@@ -9,9 +9,7 @@ def test_widget_serialization__uses_camelcase_and_enum_values():
     widget = types.DashboardWidget(
         type=types.WidgetType.PROJECT_STATS_CARD,
         title="Traces",
-        config=types.ProjectStatsCardConfig(
-            project_id="p1", metric=types.StatsCardMetric.TRACE_COUNT
-        ),
+        config=types.ProjectStatsCardConfig(metric=types.StatsCardMetric.TRACE_COUNT),
     )
     result = widget.to_jsonable()
 
@@ -20,7 +18,6 @@ def test_widget_serialization__uses_camelcase_and_enum_values():
     assert "id" in result
     assert_equal(
         {
-            "projectId": "p1",
             "source": "traces",
             "metric": "trace_count",
         },

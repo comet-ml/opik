@@ -163,7 +163,6 @@ class BreakdownConfig(_DashboardModel):
 
 class ProjectMetricsConfig(_DashboardModel):
     metric_type: str = ProjectMetricType.TRACE_COUNT.value
-    project_id: Optional[str] = None
     chart_type: Optional[str] = ChartType.LINE.value
     trace_filters: Optional[List[Dict[str, Any]]] = None
     thread_filters: Optional[List[Dict[str, Any]]] = None
@@ -175,7 +174,6 @@ class ProjectMetricsConfig(_DashboardModel):
 
 
 class ProjectStatsCardConfig(_DashboardModel):
-    project_id: str
     source: str = TraceDataType.TRACES.value
     metric: str = StatsCardMetric.TRACE_COUNT.value
     trace_filters: Optional[List[Dict[str, Any]]] = None

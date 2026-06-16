@@ -39,12 +39,13 @@ def created_dashboards(opik_client: opik.Opik):
 
 
 def test_dashboard_lifecycle__happyflow(
-    opik_client: opik.Opik, project_id: str, created_dashboards: list
+    opik_client: opik.Opik, created_dashboards: list
 ):
     dash = opik_client.create_dashboard(
         name=f"e2e-dashboard-{PROJECT_NAME}",
         type=dashboard.DashboardType.MULTI_PROJECT,
         description="E2E test dashboard",
+        project_name=PROJECT_NAME,
     )
     created_dashboards.append(dash.id)
 
@@ -59,7 +60,6 @@ def test_dashboard_lifecycle__happyflow(
             type=dashboard.WidgetType.PROJECT_STATS_CARD,
             title="Total traces",
             config=dashboard.ProjectStatsCardConfig(
-                project_id=project_id,
                 metric=dashboard.StatsCardMetric.TRACE_COUNT,
             ),
         ),
@@ -71,7 +71,6 @@ def test_dashboard_lifecycle__happyflow(
             type=dashboard.WidgetType.PROJECT_METRICS,
             title="Duration by model",
             config=dashboard.ProjectMetricsConfig(
-                project_id=project_id,
                 metric_type=dashboard.ProjectMetricType.DURATION,
                 breakdown=dashboard.BreakdownConfig(
                     field=dashboard.BreakdownField.MODEL
@@ -194,11 +193,12 @@ def test_experiments_dashboard_widgets__all_types(
 
 
 def test_move_widget_position__persisted(
-    opik_client: opik.Opik, project_id: str, created_dashboards: list
+    opik_client: opik.Opik, created_dashboards: list
 ):
     dash = opik_client.create_dashboard(
         name=f"e2e-dashboard-move-{PROJECT_NAME}",
         type=dashboard.DashboardType.MULTI_PROJECT,
+        project_name=PROJECT_NAME,
     )
     created_dashboards.append(dash.id)
     section_id = dash.sections[0].id
@@ -210,7 +210,6 @@ def test_move_widget_position__persisted(
             type=dashboard.WidgetType.PROJECT_STATS_CARD,
             title="Widget A",
             config=dashboard.ProjectStatsCardConfig(
-                project_id=project_id,
                 metric=dashboard.StatsCardMetric.TRACE_COUNT,
             ),
         ),
@@ -221,7 +220,6 @@ def test_move_widget_position__persisted(
             type=dashboard.WidgetType.PROJECT_STATS_CARD,
             title="Widget B",
             config=dashboard.ProjectStatsCardConfig(
-                project_id=project_id,
                 metric=dashboard.StatsCardMetric.ERROR_COUNT,
             ),
         ),

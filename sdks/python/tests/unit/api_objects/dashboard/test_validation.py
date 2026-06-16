@@ -138,3 +138,32 @@ def test_as_section_dicts__invalid_type__raises():
         exceptions.DashboardValidationError, match="Expected a DashboardSection"
     ):
         validation.as_section_dicts(["not-a-section"])
+
+
+def test_inject_project_id__project_scoped_widget_injects():
+    widget = {"type": "project_stats_card", "config": {"metric": "trace_count"}}
+    validation.inject_project_id(widget, "proj-123")
+    assert widget["config"]["projectId"] == "proj-123"
+
+
+def test_inject_project_id__project_metrics_injects():
+    widget = {"type": "project_metrics", "config": {"metricType": "DURATION"}}
+    validation.inject_project_id(widget, "proj-abc")
+    assert widget["config"]["projectId"] == "proj-abc"
+
+
+def test_inject_project_id__non_project_widget_untouched():
+    widget = {"type": "text_markdown", "config": {"content": "hi"}}
+    validation.inject_project_id(widget, "proj-123")
+    assert "projectId" not in widget["config"]
+
+
+def test_inject_project_id__no_project_id_raises():
+    widget = {"type": "project_stats_card", "config": {}}
+    with pytest.raises(exceptions.DashboardValidationError, match="project-scoped"):
+        validation.inject_project_id(widget, None)
+
+
+def test_inject_project_id__no_project_id_for_non_project_widget_ok():
+    widget = {"type": "text_markdown", "config": {}}
+    validation.inject_project_id(widget, None)

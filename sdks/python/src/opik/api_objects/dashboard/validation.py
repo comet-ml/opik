@@ -30,6 +30,26 @@ _WIDGET_TYPES_BY_DASHBOARD_TYPE = {
 
 _PROJECT_METRIC_TYPES = {m.value for m in types.ProjectMetricType}
 _STATS_CARD_METRICS = {m.value for m in types.StatsCardMetric}
+_PROJECT_SCOPED_WIDGET_TYPES = {
+    types.WidgetType.PROJECT_METRICS.value,
+    types.WidgetType.PROJECT_STATS_CARD.value,
+}
+
+
+def inject_project_id(widget_dict: Dict[str, Any], project_id: Optional[str]) -> None:
+    """Inject projectId into a project-scoped widget config.
+
+    Raises DashboardValidationError if the widget is project-scoped but the dashboard
+    has no project_id — callers should ensure the dashboard was created with a project.
+    """
+    if widget_dict.get("type") not in _PROJECT_SCOPED_WIDGET_TYPES:
+        return
+    if not project_id:
+        raise exceptions.DashboardValidationError(
+            f"Widget type {widget_dict.get('type')!r} requires a project-scoped dashboard. "
+            "Pass project_name or project_id to create_dashboard."
+        )
+    widget_dict.setdefault("config", {})["projectId"] = project_id
 
 
 def validate_structure(state: Dict[str, Any]) -> None:

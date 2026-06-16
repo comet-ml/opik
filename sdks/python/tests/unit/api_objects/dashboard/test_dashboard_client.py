@@ -51,11 +51,15 @@ class FakeRest:
         self.dashboards = FakeDashboardsApi(store)
 
 
-def _make_dashboard(config, dashboard_type="multi_project"):
+def _make_dashboard(config, dashboard_type="multi_project", project_id=None):
     store = {"id": "d1", "name": "My dash", "type": dashboard_type, "config": config}
     rest = FakeRest(store)
     public = dp.DashboardPublic(
-        id="d1", name="My dash", type=dashboard_type, config=copy.deepcopy(config)
+        id="d1",
+        name="My dash",
+        type=dashboard_type,
+        config=copy.deepcopy(config),
+        project_id=project_id,
     )
     return Dashboard(dashboard_public=public, rest_client=rest), rest, store
 
@@ -104,6 +108,46 @@ def test_add_widget__preserves_unknown_fields_round_trip():
     assert widget_id in [i["i"] for i in config["sections"][0]["layout"]]
     assert config["version"] == 4
     assert config["lastModified"] != 111
+
+
+def test_add_widget__project_scoped_injects_project_id():
+    config = {
+        "version": 4,
+        "sections": [{"id": "s1", "title": "t", "widgets": [], "layout": []}],
+        "lastModified": 1,
+    }
+    dashboard, _, _ = _make_dashboard(config, project_id="proj-xyz")
+
+    widget_id = dashboard.add_widget(
+        "s1",
+        types.DashboardWidget(
+            type=types.WidgetType.PROJECT_STATS_CARD,
+            config=types.ProjectStatsCardConfig(
+                metric=types.StatsCardMetric.TRACE_COUNT
+            ),
+        ),
+    )
+
+    widget = dashboard.config["sections"][0]["widgets"][0]
+    assert widget["id"] == widget_id
+    assert widget["config"]["projectId"] == "proj-xyz"
+
+
+def test_add_widget__project_scoped_without_dashboard_project_raises():
+    config = {
+        "version": 4,
+        "sections": [{"id": "s1", "title": "t", "widgets": [], "layout": []}],
+        "lastModified": 1,
+    }
+    dashboard, rest, _ = _make_dashboard(config, project_id=None)
+
+    with pytest.raises(exceptions.DashboardValidationError, match="project-scoped"):
+        dashboard.add_widget(
+            "s1",
+            types.DashboardWidget(type=types.WidgetType.PROJECT_STATS_CARD),
+        )
+
+    assert rest.dashboards.update_calls == []
 
 
 def test_add_widget__incompatible_type_raises_before_write():

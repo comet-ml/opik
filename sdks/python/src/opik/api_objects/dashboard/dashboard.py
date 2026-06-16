@@ -57,6 +57,7 @@ class Dashboard:
         self._description = dashboard_public.description
         self._type = dashboard_public.type
         self._scope = dashboard_public.scope
+        self._project_id: Optional[str] = dashboard_public.project_id
         self._config: Dict[str, Any] = copy.deepcopy(dashboard_public.config or {})
         self._created_at = dashboard_public.created_at
         self._last_updated_at = dashboard_public.last_updated_at
@@ -85,6 +86,16 @@ class Dashboard:
         :class:`~opik.api_objects.dashboard.types.WidgetType`).
         """
         return self._type
+
+    @property
+    def project_id(self) -> Optional[str]:
+        """Project this dashboard is scoped to, or ``None`` for workspace-level dashboards.
+
+        Project-scoped widget types (``project_metrics``, ``project_stats_card``) can
+        only be added to dashboards that have a project. Pass ``project_name`` or
+        ``project_id`` to :meth:`opik.Opik.create_dashboard` to associate a project.
+        """
+        return self._project_id
 
     @property
     def scope(self) -> Optional[str]:
@@ -148,6 +159,7 @@ class Dashboard:
                 "size must contain both 'w' and 'h' keys"
             )
         validation.validate_widget_for_dashboard(widget_dict, self._type)
+        validation.inject_project_id(widget_dict, self._project_id)
 
         with self._atomic_config():
             section = self._get_section(section_id)

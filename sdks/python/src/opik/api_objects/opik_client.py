@@ -1394,6 +1394,7 @@ class Opik:
                 dashboard_validation.validate_widget_for_dashboard(
                     widget, dashboard_type
                 )
+                dashboard_validation.inject_project_id(widget, project_id)
 
         config = {
             "version": dashboard_types.DASHBOARD_VERSION,
