@@ -12,7 +12,6 @@ import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongHistogram;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
@@ -129,9 +128,16 @@ public class FreeFormSqlQueryService {
                 .onErrorMap(error -> mapExecutionError(error, startMillis));
     }
 
-    // The parser models every SETTINGS/SET clause as a Set* node, so any node label starting with "Set" is a reject.
+    // The parser models every SETTINGS/SET clause (top-level, subquery, CTE, FORMAT ... SETTINGS) as this AST node.
+    // Verified against ClickHouse 25.3.x: EXPLAIN AST prints it as the leading token "Set". Matching the exact node
+    // token (not a "Set" prefix) avoids false positives on Set-prefixed identifiers and keeps intent explicit; the
+    // SETTINGS rejection tests fail loudly if a future ClickHouse version renames the node.
+    private static final Set<String> SETTINGS_AST_NODES = Set.of("Set");
+
     private static boolean containsSetNode(List<String> nodeLabels) {
-        return nodeLabels.stream().anyMatch(label -> label.stripLeading().startsWith("Set"));
+        return nodeLabels.stream()
+                .map(label -> label.stripLeading().split("\\s", 2)[0])
+                .anyMatch(SETTINGS_AST_NODES::contains);
     }
 
     private void recordSuccess(FreeFormSqlResult result, long startMillis) {
@@ -148,18 +154,24 @@ public class FreeFormSqlQueryService {
         }
 
         ServerException serverException = findCause(error, ServerException.class);
-        if (serverException != null) {
-            int code = serverException.getCode();
-            if (CH_LIMIT_CODES.contains(code)) {
-                // Constant message: the raw ClickHouse text (which can carry schema/tenant details) stays in logs only.
-                return error(REASON_CH_LIMIT, startMillis, Response.Status.BAD_REQUEST,
-                        "Query exceeded ClickHouse limits", error);
-            }
-            if (code == CH_ACCESS_DENIED) {
-                return error(REASON_PERMISSION_DENIED, startMillis, Response.Status.BAD_REQUEST,
-                        "Query rejected: access denied", error);
-            }
+        if (serverException == null) {
+            // No response from ClickHouse (connection/transport failure): an infrastructure problem, not a bad query,
+            // so surface it as 5xx for alerting instead of a misleading 400.
+            return error(REASON_OTHER, startMillis, Response.Status.SERVICE_UNAVAILABLE, "Query execution failed",
+                    error);
         }
+
+        int code = serverException.getCode();
+        if (CH_LIMIT_CODES.contains(code)) {
+            // Constant message: the raw ClickHouse text (which can carry schema/tenant details) stays in logs only.
+            return error(REASON_CH_LIMIT, startMillis, Response.Status.BAD_REQUEST,
+                    "Query exceeded ClickHouse limits", error);
+        }
+        if (code == CH_ACCESS_DENIED) {
+            return error(REASON_PERMISSION_DENIED, startMillis, Response.Status.BAD_REQUEST,
+                    "Query rejected: access denied", error);
+        }
+        // ClickHouse responded with an error: the failure is attributable to the query, so return 4xx.
         return error(REASON_OTHER, startMillis, Response.Status.BAD_REQUEST, "Query execution failed", error);
     }
 
@@ -168,7 +180,7 @@ public class FreeFormSqlQueryService {
         rejected.add(1, reason);
         duration.record(elapsed(startMillis), RESULT_REJECTED);
         log.info("Free-form SQL query rejected: {}", message, cause);
-        return clientError(Response.Status.BAD_REQUEST, message);
+        return httpError(Response.Status.BAD_REQUEST, message);
     }
 
     private WebApplicationException error(Attributes reason, long startMillis, Response.Status status, String message,
@@ -177,11 +189,11 @@ public class FreeFormSqlQueryService {
         rejected.add(1, reason);
         duration.record(elapsed(startMillis), RESULT_ERROR);
         log.warn("Free-form SQL query failed: {}", message, cause);
-        return clientError(status, message);
+        return httpError(status, message);
     }
 
-    private static WebApplicationException clientError(Response.Status status, String message) {
-        return new ClientErrorException(Response.status(status)
+    private static WebApplicationException httpError(Response.Status status, String message) {
+        return new WebApplicationException(Response.status(status)
                 .entity(new ErrorMessage(List.of(message)))
                 .build());
     }

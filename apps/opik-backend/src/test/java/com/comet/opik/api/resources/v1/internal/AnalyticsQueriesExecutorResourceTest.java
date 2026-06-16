@@ -174,6 +174,15 @@ class AnalyticsQueriesExecutorResourceTest {
     }
 
     @Test
+    @DisplayName("a Set-prefixed identifier is not mistaken for a SETTINGS node")
+    void executeQuery__whenSetPrefixedIdentifier__thenAccepted() {
+        // The AST guard matches the exact `Set` node token, so a `settings`-named CTE must not be falsely rejected.
+        var query = "WITH settings AS (SELECT id FROM traces) "
+                + "SELECT toJSONString(map('id', toString(id))) AS result FROM settings";
+        assertResultIds(executorClient.execute(projectIdA, query, API_KEY_A, WORKSPACE_NAME_A), traceIdA);
+    }
+
+    @Test
     @DisplayName("an unparseable query is rejected")
     void executeQuery__whenQueryUnparseable__thenRejected() {
         assertBadRequest("SELECT FROM WHERE");
@@ -196,6 +205,13 @@ class AnalyticsQueriesExecutorResourceTest {
     @DisplayName("a query against a non-granted table fails on permissions")
     void executeQuery__whenNonGrantedTable__thenRejected() {
         assertBadRequest("SELECT toJSONString(map('id', toString(id))) AS result FROM experiments");
+    }
+
+    @Test
+    @DisplayName("a query against a system table is rejected (row policies don't cover system.*)")
+    void executeQuery__whenSystemTable__thenRejected() {
+        // system.* is outside the row policies, so isolation relies on the read-only user not being granted access.
+        assertBadRequest("SELECT toJSONString(map('q', query)) AS result FROM system.query_log");
     }
 
     private void assertBadRequest(String query) {
