@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.db;
 
 import com.clickhouse.client.api.Client;
+import com.clickhouse.client.api.query.QuerySettings;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import io.dropwizard.util.Duration;
 import jakarta.inject.Inject;
@@ -39,5 +40,18 @@ public class ClickHouseReadOnlyFreeFormSqlHealthCheck extends AbstractClickHouse
             return Result.healthy("Agent Insights queries disabled");
         }
         return super.check();
+    }
+
+    /**
+     * The Agent Insights read-only free-form SQL user runs under the production settings profile
+     * (see {@code provision_agent_insights_readonly_user.sh}): {@code readonly=1} with only
+     * {@code SQL_workspace_id} / {@code SQL_project_id} marked {@code CHANGEABLE_IN_READONLY}.
+     * That explicit allowlist makes ClickHouse reject any other per-call setting change —
+     * including {@code max_execution_time}. The probe must therefore carry no per-call settings;
+     * the caller-side {@code future.get(healthCheckTimeout)} is the deadline.
+     */
+    @Override
+    protected QuerySettings newQuerySettings() {
+        return null;
     }
 }

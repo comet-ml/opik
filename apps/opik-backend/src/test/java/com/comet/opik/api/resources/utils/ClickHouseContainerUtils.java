@@ -86,8 +86,19 @@ public class ClickHouseContainerUtils {
                     // We need to override the default user and password so that we can use the same credentials as test containers.
                     .withUsername("default")
                     .withPassword("")
+                    // Pre-create the opik database via CLICKHOUSE_DB so the Agent Insights read-only
+                    // user (defined in users.xml) has something to bind its grants against. The
+                    // database name matches databaseAnalytics.databaseName in config-test.yml, so
+                    // Liquibase migrations (run per-test where the schema is needed) are no-ops on
+                    // the CREATE DATABASE step.
+                    .withDatabaseName(DATABASE_NAME)
                     .withCopyFileToContainer(MountableFile.forClasspathResource("clickhouse.xml"),
-                            "/etc/clickhouse-server/config.d/clickhouse.xml");
+                            "/etc/clickhouse-server/config.d/clickhouse.xml")
+                    // Provision the production-shape Agent Insights read-only user globally
+                    // (settings profile, user, per-table SELECT grants, row policies; mirrors
+                    // provision_agent_insights_readonly_user.sh). Loaded at server startup.
+                    .withCopyFileToContainer(MountableFile.forClasspathResource("users.xml"),
+                            "/etc/clickhouse-server/users.d/users.xml");
 
         } catch (Exception e) {
             throw new RuntimeException(e);

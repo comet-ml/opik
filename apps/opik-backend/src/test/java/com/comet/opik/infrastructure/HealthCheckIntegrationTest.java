@@ -5,6 +5,8 @@ import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -12,7 +14,10 @@ import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.core.GenericType;
 import lombok.Builder;
 import org.apache.hc.core5.http.HttpStatus;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -26,13 +31,13 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@ExtendWith(DropwizardAppExtensionProvider.class)
 class HealthCheckIntegrationTest {
 
     private static final String READY = "READY";
@@ -46,70 +51,146 @@ class HealthCheckIntegrationTest {
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(ZOOKEEPER_CONTAINER);
 
-    @RegisterApp
-    private final TestDropwizardAppExtension app;
-
-    private String baseURI;
-    private ClientSupport client;
-
     {
         Startables.deepStart(MYSQL, CLICKHOUSE, REDIS, ZOOKEEPER_CONTAINER).join();
-        var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
-                CLICKHOUSE, ClickHouseContainerUtils.DATABASE_NAME);
-        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
-                MYSQL.getJdbcUrl(), databaseAnalyticsFactory, null, REDIS.getRedisURI());
     }
 
-    @BeforeAll
-    void setUpAll(ClientSupport client) {
-        this.baseURI = TestUtils.getBaseUrl(client);
-        this.client = client;
-        ClientSupportUtils.config(client);
+    private TestDropwizardAppExtension newApp(List<CustomConfig> customConfigs) {
+        var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
+                CLICKHOUSE, ClickHouseContainerUtils.DATABASE_NAME);
+        return TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
+                AppContextConfig.builder()
+                        .jdbcUrl(MYSQL.getJdbcUrl())
+                        .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                        .redisUrl(REDIS.getRedisURI())
+                        .customConfigs(customConfigs)
+                        .build());
     }
 
     /**
-     * Opik-owned checks (clickhouse, mysql, redis, clickhouse-readonly-freeform-sql) are asserted
-     * individually; Dropwizard-provided checks (db, deadlocks) only appear in the aggregate
-     * {@code all} row.
+     * Default test-config: {@code serviceToggles.agentInsightsEnabled} off. Covers the standard
+     * health check HTTP surface (per-check + aggregate {@code all}). Opik-owned checks
+     * (clickhouse, mysql, redis, clickhouse-readonly-freeform-sql) are asserted individually;
+     * Dropwizard-provided checks (db, deadlocks) only appear in the aggregate row.
      */
-    private Stream<Arguments> healthCheckOk() {
-        var clickHouseResponse = HealthCheckResponse.builder()
-                .name("clickhouse").healthy(true).critical(true).type(READY).build();
-        // Toggle off in config-test → healthy without touching ClickHouse; non-critical so a
-        // freeform-SQL issue never gates overall readiness.
-        var clickhouseFreeformSqlResponse = HealthCheckResponse.builder()
-                .name("clickhouse-readonly-freeform-sql").healthy(true).critical(false).type(READY).build();
-        var mysqlResponse = HealthCheckResponse.builder()
-                .name("mysql").healthy(true).critical(true).type(READY).build();
-        var redisResponse = HealthCheckResponse.builder()
-                .name("redis").healthy(true).critical(true).type(READY).build();
-        var dbResponse = HealthCheckResponse.builder()
-                .name("db").healthy(true).critical(true).type(READY).build();
-        var deadlocks = HealthCheckResponse.builder()
-                .name("deadlocks").healthy(true).critical(true).type(ALIVE).build();
-        var all = List.of(
-                clickHouseResponse, clickhouseFreeformSqlResponse, mysqlResponse, redisResponse, dbResponse, deadlocks);
-        return Stream.of(
-                arguments("clickhouse", List.of(clickHouseResponse)),
-                arguments("mysql", List.of(mysqlResponse)),
-                arguments("redis", List.of(redisResponse)),
-                arguments("clickhouse-readonly-freeform-sql", List.of(clickhouseFreeformSqlResponse)),
-                arguments("all", all));
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @ExtendWith(DropwizardAppExtensionProvider.class)
+    class DefaultConfig {
+
+        @RegisterApp
+        private final TestDropwizardAppExtension app = newApp(List.of());
+
+        private ClientSupport client;
+        private String baseURI;
+
+        @BeforeAll
+        void setUpAll(ClientSupport client) {
+            this.client = client;
+            this.baseURI = TestUtils.getBaseUrl(client);
+            ClientSupportUtils.config(client);
+        }
+
+        private Stream<Arguments> healthCheckOk() {
+            var clickHouseResponse = HealthCheckResponse.builder()
+                    .name("clickhouse").healthy(true).critical(true).type(READY).build();
+            // Toggle off in config-test → healthy without touching ClickHouse; non-critical so a
+            // freeform-SQL issue never gates overall readiness.
+            var clickhouseFreeformSqlResponse = HealthCheckResponse.builder()
+                    .name("clickhouse-readonly-freeform-sql").healthy(true).critical(false).type(READY).build();
+            var mysqlResponse = HealthCheckResponse.builder()
+                    .name("mysql").healthy(true).critical(true).type(READY).build();
+            var redisResponse = HealthCheckResponse.builder()
+                    .name("redis").healthy(true).critical(true).type(READY).build();
+            var dbResponse = HealthCheckResponse.builder()
+                    .name("db").healthy(true).critical(true).type(READY).build();
+            var deadlocks = HealthCheckResponse.builder()
+                    .name("deadlocks").healthy(true).critical(true).type(ALIVE).build();
+            var all = List.of(
+                    clickHouseResponse,
+                    clickhouseFreeformSqlResponse,
+                    mysqlResponse,
+                    redisResponse,
+                    dbResponse,
+                    deadlocks);
+            return Stream.of(
+                    arguments("clickhouse", List.of(clickHouseResponse)),
+                    arguments("mysql", List.of(mysqlResponse)),
+                    arguments("redis", List.of(redisResponse)),
+                    arguments("clickhouse-readonly-freeform-sql", List.of(clickhouseFreeformSqlResponse)),
+                    arguments("all", all));
+        }
+
+        @ParameterizedTest(name = "healthCheckOk - {0}")
+        @MethodSource
+        void healthCheckOk(String name, List<HealthCheckResponse> expectedResponse) {
+            callHealthCheckAndAwaitAssertResponse(client, baseURI, name, expectedResponse);
+        }
     }
 
-    @ParameterizedTest(name = "healthCheckOk - {0}")
-    @MethodSource
-    void healthCheckOk(String name, List<HealthCheckResponse> expectedResponse) {
-        var actualResponse = callHealthCheckAndAssertOk(name);
+    /**
+     * {@code serviceToggles.agentInsightsEnabled} on. The production-shape Agent Insights
+     * read-only user is provisioned globally on the test ClickHouse container (see
+     * {@code src/test/resources/users.xml}, mirroring
+     * {@code apps/opik-backend/provision_agent_insights_readonly_user.sh}), so the {@code
+     * clickhouse-readonly-freeform-sql} probe actually runs against it. Without the {@code
+     * newQuerySettings()} override in
+     * {@link com.comet.opik.infrastructure.db.ClickHouseReadOnlyFreeFormSqlHealthCheck} the probe
+     * is rejected with {@code Code: 164. DB::Exception: Cannot modify 'max_execution_time'
+     * setting in readonly mode. (READONLY)}.
+     */
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @ExtendWith(DropwizardAppExtensionProvider.class)
+    class AgentInsightsEnabled {
 
-        assertResponse(actualResponse, expectedResponse);
+        @RegisterApp
+        private final TestDropwizardAppExtension app = newApp(List.of(
+                new CustomConfig("serviceToggles.agentInsightsEnabled", "true")));
+
+        private ClientSupport client;
+        private String baseURI;
+
+        @BeforeAll
+        void setUpAll(ClientSupport client) {
+            this.client = client;
+            this.baseURI = TestUtils.getBaseUrl(client);
+            ClientSupportUtils.config(client);
+        }
+
+        @Test
+        void healthCheckOk() {
+            var expected = HealthCheckResponse.builder()
+                    .name("clickhouse-readonly-freeform-sql").healthy(true).critical(false).type(READY).build();
+
+            callHealthCheckAndAwaitAssertResponse(
+                    client, baseURI, "clickhouse-readonly-freeform-sql", List.of(expected));
+        }
     }
 
     @Builder
     private record HealthCheckResponse(String name, boolean healthy, boolean critical, String type) {
     }
 
-    private List<HealthCheckResponse> callHealthCheckAndAssertOk(String name) {
+    /**
+     * Polls {@code /health-check?name=...} until the response matches {@code expected}. Required
+     * because Dropwizard's health endpoint returns cached state from the periodic scheduler; the
+     * test ClickHouse/MySQL/Redis containers (and the read-only ClickHouse user under
+     * Agent Insights) take a probe cycle or two after app start to be reflected. The aggressive
+     * schedule in {@code config-test.yml} (100 ms interval, single-attempt thresholds) keeps the
+     * window short, so a broken probe never satisfies the assertion before the timeout.
+     */
+    private void callHealthCheckAndAwaitAssertResponse(ClientSupport client, String baseURI, String name,
+            List<HealthCheckResponse> expected) {
+        Awaitility.await()
+                .atMost(5, TimeUnit.SECONDS)
+                .untilAsserted(() -> {
+                    var actual = callHealthCheckAndAssertOk(client, baseURI, name);
+                    assertResponse(actual, expected);
+                });
+    }
+
+    private List<HealthCheckResponse> callHealthCheckAndAssertOk(ClientSupport client, String baseURI, String name) {
         try (var response = client.target("%s/health-check?name=%s".formatted(baseURI, name))
                 .request()
                 .get()) {
