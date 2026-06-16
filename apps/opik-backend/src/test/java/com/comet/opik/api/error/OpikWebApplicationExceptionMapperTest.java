@@ -1,11 +1,13 @@
 package com.comet.opik.api.error;
 
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.infrastructure.metrics.ErrorMetrics;
+import com.comet.opik.infrastructure.metrics.HttpErrorMetrics;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Provider;
 import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.Request;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
 import org.junit.jupiter.api.DisplayName;
@@ -26,39 +28,43 @@ import static org.mockito.Mockito.when;
 class OpikWebApplicationExceptionMapperTest {
 
     @Mock
-    private ErrorMetrics errorMetrics;
+    private HttpErrorMetrics errorMetrics;
     @Mock
     private Provider<RequestContext> requestContext;
+    @Mock
+    private Provider<Request> request;
     @Mock
     private Provider<UriInfo> uriInfoProvider;
     @Mock
     private UriInfo uriInfo;
 
     @Test
-    @DisplayName("records server errors and preserves the original response")
+    @DisplayName("records server errors and renders the error message body")
     void recordsServerErrors() {
         when(uriInfoProvider.get()).thenReturn(uriInfo);
-        var mapper = new OpikWebApplicationExceptionMapper(errorMetrics, requestContext, uriInfoProvider);
+        var mapper = new OpikWebApplicationExceptionMapper(errorMetrics, requestContext, request, uriInfoProvider);
         var exception = new InternalServerErrorException("db down");
 
         var response = mapper.toResponse(exception);
 
-        assertThat(response).isSameAs(exception.getResponse());
         assertThat(response.getStatus()).isEqualTo(Response.Status.INTERNAL_SERVER_ERROR.getStatusCode());
-        verify(errorMetrics).record(exception, uriInfo, requestContext);
+        assertThat(response.getEntity())
+                .isEqualTo(new ErrorMessage(Response.Status.INTERNAL_SERVER_ERROR.getStatusCode(), "db down"));
+        verify(errorMetrics).record(exception, request, uriInfo, requestContext);
     }
 
     @Test
-    @DisplayName("does not record client errors but still preserves the response")
+    @DisplayName("does not record client errors but still renders the error message body")
     void ignoresClientErrors() {
-        var mapper = new OpikWebApplicationExceptionMapper(errorMetrics, requestContext, uriInfoProvider);
-        var exception = new NotFoundException();
+        var mapper = new OpikWebApplicationExceptionMapper(errorMetrics, requestContext, request, uriInfoProvider);
+        var exception = new NotFoundException("Prompt not found");
 
         var response = mapper.toResponse(exception);
 
-        assertThat(response).isSameAs(exception.getResponse());
         assertThat(response.getStatus()).isEqualTo(Response.Status.NOT_FOUND.getStatusCode());
-        verify(errorMetrics, never()).record(any(), any(), any());
+        assertThat(response.getEntity())
+                .isEqualTo(new ErrorMessage(Response.Status.NOT_FOUND.getStatusCode(), "Prompt not found"));
+        verify(errorMetrics, never()).record(any(), any(), any(), any());
         verifyNoInteractions(uriInfoProvider);
     }
 
@@ -66,12 +72,12 @@ class OpikWebApplicationExceptionMapperTest {
     @DisplayName("records explicitly built 5xx WebApplicationExceptions")
     void recordsExplicit5xx() {
         when(uriInfoProvider.get()).thenReturn(uriInfo);
-        var mapper = new OpikWebApplicationExceptionMapper(errorMetrics, requestContext, uriInfoProvider);
+        var mapper = new OpikWebApplicationExceptionMapper(errorMetrics, requestContext, request, uriInfoProvider);
         var exception = new WebApplicationException(Response.status(503).build());
 
         var response = mapper.toResponse(exception);
 
         assertThat(response.getStatus()).isEqualTo(503);
-        verify(errorMetrics).record(exception, uriInfo, requestContext);
+        verify(errorMetrics).record(exception, request, uriInfo, requestContext);
     }
 }
