@@ -9,6 +9,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.RequiredPermissions;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -41,14 +42,14 @@ import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 @Timed
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Tag(name = "Agent Insights Jobs", description = "Per-(workspace, project) Agent Insights report configuration")
-public class AgentInsightsJobResource {
+public class AgentInsightsJobsResource {
 
     private final @NonNull AgentInsightsJobService service;
     private final @NonNull Provider<RequestContext> requestContext;
 
     @POST
     @Operation(operationId = "enableAgentInsightsJob", summary = "Enable Agent Insights job", description = "Enables the Agent Insights report for a project (idempotent on workspace+project) and triggers an immediate first run. Returns 201 on first enable, 200 if it already existed.", responses = {
-            @ApiResponse(responseCode = "201", description = "Job created", content = @Content(schema = @Schema(implementation = AgentInsightsJob.class))),
+            @ApiResponse(responseCode = "201", description = "Job created", headers = @Header(name = "Location", description = "URI of the created job", schema = @Schema(type = "string")), content = @Content(schema = @Schema(implementation = AgentInsightsJob.class))),
             @ApiResponse(responseCode = "200", description = "Job already existed", content = @Content(schema = @Schema(implementation = AgentInsightsJob.class))),
             @ApiResponse(responseCode = "404", description = "Project not found")
     })

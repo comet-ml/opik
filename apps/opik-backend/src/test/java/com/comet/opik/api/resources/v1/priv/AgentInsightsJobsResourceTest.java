@@ -41,7 +41,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
-class AgentInsightsJobResourceTest {
+class AgentInsightsJobsResourceTest {
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
@@ -152,6 +152,14 @@ class AgentInsightsJobResourceTest {
     void enable__projectMissing__returns404() {
         try (var response = jobsClient.enable(UUID.randomUUID(), API_KEY, WORKSPACE_NAME)) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+        }
+    }
+
+    @Test
+    @DisplayName("Enable without project_id fails validation (400)")
+    void enable__missingProjectId__returnsBadRequest() {
+        try (var response = jobsClient.enableRaw("{}", API_KEY, WORKSPACE_NAME)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
         }
     }
 

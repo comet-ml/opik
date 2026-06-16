@@ -26,6 +26,14 @@ public class AgentInsightsJobResourceClient {
                 .post(Entity.json(AgentInsightsJobRequest.builder().projectId(projectId).build()));
     }
 
+    public Response enableRaw(String jsonBody, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(jsonBody));
+    }
+
     public Response get(UUID projectId, String apiKey, String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .queryParam("project_id", projectId)
