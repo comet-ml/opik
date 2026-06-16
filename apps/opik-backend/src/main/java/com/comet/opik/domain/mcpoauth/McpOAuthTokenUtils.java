@@ -1,9 +1,7 @@
 package com.comet.opik.domain.mcpoauth;
 
-import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.codec.digest.DigestUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Strings;
 
 import java.security.NoSuchAlgorithmException;
@@ -63,30 +61,15 @@ public class McpOAuthTokenUtils {
      * Strips the {@code Bearer } scheme prefix from an {@code Authorization} header.
      * @throws IllegalArgumentException if Bearer header missing
      */
-    public static String extractBearerToken(@NonNull String authHeader) {
+    public static String extractBearerToken(String authHeader) {
         if (!containsBearerPrefix(authHeader)) {
             throw new IllegalArgumentException("Authorization header is not a Bearer token");
         }
-        return authHeader.substring(BEARER_PREFIX.length()).trim();
+        return authHeader.substring(BEARER_PREFIX.length()).strip();
     }
 
     public static String hash(String token) {
         return DigestUtils.sha256Hex(token);
-    }
-
-    /**
-     * Masks a token for safe logging. Never emits token fragments: a SHA-256 prefix is non-reversible
-     * yet stable enough to correlate the same token across log lines.
-     *
-     * @param token the raw token; may be {@code null} or empty
-     * @return an empty string for null/empty input, otherwise {@code "sha256:"} followed by the first
-     *         12 hex characters of the token's SHA-256 hash
-     */
-    public static String maskToken(String token) {
-        if (StringUtils.isEmpty(token)) {
-            return "";
-        }
-        return "sha256:" + hash(token).substring(0, 12);
     }
 
     private static SecureRandom getSecureRandom() {

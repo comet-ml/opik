@@ -27,6 +27,8 @@ import static com.comet.opik.domain.mcpoauth.OAuthConstants.OAUTH_VALIDATE_TOKEN
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.TOKEN_TYPE_BEARER;
 
 @Path(OAUTH_VALIDATE_TOKEN_RESOURCE_BASE_PATH)
+@Consumes(MediaType.APPLICATION_JSON)
+@Produces(MediaType.APPLICATION_JSON)
 @Timed
 @Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -36,8 +38,6 @@ public class OAuthValidateTokenResource {
     private final @NonNull McpOAuthService mcpOAuthService;
 
     @POST
-    @Consumes(MediaType.APPLICATION_JSON)
-    @Produces(MediaType.APPLICATION_JSON)
     @Operation(operationId = "validateOAuthToken", summary = "Validate OAuth Access Token", description = "Introspects a bearer access token and returns the identity it resolves to", responses = {
             @ApiResponse(responseCode = "200", description = "Validated token identity", content = @Content(schema = @Schema(implementation = ValidatedToken.class))),
             @ApiResponse(responseCode = "401", description = "Missing, malformed, or unknown access token")})
@@ -48,14 +48,13 @@ public class OAuthValidateTokenResource {
         }
 
         String token = McpOAuthTokenUtils.extractBearerToken(authHeader);
-        String maskedToken = McpOAuthTokenUtils.maskToken(token);
         ValidatedToken validated = mcpOAuthService.validateAccessToken(token)
                 .orElseThrow(() -> {
-                    log.info("MCP OAuth validate rejected: token '{}' is not active", maskedToken);
+                    log.info("MCP OAuth validate rejected: token is not active");
                     return new NotAuthorizedException(TOKEN_TYPE_BEARER);
                 });
 
-        log.info("MCP OAuth validate succeeded for token '{}'", maskedToken);
+        log.info("MCP OAuth validate succeeded");
         return Response.ok(validated).build();
     }
 }

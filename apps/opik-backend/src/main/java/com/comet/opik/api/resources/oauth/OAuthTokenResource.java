@@ -1,7 +1,6 @@
 package com.comet.opik.api.resources.oauth;
 
 import com.codahale.metrics.annotation.Timed;
-import com.comet.opik.domain.mcpoauth.McpOAuthTokenUtils;
 import com.comet.opik.domain.mcpoauth.OAuthTokenService;
 import com.comet.opik.domain.mcpoauth.TokenResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -83,7 +82,7 @@ public class OAuthTokenResource {
             @FormParam(PARAM_TOKEN) String token,
             @FormParam(PARAM_CLIENT_ID) String clientId) {
 
-        log.info("MCP OAuth revoke request '{}', '{}'", McpOAuthTokenUtils.maskToken(token), clientId);
+        log.info("MCP OAuth revoke request '{}'", clientId);
 
         // RFC 7009 §2.2: the AS returns 200 whether the token was revoked, never existed, or was invalid.
         if (!StringUtils.isBlank(token)) {
