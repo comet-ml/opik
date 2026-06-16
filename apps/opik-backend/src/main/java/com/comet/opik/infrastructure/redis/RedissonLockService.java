@@ -66,7 +66,7 @@ class RedissonLockService implements LockService {
     public <T> Mono<T> executeWithLockCustomExpire(
             @NonNull Lock lock, @NonNull Mono<T> action, @NonNull Duration duration) {
         var semaphore = getSemaphore(lock);
-        var metricLock = LockMetrics.label(lock.key());
+        var metricLock = lock.metricName();
         log.debug(TRYING_TO_LOCK_WITH, lock);
         return instrumentedAcquire(metricLock, acquireLock(semaphore, duration))
                 .flatMap(lockInstance -> runAction(lock, action, lockInstance)
@@ -76,7 +76,7 @@ class RedissonLockService implements LockService {
     @Override
     public <T> Flux<T> executeWithLock(@NonNull Lock lock, @NonNull Flux<T> stream) {
         var semaphore = getSemaphore(lock);
-        var metricLock = LockMetrics.label(lock.key());
+        var metricLock = lock.metricName();
         log.debug(TRYING_TO_LOCK_WITH, lock);
         return instrumentedAcquire(metricLock,
                 acquireLock(semaphore, Duration.ofMillis(distributedLockConfig.getLockTimeoutMS())))
@@ -180,7 +180,7 @@ class RedissonLockService implements LockService {
     public <T> Mono<T> bestEffortLock(Lock lock, Mono<T> action, Mono<Void> failToAcquireLockAction,
             Duration actionTimeout, Duration lockWaitTime, boolean holdUntilExpiry) {
         var semaphore = getSemaphore(lock);
-        var metricLock = LockMetrics.label(lock.key());
+        var metricLock = lock.metricName();
         log.debug(TRYING_TO_LOCK_WITH, lock);
         return Mono.defer(() -> {
             long start = System.currentTimeMillis();
