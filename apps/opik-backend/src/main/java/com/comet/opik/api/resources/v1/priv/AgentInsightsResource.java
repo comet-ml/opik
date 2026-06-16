@@ -6,8 +6,9 @@ import com.comet.opik.api.AgentInsightsIssueStatus;
 import com.comet.opik.api.AgentInsightsIssueUpdate;
 import com.comet.opik.api.AgentInsightsIssueWithDetails;
 import com.comet.opik.api.AgentInsightsReport;
-import com.comet.opik.api.AgentInsightsSortBy;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.sorting.AgentInsightsIssueSortingFactory;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.AgentInsightsIssueService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -35,6 +36,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 @Path("/v1/private/agent-insights")
@@ -46,6 +48,7 @@ import java.util.UUID;
 public class AgentInsightsResource {
 
     private final @NonNull AgentInsightsIssueService agentInsightsIssueService;
+    private final @NonNull AgentInsightsIssueSortingFactory sortingFactory;
 
     @GET
     @Path("/issues")
@@ -59,12 +62,13 @@ public class AgentInsightsResource {
             @QueryParam("from_date") LocalDate fromDate,
             @QueryParam("to_date") LocalDate toDate,
             @QueryParam("status") AgentInsightsIssueStatus status,
-            @QueryParam("sort_by") AgentInsightsSortBy sortBy,
+            @QueryParam("sorting") String sorting,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @Max(100) @DefaultValue("10") int size) {
 
+        List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
         AgentInsightsIssue.AgentInsightsIssuePage issuesPage = agentInsightsIssueService.findIssues(
-                projectId, fromDate, toDate, status, sortBy, page, size);
+                projectId, fromDate, toDate, status, sortingFields, page, size);
 
         return Response.ok(issuesPage).build();
     }

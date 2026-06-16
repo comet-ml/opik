@@ -4,7 +4,6 @@ import com.comet.opik.api.AgentInsightsIssue;
 import com.comet.opik.api.AgentInsightsIssueStatus;
 import com.comet.opik.api.AgentInsightsIssueUpdate;
 import com.comet.opik.api.AgentInsightsReport;
-import com.comet.opik.api.AgentInsightsSortBy;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -17,6 +16,9 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AgentInsightsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.api.sorting.Direction;
+import com.comet.opik.api.sorting.SortableFields;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -181,6 +183,10 @@ class AgentInsightsResourceTest {
             LocalDate toDate) {
         return agentInsightsResourceClient.findIssues(projectId, fromDate, toDate, null, null, null, null,
                 API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+    }
+
+    private static List<SortingField> sortBy(String field, Direction direction) {
+        return List.of(SortingField.builder().field(field).direction(direction).build());
     }
 
     private static long rndOccurrences() {
@@ -539,7 +545,7 @@ class AgentInsightsResourceTest {
         }
 
         @Test
-        @DisplayName("Default sorting is last seen DESC, sort_by=total_occurrences sorts by occurrences DESC")
+        @DisplayName("Default sorting is last seen DESC, sorting by total_occurrences sorts by occurrences DESC")
         void findIssuesSorting() {
             var projectId = createProject();
             var nameA = rndName();
@@ -561,13 +567,15 @@ class AgentInsightsResourceTest {
                     .containsExactly(nameC, nameB, nameA);
 
             var byOccurrences = agentInsightsResourceClient.findIssues(projectId, DAY_1, DAY_3, null,
-                    AgentInsightsSortBy.TOTAL_OCCURRENCES, null, null, API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+                    sortBy(SortableFields.TOTAL_OCCURRENCES, Direction.DESC), null, null, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_OK);
             assertThat(byOccurrences.content())
                     .extracting(AgentInsightsIssue::name)
                     .containsExactly(nameA, nameB, nameC);
 
             var byLastSeen = agentInsightsResourceClient.findIssues(projectId, DAY_1, DAY_3, null,
-                    AgentInsightsSortBy.LAST_SEEN, null, null, API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+                    sortBy(SortableFields.LAST_SEEN, Direction.DESC), null, null, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_OK);
             assertThat(byLastSeen.content())
                     .extracting(AgentInsightsIssue::name)
                     .containsExactly(nameC, nameB, nameA);
@@ -622,7 +630,8 @@ class AgentInsightsResourceTest {
                     reportedIssue(nameC, countC, totalCount, impacted, totalUsers)));
 
             var firstPage = agentInsightsResourceClient.findIssues(projectId, DAY_1, DAY_1, null,
-                    AgentInsightsSortBy.TOTAL_OCCURRENCES, 1, 2, API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+                    sortBy(SortableFields.TOTAL_OCCURRENCES, Direction.DESC), 1, 2, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_OK);
             assertThat(firstPage.total()).isEqualTo(3);
             assertThat(firstPage.size()).isEqualTo(2);
             assertThat(firstPage.content())
@@ -630,7 +639,8 @@ class AgentInsightsResourceTest {
                     .containsExactly(nameA, nameB);
 
             var secondPage = agentInsightsResourceClient.findIssues(projectId, DAY_1, DAY_1, null,
-                    AgentInsightsSortBy.TOTAL_OCCURRENCES, 2, 2, API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+                    sortBy(SortableFields.TOTAL_OCCURRENCES, Direction.DESC), 2, 2, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_OK);
             assertThat(secondPage.content())
                     .extracting(AgentInsightsIssue::name)
                     .containsExactly(nameC);
@@ -663,9 +673,9 @@ class AgentInsightsResourceTest {
         @MethodSource("invalidFindParams")
         @DisplayName("Invalid query params return 400")
         void findIssuesWhenQueryParamsAreInvalidThenBadRequest(String fromDate, String toDate, String status,
-                String sortBy) {
+                String sorting) {
             try (var response = agentInsightsResourceClient.findIssuesWithResponse(UUID.randomUUID(), fromDate,
-                    toDate, status, sortBy, null, null, API_KEY, TEST_WORKSPACE)) {
+                    toDate, status, sorting, null, null, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
             }
         }

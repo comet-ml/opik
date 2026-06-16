@@ -102,7 +102,7 @@ interface AgentInsightsIssueDAO {
                 AND d.report_day BETWEEN :from_date AND :to_date
                 <if(status)> AND i.status = :status <endif>
             GROUP BY i.id
-            ORDER BY <order_by>
+            ORDER BY <if(sort_fields)> <sort_fields>, <endif> last_seen DESC, total_occurrences DESC, i.id DESC
             LIMIT :limit OFFSET :offset
             """)
     @UseStringTemplateEngine
@@ -113,7 +113,7 @@ interface AgentInsightsIssueDAO {
             @Bind("from_date") LocalDate fromDate,
             @Bind("to_date") LocalDate toDate,
             @Define("status") @Bind("status") AgentInsightsIssueStatus status,
-            @Define("order_by") String orderBy,
+            @Define("sort_fields") String sortFields,
             @Bind("limit") int limit,
             @Bind("offset") int offset);
 

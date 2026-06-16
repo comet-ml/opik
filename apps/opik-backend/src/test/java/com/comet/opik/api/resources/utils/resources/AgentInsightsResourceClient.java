@@ -5,18 +5,23 @@ import com.comet.opik.api.AgentInsightsIssueStatus;
 import com.comet.opik.api.AgentInsightsIssueUpdate;
 import com.comet.opik.api.AgentInsightsIssueWithDetails;
 import com.comet.opik.api.AgentInsightsReport;
-import com.comet.opik.api.AgentInsightsSortBy;
 import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.utils.JsonUtils;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -52,13 +57,13 @@ public class AgentInsightsResourceClient {
     }
 
     public AgentInsightsIssue.AgentInsightsIssuePage findIssues(UUID projectId, LocalDate fromDate, LocalDate toDate,
-            AgentInsightsIssueStatus status, AgentInsightsSortBy sortBy, Integer page, Integer size,
+            AgentInsightsIssueStatus status, List<SortingField> sorting, Integer page, Integer size,
             String apiKey, String workspaceName, int expectedStatus) {
         try (var actualResponse = findIssuesWithResponse(projectId,
                 fromDate == null ? null : fromDate.toString(),
                 toDate == null ? null : toDate.toString(),
                 status == null ? null : status.getValue(),
-                sortBy == null ? null : sortBy.getValue(),
+                CollectionUtils.isEmpty(sorting) ? null : JsonUtils.writeValueAsString(sorting),
                 page, size, apiKey, workspaceName)) {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
@@ -72,7 +77,7 @@ public class AgentInsightsResourceClient {
     }
 
     public Response findIssuesWithResponse(UUID projectId, String fromDate, String toDate, String status,
-            String sortBy, Integer page, Integer size, String apiKey, String workspaceName) {
+            String sorting, Integer page, Integer size, String apiKey, String workspaceName) {
         WebTarget target = client.target(ISSUES_PATH.formatted(baseURI));
 
         if (projectId != null) {
@@ -87,8 +92,8 @@ public class AgentInsightsResourceClient {
         if (status != null) {
             target = target.queryParam("status", status);
         }
-        if (sortBy != null) {
-            target = target.queryParam("sort_by", sortBy);
+        if (sorting != null) {
+            target = target.queryParam("sorting", URLEncoder.encode(sorting, StandardCharsets.UTF_8));
         }
         if (page != null) {
             target = target.queryParam("page", page);

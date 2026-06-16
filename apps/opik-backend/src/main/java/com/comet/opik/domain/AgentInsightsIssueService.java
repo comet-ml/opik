@@ -6,7 +6,8 @@ import com.comet.opik.api.AgentInsightsIssueStatus;
 import com.comet.opik.api.AgentInsightsIssueUpdate;
 import com.comet.opik.api.AgentInsightsIssueWithDetails;
 import com.comet.opik.api.AgentInsightsReport;
-import com.comet.opik.api.AgentInsightsSortBy;
+import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -36,7 +37,7 @@ public interface AgentInsightsIssueService {
     void reportIssues(AgentInsightsReport report);
 
     AgentInsightsIssue.AgentInsightsIssuePage findIssues(UUID projectId, LocalDate fromDate, LocalDate toDate,
-            AgentInsightsIssueStatus status, AgentInsightsSortBy sortBy, int page, int size);
+            AgentInsightsIssueStatus status, List<SortingField> sortingFields, int page, int size);
 
     AgentInsightsIssueWithDetails getIssue(UUID issueId, UUID projectId, LocalDate fromDate, LocalDate toDate);
 
@@ -57,6 +58,7 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate transactionTemplate;
     private final @NonNull ProjectService projectService;
+    private final @NonNull SortingQueryBuilder sortingQueryBuilder;
 
     @Override
     public void reportIssues(@NonNull AgentInsightsReport report) {
@@ -99,12 +101,12 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
 
     @Override
     public AgentInsightsIssue.AgentInsightsIssuePage findIssues(@NonNull UUID projectId, LocalDate fromDate,
-            LocalDate toDate, AgentInsightsIssueStatus status, AgentInsightsSortBy sortBy, int page,
+            LocalDate toDate, AgentInsightsIssueStatus status, List<SortingField> sortingFields, int page,
             int size) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         DateWindow window = resolveWindow(fromDate, toDate);
-        String orderBy = toOrderByClause(Objects.requireNonNullElse(sortBy, AgentInsightsSortBy.LAST_SEEN));
+        String sortFields = sortingQueryBuilder.toOrderBySql(sortingFields);
 
         log.info("Retrieving agent insights issues for project '{}' in workspace '{}', window '{}'..'{}', page {}",
                 projectId, workspaceId, window.from(), window.to(), page);
@@ -114,7 +116,7 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
 
             int offset = (page - 1) * size;
             List<AgentInsightsIssue> issues = dao.findIssues(workspaceId, projectId, window.from(), window.to(),
-                    status, orderBy, size, offset);
+                    status, sortFields, size, offset);
             long total = dao.countIssues(workspaceId, projectId, window.from(), window.to(), status);
 
             return AgentInsightsIssue.AgentInsightsIssuePage.builder()
@@ -198,13 +200,5 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
     }
 
     private record DateWindow(LocalDate from, LocalDate to) {
-    }
-
-    // Hardcoded fragments keyed by enum: user input never reaches the SQL text
-    private String toOrderByClause(AgentInsightsSortBy sortBy) {
-        return switch (sortBy) {
-            case LAST_SEEN -> "last_seen DESC, total_occurrences DESC, i.id DESC";
-            case TOTAL_OCCURRENCES -> "total_occurrences DESC, last_seen DESC, i.id DESC";
-        };
     }
 }
