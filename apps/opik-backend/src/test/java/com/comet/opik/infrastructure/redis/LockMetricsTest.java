@@ -89,4 +89,19 @@ class LockMetricsTest {
         // Negative waits (clock skew) are clamped via Math.max(0, ...) before recording.
         assertThatCode(() -> metrics.acquired(lock, waitMillis)).doesNotThrowAnyException();
     }
+
+    @Test
+    void nonUuidLockLabelsAreCappedToBoundCardinality() {
+        var metrics = new LockMetrics();
+
+        // A caller that interpolates a non-UUID dynamic segment (a name, an email, ...) produces
+        // labels that label() can't collapse. The cap bounds the distinct labels we record so the
+        // gauge maps and the "lock" attribute cardinality can't grow without bound.
+        assertThatCode(() -> {
+            for (int i = 0; i < LockMetrics.MAX_DISTINCT_LOCKS + 50; i++) {
+                metrics.waitStart("export-for-workspace-" + i);
+            }
+        }).doesNotThrowAnyException();
+        assertThat(metrics.trackedLocks()).isEqualTo(LockMetrics.MAX_DISTINCT_LOCKS);
+    }
 }
