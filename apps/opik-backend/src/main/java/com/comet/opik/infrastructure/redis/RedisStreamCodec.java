@@ -4,6 +4,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Suppliers;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -38,7 +39,8 @@ public enum RedisStreamCodec {
      * (e.g. a new {@code workspace_name}); otherwise the decode error would make {@code XAUTOCLAIM} loop
      * on the message indefinitely.
      */
-    private static ObjectMapper buildStreamMapper() {
+    @VisibleForTesting
+    static ObjectMapper buildStreamMapper() {
         ObjectMapper mapper = JsonUtils.getMapper().copy();
         mapper.registerModule(new SimpleModule().addDeserializer(UUID.class, LenientUUIDDeserializer.INSTANCE));
         mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
