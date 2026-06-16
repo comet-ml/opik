@@ -3,7 +3,7 @@ from unittest import mock
 import pytest
 
 from opik import exceptions
-from opik.api_objects.dashboard import validation
+from opik.api_objects.dashboard import types, validation
 
 
 def _section(section_id, widgets, layout_ids):
@@ -95,3 +95,46 @@ def test_validate_writable_version__known_version_ok():
 def test_validate_writable_version__unknown_version_raises():
     with pytest.raises(exceptions.DashboardValidationError, match="schema version 5"):
         validation.validate_writable_version(5)
+
+
+def test_as_widget_dict__from_model__returns_jsonable():
+    widget = types.DashboardWidget(
+        id="w1", type=types.WidgetType.TEXT_MARKDOWN, config=types.TextMarkdownConfig()
+    )
+    result = validation.as_widget_dict(widget)
+    assert result["id"] == "w1"
+    assert result["type"] == "text_markdown"
+
+
+def test_as_widget_dict__from_dict__returns_same_dict():
+    d = {"id": "w1", "type": "text_markdown", "config": {}}
+    result = validation.as_widget_dict(d)
+    assert result is d
+
+
+def test_as_widget_dict__invalid_type__raises():
+    with pytest.raises(
+        exceptions.DashboardValidationError, match="Expected a DashboardWidget"
+    ):
+        validation.as_widget_dict(42)
+
+
+def test_as_section_dicts__from_models__returns_jsonable():
+    section = types.DashboardSection(title="S1")
+    result = validation.as_section_dicts([section])
+    assert len(result) == 1
+    assert result[0]["title"] == "S1"
+    assert "id" in result[0]
+
+
+def test_as_section_dicts__from_dicts__returns_same_dicts():
+    d = {"id": "s1", "title": "S1", "widgets": [], "layout": []}
+    result = validation.as_section_dicts([d])
+    assert result[0] is d
+
+
+def test_as_section_dicts__invalid_type__raises():
+    with pytest.raises(
+        exceptions.DashboardValidationError, match="Expected a DashboardSection"
+    ):
+        validation.as_section_dicts(["not-a-section"])

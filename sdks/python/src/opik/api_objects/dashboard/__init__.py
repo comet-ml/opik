@@ -16,6 +16,7 @@ from .types import (
     StatsCardMetric,
     TextMarkdownConfig,
     TraceDataType,
+    WidgetConfig,
     WidgetType,
 )
 
@@ -37,5 +38,6 @@ __all__ = [
     "StatsCardMetric",
     "TextMarkdownConfig",
     "TraceDataType",
+    "WidgetConfig",
     "WidgetType",
 ]

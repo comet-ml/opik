@@ -308,28 +308,31 @@ def verify_dashboard(
     expected_widget_positions: Optional[Dict[str, Dict[str, int]]] = None,
 ):
     assert synchronization.until(
-        lambda: opik_client.get_dashboard(dashboard_id) is not None,
+        lambda: opik_client.get_dashboard(dashboard_id),
         allow_errors=True,
     ), f"Failed to get dashboard with id {dashboard_id}."
 
     fetched = opik_client.get_dashboard(dashboard_id)
     config = fetched.config
 
-    assert fetched.name == name
-    assert fetched.type == type
+    testlib.assert_equal(name, fetched.name)
+    testlib.assert_equal(type, fetched.type)
     if version is not mock.ANY:
         assert config["version"] == version
     if section_count is not mock.ANY:
         assert len(config["sections"]) == section_count
 
-    configs_by_type = {
-        widget["type"]: widget["config"]
-        for section in config["sections"]
-        for widget in section.get("widgets", [])
-    }
+    configs_by_type: Dict[str, List[Dict[str, Any]]] = {}
+    for section in config["sections"]:
+        for widget in section.get("widgets", []):
+            configs_by_type.setdefault(widget["type"], []).append(widget["config"])
     if expected_widget_configs is not None:
         for widget_type, expected_config in expected_widget_configs.items():
-            actual_config = configs_by_type[widget_type]
+            assert widget_type in configs_by_type, (
+                f"Expected widget of type {widget_type!r} not found in dashboard. "
+                f"Present types: {sorted(configs_by_type)}"
+            )
+            actual_config = configs_by_type[widget_type][0]
             actual_subset = {key: actual_config.get(key) for key in expected_config}
             testlib.assert_equal(expected_config, actual_subset)
 

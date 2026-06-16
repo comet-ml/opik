@@ -174,13 +174,15 @@ def test_update_widget__merges_config():
         ],
         "lastModified": 1,
     }
-    dashboard, _, _ = _make_dashboard(config)
+    dashboard, rest, _ = _make_dashboard(config)
 
     dashboard.update_widget("w1", title="New", config={"content": "b"})
 
     widget = dashboard.config["sections"][0]["widgets"][0]
     assert widget["title"] == "New"
     assert widget["config"]["content"] == "b"
+    assert len(rest.dashboards.update_calls) == 1
+    assert rest.dashboards.update_calls[0]["config"] is not None
 
 
 def test_remove_widget__removes_widget_and_layout():

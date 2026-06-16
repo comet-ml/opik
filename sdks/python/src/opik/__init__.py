@@ -16,7 +16,7 @@ from .api_objects.experiment.experiment_item import (
 )
 from .api_objects.agent_config import Config
 from .api_objects.agent_config.context import agent_config_context
-from .exceptions import ConfigNotFound, ConfigMismatch
+from .exceptions import ConfigNotFound, ConfigMismatch, DashboardValidationError
 from .api_objects.opik_client import Opik, get_global_client, set_global_client
 from .api_objects.prompt import Prompt, ChatPrompt
 from .api_objects.prompt.types import PromptType
@@ -96,6 +96,7 @@ __all__ = [
     "Config",
     "ConfigNotFound",
     "ConfigMismatch",
+    "DashboardValidationError",
     "agent_config_context",
     "update_current_trace",
     "update_current_span",

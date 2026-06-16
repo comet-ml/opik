@@ -98,7 +98,7 @@ def test_dashboard_lifecycle__happyflow(
     )
 
     # The dashboard is discoverable via find.
-    found = opik_client.find_dashboards(
+    found = opik_client.get_dashboards(
         name=f"e2e-dashboard-{PROJECT_NAME}", max_results=10
     )
     assert any(found_dashboard.id == dash.id for found_dashboard in found)

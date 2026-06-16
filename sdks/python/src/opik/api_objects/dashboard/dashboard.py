@@ -1,6 +1,7 @@
 import copy
 import logging
-from typing import Any, Dict, List, Optional, Union
+from contextlib import contextmanager
+from typing import Any, Dict, Generator, List, Optional, Union
 
 from opik import exceptions, id_helpers
 from opik.rest_api import client as rest_api_client
@@ -15,7 +16,7 @@ class Dashboard:
     """A high-level wrapper around an Opik dashboard.
 
     Do not instantiate directly; use :meth:`opik.Opik.create_dashboard`,
-    :meth:`opik.Opik.get_dashboard`, or :meth:`opik.Opik.find_dashboards`.
+    :meth:`opik.Opik.get_dashboard`, or :meth:`opik.Opik.get_dashboards`.
 
     The wrapper holds the raw ``config`` blob read from the backend as its source
     of truth. Mutators edit that blob in place and PATCH the whole document back
@@ -143,23 +144,23 @@ class Dashboard:
         widget_dict.setdefault("id", id_helpers.generate_id())
         validation.validate_widget_for_dashboard(widget_dict, self._type)
 
-        section = self._get_section(section_id)
-        section.setdefault("widgets", []).append(widget_dict)
-        typed_layout = [
-            types.DashboardLayoutItem.model_validate(i)
-            for i in section.get("layout", [])
-        ]
-        section["layout"] = [
-            item.to_jsonable()
-            for item in layout.calculate_layout_for_adding_widget(
-                typed_layout,
-                widget_type=str(widget_dict["type"]),
-                widget_id=str(widget_dict["id"]),
-                size=size,
-            )
-        ]
-
-        self._commit_config()
+        with self._atomic_config():
+            section = self._get_section(section_id)
+            section.setdefault("widgets", []).append(widget_dict)
+            typed_layout = [
+                types.DashboardLayoutItem.model_validate(i)
+                for i in section.get("layout", [])
+            ]
+            section["layout"] = [
+                item.to_jsonable()
+                for item in layout.calculate_layout_for_adding_widget(
+                    typed_layout,
+                    widget_type=str(widget_dict["type"]),
+                    widget_id=str(widget_dict["id"]),
+                    size=size,
+                )
+            ]
+            self._commit_config()
         return str(widget_dict["id"])
 
     def remove_widget(self, widget_id: str) -> None:
@@ -175,24 +176,29 @@ class Dashboard:
             kept = [w for w in widgets if w.get("id") != widget_id]
             if len(kept) != len(widgets):
                 removed = True
-                section["widgets"] = kept
-                typed_layout = [
-                    types.DashboardLayoutItem.model_validate(i)
-                    for i in section.get("layout", [])
-                ]
-                section["layout"] = [
-                    item.to_jsonable()
-                    for item in layout.remove_widget_from_layout(
-                        typed_layout, widget_id
-                    )
-                ]
 
         if not removed:
             raise exceptions.DashboardValidationError(
                 f"Widget with id {widget_id!r} not found in dashboard"
             )
 
-        self._commit_config()
+        with self._atomic_config():
+            for section in self._config.get("sections", []):
+                widgets = section.get("widgets", [])
+                kept = [w for w in widgets if w.get("id") != widget_id]
+                if len(kept) != len(widgets):
+                    section["widgets"] = kept
+                    typed_layout = [
+                        types.DashboardLayoutItem.model_validate(i)
+                        for i in section.get("layout", [])
+                    ]
+                    section["layout"] = [
+                        item.to_jsonable()
+                        for item in layout.remove_widget_from_layout(
+                            typed_layout, widget_id
+                        )
+                    ]
+            self._commit_config()
 
     def update_widget(
         self,
@@ -200,7 +206,7 @@ class Dashboard:
         *,
         title: Optional[str] = None,
         subtitle: Optional[str] = None,
-        config: Optional[Union[types._DashboardModel, Dict[str, Any]]] = None,
+        config: Optional[Union[types.WidgetConfig, Dict[str, Any]]] = None,
     ) -> None:
         """Update a widget's display properties or configuration.
 
@@ -209,22 +215,23 @@ class Dashboard:
         (not replaced), so partial updates are safe.
         """
         self._assert_config_writable()
-        widget = self._find_widget(widget_id)
+        with self._atomic_config():
+            widget = self._find_widget(widget_id)
 
-        if title is not None:
-            widget["title"] = title
-        if subtitle is not None:
-            widget["subtitle"] = subtitle
-        if config is not None:
-            config_dict = (
-                config.to_jsonable()
-                if isinstance(config, types._DashboardModel)
-                else config
-            )
-            widget.setdefault("config", {}).update(config_dict)
+            if title is not None:
+                widget["title"] = title
+            if subtitle is not None:
+                widget["subtitle"] = subtitle
+            if config is not None:
+                config_dict = (
+                    config.to_jsonable()
+                    if isinstance(config, types._DashboardModel)
+                    else config
+                )
+                widget.setdefault("config", {}).update(config_dict)
 
-        validation.validate_widget_for_dashboard(widget, self._type)
-        self._commit_config()
+            validation.validate_widget_for_dashboard(widget, self._type)
+            self._commit_config()
 
     def add_section(self, title: str) -> str:
         """Append a new empty section to the dashboard and return its ID.
@@ -234,8 +241,9 @@ class Dashboard:
         """
         self._assert_config_writable()
         section = types.DashboardSection(title=title).to_jsonable()
-        self._config.setdefault("sections", []).append(section)
-        self._commit_config()
+        with self._atomic_config():
+            self._config.setdefault("sections", []).append(section)
+            self._commit_config()
         return str(section["id"])
 
     def replace_sections(
@@ -253,8 +261,9 @@ class Dashboard:
         for section in section_dicts:
             for widget in section.get("widgets", []):
                 validation.validate_widget_for_dashboard(widget, self._type)
-        self._config["sections"] = section_dicts
-        self._commit_config()
+        with self._atomic_config():
+            self._config["sections"] = section_dicts
+            self._commit_config()
 
     def rename(self, name: str) -> None:
         """Change the dashboard's display name."""
@@ -280,6 +289,16 @@ class Dashboard:
     def delete(self) -> None:
         """Permanently delete the dashboard from the workspace."""
         self._rest_client.dashboards.delete_dashboard(self._id)
+
+    @contextmanager
+    def _atomic_config(self) -> Generator[None, None, None]:
+        """Snapshot _config before a mutation; restore it if the commit fails."""
+        old_config = copy.deepcopy(self._config)
+        try:
+            yield
+        except Exception:
+            self._config = old_config
+            raise
 
     def _assert_config_writable(self) -> None:
         validation.validate_writable_version(self._config.get("version"))

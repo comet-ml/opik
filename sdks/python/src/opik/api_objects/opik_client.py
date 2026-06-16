@@ -1434,7 +1434,7 @@ class Opik:
             client=self,
         )
 
-    def find_dashboards(
+    def get_dashboards(
         self,
         name: Optional[str] = None,
         project_id: Optional[str] = None,
@@ -1443,7 +1443,7 @@ class Opik:
         filters: Optional[str] = None,
     ) -> List[dashboard.Dashboard]:
         """
-        Find dashboards in the workspace.
+        Get dashboards in the workspace.
 
         Args:
             name: Optional name to filter dashboards by.
