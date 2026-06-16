@@ -25,7 +25,7 @@ const MAX_IN_FLIGHT = 4;
 
 // Scoped by projectId so cached answers / streaming routes can't collide
 // across projects.
-const keyOf = (t: ExplainTarget) => `${t.projectId}:${t.kind}:${t.entityId}`;
+const cellKey = (t: ExplainTarget) => `${t.projectId}:${t.kind}:${t.entityId}`;
 
 type ExplainState = {
   // Results cached per cell, so reopening a popover shows the answer (or its
@@ -49,6 +49,44 @@ type ExplainState = {
   onError: (data: SidebarEventMap["explain:error"]) => void;
 };
 
+const omit = (routes: Record<string, string>, explainId: string) => {
+  const next = { ...routes };
+  delete next[explainId];
+  return next;
+};
+
+/**
+ * Resolve the cell an `explainId` streams into and apply `patch` to its entry.
+ * Terminal events pass `dropRoute` to retire the explainId (no more chunks can
+ * arrive) while keeping the cell entry for the cache. No-ops on an unknown id.
+ */
+const patchEntry = (
+  s: ExplainState,
+  explainId: string,
+  patch: (entry: ExplainEntry) => Partial<ExplainEntry>,
+  dropRoute = false,
+): ExplainState => {
+  const key = s.routes[explainId];
+  if (!key) return s;
+  const routes = dropRoute ? omit(s.routes, explainId) : s.routes;
+  const entry = s.entries[key];
+  if (!entry) return dropRoute ? { ...s, routes } : s;
+  return {
+    ...s,
+    routes,
+    entries: { ...s.entries, [key]: { ...entry, ...patch(entry) } },
+  };
+};
+
+// Drop a cell's cached entry and its route so a fresh explain can run.
+const removeEntry = (s: ExplainState, key: string): ExplainState => {
+  const entry = s.entries[key];
+  if (!entry) return s;
+  const entries = { ...s.entries };
+  delete entries[key];
+  return { ...s, entries, routes: omit(s.routes, entry.explainId) };
+};
+
 const useExplainStore = create<ExplainState>((set, get) => ({
   entries: {},
   routes: {},
@@ -63,7 +101,7 @@ const useExplainStore = create<ExplainState>((set, get) => ({
   },
 
   explain: (target) => {
-    const key = keyOf(target);
+    const key = cellKey(target);
     const cached = get().entries[key];
     if (cached && cached.phase !== "error") return; // reuse cache / in-flight
     const inFlight = Object.values(get().entries).filter(
@@ -82,73 +120,65 @@ const useExplainStore = create<ExplainState>((set, get) => ({
   },
 
   retry: (target) => {
-    const key = keyOf(target);
-    set((s) => {
-      const entries = { ...s.entries };
-      const routes = { ...s.routes };
-      if (entries[key]) delete routes[entries[key].explainId];
-      delete entries[key];
-      return { entries, routes };
-    });
+    set((s) => removeEntry(s, cellKey(target)));
     get().explain(target);
   },
 
   onConsoleReady: ({ capabilities }) => set({ capabilities }),
 
   onChunk: ({ explainId, delta }) =>
-    set((s) => {
-      const entry = s.entries[s.routes[explainId]];
-      if (!entry) return s; // unknown / cleared
-      return {
-        entries: {
-          ...s.entries,
-          [s.routes[explainId]]: {
-            ...entry,
-            phase: "loading",
-            text: entry.text + delta,
-          },
-        },
-      };
-    }),
+    set((s) =>
+      patchEntry(s, explainId, (e) => ({
+        phase: "loading",
+        text: e.text + delta,
+      })),
+    ),
 
-  // A terminal event drops the explainId route (it can't receive more chunks);
-  // the cell entry stays for the cache. A retry mints a fresh explainId+route.
   onDone: ({ explainId }) =>
-    set((s) => {
-      const key = s.routes[explainId];
-      if (!key) return s; // unknown / already dropped
-      const routes = { ...s.routes };
-      delete routes[explainId];
-      const entry = s.entries[key];
-      return entry
-        ? {
-            routes,
-            entries: { ...s.entries, [key]: { ...entry, phase: "done" } },
-          }
-        : { routes };
-    }),
+    set((s) => patchEntry(s, explainId, () => ({ phase: "done" }), true)),
 
   onError: ({ explainId, message }) =>
-    set((s) => {
-      const key = s.routes[explainId];
-      if (!key) return s;
-      const routes = { ...s.routes };
-      delete routes[explainId];
-      const entry = s.entries[key];
-      return entry
-        ? {
-            routes,
-            entries: {
-              ...s.entries,
-              [key]: { ...entry, phase: "error", error: message },
-            },
-          }
-        : { routes };
-    }),
+    set((s) =>
+      patchEntry(
+        s,
+        explainId,
+        () => ({ phase: "error", error: message }),
+        true,
+      ),
+    ),
 }));
 
+/**
+ * Forward a shell→host bridge event to the explain store. Returns false when
+ * `event` isn't an explain event, so the bridge falls through to its default
+ * handling. Keeps the explain event shapes (and the casts at the untyped bridge
+ * boundary) owned by this module rather than leaking into the sidebar.
+ */
+export const handleConsoleEvent = (
+  event: keyof SidebarEventMap,
+  data: SidebarEventMap[keyof SidebarEventMap],
+): boolean => {
+  const store = useExplainStore.getState();
+  switch (event) {
+    case "console:ready":
+      store.onConsoleReady(data as SidebarEventMap["console:ready"]);
+      return true;
+    case "explain:chunk":
+      store.onChunk(data as SidebarEventMap["explain:chunk"]);
+      return true;
+    case "explain:done":
+      store.onDone(data as SidebarEventMap["explain:done"]);
+      return true;
+    case "explain:error":
+      store.onError(data as SidebarEventMap["explain:error"]);
+      return true;
+    default:
+      return false;
+  }
+};
+
 export const useExplainEntry = (target: ExplainTarget) =>
-  useExplainStore((s) => s.entries[keyOf(target)]);
+  useExplainStore((s) => s.entries[cellKey(target)]);
 
 export const useIsExplainCapable = () =>
   useExplainStore((s) => s.capabilities.includes("explain"));

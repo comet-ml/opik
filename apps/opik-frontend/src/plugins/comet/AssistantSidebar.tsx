@@ -36,6 +36,7 @@ import {
 } from "@/constants/assistantSidebar";
 import useExplainStore, {
   ConsoleEmit,
+  handleConsoleEvent,
 } from "@/plugins/comet/explain/explainStore";
 
 // 2 = explain/chat events added (`explain:run`/`explain:cancel`/`chat:continue`
@@ -194,30 +195,10 @@ const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
           data as SidebarEventMap["runner:request-pair"],
         );
         break;
-      // Explain relay (shell → host). `data` is cast at this untyped bridge
-      // boundary (same as the cases above); the explain store owns the state.
-      case "console:ready":
-        useExplainStore
-          .getState()
-          .onConsoleReady(data as SidebarEventMap["console:ready"]);
-        break;
-      case "explain:chunk":
-        useExplainStore
-          .getState()
-          .onChunk(data as SidebarEventMap["explain:chunk"]);
-        break;
-      case "explain:done":
-        useExplainStore
-          .getState()
-          .onDone(data as SidebarEventMap["explain:done"]);
-        break;
-      case "explain:error":
-        useExplainStore
-          .getState()
-          .onError(data as SidebarEventMap["explain:error"]);
-        break;
       default:
-        if (IS_ASSISTANT_DEV) {
+        // The explain relay (shell → host) is owned by the explain module; the
+        // bridge just forwards anything it doesn't handle itself.
+        if (!handleConsoleEvent(event, data) && IS_ASSISTANT_DEV) {
           console.warn(
             `[AssistantBridge] Unhandled sidebar event: "${event}"`,
             data,
