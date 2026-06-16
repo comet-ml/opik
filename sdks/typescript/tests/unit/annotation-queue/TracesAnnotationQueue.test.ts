@@ -8,6 +8,7 @@ import { logger } from "@/utils/logger";
 import {
   mockAPIFunction,
   createMockHttpResponsePromise,
+  mockAPIFunctionWithStream,
 } from "../../mockUtils";
 import * as OpikApi from "@/rest_api/api";
 
@@ -227,6 +228,72 @@ describe("TracesAnnotationQueue", () => {
         await queue.removeTraces([]);
 
         expect(removeItemsSpy).not.toHaveBeenCalled();
+      });
+    });
+
+    describe("getItems", () => {
+      let searchTracesSpy: MockInstance<
+        typeof client.api.traces.searchTraces
+      >;
+
+      afterEach(() => {
+        searchTracesSpy?.mockRestore();
+      });
+
+      it("should filter by the queue id and return parsed traces", async () => {
+        const queue = new TracesAnnotationQueue(
+          {
+            id: "queue-id",
+            name: "Test Queue",
+            projectId: "project-id",
+            scope: "trace",
+          },
+          client
+        );
+
+        const ndjson = [
+          JSON.stringify({ id: "trace-1", start_time: new Date().toISOString() }),
+          JSON.stringify({ id: "trace-2", start_time: new Date().toISOString() }),
+        ].join("\n");
+
+        searchTracesSpy = vi
+          .spyOn(client.api.traces, "searchTraces")
+          .mockImplementation(() => mockAPIFunctionWithStream(ndjson));
+
+        const items = await queue.getItems();
+
+        expect(items.map((t) => t.id)).toEqual(["trace-1", "trace-2"]);
+
+        const request = searchTracesSpy.mock.calls[0][0]!;
+        expect(request.projectId).toBe("project-id");
+        expect(request.truncate).toBe(true);
+        expect(request.filters).toEqual([
+          {
+            field: "annotation_queue_ids",
+            operator: "contains",
+            value: "queue-id",
+          },
+        ]);
+      });
+
+      it("should pass truncate=false when truncateImages is false", async () => {
+        const queue = new TracesAnnotationQueue(
+          {
+            id: "queue-id",
+            name: "Test Queue",
+            projectId: "project-id",
+            scope: "trace",
+          },
+          client
+        );
+
+        searchTracesSpy = vi
+          .spyOn(client.api.traces, "searchTraces")
+          .mockImplementation(() => mockAPIFunctionWithStream(""));
+
+        await queue.getItems({ truncateImages: false });
+
+        expect(searchTracesSpy.mock.calls[0][0]!.truncate).toBe(false);
       });
     });
   });

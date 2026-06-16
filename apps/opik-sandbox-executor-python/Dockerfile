@@ -57,6 +57,15 @@ COPY --from=builder /build/scoring_runner.pyc ./scoring_runner.pyc
 COPY --from=builder /prewarm.pyc /tmp/prewarm.pyc
 COPY --from=builder /usr/local/bin/selftest.sh /usr/local/bin/selftest.sh
 
+# Bake stdlib bytecode at build time. The slimming above only touched
+# site-packages; the stdlib under /usr/local/lib/python3.12 keeps its source
+# with no __pycache__. The runtime CMD runs as user 1001 with
+# PYTHONDONTWRITEBYTECODE=1, so without this the cold per-request process
+# recompiles inspect/typing/ast/re/... from source on EVERY invocation and
+# cannot cache the result (root-owned dir + DONTWRITEBYTECODE). Compile at
+# opt-level 0 so the cached .pyc matches the runtime optimization level.
+RUN python -m compileall -q /usr/local/lib/python3.12 || true
+
 # Prewarm imports, then fail the build if the runner can't score in this stage.
 RUN python /tmp/prewarm.pyc \
     && sh /usr/local/bin/selftest.sh ./scoring_runner.pyc

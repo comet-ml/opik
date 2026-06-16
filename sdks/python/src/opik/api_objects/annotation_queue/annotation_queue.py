@@ -8,11 +8,16 @@ from typing import (
 )
 
 from opik.rest_api import client as rest_api_client
-from opik.rest_api.types import trace_public, trace_thread
+from opik.rest_api.types import (
+    trace_public,
+    trace_thread,
+    trace_filter_public,
+    trace_thread_filter,
+)
 from opik.message_processing.batching import sequence_splitter
 from opik.api_objects.trace import trace_client
 from opik.api_objects.rest_helpers import ensure_rest_api_call_respecting_rate_limit
-from opik.api_objects import constants
+from opik.api_objects import constants, helpers, search_helpers
 import opik.exceptions as exceptions
 
 LOGGER = logging.getLogger(__name__)
@@ -261,6 +266,34 @@ class TracesAnnotationQueue(BaseAnnotationQueue):
 
         self._items_count = None
 
+    def get_items(
+        self,
+        truncate_images: bool = True,
+    ) -> List[trace_public.TracePublic]:
+        """
+        Get all trace objects currently in the annotation queue.
+
+        Args:
+            truncate_images: Whether to truncate inline base64 image data stored in
+                input, output, or metadata of the returned traces.
+
+        Returns:
+            List[trace_public.TracePublic]: All traces currently in the queue.
+        """
+        filters = helpers.parse_filter_expressions(
+            f'annotation_queue_ids contains "{self._id}"',
+            parsed_item_class=trace_filter_public.TraceFilterPublic,
+            entity_type="traces",
+        )
+
+        return search_helpers.search_traces_with_filters(
+            rest_client=self._rest_client,
+            project_id=self._project_id,
+            filters=filters,
+            max_results=None,
+            truncate=truncate_images,
+        )
+
 
 class ThreadsAnnotationQueue(BaseAnnotationQueue):
     """
@@ -349,3 +382,31 @@ class ThreadsAnnotationQueue(BaseAnnotationQueue):
             self._remove_items_batch_with_retry(batch)
 
         self._items_count = None
+
+    def get_items(
+        self,
+        truncate_images: bool = True,
+    ) -> List[trace_thread.TraceThread]:
+        """
+        Get all thread objects currently in the annotation queue.
+
+        Args:
+            truncate_images: Whether to truncate inline base64 image data stored in
+                input, output, or metadata of the returned threads.
+
+        Returns:
+            List[trace_thread.TraceThread]: All threads currently in the queue.
+        """
+        filters = helpers.parse_filter_expressions(
+            f'annotation_queue_ids contains "{self._id}"',
+            parsed_item_class=trace_thread_filter.TraceThreadFilter,
+            entity_type="threads",
+        )
+
+        return search_helpers.search_threads_with_filters(
+            rest_client=self._rest_client,
+            project_id=self._project_id,
+            filters=filters,
+            max_results=None,
+            truncate=truncate_images,
+        )

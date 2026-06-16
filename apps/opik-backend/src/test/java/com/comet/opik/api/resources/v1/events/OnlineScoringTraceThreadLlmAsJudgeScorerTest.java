@@ -518,14 +518,11 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
             when(aiProxyService.scoreTrace(any(ChatRequest.class), eq(code.model()), eq(workspaceId)))
                     .thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage(LLM_RESPONSE)).build());
             when(feedbackScoreService.scoreBatchOfThreads(any())).thenReturn(Mono.empty());
-            when(traceThreadService.setScoredAt(eq(projectId), eq(List.of(threadId)), any()))
-                    .thenReturn(Mono.empty());
 
             scorer.score(message).block();
 
             var captor = ArgumentCaptor.forClass(List.class);
             verify(feedbackScoreService).scoreBatchOfThreads(captor.capture());
-            verify(traceThreadService).setScoredAt(eq(projectId), eq(List.of(threadId)), any());
 
             assertThat(captor.getValue()).usingRecursiveComparison().isEqualTo(List.of(
                     threadScore("Relevance", BigDecimal.valueOf(4), "on-topic", project),
@@ -559,8 +556,6 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
             when(aiProxyService.scoreTrace(any(ChatRequest.class), eq(code.model()), eq(workspaceId)))
                     .thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage(LLM_RESPONSE)).build());
             when(feedbackScoreService.scoreBatchOfThreads(any())).thenReturn(Mono.empty());
-            when(traceThreadService.setScoredAt(eq(projectId), eq(List.of(threadId)), any()))
-                    .thenReturn(Mono.empty());
             // Toggle off — the scorer should not even ask the SpanService.
             org.mockito.Mockito.when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(false);
 
@@ -574,8 +569,6 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
             var message = sampleMessage();
 
             when(traceService.search(anyInt(), any(TraceSearchCriteria.class))).thenReturn(Flux.empty());
-            when(traceThreadService.setScoredAt(eq(projectId), eq(List.of(threadId)), any()))
-                    .thenReturn(Mono.empty());
 
             scorer.score(message).block();
 
@@ -593,8 +586,6 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
             when(traceService.search(anyInt(), any(TraceSearchCriteria.class)))
                     .thenReturn(Flux.just(sampleTrace()), Flux.empty());
             when(traceThreadService.getThreadModelId(projectId, threadId)).thenReturn(Mono.empty());
-            when(traceThreadService.setScoredAt(eq(projectId), eq(List.of(threadId)), any()))
-                    .thenReturn(Mono.empty());
 
             scorer.score(message).block();
 
@@ -613,8 +604,6 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
             when(traceThreadService.getThreadModelId(projectId, threadId)).thenReturn(Mono.just(threadModelId));
             when(automationRuleEvaluatorService.findById(ruleId, Set.of(projectId), workspaceId))
                     .thenThrow(new NotFoundException("rule not found"));
-            when(traceThreadService.setScoredAt(eq(projectId), eq(List.of(threadId)), any()))
-                    .thenReturn(Mono.empty());
 
             scorer.score(message).block();
 
