@@ -277,11 +277,9 @@ export const SMEFlowProvider: React.FunctionComponent<{
 
   // Per-user deterministic shuffle of items
   const shuffledItemIds = useMemo(() => {
-    const seed = hashCode(
-      (currentUserName ?? "") + (annotationQueue?.id ?? ""),
-    );
+    const prefix = (currentUserName ?? "") + (annotationQueue?.id ?? "");
     return [...allItemIds].sort(
-      (a, b) => hashCode(a + seed) - hashCode(b + seed),
+      (a, b) => hashCode(prefix + a) - hashCode(prefix + b),
     );
   }, [allItemIds, currentUserName, annotationQueue?.id]);
 
