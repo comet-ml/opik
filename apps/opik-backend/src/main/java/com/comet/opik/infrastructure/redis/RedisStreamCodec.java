@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.redis;
 
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.google.common.base.Suppliers;
@@ -31,10 +32,16 @@ public enum RedisStreamCodec {
      * by previous opik-backend versions used one shape, the current version may produce
      * the other; tolerating both keeps {@code XAUTOCLAIM} from looping on a decode error
      * every {@code pending-message-duration} window.
+     * <p>
+     * Unknown properties are also ignored so that, during a rolling upgrade, a consumer on the older
+     * version can still decode messages produced by a newer version that added a field to the payload
+     * (e.g. a new {@code workspace_name}); otherwise the decode error would make {@code XAUTOCLAIM} loop
+     * on the message indefinitely.
      */
     private static ObjectMapper buildStreamMapper() {
         ObjectMapper mapper = JsonUtils.getMapper().copy();
         mapper.registerModule(new SimpleModule().addDeserializer(UUID.class, LenientUUIDDeserializer.INSTANCE));
+        mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
         return mapper;
     }
 
