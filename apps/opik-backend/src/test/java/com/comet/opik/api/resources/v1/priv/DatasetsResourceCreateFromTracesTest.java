@@ -192,6 +192,7 @@ class DatasetsResourceCreateFromTracesTest {
                 null,
                 null,
                 null,
+                null,
                 null);
 
         traceResourceClient.createComment(comment, trace1.id(), apiKey, workspaceName, 201);

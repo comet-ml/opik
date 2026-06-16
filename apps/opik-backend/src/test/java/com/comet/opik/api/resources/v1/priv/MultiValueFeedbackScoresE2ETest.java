@@ -264,9 +264,9 @@ class MultiValueFeedbackScoresE2ETest {
         assertThat(actualTrace.feedbackScores()).hasSize(1);
         assertThat(actualTrace.feedbackScores().getFirst().valueByAuthor()).hasSize(2);
 
-        // Delete user 2 feedback score
+        // Delete user 2 feedback score (must be authenticated as user 2)
         traceResourceClient.deleteTraceFeedbackScore(
-                DeleteFeedbackScore.builder().name(user1Score.name()).author(USER2).build(), traceId, API_KEY1,
+                DeleteFeedbackScore.builder().name(user1Score.name()).build(), traceId, API_KEY2,
                 TEST_WORKSPACE);
 
         // verify only user 1 score is present
@@ -381,9 +381,9 @@ class MultiValueFeedbackScoresE2ETest {
         assertThat(actualSpan.feedbackScores()).hasSize(1);
         assertThat(actualSpan.feedbackScores().getFirst().valueByAuthor()).hasSize(2);
 
-        // Delete user 2 feedback score
+        // Delete user 2 feedback score (must be authenticated as user 2)
         spanResourceClient.deleteSpanFeedbackScore(
-                DeleteFeedbackScore.builder().name(user1Score.name()).author(USER2).build(), spanId, API_KEY1,
+                DeleteFeedbackScore.builder().name(user1Score.name()).build(), spanId, API_KEY2,
                 TEST_WORKSPACE);
 
         // verify only user 1 score is present
@@ -447,9 +447,9 @@ class MultiValueFeedbackScoresE2ETest {
         assertThat(actualThread.feedbackScores()).hasSize(1);
         assertThat(actualThread.feedbackScores().getFirst().valueByAuthor()).hasSize(2);
 
-        // Delete user 2 feedback score
+        // Delete user 2 feedback score (must be authenticated as user 2)
         traceResourceClient.deleteThreadFeedbackScores(projectName, threadId, Set.of(user1Score.name()), USER2,
-                API_KEY1,
+                API_KEY2,
                 TEST_WORKSPACE);
 
         // verify only user 1 score is present

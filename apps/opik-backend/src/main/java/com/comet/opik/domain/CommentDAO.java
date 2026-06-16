@@ -66,6 +66,7 @@ class CommentDAOImpl implements CommentDAO {
                 project_id,
                 workspace_id,
                 text,
+                source_queue_id,
                 created_by,
                 last_updated_by
             )
@@ -77,6 +78,7 @@ class CommentDAOImpl implements CommentDAO {
                  :project_id,
                  :workspace_id,
                  :text,
+                 :source_queue_id,
                  :user_name,
                  :user_name
             )
@@ -97,7 +99,7 @@ class CommentDAOImpl implements CommentDAO {
 
     private static final String UPDATE = """
             INSERT INTO comments (
-            	id, entity_id, entity_type, project_id, workspace_id, text, created_at, created_by, last_updated_by
+            	id, entity_id, entity_type, project_id, workspace_id, text, source_queue_id, created_at, created_by, last_updated_by
             )
             SELECT
             	id,
@@ -106,6 +108,7 @@ class CommentDAOImpl implements CommentDAO {
             	project_id,
             	workspace_id,
             	:text as text,
+            	source_queue_id,
             	created_at,
             	created_by,
                 :user_name as last_updated_by
@@ -263,5 +266,11 @@ class CommentDAOImpl implements CommentDAO {
                 .bind("entity_type", entityType.getType())
                 .bind("project_id", projectId)
                 .bind("text", comment.text());
+
+        if (comment.sourceQueueId() != null) {
+            statement.bind("source_queue_id", comment.sourceQueueId().toString());
+        } else {
+            statement.bindNull("source_queue_id", String.class);
+        }
     }
 }
