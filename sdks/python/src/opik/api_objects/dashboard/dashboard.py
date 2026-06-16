@@ -162,7 +162,9 @@ class Dashboard:
         validation.validate_widget_for_dashboard(widget_dict, self._type)
         validation.inject_project_id(widget_dict, self._project_id)
 
-        resolved_section_id = section_id or self._default_section_id()
+        resolved_section_id = (
+            self._default_section_id() if section_id is None else section_id
+        )
         with self._atomic_config():
             section = self._get_section(resolved_section_id)
             section.setdefault("widgets", []).append(widget_dict)
