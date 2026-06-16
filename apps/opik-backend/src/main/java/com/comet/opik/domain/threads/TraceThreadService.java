@@ -95,11 +95,8 @@ class TraceThreadServiceImpl implements TraceThreadService {
 
         return processThreadAsync(threadInfo, projectId)
                 .collectList()
-                .flatMap(traceThreads -> lockService.executeWithLockCustomExpire(
-                        new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
-                        Mono.defer(() -> this.saveTraceThreads(projectId, traceThreads)
-                                .then()),
-                        LOCK_DURATION));
+                .flatMap(traceThreads -> this.saveTraceThreads(projectId, traceThreads))
+                .then();
     }
 
     private Flux<TraceThreadModel> processThreadAsync(Map<String, ThreadTimestamps> threadInfo, UUID projectId) {
@@ -147,10 +144,7 @@ class TraceThreadServiceImpl implements TraceThreadService {
             return Mono.empty();
         }
 
-        return lockService.executeWithLockCustomExpire(
-                new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
-                Mono.defer(() -> processUpdateThreadSampledValue(projectId, threadSamplingPerRules)),
-                LOCK_DURATION);
+        return processUpdateThreadSampledValue(projectId, threadSamplingPerRules);
     }
 
     private Mono<Void> processUpdateThreadSampledValue(UUID projectId,
@@ -295,12 +289,10 @@ class TraceThreadServiceImpl implements TraceThreadService {
     @Override
     public Mono<Void> processProjectWithTraceThreadsPendingClosure(@NonNull UUID projectId,
             @NonNull Instant now, @NonNull Duration defaultTimeoutToMarkThreadAsInactive) {
-        return lockService.executeWithLockCustomExpire(
-                new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
-                Mono.deferContextual(
-                        contextView -> closeThreadWith(projectId, now, defaultTimeoutToMarkThreadAsInactive,
-                                contextView)),
-                LOCK_DURATION).then();
+        return Mono.deferContextual(
+                contextView -> closeThreadWith(projectId, now, defaultTimeoutToMarkThreadAsInactive,
+                        contextView))
+                .then();
     }
 
     private Mono<Long> closeThreadWith(UUID projectId, Instant now, Duration defaultTimeoutToMarkThreadAsInactive,
