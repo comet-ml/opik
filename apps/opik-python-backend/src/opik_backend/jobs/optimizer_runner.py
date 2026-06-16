@@ -283,8 +283,16 @@ def main():
                 config.optimizer_params,
             )
 
-            # Create prompt from config
-            prompt = ChatPrompt(messages=config.prompt_messages)
+            # Create prompt from config. The model must be set on the prompt
+            # itself: the optimizer only uses config.model for its own reasoning
+            # calls, while the baseline and per-trial task evaluations run through
+            # the prompt's model. Without this, ChatPrompt falls back to the SDK
+            # default (openai/gpt-5-nano) and ignores the model picked in the UI.
+            prompt = ChatPrompt(
+                messages=config.prompt_messages,
+                model=config.model,
+                model_parameters=config.model_params,
+            )
 
             # Run optimization
             result = run_optimization(
