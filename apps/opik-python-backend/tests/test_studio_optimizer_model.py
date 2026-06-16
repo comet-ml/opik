@@ -1,34 +1,39 @@
-"""Unit tests for the optional separate optimizer/algorithm model.
+"""Unit tests for the studio model wiring.
 
 The Optimization Studio lets the optimizer/algorithm (GEPA's reflection LM,
-hierarchical's reasoning model) run on a different model than the prompt. That
-model is carried inside ``studio_config.optimizer.parameters`` and must be
-pulled out of the parameters so the rest can be passed as kwargs to the
-optimizer constructor without colliding with ``model``.
+hierarchical's reasoning model) run on a different model than the prompt. These
+tests verify, deterministically and offline:
+
+- the separate algorithm model is parsed out of the optimizer parameters,
+- the prompt is built with its configured model + parameters,
+- the optimizer is built with its configured model + parameters,
+- the optimizer defaults to the prompt model when none is set.
 """
 
+from opik_backend.jobs import optimizer_runner
 from opik_backend.studio.types import OptimizationConfig
 
 
-def _config(optimizer_params: dict) -> dict:
+def _config(
+    task_model: str = "claude-haiku-4-5-20251001",
+    task_params: dict | None = None,
+    optimizer_params: dict | None = None,
+) -> dict:
     return {
         "dataset_name": "ds",
         "prompt": {"messages": [{"role": "user", "content": "{{text}}"}]},
-        "llm_model": {
-            "model": "claude-haiku-4-5-20251001",
-            "parameters": {"stream": False},
-        },
+        "llm_model": {"model": task_model, "parameters": task_params or {}},
         "evaluation": {
             "metrics": [{"type": "equals", "parameters": {"reference_key": "label"}}]
         },
-        "optimizer": {"type": "gepa", "parameters": optimizer_params},
+        "optimizer": {"type": "gepa", "parameters": optimizer_params or {"seed": 42}},
     }
 
 
 def test_optimizer_model_extracted_from_optimizer_params():
     config = OptimizationConfig.from_dict(
         _config(
-            {
+            optimizer_params={
                 "seed": 42,
                 "model": "claude-opus-4-8",
                 "model_parameters": {"temperature": 0.5},
@@ -46,8 +51,55 @@ def test_optimizer_model_extracted_from_optimizer_params():
 
 
 def test_optimizer_model_defaults_to_none_when_absent():
-    config = OptimizationConfig.from_dict(_config({"seed": 7}))
+    config = OptimizationConfig.from_dict(_config(optimizer_params={"seed": 7}))
 
     assert config.optimizer_model is None
     assert config.optimizer_model_params is None
     assert config.optimizer_params == {"seed": 7}
+
+
+def test_prompt_and_algorithm_use_their_configured_models_and_params():
+    config = OptimizationConfig.from_dict(
+        _config(
+            task_model="claude-haiku-4-5-20251001",
+            task_params={"temperature": 0.3},
+            optimizer_params={
+                "seed": 42,
+                "model": "claude-opus-4-8",
+                "model_parameters": {"temperature": 0.7},
+            },
+        )
+    )
+
+    optimizer, prompt = optimizer_runner.build_optimizer_and_prompt(config)
+
+    # Prompt (task evaluation) uses the configured prompt model + params,
+    # gateway-routed, with the studio defaults applied.
+    assert prompt.model == "openai/claude-haiku-4-5-20251001"
+    assert prompt.model_kwargs.get("temperature") == 0.3
+    assert prompt.model_kwargs.get("stream") is False
+    assert "max_tokens" in prompt.model_kwargs
+
+    # Optimizer (algorithm) uses its own configured model + params.
+    assert optimizer.model == "openai/claude-opus-4-8"
+    assert optimizer.model_parameters.get("temperature") == 0.7
+    assert optimizer.model_parameters.get("stream") is False
+    assert "max_tokens" in optimizer.model_parameters
+
+
+def test_algorithm_defaults_to_prompt_model_when_not_set():
+    config = OptimizationConfig.from_dict(
+        _config(
+            task_model="claude-haiku-4-5-20251001",
+            task_params={"temperature": 0.3},
+            optimizer_params={"seed": 42},
+        )
+    )
+
+    optimizer, prompt = optimizer_runner.build_optimizer_and_prompt(config)
+
+    assert prompt.model == "openai/claude-haiku-4-5-20251001"
+    # No separate algorithm model → optimizer falls back to the prompt model
+    # and its parameters.
+    assert optimizer.model == "openai/claude-haiku-4-5-20251001"
+    assert optimizer.model_parameters.get("temperature") == 0.3
