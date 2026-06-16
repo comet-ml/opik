@@ -49,7 +49,7 @@ const ManualIntegrationDetail: React.FC<ManualIntegrationDetailProps> = ({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1.5">
-        <h3 className="comet-title-xs flex items-center gap-3">
+        <h3 className="comet-title-xs flex items-center gap-1.5">
           <img
             alt={integration.title}
             src={iconSrc}

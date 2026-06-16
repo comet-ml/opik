@@ -83,7 +83,7 @@ const IntegrationDetailsDialog: React.FunctionComponent<
     <Dialog open={!!selectedIntegration} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-[920px] gap-2">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-3">
+          <DialogTitle className="flex items-center gap-1.5">
             <img
               alt={selectedIntegration.title}
               src={iconSrc}
