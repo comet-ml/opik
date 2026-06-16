@@ -33,6 +33,7 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.util.Map;
 import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -156,10 +157,10 @@ class AgentInsightsJobsResourceTest {
     }
 
     @Test
-    @DisplayName("Enable without project_id fails validation (400)")
-    void enable__missingProjectId__returnsBadRequest() {
-        try (var response = jobsClient.enableRaw("{}", API_KEY, WORKSPACE_NAME)) {
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+    @DisplayName("Enable without project_id fails validation (422)")
+    void enable__missingProjectId__returnsUnprocessableEntity() {
+        try (var response = jobsClient.enableRaw(Map.of(), API_KEY, WORKSPACE_NAME)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
         }
     }
 
