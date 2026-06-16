@@ -34,8 +34,14 @@ import {
   isAssistantSidebarOpen,
   setAssistantSidebarOpen,
 } from "@/constants/assistantSidebar";
+import useExplainStore, {
+  ConsoleEmit,
+} from "@/plugins/comet/explain/explainStore";
 
-const BRIDGE_PROTOCOL_VERSION = 1;
+// 2 = explain/chat events added (`explain:run`/`explain:cancel`/`chat:continue`
+// + `console:ready`/`explain:chunk`/`explain:done`/`explain:error`). MUST move
+// in lockstep with `ollie-console/src/bridge.ts`; VER-4 asserts the contract.
+const BRIDGE_PROTOCOL_VERSION = 2;
 
 interface AssistantSidebarLoaderProps {
   error: string | null;
@@ -118,6 +124,9 @@ function createHostListeners(): HostListeners {
     "visibility:changed": new Set(),
     "runner:state-changed": new Set(),
     "conversation:start": new Set(),
+    "explain:run": new Set(),
+    "explain:cancel": new Set(),
+    "chat:continue": new Set(),
   };
 }
 
@@ -184,6 +193,28 @@ const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
         refs.onRequestPair.current(
           data as SidebarEventMap["runner:request-pair"],
         );
+        break;
+      // Explain relay (shell → host). `data` is cast at this untyped bridge
+      // boundary (same as the cases above); the explain store owns the state.
+      case "console:ready":
+        useExplainStore
+          .getState()
+          .onConsoleReady(data as SidebarEventMap["console:ready"]);
+        break;
+      case "explain:chunk":
+        useExplainStore
+          .getState()
+          .onChunk(data as SidebarEventMap["explain:chunk"]);
+        break;
+      case "explain:done":
+        useExplainStore
+          .getState()
+          .onDone(data as SidebarEventMap["explain:done"]);
+        break;
+      case "explain:error":
+        useExplainStore
+          .getState()
+          .onError(data as SidebarEventMap["explain:error"]);
         break;
       default:
         if (IS_ASSISTANT_DEV) {
@@ -393,6 +424,16 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
       }
     };
   }, [meta]);
+
+  // Register this sidebar as the explain bridge's host→shell emitter.
+  // Ownership-guarded (like window.opikBridge) so the sidebar↔OlliePage
+  // instance switch can't tear down a freshly mounted instance.
+  useEffect(() => {
+    const emit: ConsoleEmit = (event, data) =>
+      emitHostEvent(listenersRef, event, data);
+    useExplainStore.getState().setEmit(emit);
+    return () => useExplainStore.getState().clearEmit(emit);
+  }, []);
 
   // Emit context changes to sidebar listeners
   useEffect(() => {
