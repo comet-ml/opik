@@ -343,7 +343,7 @@ def verify_dashboard(
 
     if expected_widget_positions is not None:
         layout_by_id = {
-            item.i: item for section in fetched.sections for item in section.layout
+            item.id: item for section in fetched.sections for item in section.layout
         }
         for widget_id, expected_pos in expected_widget_positions.items():
             actual_item = layout_by_id[widget_id]

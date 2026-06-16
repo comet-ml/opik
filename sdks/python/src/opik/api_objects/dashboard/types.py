@@ -274,7 +274,7 @@ class DashboardWidget(_DashboardModel):
 
 
 class DashboardLayoutItem(_DashboardModel):
-    i: str
+    id: str = pydantic.Field(alias="i")
     x: int
     y: int
     w: int

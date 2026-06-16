@@ -1,22 +1,19 @@
 """Grid auto-layout, ported from apps/opik-frontend/src/lib/dashboard/layout.ts.
 
-Operates on raw camelCase layout-item dicts (``{"i", "x", "y", "w", "h", ...}``),
-matching the shape stored in the dashboard ``config`` blob. Keeping the algorithm
-in sync with the frontend means widgets the SDK adds are positioned the same way
-the UI would position them.
+Operates on :class:`~opik.api_objects.dashboard.types.DashboardLayoutItem` objects.
+Keeping the algorithm in sync with the frontend means widgets the SDK adds are
+positioned the same way the UI would position them.
 """
 
 from typing import Any, Dict, List, Optional
 
 from . import types
+from .types import DashboardLayoutItem
 
 GRID_COLUMNS = types.GRID_COLUMNS
 MAX_WIDGET_HEIGHT = types.MAX_WIDGET_HEIGHT
 MIN_WIDGET_WIDTH = types.MIN_WIDGET_WIDTH
 MIN_WIDGET_HEIGHT = types.MIN_WIDGET_HEIGHT
-
-# Layout items mix value types: "i" is a widget-id string, the rest are ints.
-LayoutItem = Dict[str, Any]
 
 _WIDGET_SIZE_CONFIG: Dict[str, Dict[str, int]] = {
     types.WidgetType.PROJECT_METRICS.value: {"w": 2, "h": 4, "minW": 2, "minH": 4},
@@ -48,13 +45,13 @@ def get_widget_size_config(widget_type: str) -> Dict[str, int]:
     return _WIDGET_SIZE_CONFIG.get(widget_type, _DEFAULT_SIZE_CONFIG)
 
 
-def get_column_heights(layout: List[LayoutItem]) -> List[int]:
+def get_column_heights(layout: List[DashboardLayoutItem]) -> List[int]:
     heights = [0] * GRID_COLUMNS
 
     for item in layout:
-        start_col = item["x"]
-        end_col = min(item["x"] + item["w"], GRID_COLUMNS)
-        item_bottom = item["y"] + item["h"]
+        start_col = item.x
+        end_col = min(item.x + item.w, GRID_COLUMNS)
+        item_bottom = item.y + item.h
 
         for col in range(start_col, end_col):
             heights[col] = max(heights[col], item_bottom)
@@ -83,49 +80,49 @@ def find_first_available_position(
 
 
 def calculate_layout_for_adding_widget(
-    layout: List[LayoutItem],
+    layout: List[DashboardLayoutItem],
     widget_type: str,
     widget_id: str,
     size: Optional[Dict[str, int]] = None,
-) -> List[LayoutItem]:
+) -> List[DashboardLayoutItem]:
     size_config = get_widget_size_config(widget_type)
     raw_w = size["w"] if size else size_config["w"]
     raw_h = size["h"] if size else size_config["h"]
     w = max(size_config["minW"], min(raw_w, GRID_COLUMNS))
     h = max(size_config["minH"], min(raw_h, MAX_WIDGET_HEIGHT))
 
-    new_item: LayoutItem = {
-        "i": widget_id,
-        "x": 0,
-        "y": 0,
-        "w": w,
-        "h": h,
-        "minW": size_config["minW"],
-        "minH": size_config["minH"],
-        "maxW": GRID_COLUMNS,
-        "maxH": MAX_WIDGET_HEIGHT,
-    }
+    new_item = DashboardLayoutItem(
+        id=widget_id,
+        x=0,
+        y=0,
+        w=w,
+        h=h,
+        min_w=size_config["minW"],
+        min_h=size_config["minH"],
+        max_w=GRID_COLUMNS,
+        max_h=MAX_WIDGET_HEIGHT,
+    )
 
     if not layout:
         return [new_item]
 
     column_heights = get_column_heights(layout)
     position = find_first_available_position(w, h, column_heights)
-    new_item["x"] = position["x"]
-    new_item["y"] = position["y"]
+    new_item.x = position["x"]
+    new_item.y = position["y"]
 
     return [*layout, new_item]
 
 
 def normalize_layout(
-    layout: List[LayoutItem],
-    widgets: Optional[List[Dict[str, object]]] = None,
-) -> List[LayoutItem]:
+    layout: List[DashboardLayoutItem],
+    widgets: Optional[List[Dict[str, Any]]] = None,
+) -> List[DashboardLayoutItem]:
     widgets_by_id = {w["id"]: w for w in (widgets or [])}
 
-    normalized: List[LayoutItem] = []
+    normalized: List[DashboardLayoutItem] = []
     for item in layout:
-        widget = widgets_by_id.get(item["i"])
+        widget = widgets_by_id.get(item.id)
         if widget is not None:
             size_config = get_widget_size_config(str(widget["type"]))
             min_w, min_h = size_config["minW"], size_config["minH"]
@@ -133,23 +130,23 @@ def normalize_layout(
             min_w, min_h = MIN_WIDGET_WIDTH, MIN_WIDGET_HEIGHT
 
         normalized.append(
-            {
-                "i": item["i"],
-                "x": max(0, min(item["x"], GRID_COLUMNS - item["w"])),
-                "y": max(0, item["y"]),
-                "w": max(min_w, min(item["w"], GRID_COLUMNS)),
-                "h": max(min_h, min(item["h"], MAX_WIDGET_HEIGHT)),
-                "minW": min_w,
-                "minH": min_h,
-                "maxW": GRID_COLUMNS,
-                "maxH": MAX_WIDGET_HEIGHT,
-            }
+            DashboardLayoutItem(
+                id=item.id,
+                x=max(0, min(item.x, GRID_COLUMNS - item.w)),
+                y=max(0, item.y),
+                w=max(min_w, min(item.w, GRID_COLUMNS)),
+                h=max(min_h, min(item.h, MAX_WIDGET_HEIGHT)),
+                min_w=min_w,
+                min_h=min_h,
+                max_w=GRID_COLUMNS,
+                max_h=MAX_WIDGET_HEIGHT,
+            )
         )
 
     return normalized
 
 
 def remove_widget_from_layout(
-    layout: List[LayoutItem], widget_id: str
-) -> List[LayoutItem]:
-    return [item for item in layout if item["i"] != widget_id]
+    layout: List[DashboardLayoutItem], widget_id: str
+) -> List[DashboardLayoutItem]:
+    return [item for item in layout if item.id != widget_id]

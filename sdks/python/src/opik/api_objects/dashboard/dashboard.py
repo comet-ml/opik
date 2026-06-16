@@ -125,12 +125,19 @@ class Dashboard:
 
         section = self._get_section(section_id)
         section.setdefault("widgets", []).append(widget_dict)
-        section["layout"] = layout.calculate_layout_for_adding_widget(
-            section.get("layout", []),
-            widget_type=str(widget_dict["type"]),
-            widget_id=str(widget_dict["id"]),
-            size=size,
-        )
+        typed_layout = [
+            types.DashboardLayoutItem.model_validate(i)
+            for i in section.get("layout", [])
+        ]
+        section["layout"] = [
+            item.to_jsonable()
+            for item in layout.calculate_layout_for_adding_widget(
+                typed_layout,
+                widget_type=str(widget_dict["type"]),
+                widget_id=str(widget_dict["id"]),
+                size=size,
+            )
+        ]
 
         self._commit_config()
         return str(widget_dict["id"])
@@ -145,9 +152,16 @@ class Dashboard:
             if len(kept) != len(widgets):
                 removed = True
                 section["widgets"] = kept
-                section["layout"] = layout.remove_widget_from_layout(
-                    section.get("layout", []), widget_id
-                )
+                typed_layout = [
+                    types.DashboardLayoutItem.model_validate(i)
+                    for i in section.get("layout", [])
+                ]
+                section["layout"] = [
+                    item.to_jsonable()
+                    for item in layout.remove_widget_from_layout(
+                        typed_layout, widget_id
+                    )
+                ]
 
         if not removed:
             raise exceptions.DashboardValidationError(

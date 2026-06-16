@@ -301,7 +301,7 @@ def test_create_dashboard__with_provided_sections():
     section = types.DashboardSection(
         title="Custom",
         widgets=[types.DashboardWidget(id="w1", type=types.WidgetType.TEXT_MARKDOWN)],
-        layout=[types.DashboardLayoutItem(i="w1", x=0, y=0, w=2, h=4)],
+        layout=[types.DashboardLayoutItem(id="w1", x=0, y=0, w=2, h=4)],
     )
 
     with patch.object(
@@ -321,7 +321,7 @@ def test_create_dashboard__incompatible_widget_raises_before_create():
         widgets=[
             types.DashboardWidget(id="w1", type=types.WidgetType.EXPERIMENT_LEADERBOARD)
         ],
-        layout=[types.DashboardLayoutItem(i="w1", x=0, y=0, w=6, h=6)],
+        layout=[types.DashboardLayoutItem(id="w1", x=0, y=0, w=6, h=6)],
     )
 
     with patch.object(
@@ -350,7 +350,7 @@ def test_replace_sections__incompatible_widget_raises_before_write():
         widgets=[
             types.DashboardWidget(id="w1", type=types.WidgetType.EXPERIMENT_LEADERBOARD)
         ],
-        layout=[types.DashboardLayoutItem(i="w1", x=0, y=0, w=6, h=6)],
+        layout=[types.DashboardLayoutItem(id="w1", x=0, y=0, w=6, h=6)],
     )
 
     with pytest.raises(exceptions.DashboardValidationError, match="not supported"):

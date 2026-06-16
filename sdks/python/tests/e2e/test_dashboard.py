@@ -230,7 +230,7 @@ def test_move_widget_position__persisted(
     # Move w1 to the far right (x=5) via replace_sections.
     sections = dash.sections
     for item in sections[0].layout:
-        if item.i == w1_id:
+        if item.id == w1_id:
             item.x = 5
             item.y = 0
     dash.replace_sections(sections)
