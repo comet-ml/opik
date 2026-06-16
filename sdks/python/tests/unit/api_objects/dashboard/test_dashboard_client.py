@@ -357,10 +357,8 @@ def test_create_dashboard__with_provided_sections():
 
 def test_create_dashboard__project_scoped_widget_with_project_id_injects():
     client = opik_client.Opik()
-    captured = {}
 
     def fake_create(*, name, config, type, description, project_id, project_name):
-        captured["config"] = config
         return dp.DashboardPublic(id="d1", name=name, type=type, config=config)
 
     section = types.DashboardSection(
@@ -380,14 +378,14 @@ def test_create_dashboard__project_scoped_widget_with_project_id_injects():
     with patch.object(
         client._rest_client.dashboards, "create_dashboard", side_effect=fake_create
     ):
-        client.create_dashboard(
+        dashboard = client.create_dashboard(
             name="Prod",
             type=types.DashboardType.MULTI_PROJECT,
             project_id="proj-123",
             sections=[section],
         )
 
-    widget = captured["config"]["sections"][0]["widgets"][0]
+    widget = dashboard.config["sections"][0]["widgets"][0]
     assert widget["config"]["projectId"] == "proj-123"
 
 
