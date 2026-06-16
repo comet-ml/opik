@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import useSelectedSpanData, {
   type SpanWithOptionalPayload,
 } from "@/api/traces/useSelectedSpanData";
+import { SPANS_KEY } from "@/api/api";
 import { Span, Trace } from "@/types/traces";
 
 vi.mock("@tanstack/react-query", async (importOriginal) => {
@@ -20,6 +21,7 @@ const useQueryMock = vi.mocked(useQuery);
 const makeSpan = (overrides: Partial<Span> = {}) =>
   ({
     id: "span-1",
+    project_id: "project-1",
     trace_id: "trace-1",
     input: { prompt: "hello" },
     output: { response: "world" },
@@ -63,6 +65,7 @@ describe("useSelectedSpanData", () => {
 
     const { result } = renderHook(() =>
       useSelectedSpanData({
+        projectId: span.project_id,
         spanId: span.id,
         traceId: span.trace_id,
         spans: [span],
@@ -74,6 +77,14 @@ describe("useSelectedSpanData", () => {
       expect.objectContaining({
         enabled: false,
         placeholderData: span,
+        queryKey: [
+          SPANS_KEY,
+          {
+            projectId: span.project_id,
+            spanId: span.id,
+            stripAttachments: true,
+          },
+        ],
       }),
     );
     expect(result.current.dataToView).toBe(span);
@@ -87,6 +98,7 @@ describe("useSelectedSpanData", () => {
 
     const { result } = renderHook(() =>
       useSelectedSpanData({
+        projectId: span.project_id,
         spanId: span.id,
         traceId: span.trace_id,
         spans: [span],
@@ -111,6 +123,7 @@ describe("useSelectedSpanData", () => {
 
     const { result, unmount } = renderHook(() =>
       useSelectedSpanData({
+        projectId: fetchedSpan.project_id,
         spanId: fetchedSpan.id,
         traceId: trace.id,
         spans: [makeLightSpan()],
@@ -125,6 +138,7 @@ describe("useSelectedSpanData", () => {
     mockQuery({ data: makeSpan({ trace_id: "trace-2" }) });
     const { result: wrongTraceResult } = renderHook(() =>
       useSelectedSpanData({
+        projectId: fetchedSpan.project_id,
         spanId: fetchedSpan.id,
         traceId: trace.id,
         spans: [makeLightSpan()],

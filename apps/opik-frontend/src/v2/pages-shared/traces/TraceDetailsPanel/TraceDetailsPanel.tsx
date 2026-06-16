@@ -25,7 +25,9 @@ import AgentGraphTab from "./TraceDataViewer/AgentGraphTab";
 import NoData from "@/shared/NoData/NoData";
 import { BASE_TRACE_DATA_TYPE } from "@/types/traces";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
-import useLazySpansList from "@/api/traces/useLazySpansList";
+import useLazySpansList, {
+  shouldLoadFullSpansData,
+} from "@/api/traces/useLazySpansList";
 import useSelectedSpanData from "@/api/traces/useSelectedSpanData";
 import {
   DetailsActionSection,
@@ -170,6 +172,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   );
 
   const projectId = externalProjectId || trace?.project_id || "";
+  const loadFullSpansData = shouldLoadFullSpansData(search, filters);
 
   const {
     query: { data: spansData, isPending: isSpansPending },
@@ -187,10 +190,12 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
       enabled: Boolean(traceId) && Boolean(projectId),
       refetchInterval,
     },
+    { loadFullData: loadFullSpansData },
   );
 
   const { dataToView, isSelectedSpanPending } = useSelectedSpanData(
     {
+      projectId,
       spanId,
       traceId,
       spans: spansData?.content,

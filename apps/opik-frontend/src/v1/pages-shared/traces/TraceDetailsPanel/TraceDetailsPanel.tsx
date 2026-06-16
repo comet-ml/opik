@@ -19,7 +19,9 @@ import TraceAnnotateViewer from "./TraceAnnotateViewer/TraceAnnotateViewer";
 import NoData from "@/shared/NoData/NoData";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
 import CommentsViewer from "./CommentsViewer/CommentsViewer";
-import useLazySpansList from "@/api/traces/useLazySpansList";
+import useLazySpansList, {
+  shouldLoadFullSpansData,
+} from "@/api/traces/useLazySpansList";
 import useSelectedSpanData from "@/api/traces/useSelectedSpanData";
 import {
   DetailsActionSection,
@@ -97,6 +99,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   );
 
   const projectId = externalProjectId || trace?.project_id || "";
+  const loadFullSpansData = shouldLoadFullSpansData(search, filters);
 
   const {
     query: { data: spansData, isPending: isSpansPending },
@@ -113,9 +116,11 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
       placeholderData: keepPreviousData,
       enabled: Boolean(traceId) && Boolean(projectId),
     },
+    { loadFullData: loadFullSpansData },
   );
 
   const { dataToView, isSelectedSpanPending } = useSelectedSpanData({
+    projectId,
     spanId,
     traceId,
     spans: spansData?.content,

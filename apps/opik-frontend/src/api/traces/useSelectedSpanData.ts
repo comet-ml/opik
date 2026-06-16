@@ -11,6 +11,7 @@ export type SpanWithOptionalPayload = Omit<Span, "input" | "output"> & {
 };
 
 type UseSelectedSpanDataParams = {
+  projectId: string;
   spanId: string;
   traceId: string;
   spans?: SpanWithOptionalPayload[];
@@ -50,6 +51,7 @@ const getSpanById = async (
 
 export default function useSelectedSpanData(
   {
+    projectId,
     spanId,
     traceId,
     spans,
@@ -68,7 +70,9 @@ export default function useSelectedSpanData(
     [spanId, spans, traceId],
   );
   const shouldFetchSelectedSpan =
-    Boolean(spanId) && !hasFullSpanData(selectedSpanFromList);
+    Boolean(projectId) &&
+    Boolean(spanId) &&
+    !hasFullSpanData(selectedSpanFromList);
 
   const {
     data: selectedSpanData,
@@ -76,7 +80,7 @@ export default function useSelectedSpanData(
     isFetching: isSelectedSpanFetching,
     isPlaceholderData: isSelectedSpanPlaceholderData,
   } = useQuery({
-    queryKey: [SPANS_KEY, { spanId, stripAttachments }],
+    queryKey: [SPANS_KEY, { projectId, spanId, stripAttachments }],
     queryFn: (context) => getSpanById(context, { spanId, stripAttachments }),
     ...options,
     placeholderData: selectedSpanFromList as Span | undefined,
