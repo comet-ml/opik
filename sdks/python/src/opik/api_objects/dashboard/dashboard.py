@@ -141,7 +141,12 @@ class Dashboard:
         """
         self._assert_config_writable()
         widget_dict = copy.deepcopy(validation.as_widget_dict(widget))
-        widget_dict.setdefault("id", id_helpers.generate_id())
+        if not widget_dict.get("id"):
+            widget_dict["id"] = id_helpers.generate_id()
+        if size is not None and ("w" not in size or "h" not in size):
+            raise exceptions.DashboardValidationError(
+                "size must contain both 'w' and 'h' keys"
+            )
         validation.validate_widget_for_dashboard(widget_dict, self._type)
 
         with self._atomic_config():
@@ -228,7 +233,9 @@ class Dashboard:
                     if isinstance(config, types._DashboardModel)
                     else config
                 )
-                widget.setdefault("config", {}).update(config_dict)
+                if not isinstance(widget.get("config"), dict):
+                    widget["config"] = {}
+                widget["config"].update(config_dict)
 
             validation.validate_widget_for_dashboard(widget, self._type)
             self._commit_config()

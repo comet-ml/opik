@@ -386,6 +386,63 @@ def test_delete_dashboard__calls_rest():
         mock_delete.assert_called_once_with("d1")
 
 
+def test_add_widget__null_id_is_replaced():
+    config = {
+        "version": 4,
+        "sections": [{"id": "s1", "title": "t", "widgets": [], "layout": []}],
+        "lastModified": 1,
+    }
+    dashboard, _, _ = _make_dashboard(config)
+
+    widget_id = dashboard.add_widget(
+        "s1", {"id": None, "type": "text_markdown", "config": {"content": "hi"}}
+    )
+
+    assert widget_id != "None"
+    assert widget_id is not None
+    layout_ids = [i["i"] for i in dashboard.config["sections"][0]["layout"]]
+    assert widget_id in layout_ids
+
+
+def test_add_widget__partial_size_raises():
+    config = {
+        "version": 4,
+        "sections": [{"id": "s1", "title": "t", "widgets": [], "layout": []}],
+        "lastModified": 1,
+    }
+    dashboard, rest, _ = _make_dashboard(config)
+
+    with pytest.raises(exceptions.DashboardValidationError, match="'w' and 'h'"):
+        dashboard.add_widget(
+            "s1",
+            types.DashboardWidget(type=types.WidgetType.TEXT_MARKDOWN),
+            size={"w": 2},
+        )
+
+    assert rest.dashboards.update_calls == []
+
+
+def test_update_widget__null_config_from_api_does_not_raise():
+    config = {
+        "version": 4,
+        "sections": [
+            {
+                "id": "s1",
+                "title": "t",
+                "widgets": [{"id": "w1", "type": "text_markdown", "config": None}],
+                "layout": [{"i": "w1", "x": 0, "y": 0, "w": 2, "h": 4}],
+            }
+        ],
+        "lastModified": 1,
+    }
+    dashboard, _, _ = _make_dashboard(config)
+
+    dashboard.update_widget("w1", config={"content": "new"})
+
+    widget = dashboard.config["sections"][0]["widgets"][0]
+    assert widget["config"]["content"] == "new"
+
+
 def test_find_dashboards__paginates_and_respects_max_results():
     from opik.api_objects.dashboard import rest_operations
     from opik.rest_api.types import dashboard_page_public as dpp
