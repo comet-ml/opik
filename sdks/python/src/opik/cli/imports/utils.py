@@ -4,13 +4,16 @@ import json
 import sys
 from collections import deque
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
 import click
 import opik
 from opik.types import FeedbackScoreDict
 from rich.console import Console
 from rich.table import Table
+
+if TYPE_CHECKING:
+    from ..migration_manifest import MigrationManifest
 
 PROJECT_METADATA_FILENAME = "project.json"
 
@@ -133,6 +136,52 @@ def resolve_import_project_root(
         )
         sys.exit(1)
     return project_root, (to_project or project_name)
+
+
+def finalize_import(
+    manifest: Optional["MigrationManifest"],
+    client: opik.Opik,
+    total_errors: int,
+    dry_run: bool,
+) -> None:
+    """Flush ingestion, surface upload failures, and complete the manifest.
+
+    Shared tail of ``import_all`` and ``_import_by_type`` so resume/manifest
+    tweaks stay in one place. No-op on dry runs. Exits with code 1 if the flush
+    times out or any file upload failed. Marks the manifest complete only when
+    ``total_errors == 0``, so a partial failure leaves it ``in_progress`` for a
+    resumable rerun.
+    """
+    if dry_run:
+        return
+
+    # Flush the async ingestion queue so all enqueued traces/spans are persisted
+    # before we return; otherwise the process can exit while the background
+    # worker is still sending data (especially under rate-limiting).
+    flushed = client.flush()
+    if not flushed:
+        console.print(
+            "[yellow]Warning: flush timed out — some traces/spans may not have been "
+            "ingested. Re-run the import to retry.[/yellow]"
+        )
+        sys.exit(1)
+
+    # FileUploadManager.flush() returns True even when individual uploads fail
+    # (only False on timeout), so check failed_uploads separately.
+    failed = client.__internal_api__failed_uploads__(timeout=None)
+    if failed > 0:
+        console.print(
+            f"[yellow]Warning: {failed} file upload(s) failed during import. "
+            "Re-run the import to retry.[/yellow]"
+        )
+        sys.exit(1)
+
+    # Mark complete only on a fully clean run. On any error, leave it in_progress
+    # so the next run (without --force) resumes/retries instead of
+    # short-circuiting on manifest.is_completed.
+    assert manifest is not None  # guaranteed: manifest is set whenever not dry_run
+    if total_errors == 0:
+        manifest.complete()
 
 
 def debug_print(message: str, debug: bool) -> None:

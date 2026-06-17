@@ -15,6 +15,7 @@ from .project import import_traces_from_directory
 from .prompt import import_prompts_from_directory
 from .utils import (
     debug_print,
+    finalize_import,
     no_attachments_option,
     print_import_summary,
     resolve_import_project_root,
@@ -192,29 +193,9 @@ def import_all(
             value for key, value in total_stats.items() if key.endswith("_errors")
         )
 
-        if not dry_run:
-            flushed = client.flush()
-            if not flushed:
-                console.print(
-                    "[yellow]Warning: flush timed out — some traces/spans may not have been "
-                    "ingested. Re-run the import to retry.[/yellow]"
-                )
-                sys.exit(1)
-
-            failed = client.__internal_api__failed_uploads__(timeout=None)
-            if failed > 0:
-                console.print(
-                    f"[yellow]Warning: {failed} file upload(s) failed during import. "
-                    "Re-run the import to retry.[/yellow]"
-                )
-                sys.exit(1)
-
-            # Mark complete only on a fully clean run, so a partial failure leaves
-            # the manifest in_progress and the next run resumes/retries instead of
-            # short-circuiting on manifest.is_completed.
-            assert manifest is not None
-            if total_errors == 0:
-                manifest.complete()
+        # Flush ingestion, surface upload failures, and complete the manifest
+        # (only on a clean run). Shared with _import_by_type.
+        finalize_import(manifest, client, total_errors, dry_run)
 
         # ------------------------------------------------------------------
         # Summary
