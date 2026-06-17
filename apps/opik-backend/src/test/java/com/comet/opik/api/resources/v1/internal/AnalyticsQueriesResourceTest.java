@@ -212,6 +212,12 @@ class AnalyticsQueriesResourceTest {
     }
 
     @Test
+    @DisplayName("a non-JSON result value is rejected as a client error")
+    void executeQuery__whenResultNotJson__thenBadRequest() {
+        assertBadRequest("SELECT 'not json{' AS result FROM traces");
+    }
+
+    @Test
     @DisplayName("a query against a system table is rejected (row policies don't cover system.*)")
     void executeQuery__whenSystemTable__thenRejected() {
         // system.* is outside the row policies, so isolation relies on the read-only user not being granted access.

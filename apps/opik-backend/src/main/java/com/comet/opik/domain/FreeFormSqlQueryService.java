@@ -20,6 +20,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 
+import java.io.UncheckedIOException;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -150,6 +151,12 @@ public class FreeFormSqlQueryService {
         if (findCause(error, NoSuchColumnException.class) != null) {
             return error(Outcome.OTHER, startMillis, Response.Status.BAD_REQUEST,
                     "Query must return exactly one column named 'result'", error);
+        }
+
+        if (findCause(error, UncheckedIOException.class) != null) {
+            // A non-JSON 'result' value is a bad query shape (caller's fault, not infra), so a 400 rather than a 503.
+            return error(Outcome.OTHER, startMillis, Response.Status.BAD_REQUEST,
+                    "Query 'result' column must contain valid JSON produced via toJSONString(...)", error);
         }
 
         ServerException serverException = findCause(error, ServerException.class);
