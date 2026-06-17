@@ -8,6 +8,7 @@ import com.comet.opik.domain.FreeFormSqlQueryService;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
+import com.google.common.base.Throwables;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -28,6 +29,8 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
+
+import java.util.concurrent.CompletionException;
 
 /**
  * Internal, authenticated endpoint that runs Ollie-generated read-only SQL against ClickHouse, bounded to the
@@ -70,8 +73,17 @@ public class AnalyticsQueriesResource {
         log.info("Executing Agent Insights free-form SQL for workspace '{}', project '{}'", workspaceId,
                 request.projectId());
 
-        return freeFormSqlQueryService.executeQuery(workspaceId, request.projectId(), request.query())
-                .map(response -> Response.ok(response).build())
-                .block();
+        // The service stays async (ClickHouse v2 client); terminate here, the last responsible moment, since Dropwizard
+        // is not reactive. join() wraps any failure in CompletionException — unwrap so the mapped WebApplicationException
+        // (and its HTTP status) reaches the JAX-RS exception handling unchanged.
+        try {
+            AnalyticsQueryResponse response = freeFormSqlQueryService
+                    .executeQuery(workspaceId, request.projectId(), request.query())
+                    .join();
+            return Response.ok(response).build();
+        } catch (CompletionException e) {
+            Throwables.throwIfUnchecked(e.getCause());
+            throw e;
+        }
     }
 }

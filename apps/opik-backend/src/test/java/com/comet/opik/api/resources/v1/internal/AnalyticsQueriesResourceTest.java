@@ -27,7 +27,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -49,6 +50,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Analytics Queries Resource Test")
@@ -155,63 +157,45 @@ class AnalyticsQueriesResourceTest {
         assertNoRows(analyticsQueriesClient.execute(projectIdA, RESULT_QUERY, API_KEY_B, WORKSPACE_NAME_B));
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {
-            "SELECT toJSONString(map('id', toString(id))) AS result FROM traces SETTINGS max_threads = 1",
-            "SELECT toJSONString(map('id', toString(id))) AS result FROM (SELECT id FROM traces SETTINGS max_threads = 1)",
-            "WITH t AS (SELECT id FROM traces SETTINGS max_threads = 1) SELECT toJSONString(map('id', toString(id))) AS result FROM t"
-    })
-    @DisplayName("a query carrying SETTINGS is rejected by the AST guard")
-    void executeQuery__whenQueryContainsSettings__thenRejected(String query) {
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    @DisplayName("an invalid or disallowed query is rejected with 400")
+    void executeQuery__whenInvalid__thenBadRequest(String label, String query) {
         assertBadRequest(query);
+    }
+
+    private Stream<Arguments> executeQuery__whenInvalid__thenBadRequest() {
+        // SETTINGS clauses (top level, subquery, CTE) are caught by the AST guard; the rest are rejected by the parser,
+        // the read-only profile, the per-table grants, or the single-JSON-column result contract.
+        return Stream.of(
+                arguments("SETTINGS clause at top level",
+                        "SELECT toJSONString(map('id', toString(id))) AS result FROM traces SETTINGS max_threads = 1"),
+                arguments("SETTINGS clause in a subquery",
+                        "SELECT toJSONString(map('id', toString(id))) AS result FROM (SELECT id FROM traces SETTINGS max_threads = 1)"),
+                arguments("SETTINGS clause in a CTE",
+                        "WITH t AS (SELECT id FROM traces SETTINGS max_threads = 1) SELECT toJSONString(map('id', toString(id))) AS result FROM t"),
+                arguments("unparseable query", "SELECT FROM WHERE"),
+                arguments("statement stacking", "SELECT 1 AS result; SELECT 2 AS result"),
+                arguments("write statement (read-only profile)",
+                        "INSERT INTO traces (id, workspace_id, project_id, name) VALUES ('%s', '%s', '%s', 'x')"
+                                .formatted(UUID.randomUUID(), WORKSPACE_ID_A, projectIdA)),
+                arguments("non-granted table",
+                        "SELECT toJSONString(map('id', toString(id))) AS result FROM experiments"),
+                arguments("non-JSON result value", "SELECT 'not json{' AS result FROM traces"),
+                arguments("system table (outside row policies)",
+                        "SELECT toJSONString(map('q', query)) AS result FROM system.query_log"));
     }
 
     @Test
     @DisplayName("a Set-prefixed identifier is not mistaken for a SETTINGS node")
     void executeQuery__whenSetPrefixedIdentifier__thenAccepted() {
         // The AST guard matches the exact `Set` node token, so a `settings`-named CTE must not be falsely rejected.
-        var query = "WITH settings AS (SELECT id, workspace_id, project_id FROM traces) "
-                + "SELECT toJSONString(map('id', toString(id), 'workspace_id', workspace_id, 'project_id', toString(project_id))) AS result FROM settings";
+        var query = """
+                WITH settings AS (SELECT id, workspace_id, project_id FROM traces)
+                SELECT toJSONString(map('id', toString(id), 'workspace_id', workspace_id, 'project_id', toString(project_id))) AS result FROM settings
+                """;
         assertScopedRows(analyticsQueriesClient.execute(projectIdA, query, API_KEY_A, WORKSPACE_NAME_A),
                 WORKSPACE_ID_A, projectIdA, traceIdA);
-    }
-
-    @Test
-    @DisplayName("an unparseable query is rejected")
-    void executeQuery__whenQueryUnparseable__thenRejected() {
-        assertBadRequest("SELECT FROM WHERE");
-    }
-
-    @Test
-    @DisplayName("statement stacking is rejected")
-    void executeQuery__whenStatementStacking__thenRejected() {
-        assertBadRequest("SELECT 1 AS result; SELECT 2 AS result");
-    }
-
-    @Test
-    @DisplayName("a write statement is rejected by the read-only profile")
-    void executeQuery__whenWriteStatement__thenRejected() {
-        assertBadRequest("INSERT INTO traces (id, workspace_id, project_id, name) VALUES ('%s', '%s', '%s', 'x')"
-                .formatted(UUID.randomUUID(), WORKSPACE_ID_A, projectIdA));
-    }
-
-    @Test
-    @DisplayName("a query against a non-granted table fails on permissions")
-    void executeQuery__whenNonGrantedTable__thenRejected() {
-        assertBadRequest("SELECT toJSONString(map('id', toString(id))) AS result FROM experiments");
-    }
-
-    @Test
-    @DisplayName("a non-JSON result value is rejected as a client error")
-    void executeQuery__whenResultNotJson__thenBadRequest() {
-        assertBadRequest("SELECT 'not json{' AS result FROM traces");
-    }
-
-    @Test
-    @DisplayName("a query against a system table is rejected (row policies don't cover system.*)")
-    void executeQuery__whenSystemTable__thenRejected() {
-        // system.* is outside the row policies, so isolation relies on the read-only user not being granted access.
-        assertBadRequest("SELECT toJSONString(map('q', query)) AS result FROM system.query_log");
     }
 
     private void assertBadRequest(String query) {

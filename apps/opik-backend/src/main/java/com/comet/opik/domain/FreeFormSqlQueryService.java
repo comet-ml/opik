@@ -18,12 +18,12 @@ import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import reactor.core.publisher.Mono;
 
 import java.io.UncheckedIOException;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
@@ -46,8 +46,10 @@ public class FreeFormSqlQueryService {
     private static final AttributeKey<String> RESULT_KEY = stringKey("result");
     private static final AttributeKey<String> REASON_KEY = stringKey("reason");
 
-    // The terminal outcome of a query, carrying its (result, reason) metric tags. The duration histogram is tagged
-    // with these and its per-tag count is the query counter, so no separate counters are needed.
+    /**
+     * The terminal outcome of a query, carrying its {@code (result, reason)} metric tags. The duration histogram is
+     * tagged with these and its per-tag count is the query counter, so no separate counters are needed.
+     */
     private enum Outcome {
         SUCCESS("success", "none"),
         SETTINGS_CLAUSE("rejected", "settings_clause_rejected"),
@@ -63,13 +65,15 @@ public class FreeFormSqlQueryService {
         }
     }
 
-    // The parser models every SETTINGS/SET clause (top-level, subquery, CTE, FORMAT ... SETTINGS) as this AST node.
-    // Verified against ClickHouse 25.3.x: EXPLAIN AST prints it as the leading token "Set". Matching the exact node
-    // token (not a "Set" prefix) avoids false positives on Set-prefixed identifiers and keeps intent explicit; the
-    // SETTINGS rejection tests fail loudly if a future ClickHouse version renames the node.
+    /**
+     * The parser models every SETTINGS/SET clause (top-level, subquery, CTE, {@code FORMAT ... SETTINGS}) as this AST
+     * node. Verified against ClickHouse 25.3.x: {@code EXPLAIN AST} prints it as the leading token {@code "Set"}.
+     * Matching the exact node token (not a {@code "Set"} prefix) avoids false positives on Set-prefixed identifiers and
+     * keeps intent explicit; the SETTINGS rejection tests fail loudly if a future ClickHouse version renames the node.
+     */
     private static final Set<String> SETTINGS_AST_NODES = Set.of("Set");
 
-    // ClickHouse error codes surfaced to the caller as a clean 4xx rather than a 500.
+    /** ClickHouse error codes surfaced to the caller as a clean 4xx rather than a 500. */
     private static final int CH_TOO_MANY_ROWS = 158;
     private static final int CH_TIMEOUT_EXCEEDED = 159;
     private static final int CH_MEMORY_LIMIT_EXCEEDED = 241;
@@ -109,30 +113,44 @@ public class FreeFormSqlQueryService {
                 .build();
     }
 
-    public Mono<AnalyticsQueryResponse> executeQuery(@NonNull String workspaceId, @NonNull UUID projectId,
+    public CompletableFuture<AnalyticsQueryResponse> executeQuery(@NonNull String workspaceId, @NonNull UUID projectId,
             @NonNull String query) {
         long startMillis = System.currentTimeMillis();
 
         return freeFormSqlQueryDAO.explainAst(query)
-                // A failed EXPLAIN AST is a hard reject: never fall through to execution. A genuine syntax error
-                // (unparseable input, statement-stacking) is reported as parse_error; any other failure (transport,
-                // permissions, ...) is routed through the standard execution-error mapping so it isn't mislabelled.
-                .onErrorMap(error -> isSyntaxError(error)
-                        ? reject(Outcome.PARSE_ERROR, startMillis, "Query rejected: could not be parsed", error)
-                        : mapExecutionError(error, startMillis))
-                .flatMap(nodeLabels -> containsSetNode(nodeLabels)
-                        ? Mono.error(reject(Outcome.SETTINGS_CLAUSE, startMillis,
-                                "Query rejected: SETTINGS/SET clauses are not allowed", null))
-                        : runQuery(workspaceId, projectId, query, startMillis));
+                .handle((nodeLabels, error) -> validateAst(nodeLabels, error, startMillis))
+                .thenCompose(nodeLabels -> runQuery(workspaceId, projectId, query, startMillis));
     }
 
-    private Mono<AnalyticsQueryResponse> runQuery(String workspaceId, UUID projectId, String query, long startMillis) {
+    /**
+     * A failed EXPLAIN AST is a hard reject: never fall through to execution. A genuine syntax error (unparseable
+     * input, statement-stacking) is reported as parse_error; any other failure (transport, permissions, ...) is routed
+     * through the standard execution-error mapping so it isn't mislabelled. A successful parse carrying a SETTINGS/SET
+     * clause is rejected before execution.
+     */
+    private List<String> validateAst(List<String> nodeLabels, Throwable error, long startMillis) {
+        if (error != null) {
+            throw isSyntaxError(error)
+                    ? reject(Outcome.PARSE_ERROR, startMillis, "Query rejected: could not be parsed", error)
+                    : mapExecutionError(error, startMillis);
+        }
+        if (containsSetNode(nodeLabels)) {
+            throw reject(Outcome.SETTINGS_CLAUSE, startMillis,
+                    "Query rejected: SETTINGS/SET clauses are not allowed", null);
+        }
+        return nodeLabels;
+    }
+
+    private CompletableFuture<AnalyticsQueryResponse> runQuery(String workspaceId, UUID projectId, String query,
+            long startMillis) {
         return freeFormSqlQueryDAO.execute(workspaceId, projectId, query)
-                .map(result -> {
+                .handle((result, error) -> {
+                    if (error != null) {
+                        throw mapExecutionError(error, startMillis);
+                    }
                     recordSuccess(result, startMillis);
                     return AnalyticsQueryResponse.builder().results(result.rows()).build();
-                })
-                .onErrorMap(error -> mapExecutionError(error, startMillis));
+                });
     }
 
     private static boolean containsSetNode(List<String> nodeLabels) {
