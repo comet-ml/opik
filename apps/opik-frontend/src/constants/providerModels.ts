@@ -2180,6 +2180,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "z-ai/glm-5.1",
     },
     {
+      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5_2,
+      label: "z-ai/glm-5.2",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5V_TURBO,
       label: "z-ai/glm-5v-turbo",
     },

@@ -130,6 +130,12 @@ class DatasetNotFound(OpikException):
     pass
 
 
+class DashboardValidationError(OpikException):
+    """Raised when a dashboard configuration violates a structural or semantic invariant."""
+
+    pass
+
+
 class DatasetVersionNotFound(OpikException):
     """Exception raised when a dataset version is not found."""
 

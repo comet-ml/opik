@@ -48,7 +48,7 @@ const ExperimentsPage: React.FC = () => {
 
   return (
     <PageBodyScrollContainer>
-      <div className="flex min-h-full flex-col pt-4">
+      <div className="flex min-h-full w-fit min-w-full flex-col pt-4">
         <PageBodyStickyContainer
           className="flex items-center justify-between pb-1"
           direction="horizontal"
