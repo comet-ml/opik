@@ -11,7 +11,9 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.resources.OAuthResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -25,27 +27,32 @@ import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
+import uk.co.jemos.podam.api.PodamFactory;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Smoke test for the wired scrub job: an authorization code and token pair are minted through the public OAuth
- * endpoints, expire, and the job removes them when fired. The business-logic edge cases live in
- * {@link McpOAuthScrubServiceTest}.
+ * Black-box coverage of the scrub business logic. Artifacts are minted through the public OAuth endpoints; the happy
+ * path expires an authorization code and token pair and asserts {@link McpOAuthScrubService#scrub()} removes them.
  *
- * <p>Deletion is asserted by reading rows back through the DAOs rather than the API. This is a deliberate, narrow
- * exception: the validate endpoint returns 401 for both an expired-but-present token and one the scrub deleted, so the
- * API cannot prove physical removal — a 401 would pass even if the job did nothing.
+ * <p>The assertions read rows back through the DAOs rather than the API. This is a deliberate, narrow exception: the
+ * validate endpoint returns 401 for both an expired-but-present token and one the scrub deleted, so the API cannot
+ * prove physical removal — a 401 would pass even if the scrub did nothing. The grace-window and unexpired-retention
+ * predicates are likewise seeded directly, since real TTLs cannot reproduce those states deterministically through the
+ * endpoints.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@DisplayName("McpOAuthScrubJob")
+@DisplayName("McpOAuthScrubService")
 @ExtendWith(DropwizardAppExtensionProvider.class)
-class McpOAuthScrubJobTest {
+class McpOAuthScrubServiceTest {
 
     private static final String REDIRECT_URI = "http://localhost:1234/callback";
     private static final String RESOURCE_URI = "http://localhost:8080/api/v1/mcp";
@@ -84,14 +91,17 @@ class McpOAuthScrubJobTest {
                         .build());
     }
 
+    private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
+
     private TransactionTemplate transactionTemplate;
-    private McpOAuthScrubJob job;
+    private McpOAuthScrubService scrubService;
     private OAuthResourceClient oauthClient;
 
     @BeforeAll
-    void setUpAll(ClientSupport clientSupport, TransactionTemplate transactionTemplate, McpOAuthScrubJob job) {
+    void setUpAll(ClientSupport clientSupport, TransactionTemplate transactionTemplate,
+            McpOAuthScrubService scrubService) {
         this.transactionTemplate = transactionTemplate;
-        this.job = job;
+        this.scrubService = scrubService;
         this.oauthClient = new OAuthResourceClient(
                 clientSupport, TestUtils.getBaseUrl(clientSupport), REDIRECT_URI, RESOURCE_URI);
     }
@@ -109,13 +119,88 @@ class McpOAuthScrubJobTest {
         Awaitility.await().atMost(10, TimeUnit.SECONDS).pollInterval(100, TimeUnit.MILLISECONDS)
                 .until(() -> isExpired(fetchCodeExpiry(codeHash)) && isExpired(fetchTokenExpiry(accessHash)));
 
-        job.doJob(null);
+        scrubService.scrub().block();
 
-        Awaitility.await().atMost(10, TimeUnit.SECONDS).pollInterval(100, TimeUnit.MILLISECONDS).untilAsserted(() -> {
-            assertThat(codeExists(codeHash)).isFalse();
-            assertThat(tokenExists(accessHash)).isFalse();
-            assertThat(tokenExists(refreshHash)).isFalse();
+        assertThat(codeExists(codeHash)).isFalse();
+        assertThat(tokenExists(accessHash)).isFalse();
+        assertThat(tokenExists(refreshHash)).isFalse();
+    }
+
+    @Test
+    @DisplayName("deleteExpired keeps codes that have not reached their expiry")
+    void daoKeepsUnexpiredCodes() {
+        Instant now = Instant.now();
+        McpOAuthCode expired = insertCode(now.minus(Duration.ofHours(1)));
+        McpOAuthCode valid = insertCode(now.plus(Duration.ofHours(1)));
+
+        transactionTemplate.inTransaction(WRITE, handle -> handle.attach(McpOAuthCodeDAO.class).deleteExpired(now));
+
+        assertThat(codeExists(expired.codeHash())).isFalse();
+        assertThat(codeExists(valid.codeHash())).isTrue();
+    }
+
+    @Test
+    @DisplayName("deleteExpiredAndRevoked drops tokens revoked before the grace threshold and keeps newer ones")
+    void daoDeletesRevokedTokensOnlyPastGrace() {
+        Instant now = Instant.now();
+        Duration grace = Duration.ofMinutes(5);
+        Instant threshold = now.minus(grace);
+        Instant farFuture = now.plus(Duration.ofHours(1));
+
+        McpOAuthToken withinGrace = insertToken(farFuture, now.minus(grace.dividedBy(2)));
+        McpOAuthToken pastGrace = insertToken(farFuture, now.minus(grace.plusMinutes(1)));
+        McpOAuthToken valid = insertToken(farFuture, null);
+
+        transactionTemplate.inTransaction(WRITE,
+                handle -> handle.attach(McpOAuthTokenDAO.class).deleteExpiredAndRevoked(threshold));
+
+        assertThat(tokenExists(withinGrace.tokenHash())).isTrue();
+        assertThat(tokenExists(pastGrace.tokenHash())).isFalse();
+        assertThat(tokenExists(valid.tokenHash())).isTrue();
+    }
+
+    /** Seeds a code row directly: the unexpired-retention predicate cannot be reproduced through the endpoints' real TTLs. */
+    private McpOAuthCode insertCode(Instant expiresAt) {
+        McpOAuthCode code = factory.manufacturePojo(McpOAuthCode.class).toBuilder()
+                .id(UUID.randomUUID().toString())
+                .codeHash(randomHash())
+                .clientId(UUID.randomUUID().toString())
+                .codeChallengeMethod("S256")
+                .expiresAt(expiresAt)
+                .build();
+
+        transactionTemplate.inTransaction(WRITE, handle -> {
+            handle.attach(McpOAuthCodeDAO.class).save(code);
+            return null;
         });
+
+        return code;
+    }
+
+    /** Seeds a token row (optionally revoked) directly: the revocation grace window cannot be reproduced through the endpoints' real TTLs. */
+    private McpOAuthToken insertToken(Instant expiresAt, Instant revokedAt) {
+        McpOAuthToken token = factory.manufacturePojo(McpOAuthToken.class).toBuilder()
+                .id(UUID.randomUUID().toString())
+                .tokenHash(randomHash())
+                .type(McpOAuthToken.TYPE_ACCESS)
+                .clientId(UUID.randomUUID().toString())
+                .familyId(UUID.randomUUID().toString())
+                .rotatedFromId(null)
+                .expiresAt(expiresAt)
+                .build();
+
+        transactionTemplate.inTransaction(WRITE, handle -> {
+            handle.attach(McpOAuthTokenDAO.class).save(token);
+            if (revokedAt != null) {
+                handle.createUpdate("UPDATE mcp_oauth_tokens SET revoked_at = :revokedAt WHERE id = :id")
+                        .bind("revokedAt", revokedAt)
+                        .bind("id", token.id())
+                        .execute();
+            }
+            return null;
+        });
+
+        return token;
     }
 
     /** Polls the persisted expiry instant, which the API does not expose, to wait until the artifact is scrub-eligible. */
@@ -146,5 +231,9 @@ class McpOAuthScrubJobTest {
 
     private static boolean isExpired(Instant expiresAt) {
         return expiresAt != null && expiresAt.isBefore(Instant.now());
+    }
+
+    private static String randomHash() {
+        return RandomStringUtils.secure().nextAlphanumeric(64);
     }
 }

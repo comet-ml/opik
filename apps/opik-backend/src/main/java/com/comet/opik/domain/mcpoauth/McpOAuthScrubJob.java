@@ -15,13 +15,10 @@ import org.quartz.JobExecutionContext;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
-import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
-import java.time.Instant;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
 
 @Singleton
@@ -33,17 +30,13 @@ public class McpOAuthScrubJob extends Job implements InterruptableJob {
 
     private static final Lock JOB_LOCK = new Lock("mcp_oauth_scrub:lock");
 
-    private final @NonNull TransactionTemplate template;
+    private final @NonNull McpOAuthScrubService scrubService;
     private final @NonNull OpikConfiguration opikConfig;
     private final @NonNull LockService lockService;
 
     private final AtomicBoolean interrupted = new AtomicBoolean(false);
     private final AtomicReference<Disposable> currentExecution = new AtomicReference<>();
 
-    /**
-     * Revoked tokens within the rotation grace window must remain queryable, so a duplicate refresh
-     * request (RFC 6749 §6 token rotation grace) returns invalid_grant instead of triggering reuse detection.
-     */
     @Override
     public void doJob(JobExecutionContext context) {
         if (interrupted.get()) {
@@ -60,7 +53,7 @@ public class McpOAuthScrubJob extends Job implements InterruptableJob {
                         log.info("MCP OAuth scrub was interrupted before processing, skipping");
                         return Mono.empty();
                     }
-                    return Mono.fromRunnable(this::scrub);
+                    return scrubService.scrub();
                 }),
                 Mono.fromRunnable(
                         () -> log.debug("Could not acquire lock for MCP OAuth scrub, another instance is running")),
@@ -85,16 +78,5 @@ public class McpOAuthScrubJob extends Job implements InterruptableJob {
             execution.dispose();
             log.info("MCP OAuth scrub job interrupted successfully");
         }
-    }
-
-    private void scrub() {
-        Instant now = Instant.now();
-        Instant tokenThreshold = now.minus(opikConfig.getMcpOAuth().getRefreshRotationGrace());
-
-        int codes = template.inTransaction(WRITE,
-                handle -> handle.attach(McpOAuthCodeDAO.class).deleteExpired(now));
-        int tokens = template.inTransaction(WRITE,
-                handle -> handle.attach(McpOAuthTokenDAO.class).deleteExpiredAndRevoked(tokenThreshold));
-        log.info("MCP OAuth scrub: removed '{}' expired codes, '{}' expired/revoked tokens", codes, tokens);
     }
 }
