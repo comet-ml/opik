@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.metrics;
 
 import com.comet.opik.infrastructure.auth.RequestContext;
+import io.opentelemetry.api.common.AttributeKey;
 import jakarta.inject.Provider;
 import jakarta.ws.rs.core.Request;
 import jakarta.ws.rs.core.UriInfo;
@@ -24,12 +25,12 @@ import java.util.function.Function;
 @UtilityClass
 public class ErrorMetricsResolver {
 
-    public static final String ERROR_TYPE_KEY = "error_type";
-    public static final String METHOD_KEY = "method";
-    public static final String ENDPOINT_KEY = "endpoint";
-    public static final String WORKSPACE_ID_KEY = "workspace_id";
-    public static final String WORKSPACE_NAME_KEY = "workspace_name";
-    public static final String USER_NAME_KEY = "user_name";
+    public static final AttributeKey<String> ERROR_TYPE_KEY = AttributeKey.stringKey("error_type");
+    public static final AttributeKey<String> METHOD_KEY = AttributeKey.stringKey("method");
+    public static final AttributeKey<String> ENDPOINT_KEY = AttributeKey.stringKey("endpoint");
+    public static final AttributeKey<String> WORKSPACE_ID_KEY = AttributeKey.stringKey("workspace_id");
+    public static final AttributeKey<String> WORKSPACE_NAME_KEY = AttributeKey.stringKey("workspace_name");
+    public static final AttributeKey<String> USER_NAME_KEY = AttributeKey.stringKey("user_name");
     public static final String UNKNOWN = "unknown";
 
     public static String errorType(Throwable throwable) {

@@ -42,8 +42,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Stream;
 
-import static io.opentelemetry.api.common.AttributeKey.stringKey;
-
 /**
  * This is the Base Redis Subscriber, for all particular implementations to extend. It listens to a Redis stream.
  * Extending classes must provide a particular implementation for the processEvent method.
@@ -364,7 +362,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 // Unexpected errors handling: interval is dropped, but processing continues
                 .onErrorContinue((throwable, object) -> {
                     unexpectedErrors.add(1, Attributes.of(
-                            stringKey(ErrorMetricsResolver.ERROR_TYPE_KEY), ErrorMetricsResolver.errorType(throwable)));
+                            ErrorMetricsResolver.ERROR_TYPE_KEY, ErrorMetricsResolver.errorType(throwable)));
                     log.error("Unexpected error processing message from Redis stream '{}'", object, throwable);
                 })
                 .name("redis-subscriber")

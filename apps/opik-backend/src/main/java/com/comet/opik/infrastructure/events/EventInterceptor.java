@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.events;
 
 import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.trace.Span;
@@ -20,7 +21,7 @@ import static io.opentelemetry.api.common.AttributeKey.stringKey;
 @Slf4j
 class EventInterceptor implements MethodInterceptor {
 
-    private static final String LISTENER_KEY = "listener";
+    private static final AttributeKey<String> LISTENER_KEY = stringKey("listener");
 
     private final LongCounter errorCounter;
 
@@ -59,8 +60,8 @@ class EventInterceptor implements MethodInterceptor {
             return result;
         } catch (Throwable e) {
             errorCounter.add(1, Attributes.of(
-                    stringKey(LISTENER_KEY), listenerName,
-                    stringKey(ErrorMetricsResolver.ERROR_TYPE_KEY), ErrorMetricsResolver.errorType(e)));
+                    LISTENER_KEY, listenerName,
+                    ErrorMetricsResolver.ERROR_TYPE_KEY, ErrorMetricsResolver.errorType(e)));
 
             span.recordException(e);
             span.setStatus(StatusCode.ERROR, "Failed to process event");
