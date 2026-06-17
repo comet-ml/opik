@@ -8,7 +8,6 @@ import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
 import org.jdbi.v3.sqlobject.statement.SqlBatch;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
-import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
 import java.util.List;
 import java.util.UUID;
@@ -17,23 +16,15 @@ import java.util.UUID;
 @RegisterConstructorMapper(TraceThreadIdModel.class)
 interface TraceThreadIdDAO {
 
-    @SqlUpdate("""
-                INSERT INTO project_trace_threads(id, project_id, thread_id, created_by, created_at)
-                VALUES (:thread.id, :thread.projectId, :thread.threadId, :thread.createdBy, :thread.createdAt)
-            """)
-    void save(@BindMethods("thread") TraceThreadIdModel rule);
-
     @SqlBatch("""
                 INSERT INTO project_trace_threads(id, project_id, thread_id, created_by, created_at)
                 VALUES (:thread.id, :thread.projectId, :thread.threadId, :thread.createdBy, :thread.createdAt)
             """)
     void save(@BindMethods("thread") List<TraceThreadIdModel> threads);
 
-    @SqlQuery("""
-                SELECT * FROM project_trace_threads
-                WHERE project_id = :projectId AND thread_id = :threadId
-            """)
-    TraceThreadIdModel findByProjectIdAndThreadId(@Bind("projectId") UUID projectId, @Bind("threadId") String threadId);
+    default void save(TraceThreadIdModel thread) {
+        save(List.of(thread));
+    }
 
     @SqlQuery("""
                 SELECT * FROM project_trace_threads
@@ -41,6 +32,10 @@ interface TraceThreadIdDAO {
             """)
     List<TraceThreadIdModel> findByProjectIdAndThreadIds(@Bind("projectId") UUID projectId,
             @BindList("threadIds") List<String> threadIds);
+
+    default TraceThreadIdModel findByProjectIdAndThreadId(UUID projectId, String threadId) {
+        return findByProjectIdAndThreadIds(projectId, List.of(threadId)).stream().findFirst().orElse(null);
+    }
 
     @SqlQuery("""
                 SELECT * FROM project_trace_threads

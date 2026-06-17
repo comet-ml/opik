@@ -359,12 +359,13 @@ class TraceThreadServiceImpl implements TraceThreadService {
     @Override
     public Mono<Void> openThread(UUID projectId, String projectName, @NonNull String threadId) {
         return projectService.resolveProjectIdAndVerifyVisibility(projectId, projectName)
-                .flatMap(id -> getOrCreateThreadId(id, threadId)
+                .flatMap(verifiedProjectId -> getOrCreateThreadId(verifiedProjectId, threadId)
                         .then(Mono.defer(() -> lockService.executeWithLockCustomExpire(
-                                new LockService.Lock(id, TraceThreadService.THREADS_LOCK),
-                                Mono.defer(() -> traceThreadDAO.openThread(id, threadId)),
+                                new LockService.Lock(verifiedProjectId, TraceThreadService.THREADS_LOCK),
+                                Mono.defer(() -> traceThreadDAO.openThread(verifiedProjectId, threadId)),
                                 LOCK_DURATION)))
-                        .doOnSuccess(_ -> log.info("Opened thread for threadId '{}' and projectId: '{}'", threadId, id))
+                        .doOnSuccess(_ -> log.info("Opened thread for threadId '{}' and projectId: '{}'", threadId,
+                                verifiedProjectId))
                         .then());
     }
 
@@ -375,22 +376,22 @@ class TraceThreadServiceImpl implements TraceThreadService {
         }
 
         return projectService.resolveProjectIdAndVerifyVisibility(projectId, projectName)
-                .flatMap(id -> verifyAndCreateThreadsIfNeeded(id, threadIds)
+                .flatMap(verifiedProjectId -> verifyAndCreateThreadsIfNeeded(verifiedProjectId, threadIds)
                         // Lock only the non-idempotent op: the closure write itself.
                         .then(Mono.defer(() -> lockService.executeWithLockCustomExpire(
-                                new LockService.Lock(id, TraceThreadService.THREADS_LOCK),
-                                Mono.defer(() -> traceThreadDAO.closeThread(id, threadIds))
+                                new LockService.Lock(verifiedProjectId, TraceThreadService.THREADS_LOCK),
+                                Mono.defer(() -> traceThreadDAO.closeThread(verifiedProjectId, threadIds))
                                         .doOnSuccess(count -> log.info(
                                                 "Closed count '{}' for threadIds '{}' and projectId: '{}'",
-                                                count, threadIds, id)),
+                                                count, threadIds, verifiedProjectId)),
                                 LOCK_DURATION)))
                         // The post-close read (idempotent) and online-scoring publish run outside the lock.
                         .then(Mono.defer(() -> traceThreadDAO.findThreadsByProject(1, threadIds.size(),
                                 TraceThreadCriteria.builder()
-                                        .projectId(id)
+                                        .projectId(verifiedProjectId)
                                         .threadIds(threadIds)
                                         .build())))
-                        .flatMap(threadModels -> checkAndTriggerOnlineScoring(id, threadModels)));
+                        .flatMap(threadModels -> checkAndTriggerOnlineScoring(verifiedProjectId, threadModels)));
     }
 
     private Mono<Void> verifyAndCreateThreadsIfNeeded(UUID projectId, Set<String> threadIds) {

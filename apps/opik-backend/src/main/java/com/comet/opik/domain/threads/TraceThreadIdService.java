@@ -16,6 +16,7 @@ import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -71,12 +72,23 @@ class TraceThreadIdServiceImpl implements TraceThreadIdService {
                 .switchIfEmpty(Mono.error(new NotFoundException("Project not found: " + projectId)));
     }
 
+    /**
+     * Bulk get-or-create of trace-thread-model ids for a project.
+     * <p>
+     * Reads the existing {@code (project_id, thread_id)} rows, then inserts only the missing ones. A
+     * conflict can arise when a concurrent caller creates the same {@code (project_id, thread_id)}
+     * between our read and our insert — the unique constraint then rejects our insert. In that case
+     * {@code withRetry} re-runs the whole read-then-insert in a fresh transaction (so a fresh snapshot
+     * under REPEATABLE READ): the retry sees the now-existing row, drops it from the missing set, and
+     * converges. The unique key guarantees a single canonical id per thread; the retry only covers the
+     * read→write race.
+     */
     @Override
-    public Mono<List<TraceThreadIdModel>> getOrCreateTraceThreadIds(@NonNull String workspaceId,
-            @NonNull UUID projectId, @NonNull Map<String, Instant> threadIdToTimestamp) {
+    public Mono<List<TraceThreadIdModel>> getOrCreateTraceThreadIds(String workspaceId,
+            @NonNull UUID projectId, Map<String, Instant> threadIdToTimestamp) {
         Preconditions.checkArgument(!StringUtils.isBlank(workspaceId), "Workspace ID cannot be blank");
 
-        if (threadIdToTimestamp.isEmpty()) {
+        if (MapUtils.isEmpty(threadIdToTimestamp)) {
             return Mono.just(List.of());
         }
 
