@@ -13,6 +13,7 @@ import org.quartz.DisallowConcurrentExecution;
 import org.quartz.InterruptableJob;
 import org.quartz.JobExecutionContext;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Instant;
@@ -57,6 +58,7 @@ public class McpOAuthScrubJob extends Job implements InterruptableJob {
                 opikConfig.getMcpOAuth().getScrubLockTimeout(),
                 opikConfig.getMcpOAuth().getScrubLockWaitTime(),
                 true)
+                .subscribeOn(Schedulers.boundedElastic())
                 .subscribe(
                         __ -> {
                         },
