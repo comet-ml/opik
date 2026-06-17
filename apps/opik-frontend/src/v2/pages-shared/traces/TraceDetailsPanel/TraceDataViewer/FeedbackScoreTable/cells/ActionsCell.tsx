@@ -4,7 +4,7 @@ import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import { ExpandingFeedbackScoreRow } from "../types";
 import { X } from "lucide-react";
 import { getIsParentFeedbackScoreRow } from "../utils";
-import { useLoggedInUserName } from "@/store/AppStore";
+import { useLoggedInUserNameOrOpenSourceDefaultUser } from "@/store/AppStore";
 
 type CustomMeta = {
   onDelete: (row: ExpandingFeedbackScoreRow) => void;
@@ -15,7 +15,7 @@ const ActionsCell: React.FunctionComponent<
 > = (context) => {
   const { custom } = context.column.columnDef.meta ?? {};
   const { onDelete } = (custom ?? {}) as CustomMeta;
-  const currentUserName = useLoggedInUserName();
+  const currentUserName = useLoggedInUserNameOrOpenSourceDefaultUser();
 
   const isParentFeedbackScoreRow = getIsParentFeedbackScoreRow(
     context.row.original,

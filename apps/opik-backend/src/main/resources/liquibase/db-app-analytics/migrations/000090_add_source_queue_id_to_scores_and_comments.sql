@@ -3,10 +3,12 @@
 --comment: Add source_queue_id to authored_feedback_scores and comments for annotation queue provenance tracking (OPIK-6791)
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.authored_feedback_scores ON CLUSTER '{cluster}'
-    ADD COLUMN IF NOT EXISTS source_queue_id Nullable(FixedString(36)) DEFAULT NULL;
+    ADD COLUMN IF NOT EXISTS source_queue_id FixedString(36),
+    MODIFY ORDER BY (workspace_id, project_id, entity_type, entity_id, author, name, source_queue_id);
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.comments ON CLUSTER '{cluster}'
-    ADD COLUMN IF NOT EXISTS source_queue_id Nullable(FixedString(36)) DEFAULT NULL;
+    ADD COLUMN IF NOT EXISTS source_queue_id FixedString(36);
 
+--rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.authored_feedback_scores ON CLUSTER '{cluster}' MODIFY ORDER BY (workspace_id, project_id, entity_type, entity_id, author, name);
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.authored_feedback_scores ON CLUSTER '{cluster}' DROP COLUMN IF EXISTS source_queue_id;
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.comments ON CLUSTER '{cluster}' DROP COLUMN IF EXISTS source_queue_id;

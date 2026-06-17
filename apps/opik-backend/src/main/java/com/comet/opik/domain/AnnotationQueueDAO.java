@@ -292,7 +292,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                            created_by,
                            last_updated_at,
                            last_updated_by AS author,
-                           CAST(NULL AS Nullable(FixedString(36))) AS source_queue_id
+                           CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores
                     WHERE workspace_id = :workspace_id
                         AND project_id IN (SELECT project_id FROM queues_final)
@@ -314,7 +314,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                        AND entity_id IN (SELECT item_id FROM queue_items_final)
                 )
                 ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ), feedback_scores_combined AS (
                 SELECT entity_id,
                        name,

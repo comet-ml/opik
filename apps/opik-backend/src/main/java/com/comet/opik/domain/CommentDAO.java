@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -267,10 +268,7 @@ class CommentDAOImpl implements CommentDAO {
                 .bind("project_id", projectId)
                 .bind("text", comment.text());
 
-        if (comment.sourceQueueId() != null) {
-            statement.bind("source_queue_id", comment.sourceQueueId().toString());
-        } else {
-            statement.bindNull("source_queue_id", String.class);
-        }
+        statement.bind("source_queue_id",
+                Optional.ofNullable(comment.sourceQueueId()).map(UUID::toString).orElse(""));
     }
 }

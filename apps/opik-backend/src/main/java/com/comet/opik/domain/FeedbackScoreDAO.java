@@ -371,11 +371,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
             if (author != null) {
                 statement.bind("author" + i, getValueOrDefault(author));
-                if (feedbackScoreBatchItem.sourceQueueId() != null) {
-                    statement.bind("source_queue_id" + i, feedbackScoreBatchItem.sourceQueueId().toString());
-                } else {
-                    statement.bindNull("source_queue_id" + i, String.class);
-                }
+                statement.bind("source_queue_id" + i,
+                        Optional.ofNullable(feedbackScoreBatchItem.sourceQueueId()).map(UUID::toString).orElse(""));
             }
         }
     }
