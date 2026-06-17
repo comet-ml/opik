@@ -18,7 +18,6 @@ import tenacity
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 import opik
-from opik.api_objects import rest_helpers
 from opik.api_objects.attachment import client as attachment_client
 from opik import exceptions as opik_exceptions
 from opik.rate_limit import rate_limit
@@ -33,6 +32,7 @@ from .utils import (
     extract_trace_id_from_filename,
     matches_name_pattern,
     no_attachments_option,
+    prepare_project_export_dir,
     print_export_summary,
     trace_to_csv_rows,
     write_csv_data,
@@ -811,20 +811,18 @@ def export_project_traces(
         else:
             client = opik.Opik(workspace=workspace)
 
-        # Create the project's output directory (project-nested layout)
-        project_dir = Path(output_path) / workspace / "projects" / project_name
-        project_dir.mkdir(parents=True, exist_ok=True)
+        # Resolve the project to its ID and create projects/<id>/ (writes
+        # project.json). Raises ValueError if the project does not exist.
+        try:
+            _project_id, project_dir = prepare_project_export_dir(
+                client, output_path, workspace, project_name
+            )
+        except ValueError:
+            console.print(f"[red]Project '{project_name}' not found[/red]")
+            sys.exit(1)
 
         if debug:
             debug_print(f"Target directory: {project_dir}", debug)
-
-        # Validate the project exists so we can give a clear error message.
-        project_id = rest_helpers.resolve_project_id_by_name_optional(
-            client.rest_client, project_name=project_name
-        )
-        if project_id is None:
-            console.print(f"[red]Project '{project_name}' not found[/red]")
-            sys.exit(1)
 
         # Export the project's traces
         exported_count, traces_exported, traces_skipped, had_errors = (

@@ -15,7 +15,14 @@ from .dataset import import_datasets_from_directory
 from .experiment import import_experiments_from_directory
 from .project import import_traces_from_directory
 from .prompt import import_prompts_from_directory
-from .utils import debug_print, no_attachments_option, print_import_summary
+from .utils import (
+    available_project_names,
+    debug_print,
+    find_project_export_dir,
+    no_attachments_option,
+    print_import_summary,
+    to_project_option,
+)
 
 console = Console()
 
@@ -34,6 +41,7 @@ def _import_by_type(
     api_key: Optional[str] = None,
     force: bool = False,
     include_attachments: bool = True,
+    to_project: Optional[str] = None,
 ) -> None:
     """
     Import data by type (dataset, traces, experiment, prompt) into a project.
@@ -42,13 +50,16 @@ def _import_by_type(
         import_type: Type of data to import ("dataset", "traces", "experiment", "prompt")
         path: Base directory containing the exported data
         workspace: Target workspace name
-        project_name: Target project name. Every imported dataset, prompt,
-            experiment, and trace is created in this project.
+        project_name: Source project name. Used to locate the exported project
+            folder (matched against the name recorded in project.json). Also the
+            default destination project when ``to_project`` is not given.
         dry_run: Whether to show what would be imported without importing
         name_pattern: Optional string pattern to filter items by name
         debug: Enable debug output
         recreate_experiments: Whether to recreate experiments after importing
         force: Discard any existing manifest and restart from scratch
+        to_project: Optional destination project name. When provided the data is
+            created in this project instead of ``project_name``.
     """
     try:
         debug_print(f"DEBUG: Starting {import_type} import from {path}", debug)
@@ -59,8 +70,25 @@ def _import_by_type(
         else:
             client = opik.Opik(workspace=workspace)
 
-        # Everything for one project lives under projects/<project>/.
-        project_root = Path(path) / "projects" / project_name
+        # Locate the exported project folder by its recorded name (folders are
+        # keyed by id on disk; project.json holds the human name).
+        base_path = Path(path)
+        project_root = find_project_export_dir(base_path, project_name)
+        if project_root is None:
+            available = available_project_names(base_path)
+            hint = (
+                f" Available: {', '.join(available)}"
+                if available
+                else " No exported projects were found."
+            )
+            console.print(
+                f"[red]No exported project named '{project_name}' under "
+                f"{base_path / 'projects'}.{hint}[/red]"
+            )
+            sys.exit(1)
+
+        # Data is created in --to-project when given, else the source name.
+        target_project_name = to_project or project_name
 
         # ------------------------------------------------------------------
         # Manifest lifecycle management
@@ -117,7 +145,7 @@ def _import_by_type(
             stats = import_datasets_from_directory(
                 client,
                 source_dir,
-                project_name,
+                target_project_name,
                 dry_run,
                 name_pattern,
                 debug,
@@ -127,7 +155,7 @@ def _import_by_type(
             stats = import_traces_from_directory(
                 client,
                 source_dir,
-                project_name,
+                target_project_name,
                 dry_run,
                 name_pattern,
                 debug,
@@ -139,7 +167,7 @@ def _import_by_type(
             stats = import_experiments_from_directory(
                 client,
                 source_dir,
-                project_name,
+                target_project_name,
                 dry_run,
                 name_pattern,
                 debug,
@@ -149,7 +177,7 @@ def _import_by_type(
             stats = import_prompts_from_directory(
                 client,
                 source_dir,
-                project_name,
+                target_project_name,
                 dry_run,
                 name_pattern,
                 debug,
@@ -366,6 +394,7 @@ import_group.add_command(import_all_command)
     is_flag=True,
     help="Enable debug output to show detailed information about the import process.",
 )
+@to_project_option()
 @click.pass_context
 def import_dataset(
     ctx: click.Context,
@@ -374,23 +403,25 @@ def import_dataset(
     dry_run: bool,
     force: bool,
     debug: bool,
+    to_project: Optional[str],
 ) -> None:
-    """Import datasets from workspace/datasets directory.
+    """Import datasets from projects/PROJECT/datasets.
 
-    This command imports datasets matching the specified name from the path/datasets/ directory.
-    The name is matched using case-insensitive substring matching.
+    This command imports datasets matching the specified name from the source
+    project's datasets directory. The name is matched using case-insensitive
+    substring matching.
 
     \b
     Examples:
     \b
         # Preview a dataset that would be imported
-        opik import my-workspace dataset "my-dataset" --dry-run
+        opik import my-workspace my-project dataset "my-dataset" --dry-run
     \b
         # Import a specific dataset
-        opik import my-workspace dataset "my-dataset"
+        opik import my-workspace my-project dataset "my-dataset"
     \b
-        # Import datasets containing "training" in the name
-        opik import my-workspace dataset "training"
+        # Import into a different destination project
+        opik import my-workspace my-project dataset "my-dataset" --to-project other-project
     \b
         # Import from a custom path
         opik import my-workspace my-project dataset "my-dataset" --path ./custom-exports/
@@ -408,6 +439,7 @@ def import_dataset(
         debug,
         api_key=api_key,
         force=force,
+        to_project=to_project,
     )
 
 
@@ -435,6 +467,7 @@ def import_dataset(
     help="Enable debug output to show detailed information about the import process.",
 )
 @no_attachments_option()
+@to_project_option()
 @click.pass_context
 def import_traces(
     ctx: click.Context,
@@ -443,11 +476,12 @@ def import_traces(
     force: bool,
     debug: bool,
     no_attachments: bool,
+    to_project: Optional[str],
 ) -> None:
     """Import the project's traces from projects/PROJECT/.
 
-    Reads the trace files exported under projects/PROJECT/ and recreates the
-    traces and their spans in the named project.
+    Reads the trace files exported under the source project's folder and
+    recreates the traces and their spans in the destination project.
 
     If a previous import was interrupted, re-running the same command automatically
     resumes from where it left off. Use --force to start over from scratch.
@@ -461,8 +495,8 @@ def import_traces(
         # Import the project's traces
         opik import my-workspace my-project traces
     \b
-        # Import traces with debug output
-        opik import my-workspace my-project traces --debug
+        # Import into a different destination project
+        opik import my-workspace my-project traces --to-project other-project
     \b
         # Import from a custom path
         opik import my-workspace my-project traces --path ./custom-exports/
@@ -485,6 +519,7 @@ def import_traces(
         api_key=api_key,
         force=force,
         include_attachments=not no_attachments,
+        to_project=to_project,
     )
 
 
@@ -512,6 +547,7 @@ def import_traces(
     is_flag=True,
     help="Enable debug output to show detailed information about the import process.",
 )
+@to_project_option()
 @click.pass_context
 def import_experiment(
     ctx: click.Context,
@@ -520,11 +556,13 @@ def import_experiment(
     dry_run: bool,
     force: bool,
     debug: bool,
+    to_project: Optional[str],
 ) -> None:
-    """Import experiments from workspace/experiments directory.
+    """Import experiments from projects/PROJECT/experiments.
 
-    This command imports experiments matching the specified name from the path/experiments/ directory.
-    The name is matched using case-insensitive substring matching.
+    This command imports experiments matching the specified name from the source
+    project's experiments directory. The name is matched using case-insensitive
+    substring matching.
 
     If a previous import was interrupted, re-running the same command automatically
     resumes from where it left off. Use --force to start over from scratch.
@@ -533,10 +571,13 @@ def import_experiment(
     Examples:
     \b
         # Preview an experiment that would be imported
-        opik import my-workspace experiment "my-experiment" --dry-run
+        opik import my-workspace my-project experiment "my-experiment" --dry-run
     \b
         # Import a specific experiment
-        opik import my-workspace experiment "my-experiment"
+        opik import my-workspace my-project experiment "my-experiment"
+    \b
+        # Import into a different destination project
+        opik import my-workspace my-project experiment "my-experiment" --to-project other-project
     \b
         # Import from a custom path
         opik import my-workspace my-project experiment "my-experiment" --path ./custom-exports/
@@ -555,6 +596,7 @@ def import_experiment(
         True,
         api_key=api_key,
         force=force,
+        to_project=to_project,
     )
 
 
@@ -582,6 +624,7 @@ def import_experiment(
     is_flag=True,
     help="Enable debug output to show detailed information about the import process.",
 )
+@to_project_option()
 @click.pass_context
 def import_prompt(
     ctx: click.Context,
@@ -590,20 +633,25 @@ def import_prompt(
     dry_run: bool,
     force: bool,
     debug: bool,
+    to_project: Optional[str],
 ) -> None:
-    """Import prompts from workspace/prompts directory.
+    """Import prompts from projects/PROJECT/prompts.
 
-    This command imports prompts matching the specified name from the path/prompts/ directory.
-    The name is matched using case-insensitive substring matching.
+    This command imports prompts matching the specified name from the source
+    project's prompts directory. The name is matched using case-insensitive
+    substring matching.
 
     \b
     Examples:
     \b
         # Preview a prompt that would be imported
-        opik import my-workspace prompt "my-prompt" --dry-run
+        opik import my-workspace my-project prompt "my-prompt" --dry-run
     \b
         # Import a specific prompt
-        opik import my-workspace prompt "my-prompt"
+        opik import my-workspace my-project prompt "my-prompt"
+    \b
+        # Import into a different destination project
+        opik import my-workspace my-project prompt "my-prompt" --to-project other-project
     \b
         # Import from a custom path
         opik import my-workspace my-project prompt "my-prompt" --path ./custom-exports/
@@ -621,4 +669,5 @@ def import_prompt(
         debug,
         api_key=api_key,
         force=force,
+        to_project=to_project,
     )

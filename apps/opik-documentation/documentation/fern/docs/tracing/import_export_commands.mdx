@@ -139,6 +139,7 @@ Imports specific data types from local files into the specified project.
 
 **Options:**
 - `--path, -p`: Directory containing exported data (default: `opik_exports`)
+- `--to-project NAME`: Destination project to import into. Defaults to the source project's name (the `name` recorded in `project.json`). Use this to restore into a renamed or scratch project. Available on `all`, `traces`, `dataset`, `experiment`, and `prompt`.
 - `--dry-run`: Show what would be imported without actually importing
 - `--force`: Discard the migration manifest and re-import everything from scratch
 - `--no-attachments`: Skip uploading attachment files.
@@ -146,10 +147,15 @@ Imports specific data types from local files into the specified project.
 
 **Note:** Experiment imports automatically recreate experiments where possible. No additional flags are needed.
 
+**Note:** `PROJECT` is matched by name against the `name` recorded in each
+exported `project.json` (folders on disk are named by project ID). Point
+`--path` at the directory that contains `projects/` — i.e. the workspace
+directory produced by export (`<export --path>/<workspace>`).
+
 ### Resumable imports
 
 Every import automatically maintains a `migration_manifest.db` SQLite database
-under the project directory (`projects/PROJECT_NAME/migration_manifest.db`). It
+under the project directory (`projects/PROJECT_ID/migration_manifest.db`). It
 tracks which files have been imported and the ID mappings needed to link
 experiments back to their traces.
 
@@ -196,6 +202,11 @@ Use a name pattern when you want to import multiple items whose names share a su
 opik import my-workspace my-project dataset "test"
 ```
 
+Use `--to-project` to import into a different (e.g. renamed or scratch) destination project. The source folder is still located by the `my-project` name; the data is created in `my-restore`:
+```bash
+opik import my-workspace my-project all --to-project my-restore
+```
+
 Use `--path` when your exported data is not in the default `opik_exports` directory:
 ```bash
 opik import my-workspace my-project dataset "my-dataset" --path ./custom-exports
@@ -239,23 +250,37 @@ The exported data is stored in JSON files with the following structure:
 OUTPUT_DIR/
 └── WORKSPACE/
     └── projects/
-        └── PROJECT_NAME/
-            ├── migration_manifest.db      # created automatically during import
+        └── PROJECT_ID/
+            ├── project.json               # {"id": "PROJECT_ID", "name": "project name"}
+            ├── export_manifest.db          # created during export to track progress
+            ├── migration_manifest.db       # created during import to track progress
             ├── datasets/
-            │   ├── dataset_DATASET_NAME_1.json
-            │   └── dataset_DATASET_NAME_2.json
+            │   ├── dataset_DATASET_ID_1.json
+            │   └── dataset_DATASET_ID_2.json
             ├── prompts/
-            │   ├── prompt_PROMPT_NAME_1.json
-            │   └── prompt_PROMPT_NAME_2.json
+            │   ├── prompt_PROMPT_ID_1.json
+            │   └── prompt_PROMPT_ID_2.json
             ├── experiments/
-            │   ├── experiment_EXPERIMENT_NAME_1.json
-            │   └── experiment_EXPERIMENT_NAME_2.json
+            │   ├── experiment_EXPERIMENT_ID_1.json
+            │   └── experiment_EXPERIMENT_ID_2.json
             ├── trace_TRACE_ID_1.json
             ├── trace_TRACE_ID_2.json
             └── attachments/
                 ├── trace/<TRACE_ID>/image.png
                 └── span/<SPAN_ID>/document.pdf
 ```
+
+<Note>
+Folders and files are keyed by **ID**, not by human name. The project folder is
+the project's UUID, and each item file is named by its own ID
+(`dataset_<dataset_id>.json`, `prompt_<prompt_id>.json`,
+`experiment_<experiment_id>.json`, `trace_<trace_id>.json`). The human-readable
+names live as data — inside `project.json` and inside each file. This keeps
+paths free of characters like `/`, `:`, or spaces that commonly appear in names.
+You still pass project and item **names** on the command line; the CLI resolves
+names ↔ IDs for you (on import it matches the name you type against the `name`
+recorded in `project.json`).
+</Note>
 
 Each trace file contains:
 ```json
@@ -356,9 +381,10 @@ Each experiment file contains:
 }
 ```
 
-Each prompt file contains:
+Each prompt file contains (the file is named `prompt_<id>.json`; the `id` and `name` are stored inside):
 ```json
 {
+  "id": "prompt-uuid",
   "name": "prompt-name",
   "current_version": {
     "prompt": "Your prompt template here...",
@@ -391,15 +417,20 @@ When using `--format csv`, data is exported as CSV files with flattened data str
 OUTPUT_DIR/
 └── WORKSPACE/
     └── projects/
-        └── PROJECT_NAME/
+        └── PROJECT_ID/
+            ├── project.json                       # {"id": "PROJECT_ID", "name": "project name"}
             ├── datasets/
-            │   └── datasets_DATASET_NAME.csv      # Dataset data in CSV format
+            │   └── dataset_DATASET_ID.csv          # Dataset data in CSV format
             ├── prompts/
-            │   └── prompts_PROMPT_NAME.csv         # Prompt data in CSV format
+            │   └── prompt_PROMPT_ID.csv            # Prompt data in CSV format
             ├── experiments/
-            │   └── experiments_EXPERIMENT_NAME.csv # Experiment data in CSV format
-            └── traces_PROJECT_NAME.csv             # All traces in a single CSV file
+            │   └── experiment_EXPERIMENT_ID.csv    # Experiment data in CSV format
+            ├── trace_TRACE_ID_1.csv                # One CSV per trace, under the project folder
+            └── trace_TRACE_ID_2.csv
 ```
+
+As with JSON, CSV files are named by **ID**; the human names are stored in the
+file contents and in `project.json`.
 
 **CSV Format Benefits:**
 - **Single File**: All data combined into one CSV file per data type
@@ -424,15 +455,21 @@ your destination credentials. The `migration_manifest.db` created during
 import travels with the exported data and makes the import safe to interrupt
 and resume.
 
+Export writes to `<--path>/<workspace>/projects/<project_id>/`, so on import
+point `--path` at the workspace directory (one level below the export `--path`).
+Add `--to-project <NAME>` to import into a different destination project.
+
 ```bash
 # Step 1: Export from source (run with source API key / Opik URL)
+# Writes to ./migration_data/my-workspace/projects/<project_id>/
 OPIK_API_KEY=<source_key> OPIK_URL_OVERRIDE=https://source.opik.example.com \
   opik export my-workspace my-project traces --path ./migration_data
 
 # Step 2: Import to destination (run with destination API key / Opik URL)
+# Point --path at the workspace dir produced by export.
 # If this is interrupted, just re-run the same command — it resumes automatically.
 OPIK_API_KEY=<dest_key> OPIK_URL_OVERRIDE=https://dest.opik.example.com \
-  opik import my-workspace my-project traces --path ./migration_data
+  opik import my-workspace my-project traces --path ./migration_data/my-workspace
 ```
 
 To migrate all data types at once:
@@ -444,11 +481,12 @@ OPIK_API_KEY=<source_key> opik export my-workspace my-project prompt "my-prompt"
 OPIK_API_KEY=<source_key> opik export my-workspace my-project traces --path ./migration_data
 OPIK_API_KEY=<source_key> opik export my-workspace my-project experiment "my-experiment" --path ./migration_data
 
-# Import everything (destination credentials)
-OPIK_API_KEY=<dest_key> opik import my-workspace my-project dataset "my-dataset" --path ./migration_data
-OPIK_API_KEY=<dest_key> opik import my-workspace my-project prompt "my-prompt" --path ./migration_data
-OPIK_API_KEY=<dest_key> opik import my-workspace my-project traces --path ./migration_data
-OPIK_API_KEY=<dest_key> opik import my-workspace my-project experiment "my-experiment" --path ./migration_data
+# Import everything (destination credentials).
+# Point --path at the workspace dir produced by export.
+OPIK_API_KEY=<dest_key> opik import my-workspace my-project dataset "my-dataset" --path ./migration_data/my-workspace
+OPIK_API_KEY=<dest_key> opik import my-workspace my-project prompt "my-prompt" --path ./migration_data/my-workspace
+OPIK_API_KEY=<dest_key> opik import my-workspace my-project traces --path ./migration_data/my-workspace
+OPIK_API_KEY=<dest_key> opik import my-workspace my-project experiment "my-experiment" --path ./migration_data/my-workspace
 ```
 
 ### 2. Data Backup
@@ -503,9 +541,9 @@ opik export my-workspace my-project experiment "my-experiment" --format csv --pa
 opik export my-workspace my-project prompt "my-template" --format csv --path ./analysis_data
 
 # Open in Excel or Google Sheets for analysis
-# Or use with pandas in Python:
-# import pandas as pd
-# df = pd.read_csv('./analysis_data/my-workspace/projects/my-project/traces_my-project.csv')
+# Or use with pandas in Python (the project folder is the project ID — use a glob):
+# import pandas as pd, glob
+# df = pd.concat([pd.read_csv(f) for f in glob.glob('./analysis_data/my-workspace/projects/*/trace_*.csv')])
 ```
 
 ### 7. Prompt Management
@@ -549,7 +587,7 @@ opik import my-workspace my-project experiment "evaluation" --path ./experiment_
 ### Common Issues
 
 1. **Import was interrupted and re-running creates duplicates**
-   - This should not happen — the import automatically detects and resumes from the `migration_manifest.db` under the project directory (`projects/PROJECT_NAME/migration_manifest.db`)
+   - This should not happen — the import automatically detects and resumes from the `migration_manifest.db` under the project directory (`projects/PROJECT_ID/migration_manifest.db`)
    - If you do not see the "Resuming interrupted import" message, check that you are pointing to the same `--path` and project as the original run
    - If the manifest database is unreadable, delete `migration_manifest.db` and use `--force` to start fresh (this will re-import everything)
 
@@ -625,24 +663,23 @@ opik export my-workspace my-project prompt "my-template" --path ./temp_data
 # Alternative: Export experiment with specific dataset filtering
 opik export my-workspace my-project experiment "evaluation-exp" --dataset "test-dataset" --max-traces 100 --path ./temp_data
 
-# 2. Inspect the exported data
-ls ./temp_data/my-workspace/projects/my-project/datasets/
-ls ./temp_data/my-workspace/projects/my-project/
-ls ./temp_data/my-workspace/projects/my-project/experiments/
-ls ./temp_data/my-workspace/projects/my-project/prompts/
-cat ./temp_data/my-workspace/projects/my-project/trace_*.json | head -20
+# 2. Inspect the exported data (the project folder is the project ID; use a glob)
+ls ./temp_data/my-workspace/projects/*/        # project.json + datasets/ prompts/ experiments/ + trace files
+cat ./temp_data/my-workspace/projects/*/project.json   # maps the ID folder to the project name
+ls ./temp_data/my-workspace/projects/*/datasets/
+cat ./temp_data/my-workspace/projects/*/trace_*.json | head -20
 
-# 3. Dry run import to see what would be imported
-opik import my-workspace my-project dataset "my-dataset" --path ./temp_data --dry-run
-opik import my-workspace my-project traces --path ./temp_data --dry-run
-opik import my-workspace my-project experiment "my-experiment" --path ./temp_data --dry-run
-opik import my-workspace my-project prompt "my-template" --path ./temp_data --dry-run
+# 3. Dry run import to see what would be imported (point --path at the workspace dir)
+opik import my-workspace my-project dataset "my-dataset" --path ./temp_data/my-workspace --dry-run
+opik import my-workspace my-project traces --path ./temp_data/my-workspace --dry-run
+opik import my-workspace my-project experiment "my-experiment" --path ./temp_data/my-workspace --dry-run
+opik import my-workspace my-project prompt "my-template" --path ./temp_data/my-workspace --dry-run
 
 # 4. Import all data — if interrupted, just re-run the same commands to resume
-opik import my-workspace my-project dataset "my-dataset" --path ./temp_data
-opik import my-workspace my-project traces --path ./temp_data
-opik import my-workspace my-project experiment "my-experiment" --path ./temp_data
-opik import my-workspace my-project prompt "my-template" --path ./temp_data
+opik import my-workspace my-project dataset "my-dataset" --path ./temp_data/my-workspace
+opik import my-workspace my-project traces --path ./temp_data/my-workspace
+opik import my-workspace my-project experiment "my-experiment" --path ./temp_data/my-workspace
+opik import my-workspace my-project prompt "my-template" --path ./temp_data/my-workspace
 
 # 5. Clean up temporary data
 rm -rf ./temp_data
@@ -656,29 +693,30 @@ opik export my-workspace my-source-project dataset "my-dataset" --format csv --p
 opik export my-workspace my-source-project experiment "my-experiment" --format csv --path ./csv_data
 opik export my-workspace my-source-project prompt "my-template" --format csv --path ./csv_data
 
-# 2. Inspect the CSV files
-ls ./csv_data/my-workspace/projects/my-source-project/
-ls ./csv_data/my-workspace/projects/my-source-project/datasets/
-ls ./csv_data/my-workspace/projects/my-source-project/experiments/
-ls ./csv_data/my-workspace/projects/my-source-project/prompts/
+# 2. Inspect the CSV files (the project folder is the project ID; use a glob)
+ls ./csv_data/my-workspace/projects/*/
+ls ./csv_data/my-workspace/projects/*/datasets/
+ls ./csv_data/my-workspace/projects/*/experiments/
+ls ./csv_data/my-workspace/projects/*/prompts/
 
 # Each trace is exported to its own CSV file
-head -5 ./csv_data/my-workspace/projects/my-source-project/trace_*.csv | head -20
-head -5 ./csv_data/my-workspace/projects/my-source-project/datasets/datasets_test-dataset.csv
+head -5 ./csv_data/my-workspace/projects/*/trace_*.csv | head -20
+head -5 ./csv_data/my-workspace/projects/*/datasets/dataset_*.csv
 
 # 3. Analyze with pandas (optional)
 python -c "
 import pandas as pd
 import glob
 
-# Read all trace CSV files and combine them
-trace_files = glob.glob('./csv_data/my-workspace/projects/my-source-project/trace_*.csv')
+# Read all trace CSV files and combine them (folder is the project ID — use a glob)
+trace_files = glob.glob('./csv_data/my-workspace/projects/*/trace_*.csv')
 df_traces = pd.concat([pd.read_csv(f) for f in trace_files], ignore_index=True) if trace_files else pd.DataFrame()
-df_datasets = pd.read_csv('./csv_data/my-workspace/projects/my-source-project/datasets/datasets_test-dataset.csv')
+dataset_files = glob.glob('./csv_data/my-workspace/projects/*/datasets/dataset_*.csv')
+df_datasets = pd.concat([pd.read_csv(f) for f in dataset_files], ignore_index=True) if dataset_files else pd.DataFrame()
 print(f'Exported {len(df_traces)} trace records from {len(trace_files)} files')
 print(f'Exported {len(df_datasets)} dataset records')
 print('Trace columns:', df_traces.columns.tolist() if not df_traces.empty else 'No traces')
-print('Dataset columns:', df_datasets.columns.tolist())
+print('Dataset columns:', df_datasets.columns.tolist() if not df_datasets.empty else 'No datasets')
 "
 
 # 4. For import, you would need to convert back to JSON format

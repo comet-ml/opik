@@ -43,6 +43,8 @@ _paginate helper
   - Empty first page
 """
 
+import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -51,6 +53,7 @@ from opik.cli.export_manifest import ExportManifest
 from opik.cli.migration_manifest import MigrationManifest
 
 _PROJECT = "proj"
+_PROJECT_ID = "proj-id"
 _IMPORT_MODULE = "opik.cli.imports.all"
 _EXPORT_MODULE = "opik.cli.exports.all"
 
@@ -70,6 +73,27 @@ def _make_import_client() -> MagicMock:
 
 def _make_export_client() -> MagicMock:
     return MagicMock()
+
+
+def _seed_project_meta(tmp_path: Path) -> Path:
+    """Create the on-disk project folder + project.json so import_all can resolve
+    the source project by its recorded name. Folders are keyed by id on disk; the
+    folder name is irrelevant — find_project_export_dir matches project.json's name.
+    """
+    proj = tmp_path / "projects" / _PROJECT
+    proj.mkdir(parents=True, exist_ok=True)
+    (proj / "project.json").write_text(
+        json.dumps({"id": _PROJECT_ID, "name": _PROJECT})
+    )
+    return proj
+
+
+def _fake_prepare_export_dir(client, output_path, workspace, project_name):
+    """Stand-in for prepare_project_export_dir that skips ID resolution (the
+    client is mocked) and returns a deterministic id-named project dir."""
+    project_dir = Path(output_path) / workspace / "projects" / _PROJECT_ID
+    project_dir.mkdir(parents=True, exist_ok=True)
+    return _PROJECT_ID, project_dir
 
 
 # ---------------------------------------------------------------------------
@@ -368,6 +392,7 @@ class TestImportAll:
             (tmp_path / "projects" / _PROJECT / d).mkdir(parents=True)
 
         client = _make_import_client()
+        _seed_project_meta(tmp_path)
 
         with (
             patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client),
@@ -408,6 +433,7 @@ class TestImportAll:
         """Dry-run must not create a manifest or flush the client."""
         (tmp_path / "projects" / _PROJECT / "datasets").mkdir(parents=True)
         client = _make_import_client()
+        _seed_project_meta(tmp_path)
 
         with (
             patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client),
@@ -443,6 +469,7 @@ class TestImportAll:
         manifest.complete()
 
         client = _make_import_client()
+        _seed_project_meta(tmp_path)
 
         with (
             patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client),
@@ -484,6 +511,7 @@ class TestImportAll:
         manifest.complete()
 
         client = _make_import_client()
+        _seed_project_meta(tmp_path)
 
         with (
             patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client),
@@ -523,6 +551,7 @@ class TestImportAll:
         manifest.start()
 
         client = _make_import_client()
+        _seed_project_meta(tmp_path)
 
         with (
             patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client),
@@ -559,6 +588,7 @@ class TestImportAll:
         """When include=['datasets'], only the dataset phase is called."""
         (tmp_path / "projects" / _PROJECT / "datasets").mkdir(parents=True)
         client = _make_import_client()
+        _seed_project_meta(tmp_path)
 
         with (
             patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client),
@@ -597,6 +627,7 @@ class TestImportAll:
         """If datasets/ does not exist, the dataset phase is silently skipped."""
         # Do NOT create (tmp_path / "datasets")
         client = _make_import_client()
+        _seed_project_meta(tmp_path)
 
         with (
             patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client),
@@ -630,6 +661,7 @@ class TestImportAll:
         """If client.flush() returns False (timeout), import_all raises SystemExit(1)."""
         (tmp_path / "projects" / _PROJECT / "datasets").mkdir(parents=True)
         client = _make_import_client()
+        _seed_project_meta(tmp_path)
         client.flush.return_value = False  # simulate timeout
 
         with (
@@ -663,6 +695,7 @@ class TestImportAll:
         """If failed_uploads > 0, import_all raises SystemExit(1)."""
         (tmp_path / "projects" / _PROJECT / "datasets").mkdir(parents=True)
         client = _make_import_client()
+        _seed_project_meta(tmp_path)
         client.__internal_api__failed_uploads__ = MagicMock(return_value=3)
 
         with (
@@ -697,6 +730,7 @@ class TestImportAll:
         when at least one prompt was imported."""
         (tmp_path / "projects" / _PROJECT / "prompts").mkdir(parents=True)
         client = _make_import_client()
+        _seed_project_meta(tmp_path)
 
         with (
             patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client),
@@ -730,6 +764,7 @@ class TestImportAll:
         were imported — no intermediate flush is triggered."""
         (tmp_path / "projects" / _PROJECT / "prompts").mkdir(parents=True)
         client = _make_import_client()
+        _seed_project_meta(tmp_path)
 
         with (
             patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client),
@@ -760,6 +795,7 @@ class TestImportAll:
     def test_api_key_passed_to_opik_constructor(self, tmp_path):
         """When api_key is provided it is forwarded to opik.Opik()."""
         client = _make_import_client()
+        _seed_project_meta(tmp_path)
 
         with (
             patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client) as mock_opik,
@@ -804,6 +840,10 @@ class TestExportAll:
         client = _make_export_client()
         with (
             patch(f"{_EXPORT_MODULE}.opik.Opik", return_value=client),
+            patch(
+                f"{_EXPORT_MODULE}.prepare_project_export_dir",
+                side_effect=_fake_prepare_export_dir,
+            ),
             patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(0, 0)),
             patch(f"{_EXPORT_MODULE}._export_all_prompts", return_value=(0, 0)),
             patch(
@@ -828,12 +868,16 @@ class TestExportAll:
                 format="json",
             )
 
-        assert (tmp_path / "my-ws" / "projects" / _PROJECT).is_dir()
+        assert (tmp_path / "my-ws" / "projects" / _PROJECT_ID).is_dir()
 
     def test_subdirectories_created_for_all_phases(self, tmp_path):
         client = _make_export_client()
         with (
             patch(f"{_EXPORT_MODULE}.opik.Opik", return_value=client),
+            patch(
+                f"{_EXPORT_MODULE}.prepare_project_export_dir",
+                side_effect=_fake_prepare_export_dir,
+            ),
             patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(0, 0)),
             patch(f"{_EXPORT_MODULE}._export_all_prompts", return_value=(0, 0)),
             patch(
@@ -858,7 +902,7 @@ class TestExportAll:
                 format="json",
             )
 
-        ws = tmp_path / "ws" / "projects" / _PROJECT
+        ws = tmp_path / "ws" / "projects" / _PROJECT_ID
         for subdir in ("datasets", "prompts", "experiments"):
             assert (ws / subdir).is_dir(), f"Missing {subdir}/ directory"
 
@@ -1058,7 +1102,7 @@ class TestExportExperimentByIdJsonFastPath:
         experiment_id = "exp-abc-123"
 
         # Create the experiment JSON file the fast path will read from disk.
-        experiment_file = tmp_path / f"experiment_my_exp_{experiment_id}.json"
+        experiment_file = tmp_path / f"experiment_{experiment_id}.json"
         experiment_data = {
             "id": experiment_id,
             "name": "my_exp",
@@ -1106,7 +1150,7 @@ class TestExportExperimentByIdJsonFastPath:
         experiment_id = "exp-corrupt-456"
 
         # Write a corrupt JSON file.
-        experiment_file = tmp_path / f"experiment_bad_{experiment_id}.json"
+        experiment_file = tmp_path / f"experiment_{experiment_id}.json"
         experiment_file.write_text("{ not valid json }")
 
         mock_client = MagicMock()

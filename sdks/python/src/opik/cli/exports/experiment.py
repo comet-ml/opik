@@ -24,6 +24,7 @@ from .utils import (
     create_experiment_data_structure,
     debug_print,
     extract_trace_id_from_filename,
+    prepare_project_export_dir,
     write_json_data,
     write_csv_data,
     print_export_summary,
@@ -423,9 +424,7 @@ def export_experiment_by_id(
         # e.g. a previous run that fetched items but crashed before finishing traces.
         if not force:
             stored_ids = manifest.get_all_trace_ids()
-            experiment_files = list(
-                output_dir.glob(f"experiment_*_{experiment_id}.json")
-            )
+            experiment_files = list(output_dir.glob(f"experiment_{experiment_id}.json"))
             if stored_ids is not None and experiment_files:
                 if trace_ids_collector is not None:
                     trace_ids_collector.update(stored_ids)
@@ -525,9 +524,7 @@ def export_experiment_by_id(
 
         # Save experiment data
         # Include experiment ID in filename to handle multiple experiments with same name
-        experiment_file = (
-            output_dir / f"experiment_{experiment.name}_{experiment.id}.json"
-        )
+        experiment_file = output_dir / f"experiment_{experiment.id}.json"
         file_already_exists = experiment_file.exists()
         experiment_file_written = False
 
@@ -608,8 +605,10 @@ def export_experiment_by_name(
         else:
             client = opik.Opik(workspace=workspace)
 
-        # Create output directory (project-nested layout)
-        project_root = Path(output_path) / workspace / "projects" / project_name
+        # Resolve the project to its ID and create projects/<id>/.
+        _project_id, project_root = prepare_project_export_dir(
+            client, output_path, workspace, project_name
+        )
         output_dir = project_root / "experiments"
         output_dir.mkdir(parents=True, exist_ok=True)
         datasets_dir = project_root / "datasets"
@@ -840,8 +839,10 @@ def export_experiment_by_name_or_id(
         else:
             client = opik.Opik(workspace=workspace)
 
-        # Create output directory (project-nested layout)
-        project_root = Path(output_path) / workspace / "projects" / project_name
+        # Resolve the project to its ID and create projects/<id>/.
+        _project_id, project_root = prepare_project_export_dir(
+            client, output_path, workspace, project_name
+        )
         output_dir = project_root / "experiments"
         output_dir.mkdir(parents=True, exist_ok=True)
         datasets_dir = project_root / "datasets"

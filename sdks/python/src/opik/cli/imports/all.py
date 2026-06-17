@@ -14,7 +14,14 @@ from .dataset import import_datasets_from_directory
 from .experiment import import_experiments_from_directory
 from .project import import_traces_from_directory
 from .prompt import import_prompts_from_directory
-from .utils import debug_print, no_attachments_option, print_import_summary
+from .utils import (
+    available_project_names,
+    debug_print,
+    find_project_export_dir,
+    no_attachments_option,
+    print_import_summary,
+    to_project_option,
+)
 from ..include_validation import validate_include
 
 console = Console()
@@ -45,6 +52,7 @@ def import_all(
     debug: bool,
     api_key: Optional[str] = None,
     include_attachments: bool = True,
+    to_project: Optional[str] = None,
 ) -> None:
     """Import all data types from the project export directory."""
     try:
@@ -53,8 +61,25 @@ def import_all(
         else:
             client = opik.Opik(workspace=workspace)
 
-        # Everything for one project lives under projects/<project>/.
-        project_root = Path(path) / "projects" / project_name
+        # Locate the exported project folder by its recorded name (folders are
+        # keyed by id on disk; project.json holds the human name).
+        base_path = Path(path)
+        project_root = find_project_export_dir(base_path, project_name)
+        if project_root is None:
+            available = available_project_names(base_path)
+            hint = (
+                f" Available: {', '.join(available)}"
+                if available
+                else " No exported projects were found."
+            )
+            console.print(
+                f"[red]No exported project named '{project_name}' under "
+                f"{base_path / 'projects'}.{hint}[/red]"
+            )
+            sys.exit(1)
+
+        # Data is created in --to-project when given, else the source name.
+        project_name = to_project or project_name
 
         # ------------------------------------------------------------------
         # Manifest lifecycle (skipped for --dry-run)
@@ -247,6 +272,7 @@ def import_all(
     ),
 )
 @no_attachments_option()
+@to_project_option()
 @click.pass_context
 def import_all_command(
     ctx: click.Context,
@@ -256,6 +282,7 @@ def import_all_command(
     debug: bool,
     include: List[str],
     no_attachments: bool,
+    to_project: Optional[str],
 ) -> None:
     """Import all datasets, prompts, traces, and experiments into the project.
 
@@ -297,4 +324,5 @@ def import_all_command(
         debug,
         api_key,
         include_attachments=not no_attachments,
+        to_project=to_project,
     )

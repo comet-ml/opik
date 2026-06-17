@@ -13,6 +13,7 @@ from opik.api_objects.prompt import Prompt, ChatPrompt
 from .utils import (
     console,
     debug_print,
+    prepare_project_export_dir,
     prompt_to_csv_rows,
     should_skip_file,
     write_csv_data,
@@ -88,13 +89,13 @@ def export_single_prompt(
     debug: bool,
     format: str,
 ) -> int:
-    """Export a single prompt."""
+    """Export a single prompt. The file is named by prompt ID; the human name
+    is stored inside the file."""
     try:
-        # Check if already exists and force is not set
-        if format.lower() == "csv":
-            prompt_file = output_dir / f"prompts_{prompt.name.replace('/', '_')}.csv"
-        else:
-            prompt_file = output_dir / f"prompt_{prompt.name.replace('/', '_')}.json"
+        # File is keyed by prompt ID (the name lives inside the file).
+        prompt_id = prompt.id
+        ext = "csv" if format.lower() == "csv" else "json"
+        prompt_file = output_dir / f"prompt_{prompt_id}.{ext}"
 
         if should_skip_file(prompt_file, force):
             if debug:
@@ -125,6 +126,7 @@ def export_single_prompt(
 
         # Create prompt data structure
         prompt_data = {
+            "id": prompt_id,
             "name": prompt.name,
             "current_version": {
                 "prompt": _get_prompt_content(prompt),
@@ -183,10 +185,11 @@ def export_prompt_by_name(
         else:
             client = opik.Opik(workspace=workspace)
 
-        # Create output directory (project-nested layout)
-        output_dir = (
-            Path(output_path) / workspace / "projects" / project_name / "prompts"
+        # Resolve the project to its ID and create projects/<id>/prompts.
+        _project_id, project_dir = prepare_project_export_dir(
+            client, output_path, workspace, project_name
         )
+        output_dir = project_dir / "prompts"
         output_dir.mkdir(parents=True, exist_ok=True)
 
         if debug:
@@ -287,17 +290,10 @@ def export_prompts_by_ids(
                     )
                 continue
 
-            # Determine file path
-            if format.lower() == "csv":
-                prompt_file = (
-                    prompts_dir
-                    / f"prompts_{prompt.name or getattr(prompt, 'id', 'unknown')}.csv"
-                )
-            else:
-                prompt_file = (
-                    prompts_dir
-                    / f"prompt_{prompt.name or getattr(prompt, 'id', 'unknown')}.json"
-                )
+            # File is keyed by prompt ID (the name lives inside the file).
+            resolved_prompt_id = prompt.id or prompt_id
+            ext = "csv" if format.lower() == "csv" else "json"
+            prompt_file = prompts_dir / f"prompt_{resolved_prompt_id}.{ext}"
 
             # Check if file already exists and should be skipped
             if should_skip_file(prompt_file, force):
@@ -528,13 +524,9 @@ def export_related_prompts_by_name(
                     "related_to_experiment": experiment.name or experiment.id,
                 }
 
-                # Save prompt data using the appropriate format
-                # Sanitize prompt name for filename (replace / with _)
-                sanitized_name = prompt.name.replace("/", "_")
-                if format.lower() == "csv":
-                    prompt_file = prompts_dir / f"prompts_{sanitized_name}.csv"
-                else:
-                    prompt_file = prompts_dir / f"prompt_{sanitized_name}.json"
+                # File is keyed by prompt ID (the name lives inside the file).
+                ext = "csv" if format.lower() == "csv" else "json"
+                prompt_file = prompts_dir / f"prompt_{prompt.id}.{ext}"
 
                 # Check if file should be skipped using the standard utility
                 if should_skip_file(prompt_file, force):

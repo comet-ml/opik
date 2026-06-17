@@ -1,6 +1,8 @@
 """Common utilities for import functionality."""
 
+import json
 from collections import deque
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 import click
@@ -8,6 +10,8 @@ import opik
 from opik.types import FeedbackScoreDict
 from rich.console import Console
 from rich.table import Table
+
+PROJECT_METADATA_FILENAME = "project.json"
 
 
 def no_attachments_option() -> Callable:
@@ -19,7 +23,63 @@ def no_attachments_option() -> Callable:
     )
 
 
+def to_project_option() -> Callable:
+    """Shared Click decorator for the ``--to-project`` flag.
+
+    Overrides the destination project. When omitted, data is imported into a
+    project named after the source (the name recorded in ``project.json``).
+    """
+    return click.option(
+        "--to-project",
+        "to_project",
+        type=str,
+        default=None,
+        help="Create the imported data in this project instead of the source project's name.",
+    )
+
+
 console = Console()
+
+
+def _read_project_metadata_name(project_dir: Path) -> Optional[str]:
+    """Return the recorded project name from ``<project_dir>/project.json``."""
+    meta = project_dir / PROJECT_METADATA_FILENAME
+    if not meta.exists():
+        return None
+    try:
+        return json.loads(meta.read_text(encoding="utf-8")).get("name")
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def find_project_export_dir(base_path: Path, project_name: str) -> Optional[Path]:
+    """Locate the exported project folder whose ``project.json`` name matches.
+
+    The on-disk layout keys folders by project ID; the human name lives in
+    ``project.json``. This resolves a user-supplied project *name* back to its
+    id-named directory under ``base_path/projects/``. Returns ``None`` if no
+    folder records that name.
+    """
+    projects_dir = base_path / "projects"
+    if not projects_dir.is_dir():
+        return None
+    for child in sorted(projects_dir.iterdir()):
+        if child.is_dir() and _read_project_metadata_name(child) == project_name:
+            return child
+    return None
+
+
+def available_project_names(base_path: Path) -> List[str]:
+    """List the project names recorded under ``base_path/projects/*/project.json``."""
+    projects_dir = base_path / "projects"
+    if not projects_dir.is_dir():
+        return []
+    names = [
+        name
+        for child in sorted(projects_dir.iterdir())
+        if child.is_dir() and (name := _read_project_metadata_name(child)) is not None
+    ]
+    return names
 
 
 def debug_print(message: str, debug: bool) -> None:

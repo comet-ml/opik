@@ -19,7 +19,6 @@ from rich.progress import (
 )
 
 import opik
-from opik.api_objects import rest_helpers
 from opik.api_objects.prompt import Prompt, ChatPrompt
 from .dataset import export_single_dataset
 from .experiment import (
@@ -28,7 +27,13 @@ from .experiment import (
 )
 from .project import export_single_project
 from .prompt import export_single_prompt
-from .utils import console, debug_print, no_attachments_option, print_export_summary
+from .utils import (
+    console,
+    debug_print,
+    no_attachments_option,
+    prepare_project_export_dir,
+    print_export_summary,
+)
 from ..include_validation import validate_include
 
 PAGE_SIZE = 500
@@ -427,13 +432,15 @@ def export_all(
         else:
             client = opik.Opik(workspace=workspace)
 
-        project_root = Path(output_path) / workspace / "projects" / project_name
-        project_root.mkdir(parents=True, exist_ok=True)
-
-        # Resolve the project id once so per-entity listings can be scoped to it.
-        project_id = rest_helpers.resolve_project_id_by_name_optional(
-            client.rest_client, project_name=project_name
-        )
+        # Resolve the project to its ID, create projects/<id>/ and write
+        # project.json. The id also scopes per-entity listings below.
+        try:
+            project_id, project_root = prepare_project_export_dir(
+                client, output_path, workspace, project_name
+            )
+        except ValueError:
+            console.print(f"[red]Project '{project_name}' not found[/red]")
+            sys.exit(1)
 
         total_stats: dict = {}
         any_errors = False
