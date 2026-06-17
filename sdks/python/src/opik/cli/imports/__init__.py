@@ -208,7 +208,7 @@ def _import_by_type(
 
             # ------------------------------------------------------------------
             # Mark manifest complete only on a fully clean run. On any error we
-            # leave it in_progress so the next (non---force) run resumes/retries
+            # leave it in_progress so the next run (without --force) resumes/retries
             # instead of short-circuiting on manifest.is_completed.
             # ------------------------------------------------------------------
             assert manifest is not None  # guaranteed: manifest is set when not dry_run

@@ -727,43 +727,60 @@ class TestImportAll:
 
         assert exc_info.value.code == 1
 
-    def test_phase_errors_leave_manifest_incomplete(self, tmp_path):
-        """A failed import must NOT mark the manifest completed, so a non---force
-        rerun resumes/retries instead of short-circuiting on is_completed."""
+    def test_failed_import_is_retryable_without_force(self, tmp_path):
+        """A failed import must not be recorded as completed: re-running without
+        ``--force`` must re-attempt the phases instead of short-circuiting on
+        "already completed". Verified through observable behavior (the importer
+        is invoked again on the second run) rather than the internal manifest.
+        """
         (tmp_path / _WORKSPACE / "projects" / _PROJECT / "datasets").mkdir(parents=True)
         client = _make_import_client()
         _seed_project_meta(tmp_path)
 
-        with (
-            patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client),
-            patch(
-                f"{_IMPORT_MODULE}.import_datasets_from_directory",
-                return_value={"datasets": 0, "datasets_errors": 1},
-            ),
-            patch(
-                f"{_IMPORT_MODULE}.import_prompts_from_directory",
-                return_value={"prompts": 0},
-            ),
-            patch(f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}),
-            patch(
-                f"{_IMPORT_MODULE}.import_experiments_from_directory", return_value={}
-            ),
-            pytest.raises(SystemExit),
-        ):
-            from opik.cli.imports.all import import_all
+        from opik.cli.imports.all import import_all
 
-            import_all(
-                workspace="ws",
-                project_name=_PROJECT,
-                path=str(tmp_path),
-                include=["datasets"],
-                dry_run=False,
-                force=False,
-                debug=False,
-            )
+        def _run_import_datasets(datasets_result):
+            """Run `import_all` for the datasets phase with a patched importer.
 
-        manifest = MigrationManifest(tmp_path / _WORKSPACE / "projects" / _PROJECT)
-        assert not manifest.is_completed
+            Returns the dataset-importer mock so the caller can assert it was
+            invoked (i.e. the run was not short-circuited as already-completed).
+            """
+            mock_ds = MagicMock(return_value=datasets_result)
+            with (
+                patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client),
+                patch(f"{_IMPORT_MODULE}.import_datasets_from_directory", mock_ds),
+                patch(
+                    f"{_IMPORT_MODULE}.import_prompts_from_directory",
+                    return_value={"prompts": 0},
+                ),
+                patch(
+                    f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}
+                ),
+                patch(
+                    f"{_IMPORT_MODULE}.import_experiments_from_directory",
+                    return_value={},
+                ),
+            ):
+                import_all(
+                    workspace="ws",
+                    project_name=_PROJECT,
+                    path=str(tmp_path),
+                    include=["datasets"],
+                    dry_run=False,
+                    force=False,
+                    debug=False,
+                )
+            return mock_ds
+
+        # First run: the dataset import reports an error -> SystemExit(1).
+        with pytest.raises(SystemExit):
+            _run_import_datasets({"datasets": 0, "datasets_errors": 1})
+
+        # Second run (no --force): a clean dataset import must run AGAIN. If the
+        # failed run had wrongly marked the manifest completed, import_all would
+        # short-circuit and never call the importer.
+        mock_ds_ok = _run_import_datasets({"datasets": 1})
+        assert mock_ds_ok.called
 
     def test_flush_timeout_exits_with_code_1(self, tmp_path):
         """If client.flush() returns False (timeout), import_all raises SystemExit(1)."""
