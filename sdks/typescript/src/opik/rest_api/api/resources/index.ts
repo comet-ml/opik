@@ -1,5 +1,8 @@
 export * from "./agentConfigs/client/requests/index.js";
 export * as agentConfigs from "./agentConfigs/index.js";
+export * from "./agentInsights/client/requests/index.js";
+export * as agentInsights from "./agentInsights/index.js";
+export * from "./agentInsights/types/index.js";
 export * from "./aiSpend/client/requests/index.js";
 export * as aiSpend from "./aiSpend/index.js";
 export * from "./alerts/client/requests/index.js";
