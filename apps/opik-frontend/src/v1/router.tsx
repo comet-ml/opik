@@ -58,6 +58,7 @@ import TestSuitePage from "@/v1/pages/TestSuitePage/TestSuitePage";
 import TestSuiteItemsPage from "@/v1/pages/TestSuiteItemsPage/TestSuiteItemsPage";
 import PairV1Page from "@/v1/pages/PairV1Page/PairV1Page";
 import PairRouteVersionGuard from "@/shared/WorkspaceVersionResolver/PairRouteVersionGuard";
+import { createOAuthConsentRoute } from "@/shared/OAuthConsentPage/createOAuthConsentRoute";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -134,14 +135,7 @@ const pairingRouteOssAlias = createRoute({
 // The browser lands here from opik-backend's GET /oauth/authorize 302 before any workspace
 // is selected, so both V1 and V2 routers must serve it — WorkspaceVersionGate picks the
 // app from cached defaults and the consent page itself is independent of either layout.
-const OAuthConsentPage = lazy(
-  () => import("@/shared/OAuthConsentPage/OAuthConsentPage"),
-);
-const oauthConsentRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/oauth/consent",
-  component: OAuthConsentPage,
-});
+const oauthConsentRoute = createOAuthConsentRoute(rootRoute);
 
 const baseRoute = createRoute({
   path: "/",

@@ -1,8 +1,7 @@
 import React, { useMemo, useState } from "react";
-import get from "lodash/get";
 import useOAuthAuthorizeContext from "@/api/oauth/useOAuthAuthorizeContext";
 import useOAuthConsentMutation from "@/api/oauth/useOAuthConsentMutation";
-import { OAuthAuthorizeContext } from "@/api/oauth/types";
+import { OAuthAuthorizeContext, OAuthWorkspaceInfo } from "@/api/oauth/types";
 import { Button } from "@/ui/button";
 import {
   Card,
@@ -16,55 +15,12 @@ import { Label } from "@/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/ui/radio-group";
 import Loader from "@/shared/Loader/Loader";
 import { useToast } from "@/ui/use-toast";
-
-type ParsedParams = {
-  client_id: string;
-  redirect_uri: string;
-  code_challenge: string;
-  code_challenge_method: string;
-  resource: string;
-  state: string | null;
-};
-
-const parseParams = (search: string): ParsedParams | null => {
-  const q = new URLSearchParams(search);
-  // response_type is required by the OAuth spec; we gate on its presence but
-  // never forward it (the backend already validated it before this redirect).
-  const required = [
-    "client_id",
-    "redirect_uri",
-    "response_type",
-    "code_challenge",
-    "code_challenge_method",
-    "resource",
-  ] as const;
-  for (const k of required) {
-    if (!q.get(k)) return null;
-  }
-  return {
-    client_id: q.get("client_id") as string,
-    redirect_uri: q.get("redirect_uri") as string,
-    code_challenge: q.get("code_challenge") as string,
-    code_challenge_method: q.get("code_challenge_method") as string,
-    resource: q.get("resource") as string,
-    state: q.get("state"),
-  };
-};
-
-const denyAndRedirect = (
-  redirectUri: string,
-  state: string | null,
-): boolean => {
-  try {
-    const url = new URL(redirectUri);
-    url.searchParams.set("error", "access_denied");
-    if (state) url.searchParams.set("state", state);
-    window.location.href = url.toString();
-    return true;
-  } catch {
-    return false;
-  }
-};
+import {
+  buildConsentRequest,
+  denyAndRedirect,
+  extractErrorMessage,
+  parseParams,
+} from "./helpers";
 
 const OAuthConsentPage: React.FC = () => {
   const params = useMemo(() => parseParams(window.location.search), []);
@@ -72,6 +28,7 @@ const OAuthConsentPage: React.FC = () => {
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(
     null,
   );
+  const [logoFailed, setLogoFailed] = useState(false);
 
   const contextQuery = useOAuthAuthorizeContext(
     {
@@ -116,6 +73,8 @@ const OAuthConsentPage: React.FC = () => {
   const data: OAuthAuthorizeContext = contextQuery.data;
   const workspaces = data.workspaces ?? [];
   const effectiveWorkspaceId = selectedWorkspaceId ?? workspaces[0]?.id ?? null;
+  const canAllow =
+    !consent.isPending && workspaces.length > 0 && !!effectiveWorkspaceId;
 
   const handleAllow = () => {
     const workspace = workspaces.find((w) => w.id === effectiveWorkspaceId);
@@ -127,36 +86,21 @@ const OAuthConsentPage: React.FC = () => {
       });
       return;
     }
-    consent.mutate(
-      {
-        client_id: params.client_id,
-        redirect_uri: params.redirect_uri,
-        code_challenge: params.code_challenge,
-        code_challenge_method: params.code_challenge_method,
-        resource: params.resource,
-        state: params.state,
-        workspace_id: workspace.id,
-        workspace_name: workspace.name,
-        csrf: data.csrf_token,
+    consent.mutate(buildConsentRequest(params, workspace, data.csrf_token), {
+      onSuccess: ({ redirect_to }) => {
+        window.location.href = redirect_to;
       },
-      {
-        onSuccess: ({ redirect_to }) => {
-          window.location.href = redirect_to;
-        },
-        onError: (error) => {
-          const description = get(
+      onError: (error) => {
+        toast({
+          title: "Could not complete authorization",
+          description: extractErrorMessage(
             error,
-            ["response", "data", "message"],
             "The server rejected the consent. Please retry from your AI host.",
-          );
-          toast({
-            title: "Could not complete authorization",
-            description,
-            variant: "destructive",
-          });
-        },
+          ),
+          variant: "destructive",
+        });
       },
-    );
+    });
   };
 
   const handleDeny = () => {
@@ -174,11 +118,12 @@ const OAuthConsentPage: React.FC = () => {
     <FullPage>
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-3">
-          {data.client_logo_uri ? (
+          {data.client_logo_uri && !logoFailed ? (
             <img
               src={data.client_logo_uri}
               alt={`${data.client_name} logo`}
               className="size-12 rounded"
+              onError={() => setLogoFailed(true)}
             />
           ) : null}
           <CardTitle>{data.client_name}</CardTitle>
@@ -189,29 +134,11 @@ const OAuthConsentPage: React.FC = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {workspaces.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No eligible workspaces. Create one in Opik before approving this
-              request.
-            </p>
-          ) : (
-            <div className="space-y-3">
-              <Label>Workspace</Label>
-              <RadioGroup
-                value={effectiveWorkspaceId ?? undefined}
-                onValueChange={setSelectedWorkspaceId}
-              >
-                {workspaces.map((w) => (
-                  <div key={w.id} className="flex items-center space-x-2">
-                    <RadioGroupItem value={w.id} id={`ws-${w.id}`} />
-                    <Label htmlFor={`ws-${w.id}`} className="font-normal">
-                      {w.name}
-                    </Label>
-                  </div>
-                ))}
-              </RadioGroup>
-            </div>
-          )}
+          <WorkspacePicker
+            workspaces={workspaces}
+            value={effectiveWorkspaceId}
+            onChange={setSelectedWorkspaceId}
+          />
         </CardContent>
         <CardFooter className="flex justify-end gap-2">
           <Button
@@ -221,19 +148,43 @@ const OAuthConsentPage: React.FC = () => {
           >
             Deny
           </Button>
-          <Button
-            onClick={handleAllow}
-            disabled={
-              consent.isPending ||
-              workspaces.length === 0 ||
-              !effectiveWorkspaceId
-            }
-          >
+          <Button onClick={handleAllow} disabled={!canAllow}>
             {consent.isPending ? "Approving…" : "Allow"}
           </Button>
         </CardFooter>
       </Card>
     </FullPage>
+  );
+};
+
+const WorkspacePicker: React.FC<{
+  workspaces: OAuthWorkspaceInfo[];
+  value: string | null;
+  onChange: (id: string) => void;
+}> = ({ workspaces, value, onChange }) => {
+  if (workspaces.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        No eligible workspaces. Create one in Opik before approving this
+        request.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <Label>Workspace</Label>
+      <RadioGroup value={value ?? undefined} onValueChange={onChange}>
+        {workspaces.map((w) => (
+          <div key={w.id} className="flex items-center space-x-2">
+            <RadioGroupItem value={w.id} id={`ws-${w.id}`} />
+            <Label htmlFor={`ws-${w.id}`} className="font-normal">
+              {w.name}
+            </Label>
+          </div>
+        ))}
+      </RadioGroup>
+    </div>
   );
 };
 

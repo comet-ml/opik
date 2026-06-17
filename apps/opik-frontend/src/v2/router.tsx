@@ -43,6 +43,7 @@ import AnnotationQueuePage from "@/v2/pages/AnnotationQueuePage/AnnotationQueueP
 import AgentRunnerPage from "@/v2/pages/AgentRunnerPage/AgentRunnerPage";
 import PairingPage from "@/v2/pages/PairingPage/PairingPage";
 import PairRouteVersionGuard from "@/shared/WorkspaceVersionResolver/PairRouteVersionGuard";
+import { createOAuthConsentRoute } from "@/shared/OAuthConsentPage/createOAuthConsentRoute";
 import OptimizationsPage from "@/v2/pages/OptimizationsPage/OptimizationsPage";
 import OptimizationsNewPage from "@/v2/pages/OptimizationsPage/OptimizationsNewPage/OptimizationsNewPage";
 import OptimizationPage from "@/v2/pages/OptimizationPage/OptimizationPage";
@@ -140,14 +141,7 @@ const pairingRouteOssAlias = createRoute({
 // ----------- MCP OAuth consent (root-level, no workspace guard, no layout)
 // Browser lands here after the backend's GET /oauth/authorize 302-redirects with the OAuth
 // request parameters preserved. The page reads them from window.location.search.
-const OAuthConsentPage = lazy(
-  () => import("@/shared/OAuthConsentPage/OAuthConsentPage"),
-);
-const oauthConsentRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/oauth/consent",
-  component: OAuthConsentPage,
-});
+const oauthConsentRoute = createOAuthConsentRoute(rootRoute);
 
 // ----------- base redirect
 const baseRoute = createRoute({

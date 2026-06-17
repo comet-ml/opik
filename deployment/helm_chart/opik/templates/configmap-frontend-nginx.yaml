@@ -160,6 +160,8 @@ data:
         # React consent page renders from the SPA bundle while every other
         # /oauth/* path is rewritten to / and proxied to the backend.
         location = {{ $rootPath }}/oauth/consent {
+          # Consent screens are prime clickjacking targets; never allow framing.
+          add_header X-Frame-Options "DENY" always;
           try_files /dev/null {{ $rootPath }}/index.html;
         }
         location @mcp_oauth_backend {
