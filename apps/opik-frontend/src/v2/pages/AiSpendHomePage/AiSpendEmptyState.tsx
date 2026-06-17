@@ -1,8 +1,7 @@
 import React, { useMemo } from "react";
 import { ChartNoAxesColumn } from "lucide-react";
-import CodeHighlighter, {
-  SUPPORTED_LANGUAGE,
-} from "@/shared/CodeHighlighter/CodeHighlighter";
+import CodeHighlighter from "@/shared/CodeHighlighter/CodeHighlighter";
+import { SUPPORTED_LANGUAGE } from "@/constants/codeLanguage";
 import { BASE_API_URL } from "@/api/api";
 import { useAiSpend } from "@/contexts/AiSpendContext";
 

@@ -10,8 +10,6 @@ import CopyButton from "@/shared/CopyButton/CopyButton";
 import { SUPPORTED_LANGUAGE } from "@/constants/codeLanguage";
 import { getLanguageExtension } from "./getLanguageExtension";
 
-export { SUPPORTED_LANGUAGE };
-
 type CodeHighlighterProps = {
   data: string;
   copyData?: string;

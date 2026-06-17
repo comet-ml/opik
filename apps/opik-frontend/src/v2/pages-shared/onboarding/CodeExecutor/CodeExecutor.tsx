@@ -2,7 +2,10 @@ import React, { useEffect, useRef, useState } from "react";
 
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
-import { EditorState } from "@codemirror/state";
+import { EditorState, Extension } from "@codemirror/state";
+import { jsonLanguage } from "@codemirror/lang-json";
+import { yamlLanguage } from "@codemirror/lang-yaml";
+import { pythonLanguage } from "@codemirror/lang-python";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { useCodemirrorLineHighlight } from "@/hooks/useCodemirrorLineHighlight";
 import CopyButton from "@/shared/CopyButton/CopyButton";
@@ -11,10 +14,18 @@ import useRunCodeSnippet from "./useRunCodeSnippet";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { FINAL_LOG_TEMPLATE } from "@/integrations/integration-logs";
-import { SUPPORTED_LANGUAGE } from "@/constants/codeLanguage";
-import { getLanguageExtension } from "@/shared/CodeHighlighter/getLanguageExtension";
 
-export { SUPPORTED_LANGUAGE };
+export enum SUPPORTED_LANGUAGE {
+  json = "json",
+  yaml = "yaml",
+  python = "python",
+}
+
+const PLUGINS_MAP: Record<SUPPORTED_LANGUAGE, Extension> = {
+  [SUPPORTED_LANGUAGE.json]: jsonLanguage,
+  [SUPPORTED_LANGUAGE.yaml]: yamlLanguage,
+  [SUPPORTED_LANGUAGE.python]: pythonLanguage,
+};
 
 type CodeExecutorProps = {
   data: string;
@@ -173,7 +184,7 @@ const CodeExecutor: React.FC<CodeExecutorProps> = ({
         theme={theme}
         value={data}
         extensions={[
-          getLanguageExtension(language),
+          PLUGINS_MAP[language],
           EditorView.lineWrapping,
           EditorState.readOnly.of(true),
           EditorView.editable.of(false),
