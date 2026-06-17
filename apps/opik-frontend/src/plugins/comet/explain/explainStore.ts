@@ -42,6 +42,7 @@ type ExplainState = {
 
   explain: (target: ExplainTarget) => void;
   retry: (target: ExplainTarget) => void;
+  continueChat: (target: ExplainTarget, question: string) => void;
 
   onConsoleReady: (data: SidebarEventMap["console:ready"]) => void;
   onChunk: (data: SidebarEventMap["explain:chunk"]) => void;
@@ -122,6 +123,12 @@ const useExplainStore = create<ExplainState>((set, get) => ({
   retry: (target) => {
     set((s) => removeEntry(s, cellKey(target)));
     get().explain(target);
+  },
+
+  continueChat: (target, question) => {
+    const entry = get().entries[cellKey(target)];
+    if (!entry || entry.phase !== "done") return;
+    get().emit?.("chat:continue", { question, answer: entry.text, target });
   },
 
   onConsoleReady: ({ capabilities }) => set({ capabilities }),
