@@ -26,6 +26,10 @@ env:
   OPIK_SENTRY_ENABLE: False
   OPIK_URL_OVERRIDE: http://localhost:8080
   OPIK_WORKSPACE: default
+  # Point the studio job processor's log collector at the stack's real Redis
+  # (password-protected, port-mapped to localhost by `opik.sh --port-mapping`).
+  # Without this it would fall back to localhost:6379 with no auth and fail.
+  REDIS_URL: redis://:opik@localhost:6379/0
   # Provider keys are stored in the workspace by the tests (model-storage
   # principle); the optimizer reaches the provider only through the backend
   # gateway, never via these directly.
