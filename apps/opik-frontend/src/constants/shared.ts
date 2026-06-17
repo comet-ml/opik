@@ -16,6 +16,11 @@ export const INSTALL_OPIK_SKILLS_COMMAND =
   "npx skills add comet-ml/opik-skills -g --all";
 export const INSTALL_OPIK_SECTION_TITLE =
   "1. Install Opik using pip from the command line";
+// Default copy for the install step in onboarding integration dialogs.
+// Integrations can override via `installTitle` / `installDescription`.
+export const INSTALL_OPIK_DEFAULT_TITLE = `${INSTALL_OPIK_SECTION_TITLE}.`;
+export const INSTALL_OPIK_DEFAULT_DESCRIPTION =
+  "Install Opik from the command line using pip.";
 export const INSTALL_SDK_SECTION_TITLE = "2. Install the SDK";
 
 export const TRUNCATION_DISABLED_MAX_PAGE_SIZE = 10;

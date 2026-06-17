@@ -9,7 +9,10 @@ import {
 } from "@/ui/dialog";
 import { Separator } from "@/ui/separator";
 import CodeHighlighter from "@/shared/CodeHighlighter/CodeHighlighter";
-import { INSTALL_OPIK_SECTION_TITLE } from "@/constants/shared";
+import {
+  INSTALL_OPIK_DEFAULT_DESCRIPTION,
+  INSTALL_OPIK_DEFAULT_TITLE,
+} from "@/constants/shared";
 import useAppStore from "@/store/AppStore";
 import { useUserApiKey } from "@/store/AppStore";
 import useActiveProjectName from "@/hooks/useActiveProjectName";
@@ -18,6 +21,7 @@ import { Integration } from "@/constants/integrations";
 import HelpLinks from "./HelpLinks";
 import { ExternalLink } from "lucide-react";
 import { IntegrationStep } from "./IntegrationStep";
+import AdditionalIntegrationSteps from "@/shared/OnboardingIntegrationsPage/AdditionalIntegrationSteps";
 import { useFeatureFlagVariantKey } from "posthog-js/react";
 import { CODE_EXECUTOR_SERVICE_URL } from "@/api/api";
 import CodeExecutor from "@/v2/pages-shared/onboarding/CodeExecutor/CodeExecutor";
@@ -110,36 +114,54 @@ const IntegrationDetailsDialog: React.FunctionComponent<
           </div>
 
           <IntegrationStep
-            title={`${INSTALL_OPIK_SECTION_TITLE}.`}
-            description="Install Opik from the command line using pip."
+            title={
+              selectedIntegration.installTitle ?? INSTALL_OPIK_DEFAULT_TITLE
+            }
+            description={
+              selectedIntegration.installDescription ??
+              INSTALL_OPIK_DEFAULT_DESCRIPTION
+            }
             className="mb-6"
           >
             <div className="min-h-7">
               <CodeHighlighter data={selectedIntegration.installCommand} />
             </div>
           </IntegrationStep>
-          <IntegrationStep
-            title={`2. Run the following code to get started with ${selectedIntegration.title}`}
-            className="mb-6"
-          >
-            {shouldShowCodeExecutor ? (
-              <CodeExecutor
-                executionUrl={selectedIntegration.executionUrl!}
-                executionLogs={selectedIntegration.executionLogs!}
-                data={codeWithConfig}
-                copyData={codeWithConfigToCopy}
-                apiKey={apiKey}
-                workspaceName={workspaceName}
-                highlightedLines={lines}
-              />
-            ) : (
-              <CodeHighlighter
-                data={codeWithConfig}
-                copyData={codeWithConfigToCopy}
-                highlightedLines={lines}
-              />
-            )}
-          </IntegrationStep>
+          {selectedIntegration.additionalSteps && (
+            <AdditionalIntegrationSteps
+              steps={selectedIntegration.additionalSteps}
+              workspaceName={workspaceName}
+              apiKey={apiKey}
+              projectName={projectName}
+              IntegrationStep={IntegrationStep}
+              stepClassName="mb-6"
+            />
+          )}
+          {selectedIntegration.code && (
+            <IntegrationStep
+              title={`2. Run the following code to get started with ${selectedIntegration.title}`}
+              className="mb-6"
+            >
+              {shouldShowCodeExecutor ? (
+                <CodeExecutor
+                  executionUrl={selectedIntegration.executionUrl!}
+                  executionLogs={selectedIntegration.executionLogs!}
+                  data={codeWithConfig}
+                  copyData={codeWithConfigToCopy}
+                  apiKey={apiKey}
+                  workspaceName={workspaceName}
+                  highlightedLines={lines}
+                />
+              ) : (
+                <CodeHighlighter
+                  data={codeWithConfig}
+                  copyData={codeWithConfigToCopy}
+                  highlightedLines={lines}
+                  language={selectedIntegration.codeLanguage}
+                />
+              )}
+            </IntegrationStep>
+          )}
 
           <Separator className="my-6" />
 
