@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure;
 
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
+import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
@@ -53,6 +54,10 @@ class HealthCheckIntegrationTest {
 
     {
         Startables.deepStart(MYSQL, CLICKHOUSE, REDIS, ZOOKEEPER_CONTAINER).join();
+        // The v2 Client built by DatabaseAnalyticsFactory sets setDefaultDatabase("opik"), so
+        // ClickHouse rejects every query — including the probe's SELECT 1 — with UNKNOWN_DATABASE
+        // until that database exists. Run the analytics changelog up-front to create it.
+        MigrationUtils.runClickhouseDbMigration(CLICKHOUSE);
     }
 
     private TestDropwizardAppExtension newApp(List<CustomConfig> customConfigs) {
