@@ -104,7 +104,7 @@ import AutodetectCell from "@/shared/DataTableCells/AutodetectCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
 import EnvironmentCell from "@/shared/DataTableCells/EnvironmentCell";
 import CostCell from "@/shared/DataTableCells/CostCell";
-import ErrorCell from "@/shared/DataTableCells/ErrorCell";
+import ErrorCellWithExplain from "@/v2/pages/LogsPage/TracesSpansTab/ErrorCellWithExplain";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
 import FeedbackScoreCell from "@/shared/DataTableCells/FeedbackScoreCell";
 import PrettyCell from "@/shared/DataTableCells/PrettyCell";
@@ -204,7 +204,7 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     label: "Errors",
     statisticKey: "error_count",
     type: COLUMN_TYPE.errors,
-    cell: ErrorCell as never,
+    cell: ErrorCellWithExplain as never,
   },
   {
     id: "duration",
