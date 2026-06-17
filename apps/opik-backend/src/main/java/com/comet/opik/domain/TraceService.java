@@ -136,8 +136,8 @@ class TraceServiceImpl implements TraceService {
         String projectName = WorkspaceUtils.getProjectName(trace.projectName());
         UUID id = trace.id() == null ? idGenerator.generateId() : trace.id();
 
-        return Mono.deferContextual(ctx -> IdGenerator
-                .validateVersionAsync(id, TRACE_KEY)
+        return Mono.deferContextual(ctx -> idGenerator
+                .validateIdAsync(id, TRACE_KEY)
                 .then(Mono.defer(() -> projectService.getOrCreate(projectName)))
                 .flatMap(project -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
@@ -241,7 +241,7 @@ class TraceServiceImpl implements TraceService {
                     Project project = projectPerName.get(projectName);
 
                     UUID id = trace.id() == null ? idGenerator.generateId() : trace.id();
-                    IdGenerator.validateVersion(id, TRACE_KEY);
+                    idGenerator.validateId(id, TRACE_KEY);
 
                     return trace.toBuilder().id(id).projectId(project.id()).projectName(project.name()).build();
                 })
@@ -353,8 +353,8 @@ class TraceServiceImpl implements TraceService {
     }
 
     private Mono<Void> insertUpdate(Project project, TraceUpdate traceUpdate, UUID id) {
-        return IdGenerator
-                .validateVersionAsync(id, TRACE_KEY)
+        return idGenerator
+                .validateIdForUpdateAsync(id, TRACE_KEY)
                 .then(Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
                     String userName = ctx.get(RequestContext.USER_NAME);

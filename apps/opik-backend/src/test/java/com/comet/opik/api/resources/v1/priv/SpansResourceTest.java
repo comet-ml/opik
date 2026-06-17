@@ -22,6 +22,7 @@ import com.comet.opik.api.Visibility;
 import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.error.InvalidUUIDException.Reason;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.SpanField;
 import com.comet.opik.api.filter.SpanFilter;
@@ -104,6 +105,7 @@ import uk.co.jemos.podam.api.PodamUtils;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
@@ -168,6 +170,8 @@ class SpansResourceTest {
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
+    private static final TimeBasedEpochGenerator generator = Generators.timeBasedEpochGenerator();
+
     private final RedisContainer redisContainer = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer mySqlContainer = MySQLContainerUtils.newMySQLContainer();
     private final GenericContainer<?> zookeeperContainer = ClickHouseContainerUtils.newZookeeperContainer();
@@ -205,7 +209,6 @@ class SpansResourceTest {
     }
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
-    private final TimeBasedEpochGenerator generator = Generators.timeBasedEpochGenerator();
 
     private String baseURI;
     private ClientSupport client;
@@ -301,6 +304,43 @@ class SpansResourceTest {
 
         SpanAssertions.assertPage(actualPage, page, expectedSpans.size(), expectedTotal);
         SpanAssertions.assertSpan(actualPage.content(), expectedSpans, unexpectedSpans, USER);
+    }
+
+    static Stream<Arguments> invalidIds() {
+        var now = Instant.now();
+        var old = now.minus(Duration.ofHours(25)).toEpochMilli();
+        var future = now.plus(Duration.ofHours(25)).toEpochMilli();
+        var expectedDetails = "id with timestamp '%s' must be in the allowed ingestion window of '%s' around now, reason '%s'";
+        var expectedWindow = Duration.ofHours(24);
+        return Stream.of(
+                arguments(UUID.randomUUID(),
+                        "Span id must be a version 7 UUID",
+                        "UUID not v7"),
+                arguments(
+                        generator.construct(old),
+                        expectedDetails.formatted(
+                                Instant.ofEpochMilli(old), expectedWindow, Reason.TOO_OLD.getValue()),
+                        "UUID before window"),
+                arguments(
+                        generator.construct(future),
+                        expectedDetails.formatted(
+                                Instant.ofEpochMilli(future), expectedWindow, Reason.TOO_FAR_FUTURE.getValue()),
+                        "UUID after window"));
+    }
+
+    static Stream<Arguments> invalidIdsForUpdate() {
+        var future = Instant.now().plus(Duration.ofHours(25)).toEpochMilli();
+        var expectedDetails = "id with timestamp '%s' must be in the allowed ingestion window of '%s' around now, reason '%s'";
+        var expectedWindow = Duration.ofHours(24);
+        return Stream.of(
+                arguments(UUID.randomUUID(),
+                        "Span id must be a version 7 UUID",
+                        "UUID not v7"),
+                arguments(
+                        generator.construct(future),
+                        expectedDetails.formatted(
+                                Instant.ofEpochMilli(future), expectedWindow, Reason.TOO_FAR_FUTURE.getValue()),
+                        "UUID after window"));
     }
 
     @Nested
@@ -1668,6 +1708,19 @@ class SpansResourceTest {
             // For now, we just verify that the base64 data was stripped from the input
         }
 
+        @MethodSource("com.comet.opik.api.resources.v1.priv.SpansResourceTest#invalidIds")
+        @ParameterizedTest(name = "Create span with invalid id throws bad request: {2}")
+        void createWithInvalidIdThrowsBadRequest(UUID id, String expectedDetails, String testName) {
+            var expectedEntity = new io.dropwizard.jersey.errors.ErrorMessage(
+                    HttpStatus.SC_BAD_REQUEST, "Invalid UUID for id", expectedDetails);
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder().id(id).build();
+            try (var response = spanResourceClient.createSpan(
+                    span, API_KEY, TEST_WORKSPACE, HttpStatus.SC_BAD_REQUEST)) {
+                var actualEntity = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                assertThat(actualEntity).isEqualTo(expectedEntity);
+            }
+        }
+
         @Test
         @DisplayName("when span is fetched with different truncate and strip_attachments flags, then response varies accordingly")
         void getByList__whenFetchedWithDifferentFlags__thenResponseVariesAccordingly() throws Exception {
@@ -2146,6 +2199,20 @@ class SpansResourceTest {
                     .isZero();
         }
 
+        @MethodSource("com.comet.opik.api.resources.v1.priv.SpansResourceTest#invalidIds")
+        @ParameterizedTest(name = "Batch create span with invalid id throws bad request: {2}")
+        void batchCreateWithInvalidIdThrowsBadRequest(UUID id, String expectedDetails, String testName) {
+            var expectedEntity = new io.dropwizard.jersey.errors.ErrorMessage(
+                    HttpStatus.SC_BAD_REQUEST, "Invalid UUID for id", expectedDetails);
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder().id(id).build();
+            try (var response = spanResourceClient.callBatchCreateSpans(
+                    List.of(span), API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                var actualEntity = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                assertThat(actualEntity).isEqualTo(expectedEntity);
+            }
+        }
+
         private long readClickHouseErrorCount(TransactionTemplateAsync templateAsync, int errorCode) {
             return templateAsync.nonTransaction(connection -> {
                 var statement = connection.createStatement(
@@ -2410,14 +2477,27 @@ class SpansResourceTest {
         }
 
         @Test
-        void updateWhenSpanDoesNotExistButSpanIdIsInvalid__thenRejectUpdate() {
-            var id = UUID.randomUUID();
-            var expectedSpanUpdate = podamFactory.manufacturePojo(SpanUpdate.class);
-            try (var actualResponse = spanResourceClient.updateSpan(
-                    id, expectedSpanUpdate, API_KEY, TEST_WORKSPACE, HttpStatus.SC_BAD_REQUEST)) {
-                assertThat(actualResponse.hasEntity()).isTrue();
-                assertThat(actualResponse.readEntity(com.comet.opik.api.error.ErrorMessage.class).errors())
-                        .contains("Span id must be a version 7 UUID");
+        void updateAllowsOutOfWindowOldId() {
+            var id = generator.construct(Instant.now().minus(Duration.ofHours(25)).toEpochMilli());
+            var spanUpdate = podamFactory.manufacturePojo(SpanUpdate.class).toBuilder()
+                    .projectId(null)
+                    .build();
+
+            spanResourceClient.updateSpan(id, spanUpdate, API_KEY, TEST_WORKSPACE);
+        }
+
+        @MethodSource("com.comet.opik.api.resources.v1.priv.SpansResourceTest#invalidIdsForUpdate")
+        @ParameterizedTest(name = "Update span with invalid id throws bad request: {2}")
+        void updateWithInvalidIdThrowsBadRequest(UUID id, String expectedDetails, String testName) {
+            var expectedEntity = new io.dropwizard.jersey.errors.ErrorMessage(
+                    HttpStatus.SC_BAD_REQUEST, "Invalid UUID for id", expectedDetails);
+            var spanUpdate = podamFactory.manufacturePojo(SpanUpdate.class).toBuilder()
+                    .projectId(null)
+                    .build();
+            try (var response = spanResourceClient.updateSpan(
+                    id, spanUpdate, API_KEY, TEST_WORKSPACE, HttpStatus.SC_BAD_REQUEST)) {
+                var actualEntity = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                assertThat(actualEntity).isEqualTo(expectedEntity);
             }
         }
 

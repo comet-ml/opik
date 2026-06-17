@@ -2,8 +2,9 @@ package com.comet.opik.api.resources.v1.events.webhooks;
 
 import com.comet.opik.api.Alert;
 import com.comet.opik.api.AlertEventType;
+import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.infrastructure.WebhookConfig;
-import com.comet.opik.infrastructure.db.IdGeneratorImpl;
 import com.comet.opik.podam.PodamFactoryUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.Test;
@@ -44,7 +45,7 @@ class WebhookPublisherTest {
             .streamTrimLimit(STREAM_TRIM_LIMIT)
             .build();
 
-    private final IdGeneratorImpl idGenerator = new IdGeneratorImpl();
+    private final IdGenerator idGenerator = TestIdGeneratorFactory.create();
 
     @Mock
     private RedissonReactiveClient redisClient;

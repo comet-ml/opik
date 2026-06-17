@@ -145,8 +145,8 @@ public class SpanService {
     public Mono<UUID> create(@NonNull Span span) {
         var id = span.id() == null ? idGenerator.generateId() : span.id();
         var projectName = WorkspaceUtils.getProjectName(span.projectName());
-        return IdGenerator
-                .validateVersionAsync(id, SPAN_KEY)
+        return idGenerator
+                .validateIdAsync(id, SPAN_KEY)
                 .then(projectService.getOrCreate(projectName))
                 .flatMap(project -> lockService.executeWithLock(
                         new LockService.Lock(id, SPAN_KEY),
@@ -206,8 +206,8 @@ public class SpanService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            return IdGenerator
-                    .validateVersionAsync(id, SPAN_KEY)
+            return idGenerator
+                    .validateIdForUpdateAsync(id, SPAN_KEY)
                     .then(Mono.defer(() -> getProjectById(spanUpdate)
                             .switchIfEmpty(Mono.defer(() -> projectService.getOrCreate(projectName)))
                             .subscribeOn(Schedulers.boundedElastic()))
@@ -245,8 +245,8 @@ public class SpanService {
     }
 
     private Mono<Long> insertUpdate(Project project, SpanUpdate spanUpdate, UUID id) {
-        return IdGenerator
-                .validateVersionAsync(id, SPAN_KEY)
+        return idGenerator
+                .validateIdForUpdateAsync(id, SPAN_KEY)
                 .then(Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
                     String userName = ctx.get(RequestContext.USER_NAME);
@@ -448,7 +448,7 @@ public class SpanService {
                     }
 
                     UUID id = span.id() == null ? idGenerator.generateId() : span.id();
-                    IdGenerator.validateVersion(id, SPAN_KEY);
+                    idGenerator.validateId(id, SPAN_KEY);
 
                     return span.toBuilder().id(id).projectId(project.id()).build();
                 })
