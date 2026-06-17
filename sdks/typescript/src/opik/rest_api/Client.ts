@@ -34,6 +34,7 @@ import { RetentionRulesClient } from "./api/resources/retentionRules/client/Clie
 import { RunnersClient } from "./api/resources/runners/client/Client.js";
 import { ServiceTogglesClient } from "./api/resources/serviceToggles/client/Client.js";
 import { SpansClient } from "./api/resources/spans/client/Client.js";
+import { SystemAnalyticsQueriesClient } from "./api/resources/systemAnalyticsQueries/client/Client.js";
 import { SystemUsageClient } from "./api/resources/systemUsage/client/Client.js";
 import { TracesClient } from "./api/resources/traces/client/Client.js";
 import { WelcomeWizardClient } from "./api/resources/welcomeWizard/client/Client.js";
@@ -56,6 +57,7 @@ export declare namespace OpikApiClient {
 export class OpikApiClient {
     protected readonly _options: NormalizedClientOptions<OpikApiClient.Options>;
     protected _mcpOAuth: McpOAuthClient | undefined;
+    protected _systemAnalyticsQueries: SystemAnalyticsQueriesClient | undefined;
     protected _systemUsage: SystemUsageClient | undefined;
     protected _agentConfigs: AgentConfigsClient | undefined;
     protected _agentInsights: AgentInsightsClient | undefined;
@@ -101,6 +103,10 @@ export class OpikApiClient {
 
     public get mcpOAuth(): McpOAuthClient {
         return (this._mcpOAuth ??= new McpOAuthClient(this._options));
+    }
+
+    public get systemAnalyticsQueries(): SystemAnalyticsQueriesClient {
+        return (this._systemAnalyticsQueries ??= new SystemAnalyticsQueriesClient(this._options));
     }
 
     public get systemUsage(): SystemUsageClient {

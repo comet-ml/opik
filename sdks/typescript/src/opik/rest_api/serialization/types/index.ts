@@ -39,6 +39,7 @@ export * from "./AlertTriggerWrite.js";
 export * from "./AlertTriggerWriteEventType.js";
 export * from "./AlertWrite.js";
 export * from "./AlertWriteAlertType.js";
+export * from "./AnalyticsQueryResponse.js";
 export * from "./AnnotationQueue.js";
 export * from "./AnnotationQueueBatch.js";
 export * from "./AnnotationQueueItemIds.js";

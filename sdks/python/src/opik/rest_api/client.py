@@ -41,6 +41,7 @@ from .retention_rules.client import AsyncRetentionRulesClient, RetentionRulesCli
 from .runners.client import AsyncRunnersClient, RunnersClient
 from .service_toggles.client import AsyncServiceTogglesClient, ServiceTogglesClient
 from .spans.client import AsyncSpansClient, SpansClient
+from .system_analytics_queries.client import AsyncSystemAnalyticsQueriesClient, SystemAnalyticsQueriesClient
 from .system_usage.client import AsyncSystemUsageClient, SystemUsageClient
 from .traces.client import AsyncTracesClient, TracesClient
 from .welcome_wizard.client import AsyncWelcomeWizardClient, WelcomeWizardClient
@@ -108,6 +109,7 @@ class OpikApi:
         )
         self._raw_client = RawOpikApi(client_wrapper=self._client_wrapper)
         self.mcp_o_auth = McpOAuthClient(client_wrapper=self._client_wrapper)
+        self.system_analytics_queries = SystemAnalyticsQueriesClient(client_wrapper=self._client_wrapper)
         self.system_usage = SystemUsageClient(client_wrapper=self._client_wrapper)
         self.agent_configs = AgentConfigsClient(client_wrapper=self._client_wrapper)
         self.agent_insights = AgentInsightsClient(client_wrapper=self._client_wrapper)
@@ -261,6 +263,7 @@ class AsyncOpikApi:
         )
         self._raw_client = AsyncRawOpikApi(client_wrapper=self._client_wrapper)
         self.mcp_o_auth = AsyncMcpOAuthClient(client_wrapper=self._client_wrapper)
+        self.system_analytics_queries = AsyncSystemAnalyticsQueriesClient(client_wrapper=self._client_wrapper)
         self.system_usage = AsyncSystemUsageClient(client_wrapper=self._client_wrapper)
         self.agent_configs = AsyncAgentConfigsClient(client_wrapper=self._client_wrapper)
         self.agent_insights = AsyncAgentInsightsClient(client_wrapper=self._client_wrapper)
