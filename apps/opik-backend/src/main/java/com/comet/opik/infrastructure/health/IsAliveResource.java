@@ -11,6 +11,7 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import lombok.Builder;
 import lombok.NonNull;
 
 import java.util.List;
@@ -43,6 +44,7 @@ public class IsAliveResource {
                 .collect(Collectors.toUnmodifiableSet());
     }
 
+    @Builder(toBuilder = true)
     public record IsAliveResponse(String message, boolean healthy) {
 
         static IsAliveResponse healthy(String message) {
@@ -54,6 +56,7 @@ public class IsAliveResource {
         }
     }
 
+    @Builder(toBuilder = true)
     public record VersionResponse(String version) {
     }
 

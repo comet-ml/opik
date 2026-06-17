@@ -27,6 +27,7 @@ services:
   backend:
     ports: !override
       - "${OPIK_BACKEND_PORT:-8080}:8080"
+      - "${SERVER_ADMIN_PORT:-8081}:8081"
       - "3003:3003"
 
   python-backend:
