@@ -43,8 +43,8 @@ const DataTableRowHeightSelector: React.FunctionComponent<
               Row size
             </Button>
           ) : (
-            <Button variant="outline" size="icon-sm">
-              <Rows3 className="size-3.5" />
+            <Button variant="outline" size={size}>
+              <Rows3 />
             </Button>
           )}
         </DropdownMenuTrigger>
