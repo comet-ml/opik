@@ -33,9 +33,8 @@ import {
 } from "@/v2/pages-shared/llm/FormFieldCard";
 import CodeBlockCopy from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/CodeBlock/CodeBlockCopy";
 import { Skeleton } from "@/ui/skeleton";
-import CodeHighlighter, {
-  SUPPORTED_LANGUAGE,
-} from "@/shared/CodeHighlighter/CodeHighlighter";
+import CodeHighlighter from "@/shared/CodeHighlighter/CodeHighlighter";
+import { SUPPORTED_LANGUAGE } from "@/constants/codeLanguage";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import EditPromptSheet from "@/v2/pages/PromptPage/PromptTab/EditPromptSheet";
