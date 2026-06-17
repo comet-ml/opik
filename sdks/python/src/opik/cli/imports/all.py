@@ -12,15 +12,15 @@ import opik
 from ..migration_manifest import MigrationManifest
 from .dataset import import_datasets_from_directory
 from .experiment import import_experiments_from_directory
-from .project import import_projects_from_directory
+from .project import import_traces_from_directory
 from .prompt import import_prompts_from_directory
 from .utils import debug_print, no_attachments_option, print_import_summary
 from ..include_validation import validate_include
 
 console = Console()
 
-_VALID_INCLUDES = {"datasets", "prompts", "projects", "experiments"}
-_DEFAULT_INCLUDE = "datasets,prompts,projects,experiments"
+_VALID_INCLUDES = {"datasets", "prompts", "traces", "experiments"}
+_DEFAULT_INCLUDE = "datasets,prompts,traces,experiments"
 
 
 def _validate_include(
@@ -37,6 +37,7 @@ def _merge_stats(total: Dict[str, int], phase: Dict[str, int]) -> None:
 
 def import_all(
     workspace: str,
+    project_name: str,
     path: str,
     include: List[str],
     dry_run: bool,
@@ -45,14 +46,15 @@ def import_all(
     api_key: Optional[str] = None,
     include_attachments: bool = True,
 ) -> None:
-    """Import all data types from the workspace export directory."""
+    """Import all data types from the project export directory."""
     try:
         if api_key:
             client = opik.Opik(api_key=api_key, workspace=workspace)
         else:
             client = opik.Opik(workspace=workspace)
 
-        base_path = Path(path)
+        # Everything for one project lives under projects/<project>/.
+        project_root = Path(path) / "projects" / project_name
 
         # ------------------------------------------------------------------
         # Manifest lifecycle (skipped for --dry-run)
@@ -60,9 +62,9 @@ def import_all(
         manifest: Optional[MigrationManifest] = None
 
         if not dry_run:
-            manifest = MigrationManifest(base_path)
+            manifest = MigrationManifest(project_root)
             if force:
-                if MigrationManifest.exists(base_path):
+                if MigrationManifest.exists(project_root):
                     manifest.reset()
                     console.print(
                         "[yellow]--force: discarding existing manifest, starting fresh[/yellow]"
@@ -86,11 +88,17 @@ def import_all(
         # Phase 1 — Datasets
         # ------------------------------------------------------------------
         if "datasets" in include:
-            datasets_dir = base_path / "datasets"
+            datasets_dir = project_root / "datasets"
             if datasets_dir.exists():
                 console.print("\n[bold blue]--- Importing Datasets ---[/bold blue]")
                 stats = import_datasets_from_directory(
-                    client, datasets_dir, dry_run, None, debug, manifest=manifest
+                    client,
+                    datasets_dir,
+                    project_name,
+                    dry_run,
+                    None,
+                    debug,
+                    manifest=manifest,
                 )
                 _merge_stats(total_stats, stats)
             else:
@@ -100,11 +108,17 @@ def import_all(
         # Phase 2 — Prompts
         # ------------------------------------------------------------------
         if "prompts" in include:
-            prompts_dir = base_path / "prompts"
+            prompts_dir = project_root / "prompts"
             if prompts_dir.exists():
                 console.print("\n[bold blue]--- Importing Prompts ---[/bold blue]")
                 stats = import_prompts_from_directory(
-                    client, prompts_dir, dry_run, None, debug, manifest=manifest
+                    client,
+                    prompts_dir,
+                    project_name,
+                    dry_run,
+                    None,
+                    debug,
+                    manifest=manifest,
                 )
                 _merge_stats(total_stats, stats)
                 # Flush so prompts are available before experiments reference them
@@ -114,26 +128,23 @@ def import_all(
                 debug_print(f"No prompts directory at {prompts_dir}, skipping", debug)
 
         # ------------------------------------------------------------------
-        # Phase 3 — Projects (traces)
+        # Phase 3 — Traces
         # Populates trace ID mappings in the manifest for experiments to use.
         # ------------------------------------------------------------------
-        if "projects" in include:
-            projects_dir = base_path / "projects"
-            if projects_dir.exists():
-                console.print("\n[bold blue]--- Importing Projects ---[/bold blue]")
-                stats = import_projects_from_directory(
-                    client,
-                    projects_dir,
-                    dry_run,
-                    None,
-                    debug,
-                    recreate_experiments_flag=False,
-                    manifest=manifest,
-                    include_attachments=include_attachments,
-                )
-                _merge_stats(total_stats, stats)
-            else:
-                debug_print(f"No projects directory at {projects_dir}, skipping", debug)
+        if "traces" in include:
+            console.print("\n[bold blue]--- Importing Traces ---[/bold blue]")
+            stats = import_traces_from_directory(
+                client,
+                project_root,
+                project_name,
+                dry_run,
+                None,
+                debug,
+                recreate_experiments_flag=False,
+                manifest=manifest,
+                include_attachments=include_attachments,
+            )
+            _merge_stats(total_stats, stats)
 
         # ------------------------------------------------------------------
         # Phase 4 — Experiments
@@ -143,11 +154,17 @@ def import_all(
         # phase 3 directly from the manifest DB.
         # ------------------------------------------------------------------
         if "experiments" in include:
-            experiments_dir = base_path / "experiments"
+            experiments_dir = project_root / "experiments"
             if experiments_dir.exists():
                 console.print("\n[bold blue]--- Importing Experiments ---[/bold blue]")
                 stats = import_experiments_from_directory(
-                    client, experiments_dir, dry_run, None, debug, manifest=manifest
+                    client,
+                    experiments_dir,
+                    project_name,
+                    dry_run,
+                    None,
+                    debug,
+                    manifest=manifest,
                 )
                 _merge_stats(total_stats, stats)
             else:
@@ -240,37 +257,39 @@ def import_all_command(
     include: List[str],
     no_attachments: bool,
 ) -> None:
-    """Import all datasets, prompts, projects, and experiments into the workspace.
+    """Import all datasets, prompts, traces, and experiments into the project.
 
-    Reads from the directory structure produced by 'opik export WORKSPACE all'.
+    Reads from the directory structure produced by 'opik export WORKSPACE PROJECT all'.
     A single migration manifest tracks progress across all data types, so an
     interrupted import can be resumed by re-running the same command.
 
-    Import order: datasets → prompts → projects → experiments.
-    Experiments depend on datasets, prompts, and project traces being present,
+    Import order: datasets → prompts → traces → experiments.
+    Experiments depend on datasets, prompts, and traces being present,
     so earlier phases are always run first when included.
 
     \b
     Examples:
         # Import everything
-        opik import my-workspace all
+        opik import my-workspace my-project all
 
         # Preview what would be imported
-        opik import my-workspace all --dry-run
+        opik import my-workspace my-project all --dry-run
 
         # Import only datasets and prompts
-        opik import my-workspace all --include datasets,prompts
+        opik import my-workspace my-project all --include datasets,prompts
 
         # Restart from scratch, discarding previous progress
-        opik import my-workspace all --force
+        opik import my-workspace my-project all --force
 
         # Import from a custom path
-        opik import my-workspace all --path ./backup
+        opik import my-workspace my-project all --path ./backup
     """
     workspace = ctx.obj["workspace"]
+    project_name = ctx.obj["project_name"]
     api_key = ctx.obj.get("api_key") if ctx.obj else None
     import_all(
         workspace,
+        project_name,
         path,
         include,
         dry_run,

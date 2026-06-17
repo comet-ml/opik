@@ -50,6 +50,7 @@ import pytest
 from opik.cli.export_manifest import ExportManifest
 from opik.cli.migration_manifest import MigrationManifest
 
+_PROJECT = "proj"
 _IMPORT_MODULE = "opik.cli.imports.all"
 _EXPORT_MODULE = "opik.cli.exports.all"
 
@@ -363,8 +364,8 @@ class TestImportAll:
 
     def test_fresh_run_calls_all_phases_and_completes_manifest(self, tmp_path):
         """A fresh import runs all four phases and marks the manifest completed."""
-        for d in ("datasets", "prompts", "projects", "experiments"):
-            (tmp_path / d).mkdir()
+        for d in ("datasets", "prompts", "experiments"):
+            (tmp_path / "projects" / _PROJECT / d).mkdir(parents=True)
 
         client = _make_import_client()
 
@@ -378,7 +379,7 @@ class TestImportAll:
                 return_value={"prompts": 0},
             ),
             patch(
-                f"{_IMPORT_MODULE}.import_projects_from_directory", return_value={}
+                f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}
             ) as mock_proj,
             patch(
                 f"{_IMPORT_MODULE}.import_experiments_from_directory", return_value={}
@@ -388,8 +389,9 @@ class TestImportAll:
 
             import_all(
                 workspace="ws",
+                project_name=_PROJECT,
                 path=str(tmp_path),
-                include=["datasets", "prompts", "projects", "experiments"],
+                include=["datasets", "prompts", "traces", "experiments"],
                 dry_run=False,
                 force=False,
                 debug=False,
@@ -399,12 +401,12 @@ class TestImportAll:
         mock_proj.assert_called_once()
         mock_exp.assert_called_once()
 
-        m = MigrationManifest(tmp_path)
+        m = MigrationManifest(tmp_path / "projects" / _PROJECT)
         assert m.is_completed
 
     def test_dry_run_skips_manifest_and_flush(self, tmp_path):
         """Dry-run must not create a manifest or flush the client."""
-        (tmp_path / "datasets").mkdir()
+        (tmp_path / "projects" / _PROJECT / "datasets").mkdir(parents=True)
         client = _make_import_client()
 
         with (
@@ -414,7 +416,7 @@ class TestImportAll:
                 f"{_IMPORT_MODULE}.import_prompts_from_directory",
                 return_value={"prompts": 0},
             ),
-            patch(f"{_IMPORT_MODULE}.import_projects_from_directory", return_value={}),
+            patch(f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}),
             patch(
                 f"{_IMPORT_MODULE}.import_experiments_from_directory", return_value={}
             ),
@@ -423,6 +425,7 @@ class TestImportAll:
 
             import_all(
                 workspace="ws",
+                project_name=_PROJECT,
                 path=str(tmp_path),
                 include=["datasets"],
                 dry_run=True,
@@ -430,12 +433,12 @@ class TestImportAll:
                 debug=False,
             )
 
-        assert not MigrationManifest.exists(tmp_path)
+        assert not MigrationManifest.exists(tmp_path / "projects" / _PROJECT)
         client.flush.assert_not_called()
 
     def test_completed_manifest_returns_early_without_reimporting(self, tmp_path):
         """A completed manifest without --force causes immediate return."""
-        manifest = MigrationManifest(tmp_path)
+        manifest = MigrationManifest(tmp_path / "projects" / _PROJECT)
         manifest.start()
         manifest.complete()
 
@@ -451,7 +454,7 @@ class TestImportAll:
                 return_value={"prompts": 0},
             ),
             patch(
-                f"{_IMPORT_MODULE}.import_projects_from_directory", return_value={}
+                f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}
             ) as mock_proj,
             patch(
                 f"{_IMPORT_MODULE}.import_experiments_from_directory", return_value={}
@@ -461,8 +464,9 @@ class TestImportAll:
 
             import_all(
                 workspace="ws",
+                project_name=_PROJECT,
                 path=str(tmp_path),
-                include=["datasets", "prompts", "projects", "experiments"],
+                include=["datasets", "prompts", "traces", "experiments"],
                 dry_run=False,
                 force=False,
                 debug=False,
@@ -474,8 +478,8 @@ class TestImportAll:
 
     def test_force_flag_resets_completed_manifest_and_reimports(self, tmp_path):
         """--force discards a completed manifest and runs all requested phases."""
-        (tmp_path / "datasets").mkdir()
-        manifest = MigrationManifest(tmp_path)
+        (tmp_path / "projects" / _PROJECT / "datasets").mkdir(parents=True)
+        manifest = MigrationManifest(tmp_path / "projects" / _PROJECT)
         manifest.start()
         manifest.complete()
 
@@ -490,7 +494,7 @@ class TestImportAll:
                 f"{_IMPORT_MODULE}.import_prompts_from_directory",
                 return_value={"prompts": 0},
             ),
-            patch(f"{_IMPORT_MODULE}.import_projects_from_directory", return_value={}),
+            patch(f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}),
             patch(
                 f"{_IMPORT_MODULE}.import_experiments_from_directory", return_value={}
             ),
@@ -499,6 +503,7 @@ class TestImportAll:
 
             import_all(
                 workspace="ws",
+                project_name=_PROJECT,
                 path=str(tmp_path),
                 include=["datasets"],
                 dry_run=False,
@@ -510,11 +515,11 @@ class TestImportAll:
 
     def test_resume_in_progress_manifest_runs_phases_and_completes(self, tmp_path):
         """An in_progress manifest is treated as a resume; phases run and manifest completes."""
-        (tmp_path / "datasets").mkdir()
-        (tmp_path / "prompts").mkdir()
+        (tmp_path / "projects" / _PROJECT / "datasets").mkdir(parents=True)
+        (tmp_path / "projects" / _PROJECT / "prompts").mkdir(parents=True)
 
         # Simulate an interrupted import
-        manifest = MigrationManifest(tmp_path)
+        manifest = MigrationManifest(tmp_path / "projects" / _PROJECT)
         manifest.start()
 
         client = _make_import_client()
@@ -528,7 +533,7 @@ class TestImportAll:
                 f"{_IMPORT_MODULE}.import_prompts_from_directory",
                 return_value={"prompts": 0},
             ) as mock_pr,
-            patch(f"{_IMPORT_MODULE}.import_projects_from_directory", return_value={}),
+            patch(f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}),
             patch(
                 f"{_IMPORT_MODULE}.import_experiments_from_directory", return_value={}
             ),
@@ -537,6 +542,7 @@ class TestImportAll:
 
             import_all(
                 workspace="ws",
+                project_name=_PROJECT,
                 path=str(tmp_path),
                 include=["datasets", "prompts"],
                 dry_run=False,
@@ -546,12 +552,12 @@ class TestImportAll:
 
         mock_ds.assert_called_once()
         mock_pr.assert_called_once()
-        m = MigrationManifest(tmp_path)
+        m = MigrationManifest(tmp_path / "projects" / _PROJECT)
         assert m.is_completed
 
     def test_include_filter_runs_only_specified_phases(self, tmp_path):
         """When include=['datasets'], only the dataset phase is called."""
-        (tmp_path / "datasets").mkdir()
+        (tmp_path / "projects" / _PROJECT / "datasets").mkdir(parents=True)
         client = _make_import_client()
 
         with (
@@ -564,7 +570,7 @@ class TestImportAll:
                 return_value={"prompts": 0},
             ) as mock_pr,
             patch(
-                f"{_IMPORT_MODULE}.import_projects_from_directory", return_value={}
+                f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}
             ) as mock_proj,
             patch(
                 f"{_IMPORT_MODULE}.import_experiments_from_directory", return_value={}
@@ -574,6 +580,7 @@ class TestImportAll:
 
             import_all(
                 workspace="ws",
+                project_name=_PROJECT,
                 path=str(tmp_path),
                 include=["datasets"],
                 dry_run=False,
@@ -600,7 +607,7 @@ class TestImportAll:
                 f"{_IMPORT_MODULE}.import_prompts_from_directory",
                 return_value={"prompts": 0},
             ),
-            patch(f"{_IMPORT_MODULE}.import_projects_from_directory", return_value={}),
+            patch(f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}),
             patch(
                 f"{_IMPORT_MODULE}.import_experiments_from_directory", return_value={}
             ),
@@ -609,6 +616,7 @@ class TestImportAll:
 
             import_all(
                 workspace="ws",
+                project_name=_PROJECT,
                 path=str(tmp_path),
                 include=["datasets"],
                 dry_run=False,
@@ -620,7 +628,7 @@ class TestImportAll:
 
     def test_flush_timeout_exits_with_code_1(self, tmp_path):
         """If client.flush() returns False (timeout), import_all raises SystemExit(1)."""
-        (tmp_path / "datasets").mkdir()
+        (tmp_path / "projects" / _PROJECT / "datasets").mkdir(parents=True)
         client = _make_import_client()
         client.flush.return_value = False  # simulate timeout
 
@@ -631,7 +639,7 @@ class TestImportAll:
                 f"{_IMPORT_MODULE}.import_prompts_from_directory",
                 return_value={"prompts": 0},
             ),
-            patch(f"{_IMPORT_MODULE}.import_projects_from_directory", return_value={}),
+            patch(f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}),
             patch(
                 f"{_IMPORT_MODULE}.import_experiments_from_directory", return_value={}
             ),
@@ -641,6 +649,7 @@ class TestImportAll:
 
             import_all(
                 workspace="ws",
+                project_name=_PROJECT,
                 path=str(tmp_path),
                 include=["datasets"],
                 dry_run=False,
@@ -652,7 +661,7 @@ class TestImportAll:
 
     def test_failed_uploads_exits_with_code_1(self, tmp_path):
         """If failed_uploads > 0, import_all raises SystemExit(1)."""
-        (tmp_path / "datasets").mkdir()
+        (tmp_path / "projects" / _PROJECT / "datasets").mkdir(parents=True)
         client = _make_import_client()
         client.__internal_api__failed_uploads__ = MagicMock(return_value=3)
 
@@ -663,7 +672,7 @@ class TestImportAll:
                 f"{_IMPORT_MODULE}.import_prompts_from_directory",
                 return_value={"prompts": 0},
             ),
-            patch(f"{_IMPORT_MODULE}.import_projects_from_directory", return_value={}),
+            patch(f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}),
             patch(
                 f"{_IMPORT_MODULE}.import_experiments_from_directory", return_value={}
             ),
@@ -673,6 +682,7 @@ class TestImportAll:
 
             import_all(
                 workspace="ws",
+                project_name=_PROJECT,
                 path=str(tmp_path),
                 include=["datasets"],
                 dry_run=False,
@@ -685,7 +695,7 @@ class TestImportAll:
     def test_intermediate_flush_after_prompts_imported(self, tmp_path):
         """client.flush() is called once after prompts phase (before end flush)
         when at least one prompt was imported."""
-        (tmp_path / "prompts").mkdir()
+        (tmp_path / "projects" / _PROJECT / "prompts").mkdir(parents=True)
         client = _make_import_client()
 
         with (
@@ -695,7 +705,7 @@ class TestImportAll:
                 f"{_IMPORT_MODULE}.import_prompts_from_directory",
                 return_value={"prompts": 2},
             ),
-            patch(f"{_IMPORT_MODULE}.import_projects_from_directory", return_value={}),
+            patch(f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}),
             patch(
                 f"{_IMPORT_MODULE}.import_experiments_from_directory", return_value={}
             ),
@@ -704,6 +714,7 @@ class TestImportAll:
 
             import_all(
                 workspace="ws",
+                project_name=_PROJECT,
                 path=str(tmp_path),
                 include=["prompts"],
                 dry_run=False,
@@ -717,7 +728,7 @@ class TestImportAll:
     def test_no_intermediate_flush_when_zero_prompts_imported(self, tmp_path):
         """client.flush() is called exactly once (end-of-import) when no prompts
         were imported — no intermediate flush is triggered."""
-        (tmp_path / "prompts").mkdir()
+        (tmp_path / "projects" / _PROJECT / "prompts").mkdir(parents=True)
         client = _make_import_client()
 
         with (
@@ -727,7 +738,7 @@ class TestImportAll:
                 f"{_IMPORT_MODULE}.import_prompts_from_directory",
                 return_value={"prompts": 0},
             ),
-            patch(f"{_IMPORT_MODULE}.import_projects_from_directory", return_value={}),
+            patch(f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}),
             patch(
                 f"{_IMPORT_MODULE}.import_experiments_from_directory", return_value={}
             ),
@@ -736,6 +747,7 @@ class TestImportAll:
 
             import_all(
                 workspace="ws",
+                project_name=_PROJECT,
                 path=str(tmp_path),
                 include=["prompts"],
                 dry_run=False,
@@ -756,7 +768,7 @@ class TestImportAll:
                 f"{_IMPORT_MODULE}.import_prompts_from_directory",
                 return_value={"prompts": 0},
             ),
-            patch(f"{_IMPORT_MODULE}.import_projects_from_directory", return_value={}),
+            patch(f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}),
             patch(
                 f"{_IMPORT_MODULE}.import_experiments_from_directory", return_value={}
             ),
@@ -765,6 +777,7 @@ class TestImportAll:
 
             import_all(
                 workspace="my-ws",
+                project_name=_PROJECT,
                 path=str(tmp_path),
                 include=[],
                 dry_run=False,
@@ -794,7 +807,8 @@ class TestExportAll:
             patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(0, 0)),
             patch(f"{_EXPORT_MODULE}._export_all_prompts", return_value=(0, 0)),
             patch(
-                f"{_EXPORT_MODULE}._export_all_projects", return_value=(0, 0, 0, False)
+                f"{_EXPORT_MODULE}._export_project_traces",
+                return_value=(0, 0, 0, False),
             ),
             patch(
                 f"{_EXPORT_MODULE}._export_all_experiments",
@@ -805,15 +819,16 @@ class TestExportAll:
 
             export_all(
                 workspace="my-ws",
+                project_name=_PROJECT,
                 output_path=str(tmp_path),
-                include=["datasets", "prompts", "projects", "experiments"],
+                include=["datasets", "prompts", "traces", "experiments"],
                 max_results=None,
                 force=False,
                 debug=False,
                 format="json",
             )
 
-        assert (tmp_path / "my-ws").is_dir()
+        assert (tmp_path / "my-ws" / "projects" / _PROJECT).is_dir()
 
     def test_subdirectories_created_for_all_phases(self, tmp_path):
         client = _make_export_client()
@@ -822,7 +837,8 @@ class TestExportAll:
             patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(0, 0)),
             patch(f"{_EXPORT_MODULE}._export_all_prompts", return_value=(0, 0)),
             patch(
-                f"{_EXPORT_MODULE}._export_all_projects", return_value=(0, 0, 0, False)
+                f"{_EXPORT_MODULE}._export_project_traces",
+                return_value=(0, 0, 0, False),
             ),
             patch(
                 f"{_EXPORT_MODULE}._export_all_experiments",
@@ -833,16 +849,17 @@ class TestExportAll:
 
             export_all(
                 workspace="ws",
+                project_name=_PROJECT,
                 output_path=str(tmp_path),
-                include=["datasets", "prompts", "projects", "experiments"],
+                include=["datasets", "prompts", "traces", "experiments"],
                 max_results=None,
                 force=False,
                 debug=False,
                 format="json",
             )
 
-        ws = tmp_path / "ws"
-        for subdir in ("datasets", "prompts", "projects", "experiments"):
+        ws = tmp_path / "ws" / "projects" / _PROJECT
+        for subdir in ("datasets", "prompts", "experiments"):
             assert (ws / subdir).is_dir(), f"Missing {subdir}/ directory"
 
     def test_only_included_phases_are_called(self, tmp_path):
@@ -857,7 +874,8 @@ class TestExportAll:
                 f"{_EXPORT_MODULE}._export_all_prompts", return_value=(0, 0)
             ) as mock_pr,
             patch(
-                f"{_EXPORT_MODULE}._export_all_projects", return_value=(0, 0, 0, False)
+                f"{_EXPORT_MODULE}._export_project_traces",
+                return_value=(0, 0, 0, False),
             ) as mock_proj,
             patch(
                 f"{_EXPORT_MODULE}._export_all_experiments",
@@ -868,6 +886,7 @@ class TestExportAll:
 
             export_all(
                 workspace="ws",
+                project_name=_PROJECT,
                 output_path=str(tmp_path),
                 include=["datasets"],
                 max_results=None,
@@ -889,7 +908,8 @@ class TestExportAll:
             patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(1, 0)),
             patch(f"{_EXPORT_MODULE}._export_all_prompts", return_value=(2, 0)),
             patch(
-                f"{_EXPORT_MODULE}._export_all_projects", return_value=(1, 5, 0, False)
+                f"{_EXPORT_MODULE}._export_project_traces",
+                return_value=(1, 5, 0, False),
             ),
             patch(
                 f"{_EXPORT_MODULE}._export_all_experiments",
@@ -901,8 +921,9 @@ class TestExportAll:
 
             export_all(
                 workspace="ws",
+                project_name=_PROJECT,
                 output_path=str(tmp_path),
-                include=["datasets", "prompts", "projects", "experiments"],
+                include=["datasets", "prompts", "traces", "experiments"],
                 max_results=None,
                 force=False,
                 debug=False,
@@ -924,7 +945,8 @@ class TestExportAll:
             patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(0, 0)),
             patch(f"{_EXPORT_MODULE}._export_all_prompts", return_value=(0, 0)),
             patch(
-                f"{_EXPORT_MODULE}._export_all_projects", return_value=(0, 0, 0, False)
+                f"{_EXPORT_MODULE}._export_project_traces",
+                return_value=(0, 0, 0, False),
             ),
             patch(
                 f"{_EXPORT_MODULE}._export_all_experiments",
@@ -935,6 +957,7 @@ class TestExportAll:
 
             export_all(
                 workspace="ws",
+                project_name=_PROJECT,
                 output_path=str(tmp_path),
                 include=[],
                 max_results=None,
@@ -1057,6 +1080,7 @@ class TestExportExperimentByIdJsonFastPath:
         stats, file_written, _ = export_experiment_by_id(
             mock_client,
             tmp_path,
+            _PROJECT,
             experiment_id,
             max_traces=None,
             force=False,
@@ -1097,6 +1121,7 @@ class TestExportExperimentByIdJsonFastPath:
         export_experiment_by_id(
             mock_client,
             tmp_path,
+            _PROJECT,
             experiment_id,
             max_traces=None,
             force=False,
@@ -1115,27 +1140,19 @@ class TestExportExperimentByIdJsonFastPath:
 # ---------------------------------------------------------------------------
 
 
-class TestFilenameBasedProjectInference:
-    """Verify trace_to_project_map is built from on-disk trace filenames and used
-    to infer project_for_logs when experiment metadata has no explicit project."""
+class TestImportExperimentsDryRun:
+    """Experiments now always import into the project named on the command line
+    (the old filename-based project inference was removed). Verify the importer
+    accepts the project_name positional and returns stats without error."""
 
-    def test_project_name_inferred_from_trace_filename(self, tmp_path):
-        """When a trace file exists under projects/my-project/, its project name
-        is inferred without opening the file."""
+    def test_dry_run_returns_stats_for_named_project(self, tmp_path):
         import json
 
         from opik.cli.imports.experiment import import_experiments_from_directory
 
-        # Build workspace layout: experiments/ and projects/my-project/
         experiments_dir = tmp_path / "experiments"
         experiments_dir.mkdir()
-        projects_dir = tmp_path / "projects" / "my-project"
-        projects_dir.mkdir(parents=True)
 
-        trace_id = "trace-abc-123"
-        (projects_dir / f"trace_{trace_id}.json").write_text("{}")
-
-        # Write a minimal experiment JSON that references the trace above.
         exp_data = {
             "experiment": {
                 "name": "test-exp",
@@ -1143,7 +1160,7 @@ class TestFilenameBasedProjectInference:
                 "dataset_name": "ds",
             },
             "items": [
-                {"trace_id": trace_id},
+                {"trace_id": "trace-abc-123"},
             ],
             "downloaded_at": "2024-01-01T00:00:00",
         }
@@ -1152,22 +1169,17 @@ class TestFilenameBasedProjectInference:
         )
 
         mock_client = MagicMock()
-        # create_experiment returns a mock with id
-        created_exp = MagicMock()
-        created_exp.id = "new-exp-id"
-        mock_client.create_experiment.return_value = created_exp
-        mock_client.get_experiment_by_id.return_value = MagicMock(id="new-exp-id")
         mock_client.flush.return_value = True
 
         result = import_experiments_from_directory(
             mock_client,
             experiments_dir,
+            _PROJECT,
             dry_run=True,  # dry_run avoids real API calls for import
             name_pattern=None,
             debug=False,
         )
 
-        # The function should complete without error regardless of dry_run;
-        # the key assertion is that no exception is raised and it returns stats.
+        # Completes without error and returns stats for the named project.
         assert isinstance(result, dict)
         assert "experiments" in result

@@ -122,7 +122,15 @@ class TestValidateIncludeExport:
         runner = CliRunner()
         result = runner.invoke(
             cli,
-            ["export", "default", "all", "--include", "datasets,prompts", "--help"],
+            [
+                "export",
+                "default",
+                "proj",
+                "all",
+                "--include",
+                "datasets,prompts",
+                "--help",
+            ],
         )
         # --help always exits 0 regardless of option values
         assert result.exit_code == 0
@@ -132,7 +140,7 @@ class TestValidateIncludeExport:
         with patch("opik.cli.exports.all.opik.Opik"):
             result = runner.invoke(
                 cli,
-                ["export", "default", "all", "--include", "invalid_type"],
+                ["export", "default", "proj", "all", "--include", "invalid_type"],
             )
         assert result.exit_code != 0
         assert "Invalid" in result.output or "invalid" in result.output.lower()
@@ -151,8 +159,8 @@ class TestValidateIncludeExport:
 
         ctx = MagicMock(spec=click.Context)
         param = MagicMock(spec=click.Parameter)
-        result = _validate_include(ctx, param, "datasets,prompts,projects,experiments")
-        assert set(result) == {"datasets", "prompts", "projects", "experiments"}
+        result = _validate_include(ctx, param, "datasets,prompts,traces,experiments")
+        assert set(result) == {"datasets", "prompts", "traces", "experiments"}
 
     def test_invalid_type_raises_bad_parameter(self):
         from opik.cli.exports.all import _validate_include
@@ -185,7 +193,7 @@ class TestValidateIncludeImport:
         ctx = MagicMock(spec=click.Context)
         param = MagicMock(spec=click.Parameter)
         with pytest.raises(click.BadParameter, match="Invalid"):
-            _validate_include(ctx, param, "traces")
+            _validate_include(ctx, param, "projects")
 
     def test_empty_segments_ignored(self):
         from opik.cli.imports.all import _validate_include
@@ -240,6 +248,7 @@ class TestPromptTypeResolution:
                 result = import_prompts_from_directory(
                     client=mock_client,
                     source_dir=Path(tmp),
+                    project_name="test-project",
                     dry_run=False,
                     name_pattern=None,
                     debug=False,
@@ -273,6 +282,7 @@ class TestPromptTypeResolution:
                 result = import_prompts_from_directory(
                     client=mock_client,
                     source_dir=Path(tmp),
+                    project_name="test-project",
                     dry_run=False,
                     name_pattern=None,
                     debug=False,
@@ -383,14 +393,14 @@ class TestExportTracesMaxResultsNone:
 class TestAllCommandRegistered:
     def test_export_all_help_is_accessible(self):
         runner = CliRunner()
-        result = runner.invoke(cli, ["export", "default", "all", "--help"])
+        result = runner.invoke(cli, ["export", "default", "proj", "all", "--help"])
         assert result.exit_code == 0
         assert "all" in result.output.lower()
         assert "--include" in result.output
 
     def test_import_all_help_is_accessible(self):
         runner = CliRunner()
-        result = runner.invoke(cli, ["import", "default", "all", "--help"])
+        result = runner.invoke(cli, ["import", "default", "proj", "all", "--help"])
         assert result.exit_code == 0
         assert "all" in result.output.lower()
         assert "--include" in result.output
@@ -410,7 +420,7 @@ class TestAllCommandRegistered:
     def test_export_missing_subcommand_error_mentions_all(self):
         """When no subcommand is given the error message should list 'all'."""
         runner = CliRunner()
-        result = runner.invoke(cli, ["export", "default"])
+        result = runner.invoke(cli, ["export", "default", "proj"])
         # Non-zero exit or the error message includes "all"
         assert "all" in result.output
 
@@ -484,7 +494,9 @@ class TestExportAllExperimentsSemaphore:
                     _had_errors,
                 ) = _export_all_experiments(
                     client=MagicMock(),
-                    workspace_root=workspace_root,
+                    project_dir=workspace_root,
+                    project_name="proj",
+                    project_id=None,
                     experiments_dir=experiments_dir,
                     max_results=None,
                     force=False,

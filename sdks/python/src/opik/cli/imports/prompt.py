@@ -18,12 +18,13 @@ console = Console()
 def import_prompts_from_directory(
     client: opik.Opik,
     source_dir: Path,
+    project_name: str,
     dry_run: bool,
     name_pattern: Optional[str],
     debug: bool,
     manifest: Optional[MigrationManifest] = None,
 ) -> Dict[str, int]:
-    """Import prompts from a directory.
+    """Import prompts from a directory into the given project.
 
     Returns:
         Dictionary with keys: 'prompts', 'prompts_skipped', 'prompts_errors'
@@ -140,6 +141,7 @@ def import_prompts_from_directory(
                             messages=prompt_content,
                             metadata=metadata,
                             type=prompt_type_enum,
+                            project_name=project_name,
                         )
                         if debug:
                             console.print(
@@ -160,6 +162,7 @@ def import_prompts_from_directory(
                             prompt=prompt_content,
                             metadata=metadata,
                             type=prompt_type_enum,
+                            project_name=project_name,
                         )
                         if debug:
                             console.print(

@@ -14,7 +14,6 @@ from .._attachment_path import safe_attachment_path
 from ..migration_manifest import MigrationManifest
 from .experiment import recreate_experiments
 from .utils import (
-    matches_name_pattern,
     clean_feedback_scores,
     clean_usage_for_import,
     sort_spans_topologically,
@@ -102,9 +101,10 @@ def _upload_attachments_for_trace(
         )
 
 
-def import_projects_from_directory(
+def import_traces_from_directory(
     client: opik.Opik,
-    source_dir: Path,
+    project_dir: Path,
+    project_name: str,
     dry_run: bool,
     name_pattern: Optional[str],
     debug: bool,
@@ -112,285 +112,254 @@ def import_projects_from_directory(
     manifest: Optional[MigrationManifest] = None,
     include_attachments: bool = True,
 ) -> Dict[str, int]:
-    """Import projects from a directory.
+    """Import the project's traces (and optionally experiments) from ``project_dir``.
+
+    Trace files live directly in ``project_dir`` (``trace_*.json``); experiment
+    files, when recreated, live in ``project_dir/experiments``. Everything is
+    created in ``project_name``.
 
     Returns:
         Dictionary with keys: 'projects', 'projects_skipped', 'projects_errors', 'traces', 'traces_errors'
     """
     try:
-        project_dirs = [d for d in source_dir.iterdir() if d.is_dir()]
+        trace_files = list(project_dir.glob("trace_*.json"))
 
-        if not project_dirs:
-            console.print("[yellow]No project directories found[/yellow]")
+        if not trace_files and not dry_run:
+            console.print(f"[yellow]No trace files found in {project_dir}[/yellow]")
+
+        traces_imported = 0
+        traces_errors = 0
+
+        if dry_run:
+            console.print(
+                f"[blue]Would import {len(trace_files)} trace(s) into project "
+                f"'{project_name}'[/blue]"
+            )
             return {
-                "projects": 0,
+                "projects": 1 if trace_files else 0,
                 "projects_skipped": 0,
                 "projects_errors": 0,
-                "traces": 0,
+                "traces": len(trace_files),
                 "traces_errors": 0,
             }
 
-        imported_count = 0
-        skipped_count = 0
-        error_count = 0
-        total_traces_imported = 0
-        total_traces_errors = 0
+        debug_print(f"Importing traces into project: {project_name}", debug)
 
         # Seed trace_id_map from the manifest so experiments can cross-reference
         # traces that were imported in a previous (interrupted) run.
         trace_id_map: Dict[str, str] = manifest.get_trace_id_map() if manifest else {}
 
-        for project_dir in project_dirs:
-            try:
-                project_name = project_dir.name
+        # Per-project span ID map (only needed during this import session,
+        # not persisted — span IDs are not referenced across files).
+        span_id_map: Dict[str, str] = {}
 
-                # Filter by name pattern if specified
-                if name_pattern and not matches_name_pattern(
-                    project_name, name_pattern
-                ):
+        for trace_file in trace_files:
+            try:
+                # Skip trace files already imported in a previous run
+                if manifest and manifest.is_file_completed(trace_file):
                     debug_print(
-                        f"Skipping project {project_name} (doesn't match pattern)",
+                        f"Skipping {trace_file.name} (already imported in a previous run)",
                         debug,
                     )
-                    skipped_count += 1
+                    traces_imported += 1
                     continue
 
-                if dry_run:
-                    console.print(f"[blue]Would import project: {project_name}[/blue]")
-                    imported_count += 1
-                    continue
+                with open(trace_file, "r", encoding="utf-8") as f:
+                    trace_data = json.load(f)
 
-                debug_print(f"Importing project: {project_name}", debug)
+                # Import trace and spans
+                trace_info = trace_data.get("trace", {})
+                spans_info = trace_data.get("spans", [])
+                original_trace_id = trace_info.get("id")
 
-                # Per-project span ID map (only needed during this import session,
-                # not persisted — span IDs are not referenced across files).
-                span_id_map: Dict[str, str] = {}
+                # Clean feedback scores to remove read-only fields
+                feedback_scores = clean_feedback_scores(
+                    trace_info.get("feedback_scores")
+                )
 
-                trace_files = list(project_dir.glob("trace_*.json"))
-                traces_imported = 0
-                traces_errors = 0
+                original_start_time = (
+                    datetime.fromisoformat(
+                        trace_info["start_time"].replace("Z", "+00:00")
+                    )
+                    if trace_info.get("start_time")
+                    else None
+                )
 
-                for trace_file in trace_files:
-                    try:
-                        # Skip trace files already imported in a previous run
-                        if manifest and manifest.is_file_completed(trace_file):
-                            debug_print(
-                                f"Skipping {trace_file.name} (already imported in a previous run)",
-                                debug,
-                            )
-                            traces_imported += 1
-                            continue
-
-                        with open(trace_file, "r", encoding="utf-8") as f:
-                            trace_data = json.load(f)
-
-                        # Import trace and spans
-                        trace_info = trace_data.get("trace", {})
-                        spans_info = trace_data.get("spans", [])
-                        original_trace_id = trace_info.get("id")
-
-                        # Clean feedback scores to remove read-only fields
-                        feedback_scores = clean_feedback_scores(
-                            trace_info.get("feedback_scores")
+                trace = client.trace(
+                    id=id_helpers.generate_id(timestamp=original_start_time),
+                    name=trace_info.get("name", "imported_trace"),
+                    start_time=original_start_time,
+                    end_time=(
+                        datetime.fromisoformat(
+                            trace_info["end_time"].replace("Z", "+00:00")
                         )
+                        if trace_info.get("end_time")
+                        else None
+                    ),
+                    input=trace_info.get("input", {}),
+                    output=trace_info.get("output", {}),
+                    metadata=build_import_metadata(
+                        trace_info,
+                        _TRACE_IMPORT_FIELDS,
+                        trace_info.get("metadata"),
+                    ),
+                    tags=trace_info.get("tags"),
+                    feedback_scores=feedback_scores,
+                    error_info=trace_info.get("error_info"),
+                    thread_id=trace_info.get("thread_id"),
+                    project_name=project_name,
+                )
 
-                        original_start_time = (
+                if original_trace_id:
+                    trace_id_map[original_trace_id] = trace.id
+                    # Persist the mapping so it survives if we are interrupted
+                    # before completing all files.
+                    if manifest:
+                        manifest.add_trace_mapping(original_trace_id, trace.id)
+
+                # Create spans with full data, preserving parent-child relationships.
+                # Sort spans topologically to ensure parents are processed before children
+                # so that multi-level hierarchies are handled correctly.
+                sorted_spans = sort_spans_topologically(spans_info)
+
+                for span_info in sorted_spans:
+                    # Clean feedback scores to remove read-only fields
+                    span_feedback_scores = clean_feedback_scores(
+                        span_info.get("feedback_scores")
+                    )
+
+                    original_span_id = span_info.get("id")
+                    # Translate parent_span_id to the new ID if it was already created
+                    original_parent_span_id = span_info.get("parent_span_id")
+
+                    new_parent_span_id = None
+                    if (
+                        original_parent_span_id
+                        and original_parent_span_id in span_id_map
+                    ):
+                        new_parent_span_id = span_id_map[original_parent_span_id]
+
+                    # Create span with parent_span_id if available
+                    # Clean usage data to avoid double-prefixing of original_usage keys
+                    usage_data = clean_usage_for_import(span_info.get("usage"))
+
+                    span = client.span(
+                        name=span_info.get("name", "imported_span"),
+                        type=span_info.get("type", "general"),
+                        start_time=(
                             datetime.fromisoformat(
-                                trace_info["start_time"].replace("Z", "+00:00")
+                                span_info["start_time"].replace("Z", "+00:00")
                             )
-                            if trace_info.get("start_time")
+                            if span_info.get("start_time")
                             else None
-                        )
+                        ),
+                        end_time=(
+                            datetime.fromisoformat(
+                                span_info["end_time"].replace("Z", "+00:00")
+                            )
+                            if span_info.get("end_time")
+                            else None
+                        ),
+                        input=span_info.get("input", {}),
+                        output=span_info.get("output", {}),
+                        metadata=build_import_metadata(
+                            span_info,
+                            _SPAN_IMPORT_FIELDS,
+                            span_info.get("metadata"),
+                        ),
+                        tags=span_info.get("tags"),
+                        usage=usage_data,
+                        feedback_scores=span_feedback_scores,
+                        model=span_info.get("model"),
+                        provider=span_info.get("provider"),
+                        error_info=span_info.get("error_info"),
+                        total_cost=span_info.get("total_cost"),
+                        trace_id=trace.id,
+                        parent_span_id=new_parent_span_id,
+                        project_name=project_name,
+                    )
 
-                        trace = client.trace(
-                            id=id_helpers.generate_id(timestamp=original_start_time),
-                            name=trace_info.get("name", "imported_trace"),
-                            start_time=original_start_time,
-                            end_time=(
-                                datetime.fromisoformat(
-                                    trace_info["end_time"].replace("Z", "+00:00")
-                                )
-                                if trace_info.get("end_time")
-                                else None
-                            ),
-                            input=trace_info.get("input", {}),
-                            output=trace_info.get("output", {}),
-                            metadata=build_import_metadata(
-                                trace_info,
-                                _TRACE_IMPORT_FIELDS,
-                                trace_info.get("metadata"),
-                            ),
-                            tags=trace_info.get("tags"),
-                            feedback_scores=feedback_scores,
-                            error_info=trace_info.get("error_info"),
-                            thread_id=trace_info.get("thread_id"),
+                    # Map original span ID to new span ID for parent relationship mapping
+                    if original_span_id and span.id:
+                        span_id_map[original_span_id] = span.id
+
+                # Queue attachment uploads while span_id_map is still
+                # populated. Uploads run in the background via the
+                # streamer (retries + parallelism); flush() is called
+                # after all traces for this project are processed.
+                if include_attachments and not dry_run:
+                    attachments = trace_data.get("attachments", [])
+                    if attachments:
+                        _upload_attachments_for_trace(
+                            client=client,
+                            project_dir=project_dir,
+                            attachments=attachments,
+                            new_trace_id=trace.id,
+                            span_id_map=span_id_map,
                             project_name=project_name,
                         )
 
-                        if original_trace_id:
-                            trace_id_map[original_trace_id] = trace.id
-                            # Persist the mapping so it survives if we are interrupted
-                            # before completing all files.
-                            if manifest:
-                                manifest.add_trace_mapping(original_trace_id, trace.id)
+                traces_imported += 1
 
-                        # Create spans with full data, preserving parent-child relationships.
-                        # Sort spans topologically to ensure parents are processed before children
-                        # so that multi-level hierarchies are handled correctly.
-                        sorted_spans = sort_spans_topologically(spans_info)
-
-                        for span_info in sorted_spans:
-                            # Clean feedback scores to remove read-only fields
-                            span_feedback_scores = clean_feedback_scores(
-                                span_info.get("feedback_scores")
-                            )
-
-                            original_span_id = span_info.get("id")
-                            # Translate parent_span_id to the new ID if it was already created
-                            original_parent_span_id = span_info.get("parent_span_id")
-
-                            new_parent_span_id = None
-                            if (
-                                original_parent_span_id
-                                and original_parent_span_id in span_id_map
-                            ):
-                                new_parent_span_id = span_id_map[
-                                    original_parent_span_id
-                                ]
-
-                            # Create span with parent_span_id if available
-                            # Clean usage data to avoid double-prefixing of original_usage keys
-                            usage_data = clean_usage_for_import(span_info.get("usage"))
-
-                            span = client.span(
-                                name=span_info.get("name", "imported_span"),
-                                type=span_info.get("type", "general"),
-                                start_time=(
-                                    datetime.fromisoformat(
-                                        span_info["start_time"].replace("Z", "+00:00")
-                                    )
-                                    if span_info.get("start_time")
-                                    else None
-                                ),
-                                end_time=(
-                                    datetime.fromisoformat(
-                                        span_info["end_time"].replace("Z", "+00:00")
-                                    )
-                                    if span_info.get("end_time")
-                                    else None
-                                ),
-                                input=span_info.get("input", {}),
-                                output=span_info.get("output", {}),
-                                metadata=build_import_metadata(
-                                    span_info,
-                                    _SPAN_IMPORT_FIELDS,
-                                    span_info.get("metadata"),
-                                ),
-                                tags=span_info.get("tags"),
-                                usage=usage_data,
-                                feedback_scores=span_feedback_scores,
-                                model=span_info.get("model"),
-                                provider=span_info.get("provider"),
-                                error_info=span_info.get("error_info"),
-                                total_cost=span_info.get("total_cost"),
-                                trace_id=trace.id,
-                                parent_span_id=new_parent_span_id,
-                                project_name=project_name,
-                            )
-
-                            # Map original span ID to new span ID for parent relationship mapping
-                            if original_span_id and span.id:
-                                span_id_map[original_span_id] = span.id
-
-                        # Queue attachment uploads while span_id_map is still
-                        # populated. Uploads run in the background via the
-                        # streamer (retries + parallelism); flush() is called
-                        # after all traces for this project are processed.
-                        if include_attachments and not dry_run:
-                            attachments = trace_data.get("attachments", [])
-                            if attachments:
-                                _upload_attachments_for_trace(
-                                    client=client,
-                                    project_dir=project_dir,
-                                    attachments=attachments,
-                                    new_trace_id=trace.id,
-                                    span_id_map=span_id_map,
-                                    project_name=project_name,
-                                )
-
-                        traces_imported += 1
-
-                        # Mark file as completed and flush trace mapping to disk
-                        if manifest:
-                            manifest.mark_file_completed(trace_file)
-
-                    except Exception as e:
-                        console.print(
-                            f"[red]Error importing trace from {trace_file}: {e}[/red]"
-                        )
-                        if manifest:
-                            manifest.mark_file_failed(trace_file, str(e))
-                        traces_errors += 1
-                        continue
-
-                # Flush queued attachment uploads (and any other streamed messages)
-                # before proceeding so all data is persisted before we move on.
-                client.flush()
-
-                # Handle experiment recreation if requested
-                if recreate_experiments_flag:
-                    experiment_files = list(project_dir.glob("experiment_*.json"))
-                    if experiment_files:
-                        debug_print(
-                            f"Found {len(experiment_files)} experiment files in project {project_name}",
-                            debug,
-                        )
-
-                        experiments_recreated = recreate_experiments(
-                            client,
-                            project_dir,
-                            project_name,
-                            dry_run,
-                            name_pattern,
-                            trace_id_map,
-                            None,  # dataset_item_id_map - not available in project import context
-                            debug,
-                            manifest=manifest,
-                        )
-
-                        if experiments_recreated > 0:
-                            debug_print(
-                                f"Recreated {experiments_recreated} experiments for project {project_name}",
-                                debug,
-                            )
-
-                total_traces_imported += traces_imported
-                total_traces_errors += traces_errors
-
-                if traces_imported > 0:
-                    imported_count += 1
-                    debug_print(
-                        f"Imported project: {project_name} with {traces_imported} traces",
-                        debug,
-                    )
+                # Mark file as completed and flush trace mapping to disk
+                if manifest:
+                    manifest.mark_file_completed(trace_file)
 
             except Exception as e:
                 console.print(
-                    f"[red]Error importing project {project_dir.name}: {e}[/red]"
+                    f"[red]Error importing trace from {trace_file}: {e}[/red]"
                 )
-                error_count += 1
+                if manifest:
+                    manifest.mark_file_failed(trace_file, str(e))
+                traces_errors += 1
                 continue
 
+        # Flush queued attachment uploads (and any other streamed messages)
+        # before proceeding so all data is persisted before we move on.
+        client.flush()
+
+        # Handle experiment recreation if requested
+        if recreate_experiments_flag:
+            experiments_dir = project_dir / "experiments"
+            experiment_files = (
+                list(experiments_dir.glob("experiment_*.json"))
+                if experiments_dir.exists()
+                else []
+            )
+            if experiment_files:
+                debug_print(
+                    f"Found {len(experiment_files)} experiment files in project {project_name}",
+                    debug,
+                )
+
+                experiments_recreated = recreate_experiments(
+                    client,
+                    experiments_dir,
+                    project_name,
+                    dry_run,
+                    name_pattern,
+                    trace_id_map,
+                    None,  # dataset_item_id_map - not available in traces import context
+                    debug,
+                    manifest=manifest,
+                )
+
+                if experiments_recreated > 0:
+                    debug_print(
+                        f"Recreated {experiments_recreated} experiments for project {project_name}",
+                        debug,
+                    )
+
         return {
-            "projects": imported_count,
-            "projects_skipped": skipped_count,
-            "projects_errors": error_count,
-            "traces": total_traces_imported,
-            "traces_errors": total_traces_errors,
+            "projects": 1 if traces_imported > 0 else 0,
+            "projects_skipped": 0,
+            "projects_errors": 0,
+            "traces": traces_imported,
+            "traces_errors": traces_errors,
         }
 
     except Exception as e:
-        console.print(f"[red]Error importing projects: {e}[/red]")
+        console.print(f"[red]Error importing traces: {e}[/red]")
         return {
             "projects": 0,
             "projects_skipped": 0,

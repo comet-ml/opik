@@ -10,7 +10,7 @@ from .all import export_all_command
 from .dataset import export_dataset_command
 from .experiment import export_experiment_command
 from .prompt import export_prompt_command
-from .project import export_project_command
+from .project import export_traces_command
 
 EXPORT_CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
 
@@ -19,27 +19,31 @@ EXPORT_CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
     name="export", context_settings=EXPORT_CONTEXT_SETTINGS, invoke_without_command=True
 )
 @click.argument("workspace", type=str)
+@click.argument("project", type=str)
 @click.option(
     "--api-key",
     type=str,
     help="Opik API key. If not provided, will use OPIK_API_KEY environment variable or configuration.",
 )
 @click.pass_context
-def export_group(ctx: click.Context, workspace: str, api_key: Optional[str]) -> None:
-    """Export data from Opik workspace.
+def export_group(
+    ctx: click.Context, workspace: str, project: str, api_key: Optional[str]
+) -> None:
+    """Export data from an Opik project.
 
-    This command allows you to export specific data from an Opik workspace to local files.
-    Supported data types include datasets, projects, experiments, and prompts.
+    In Opik v2 every dataset, prompt, and experiment belongs to a project, so
+    exports are always scoped to a single project named on the command line.
+    Exported data is written under ``PATH/WORKSPACE/projects/PROJECT/``.
 
     \b
     General Usage:
-        opik export WORKSPACE ITEM NAME [OPTIONS]
+        opik export WORKSPACE PROJECT ITEM [NAME] [OPTIONS]
 
     \b
     Data Types (ITEM):
-        all          Export everything: datasets, prompts, projects, and experiments
+        all          Export everything in the project: datasets, prompts, experiments, and traces
         dataset      Export a dataset by exact name (exports dataset definition and items)
-        project      Export a project by name or ID (exports project traces and metadata)
+        traces       Export the project's traces and their spans
         experiment   Export an experiment by name or ID (exports experiment configuration and results)
         prompt       Export a prompt by exact name (exports prompt templates and versions)
 
@@ -53,27 +57,28 @@ def export_group(ctx: click.Context, workspace: str, api_key: Optional[str]) -> 
 
     \b
     Examples:
-        # Export everything in the workspace
-        opik export my-workspace all
+        # Export everything in the project
+        opik export my-workspace my-project all
 
         # Export only datasets and prompts
-        opik export my-workspace all --include datasets,prompts
+        opik export my-workspace my-project all --include datasets,prompts
 
         # Export a specific dataset
-        opik export my-workspace dataset "my-dataset"
+        opik export my-workspace my-project dataset "my-dataset"
 
-        # Export a project with OQL filter
-        opik export my-workspace project "my-project" --filter "status:completed"
+        # Export the project's traces with an OQL filter
+        opik export my-workspace my-project traces --filter "status:completed"
 
         # Export an experiment with dataset filter (by name or ID)
-        opik export my-workspace experiment "my-experiment" --dataset "my-dataset"
-        opik export my-workspace experiment "01234567-89ab-cdef-0123-456789abcdef" --dataset "my-dataset"
+        opik export my-workspace my-project experiment "my-experiment" --dataset "my-dataset"
+        opik export my-workspace my-project experiment "01234567-89ab-cdef-0123-456789abcdef" --dataset "my-dataset"
 
         # Export in CSV format to a specific directory
-        opik export my-workspace prompt "my-template" --format csv --path ./custom-exports
+        opik export my-workspace my-project prompt "my-template" --format csv --path ./custom-exports
     """
     ctx.ensure_object(dict)
     ctx.obj["workspace"] = workspace
+    ctx.obj["project_name"] = project
     # Use API key from this command or from parent context
     ctx.obj["api_key"] = api_key or (
         ctx.parent.obj.get("api_key") if ctx.parent and ctx.parent.obj else None
@@ -124,19 +129,19 @@ def export_group(ctx: click.Context, workspace: str, api_key: Optional[str]) -> 
     # If no subcommand was invoked, show helpful error
     if ctx.invoked_subcommand is None:
         available_items = ", ".join(
-            sorted(["all", "dataset", "experiment", "prompt", "project"])
+            sorted(["all", "dataset", "experiment", "prompt", "traces"])
         )
         click.echo(
             f"Error: Missing ITEM.\n\n"
             f"Available items: {available_items}\n\n"
-            f"Usage: opik export {workspace} ITEM NAME [OPTIONS]\n\n"
+            f"Usage: opik export {workspace} {project} ITEM [NAME] [OPTIONS]\n\n"
             f"Examples:\n"
-            f"  opik export {workspace} all\n"
-            f'  opik export {workspace} dataset "my-dataset"\n'
-            f'  opik export {workspace} project "my-project"\n'
-            f'  opik export {workspace} experiment "my-experiment"\n'
-            f'  opik export {workspace} prompt "my-template"\n\n'
-            f"Run 'opik export {workspace} --help' for more information.",
+            f"  opik export {workspace} {project} all\n"
+            f'  opik export {workspace} {project} dataset "my-dataset"\n'
+            f"  opik export {workspace} {project} traces\n"
+            f'  opik export {workspace} {project} experiment "my-experiment"\n'
+            f'  opik export {workspace} {project} prompt "my-template"\n\n'
+            f"Run 'opik export {workspace} {project} --help' for more information.",
             err=True,
         )
         ctx.exit(2)
@@ -182,4 +187,4 @@ export_group.add_command(export_all_command)
 export_group.add_command(export_dataset_command)
 export_group.add_command(export_experiment_command)
 export_group.add_command(export_prompt_command)
-export_group.add_command(export_project_command)
+export_group.add_command(export_traces_command)

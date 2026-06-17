@@ -82,6 +82,7 @@ def export_single_prompt(
     client: opik.Opik,
     prompt: Union[Prompt, ChatPrompt],
     output_dir: Path,
+    project_name: str,
     max_results: Optional[int],
     force: bool,
     debug: bool,
@@ -100,16 +101,20 @@ def export_single_prompt(
                 debug_print(f"Skipping {prompt.name} (already exists)", debug)
             return 0
 
-        # Get prompt history - use appropriate method based on prompt type
+        # Get prompt history (scoped to the prompt's project)
         prompt_history: List[Union[Prompt, ChatPrompt]]
         try:
             if isinstance(prompt, ChatPrompt):
-                prompt_history = list(client.get_chat_prompt_history(prompt.name))
+                prompt_history = list(
+                    client.get_chat_prompt_history(
+                        prompt.name, project_name=project_name
+                    )
+                )
             else:
-                prompt_history = list(client.get_prompt_history(prompt.name))
+                prompt_history = list(
+                    client.get_prompt_history(prompt.name, project_name=project_name)
+                )
         except (ValueError, Exception):
-            # History lookup may fail if the prompt is not associated with the
-            # default project (get_prompt_history filters by project_id internally).
             # Fall back to empty history so the current version is still exported.
             if debug:
                 debug_print(
@@ -159,6 +164,7 @@ def export_single_prompt(
 def export_prompt_by_name(
     name: str,
     workspace: str,
+    project_name: str,
     output_path: str,
     max_results: Optional[int],
     force: bool,
@@ -166,7 +172,7 @@ def export_prompt_by_name(
     format: str,
     api_key: Optional[str] = None,
 ) -> None:
-    """Export a prompt by exact name."""
+    """Export a prompt by exact name from the given project."""
     try:
         if debug:
             debug_print(f"Exporting prompt: {name}", debug)
@@ -177,24 +183,26 @@ def export_prompt_by_name(
         else:
             client = opik.Opik(workspace=workspace)
 
-        # Create output directory
-        output_dir = Path(output_path) / workspace / "prompts"
+        # Create output directory (project-nested layout)
+        output_dir = (
+            Path(output_path) / workspace / "projects" / project_name / "prompts"
+        )
         output_dir.mkdir(parents=True, exist_ok=True)
 
         if debug:
             debug_print(f"Target directory: {output_dir}", debug)
 
-        # Try to get prompt by exact name
+        # Try to get prompt by exact name within the project
         # Try ChatPrompt first, then regular Prompt
         prompt: Optional[Union[Prompt, ChatPrompt]] = None
         try:
-            prompt = client.get_chat_prompt(name)
+            prompt = client.get_chat_prompt(name, project_name=project_name)
             if debug and prompt:
                 debug_print(f"Found ChatPrompt by direct lookup: {prompt.name}", debug)
         except Exception:
             # Not a ChatPrompt, try regular Prompt
             try:
-                prompt = client.get_prompt(name)
+                prompt = client.get_prompt(name, project_name=project_name)
                 if not prompt:
                     console.print(f"[red]Prompt '{name}' not found[/red]")
                     return
@@ -210,7 +218,7 @@ def export_prompt_by_name(
 
         # Export the prompt
         exported_count = export_single_prompt(
-            client, prompt, output_dir, max_results, force, debug, format
+            client, prompt, output_dir, project_name, max_results, force, debug, format
         )
 
         # Collect statistics for summary
@@ -240,6 +248,7 @@ def export_prompts_by_ids(
     client: opik.Opik,
     prompt_ids: set[str],
     prompts_dir: Path,
+    project_name: str,
     format: str,
     debug: bool,
     force: bool,
@@ -250,6 +259,7 @@ def export_prompts_by_ids(
         client: Opik client instance
         prompt_ids: Set of prompt IDs to export
         prompts_dir: Directory to save prompts
+        project_name: Project the prompts belong to
         format: Export format ('json' or 'csv')
         debug: Enable debug output
         force: Re-download prompts even if they already exist locally
@@ -265,10 +275,10 @@ def export_prompts_by_ids(
             # Get the prompt - try ChatPrompt first, then regular Prompt
             prompt: Optional[Union[Prompt, ChatPrompt]] = None
             try:
-                prompt = client.get_chat_prompt(prompt_id)
+                prompt = client.get_chat_prompt(prompt_id, project_name=project_name)
             except Exception:
                 # Not a ChatPrompt, try regular Prompt
-                prompt = client.get_prompt(prompt_id)
+                prompt = client.get_prompt(prompt_id, project_name=project_name)
 
             if not prompt:
                 if debug:
@@ -306,9 +316,15 @@ def export_prompts_by_ids(
             # Get prompt history - use appropriate method based on prompt type
             prompt_history: List[Union[Prompt, ChatPrompt]]
             if isinstance(prompt, ChatPrompt):
-                prompt_history = list(client.get_chat_prompt_history(prompt.name))
+                prompt_history = list(
+                    client.get_chat_prompt_history(
+                        prompt.name, project_name=project_name
+                    )
+                )
             else:
-                prompt_history = list(client.get_prompt_history(prompt_id))
+                prompt_history = list(
+                    client.get_prompt_history(prompt_id, project_name=project_name)
+                )
 
             # Create prompt data structure
             prompt_data = {
@@ -372,6 +388,7 @@ def export_related_prompts_by_name(
     client: opik.Opik,
     experiment: Any,
     output_dir: Path,
+    project_name: str,
     force: bool,
     debug: bool,
     format: str = "json",
@@ -440,11 +457,15 @@ def export_related_prompts_by_name(
                 # Try to get the prompt - try ChatPrompt first, then regular Prompt
                 prompt: Optional[Union[Prompt, ChatPrompt]] = None
                 try:
-                    prompt = client.get_chat_prompt(prompt_name)
+                    prompt = client.get_chat_prompt(
+                        prompt_name, project_name=project_name
+                    )
                 except Exception:
                     # Not a ChatPrompt, try regular Prompt
                     try:
-                        prompt = client.get_prompt(prompt_name)
+                        prompt = client.get_prompt(
+                            prompt_name, project_name=project_name
+                        )
                     except Exception as e:
                         if debug:
                             console.print(
@@ -464,10 +485,16 @@ def export_related_prompts_by_name(
                 try:
                     if isinstance(prompt, ChatPrompt):
                         prompt_history = list(
-                            client.get_chat_prompt_history(prompt.name)
+                            client.get_chat_prompt_history(
+                                prompt.name, project_name=project_name
+                            )
                         )
                     else:
-                        prompt_history = list(client.get_prompt_history(prompt.name))
+                        prompt_history = list(
+                            client.get_prompt_history(
+                                prompt.name, project_name=project_name
+                            )
+                        )
                 except (ValueError, Exception):
                     prompt_history = []
 
@@ -583,10 +610,11 @@ def export_prompt_command(
     debug: bool,
     format: str,
 ) -> None:
-    """Export a prompt by exact name to workspace/prompts."""
-    # Get workspace and API key from context
+    """Export a prompt by exact name to projects/<project>/prompts."""
+    # Get workspace, project, and API key from context
     workspace = ctx.obj["workspace"]
+    project_name = ctx.obj["project_name"]
     api_key = ctx.obj.get("api_key") if ctx.obj else None
     export_prompt_by_name(
-        name, workspace, path, max_results, force, debug, format, api_key
+        name, workspace, project_name, path, max_results, force, debug, format, api_key
     )

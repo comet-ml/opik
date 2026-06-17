@@ -13,7 +13,7 @@ from ..migration_manifest import MigrationManifest
 from .all import import_all_command
 from .dataset import import_datasets_from_directory
 from .experiment import import_experiments_from_directory
-from .project import import_projects_from_directory
+from .project import import_traces_from_directory
 from .prompt import import_prompts_from_directory
 from .utils import debug_print, no_attachments_option, print_import_summary
 
@@ -26,6 +26,7 @@ def _import_by_type(
     import_type: str,
     path: str,
     workspace: str,
+    project_name: str,
     dry_run: bool,
     name_pattern: Optional[str],
     debug: bool,
@@ -35,12 +36,14 @@ def _import_by_type(
     include_attachments: bool = True,
 ) -> None:
     """
-    Import data by type (dataset, project, experiment) with pattern matching.
+    Import data by type (dataset, traces, experiment, prompt) into a project.
 
     Args:
-        import_type: Type of data to import ("dataset", "project", "experiment")
+        import_type: Type of data to import ("dataset", "traces", "experiment", "prompt")
         path: Base directory containing the exported data
         workspace: Target workspace name
+        project_name: Target project name. Every imported dataset, prompt,
+            experiment, and trace is created in this project.
         dry_run: Whether to show what would be imported without importing
         name_pattern: Optional string pattern to filter items by name
         debug: Enable debug output
@@ -56,7 +59,8 @@ def _import_by_type(
         else:
             client = opik.Opik(workspace=workspace)
 
-        base_path = Path(path)
+        # Everything for one project lives under projects/<project>/.
+        project_root = Path(path) / "projects" / project_name
 
         # ------------------------------------------------------------------
         # Manifest lifecycle management
@@ -66,9 +70,9 @@ def _import_by_type(
         manifest: Optional[MigrationManifest] = None
 
         if not dry_run:
-            manifest = MigrationManifest(base_path)
+            manifest = MigrationManifest(project_root)
             if force:
-                if MigrationManifest.exists(base_path):
+                if MigrationManifest.exists(project_root):
                     manifest.reset()
                     console.print(
                         "[yellow]--force: discarding existing manifest, starting fresh[/yellow]"
@@ -87,16 +91,16 @@ def _import_by_type(
             manifest.start()
 
         # ------------------------------------------------------------------
-        # Determine source directory
+        # Determine source directory (project-nested layout)
         # ------------------------------------------------------------------
         if import_type == "dataset":
-            source_dir = base_path / "datasets"
-        elif import_type == "project":
-            source_dir = base_path / "projects"
+            source_dir = project_root / "datasets"
+        elif import_type == "traces":
+            source_dir = project_root
         elif import_type == "experiment":
-            source_dir = base_path / "experiments"
+            source_dir = project_root / "experiments"
         elif import_type == "prompt":
-            source_dir = base_path / "prompts"
+            source_dir = project_root / "prompts"
         else:
             console.print(f"[red]Unknown import type: {import_type}[/red]")
             return
@@ -111,12 +115,19 @@ def _import_by_type(
 
         if import_type == "dataset":
             stats = import_datasets_from_directory(
-                client, source_dir, dry_run, name_pattern, debug, manifest=manifest
-            )
-        elif import_type == "project":
-            stats = import_projects_from_directory(
                 client,
                 source_dir,
+                project_name,
+                dry_run,
+                name_pattern,
+                debug,
+                manifest=manifest,
+            )
+        elif import_type == "traces":
+            stats = import_traces_from_directory(
+                client,
+                source_dir,
+                project_name,
                 dry_run,
                 name_pattern,
                 debug,
@@ -126,11 +137,23 @@ def _import_by_type(
             )
         elif import_type == "experiment":
             stats = import_experiments_from_directory(
-                client, source_dir, dry_run, name_pattern, debug, manifest=manifest
+                client,
+                source_dir,
+                project_name,
+                dry_run,
+                name_pattern,
+                debug,
+                manifest=manifest,
             )
         elif import_type == "prompt":
             stats = import_prompts_from_directory(
-                client, source_dir, dry_run, name_pattern, debug, manifest=manifest
+                client,
+                source_dir,
+                project_name,
+                dry_run,
+                name_pattern,
+                debug,
+                manifest=manifest,
             )
 
         # Flush the async ingestion queue before returning so that all
@@ -166,67 +189,81 @@ def _import_by_type(
         # Display summary
         print_import_summary(stats)
 
-        # Map import_type to the key used in stats dictionary
+        # Map import_type to the stats dictionary key and a human-readable label.
         type_key_map = {
             "dataset": "datasets",
             "prompt": "prompts",
-            "project": "projects",
+            "traces": "traces",
+            "experiment": "experiments",
+        }
+        label_map = {
+            "dataset": "datasets",
+            "prompt": "prompts",
+            "traces": "traces",
             "experiment": "experiments",
         }
         stats_key = type_key_map.get(import_type, import_type + "s")
+        label = label_map.get(import_type, import_type + "s")
         imported_count = stats.get(stats_key, 0)
         errors = stats.get(stats_key + "_errors", 0)
 
         if dry_run:
             console.print(
-                f"[blue]Dry run complete: Would import {imported_count} {import_type}s[/blue]"
+                f"[blue]Dry run complete: Would import {imported_count} {label}[/blue]"
             )
         else:
             if errors > 0:
                 console.print(
-                    f"[yellow]Import completed with {errors} error(s) while importing {import_type}s[/yellow]"
+                    f"[yellow]Import completed with {errors} error(s) while importing {label}[/yellow]"
                 )
             elif imported_count == 0:
-                console.print(f"[yellow]No {import_type}s were imported[/yellow]")
+                console.print(f"[yellow]No {label} were imported[/yellow]")
             else:
                 console.print(
-                    f"[green]Successfully imported {imported_count} {import_type}s[/green]"
+                    f"[green]Successfully imported {imported_count} {label}[/green]"
                 )
 
     except Exception as e:
-        console.print(f"[red]Error importing {import_type}s: {e}[/red]")
+        console.print(f"[red]Error importing {import_type}: {e}[/red]")
         sys.exit(1)
 
 
 @click.group(name="import", context_settings=IMPORT_CONTEXT_SETTINGS)
 @click.argument("workspace", type=str)
+@click.argument("project", type=str)
 @click.option(
     "--api-key",
     type=str,
     help="Opik API key. If not provided, will use OPIK_API_KEY environment variable or configuration.",
 )
 @click.pass_context
-def import_group(ctx: click.Context, workspace: str, api_key: Optional[str]) -> None:
-    """Import data to Opik workspace.
+def import_group(
+    ctx: click.Context, workspace: str, project: str, api_key: Optional[str]
+) -> None:
+    """Import data into an Opik project.
 
-    This command allows you to import previously exported data back into an Opik workspace.
-    Supported data types include projects, datasets, experiments, and prompts.
+    In Opik v2 every dataset, prompt, and experiment belongs to a project, so
+    imports are always scoped to a single project named on the command line.
+    Data is read from the project-nested layout produced by ``opik export``:
+    ``PATH/projects/PROJECT/{datasets,prompts,experiments}`` and the project's
+    trace files directly under ``PATH/projects/PROJECT/``.
 
-    A migration_manifest.db file is automatically maintained in the import directory.
-    If an import is interrupted, re-running the same command will resume from where it
-    left off without creating duplicates. Use --force to discard the manifest and restart.
+    A migration_manifest.db file is automatically maintained under the project
+    directory. If an import is interrupted, re-running the same command resumes
+    from where it left off without creating duplicates. Use --force to discard
+    the manifest and restart.
 
     \b
     General Usage:
-        opik import WORKSPACE TYPE NAME [OPTIONS]
+        opik import WORKSPACE PROJECT ITEM [NAME] [OPTIONS]
 
     \b
-    Data Types:
-        all         Import everything: datasets, prompts, projects, and experiments
-        project     Import projects from path/projects/ (default: opik_exports)
-        dataset     Import datasets from path/datasets/ (default: opik_exports)
-        experiment  Import experiments from path/experiments/ (default: opik_exports)
-        prompt      Import prompts from path/prompts/ (default: opik_exports)
+    Data Types (ITEM):
+        all         Import everything: datasets, prompts, traces, and experiments
+        traces      Import the project's traces (and their spans)
+        dataset     Import datasets from projects/PROJECT/datasets/
+        experiment  Import experiments from projects/PROJECT/experiments/
+        prompt      Import prompts from projects/PROJECT/prompts/
 
     \b
     Common Options:
@@ -237,32 +274,30 @@ def import_group(ctx: click.Context, workspace: str, api_key: Optional[str]) -> 
 
     \b
     Examples:
-        # Import everything in the workspace
-        opik import my-workspace all
+        # Import everything into the project
+        opik import my-workspace my-project all
 
         # Preview what would be imported
-        opik import my-workspace all --dry-run
+        opik import my-workspace my-project all --dry-run
 
-        # Preview an experiment that would be imported
-        opik import my-workspace experiment "my-experiment" --dry-run
-
-        # Import a specific project
-        opik import my-workspace project "my-project"
+        # Import the project's traces
+        opik import my-workspace my-project traces
 
         # Import a specific dataset
-        opik import my-workspace dataset "my-dataset"
+        opik import my-workspace my-project dataset "my-dataset"
 
         # Import from a custom path
-        opik import my-workspace project "my-project" --path ./custom-exports/
+        opik import my-workspace my-project all --path ./custom-exports/
 
         # Resume an interrupted import (automatic — just re-run the same command)
-        opik import my-workspace project "my-project"
+        opik import my-workspace my-project all
 
         # Discard progress and restart from scratch
-        opik import my-workspace project "my-project" --force
+        opik import my-workspace my-project all --force
     """
     ctx.ensure_object(dict)
     ctx.obj["workspace"] = workspace
+    ctx.obj["project_name"] = project
     # Use API key from this command or from parent context
     ctx.obj["api_key"] = api_key or (
         ctx.parent.obj.get("api_key") if ctx.parent and ctx.parent.obj else None
@@ -358,17 +393,25 @@ def import_dataset(
         opik import my-workspace dataset "training"
     \b
         # Import from a custom path
-        opik import my-workspace dataset "my-dataset" --path ./custom-exports/
+        opik import my-workspace my-project dataset "my-dataset" --path ./custom-exports/
     """
     workspace = ctx.obj["workspace"]
+    project_name = ctx.obj["project_name"]
     api_key = ctx.obj.get("api_key") if ctx.obj else None
     _import_by_type(
-        "dataset", path, workspace, dry_run, name, debug, api_key=api_key, force=force
+        "dataset",
+        path,
+        workspace,
+        project_name,
+        dry_run,
+        name,
+        debug,
+        api_key=api_key,
+        force=force,
     )
 
 
-@import_group.command(name="project")
-@click.argument("name", type=str)
+@import_group.command(name="traces")
 @click.option(
     "--path",
     "-p",
@@ -393,19 +436,18 @@ def import_dataset(
 )
 @no_attachments_option()
 @click.pass_context
-def import_project(
+def import_traces(
     ctx: click.Context,
-    name: str,
     path: str,
     dry_run: bool,
     force: bool,
     debug: bool,
     no_attachments: bool,
 ) -> None:
-    """Import projects from workspace/projects directory.
+    """Import the project's traces from projects/PROJECT/.
 
-    This command imports projects matching the specified name from the path/projects/ directory.
-    The name is matched using case-insensitive substring matching.
+    Reads the trace files exported under projects/PROJECT/ and recreates the
+    traces and their spans in the named project.
 
     If a previous import was interrupted, re-running the same command automatically
     resumes from where it left off. Use --force to start over from scratch.
@@ -413,34 +455,33 @@ def import_project(
     \b
     Examples:
     \b
-        # Preview a project that would be imported
-        opik import my-workspace project "my-project" --dry-run
+        # Preview the traces that would be imported
+        opik import my-workspace my-project traces --dry-run
     \b
-        # Import a specific project
-        opik import my-workspace project "my-project"
+        # Import the project's traces
+        opik import my-workspace my-project traces
     \b
-        # Import projects containing "test" in the name
-        opik import my-workspace project "test"
-    \b
-        # Import projects with debug output
-        opik import my-workspace project "my-project" --debug
+        # Import traces with debug output
+        opik import my-workspace my-project traces --debug
     \b
         # Import from a custom path
-        opik import my-workspace project "my-project" --path ./custom-exports/
+        opik import my-workspace my-project traces --path ./custom-exports/
     \b
         # Discard progress and restart
-        opik import my-workspace project "my-project" --force
+        opik import my-workspace my-project traces --force
     """
     workspace = ctx.obj["workspace"]
+    project_name = ctx.obj["project_name"]
     api_key = ctx.obj.get("api_key") if ctx.obj else None
     _import_by_type(
-        "project",
+        "traces",
         path,
         workspace,
+        project_name,
         dry_run,
-        name,
+        None,
         debug,
-        True,  # Always recreate experiments when importing projects
+        True,  # Always recreate experiments when importing traces
         api_key=api_key,
         force=force,
         include_attachments=not no_attachments,
@@ -498,14 +539,16 @@ def import_experiment(
         opik import my-workspace experiment "my-experiment"
     \b
         # Import from a custom path
-        opik import my-workspace experiment "my-experiment" --path ./custom-exports/
+        opik import my-workspace my-project experiment "my-experiment" --path ./custom-exports/
     """
     workspace = ctx.obj["workspace"]
+    project_name = ctx.obj["project_name"]
     api_key = ctx.obj.get("api_key") if ctx.obj else None
     _import_by_type(
         "experiment",
         path,
         workspace,
+        project_name,
         dry_run,
         name,
         debug,
@@ -563,10 +606,19 @@ def import_prompt(
         opik import my-workspace prompt "my-prompt"
     \b
         # Import from a custom path
-        opik import my-workspace prompt "my-prompt" --path ./custom-exports/
+        opik import my-workspace my-project prompt "my-prompt" --path ./custom-exports/
     """
     workspace = ctx.obj["workspace"]
+    project_name = ctx.obj["project_name"]
     api_key = ctx.obj.get("api_key") if ctx.obj else None
     _import_by_type(
-        "prompt", path, workspace, dry_run, name, debug, api_key=api_key, force=force
+        "prompt",
+        path,
+        workspace,
+        project_name,
+        dry_run,
+        name,
+        debug,
+        api_key=api_key,
+        force=force,
     )

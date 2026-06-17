@@ -13,9 +13,9 @@ from opik import synchronization
 from opik.api_objects.experiment.experiment_item import ExperimentItemReferences
 from opik.cli.exports.dataset import export_dataset_by_name
 from opik.cli.exports.experiment import export_experiment_by_name
-from opik.cli.exports.project import export_project_by_name
+from opik.cli.exports.project import export_project_traces
 from opik.cli.exports.prompt import export_prompt_by_name
-from opik.cli.imports.project import import_projects_from_directory
+from opik.cli.imports.project import import_traces_from_directory
 from opik.cli.imports.dataset import import_datasets_from_directory
 from opik.cli.imports.prompt import import_prompts_from_directory
 from ..conftest import random_chars
@@ -68,11 +68,11 @@ class TestCLIImportExport:
 
         return trace_ids
 
-    def _create_test_dataset(self, opik_client: opik.Opik) -> str:
-        """Create a test dataset."""
+    def _create_test_dataset(self, opik_client: opik.Opik, project_name: str) -> str:
+        """Create a test dataset in the given project."""
         dataset_name = f"cli-test-dataset-{random_chars()}"
         dataset = opik_client.create_dataset(
-            dataset_name, description="CLI test dataset"
+            dataset_name, description="CLI test dataset", project_name=project_name
         )
 
         # Insert test data
@@ -91,17 +91,20 @@ class TestCLIImportExport:
 
         return dataset_name
 
-    def _create_test_prompt(self, opik_client: opik.Opik) -> str:
-        """Create a test prompt."""
+    def _create_test_prompt(self, opik_client: opik.Opik, project_name: str) -> str:
+        """Create a test prompt in the given project."""
         prompt_name = f"cli-test-prompt-{random_chars()}"
         opik_client.create_prompt(
             name=prompt_name,
             prompt="You are a helpful assistant. Answer the following question: {question}",
+            project_name=project_name,
         )
         return prompt_name
 
-    def _create_test_chat_prompt(self, opik_client: opik.Opik) -> str:
-        """Create a test chat prompt."""
+    def _create_test_chat_prompt(
+        self, opik_client: opik.Opik, project_name: str
+    ) -> str:
+        """Create a test chat prompt in the given project."""
         prompt_name = f"cli-test-chat-prompt-{random_chars()}"
         messages = [
             {"role": "system", "content": "You are a helpful assistant."},
@@ -114,6 +117,7 @@ class TestCLIImportExport:
             name=prompt_name,
             messages=messages,
             metadata={"version": "1.0", "test": "chat_import_export"},
+            project_name=project_name,
         )
         return prompt_name
 
@@ -130,6 +134,7 @@ class TestCLIImportExport:
             dataset_name=dataset_name,
             name=experiment_name,
             experiment_config={"model": "test-model", "version": "1.0"},
+            project_name=project_name,
         )
 
         print(f"Created experiment with ID: {experiment.id}")
@@ -140,7 +145,7 @@ class TestCLIImportExport:
 
         if traces:
             # Get dataset items
-            dataset = opik_client.get_dataset(dataset_name)
+            dataset = opik_client.get_dataset(dataset_name, project_name=project_name)
             dataset_items = dataset.get_items()
             print(f"Found {len(dataset_items)} dataset items")
 
@@ -208,8 +213,8 @@ class TestCLIImportExport:
         assert len(traces) >= 1, "Expected at least 1 trace to be created"
 
         # Step 2: Export traces using direct function call
-        export_project_by_name(
-            name=source_project_name,
+        export_project_traces(
+            project_name=source_project_name,
             workspace="default",
             output_path=str(test_data_dir),
             max_results=None,
@@ -243,10 +248,11 @@ class TestCLIImportExport:
         assert trace_data["project_name"] == source_project_name
 
         # Step 3: Import traces using direct function call
-        source_dir = test_data_dir / "default" / "projects"
-        stats = import_projects_from_directory(
+        project_dir = test_data_dir / "default" / "projects" / source_project_name
+        stats = import_traces_from_directory(
             client=opik_client,
-            source_dir=source_dir,
+            project_dir=project_dir,
+            project_name=source_project_name,
             dry_run=False,
             name_pattern=None,
             debug=False,
@@ -266,7 +272,7 @@ class TestCLIImportExport:
     ) -> None:
         """Test the complete export/import flow for datasets."""
         # Step 1: Prepare test data
-        dataset_name = self._create_test_dataset(opik_client)
+        dataset_name = self._create_test_dataset(opik_client, source_project_name)
 
         # Verify dataset was created
         datasets = opik_client.get_datasets(max_results=100)
@@ -276,6 +282,7 @@ class TestCLIImportExport:
         export_dataset_by_name(
             name=dataset_name,
             workspace="default",
+            project_name=source_project_name,
             output_path=str(test_data_dir),
             max_results=None,
             force=False,
@@ -286,7 +293,9 @@ class TestCLIImportExport:
 
         # Verify export files were created
         # New CLI structure: default/datasets/ for datasets
-        datasets_dir = test_data_dir / "default" / "datasets"
+        datasets_dir = (
+            test_data_dir / "default" / "projects" / source_project_name / "datasets"
+        )
         assert datasets_dir.exists(), f"Export directory not found: {datasets_dir}"
 
         dataset_files = list(datasets_dir.glob("dataset_*.json"))
@@ -303,10 +312,13 @@ class TestCLIImportExport:
         assert "downloaded_at" in dataset_data
 
         # Step 3: Import datasets using direct function call
-        source_dir = test_data_dir / "default" / "datasets"
+        source_dir = (
+            test_data_dir / "default" / "projects" / source_project_name / "datasets"
+        )
         stats = import_datasets_from_directory(
             client=opik_client,
             source_dir=source_dir,
+            project_name=source_project_name,
             dry_run=False,
             name_pattern=None,
             debug=False,
@@ -325,7 +337,7 @@ class TestCLIImportExport:
     ) -> None:
         """Test the complete export/import flow for prompts."""
         # Step 1: Prepare test data
-        prompt_name = self._create_test_prompt(opik_client)
+        prompt_name = self._create_test_prompt(opik_client, source_project_name)
 
         # Verify prompt was created
         prompts = opik_client.search_prompts()
@@ -338,6 +350,7 @@ class TestCLIImportExport:
         export_prompt_by_name(
             name=prompt_name,
             workspace="default",
+            project_name=source_project_name,
             output_path=str(test_data_dir),
             max_results=None,
             force=False,
@@ -348,7 +361,9 @@ class TestCLIImportExport:
 
         # Verify export files were created
         # New CLI structure: default/prompts/ for prompts
-        prompts_dir = test_data_dir / "default" / "prompts"
+        prompts_dir = (
+            test_data_dir / "default" / "projects" / source_project_name / "prompts"
+        )
         assert prompts_dir.exists(), f"Export directory not found: {prompts_dir}"
 
         prompt_files = list(prompts_dir.glob("prompt_*.json"))
@@ -366,10 +381,13 @@ class TestCLIImportExport:
         assert "downloaded_at" in prompt_data
 
         # Step 3: Import prompts using direct function call
-        source_dir = test_data_dir / "default" / "prompts"
+        source_dir = (
+            test_data_dir / "default" / "projects" / source_project_name / "prompts"
+        )
         stats = import_prompts_from_directory(
             client=opik_client,
             source_dir=source_dir,
+            project_name=source_project_name,
             dry_run=False,
             name_pattern=None,
             debug=False,
@@ -401,13 +419,13 @@ class TestCLIImportExport:
         """Test the complete export/import flow for all data types."""
         # Step 1: Prepare test data (minimal)
         self._create_test_traces(opik_client, source_project_name)
-        dataset_name = self._create_test_dataset(opik_client)
-        prompt_name = self._create_test_prompt(opik_client)
+        dataset_name = self._create_test_dataset(opik_client, source_project_name)
+        prompt_name = self._create_test_prompt(opik_client, source_project_name)
 
         # Step 2: Export all data types with limited results using direct function calls
-        # Export projects (traces)
-        export_project_by_name(
-            name=source_project_name,
+        # Export traces
+        export_project_traces(
+            project_name=source_project_name,
             workspace="default",
             output_path=str(test_data_dir),
             max_results=10,  # Limit to 10 traces
@@ -422,6 +440,7 @@ class TestCLIImportExport:
         export_dataset_by_name(
             name=dataset_name,
             workspace="default",
+            project_name=source_project_name,
             output_path=str(test_data_dir),
             max_results=5,  # Limit to 5 datasets
             force=False,
@@ -434,6 +453,7 @@ class TestCLIImportExport:
         export_prompt_by_name(
             name=prompt_name,
             workspace="default",
+            project_name=source_project_name,
             output_path=str(test_data_dir),
             max_results=5,  # Limit to 5 prompt versions
             force=False,
@@ -444,8 +464,12 @@ class TestCLIImportExport:
 
         # Verify export files were created
         project_dir = test_data_dir / "default" / "projects" / source_project_name
-        datasets_dir = test_data_dir / "default" / "datasets"
-        prompts_dir = test_data_dir / "default" / "prompts"
+        datasets_dir = (
+            test_data_dir / "default" / "projects" / source_project_name / "datasets"
+        )
+        prompts_dir = (
+            test_data_dir / "default" / "projects" / source_project_name / "prompts"
+        )
 
         assert project_dir.exists(), f"Export directory not found: {project_dir}"
         assert datasets_dir.exists(), f"Export directory not found: {datasets_dir}"
@@ -462,9 +486,10 @@ class TestCLIImportExport:
 
         # Step 3: Import all data types using direct function calls
         # Import projects (traces)
-        projects_stats = import_projects_from_directory(
+        projects_stats = import_traces_from_directory(
             client=opik_client,
-            source_dir=test_data_dir / "default" / "projects",
+            project_dir=test_data_dir / "default" / "projects" / source_project_name,
+            project_name=source_project_name,
             dry_run=False,
             name_pattern=None,
             debug=False,
@@ -477,7 +502,12 @@ class TestCLIImportExport:
         # Import datasets
         datasets_stats = import_datasets_from_directory(
             client=opik_client,
-            source_dir=test_data_dir / "default" / "datasets",
+            source_dir=test_data_dir
+            / "default"
+            / "projects"
+            / source_project_name
+            / "datasets",
+            project_name=source_project_name,
             dry_run=False,
             name_pattern=None,
             debug=False,
@@ -489,7 +519,12 @@ class TestCLIImportExport:
         # Import prompts
         prompts_stats = import_prompts_from_directory(
             client=opik_client,
-            source_dir=test_data_dir / "default" / "prompts",
+            source_dir=test_data_dir
+            / "default"
+            / "projects"
+            / source_project_name
+            / "prompts",
+            project_name=source_project_name,
             dry_run=False,
             name_pattern=None,
             debug=False,
@@ -505,8 +540,8 @@ class TestCLIImportExport:
 
         # Test export with name filter using direct function call
         # OQL syntax: use = not ==, and double quotes for string values
-        export_project_by_name(
-            name=source_project_name,
+        export_project_traces(
+            project_name=source_project_name,
             workspace="default",
             output_path=str(test_data_dir),
             max_results=None,
@@ -534,8 +569,8 @@ class TestCLIImportExport:
         # Create test data and export it using direct function call
         self._create_test_traces(opik_client, source_project_name)
 
-        export_project_by_name(
-            name=source_project_name,
+        export_project_traces(
+            project_name=source_project_name,
             workspace="default",
             output_path=str(test_data_dir),
             max_results=None,
@@ -547,15 +582,16 @@ class TestCLIImportExport:
         )
 
         # Test dry run import using direct function call
-        source_dir = test_data_dir / "default" / "projects"
+        project_dir = test_data_dir / "default" / "projects" / source_project_name
 
         # Count traces before dry run
         traces_before = opik_client.search_traces(project_name=source_project_name)
         count_before = len(traces_before)
 
-        _ = import_projects_from_directory(
+        _ = import_traces_from_directory(
             client=opik_client,
-            source_dir=source_dir,
+            project_dir=project_dir,
+            project_name=source_project_name,
             dry_run=True,  # Dry run mode
             name_pattern=None,
             debug=False,
@@ -588,8 +624,8 @@ class TestCLIImportExport:
         export_cmd = [
             "export",
             "default",
-            "project",
             source_project_name,
+            "traces",
             "--path",
             str(test_data_dir),
         ]
@@ -607,8 +643,8 @@ class TestCLIImportExport:
         import_cmd = [
             "import",
             "default",
-            "project",
-            ".*",
+            source_project_name,
+            "traces",
             "--path",
             str(test_data_dir / "default"),
         ]
@@ -622,8 +658,8 @@ class TestCLIImportExport:
         """Test error handling for invalid commands."""
         # Test export with non-existent project - should fail gracefully
         try:
-            export_project_by_name(
-                name="non-existent-project",
+            export_project_traces(
+                project_name="non-existent-project",
                 workspace="default",
                 output_path=str(test_data_dir),
                 max_results=None,
@@ -647,9 +683,10 @@ class TestCLIImportExport:
 
         # Test import with non-existent directory - should fail gracefully
         try:
-            import_projects_from_directory(
+            import_traces_from_directory(
                 client=opik_client,
-                source_dir=test_data_dir / "non-existent",
+                project_dir=test_data_dir / "non-existent",
+                project_name="non-existent",
                 dry_run=False,
                 name_pattern=None,
                 debug=False,
@@ -673,10 +710,14 @@ class TestCLIImportExport:
         dataset2_name = f"cli-test-dataset2-{random_chars()}"
 
         dataset1 = opik_client.create_dataset(
-            dataset1_name, description="CLI test dataset 1"
+            dataset1_name,
+            description="CLI test dataset 1",
+            project_name=source_project_name,
         )
         dataset2 = opik_client.create_dataset(
-            dataset2_name, description="CLI test dataset 2"
+            dataset2_name,
+            description="CLI test dataset 2",
+            project_name=source_project_name,
         )
 
         # Add items to datasets
@@ -705,10 +746,12 @@ class TestCLIImportExport:
         experiment1 = opik_client.create_experiment(
             name=exp1_name,
             dataset_name=dataset1_name,
+            project_name=source_project_name,
         )
         experiment2 = opik_client.create_experiment(
             name=exp2_name,
             dataset_name=dataset2_name,
+            project_name=source_project_name,
         )
 
         # Add items to experiments
@@ -752,6 +795,7 @@ class TestCLIImportExport:
         export_experiment_by_name(
             name=exp1_name,
             workspace="default",
+            project_name=source_project_name,
             output_path=str(test_data_dir),
             dataset=dataset1_name,  # Filter by dataset1
             max_traces=None,
@@ -762,7 +806,9 @@ class TestCLIImportExport:
         )
 
         # Step 4: Verify only experiment1 was exported
-        experiments_dir = test_data_dir / "default" / "experiments"
+        experiments_dir = (
+            test_data_dir / "default" / "projects" / source_project_name / "experiments"
+        )
         assert experiments_dir.exists(), (
             f"Export directory not found: {experiments_dir}"
         )
@@ -794,7 +840,7 @@ class TestCLIImportExport:
     ) -> None:
         """Test the complete export/import flow for chat prompts."""
         # Step 1: Create a test chat prompt
-        prompt_name = self._create_test_chat_prompt(opik_client)
+        prompt_name = self._create_test_chat_prompt(opik_client, source_project_name)
 
         # Verify chat prompt was created
         prompts = opik_client.search_prompts()
@@ -807,6 +853,7 @@ class TestCLIImportExport:
         export_prompt_by_name(
             name=prompt_name,
             workspace="default",
+            project_name=source_project_name,
             output_path=str(test_data_dir),
             max_results=None,
             force=False,
@@ -816,7 +863,9 @@ class TestCLIImportExport:
         )
 
         # Verify export files were created
-        prompts_dir = test_data_dir / "default" / "prompts"
+        prompts_dir = (
+            test_data_dir / "default" / "projects" / source_project_name / "prompts"
+        )
         assert prompts_dir.exists(), f"Export directory not found: {prompts_dir}"
 
         prompt_files = list(prompts_dir.glob("prompt_*.json"))
@@ -840,10 +889,13 @@ class TestCLIImportExport:
         assert current_version["template_structure"] == "chat"
 
         # Step 3: Import chat prompt using direct function call
-        source_dir = test_data_dir / "default" / "prompts"
+        source_dir = (
+            test_data_dir / "default" / "projects" / source_project_name / "prompts"
+        )
         stats = import_prompts_from_directory(
             client=opik_client,
             source_dir=source_dir,
+            project_name=source_project_name,
             dry_run=False,
             name_pattern=None,
             debug=False,
@@ -874,13 +926,13 @@ class TestCLIImportExport:
     ) -> None:
         """Test import projects automatically recreates experiments."""
         # Step 1: Prepare test data with experiments
-        dataset_name = self._create_test_dataset(opik_client)
+        dataset_name = self._create_test_dataset(opik_client, source_project_name)
         self._create_test_traces(opik_client, source_project_name)
         self._create_test_experiment(opik_client, source_project_name, dataset_name)
 
         # Step 2: Export the project data (traces) using direct function call
-        export_project_by_name(
-            name=source_project_name,
+        export_project_traces(
+            project_name=source_project_name,
             workspace="default",
             output_path=str(test_data_dir),
             max_results=None,
@@ -896,10 +948,11 @@ class TestCLIImportExport:
         assert project_dir.exists(), f"Export directory not found: {project_dir}"
 
         # Step 3: Test import (experiments are automatically recreated) using direct function call
-        source_dir = test_data_dir / "default" / "projects"
-        stats = import_projects_from_directory(
+        project_dir = test_data_dir / "default" / "projects" / source_project_name
+        stats = import_traces_from_directory(
             client=opik_client,
-            source_dir=source_dir,
+            project_dir=project_dir,
+            project_name=source_project_name,
             dry_run=False,
             name_pattern=None,
             debug=False,
@@ -1000,8 +1053,8 @@ class TestCLIImportExport:
         print(f"Original cost: {original_cost}")
 
         # Export the project
-        export_project_by_name(
-            name=project_name,
+        export_project_traces(
+            project_name=project_name,
             workspace="default",
             output_path=str(test_data_dir),
             max_results=None,
@@ -1056,12 +1109,12 @@ class TestCLIImportExport:
             json.dump(trace_data, f)
 
         # Import the project
-        source_dir = test_data_dir / "default" / "projects"
-        stats = import_projects_from_directory(
+        stats = import_traces_from_directory(
             client=opik_client,
-            source_dir=source_dir,
+            project_dir=imported_project_dir,
+            project_name=imported_project_name,
             dry_run=False,
-            name_pattern=imported_project_name,
+            name_pattern=None,
             debug=True,
             recreate_experiments_flag=False,
         )
@@ -1075,8 +1128,9 @@ class TestCLIImportExport:
 
         # Wait for the imported trace to appear in the new project.
         assert synchronization.until(
-            lambda: len(opik_client.search_traces(project_name=imported_project_name))
-            >= 1,
+            lambda: (
+                len(opik_client.search_traces(project_name=imported_project_name)) >= 1
+            ),
             allow_errors=True,
         ), f"No imported traces found in project {imported_project_name}"
 
