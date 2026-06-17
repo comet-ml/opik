@@ -25,16 +25,15 @@ env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
   OPIK_URL_OVERRIDE: http://localhost:8080
-  OPIK_WORKSPACE: default
-  # Point the studio job processor's log collector at the stack's real Redis
+  # The studio job processor streams subprocess logs to the stack's real Redis
   # (password-protected, port-mapped to localhost by `opik.sh --port-mapping`).
-  # Without this it would fall back to localhost:6379 with no auth and fail.
+  # Not required for pass/fail (log flushing is best-effort), but without it the
+  # collector hits localhost:6379 unauthenticated and the log path goes dead.
   REDIS_URL: redis://:opik@localhost:6379/0
-  # Provider keys are stored in the workspace by the tests (model-storage
+  # The Anthropic key is stored in the workspace by the tests (model-storage
   # principle); the optimizer reaches the provider only through the backend
-  # gateway, never via these directly.
+  # gateway, never via this directly.
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   # Keep the optimization short — we only need it to start, iterate, and finish.
   OPTIMIZER_MAX_TRIALS: "1"
   OPTSTUDIO_DATASET_SAMPLES: "4"
