@@ -36,6 +36,8 @@ servers:
 tags:
 - name: MCP OAuth
   description: MCP OAuth 2.1 Authorization Server resources
+- name: System analytics queries
+  description: Internal endpoint to run Agent Insights free-form SQL
 - name: System usage
   description: System usage related resource
 - name: Agent Configs
@@ -326,6 +328,47 @@ paths:
                 $ref: "#/components/schemas/ValidatedToken"
         "401":
           description: "Missing, malformed, or unknown access token"
+  /v1/internal/analytics-queries/projects/{projectId}:
+    post:
+      tags:
+      - System analytics queries
+      summary: Execute Agent Insights free-form SQL
+      description: Runs Ollie-generated read-only SQL bounded to the caller's workspace
+        and the requested project. Returns 501 when the Agent Insights toggle is off.
+      operationId: executeAnalyticsQuery
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnalyticsQueryRequest"
+      responses:
+        "200":
+          description: Query results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsQueryResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "501":
+          description: Agent Insights queries are not enabled
   /v1/internal/usage/bi-datasets:
     get:
       tags:
@@ -9437,6 +9480,35 @@ components:
           type: string
         resource:
           type: string
+    AnalyticsQueryResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/JsonNode"
+    JsonNode:
+      type: object
+    ErrorMessage:
+      type: object
+      properties:
+        code:
+          type: integer
+          format: int32
+        message:
+          type: string
+        details:
+          type: string
+    AnalyticsQueryRequest:
+      required:
+      - query
+      type: object
+      properties:
+        query:
+          minLength: 1
+          type: string
+          description: Read-only ClickHouse SQL. Must return exactly one column named
+            `result` produced via toJSONString(...)
     BiInformation:
       type: object
       properties:
@@ -9556,16 +9628,6 @@ components:
           - prompt
           - prompt_commit
         description:
-          type: string
-    ErrorMessage:
-      type: object
-      properties:
-        code:
-          type: integer
-          format: int32
-        message:
-          type: string
-        details:
           type: string
     AgentConfigEnv:
       required:
@@ -9951,8 +10013,6 @@ components:
             \ report_day ascending"
           items:
             $ref: "#/components/schemas/AgentInsightsIssueDetail"
-    JsonNode:
-      type: object
     AgentInsightsReport:
       required:
       - issues

@@ -43,6 +43,7 @@ from .alert_trigger_write import AlertTriggerWrite
 from .alert_trigger_write_event_type import AlertTriggerWriteEventType
 from .alert_write import AlertWrite
 from .alert_write_alert_type import AlertWriteAlertType
+from .analytics_query_response import AnalyticsQueryResponse
 from .annotation_queue import AnnotationQueue
 from .annotation_queue_batch import AnnotationQueueBatch
 from .annotation_queue_item_ids import AnnotationQueueItemIds
@@ -760,6 +761,7 @@ __all__ = [
     "AlertTriggerWriteEventType",
     "AlertWrite",
     "AlertWriteAlertType",
+    "AnalyticsQueryResponse",
     "AnnotationQueue",
     "AnnotationQueueBatch",
     "AnnotationQueueItemIds",
