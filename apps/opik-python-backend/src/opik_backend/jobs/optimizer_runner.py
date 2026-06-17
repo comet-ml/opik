@@ -281,7 +281,10 @@ def main():
 
         # Import after setting up environment
         from opik_backend.studio import OptimizationJobContext
-        from opik_backend.studio.types import OptimizationConfig
+        from opik_backend.studio.types import (
+            OptimizationConfig,
+            OptimizationRunResult,
+        )
         from opik_backend.studio.helpers import (
             initialize_opik_client,
             load_and_validate_dataset,
@@ -342,7 +345,7 @@ def main():
             )
 
             # Build result dict
-            output = {
+            output: OptimizationRunResult = {
                 "success": True,
                 "optimization_id": str(context.optimization_id),
                 "score": result.score,
@@ -367,7 +370,10 @@ def main():
 
         # Output error as JSON, including the full traceback so the parent
         # process (and CI) can surface what failed inside this subprocess.
-        error_output = {
+        # Local import: an exception can fire before the deferred import above.
+        from opik_backend.studio.types import OptimizationErrorResult
+
+        error_output: OptimizationErrorResult = {
             "success": False,
             "error": str(e),
             "traceback": traceback.format_exc(),

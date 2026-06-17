@@ -2,8 +2,38 @@
 
 import re
 from dataclasses import dataclass
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, NotRequired, Optional, List, TypedDict, Union
 from uuid import UUID
+
+
+class OptimizationRunResult(TypedDict):
+    """Successful result emitted by ``optimizer_runner`` and returned by
+    ``process_optimizer_job``."""
+    success: bool
+    optimization_id: str
+    score: float
+    initial_score: Optional[float]
+    # The optimized prompt's messages (or a string fallback when the optimizer
+    # returns a non-structured prompt); absent if the optimizer produced none.
+    optimized_prompt: NotRequired[Union[List[Dict[str, str]], str]]
+
+
+class OptimizationErrorResult(TypedDict):
+    """Failure result emitted by ``optimizer_runner``. ``process_optimizer_job``
+    raises on it rather than returning it."""
+    success: bool
+    error: str
+    traceback: str
+
+
+class OptimizationCancelledResult(TypedDict):
+    """Returned by ``process_optimizer_job`` when the run was cancelled."""
+    status: str
+    optimization_id: str
+
+
+# What ``process_optimizer_job`` hands back to its caller.
+OptimizationJobResult = Union[OptimizationRunResult, OptimizationCancelledResult]
 
 
 def _convert_template_syntax(text: str) -> str:
