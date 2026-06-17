@@ -232,6 +232,7 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/ClientRegistrationRequest"
+        required: true
       responses:
         "201":
           description: Registered client metadata
@@ -301,6 +302,28 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OAuthError"
+  /opik/auth-oauth:
+    post:
+      tags:
+      - MCP OAuth
+      summary: Validate OAuth Access Token
+      description: Introspects a bearer access token and returns the identity it resolves
+        to
+      operationId: validateOAuthToken
+      parameters:
+      - name: Authorization
+        in: header
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Validated token identity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidatedToken"
+        "401":
+          description: "Missing, malformed, or unknown access token"
   /v1/internal/usage/bi-datasets:
     get:
       tags:
@@ -9200,6 +9223,17 @@ components:
         error:
           type: string
         error_description:
+          type: string
+    ValidatedToken:
+      type: object
+      properties:
+        user_name:
+          type: string
+        workspace_id:
+          type: string
+        workspace_name:
+          type: string
+        resource:
           type: string
     BiInformation:
       type: object

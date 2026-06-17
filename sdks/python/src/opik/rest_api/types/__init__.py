@@ -679,6 +679,7 @@ from .usage import Usage
 from .user_defined_metric_python_code import UserDefinedMetricPythonCode
 from .user_defined_metric_python_code_public import UserDefinedMetricPythonCodePublic
 from .user_defined_metric_python_code_write import UserDefinedMetricPythonCodeWrite
+from .validated_token import ValidatedToken
 from .value_entry import ValueEntry
 from .value_entry_compare import ValueEntryCompare
 from .value_entry_compare_source import ValueEntryCompareSource
@@ -1343,6 +1344,7 @@ __all__ = [
     "UserDefinedMetricPythonCode",
     "UserDefinedMetricPythonCodePublic",
     "UserDefinedMetricPythonCodeWrite",
+    "ValidatedToken",
     "ValueEntry",
     "ValueEntryCompare",
     "ValueEntryCompareSource",
