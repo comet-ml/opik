@@ -19,6 +19,7 @@ import {
   buildConsentRequest,
   denyAndRedirect,
   extractErrorMessage,
+  navigateToRedirect,
   parseParams,
 } from "./helpers";
 
@@ -88,7 +89,14 @@ const OAuthConsentPage: React.FC = () => {
     }
     consent.mutate(buildConsentRequest(params, workspace, data.csrf_token), {
       onSuccess: ({ redirect_to }) => {
-        window.location.href = redirect_to;
+        if (!navigateToRedirect(redirect_to)) {
+          toast({
+            title: "Could not complete authorization",
+            description:
+              "The redirect target is invalid. Restart the authorization flow from your AI host.",
+            variant: "destructive",
+          });
+        }
       },
       onError: (error) => {
         toast({

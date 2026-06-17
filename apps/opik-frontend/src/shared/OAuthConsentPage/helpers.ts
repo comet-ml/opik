@@ -35,26 +35,41 @@ export const parseParams = (search: string): ParsedParams | null => {
   };
 };
 
+// Both the Allow and Deny outcomes leave the SPA by assigning a client redirect target to
+// window.location. The initial target is OAuth for the hosted MCP over HTTP transport:
+// clients receive the callback on a hosted https endpoint or an RFC 8252 §7.3 loopback
+// listener (http://127.0.0.1|localhost) — both http(s). We only ever navigate to an http(s)
+// URL, which keeps script-executing schemes (javascript:/data:) off this origin regardless
+// of what the backend validated. Custom-scheme native deep-links are out of scope for the
+// HTTP-transport target; revisit this gate if that client model is added.
+const isHttpRedirect = (url: URL): boolean =>
+  url.protocol === "http:" || url.protocol === "https:";
+
+// Allow navigates to the backend-built redirect_to (registered redirect_uri + auth code).
+// Gated by the same http(s) check as Deny so the two outcomes share one scheme policy.
+export const navigateToRedirect = (redirectTo: string): boolean => {
+  try {
+    if (!isHttpRedirect(new URL(redirectTo))) return false;
+    window.location.href = redirectTo;
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 // Deny navigates to the raw redirect_uri query param. This is safe because the consent
 // card (and its Deny button) only render after GET /oauth/authorize/context succeeds, and
 // that endpoint validates redirect_uri against the registered client
 // (OAuthClientService#resolveForRedirect throws "invalid redirect_uri" on a mismatch). An
 // unregistered redirect_uri therefore never reaches this function — the page shows the
 // terminal error card instead. RFC 6749 §4.1.2.1.
-//
-// The initial target is OAuth for the hosted MCP over HTTP transport: clients receive the
-// callback on a hosted https endpoint or an RFC 8252 §7.3 loopback listener
-// (http://127.0.0.1|localhost) — both http(s). We only ever assign an http(s) URL to
-// window.location, which keeps script-executing schemes (javascript:/data:) off this
-// origin. Custom-scheme native deep-links are out of scope for the HTTP-transport target;
-// revisit this gate if that client model is added.
 export const denyAndRedirect = (
   redirectUri: string,
   state: string | null,
 ): boolean => {
   try {
     const url = new URL(redirectUri);
-    if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+    if (!isHttpRedirect(url)) return false;
     url.searchParams.set("error", "access_denied");
     if (state) url.searchParams.set("state", state);
     window.location.href = url.toString();

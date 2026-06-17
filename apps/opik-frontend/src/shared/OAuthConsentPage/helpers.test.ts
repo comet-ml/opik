@@ -3,6 +3,7 @@ import {
   buildConsentRequest,
   denyAndRedirect,
   extractErrorMessage,
+  navigateToRedirect,
   parseParams,
   ParsedParams,
 } from "./helpers";
@@ -110,6 +111,45 @@ describe("denyAndRedirect", () => {
     expect(window.location.href).toBe(
       "http://127.0.0.1:8765/cb?error=access_denied",
     );
+  });
+});
+
+describe("navigateToRedirect", () => {
+  const original = window.location;
+
+  beforeEach(() => {
+    Object.defineProperty(window, "location", {
+      writable: true,
+      value: { href: "" },
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, "location", {
+      writable: true,
+      value: original,
+    });
+  });
+
+  it.each([
+    "https://host.example/cb?code=abc",
+    "http://127.0.0.1:8765/cb?code=abc",
+  ])("navigates to the backend-built http(s) target %s verbatim", (uri) => {
+    expect(navigateToRedirect(uri)).toBe(true);
+    expect(window.location.href).toBe(uri);
+  });
+
+  it.each(["javascript:alert(1)", "data:text/html,1", "myapp://cb?code=abc"])(
+    "rejects non-http(s) target %s without navigating",
+    (uri) => {
+      expect(navigateToRedirect(uri)).toBe(false);
+      expect(window.location.href).toBe("");
+    },
+  );
+
+  it("returns false on a malformed target", () => {
+    expect(navigateToRedirect("not a url")).toBe(false);
+    expect(window.location.href).toBe("");
   });
 });
 
