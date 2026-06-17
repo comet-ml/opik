@@ -92,17 +92,18 @@ class AiSpendQueryBuilder {
                     TIER_COLUMNS.stream().map(col -> col + " Int64").collect(Collectors.joining(", "))))
             .collect(Collectors.joining(", ", "Tuple(", ")"));
 
-    // The FE prices the tier columns; ship the distinct models too.
+    // The FE prices the tier columns; group by model so each model's tokens
+    // carry its own rate.
     private static final String COMPOSITION_SELECT_LIST = Arrays.stream(SpendLane.values())
             .flatMap(lane -> TIER_COLUMNS.stream()
                     .map(col -> "SUM(lanes.%1$s.%2$s) AS %1$s_%2$s".formatted(lane.getKey(), col)))
-            .collect(Collectors.joining(",\n    "))
-            + ",\n    groupUniqArrayIf(model, model != '') AS models";
+            .collect(Collectors.joining(",\n    "));
 
-    // Tier-token summary from cc.billing — the FE prices these (hardcoded
-    // Claude rates); no dollar amounts are computed in the backend.
+    // Tier-token summary from cc.billing, grouped by model — the FE prices
+    // each model at its own rate; no dollar amounts are computed in the BE.
     private static final String TIER_SUMMARY = """
             SELECT
+                JSONExtractString(metadata, 'cc', 'billing', 'model') AS model,
                 SUMIf(<input_expr>, <current>) AS input_current,
                 SUMIf(<cache_read_expr>, <current>) AS cache_read_current,
                 SUMIf(<cache_creation_expr>, <current>) AS cache_creation_current,
@@ -115,6 +116,7 @@ class AiSpendQueryBuilder {
             WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND <window>
+            GROUP BY model
             ;
             """;
 
@@ -137,6 +139,7 @@ class AiSpendQueryBuilder {
 
     private static final String COMPOSITION_TOKENS = """
             SELECT
+                model,
                 <select_list>
             FROM (
                 SELECT JSONExtract(metadata, 'cc', 'billing', 'lanes', '<lanes_type>') AS lanes,
@@ -147,6 +150,7 @@ class AiSpendQueryBuilder {
                     AND <range>
                     <if(user_uuid)> AND <user_uuid_expr> = :user_uuid <endif>
             )
+            GROUP BY model
             ;
             """;
 
@@ -165,47 +169,66 @@ class AiSpendQueryBuilder {
 
     private static final String COMPOSITION_OUTPUT = """
             SELECT <lane_case> AS lane,
+                   model,
                    SUM(item_output) AS tokens
             FROM (
             %s
             )
-            GROUP BY lane
+            GROUP BY lane, model
             HAVING lane != ''
             ;
             """.formatted(OUTPUT_ITEMS);
 
-    // group_count is the distinct-entity count (drives the "Other (N)" fold);
-    // total_events is the total occurrence count (the FE's "calls" figure).
-    // The tier sums let the FE price the lane's window total.
-    private static final String BREAKDOWN_ENVELOPE = """
-            SELECT label,
-                   total_tokens,
-                   definition_tokens,
-                   usage_tokens,
-                   events,
-                   input_tokens,
-                   cache_read_tokens,
-                   cache_creation_tokens,
-                   output_tokens,
-                   SUM(total_tokens) OVER () AS grand_total,
-                   COUNT() OVER () AS group_count,
-                   SUM(events) OVER () AS total_events,
-                   SUM(input_tokens) OVER () AS total_input,
-                   SUM(cache_read_tokens) OVER () AS total_cache_read,
-                   SUM(cache_creation_tokens) OVER () AS total_cache_creation,
-                   SUM(output_tokens) OVER () AS total_output,
-                   max(model) OVER () AS model
-            FROM (
+    // Items are aggregated per (label, model) so the FE can price each row
+    // exactly when an entity spans multiple models. Labels are ranked by their
+    // model-summed total; everything past :limit folds into a single
+    // '__other__' label (still split by model). The envelope constants come
+    // from the pre-fold CTEs: grand_total / total_events span all rows,
+    // group_count is the distinct-label count that drives the "Other (N)" row.
+    private static final String BREAKDOWN_TEMPLATE = """
+            WITH agg AS (
             %s
+            ),
+            label_totals AS (
+                SELECT label, SUM(total_tokens) AS lt, SUM(events) AS le
+                FROM agg
+                GROUP BY label
+            ),
+            ranked AS (
+                SELECT label, row_number() OVER (ORDER BY lt DESC) AS rn
+                FROM label_totals
+            ),
+            totals AS (
+                SELECT SUM(lt) AS grand_total, COUNT() AS group_count, SUM(le) AS total_events
+                FROM label_totals
             )
-            ORDER BY total_tokens DESC
-            LIMIT :limit
+            SELECT
+                if(r.rn > :limit, '__other__', a.label) AS label,
+                a.model AS model,
+                SUM(a.total_tokens) AS total_tokens,
+                SUM(a.definition_tokens) AS definition_tokens,
+                SUM(a.usage_tokens) AS usage_tokens,
+                SUM(a.events) AS events,
+                SUM(a.input_tokens) AS input_tokens,
+                SUM(a.cache_read_tokens) AS cache_read_tokens,
+                SUM(a.cache_creation_tokens) AS cache_creation_tokens,
+                SUM(a.output_tokens) AS output_tokens,
+                min(r.rn) AS rank,
+                any(t.grand_total) AS grand_total,
+                any(t.group_count) AS group_count,
+                any(t.total_events) AS total_events
+            FROM agg a
+            INNER JOIN ranked r ON a.label = r.label
+            CROSS JOIN totals t
+            GROUP BY label, a.model
+            ORDER BY rank ASC, total_tokens DESC
             ;
             """;
 
-    private static final String BREAKDOWN = BREAKDOWN_ENVELOPE.formatted(
+    private static final String BREAKDOWN = BREAKDOWN_TEMPLATE.formatted(
             """
                     SELECT JSONExtractString(item, 'name') AS label,
+                           JSONExtractString(metadata, 'cc', 'billing', 'model') AS model,
                            SUM(JSONExtractInt(item, 'total')) AS total_tokens,
                            SUMIf(JSONExtractInt(item, 'total'), JSONExtractString(item, 'kind') = 'definition') AS definition_tokens,
                            SUMIf(JSONExtractInt(item, 'total'), JSONExtractString(item, 'kind') = 'usage') AS usage_tokens,
@@ -213,20 +236,19 @@ class AiSpendQueryBuilder {
                            SUM(JSONExtractInt(item, 'input')) AS input_tokens,
                            SUM(JSONExtractInt(item, 'cache_read')) AS cache_read_tokens,
                            SUM(JSONExtractInt(item, 'cache_creation')) AS cache_creation_tokens,
-                           SUM(JSONExtractInt(item, 'output')) AS output_tokens,
-                           anyLastIf(JSONExtractString(metadata, 'cc', 'billing', 'model'),
-                               JSONExtractString(metadata, 'cc', 'billing', 'model') != '') AS model
+                           SUM(JSONExtractInt(item, 'output')) AS output_tokens
                     FROM traces final
                     ARRAY JOIN JSONExtractArrayRaw(metadata, 'cc', 'billing', 'lanes', '<lane_key>', 'items') AS item
                     WHERE workspace_id = :workspace_id
                         AND project_id = :project_id
                         AND <range>
                         <if(user_uuid)> AND <user_uuid_expr> = :user_uuid <endif>
-                    GROUP BY label
+                    GROUP BY label, model
                     HAVING label != ''""");
 
-    private static final String OUTPUT_BREAKDOWN = BREAKDOWN_ENVELOPE.formatted("""
+    private static final String OUTPUT_BREAKDOWN = BREAKDOWN_TEMPLATE.formatted("""
             SELECT <lane_label_expr> AS label,
+                   model,
                    SUM(item_output) AS total_tokens,
                    toInt64(0) AS definition_tokens,
                    SUM(item_output) AS usage_tokens,
@@ -234,13 +256,12 @@ class AiSpendQueryBuilder {
                    toInt64(0) AS input_tokens,
                    toInt64(0) AS cache_read_tokens,
                    toInt64(0) AS cache_creation_tokens,
-                   SUM(item_output) AS output_tokens,
-                   anyLastIf(model, model != '') AS model
+                   SUM(item_output) AS output_tokens
             FROM (
             %s
             )
             WHERE <lane_predicate>
-            GROUP BY label
+            GROUP BY label, model
             HAVING label != ''""".formatted(OUTPUT_ITEMS));
 
     // One statement: aggregate traces and spans per user into CTEs, LEFT JOIN them, then sort + page in ClickHouse.
@@ -254,6 +275,7 @@ class AiSpendQueryBuilder {
                         <user_uuid_expr> AS user_uuid,
                         JSONExtractString(metadata, 'cc', 'identity', 'user_email') AS user_email,
                         JSONExtractString(metadata, 'cc', 'identity', 'user_display_name') AS user_display_name,
+                        JSONExtractString(metadata, 'cc', 'billing', 'model') AS model,
                         arraySum(arrayMap(x -> JSONExtractInt(x, 'count'),
                             JSONExtractArrayRaw(metadata, 'cc', 'billing', 'lanes', 'skills', 'items'))) AS skills_loaded,
                         arrayCount(x -> JSONExtractString(x, 'kind') = 'definition',
@@ -277,11 +299,14 @@ class AiSpendQueryBuilder {
                         sum(skills_loaded) AS skills,
                         max(mcps_available) AS mcps,
                         arrayFilter(x -> x != '', groupUniqArray(repository)) AS repositories,
-                        sum(tok_input) AS input_tokens,
-                        sum(tok_cache_read) AS cache_read_tokens,
-                        sum(tok_cache_creation) AS cache_creation_tokens,
-                        sum(tok_output) AS output_tokens,
-                        sum(tok_input + tok_cache_read + tok_cache_creation + tok_output) AS total_tokens
+                        sum(tok_input + tok_cache_read + tok_cache_creation + tok_output) AS total_tokens,
+                        -- Per-model tier arrays via sumMap: every sumMap sorts on
+                        -- the same model key set, so the value arrays align by index.
+                        (sumMap([model], [tok_input])).1 AS models,
+                        (sumMap([model], [tok_input])).2 AS model_input,
+                        (sumMap([model], [tok_cache_read])).2 AS model_cache_read,
+                        (sumMap([model], [tok_cache_creation])).2 AS model_cache_creation,
+                        (sumMap([model], [tok_output])).2 AS model_output
                     FROM windowed_traces
                     WHERE user_uuid != ''
                     GROUP BY user_uuid
@@ -289,8 +314,7 @@ class AiSpendQueryBuilder {
                 spend_agg AS (
                     SELECT
                         t.user_uuid AS user_uuid,
-                        countIf(startsWith(s.name, 'mcp__')) AS mcp_calls,
-                        anyLastIf(s.model, s.model != '') AS model
+                        countIf(startsWith(s.name, 'mcp__')) AS mcp_calls
                     FROM spans s final
                     INNER JOIN windowed_traces t ON s.trace_id = t.id
                     WHERE s.workspace_id = :workspace_id
@@ -306,13 +330,13 @@ class AiSpendQueryBuilder {
                 ta.skills AS skills,
                 ta.mcps AS mcps,
                 ta.repositories AS repositories,
-                ta.input_tokens AS input_tokens,
-                ta.cache_read_tokens AS cache_read_tokens,
-                ta.cache_creation_tokens AS cache_creation_tokens,
-                ta.output_tokens AS output_tokens,
                 ta.total_tokens AS total_tokens,
+                ta.models AS models,
+                ta.model_input AS model_input,
+                ta.model_cache_read AS model_cache_read,
+                ta.model_cache_creation AS model_cache_creation,
+                ta.model_output AS model_output,
                 ifNull(sa.mcp_calls, 0) AS mcp_calls,
-                sa.model AS model,
                 toInt64(if(ta.total_tokens >= :high_spend_factor * avg(ta.total_tokens) OVER (), 1, 0)) AS high_spend,
                 COUNT() OVER () AS total
             FROM trace_agg ta

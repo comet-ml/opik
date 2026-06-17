@@ -57,6 +57,51 @@ def extract_tool_description(run_dict: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+def _run_metadata_dict(run_dict: Dict[str, Any]) -> Dict[str, Any]:
+    extra = run_dict.get("extra") or {}
+    metadata = extra.get("metadata") if isinstance(extra, dict) else None
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def is_internal_langgraph_run(run_dict: Dict[str, Any]) -> bool:
+    """Whether a run is LangGraph framework plumbing rather than meaningful work.
+
+    A typical agent run emits far more spans than the user cares about: alongside the LLM
+    and tool calls and the graph nodes themselves, LangGraph emits a wrapper per node
+    (RunnableSequence, the node's inner callable, prompt formatting), conditional-edge
+    routers, channel writes and graph entry/exit markers. Users mostly want the LLM and
+    tool calls and the node/sub-agent boundaries, so everything else is treated as internal.
+
+    The classification relies on the ``langgraph_*`` metadata LangGraph attaches to every
+    run inside a graph execution:
+
+    * LLM and tool runs are always meaningful.
+    * Runs without ``langgraph_*`` metadata are not part of a graph execution (plain
+      LangChain/LCEL) and are out of scope — never flagged.
+    * Within a graph, the only meaningful chain run is the node boundary itself, whose run
+      name equals ``langgraph_node``. Intermediate wrappers carry the node name in
+      ``langgraph_node`` but a different run name, so ``name != langgraph_node`` flags them.
+    * ``__start__``/``__end__`` appear as their own node but are still plumbing.
+    """
+    if run_dict.get("run_type") in ("llm", "tool"):
+        return False
+
+    metadata = _run_metadata_dict(run_dict)
+    is_langgraph_run = any(key.startswith("langgraph_") for key in metadata)
+    if not is_langgraph_run:
+        return False
+
+    name = run_dict.get("name")
+    if not isinstance(name, str):
+        return False
+
+    # Graph entry/exit markers are plumbing even though they appear as their own node.
+    if name.startswith("__"):
+        return True
+
+    return name != metadata.get("langgraph_node")
+
+
 def get_run_metadata(run_dict: Dict[str, Any]) -> Dict[str, Any]:
     extra = run_dict.get("extra") or {}
     if not isinstance(extra, dict):
@@ -68,6 +113,17 @@ def get_run_metadata(run_dict: Dict[str, Any]) -> Dict[str, Any]:
         tool_description = extract_tool_description(run_dict)
         if tool_description:
             metadata["tool_description"] = tool_description
+
+    # Tag framework-plumbing spans so the UI can hide them by default. Written under a
+    # namespaced "_opik" container that can carry further categorization info over time.
+    # The flag is framework-neutral on purpose — the UI only keys on it, never on which
+    # integration produced the span.
+    if is_internal_langgraph_run(run_dict):
+        # "_opik" is reserved for us; if something non-dict occupies it, overwrite so the
+        # tag is always written and the span stays matchable by the UI's hide logic.
+        if not isinstance(metadata.get("_opik"), dict):
+            metadata["_opik"] = {}
+        metadata["_opik"]["is_internal"] = True
 
     return metadata
 

@@ -8,20 +8,22 @@ export const RecentActivityItemPublicType: core.serialization.Schema<
     serializers.RecentActivityItemPublicType.Raw,
     OpikApi.RecentActivityItemPublicType
 > = core.serialization.enum_([
+    "trace_daily",
     "experiment",
     "dataset_version",
     "test_suite_version",
     "alert_event",
     "optimization",
-    "agent_config_version",
+    "prompt_version",
 ]);
 
 export declare namespace RecentActivityItemPublicType {
     export type Raw =
+        | "trace_daily"
         | "experiment"
         | "dataset_version"
         | "test_suite_version"
         | "alert_event"
         | "optimization"
-        | "agent_config_version";
+        | "prompt_version";
 }

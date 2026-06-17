@@ -316,14 +316,14 @@ export class AiSpendClient {
     public getSpendSummary(
         request: OpikApi.SpendMetricRequest,
         requestOptions?: AiSpendClient.RequestOptions,
-    ): core.HttpResponsePromise<OpikApi.WorkspaceMetricsSummaryResponse> {
+    ): core.HttpResponsePromise<OpikApi.SpendSummaryResponse> {
         return core.HttpResponsePromise.fromPromise(this.__getSpendSummary(request, requestOptions));
     }
 
     private async __getSpendSummary(
         request: OpikApi.SpendMetricRequest,
         requestOptions?: AiSpendClient.RequestOptions,
-    ): Promise<core.WithRawResponse<OpikApi.WorkspaceMetricsSummaryResponse>> {
+    ): Promise<core.WithRawResponse<OpikApi.SpendSummaryResponse>> {
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
             this._options?.headers,
             mergeOnlyDefinedHeaders({
@@ -356,7 +356,7 @@ export class AiSpendClient {
         });
         if (_response.ok) {
             return {
-                data: serializers.WorkspaceMetricsSummaryResponse.parseOrThrow(_response.body, {
+                data: serializers.SpendSummaryResponse.parseOrThrow(_response.body, {
                     unrecognizedObjectKeys: "passthrough",
                     allowUnrecognizedUnionMembers: true,
                     allowUnrecognizedEnumValues: true,

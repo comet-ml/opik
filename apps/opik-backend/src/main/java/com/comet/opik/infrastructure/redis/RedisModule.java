@@ -52,9 +52,15 @@ public class RedisModule extends DropwizardAwareModule<OpikConfiguration> {
 
     @Provides
     @Singleton
+    public LockMetrics lockMetrics() {
+        return new LockMetrics();
+    }
+
+    @Provides
+    @Singleton
     public LockService lockService(RedissonReactiveClient redisClient,
-            @Config("distributedLock") DistributedLockConfig distributedLockConfig) {
-        return new RedissonLockService(redisClient, distributedLockConfig);
+            @Config("distributedLock") DistributedLockConfig distributedLockConfig, LockMetrics lockMetrics) {
+        return new RedissonLockService(redisClient, distributedLockConfig, lockMetrics);
     }
 
     @Provides

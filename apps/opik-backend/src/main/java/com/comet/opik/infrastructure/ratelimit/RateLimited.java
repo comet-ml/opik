@@ -27,6 +27,7 @@ public @interface RateLimited {
      * <br>
      * - {workspaceId}
      * - {apiKey}
+     * - {clientIp}
      * */
     String[] value() default {};
 

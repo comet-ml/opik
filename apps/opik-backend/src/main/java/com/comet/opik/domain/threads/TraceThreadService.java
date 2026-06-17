@@ -72,8 +72,6 @@ public interface TraceThreadService {
 
     Mono<Void> batchUpdate(TraceThreadBatchUpdate batchUpdate);
 
-    Mono<Void> setScoredAt(UUID projectId, List<String> threadIds, Instant scoredAt);
-
     Mono<Map<UUID, String>> getThreadIdsByThreadModelIds(List<UUID> threadModelIds);
 }
 
@@ -94,13 +92,11 @@ class TraceThreadServiceImpl implements TraceThreadService {
 
     public Mono<Void> processTraceThreads(@NonNull Map<String, ThreadTimestamps> threadInfo,
             @NonNull UUID projectId) {
-        return lockService.executeWithLockCustomExpire(
-                new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
-                Mono.defer(() -> processThreadAsync(threadInfo, projectId)
-                        .collectList()
-                        .flatMap(traceThreads -> this.saveTraceThreads(projectId, traceThreads))
-                        .then()),
-                LOCK_DURATION);
+
+        return processThreadAsync(threadInfo, projectId)
+                .collectList()
+                .flatMap(traceThreads -> this.saveTraceThreads(projectId, traceThreads))
+                .then();
     }
 
     private Flux<TraceThreadModel> processThreadAsync(Map<String, ThreadTimestamps> threadInfo, UUID projectId) {
@@ -148,10 +144,7 @@ class TraceThreadServiceImpl implements TraceThreadService {
             return Mono.empty();
         }
 
-        return lockService.executeWithLockCustomExpire(
-                new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
-                Mono.defer(() -> processUpdateThreadSampledValue(projectId, threadSamplingPerRules)),
-                LOCK_DURATION);
+        return processUpdateThreadSampledValue(projectId, threadSamplingPerRules);
     }
 
     private Mono<Void> processUpdateThreadSampledValue(UUID projectId,
@@ -179,25 +172,6 @@ class TraceThreadServiceImpl implements TraceThreadService {
         return traceThreadDAO.bulkUpdate(threadModelIds, batchUpdate.update(), mergeTags)
                 .doOnSuccess(__ -> log.info("Completed batch update for '{}' threads", batchUpdate.ids().size()))
                 .onErrorResume(TagOperations::mapTagLimitError);
-    }
-
-    @Override
-    public Mono<Void> setScoredAt(@NonNull UUID projectId, @NonNull List<String> threadIds, @NonNull Instant scoredAt) {
-        if (threadIds.isEmpty()) {
-            log.info("No threadIds provided for setting scored at. For projectId: '{}', skipping update.", projectId);
-            return Mono.empty();
-        }
-
-        return lockService.executeWithLockCustomExpire(
-                new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
-                Mono.defer(() -> traceThreadDAO.setScoredAt(projectId, threadIds, scoredAt))
-                        .doOnSuccess(count -> log.info("Set scoredAt '{}' for threadIds'[{}]' in projectId: '{}'",
-                                scoredAt, threadIds, projectId))
-                        .doOnError(ex -> log.error(
-                                "Error setting scoredAt for threadIds: '[{}]' in projectId: '{}' with error: {}",
-                                scoredAt, threadIds, projectId, ex))
-                        .then(),
-                LOCK_DURATION);
     }
 
     @Override
@@ -260,7 +234,6 @@ class TraceThreadServiceImpl implements TraceThreadService {
                                 .status(thread.status())
                                 .lastUpdatedBy(thread.lastUpdatedBy())
                                 .lastUpdatedAt(thread.lastUpdatedAt())
-                                .scoredAt(null) // Reset scoredAt to null for reopened threads
                                 .build();
                     }
                     return thread;
@@ -316,12 +289,10 @@ class TraceThreadServiceImpl implements TraceThreadService {
     @Override
     public Mono<Void> processProjectWithTraceThreadsPendingClosure(@NonNull UUID projectId,
             @NonNull Instant now, @NonNull Duration defaultTimeoutToMarkThreadAsInactive) {
-        return lockService.executeWithLockCustomExpire(
-                new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
-                Mono.deferContextual(
-                        contextView -> closeThreadWith(projectId, now, defaultTimeoutToMarkThreadAsInactive,
-                                contextView)),
-                LOCK_DURATION).then();
+        return Mono.deferContextual(
+                contextView -> closeThreadWith(projectId, now, defaultTimeoutToMarkThreadAsInactive,
+                        contextView))
+                .then();
     }
 
     private Mono<Long> closeThreadWith(UUID projectId, Instant now, Duration defaultTimeoutToMarkThreadAsInactive,
@@ -385,11 +356,11 @@ class TraceThreadServiceImpl implements TraceThreadService {
 
     @Override
     public Mono<Void> openThread(@NonNull UUID projectId, @NonNull String threadId) {
-        return Mono.deferContextual(ctx -> lockService.executeWithLockCustomExpire(
+        return Mono.deferContextual(_ -> lockService.executeWithLockCustomExpire(
                 new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
                 Mono.defer(() -> traceThreadDAO.openThread(projectId, threadId))
                         .then(Mono.defer(() -> getOrCreateThreadId(projectId, threadId)))
-                        .doOnSuccess(threadModelId -> log.info("Opened thread for threadId '{}' and projectId: '{}'",
+                        .doOnSuccess(_ -> log.info("Opened thread for threadId '{}' and projectId: '{}'",
                                 threadId, projectId))
                         .then(),
                 LOCK_DURATION));

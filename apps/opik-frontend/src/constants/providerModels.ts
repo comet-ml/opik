@@ -1167,6 +1167,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "moonshotai/kimi-k2.6:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2_7_CODE,
+      label: "moonshotai/kimi-k2.7-code",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2_FREE,
       label: "moonshotai/kimi-k2:free",
     },
@@ -2174,6 +2178,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5_1,
       label: "z-ai/glm-5.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5_2,
+      label: "z-ai/glm-5.2",
     },
     {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5V_TURBO,

@@ -12,6 +12,10 @@ from ...testlib import (
     TraceModel,
     assert_equal,
 )
+from ...llm_constants import (
+    ANTHROPIC_CLAUDE_SONNET,
+    ANTHROPIC_CLAUDE_SONNET_SHORT,
+)
 
 
 pytestmark = pytest.mark.usefixtures("ensure_anthropic_configured")
@@ -30,17 +34,13 @@ EXPECTED_USAGE_ANTHROPIC = ANY_DICT.containing(
 )
 
 
-MODEL_FOR_TESTS_FULL = "claude-sonnet-4-0"
-MODEL_FOR_TESTS_SHORT = "claude-sonnet-4"
-
-
 def test_langchain__anthropic_chat_is_used__token_usage_and_provider_is_logged__happyflow(
     fake_backend,
 ):
     # langchain_anthropic.Anthropic/AnthropicLLM is not tested because it is considered a legacy API which does not support the newest models
     llm = langchain_anthropic.ChatAnthropic(
         max_tokens=100,
-        model_name=MODEL_FOR_TESTS_FULL,
+        model_name=ANTHROPIC_CLAUDE_SONNET,
         name="custom-anthropic-llm-name",
     )
 
@@ -109,7 +109,7 @@ def test_langchain__anthropic_chat_is_used__token_usage_and_provider_is_logged__
                 end_time=ANY_BUT_NONE,
                 usage=EXPECTED_USAGE_ANTHROPIC,
                 provider="anthropic",
-                model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
+                model=ANY_STRING.starting_with(ANTHROPIC_CLAUDE_SONNET_SHORT),
                 source="sdk",
             ),
         ],
@@ -128,7 +128,7 @@ def test_langchain__anthropic_chat_is_used__streaming_mode__token_usage_and_prov
     # langchain_anthropic.Anthropic/AnthropicLLM is not tested because it is considered a legacy API which does not support the newest models
     llm = langchain_anthropic.ChatAnthropic(
         max_tokens=100,
-        model_name=MODEL_FOR_TESTS_FULL,
+        model_name=ANTHROPIC_CLAUDE_SONNET,
         name="custom-anthropic-llm-name",
         streaming=True,
         stream_usage=True,
@@ -203,7 +203,7 @@ def test_langchain__anthropic_chat_is_used__streaming_mode__token_usage_and_prov
                 end_time=ANY_BUT_NONE,
                 usage=EXPECTED_USAGE_ANTHROPIC,
                 provider="anthropic",
-                model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
+                model=ANY_STRING.starting_with(ANTHROPIC_CLAUDE_SONNET_SHORT),
                 source="sdk",
             ),
         ],

@@ -7,7 +7,6 @@ import * as core from "../../../../core/index.js";
 import * as environments from "../../../../environments.js";
 import { handleNonStatusCodeError } from "../../../../errors/handleNonStatusCodeError.js";
 import * as errors from "../../../../errors/index.js";
-import * as serializers from "../../../../serialization/index.js";
 import * as OpikApi from "../../../index.js";
 
 export declare namespace OllieStateClient {
@@ -149,16 +148,7 @@ export class OllieStateClient {
                 case 401:
                     throw new OpikApi.UnauthorizedError(_response.error.body, _response.rawResponse);
                 case 429:
-                    throw new OpikApi.TooManyRequestsError(
-                        serializers.ErrorMessage.parseOrThrow(_response.error.body, {
-                            unrecognizedObjectKeys: "passthrough",
-                            allowUnrecognizedUnionMembers: true,
-                            allowUnrecognizedEnumValues: true,
-                            skipValidation: true,
-                            breadcrumbsPrefix: ["response"],
-                        }),
-                        _response.rawResponse,
-                    );
+                    throw new OpikApi.TooManyRequestsError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,

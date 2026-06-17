@@ -7,6 +7,7 @@ Comprehensive architecture documentation for contributors and team members. Thes
 | Document | Priority | Description |
 |----------|----------|-------------|
 | **[API and Data Flow](API_AND_DATA_FLOW.md)** | ⭐ Start Here | Core architecture, client design, batch queues, async patterns |
+| **[Tracing](TRACING.md)** | ⭐ Start Here | Trace/span model, native API, `track` decorator, integrations, config — usage-focused onboarding |
 | **[Testing](TESTING.md)** | 🔵 Essential | Test categories, MSW mocking, Vitest patterns |
 | **[Integrations](INTEGRATIONS.md)** | 🟣 As Needed | Integration patterns (Proxy, Callback, Exporter), streaming support |
 | **[Evaluation](EVALUATION.md)** | 🟣 As Needed | Evaluation engine, metrics architecture, prompt evaluation |

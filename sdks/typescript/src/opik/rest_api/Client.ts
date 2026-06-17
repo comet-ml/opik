@@ -28,6 +28,7 @@ import { PairingClient } from "./api/resources/pairing/client/Client.js";
 import { ProjectsClient } from "./api/resources/projects/client/Client.js";
 import { PromptsClient } from "./api/resources/prompts/client/Client.js";
 import { RedirectClient } from "./api/resources/redirect/client/Client.js";
+import { ReportsClient } from "./api/resources/reports/client/Client.js";
 import { RetentionRulesClient } from "./api/resources/retentionRules/client/Client.js";
 import { RunnersClient } from "./api/resources/runners/client/Client.js";
 import { ServiceTogglesClient } from "./api/resources/serviceToggles/client/Client.js";
@@ -82,6 +83,7 @@ export class OpikApiClient {
     protected _pairing: PairingClient | undefined;
     protected _projects: ProjectsClient | undefined;
     protected _prompts: PromptsClient | undefined;
+    protected _reports: ReportsClient | undefined;
     protected _retentionRules: RetentionRulesClient | undefined;
     protected _serviceToggles: ServiceTogglesClient | undefined;
     protected _spans: SpansClient | undefined;
@@ -209,6 +211,10 @@ export class OpikApiClient {
 
     public get prompts(): PromptsClient {
         return (this._prompts ??= new PromptsClient(this._options));
+    }
+
+    public get reports(): ReportsClient {
+        return (this._reports ??= new ReportsClient(this._options));
     }
 
     public get retentionRules(): RetentionRulesClient {

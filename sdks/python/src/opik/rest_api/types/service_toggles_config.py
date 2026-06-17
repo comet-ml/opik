@@ -23,6 +23,7 @@ class ServiceTogglesConfig(UniversalBaseModel):
     welcome_wizard_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="welcomeWizardEnabled")]
     export_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="exportEnabled")]
     optimization_studio_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="optimizationStudioEnabled")]
+    cost_intelligence_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="costIntelligenceEnabled")]
     dataset_versioning_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="datasetVersioningEnabled")]
     dataset_export_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="datasetExportEnabled")]
     demo_data_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="demoDataEnabled")]
@@ -35,6 +36,7 @@ class ServiceTogglesConfig(UniversalBaseModel):
     customllm_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="customllmProviderEnabled")]
     ollama_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="ollamaProviderEnabled")]
     ollie_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="ollieEnabled")]
+    project_homepage_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="projectHomepageEnabled")]
     agentic_tools_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="agenticToolsEnabled")]
     agent_insights_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="agentInsightsEnabled")]
     v2workspace_allowlist_ids: typing_extensions.Annotated[

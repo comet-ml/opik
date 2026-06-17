@@ -95,16 +95,7 @@ export class PairingClient {
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
                 case 403:
-                    throw new OpikApi.ForbiddenError(
-                        serializers.ErrorMessage.parseOrThrow(_response.error.body, {
-                            unrecognizedObjectKeys: "passthrough",
-                            allowUnrecognizedUnionMembers: true,
-                            allowUnrecognizedEnumValues: true,
-                            skipValidation: true,
-                            breadcrumbsPrefix: ["response"],
-                        }),
-                        _response.rawResponse,
-                    );
+                    throw new OpikApi.ForbiddenError(_response.error.body, _response.rawResponse);
                 case 404:
                     throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
                 case 409:
@@ -112,16 +103,7 @@ export class PairingClient {
                 case 422:
                     throw new OpikApi.UnprocessableEntityError(_response.error.body, _response.rawResponse);
                 case 429:
-                    throw new OpikApi.TooManyRequestsError(
-                        serializers.ErrorMessage.parseOrThrow(_response.error.body, {
-                            unrecognizedObjectKeys: "passthrough",
-                            allowUnrecognizedUnionMembers: true,
-                            allowUnrecognizedEnumValues: true,
-                            skipValidation: true,
-                            breadcrumbsPrefix: ["response"],
-                        }),
-                        _response.rawResponse,
-                    );
+                    throw new OpikApi.TooManyRequestsError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
@@ -220,16 +202,7 @@ export class PairingClient {
                 case 422:
                     throw new OpikApi.UnprocessableEntityError(_response.error.body, _response.rawResponse);
                 case 429:
-                    throw new OpikApi.TooManyRequestsError(
-                        serializers.ErrorMessage.parseOrThrow(_response.error.body, {
-                            unrecognizedObjectKeys: "passthrough",
-                            allowUnrecognizedUnionMembers: true,
-                            allowUnrecognizedEnumValues: true,
-                            skipValidation: true,
-                            breadcrumbsPrefix: ["response"],
-                        }),
-                        _response.rawResponse,
-                    );
+                    throw new OpikApi.TooManyRequestsError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,

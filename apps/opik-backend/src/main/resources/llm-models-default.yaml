@@ -155,11 +155,10 @@ anthropic:
     structuredOutput: true
   - id: "claude-fable-5"
     label: "Claude Fable 5"
+    structuredOutput: true
   - id: "claude-3-7-sonnet-20250219"
   - id: "claude-opus-4-20250514"
-    structuredOutput: true
   - id: "claude-sonnet-4-20250514"
-    structuredOutput: true
   - id: "claude-sonnet-4-5-20250929"
     structuredOutput: true
 gemini:
@@ -833,6 +832,8 @@ openrouter:
     label: "moonshotai/kimi-k2.6"
   - id: "moonshotai/kimi-k2.6:free"
     label: "moonshotai/kimi-k2.6:free"
+  - id: "moonshotai/kimi-k2.7-code"
+    label: "moonshotai/kimi-k2.7-code"
   - id: "moonshotai/kimi-k2:free"
     label: "moonshotai/kimi-k2:free"
   - id: "moonshotai/kimi-linear-48b-a3b-instruct"
@@ -1383,6 +1384,8 @@ openrouter:
     label: "z-ai/glm-5-turbo"
   - id: "z-ai/glm-5.1"
     label: "z-ai/glm-5.1"
+  - id: "z-ai/glm-5.2"
+    label: "z-ai/glm-5.2"
   - id: "z-ai/glm-5v-turbo"
     label: "z-ai/glm-5v-turbo"
   - id: "~anthropic/claude-fable-latest"
