@@ -9,7 +9,10 @@ import {
 } from "@/ui/dialog";
 import { Separator } from "@/ui/separator";
 import CodeHighlighter from "@/shared/CodeHighlighter/CodeHighlighter";
-import { INSTALL_OPIK_SECTION_TITLE } from "@/constants/shared";
+import {
+  INSTALL_OPIK_DEFAULT_DESCRIPTION,
+  INSTALL_OPIK_DEFAULT_TITLE,
+} from "@/constants/shared";
 import useAppStore from "@/store/AppStore";
 import { useUserApiKey } from "@/store/AppStore";
 import useActiveProjectName from "@/hooks/useActiveProjectName";
@@ -99,12 +102,11 @@ const IntegrationDetailsDialog: React.FunctionComponent<
 
           <IntegrationStep
             title={
-              selectedIntegration.installTitle ??
-              `${INSTALL_OPIK_SECTION_TITLE}.`
+              selectedIntegration.installTitle ?? INSTALL_OPIK_DEFAULT_TITLE
             }
             description={
               selectedIntegration.installDescription ??
-              "Install Opik from the command line using pip."
+              INSTALL_OPIK_DEFAULT_DESCRIPTION
             }
             className="mb-6"
           >

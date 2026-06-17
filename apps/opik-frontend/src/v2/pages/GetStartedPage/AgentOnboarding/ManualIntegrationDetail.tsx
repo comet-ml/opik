@@ -5,7 +5,10 @@ import { IntegrationStep } from "@/v2/pages-shared/onboarding/IntegrationExplore
 import { useActiveWorkspaceName, useUserApiKey } from "@/store/AppStore";
 import { putConfigInCode } from "@/lib/formatCodeSnippets";
 import { Integration } from "@/constants/integrations";
-import { INSTALL_OPIK_SECTION_TITLE } from "@/constants/shared";
+import {
+  INSTALL_OPIK_DEFAULT_DESCRIPTION,
+  INSTALL_OPIK_DEFAULT_TITLE,
+} from "@/constants/shared";
 import { useAgentOnboarding } from "./AgentOnboardingContext";
 import AgentCopyButtons from "@/v2/pages-shared/onboarding/AgentCopyButtons";
 import AdditionalIntegrationSteps from "@/shared/OnboardingIntegrationsPage/AdditionalIntegrationSteps";
@@ -66,10 +69,9 @@ const ManualIntegrationDetail: React.FC<ManualIntegrationDetailProps> = ({
       <AgentCopyButtons agentName={agentName} />
 
       <IntegrationStep
-        title={integration.installTitle ?? `${INSTALL_OPIK_SECTION_TITLE}.`}
+        title={integration.installTitle ?? INSTALL_OPIK_DEFAULT_TITLE}
         description={
-          integration.installDescription ??
-          "Install Opik from the command line using pip."
+          integration.installDescription ?? INSTALL_OPIK_DEFAULT_DESCRIPTION
         }
         className="mb-2 border-0 p-0"
       >
