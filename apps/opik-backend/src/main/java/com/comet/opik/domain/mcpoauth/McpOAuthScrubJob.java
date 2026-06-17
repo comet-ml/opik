@@ -15,7 +15,6 @@ import org.quartz.JobExecutionContext;
 import reactor.core.publisher.Mono;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -55,8 +54,8 @@ public class McpOAuthScrubJob extends Job implements InterruptableJob {
                 Mono.fromRunnable(this::scrub),
                 Mono.fromRunnable(
                         () -> log.debug("Could not acquire lock for MCP OAuth scrub, another instance is running")),
-                Duration.ofMinutes(1),
-                Duration.ZERO,
+                opikConfig.getMcpOAuth().getScrubLockTimeout(),
+                opikConfig.getMcpOAuth().getScrubLockWaitTime(),
                 true)
                 .subscribe(
                         __ -> {

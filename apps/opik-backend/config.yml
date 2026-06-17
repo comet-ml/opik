@@ -218,6 +218,12 @@ mcpOAuth:
   # Default: PT30S
   # Description: Grace window during which a just-rotated refresh token is still accepted
   refreshRotationGrace: ${MCP_OAUTH_REFRESH_ROTATION_GRACE:-PT30S}
+  # Default: PT5M
+  # Description: TTL of the Redis lock held by the scrub job. The lock is held until expiry (not released after the scrub), so keeping it close to the 5-minute schedule prevents staggered replicas from re-scrubbing within the same cycle.
+  scrubLockTimeout: ${MCP_OAUTH_SCRUB_LOCK_TIMEOUT:-PT5M}
+  # Default: PT0.1S
+  # Description: Maximum time the scrub job waits to acquire the Redis lock before giving up for this cycle
+  scrubLockWaitTime: ${MCP_OAUTH_SCRUB_LOCK_WAIT_TIME:-PT0.1S}
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#servers
 server:
