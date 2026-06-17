@@ -13,6 +13,8 @@ import { useAgentOnboarding } from "./AgentOnboardingContext";
 import AgentCopyButtons from "@/v2/pages-shared/onboarding/AgentCopyButtons";
 import AdditionalIntegrationSteps from "@/shared/OnboardingIntegrationsPage/AdditionalIntegrationSteps";
 import { Separator } from "@/ui/separator";
+import { useTheme } from "@/contexts/theme-provider";
+import { THEME_MODE } from "@/constants/theme";
 
 type ManualIntegrationDetailProps = {
   integration: Integration;
@@ -24,6 +26,12 @@ const ManualIntegrationDetail: React.FC<ManualIntegrationDetailProps> = ({
   const { agentName } = useAgentOnboarding();
   const workspaceName = useActiveWorkspaceName();
   const apiKey = useUserApiKey();
+  const { themeMode } = useTheme();
+
+  const iconSrc =
+    themeMode === THEME_MODE.DARK && integration.whiteIcon
+      ? integration.whiteIcon
+      : integration.icon;
 
   const { code: codeWithConfig, lines } = putConfigInCode({
     code: integration.code,
@@ -45,7 +53,12 @@ const ManualIntegrationDetail: React.FC<ManualIntegrationDetailProps> = ({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1.5">
-        <h3 className="comet-title-xs">
+        <h3 className="comet-title-xs flex items-center gap-1.5">
+          <img
+            alt={integration.title}
+            src={iconSrc}
+            className="size-7 shrink-0"
+          />
           Integrate Opik with {integration.title}
         </h3>
         <p className="comet-body-s text-muted-slate">

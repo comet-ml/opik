@@ -25,6 +25,8 @@ import AdditionalIntegrationSteps from "@/shared/OnboardingIntegrationsPage/Addi
 import { useFeatureFlagVariantKey } from "posthog-js/react";
 import { CODE_EXECUTOR_SERVICE_URL } from "@/api/api";
 import CodeExecutor from "@/v2/pages-shared/onboarding/CodeExecutor/CodeExecutor";
+import { useTheme } from "@/contexts/theme-provider";
+import { THEME_MODE } from "@/constants/theme";
 
 type IntegrationDetailsDialogProps = {
   selectedIntegration?: Integration;
@@ -38,10 +40,16 @@ const IntegrationDetailsDialog: React.FunctionComponent<
   const apiKey = useUserApiKey();
   const variant = useFeatureFlagVariantKey("run-button-activation-test");
   const projectName = useActiveProjectName();
+  const { themeMode } = useTheme();
 
   if (!selectedIntegration) {
     return null;
   }
+
+  const iconSrc =
+    themeMode === THEME_MODE.DARK && selectedIntegration.whiteIcon
+      ? selectedIntegration.whiteIcon
+      : selectedIntegration.icon;
 
   const { code: codeWithConfig, lines } = putConfigInCode({
     code: selectedIntegration.code,
@@ -78,7 +86,12 @@ const IntegrationDetailsDialog: React.FunctionComponent<
     <Dialog open={!!selectedIntegration} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-[920px] gap-2">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-3">
+          <DialogTitle className="flex items-center gap-1.5">
+            <img
+              alt={selectedIntegration.title}
+              src={iconSrc}
+              className="size-7 shrink-0"
+            />
             {selectedIntegration.title} Integration
           </DialogTitle>
         </DialogHeader>

@@ -63,19 +63,8 @@ describe.skipIf(!shouldRunApiTests)(
       const testProjectName = `test-project-${Date.now()}`;
       createdProjectNames.push(testProjectName);
 
-      const queue = await client.createTracesAnnotationQueue({
-        name: testQueueName,
-        description: "Test queue for trace operations",
-        instructions: "Review traces for accuracy",
-      });
-      createdQueueIds.push(queue.id);
-
-      expect(queue).toBeInstanceOf(TracesAnnotationQueue);
-      expect(queue.name).toBe(testQueueName);
-      expect(queue.scope).toBe("trace");
-      expect(queue.description).toBe("Test queue for trace operations");
-
-      // CREATE TRACES: Create some traces to add to the queue
+      // CREATE TRACES: Create some traces to add to the queue. This also
+      // creates the project, which must exist before the queue is created in it.
       const trace1 = client.trace({
         name: "test-trace-1",
         projectName: testProjectName,
@@ -93,6 +82,19 @@ describe.skipIf(!shouldRunApiTests)(
       trace2.end();
 
       await client.flush();
+
+      const queue = await client.createTracesAnnotationQueue({
+        name: testQueueName,
+        projectName: testProjectName,
+        description: "Test queue for trace operations",
+        instructions: "Review traces for accuracy",
+      });
+      createdQueueIds.push(queue.id);
+
+      expect(queue).toBeInstanceOf(TracesAnnotationQueue);
+      expect(queue.name).toBe(testQueueName);
+      expect(queue.scope).toBe("trace");
+      expect(queue.description).toBe("Test queue for trace operations");
 
       // Wait for traces to be available
       const traces = await searchAndWaitForDone(
@@ -114,6 +116,19 @@ describe.skipIf(!shouldRunApiTests)(
       // Verify items count increased
       const updatedCount = await queue.getItemsCount();
       expect(updatedCount).toBeGreaterThanOrEqual(2);
+
+      // GET ITEMS: Fetch the traces currently in the queue
+      const queueTraces = await searchAndWaitForDone(
+        () => queue.getItems(),
+        2,
+        30000,
+        2000
+      );
+      expect(queueTraces.length).toBeGreaterThanOrEqual(2);
+      const queueTraceIds = new Set(queueTraces.map((t) => t.id));
+      for (const trace of traces) {
+        expect(queueTraceIds.has(trace.id)).toBe(true);
+      }
 
       // REMOVE TRACES: Remove one trace from the queue
       await queue.removeTraces([traces[0]]);
@@ -140,7 +155,7 @@ describe.skipIf(!shouldRunApiTests)(
       }
 
       await expect(client.getTracesAnnotationQueue(queue.id)).rejects.toThrow();
-    });
+    }, 60000);
 
     it("should perform complete thread queue flow: create, add threads, remove threads, delete", async () => {
       const testQueueName = `test-thread-queue-${Date.now()}`;
@@ -148,17 +163,8 @@ describe.skipIf(!shouldRunApiTests)(
       const threadId = generateId();
       createdProjectNames.push(testProjectName);
 
-      const queue = await client.createThreadsAnnotationQueue({
-        name: testQueueName,
-        description: "Test queue for thread operations",
-      });
-      createdQueueIds.push(queue.id);
-
-      expect(queue).toBeInstanceOf(ThreadsAnnotationQueue);
-      expect(queue.name).toBe(testQueueName);
-      expect(queue.scope).toBe("thread");
-
-      // CREATE TRACES WITH THREAD_ID: Create traces that form a thread
+      // CREATE TRACES WITH THREAD_ID: Create traces that form a thread. This
+      // also creates the project, which must exist before the queue is created.
       const trace1 = client.trace({
         name: "thread-trace-1",
         projectName: testProjectName,
@@ -178,6 +184,17 @@ describe.skipIf(!shouldRunApiTests)(
       trace2.end();
 
       await client.flush();
+
+      const queue = await client.createThreadsAnnotationQueue({
+        name: testQueueName,
+        projectName: testProjectName,
+        description: "Test queue for thread operations",
+      });
+      createdQueueIds.push(queue.id);
+
+      expect(queue).toBeInstanceOf(ThreadsAnnotationQueue);
+      expect(queue.name).toBe(testQueueName);
+      expect(queue.scope).toBe("thread");
 
       // Wait for traces to be available
       await searchAndWaitForDone(
@@ -220,6 +237,18 @@ describe.skipIf(!shouldRunApiTests)(
       const updatedCount = await queue.getItemsCount();
       expect(updatedCount).toBeGreaterThanOrEqual(1);
 
+      // GET ITEMS: Fetch the threads currently in the queue
+      const queueThreads = await searchAndWaitForDone(
+        () => queue.getItems(),
+        1,
+        30000,
+        2000
+      );
+      expect(queueThreads.length).toBeGreaterThanOrEqual(1);
+      expect(
+        queueThreads.some((t) => t.threadModelId === ourThread!.threadModelId)
+      ).toBe(true);
+
       // REMOVE THREADS: Remove the thread from the queue
       await queue.removeThreads([ourThread!]);
 
@@ -235,6 +264,6 @@ describe.skipIf(!shouldRunApiTests)(
       }
 
       await expect(client.getThreadsAnnotationQueue(queue.id)).rejects.toThrow();
-    });
+    }, 60000);
   }
 );

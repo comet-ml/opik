@@ -5,6 +5,8 @@ from .api_objects.annotation_queue import (
 )
 from .api_objects.attachment import Attachment
 from .rest_api.types.environment_public import EnvironmentPublic as Environment
+from .api_objects import dashboard
+from .api_objects.dashboard import Dashboard
 from .api_objects.dataset import Dataset
 from .api_objects.dataset.test_suite import TestSuite
 from .api_objects.dataset.test_suite.types import TestSuiteResult
@@ -14,7 +16,7 @@ from .api_objects.experiment.experiment_item import (
 )
 from .api_objects.agent_config import Config
 from .api_objects.agent_config.context import agent_config_context
-from .exceptions import ConfigNotFound, ConfigMismatch
+from .exceptions import ConfigNotFound, ConfigMismatch, DashboardValidationError
 from .api_objects.opik_client import Opik, get_global_client, set_global_client
 from .api_objects.prompt import Prompt, ChatPrompt
 from .api_objects.prompt.types import PromptType
@@ -72,6 +74,8 @@ __all__ = [
     "opik_context",
     "Trace",
     "Span",
+    "dashboard",
+    "Dashboard",
     "Dataset",
     "TestSuite",
     "TestSuiteResult",
@@ -92,6 +96,7 @@ __all__ = [
     "Config",
     "ConfigNotFound",
     "ConfigMismatch",
+    "DashboardValidationError",
     "agent_config_context",
     "update_current_trace",
     "update_current_span",
