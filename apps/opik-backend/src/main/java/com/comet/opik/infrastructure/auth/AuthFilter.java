@@ -25,6 +25,12 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class AuthFilter implements ContainerRequestFilter {
 
+    // Compiled once and reused across requests rather than recompiled on every path check.
+    private static final Pattern PRIVATE_PATH_PATTERN = Pattern.compile("/v1/private/.*");
+    private static final Pattern ANALYTICS_QUERIES_PATH_PATTERN = Pattern
+            .compile("/v1/internal/analytics-queries(/.*)?");
+    private static final Pattern SESSION_PATH_PATTERN = Pattern.compile("/v1/session/.*");
+
     private final AuthService authService;
     private final McpOAuthService mcpOAuthService;
     private final OpikConfiguration opikConfig;
@@ -38,8 +44,13 @@ public class AuthFilter implements ContainerRequestFilter {
         var sessionToken = headers.getCookies().get(RequestContext.SESSION_COOKIE);
 
         UriInfo uriInfo = context.getUriInfo();
+        String path = uriInfo.getRequestUri().getPath();
 
-        if (Pattern.matches("/v1/private/.*", uriInfo.getRequestUri().getPath())) {
+        // Unlike other /v1/internal/* endpoints, the Agent Insights query executor must be authenticated: it derives
+        // the bounding workspace_id from auth (see OPIK-6814 / Agent Insights technical design), so it goes through the
+        // same authentication path as /v1/private/*.
+        if (PRIVATE_PATH_PATTERN.matcher(path).matches()
+                || ANALYTICS_QUERIES_PATH_PATTERN.matcher(path).matches()) {
             ContextInfoHolder contextInfo = ContextInfoHolder.builder()
                     .uriInfo(uriInfo)
                     .method(context.getMethod())
@@ -54,7 +65,7 @@ public class AuthFilter implements ContainerRequestFilter {
             } else {
                 authService.authenticate(headers, sessionToken, contextInfo);
             }
-        } else if (Pattern.matches("/v1/session/.*", uriInfo.getRequestUri().getPath())) {
+        } else if (SESSION_PATH_PATTERN.matcher(path).matches()) {
             authService.authenticateSession(sessionToken);
         }
 
