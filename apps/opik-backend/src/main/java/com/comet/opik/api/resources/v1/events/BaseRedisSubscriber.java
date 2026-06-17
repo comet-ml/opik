@@ -464,7 +464,6 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                     .context(MessageContext.UNKNOWN)
                     .build());
         }
-        var messageContext = message != null ? messageContext(message) : MessageContext.UNKNOWN;
         var startMillis = System.currentTimeMillis();
         // Deferring as processEvent is out of our control, it might not return a cold Mono
         return Mono.defer(() -> processEvent(message))
@@ -472,14 +471,15 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .thenReturn(ProcessingResult.builder()
                         .messageId(messageId)
                         .status(MessageStatus.SUCCESS)
-                        .context(messageContext)
                         .build())
                 .doOnSuccess(r -> log.info("Successfully processed message messageId '{}'", entry.getKey()))
+                // The context is only read on the failure path, so resolve it lazily here rather than for
+                // every processed message.
                 .onErrorResume(throwable -> Mono.just(ProcessingResult.builder()
                         .messageId(messageId)
                         .status(MessageStatus.FAILURE)
                         .error(throwable)
-                        .context(messageContext)
+                        .context(message != null ? messageContext(message) : MessageContext.UNKNOWN)
                         .build()))
                 .doFinally(signalType -> {
                     messageProcessingTime.record(System.currentTimeMillis() - startMillis);

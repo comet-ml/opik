@@ -22,7 +22,14 @@ class EventInterceptor implements MethodInterceptor {
 
     private static final String LISTENER_KEY = "listener";
 
-    private volatile LongCounter errorCounter;
+    private final LongCounter errorCounter;
+
+    EventInterceptor() {
+        this.errorCounter = GlobalOpenTelemetry.get().getMeter(TRACER_NAME)
+                .counterBuilder("opik.event.error")
+                .setDescription("Event processing errors, by listener and error type")
+                .build();
+    }
 
     @Override
     public Object invoke(MethodInvocation methodInvocation) {
@@ -51,7 +58,7 @@ class EventInterceptor implements MethodInterceptor {
             log.info("Event intercepted: {}", event);
             return result;
         } catch (Throwable e) {
-            errorCounter().add(1, Attributes.of(
+            errorCounter.add(1, Attributes.of(
                     stringKey(LISTENER_KEY), listenerName,
                     stringKey(ErrorMetricsResolver.ERROR_TYPE_KEY), ErrorMetricsResolver.errorType(e)));
 
@@ -64,13 +71,4 @@ class EventInterceptor implements MethodInterceptor {
         }
     }
 
-    private LongCounter errorCounter() {
-        if (errorCounter == null) {
-            errorCounter = GlobalOpenTelemetry.get().getMeter(TRACER_NAME)
-                    .counterBuilder("opik.event.error")
-                    .setDescription("Event processing errors, by listener and error type")
-                    .build();
-        }
-        return errorCounter;
-    }
 }
