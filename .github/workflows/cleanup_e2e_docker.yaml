@@ -8,10 +8,10 @@ on:
   workflow_dispatch:
     inputs:
       max_age_days:
-        description: "Delete SHA-based tags older than this many days (0 = delete all)"
+        description: "Delete CI tags older than this many days (0 = delete all)"
         required: false
-        default: "7"
-        type: string
+        default: 7
+        type: number
 
 permissions:
   contents: read
