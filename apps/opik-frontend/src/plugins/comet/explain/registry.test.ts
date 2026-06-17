@@ -16,9 +16,9 @@ describe("AI_EXPLAIN_REGISTRY", () => {
     expect(getExplainConfig("trace.duration")?.label).toBe("Explain duration");
   });
   it("produces a non-empty seed question per kind", () => {
-    expect(getExplainConfig("trace.error")?.question(t("trace.error"))).toContain(
-      "ValueError",
-    );
+    expect(
+      getExplainConfig("trace.error")?.question(t("trace.error")),
+    ).toContain("ValueError");
     expect(getExplainConfig("trace.cost")?.question(t("trace.cost"))).toBe(
       "Explain this cost",
     );

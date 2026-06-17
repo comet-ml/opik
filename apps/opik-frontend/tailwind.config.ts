@@ -170,6 +170,10 @@ module.exports = {
           from: { opacity: "0", transform: "translateY(4px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
+        "caret-blink": {
+          "0%,70%,100%": { opacity: "1" },
+          "20%,50%": { opacity: "0" },
+        },
         shimmer: {
           "0%": { backgroundPosition: "200% 0" },
           "100%": { backgroundPosition: "-200% 0" },
@@ -181,6 +185,7 @@ module.exports = {
         "ollie-breathe": "ollie-breathe 3.2s ease-in-out infinite",
         "ollie-blink": "ollie-blink 5.4s ease-in-out infinite",
         "ollie-text-in": "ollie-text-in 300ms ease-out",
+        "caret-blink": "caret-blink 1.25s ease-out infinite",
         shimmer: "shimmer 1.8s ease-in-out infinite",
       },
       boxShadow: {
