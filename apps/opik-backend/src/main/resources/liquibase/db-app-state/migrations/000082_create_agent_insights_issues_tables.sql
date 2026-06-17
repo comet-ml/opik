@@ -41,10 +41,9 @@ CREATE TABLE agent_insights_issues_details
     last_updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
 
     PRIMARY KEY (id),
-    -- "One record per issue per report_day"; the upsert target for daily report runs
-    UNIQUE KEY agent_insights_issues_details_uk (workspace_id, project_id, issue_id, report_day),
-    -- Supports the time-window list query that filters details by report_day before joining issues
-    INDEX agent_insights_issues_details_report_day_idx (workspace_id, project_id, report_day)
+    -- "One record per issue per report_day"; the upsert target for daily report runs. report_day precedes issue_id so
+    -- this key also serves the time-window list query's report_day range scan, no separate index needed.
+    UNIQUE KEY agent_insights_issues_details_uk (workspace_id, project_id, report_day, issue_id)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4;
 

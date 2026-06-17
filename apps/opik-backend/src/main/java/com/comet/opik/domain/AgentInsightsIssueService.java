@@ -24,6 +24,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -42,7 +43,6 @@ public interface AgentInsightsIssueService {
     AgentInsightsIssueWithDetails getIssue(UUID issueId, UUID projectId, LocalDate fromDate, LocalDate toDate);
 
     LocalDate DEFAULT_FROM_DATE = LocalDate.of(1970, 1, 1);
-    LocalDate DEFAULT_TO_DATE = LocalDate.of(9999, 12, 31);
 
     void updateStatus(UUID issueId, AgentInsightsIssueUpdate update);
 }
@@ -191,7 +191,7 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
 
     private DateWindow resolveWindow(LocalDate fromDate, LocalDate toDate) {
         LocalDate effectiveFrom = Objects.requireNonNullElse(fromDate, DEFAULT_FROM_DATE);
-        LocalDate effectiveTo = Objects.requireNonNullElse(toDate, DEFAULT_TO_DATE);
+        LocalDate effectiveTo = Objects.requireNonNullElse(toDate, LocalDate.now(ZoneOffset.UTC));
         return new DateWindow(effectiveFrom, effectiveTo);
     }
 
