@@ -42,8 +42,12 @@ export const parseParams = (search: string): ParsedParams | null => {
 // unregistered redirect_uri therefore never reaches this function — the page shows the
 // terminal error card instead. RFC 6749 §4.1.2.1.
 //
-// Defense-in-depth: independent of the server-side check, only ever assign an http(s) URL
-// to window.location so a javascript:/data: scheme can never execute on this origin.
+// The initial target is OAuth for the hosted MCP over HTTP transport: clients receive the
+// callback on a hosted https endpoint or an RFC 8252 §7.3 loopback listener
+// (http://127.0.0.1|localhost) — both http(s). We only ever assign an http(s) URL to
+// window.location, which keeps script-executing schemes (javascript:/data:) off this
+// origin. Custom-scheme native deep-links are out of scope for the HTTP-transport target;
+// revisit this gate if that client model is added.
 export const denyAndRedirect = (
   redirectUri: string,
   state: string | null,

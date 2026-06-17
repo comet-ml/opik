@@ -93,13 +93,24 @@ describe("denyAndRedirect", () => {
     expect(window.location.href).toBe("");
   });
 
-  it.each(["javascript:alert(1)", "data:text/html,<script>1</script>"])(
-    "rejects the non-http(s) scheme %s without navigating",
+  it.each([
+    "javascript:alert(1)",
+    "data:text/html,<script>1</script>",
+    "myapp://callback",
+  ])(
+    "rejects non-http(s) schemes (out of scope for the HTTP-transport target) %s",
     (uri) => {
       expect(denyAndRedirect(uri, null)).toBe(false);
       expect(window.location.href).toBe("");
     },
   );
+
+  it("allows RFC 8252 loopback redirects (http on 127.0.0.1/localhost)", () => {
+    expect(denyAndRedirect("http://127.0.0.1:8765/cb", null)).toBe(true);
+    expect(window.location.href).toBe(
+      "http://127.0.0.1:8765/cb?error=access_denied",
+    );
+  });
 });
 
 describe("buildConsentRequest", () => {
