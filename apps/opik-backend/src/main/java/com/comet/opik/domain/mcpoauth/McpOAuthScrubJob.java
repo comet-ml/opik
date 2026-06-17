@@ -12,12 +12,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.quartz.DisallowConcurrentExecution;
 import org.quartz.InterruptableJob;
 import org.quartz.JobExecutionContext;
+import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
@@ -36,6 +38,7 @@ public class McpOAuthScrubJob extends Job implements InterruptableJob {
     private final @NonNull LockService lockService;
 
     private final AtomicBoolean interrupted = new AtomicBoolean(false);
+    private final AtomicReference<Disposable> currentExecution = new AtomicReference<>();
 
     /**
      * Revoked tokens within the rotation grace window must remain queryable, so a duplicate refresh
@@ -50,25 +53,38 @@ public class McpOAuthScrubJob extends Job implements InterruptableJob {
 
         // We don't run a full Quartz cluster, so each replica fires this schedule independently.
         // A best-effort Redis lock held until expiry ensures a single replica scrubs per cycle.
-        lockService.bestEffortLock(
+        var subscription = lockService.bestEffortLock(
                 JOB_LOCK,
-                Mono.fromRunnable(this::scrub),
+                Mono.defer(() -> {
+                    if (interrupted.get()) {
+                        log.info("MCP OAuth scrub was interrupted before processing, skipping");
+                        return Mono.empty();
+                    }
+                    return Mono.fromRunnable(this::scrub);
+                }),
                 Mono.fromRunnable(
                         () -> log.debug("Could not acquire lock for MCP OAuth scrub, another instance is running")),
                 opikConfig.getMcpOAuth().getScrubLockTimeout(),
                 opikConfig.getMcpOAuth().getScrubLockWaitTime(),
                 true)
+                .doFinally(signal -> currentExecution.set(null))
                 .subscribeOn(Schedulers.boundedElastic())
                 .subscribe(
                         __ -> {
                         },
                         error -> log.error("MCP OAuth scrub failed", error));
+        currentExecution.set(subscription);
     }
 
     @Override
     public void interrupt() {
+        log.info("Interrupting MCP OAuth scrub job");
         interrupted.set(true);
-        log.info("MCP OAuth scrub job successfully called interruption");
+        var execution = currentExecution.get();
+        if (execution != null && !execution.isDisposed()) {
+            execution.dispose();
+            log.info("MCP OAuth scrub job interrupted successfully");
+        }
     }
 
     private void scrub() {
