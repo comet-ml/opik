@@ -18,9 +18,11 @@ Bound the run via ``OPTIMIZER_MAX_TRIALS`` (set in CI) so it stays short.
 """
 
 import os
+from typing import Any
 
 import pytest
 
+import opik
 from opik import synchronization
 
 from opik_backend.jobs.optimizer import process_optimizer_job
@@ -32,7 +34,7 @@ pytestmark = pytest.mark.e2e
 _TASK_MODEL = "claude-haiku-4-5-20251001"
 
 
-def _studio_config(model: str, optimizer_type: str, dataset_name: str) -> dict:
+def _studio_config(model: str, optimizer_type: str, dataset_name: str) -> dict[str, Any]:
     """A job-context config with a single USER message (the regression case)."""
     return {
         "dataset_name": dataset_name,
@@ -58,7 +60,12 @@ def _studio_config(model: str, optimizer_type: str, dataset_name: str) -> dict:
     }
 
 
-def _run_studio_job(opik_client, project_name: str, dataset_name: str, studio_config: dict) -> dict:
+def _run_studio_job(
+    opik_client: opik.Opik,
+    project_name: str,
+    dataset_name: str,
+    studio_config: dict[str, Any],
+) -> dict[str, Any]:
     """Pre-create the optimization record (as the Java backend would), then run
     the real job handler. Returns the result dict from the subprocess."""
     workspace = os.getenv("OPIK_WORKSPACE", "default")
@@ -77,7 +84,7 @@ def _run_studio_job(opik_client, project_name: str, dataset_name: str, studio_co
     return process_optimizer_job(job_message)
 
 
-def _assert_healthy(result: dict) -> None:
+def _assert_healthy(result: dict[str, Any]) -> None:
     """Signals that the optimization actually ran end-to-end."""
     assert result is not None, "no result returned"
     assert "error" not in result, f"optimization errored: {result.get('error')}"
@@ -95,14 +102,14 @@ def _assert_healthy(result: dict) -> None:
     assert result.get("optimized_prompt"), "no optimized prompt produced"
 
 
-def _models_in_project(opik_client, project_name: str) -> list[str]:
+def _models_in_project(opik_client: opik.Opik, project_name: str) -> list[str]:
     return [
         (span.model or "")
         for span in opik_client.search_spans(project_name=project_name, max_results=1000)
     ]
 
 
-def _wait_for_model(opik_client, project_name: str, substring: str) -> None:
+def _wait_for_model(opik_client: opik.Opik, project_name: str, substring: str) -> None:
     assert synchronization.until(
         lambda: any(
             substring in model.lower()
@@ -118,8 +125,12 @@ def _wait_for_model(opik_client, project_name: str, substring: str) -> None:
 
 @pytest.mark.parametrize("optimizer_type", ["gepa", "hierarchical_reflective"])
 def test_studio_optimization_runs_on_dataset_and_prompt(
-    opik_client, anthropic_workspace_key, project_name, seeded_dataset, optimizer_type
-):
+    opik_client: opik.Opik,
+    anthropic_workspace_key: None,
+    project_name: str,
+    seeded_dataset: opik.Dataset,
+    optimizer_type: str,
+) -> None:
     studio_config = _studio_config(_TASK_MODEL, optimizer_type, seeded_dataset.name)
 
     result = _run_studio_job(opik_client, project_name, seeded_dataset.name, studio_config)

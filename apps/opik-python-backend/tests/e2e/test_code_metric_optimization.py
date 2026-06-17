@@ -14,6 +14,7 @@ import json
 import os
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import opik
 import pytest
@@ -36,7 +37,7 @@ FRONTEND_CONSTANTS = (
 
 def _load_frontend_template(
     template_id: str = "opik-chatbot",
-) -> tuple[dict, list[dict]]:
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Load studio_config and dataset_items from the frontend TypeScript file."""
     js_code = f'''
 const fs = require('fs');

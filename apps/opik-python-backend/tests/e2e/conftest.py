@@ -13,6 +13,7 @@ workspace, and the studio job processor routes LLM calls through the backend's
 
 import os
 import uuid
+from collections.abc import Iterator
 
 import httpx
 import pytest
@@ -58,7 +59,7 @@ def _anthropic_configured(base: str, headers: dict[str, str]) -> bool:
 
 
 @pytest.fixture(scope="session")
-def opik_client() -> opik.Opik:
+def opik_client() -> Iterator[opik.Opik]:
     if not _backend_base():
         pytest.skip("OPIK_URL_OVERRIDE not set; e2e requires a running Opik backend")
     client = opik.Opik()
@@ -98,7 +99,7 @@ def project_name() -> str:
 
 
 @pytest.fixture()
-def seeded_dataset(opik_client: opik.Opik):
+def seeded_dataset(opik_client: opik.Opik) -> Iterator[opik.Dataset]:
     """A small sentiment-classification dataset the optimizer can iterate on.
 
     Items expose `text` (referenced by the prompt as `{{text}}`) and `label`
