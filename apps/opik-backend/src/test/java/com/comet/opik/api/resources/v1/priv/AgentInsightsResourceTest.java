@@ -40,6 +40,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -897,6 +898,30 @@ class AgentInsightsResourceTest {
             try (var response = agentInsightsResourceClient.updateStatusWithResponse(UUID.randomUUID(), body,
                     API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(expectedStatus);
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("Date Range Validation:")
+    class DateRangeValidation {
+
+        @ParameterizedTest
+        @ValueSource(strings = {"list", "detail"})
+        @DisplayName("from_date after to_date returns 400 on both read endpoints")
+        void readEndpointsWhenFromDateAfterToDateThenBadRequest(String route) {
+            var projectId = createProject();
+            // from_date strictly after to_date is the only ordering the boundary validation rejects
+            var fromDate = DAY_2;
+            var toDate = DAY_1;
+
+            if ("list".equals(route)) {
+                agentInsightsResourceClient.findIssues(projectId, fromDate, toDate, null, null, null, null,
+                        API_KEY, TEST_WORKSPACE, HttpStatus.SC_BAD_REQUEST);
+            } else {
+                // validation runs before the issue lookup, so a non-existent id still yields 400, not 404
+                agentInsightsResourceClient.getIssue(UUID.randomUUID(), projectId, fromDate, toDate,
+                        API_KEY, TEST_WORKSPACE, HttpStatus.SC_BAD_REQUEST);
             }
         }
     }
