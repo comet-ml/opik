@@ -1,5 +1,6 @@
 package com.comet.opik.domain.threads;
 
+import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.domain.EntityConstraintHandler;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
@@ -9,6 +10,7 @@ import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
@@ -20,8 +22,10 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -30,6 +34,9 @@ interface TraceThreadIdService {
 
     Mono<TraceThreadIdModel> getOrCreateTraceThreadId(String workspaceId, UUID projectId, String threadId,
             Instant timestamp);
+
+    Mono<List<TraceThreadIdModel>> getOrCreateTraceThreadIds(String workspaceId, UUID projectId,
+            Map<String, Instant> threadIdToTimestamp);
 
     Mono<UUID> getThreadModelId(String workspaceId, UUID projectId, String threadId);
 
@@ -62,6 +69,64 @@ class TraceThreadIdServiceImpl implements TraceThreadIdService {
                         .switchIfEmpty(createThread(threadId, projectId, timestamp)))
                 .subscribeOn(Schedulers.boundedElastic())
                 .switchIfEmpty(Mono.error(new NotFoundException("Project not found: " + projectId)));
+    }
+
+    @Override
+    public Mono<List<TraceThreadIdModel>> getOrCreateTraceThreadIds(@NonNull String workspaceId,
+            @NonNull UUID projectId, @NonNull Map<String, Instant> threadIdToTimestamp) {
+        Preconditions.checkArgument(!StringUtils.isBlank(workspaceId), "Workspace ID cannot be blank");
+
+        if (threadIdToTimestamp.isEmpty()) {
+            return Mono.just(List.of());
+        }
+
+        return Mono.deferContextual(context -> Mono.fromCallable(() -> {
+            List<String> threadIds = List.copyOf(threadIdToTimestamp.keySet());
+            String userName = context.get(RequestContext.USER_NAME);
+
+            // Each attempt runs in its own transaction: a constraint-violation retry must re-read a
+            // fresh snapshot, and under REPEATABLE READ re-reading within the same transaction would
+            // reuse the original snapshot and never converge.
+            return EntityConstraintHandler.<List<TraceThreadIdModel>>handle(
+                    () -> transactionTemplate.inTransaction(TransactionTemplateAsync.WRITE, handle -> {
+                        var dao = handle.attach(TraceThreadIdDAO.class);
+
+                        List<TraceThreadIdModel> existing = dao.findByProjectIdAndThreadIds(projectId, threadIds);
+                        Set<String> existingThreadIds = existing.stream()
+                                .map(TraceThreadIdModel::threadId)
+                                .collect(Collectors.toSet());
+
+                        List<String> missingThreadIds = threadIds.stream()
+                                .filter(threadId -> !existingThreadIds.contains(threadId))
+                                .toList();
+
+                        if (missingThreadIds.isEmpty()) {
+                            // Common case: every thread already has an id — no write needed.
+                            return existing;
+                        }
+
+                        // We already know exactly which threads are missing, so we own their ids.
+                        List<TraceThreadIdModel> created = missingThreadIds.stream()
+                                .map(threadId -> TraceThreadIdModel.builder()
+                                        .id(generateThreadModelId(threadIdToTimestamp.get(threadId)))
+                                        .projectId(projectId)
+                                        .threadId(threadId)
+                                        .createdBy(userName)
+                                        .createdAt(Instant.now())
+                                        .build())
+                                .toList();
+
+                        // Plain INSERT: a concurrent create trips the (project_id, thread_id) constraint
+                        // and triggers a retry, which re-reads the now-smaller missing set.
+                        dao.save(created);
+
+                        List<TraceThreadIdModel> result = new ArrayList<>(existing);
+                        result.addAll(created);
+                        return result;
+                    }))
+                    .withRetry(3, () -> new EntityAlreadyExistsException(
+                            new ErrorMessage("Failed to resolve trace thread ids for project: " + projectId)));
+        }).subscribeOn(Schedulers.boundedElastic()));
     }
 
     @Cacheable(name = "GET_TRACE_THREAD_ID", key = "$workspaceId +'-'+ $projectId +'-'+ $threadId", returnType = UUID.class)

@@ -6,6 +6,7 @@ import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
+import org.jdbi.v3.sqlobject.statement.SqlBatch;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
@@ -22,11 +23,24 @@ interface TraceThreadIdDAO {
             """)
     void save(@BindMethods("thread") TraceThreadIdModel rule);
 
+    @SqlBatch("""
+                INSERT INTO project_trace_threads(id, project_id, thread_id, created_by, created_at)
+                VALUES (:thread.id, :thread.projectId, :thread.threadId, :thread.createdBy, :thread.createdAt)
+            """)
+    void save(@BindMethods("thread") List<TraceThreadIdModel> threads);
+
     @SqlQuery("""
                 SELECT * FROM project_trace_threads
                 WHERE project_id = :projectId AND thread_id = :threadId
             """)
     TraceThreadIdModel findByProjectIdAndThreadId(@Bind("projectId") UUID projectId, @Bind("threadId") String threadId);
+
+    @SqlQuery("""
+                SELECT * FROM project_trace_threads
+                WHERE project_id = :projectId AND thread_id IN (<threadIds>)
+            """)
+    List<TraceThreadIdModel> findByProjectIdAndThreadIds(@Bind("projectId") UUID projectId,
+            @BindList("threadIds") List<String> threadIds);
 
     @SqlQuery("""
                 SELECT * FROM project_trace_threads
