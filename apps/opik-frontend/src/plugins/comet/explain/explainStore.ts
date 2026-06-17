@@ -1,10 +1,12 @@
 import { create } from "zustand";
 import { v4 as uuidv4 } from "uuid";
 import {
+  ExplainKind,
   ExplainTarget,
   HostEventMap,
   SidebarEventMap,
 } from "@/types/assistant-sidebar";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 
 export type ConsoleEmit = <E extends keyof HostEventMap>(
   event: E,
@@ -15,9 +17,12 @@ export type ExplainPhase = "loading" | "done" | "error";
 
 export interface ExplainEntry {
   explainId: string;
+  kind: ExplainKind;
   phase: ExplainPhase;
   text: string;
   error?: string;
+  startedAt: number;
+  firstTokenAt?: number;
 }
 
 // Max concurrent in-flight explains; cached (done) results don't count.
@@ -35,8 +40,12 @@ type ExplainState = {
   // what multiplexes several parallel streams over the single bridge.
   routes: Record<string, string>;
   capabilities: string[];
+  // Whether the assistant pod is live (mirrored from useAssistantBackend by the
+  // owning sidebar). Gates the buttons together with `capabilities`.
+  ready: boolean;
   emit: ConsoleEmit | null;
 
+  setReady: (ready: boolean) => void;
   setEmit: (emit: ConsoleEmit) => void;
   clearEmit: (emit: ConsoleEmit) => void;
 
@@ -92,13 +101,17 @@ const useExplainStore = create<ExplainState>((set, get) => ({
   entries: {},
   routes: {},
   capabilities: [],
+  ready: false,
   emit: null,
 
+  setReady: (ready) => set({ ready }),
   setEmit: (emit) => set({ emit }),
   // Ownership-guarded (mirrors window.opikBridge): a stale sidebar unmount
   // can't drop a newer instance's channel.
   clearEmit: (emit) => {
-    if (get().emit === emit) set({ emit: null, capabilities: [] });
+    if (get().emit === emit) {
+      set({ emit: null, capabilities: [], ready: false });
+    }
   },
 
   explain: (target) => {
@@ -113,7 +126,13 @@ const useExplainStore = create<ExplainState>((set, get) => ({
     set((s) => ({
       entries: {
         ...s.entries,
-        [key]: { explainId, phase: "loading", text: "" },
+        [key]: {
+          explainId,
+          kind: target.kind,
+          phase: "loading",
+          text: "",
+          startedAt: performance.now(),
+        },
       },
       routes: { ...s.routes, [explainId]: key },
     }));
@@ -138,13 +157,31 @@ const useExplainStore = create<ExplainState>((set, get) => ({
       patchEntry(s, explainId, (e) => ({
         phase: "loading",
         text: e.text + delta,
+        firstTokenAt: e.firstTokenAt ?? performance.now(),
       })),
     ),
 
-  onDone: ({ explainId }) =>
-    set((s) => patchEntry(s, explainId, () => ({ phase: "done" }), true)),
+  // Completion/error telemetry fires from the store (once per stream, keyed by
+  // the still-present route) — the popover's lifecycle doesn't match the
+  // stream's, so reporting from the UI would double-count or miss events.
+  onDone: ({ explainId }) => {
+    const entry = get().entries[get().routes[explainId]];
+    if (entry) {
+      trackEvent(OpikEvent.EXPLAIN_COMPLETED, {
+        kind: entry.kind,
+        ttft_ms: entry.firstTokenAt
+          ? Math.round(entry.firstTokenAt - entry.startedAt)
+          : null,
+      });
+    }
+    set((s) => patchEntry(s, explainId, () => ({ phase: "done" }), true));
+  },
 
-  onError: ({ explainId, message }) =>
+  onError: ({ explainId, message }) => {
+    const entry = get().entries[get().routes[explainId]];
+    if (entry) {
+      trackEvent(OpikEvent.EXPLAIN_ERRORED, { kind: entry.kind });
+    }
     set((s) =>
       patchEntry(
         s,
@@ -152,7 +189,8 @@ const useExplainStore = create<ExplainState>((set, get) => ({
         () => ({ phase: "error", error: message }),
         true,
       ),
-    ),
+    );
+  },
 }));
 
 /**
@@ -187,7 +225,9 @@ export const handleConsoleEvent = (
 export const useExplainEntry = (target: ExplainTarget) =>
   useExplainStore((s) => s.entries[cellKey(target)]);
 
-export const useIsExplainCapable = () =>
-  useExplainStore((s) => s.capabilities.includes("explain"));
+// Single gate selector: pod live AND the console advertised the "explain"
+// capability. Read by the (per-row) button — no per-row backend hooks.
+export const useCanExplain = () =>
+  useExplainStore((s) => s.ready && s.capabilities.includes("explain"));
 
 export default useExplainStore;

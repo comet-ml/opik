@@ -424,6 +424,12 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
 
   useRegisterExplainEmitter(listenersRef);
 
+  // Mirror pod readiness into the explain store so the (per-row) Explain
+  // buttons gate on one shared value rather than each calling the backend hook.
+  useEffect(() => {
+    useExplainStore.getState().setReady(isBackendReady);
+  }, [isBackendReady]);
+
   // Emit context changes to sidebar listeners
   useEffect(() => {
     emitHostEvent(listenersRef, "context:changed", context);

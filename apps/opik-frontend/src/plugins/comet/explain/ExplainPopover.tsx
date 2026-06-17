@@ -1,4 +1,3 @@
-import { useEffect, useRef } from "react";
 import { Loader2, RotateCcw } from "lucide-react";
 import { Button } from "@/ui/button";
 import { ExplainTarget } from "@/types/assistant-sidebar";
@@ -15,32 +14,9 @@ const ExplainPopover = ({ target, onContinue }: Props) => {
   const entry = useExplainEntry(target);
   const retry = useExplainStore((s) => s.retry);
   const continueChat = useExplainStore((s) => s.continueChat);
-  const config = getExplainConfig(target.kind);
-
-  // BI: time-to-first-token + one-shot completion/error reporting.
-  const startedAt = useRef(performance.now());
-  const firstTokenAt = useRef<number | null>(null);
-  const sent = useRef({ done: false, error: false });
-
-  useEffect(() => {
-    if (!entry) return;
-    if (firstTokenAt.current === null && entry.text.length > 0) {
-      firstTokenAt.current = performance.now();
-    }
-    if (!sent.current.done && entry.phase === "done") {
-      sent.current.done = true;
-      trackEvent(OpikEvent.EXPLAIN_COMPLETED, {
-        kind: target.kind,
-        ttft_ms: firstTokenAt.current
-          ? Math.round(firstTokenAt.current - startedAt.current)
-          : null,
-      });
-    }
-    if (!sent.current.error && entry.phase === "error") {
-      sent.current.error = true;
-      trackEvent(OpikEvent.EXPLAIN_ERRORED, { kind: target.kind });
-    }
-  }, [entry, target.kind]);
+  // Completion/error telemetry fires from the store (once per stream). The
+  // popover only handles the user-action "Continue" event below.
+  const question = getExplainConfig(target.kind)?.question(target);
 
   if (!entry || (entry.phase === "loading" && entry.text.length === 0)) {
     return (
@@ -73,7 +49,7 @@ const ExplainPopover = ({ target, onContinue }: Props) => {
       <p className="whitespace-pre-wrap" role="status" aria-live="polite">
         {entry.text}
       </p>
-      {entry.phase === "done" && (
+      {entry.phase === "done" && question && (
         <Button
           variant="outline"
           size="sm"
@@ -81,7 +57,7 @@ const ExplainPopover = ({ target, onContinue }: Props) => {
             trackEvent(OpikEvent.EXPLAIN_CONTINUE_CLICKED, {
               kind: target.kind,
             });
-            continueChat(target, config?.question(target) ?? "");
+            continueChat(target, question);
             onContinue();
           }}
         >

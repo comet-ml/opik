@@ -3,20 +3,18 @@ import { Sparkles } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { ExplainButtonProps } from "@/types/assistant-sidebar";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
-import useAssistantBackend from "@/plugins/comet/useAssistantBackend";
-import useExplainStore, { useIsExplainCapable } from "./explainStore";
+import useExplainStore, { useCanExplain } from "./explainStore";
 import { getExplainConfig } from "./registry";
 import ExplainPopover from "./ExplainPopover";
 
 const ExplainButton = ({ target }: ExplainButtonProps) => {
-  const capable = useIsExplainCapable();
-  const { isReady } = useAssistantBackend();
+  const canExplain = useCanExplain();
   const explain = useExplainStore((s) => s.explain);
   const config = getExplainConfig(target.kind);
   const [open, setOpen] = useState(false);
 
-  // Fail-closed: no console capability / pod not ready / unknown kind → no button.
-  if (!capable || !isReady || !config) return null;
+  // Fail-closed: pod not ready / no "explain" capability / unknown kind → no button.
+  if (!canExplain || !config) return null;
 
   return (
     <Popover
