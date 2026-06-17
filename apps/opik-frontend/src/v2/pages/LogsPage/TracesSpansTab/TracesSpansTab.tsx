@@ -104,8 +104,14 @@ import AutodetectCell from "@/shared/DataTableCells/AutodetectCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
 import EnvironmentCell from "@/shared/DataTableCells/EnvironmentCell";
 import CostCell from "@/shared/DataTableCells/CostCell";
-import ErrorCellWithExplain from "@/v2/pages/LogsPage/TracesSpansTab/ErrorCellWithExplain";
+import ErrorCell from "@/shared/DataTableCells/ErrorCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
+import { withExplain } from "@/v2/pages/LogsPage/TracesSpansTab/ExplainableCell";
+import {
+  buildCostTarget,
+  buildDurationTarget,
+  buildErrorTarget,
+} from "@/v2/pages/LogsPage/TracesSpansTab/explainTargets";
 import FeedbackScoreCell from "@/shared/DataTableCells/FeedbackScoreCell";
 import PrettyCell from "@/shared/DataTableCells/PrettyCell";
 import CommentsCell from "@/shared/DataTableCells/CommentsCell";
@@ -152,6 +158,15 @@ const formatSpanScoreLabel = (scoreName: string): string =>
 
 const parseSpanScoreName = (label: string): string =>
   label.replace(SPAN_FEEDBACK_SCORE_SUFFIX, "");
+
+// Error/Duration/Cost cells get the Ollie Explain button (OPIK-6425), scoped
+// to this table. The button is a no-op in OSS (PluginsStore slot is empty).
+const ErrorExplainCell = withExplain(ErrorCell as never, buildErrorTarget);
+const DurationExplainCell = withExplain(
+  DurationCell as never,
+  buildDurationTarget,
+);
+const CostExplainCell = withExplain(CostCell as never, buildCostTarget);
 
 const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
   {
@@ -204,13 +219,13 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     label: "Errors",
     statisticKey: "error_count",
     type: COLUMN_TYPE.errors,
-    cell: ErrorCellWithExplain as never,
+    cell: ErrorExplainCell as never,
   },
   {
     id: "duration",
     label: "Duration",
     type: COLUMN_TYPE.duration,
-    cell: DurationCell as never,
+    cell: DurationExplainCell as never,
     statisticDataFormater: formatDuration,
     statisticTooltipFormater: formatDuration,
   },
@@ -257,7 +272,7 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     id: "total_estimated_cost",
     label: "Estimated cost",
     type: COLUMN_TYPE.cost,
-    cell: CostCell as never,
+    cell: CostExplainCell as never,
     explainer: EXPLAINERS_MAP[EXPLAINER_ID.hows_the_cost_estimated],
     size: 160,
     statisticDataFormater: formatCost,
