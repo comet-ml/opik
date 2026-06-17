@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Dict, Optional
 
 import opik
-from opik.api_objects.prompt import Prompt, ChatPrompt
 from opik.api_objects.prompt.types import PromptType
 from rich.console import Console
 
@@ -135,8 +134,10 @@ def import_prompts_from_directory(
                             skipped_count += 1
                             continue
 
-                        # Create ChatPrompt
-                        ChatPrompt(
+                        # Use the client factory (the opik.ChatPrompt()
+                        # constructor is deprecated) so the prompt lands in the
+                        # target project without a per-prompt deprecation warning.
+                        client.create_chat_prompt(
                             name=prompt_name,
                             messages=prompt_content,
                             metadata=metadata,
@@ -156,8 +157,9 @@ def import_prompts_from_directory(
                             skipped_count += 1
                             continue
 
-                        # Create Prompt
-                        Prompt(
+                        # Use the client factory (the opik.Prompt() constructor
+                        # is deprecated).
+                        client.create_prompt(
                             name=prompt_name,
                             prompt=prompt_content,
                             metadata=metadata,

@@ -244,15 +244,14 @@ class TestPromptTypeResolution:
             prompt_file = Path(tmp) / "prompt_test.json"
             prompt_file.write_text(json.dumps(prompt_data))
 
-            with patch("opik.cli.imports.prompt.Prompt"):
-                result = import_prompts_from_directory(
-                    client=mock_client,
-                    source_dir=Path(tmp),
-                    project_name="test-project",
-                    dry_run=False,
-                    name_pattern=None,
-                    debug=False,
-                )
+            result = import_prompts_from_directory(
+                client=mock_client,
+                source_dir=Path(tmp),
+                project_name="test-project",
+                dry_run=False,
+                name_pattern=None,
+                debug=False,
+            )
 
             # Should have imported one prompt, not skipped it
             assert result.get("prompts", 0) == 1
@@ -278,15 +277,14 @@ class TestPromptTypeResolution:
             prompt_file = Path(tmp) / "prompt_test2.json"
             prompt_file.write_text(json.dumps(prompt_data))
 
-            with patch("opik.cli.imports.prompt.Prompt"):
-                result = import_prompts_from_directory(
-                    client=mock_client,
-                    source_dir=Path(tmp),
-                    project_name="test-project",
-                    dry_run=False,
-                    name_pattern=None,
-                    debug=False,
-                )
+            result = import_prompts_from_directory(
+                client=mock_client,
+                source_dir=Path(tmp),
+                project_name="test-project",
+                dry_run=False,
+                name_pattern=None,
+                debug=False,
+            )
 
             # Falls back to MUSTACHE → still imports successfully
             assert result.get("prompts", 0) == 1

@@ -89,6 +89,16 @@ def _seed_project_meta(tmp_path: Path) -> Path:
     return proj
 
 
+def _manifest_dir(tmp_path: Path) -> Path:
+    """Destination-keyed import-manifest dir for the default (no --to-project)
+    case, where the destination project == the source project name."""
+    from opik.cli.imports.utils import destination_manifest_dir
+
+    return destination_manifest_dir(
+        tmp_path / _WORKSPACE / "projects" / _PROJECT, _PROJECT
+    )
+
+
 def _fake_prepare_export_dir(client, output_path, workspace, project_name):
     """Stand-in for prepare_project_export_dir that skips ID resolution (the
     client is mocked) and returns a deterministic id-named project dir."""
@@ -457,7 +467,7 @@ class TestImportAll:
         mock_proj.assert_called_once()
         mock_exp.assert_called_once()
 
-        m = MigrationManifest(tmp_path / _WORKSPACE / "projects" / _PROJECT)
+        m = MigrationManifest(_manifest_dir(tmp_path))
         assert m.is_completed
 
     def test_dry_run_skips_manifest_and_flush(self, tmp_path):
@@ -497,7 +507,7 @@ class TestImportAll:
 
     def test_completed_manifest_returns_early_without_reimporting(self, tmp_path):
         """A completed manifest without --force causes immediate return."""
-        manifest = MigrationManifest(tmp_path / _WORKSPACE / "projects" / _PROJECT)
+        manifest = MigrationManifest(_manifest_dir(tmp_path))
         manifest.start()
         manifest.complete()
 
@@ -539,7 +549,7 @@ class TestImportAll:
     def test_force_flag_resets_completed_manifest_and_reimports(self, tmp_path):
         """--force discards a completed manifest and runs all requested phases."""
         (tmp_path / _WORKSPACE / "projects" / _PROJECT / "datasets").mkdir(parents=True)
-        manifest = MigrationManifest(tmp_path / _WORKSPACE / "projects" / _PROJECT)
+        manifest = MigrationManifest(_manifest_dir(tmp_path))
         manifest.start()
         manifest.complete()
 
@@ -580,7 +590,7 @@ class TestImportAll:
         (tmp_path / _WORKSPACE / "projects" / _PROJECT / "prompts").mkdir(parents=True)
 
         # Simulate an interrupted import
-        manifest = MigrationManifest(tmp_path / _WORKSPACE / "projects" / _PROJECT)
+        manifest = MigrationManifest(_manifest_dir(tmp_path))
         manifest.start()
 
         client = _make_import_client()
@@ -614,7 +624,7 @@ class TestImportAll:
 
         mock_ds.assert_called_once()
         mock_pr.assert_called_once()
-        m = MigrationManifest(tmp_path / _WORKSPACE / "projects" / _PROJECT)
+        m = MigrationManifest(_manifest_dir(tmp_path))
         assert m.is_completed
 
     def test_include_filter_runs_only_specified_phases(self, tmp_path):
@@ -781,6 +791,53 @@ class TestImportAll:
         # short-circuit and never call the importer.
         mock_ds_ok = _run_import_datasets({"datasets": 1})
         assert mock_ds_ok.called
+
+    def test_to_project_imports_are_independent(self, tmp_path):
+        """Importing one exported project into different --to-project targets must
+        keep independent resume/completion state: a clean import into A must not
+        short-circuit a later import into B (which would write nothing to B).
+        Verified via observable behavior — the importer runs on both A and B.
+        """
+        (tmp_path / _WORKSPACE / "projects" / _PROJECT / "datasets").mkdir(parents=True)
+        client = _make_import_client()
+        _seed_project_meta(tmp_path)
+
+        from opik.cli.imports.all import import_all
+
+        def _run_into(to_project):
+            mock_ds = MagicMock(return_value={"datasets": 1})
+            with (
+                patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client),
+                patch(f"{_IMPORT_MODULE}.import_datasets_from_directory", mock_ds),
+                patch(
+                    f"{_IMPORT_MODULE}.import_prompts_from_directory",
+                    return_value={"prompts": 0},
+                ),
+                patch(
+                    f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}
+                ),
+                patch(
+                    f"{_IMPORT_MODULE}.import_experiments_from_directory",
+                    return_value={},
+                ),
+            ):
+                import_all(
+                    workspace="ws",
+                    project_name=_PROJECT,
+                    path=str(tmp_path),
+                    include=["datasets"],
+                    dry_run=False,
+                    force=False,
+                    debug=False,
+                    to_project=to_project,
+                )
+            return mock_ds
+
+        # Clean import into A completes (and marks A's manifest completed).
+        assert _run_into("dest-a").called
+        # A later import into B must still run — its own (separate) manifest is
+        # not yet completed, so it does not short-circuit on "already completed".
+        assert _run_into("dest-b").called
 
     def test_flush_timeout_exits_with_code_1(self, tmp_path):
         """If client.flush() returns False (timeout), import_all raises SystemExit(1)."""

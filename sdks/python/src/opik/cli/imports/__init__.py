@@ -16,6 +16,7 @@ from .project import import_traces_from_directory
 from .prompt import import_prompts_from_directory
 from .utils import (
     debug_print,
+    destination_manifest_dir,
     finalize_import,
     no_attachments_option,
     print_import_summary,
@@ -82,14 +83,17 @@ def _import_by_type(
         # ------------------------------------------------------------------
         # Manifest lifecycle management
         # MigrationManifest is only constructed for real (non-dry-run) imports
-        # so that --dry-run never creates the manifest DB on disk.
+        # so that --dry-run never creates the manifest DB on disk. The manifest
+        # is keyed by the destination project so importing the same source into
+        # different --to-project targets keeps independent resume state.
         # ------------------------------------------------------------------
         manifest: Optional[MigrationManifest] = None
+        manifest_dir = destination_manifest_dir(project_root, target_project_name)
 
         if not dry_run:
-            manifest = MigrationManifest(project_root)
+            manifest = MigrationManifest(manifest_dir)
             if force:
-                if MigrationManifest.exists(project_root):
+                if MigrationManifest.exists(manifest_dir):
                     manifest.reset()
                     console.print(
                         "[yellow]--force: discarding existing manifest, starting fresh[/yellow]"

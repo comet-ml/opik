@@ -1,5 +1,6 @@
 """Common utilities for import functionality."""
 
+import hashlib
 import json
 import sys
 from collections import deque
@@ -92,10 +93,22 @@ def find_project_export_dir(base_path: Path, project_name: str) -> Optional[Path
     projects_dir = base_path / "projects"
     if not projects_dir.is_dir():
         return None
-    for child in sorted(projects_dir.iterdir()):
-        if child.is_dir() and _read_project_metadata_name(child) == project_name:
-            return child
-    return None
+    matches = [
+        child
+        for child in sorted(projects_dir.iterdir())
+        if child.is_dir() and _read_project_metadata_name(child) == project_name
+    ]
+    if not matches:
+        return None
+    if len(matches) > 1:
+        # Ambiguous: e.g. a project renamed and re-exported, or the name reused
+        # across folders. Surface it rather than silently picking by sort order.
+        console.print(
+            f"[yellow]Warning: {len(matches)} exported folders record project "
+            f"name '{project_name}' ({', '.join(m.name for m in matches)}); "
+            f"using '{matches[0].name}'.[/yellow]"
+        )
+    return matches[0]
 
 
 def available_project_names(base_path: Path) -> List[str]:
@@ -136,6 +149,24 @@ def resolve_import_project_root(
         )
         sys.exit(1)
     return project_root, (to_project or project_name)
+
+
+def destination_manifest_dir(project_root: Path, destination_project_name: str) -> Path:
+    """Return the per-destination import-manifest directory under the source folder.
+
+    The resume/completion manifest must be keyed by the *destination* project, not
+    just the source folder: importing the same exported project into different
+    ``--to-project`` targets must keep independent state (each destination gets its
+    own newly-created trace ids and completion status). Without this, a clean
+    import into A would make a later import into B short-circuit on
+    ``manifest.is_completed`` (and a partially-failed import into A would resume
+    into B, splitting one project's data across two destinations).
+
+    Destination names may contain ``/``, ``:`` or whitespace, so the directory is
+    keyed by a short hash of the name rather than the name itself.
+    """
+    dest_key = hashlib.sha256(destination_project_name.encode("utf-8")).hexdigest()[:16]
+    return project_root / "import_manifests" / dest_key
 
 
 def finalize_import(
