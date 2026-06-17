@@ -62,8 +62,10 @@ def import_all(
             client = opik.Opik(workspace=workspace)
 
         # Locate the exported project folder by its recorded name (folders are
-        # keyed by id on disk; project.json holds the human name).
-        base_path = Path(path)
+        # keyed by id on disk; project.json holds the human name). The workspace
+        # segment mirrors the export layout (PATH/WORKSPACE/projects/<id>/) so
+        # the same --path round-trips between export and import.
+        base_path = Path(path) / workspace
         project_root = find_project_export_dir(base_path, project_name)
         if project_root is None:
             available = available_project_names(base_path)

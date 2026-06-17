@@ -653,7 +653,7 @@ class TestCLIImportExport:
             source_project_name,
             "traces",
             "--path",
-            str(test_data_dir / "default"),
+            str(test_data_dir),
         ]
 
         result = self._run_cli_command(import_cmd)

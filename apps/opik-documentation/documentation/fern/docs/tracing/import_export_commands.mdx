@@ -148,9 +148,9 @@ Imports specific data types from local files into the specified project.
 **Note:** Experiment imports automatically recreate experiments where possible. No additional flags are needed.
 
 **Note:** `PROJECT` is matched by name against the `name` recorded in each
-exported `project.json` (folders on disk are named by project ID). Point
-`--path` at the directory that contains `projects/` — i.e. the workspace
-directory produced by export (`<export --path>/<workspace>`).
+exported `project.json` (folders on disk are named by project ID). Import uses
+the same `--path` as export — both resolve `<path>/<workspace>/projects/<id>/` —
+so the same `--path` round-trips with no path juggling.
 
 ### Resumable imports
 
@@ -455,9 +455,9 @@ your destination credentials. The `migration_manifest.db` created during
 import travels with the exported data and makes the import safe to interrupt
 and resume.
 
-Export writes to `<--path>/<workspace>/projects/<project_id>/`, so on import
-point `--path` at the workspace directory (one level below the export `--path`).
-Add `--to-project <NAME>` to import into a different destination project.
+Export writes to `<--path>/<workspace>/projects/<project_id>/`, and import reads
+the same layout, so use the same `--path` on both sides. Add `--to-project <NAME>`
+to import into a different destination project.
 
 ```bash
 # Step 1: Export from source (run with source API key / Opik URL)
@@ -466,10 +466,9 @@ OPIK_API_KEY=<source_key> OPIK_URL_OVERRIDE=https://source.opik.example.com \
   opik export my-workspace my-project traces --path ./migration_data
 
 # Step 2: Import to destination (run with destination API key / Opik URL)
-# Point --path at the workspace dir produced by export.
-# If this is interrupted, just re-run the same command — it resumes automatically.
+# Same --path as export. If interrupted, just re-run — it resumes automatically.
 OPIK_API_KEY=<dest_key> OPIK_URL_OVERRIDE=https://dest.opik.example.com \
-  opik import my-workspace my-project traces --path ./migration_data/my-workspace
+  opik import my-workspace my-project traces --path ./migration_data
 ```
 
 To migrate all data types at once:
@@ -481,12 +480,11 @@ OPIK_API_KEY=<source_key> opik export my-workspace my-project prompt "my-prompt"
 OPIK_API_KEY=<source_key> opik export my-workspace my-project traces --path ./migration_data
 OPIK_API_KEY=<source_key> opik export my-workspace my-project experiment "my-experiment" --path ./migration_data
 
-# Import everything (destination credentials).
-# Point --path at the workspace dir produced by export.
-OPIK_API_KEY=<dest_key> opik import my-workspace my-project dataset "my-dataset" --path ./migration_data/my-workspace
-OPIK_API_KEY=<dest_key> opik import my-workspace my-project prompt "my-prompt" --path ./migration_data/my-workspace
-OPIK_API_KEY=<dest_key> opik import my-workspace my-project traces --path ./migration_data/my-workspace
-OPIK_API_KEY=<dest_key> opik import my-workspace my-project experiment "my-experiment" --path ./migration_data/my-workspace
+# Import everything (destination credentials) — same --path as export.
+OPIK_API_KEY=<dest_key> opik import my-workspace my-project dataset "my-dataset" --path ./migration_data
+OPIK_API_KEY=<dest_key> opik import my-workspace my-project prompt "my-prompt" --path ./migration_data
+OPIK_API_KEY=<dest_key> opik import my-workspace my-project traces --path ./migration_data
+OPIK_API_KEY=<dest_key> opik import my-workspace my-project experiment "my-experiment" --path ./migration_data
 ```
 
 ### 2. Data Backup
@@ -669,17 +667,17 @@ cat ./temp_data/my-workspace/projects/*/project.json   # maps the ID folder to t
 ls ./temp_data/my-workspace/projects/*/datasets/
 cat ./temp_data/my-workspace/projects/*/trace_*.json | head -20
 
-# 3. Dry run import to see what would be imported (point --path at the workspace dir)
-opik import my-workspace my-project dataset "my-dataset" --path ./temp_data/my-workspace --dry-run
-opik import my-workspace my-project traces --path ./temp_data/my-workspace --dry-run
-opik import my-workspace my-project experiment "my-experiment" --path ./temp_data/my-workspace --dry-run
-opik import my-workspace my-project prompt "my-template" --path ./temp_data/my-workspace --dry-run
+# 3. Dry run import to see what would be imported (same --path as export)
+opik import my-workspace my-project dataset "my-dataset" --path ./temp_data --dry-run
+opik import my-workspace my-project traces --path ./temp_data --dry-run
+opik import my-workspace my-project experiment "my-experiment" --path ./temp_data --dry-run
+opik import my-workspace my-project prompt "my-template" --path ./temp_data --dry-run
 
 # 4. Import all data — if interrupted, just re-run the same commands to resume
-opik import my-workspace my-project dataset "my-dataset" --path ./temp_data/my-workspace
-opik import my-workspace my-project traces --path ./temp_data/my-workspace
-opik import my-workspace my-project experiment "my-experiment" --path ./temp_data/my-workspace
-opik import my-workspace my-project prompt "my-template" --path ./temp_data/my-workspace
+opik import my-workspace my-project dataset "my-dataset" --path ./temp_data
+opik import my-workspace my-project traces --path ./temp_data
+opik import my-workspace my-project experiment "my-experiment" --path ./temp_data
+opik import my-workspace my-project prompt "my-template" --path ./temp_data
 
 # 5. Clean up temporary data
 rm -rf ./temp_data

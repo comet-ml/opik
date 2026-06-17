@@ -54,6 +54,7 @@ from opik.cli.migration_manifest import MigrationManifest
 
 _PROJECT = "proj"
 _PROJECT_ID = "proj-id"
+_WORKSPACE = "ws"
 _IMPORT_MODULE = "opik.cli.imports.all"
 _EXPORT_MODULE = "opik.cli.exports.all"
 
@@ -80,7 +81,7 @@ def _seed_project_meta(tmp_path: Path) -> Path:
     the source project by its recorded name. Folders are keyed by id on disk; the
     folder name is irrelevant — find_project_export_dir matches project.json's name.
     """
-    proj = tmp_path / "projects" / _PROJECT
+    proj = tmp_path / _WORKSPACE / "projects" / _PROJECT
     proj.mkdir(parents=True, exist_ok=True)
     (proj / "project.json").write_text(
         json.dumps({"id": _PROJECT_ID, "name": _PROJECT})
@@ -389,7 +390,7 @@ class TestImportAll:
     def test_fresh_run_calls_all_phases_and_completes_manifest(self, tmp_path):
         """A fresh import runs all four phases and marks the manifest completed."""
         for d in ("datasets", "prompts", "experiments"):
-            (tmp_path / "projects" / _PROJECT / d).mkdir(parents=True)
+            (tmp_path / _WORKSPACE / "projects" / _PROJECT / d).mkdir(parents=True)
 
         client = _make_import_client()
         _seed_project_meta(tmp_path)
@@ -426,12 +427,12 @@ class TestImportAll:
         mock_proj.assert_called_once()
         mock_exp.assert_called_once()
 
-        m = MigrationManifest(tmp_path / "projects" / _PROJECT)
+        m = MigrationManifest(tmp_path / _WORKSPACE / "projects" / _PROJECT)
         assert m.is_completed
 
     def test_dry_run_skips_manifest_and_flush(self, tmp_path):
         """Dry-run must not create a manifest or flush the client."""
-        (tmp_path / "projects" / _PROJECT / "datasets").mkdir(parents=True)
+        (tmp_path / _WORKSPACE / "projects" / _PROJECT / "datasets").mkdir(parents=True)
         client = _make_import_client()
         _seed_project_meta(tmp_path)
 
@@ -459,12 +460,14 @@ class TestImportAll:
                 debug=False,
             )
 
-        assert not MigrationManifest.exists(tmp_path / "projects" / _PROJECT)
+        assert not MigrationManifest.exists(
+            tmp_path / _WORKSPACE / "projects" / _PROJECT
+        )
         client.flush.assert_not_called()
 
     def test_completed_manifest_returns_early_without_reimporting(self, tmp_path):
         """A completed manifest without --force causes immediate return."""
-        manifest = MigrationManifest(tmp_path / "projects" / _PROJECT)
+        manifest = MigrationManifest(tmp_path / _WORKSPACE / "projects" / _PROJECT)
         manifest.start()
         manifest.complete()
 
@@ -505,8 +508,8 @@ class TestImportAll:
 
     def test_force_flag_resets_completed_manifest_and_reimports(self, tmp_path):
         """--force discards a completed manifest and runs all requested phases."""
-        (tmp_path / "projects" / _PROJECT / "datasets").mkdir(parents=True)
-        manifest = MigrationManifest(tmp_path / "projects" / _PROJECT)
+        (tmp_path / _WORKSPACE / "projects" / _PROJECT / "datasets").mkdir(parents=True)
+        manifest = MigrationManifest(tmp_path / _WORKSPACE / "projects" / _PROJECT)
         manifest.start()
         manifest.complete()
 
@@ -543,11 +546,11 @@ class TestImportAll:
 
     def test_resume_in_progress_manifest_runs_phases_and_completes(self, tmp_path):
         """An in_progress manifest is treated as a resume; phases run and manifest completes."""
-        (tmp_path / "projects" / _PROJECT / "datasets").mkdir(parents=True)
-        (tmp_path / "projects" / _PROJECT / "prompts").mkdir(parents=True)
+        (tmp_path / _WORKSPACE / "projects" / _PROJECT / "datasets").mkdir(parents=True)
+        (tmp_path / _WORKSPACE / "projects" / _PROJECT / "prompts").mkdir(parents=True)
 
         # Simulate an interrupted import
-        manifest = MigrationManifest(tmp_path / "projects" / _PROJECT)
+        manifest = MigrationManifest(tmp_path / _WORKSPACE / "projects" / _PROJECT)
         manifest.start()
 
         client = _make_import_client()
@@ -581,12 +584,12 @@ class TestImportAll:
 
         mock_ds.assert_called_once()
         mock_pr.assert_called_once()
-        m = MigrationManifest(tmp_path / "projects" / _PROJECT)
+        m = MigrationManifest(tmp_path / _WORKSPACE / "projects" / _PROJECT)
         assert m.is_completed
 
     def test_include_filter_runs_only_specified_phases(self, tmp_path):
         """When include=['datasets'], only the dataset phase is called."""
-        (tmp_path / "projects" / _PROJECT / "datasets").mkdir(parents=True)
+        (tmp_path / _WORKSPACE / "projects" / _PROJECT / "datasets").mkdir(parents=True)
         client = _make_import_client()
         _seed_project_meta(tmp_path)
 
@@ -659,7 +662,7 @@ class TestImportAll:
 
     def test_flush_timeout_exits_with_code_1(self, tmp_path):
         """If client.flush() returns False (timeout), import_all raises SystemExit(1)."""
-        (tmp_path / "projects" / _PROJECT / "datasets").mkdir(parents=True)
+        (tmp_path / _WORKSPACE / "projects" / _PROJECT / "datasets").mkdir(parents=True)
         client = _make_import_client()
         _seed_project_meta(tmp_path)
         client.flush.return_value = False  # simulate timeout
@@ -693,7 +696,7 @@ class TestImportAll:
 
     def test_failed_uploads_exits_with_code_1(self, tmp_path):
         """If failed_uploads > 0, import_all raises SystemExit(1)."""
-        (tmp_path / "projects" / _PROJECT / "datasets").mkdir(parents=True)
+        (tmp_path / _WORKSPACE / "projects" / _PROJECT / "datasets").mkdir(parents=True)
         client = _make_import_client()
         _seed_project_meta(tmp_path)
         client.__internal_api__failed_uploads__ = MagicMock(return_value=3)
@@ -728,7 +731,7 @@ class TestImportAll:
     def test_intermediate_flush_after_prompts_imported(self, tmp_path):
         """client.flush() is called once after prompts phase (before end flush)
         when at least one prompt was imported."""
-        (tmp_path / "projects" / _PROJECT / "prompts").mkdir(parents=True)
+        (tmp_path / _WORKSPACE / "projects" / _PROJECT / "prompts").mkdir(parents=True)
         client = _make_import_client()
         _seed_project_meta(tmp_path)
 
@@ -762,7 +765,7 @@ class TestImportAll:
     def test_no_intermediate_flush_when_zero_prompts_imported(self, tmp_path):
         """client.flush() is called exactly once (end-of-import) when no prompts
         were imported — no intermediate flush is triggered."""
-        (tmp_path / "projects" / _PROJECT / "prompts").mkdir(parents=True)
+        (tmp_path / _WORKSPACE / "projects" / _PROJECT / "prompts").mkdir(parents=True)
         client = _make_import_client()
         _seed_project_meta(tmp_path)
 
@@ -812,7 +815,7 @@ class TestImportAll:
             from opik.cli.imports.all import import_all
 
             import_all(
-                workspace="my-ws",
+                workspace=_WORKSPACE,
                 project_name=_PROJECT,
                 path=str(tmp_path),
                 include=[],
@@ -825,7 +828,7 @@ class TestImportAll:
         mock_opik.assert_called_once()
         kwargs = mock_opik.call_args[1]
         assert kwargs.get("api_key") == "secret-key"
-        assert kwargs.get("workspace") == "my-ws"
+        assert kwargs.get("workspace") == _WORKSPACE
 
 
 # ---------------------------------------------------------------------------

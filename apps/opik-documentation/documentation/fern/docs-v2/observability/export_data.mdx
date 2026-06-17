@@ -191,7 +191,7 @@ opik import my-workspace my-project all --dry-run
 opik import my-workspace my-project all --to-project my-restore
 ```
 
-The project name is matched against the `name` recorded in each exported `project.json`, so point `--path` at the workspace directory produced by export (`<export --path>/<workspace>`). Use `--to-project <NAME>` to import into a different destination project (default: the source project's name).
+The project name is matched against the `name` recorded in each exported `project.json`. Import uses the same `--path` as export (both resolve `<path>/<workspace>/projects/<id>/`), so no path juggling is needed. Use `--to-project <NAME>` to import into a different destination project (default: the source project's name).
 
 Imports are automatically resumable — if interrupted, re-run the same command and it picks up where it left off using a local `migration_manifest.db`.
 
@@ -204,9 +204,9 @@ OPIK_API_KEY=<source_key> OPIK_URL_OVERRIDE=https://source.opik.example.com \
   opik export my-workspace my-project all --path ./migration_data
 
 # Step 2: Import to destination (use destination credentials)
-# Point --path at the workspace dir produced by export.
+# Same --path as export — import resolves <path>/my-workspace/projects/<id>/.
 OPIK_API_KEY=<dest_key> OPIK_URL_OVERRIDE=https://dest.opik.example.com \
-  opik import my-workspace my-project all --path ./migration_data/my-workspace
+  opik import my-workspace my-project all --path ./migration_data
 ```
 
 See the CLI help (`opik export --help` / `opik import --help`) for all options and troubleshooting.
