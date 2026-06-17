@@ -46,7 +46,8 @@ public interface FeedbackScoreDAO {
 
     Mono<Void> deleteByEntityIds(EntityType entityType, Set<UUID> entityIds, UUID projectId);
 
-    Mono<Long> deleteByEntityIdAndNames(EntityType entityType, UUID entityId, Set<String> names, String author);
+    Mono<Long> deleteByEntityIdAndNames(EntityType entityType, UUID entityId, Set<String> names, String author,
+            UUID sourceQueueId);
 
     Mono<Long> scoreBatchOf(EntityType entityType, List<? extends FeedbackScoreItem> scores, @Nullable String author);
 
@@ -124,6 +125,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             AND name = :name
             AND workspace_id = :workspace_id
             <if(author)>AND <author> = :author<endif>
+            <if(source_queue_id)>AND source_queue_id = :source_queue_id<endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -153,6 +155,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             <if(names)>AND name IN :names <endif>
             <if(project_id)>AND project_id = :project_id<endif>
             <if(sources)>AND source IN :sources<endif>
+            <if(source_queue_id)>AND source_queue_id = :source_queue_id<endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -400,11 +403,14 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             var deleteNonAuthoredOperation = Mono.from(statement1.execute())
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
 
-            // Delete from authored_feedback_scores table — always scope by current user
             var deleteAuthoredFeedbackScore = getSTWithLogComment(DELETE_FEEDBACK_SCORE,
                     "delete_authored_feedback_score", workspaceId, userName, "")
                     .add("table_name", "authored_feedback_scores")
                     .add("author", "author");
+
+            if (score.sourceQueueId() != null) {
+                deleteAuthoredFeedbackScore.add("source_queue_id", "source_queue_id");
+            }
 
             var statement2 = connection.createStatement(deleteAuthoredFeedbackScore.render());
             statement2
@@ -413,6 +419,10 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("name", score.name())
                     .bind("workspace_id", workspaceId)
                     .bind("author", userName);
+
+            if (score.sourceQueueId() != null) {
+                statement2.bind("source_queue_id", score.sourceQueueId().toString());
+            }
 
             return deleteNonAuthoredOperation
                     .then(Mono.from(statement2.execute()))
@@ -435,7 +445,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     @Override
     public Mono<Long> deleteByEntityIdAndNames(@NonNull EntityType entityType, @NonNull UUID entityId,
-            @NonNull Set<String> names, String author) {
+            @NonNull Set<String> names, String author, UUID sourceQueueId) {
 
         if (names.isEmpty()) {
             return Mono.just(0L);
@@ -466,6 +476,9 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             template2.add("names", names);
             template2.add("table_name", "authored_feedback_scores");
             template2.add("author", "author");
+            if (sourceQueueId != null) {
+                template2.add("source_queue_id", "source_queue_id");
+            }
 
             var statement2 = connection.createStatement(template2.render())
                     .bind("entity_ids", Set.of(entityId))
@@ -473,6 +486,9 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("names", names)
                     .bind("workspace_id", workspaceId)
                     .bind("author", userName);
+            if (sourceQueueId != null) {
+                statement2.bind("source_queue_id", sourceQueueId.toString());
+            }
 
             return deleteNonAuthoredOperation
                     .then(Mono.from(statement2.execute()))

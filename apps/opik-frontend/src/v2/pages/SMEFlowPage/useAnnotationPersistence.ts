@@ -177,6 +177,7 @@ export function useAnnotationPersistence({
             projectId: thread.project_id,
             projectName: annotationQueue.project_name,
             names: deletedScores.map((s) => s.name),
+            sourceQueueId: annotationQueue.id,
           });
         }
         if (changedScores.length) {
@@ -195,7 +196,11 @@ export function useAnnotationPersistence({
         }
       } else {
         deletedScores.forEach((score) => {
-          deleteTraceFeedbackScore({ traceId: item.id, name: score.name });
+          deleteTraceFeedbackScore({
+            traceId: item.id,
+            name: score.name,
+            sourceQueueId: annotationQueue?.id,
+          });
         });
         changedScores.forEach((score) => {
           setTraceFeedbackScore({

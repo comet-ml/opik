@@ -291,6 +291,7 @@ describe("useAnnotationPersistence", () => {
       expect(mockDeleteTraceFeedbackScore).toHaveBeenCalledWith({
         traceId: "trace-1",
         name: "accuracy",
+        sourceQueueId: "queue-1",
       });
     });
 

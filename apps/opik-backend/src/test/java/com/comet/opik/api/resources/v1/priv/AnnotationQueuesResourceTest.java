@@ -792,22 +792,24 @@ class AnnotationQueuesResourceTest {
             var retrievedA = annotationQueuesResourceClient.getAnnotationQueueById(
                     queueA.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
 
-            assertThat(retrievedA.feedbackScores()).hasSize(2);
-            var scoresA = retrievedA.feedbackScores().stream()
-                    .collect(toMap(FeedbackScoreAverage::name, FeedbackScoreAverage::value));
-            assertThat(scoresA.get("quality")).isEqualByComparingTo(new BigDecimal("0.8"));
-            assertThat(scoresA.get("relevance")).isEqualByComparingTo(new BigDecimal("0.8"));
+            assertThat(retrievedA.feedbackScores())
+                    .usingRecursiveComparison()
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .ignoringCollectionOrder()
+                    .isEqualTo(List.of(
+                            FeedbackScoreAverage.builder().name("quality").value(new BigDecimal("0.8")).build(),
+                            FeedbackScoreAverage.builder().name("relevance").value(new BigDecimal("0.8")).build()));
             verifyReviewers(retrievedA, 2L);
 
             // Queue B: avg quality = 0.3, no relevance, no comments — reviewer scored 1 item only
             var retrievedB = annotationQueuesResourceClient.getAnnotationQueueById(
                     queueB.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
 
-            assertThat(retrievedB.feedbackScores()).hasSize(1);
-            var scoresB = retrievedB.feedbackScores().stream()
-                    .collect(toMap(FeedbackScoreAverage::name, FeedbackScoreAverage::value));
-            assertThat(scoresB.get("quality")).isEqualByComparingTo(new BigDecimal("0.3"));
-            assertThat(scoresB).doesNotContainKey("relevance");
+            assertThat(retrievedB.feedbackScores())
+                    .usingRecursiveComparison()
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .isEqualTo(List.of(
+                            FeedbackScoreAverage.builder().name("quality").value(new BigDecimal("0.3")).build()));
             verifyReviewers(retrievedB, 1L);
         }
 

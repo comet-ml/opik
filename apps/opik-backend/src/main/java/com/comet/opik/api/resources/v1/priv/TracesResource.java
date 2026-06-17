@@ -965,7 +965,8 @@ public class TracesResource {
                 scores.threadId(),
                 projectName, scores.author(), workspaceId);
 
-        feedbackScoreService.deleteThreadScores(projectName, scores.threadId(), scores.names(), scores.author())
+        feedbackScoreService.deleteThreadScores(projectName, scores.threadId(), scores.names(), scores.author(),
+                scores.sourceQueueId())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
