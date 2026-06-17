@@ -89,6 +89,11 @@ public class DatasetExportJobSubscriber extends BaseRedisSubscriber<DatasetExpor
                         .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER)); // System user for async processing
     }
 
+    @Override
+    protected MessageContext messageContext(DatasetExportMessage message) {
+        return new MessageContext(message.workspaceId(), message.workspaceName(), RequestContext.SYSTEM_USER);
+    }
+
     private boolean isDisabled() {
         if (!config.isEnabled()) {
             log.info("Dataset export job subscriber is disabled, skipping lifecycle operation");

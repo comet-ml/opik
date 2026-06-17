@@ -1,8 +1,10 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.infrastructure.StreamConfiguration;
+import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import io.dropwizard.lifecycle.Managed;
 import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.DoubleGauge;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongHistogram;
@@ -12,6 +14,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RStreamReactive;
 import org.redisson.api.RedissonReactiveClient;
 import org.redisson.api.options.PlainOptions;
@@ -358,7 +361,8 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .flatMap(this::postProcessFailureMessages)
                 // Unexpected errors handling: interval is dropped, but processing continues
                 .onErrorContinue((throwable, object) -> {
-                    unexpectedErrors.add(1);
+                    unexpectedErrors.add(1, Attributes.of(
+                            ErrorMetricsResolver.ERROR_TYPE_KEY, ErrorMetricsResolver.errorType(throwable)));
                     log.error("Unexpected error processing message from Redis stream '{}'", object, throwable);
                 })
                 .name("redis-subscriber")
@@ -455,6 +459,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                     .messageId(messageId)
                     .status(MessageStatus.FAILURE)
                     .error(classCastException)
+                    .context(MessageContext.UNKNOWN)
                     .build());
         }
         var startMillis = System.currentTimeMillis();
@@ -466,10 +471,13 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                         .status(MessageStatus.SUCCESS)
                         .build())
                 .doOnSuccess(r -> log.info("Successfully processed message messageId '{}'", entry.getKey()))
+                // The context is only read on the failure path, so resolve it lazily here rather than for
+                // every processed message.
                 .onErrorResume(throwable -> Mono.just(ProcessingResult.builder()
                         .messageId(messageId)
                         .status(MessageStatus.FAILURE)
                         .error(throwable)
+                        .context(message != null ? messageContext(message) : MessageContext.UNKNOWN)
                         .build()))
                 .doFinally(signalType -> {
                     messageProcessingTime.record(System.currentTimeMillis() - startMillis);
@@ -497,7 +505,18 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
             return Mono.just(processingResults);
         }
 
-        messageProcessingErrors.add(failures.size());
+        failures.forEach(failure -> {
+            var failureContext = failure.context() != null ? failure.context() : MessageContext.UNKNOWN;
+            messageProcessingErrors.add(1, Attributes.builder()
+                    .put(ErrorMetricsResolver.ERROR_TYPE_KEY, ErrorMetricsResolver.errorType(failure.error()))
+                    .put(ErrorMetricsResolver.WORKSPACE_ID_KEY,
+                            StringUtils.defaultIfBlank(failureContext.workspaceId(), ErrorMetricsResolver.UNKNOWN))
+                    .put(ErrorMetricsResolver.WORKSPACE_NAME_KEY,
+                            StringUtils.defaultIfBlank(failureContext.workspaceName(), ErrorMetricsResolver.UNKNOWN))
+                    .put(ErrorMetricsResolver.USER_NAME_KEY,
+                            StringUtils.defaultIfBlank(failureContext.userName(), ErrorMetricsResolver.UNKNOWN))
+                    .build());
+        });
 
         // Separate non-retryable failures first as no need to query delivery count, ack and remove all
         var nonRetryable = failures.stream()
@@ -648,7 +667,27 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
 
     @Builder(toBuilder = true)
     private record ProcessingResult(
-            StreamMessageId messageId, MessageStatus status, Throwable error, long deliveryCount) {
+            StreamMessageId messageId, MessageStatus status, Throwable error, long deliveryCount,
+            MessageContext context) {
+    }
+
+    /**
+     * Workspace/user a message belongs to, used to attribute error metrics. Mirrors the context
+     * subclasses set into the Reactor context inside {@link #processEvent(Object)}.
+     */
+    protected record MessageContext(String workspaceId, String workspaceName, String userName) {
+        static final MessageContext UNKNOWN = new MessageContext(ErrorMetricsResolver.UNKNOWN,
+                ErrorMetricsResolver.UNKNOWN,
+                ErrorMetricsResolver.UNKNOWN);
+    }
+
+    /**
+     * Hook for subclasses to expose the workspace/user a message belongs to, so processing-error
+     * metrics can be attributed. Defaults to {@link MessageContext#UNKNOWN}; override to return the
+     * same values fed to {@code contextWrite} in {@link #processEvent(Object)}.
+     */
+    protected MessageContext messageContext(M message) {
+        return MessageContext.UNKNOWN;
     }
 
     private enum MessageStatus {

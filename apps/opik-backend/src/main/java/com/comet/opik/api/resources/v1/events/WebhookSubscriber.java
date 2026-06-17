@@ -51,6 +51,11 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
     }
 
     @Override
+    protected MessageContext messageContext(WebhookEvent<?> event) {
+        return new MessageContext(event.getWorkspaceId(), event.getWorkspaceName(), event.getUserName());
+    }
+
+    @Override
     protected Mono<Void> processEvent(@NonNull WebhookEvent<?> event) {
         log.debug("Processing webhook event: id='{}', type='{}', url='{}'",
                 event.getId(), event.getEventType(), event.getUrl());
