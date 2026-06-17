@@ -15,12 +15,10 @@ from .experiment import import_experiments_from_directory
 from .project import import_traces_from_directory
 from .prompt import import_prompts_from_directory
 from .utils import (
-    available_project_names,
     debug_print,
-    find_project_export_dir,
     no_attachments_option,
     print_import_summary,
-    resolve_import_base_path,
+    resolve_import_project_root,
     to_project_option,
 )
 
@@ -70,27 +68,15 @@ def _import_by_type(
         else:
             client = opik.Opik(workspace=workspace)
 
-        # Locate the exported project folder by its recorded name (folders are
-        # keyed by id on disk; project.json holds the human name). Prefers
-        # PATH/WORKSPACE/projects/ (symmetric with export) and falls back to
-        # PATH/projects/ for cross-workspace imports.
-        base_path = resolve_import_base_path(path, workspace)
-        project_root = find_project_export_dir(base_path, project_name)
-        if project_root is None:
-            available = available_project_names(base_path)
-            hint = (
-                f" Available: {', '.join(available)}"
-                if available
-                else " No exported projects were found."
-            )
-            console.print(
-                f"[red]No exported project named '{project_name}' under "
-                f"{base_path / 'projects'}.{hint}[/red]"
-            )
-            sys.exit(1)
-
-        # Data is created in --to-project when given, else the source name.
-        target_project_name = to_project or project_name
+        # Locate the exported project folder by its recorded name and resolve
+        # the destination project. Folders are keyed by id on disk; project.json
+        # holds the human name. The source folder is found under
+        # PATH/WORKSPACE/projects/ (symmetric with export), falling back to
+        # PATH/projects/ for cross-workspace imports. Data is created in
+        # --to-project when given, else the source name.
+        project_root, target_project_name = resolve_import_project_root(
+            path, workspace, project_name, to_project
+        )
 
         # ------------------------------------------------------------------
         # Manifest lifecycle management

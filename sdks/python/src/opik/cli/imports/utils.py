@@ -1,9 +1,10 @@
 """Common utilities for import functionality."""
 
 import json
+import sys
 from collections import deque
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import click
 import opik
@@ -58,14 +59,23 @@ def resolve_import_base_path(path: str, workspace: str) -> Path:
 
 
 def _read_project_metadata_name(project_dir: Path) -> Optional[str]:
-    """Return the recorded project name from ``<project_dir>/project.json``."""
+    """Return the recorded project name from ``<project_dir>/project.json``.
+
+    Returns ``None`` for a missing/unreadable/malformed file, a non-object JSON
+    body, or a non-string ``name`` — so a corrupt ``project.json`` can never
+    crash ``find_project_export_dir`` / ``available_project_names``.
+    """
     meta = project_dir / PROJECT_METADATA_FILENAME
     if not meta.exists():
         return None
     try:
-        return json.loads(meta.read_text(encoding="utf-8")).get("name")
+        data = json.loads(meta.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
+    if not isinstance(data, dict):
+        return None
+    name = data.get("name")
+    return name if isinstance(name, str) else None
 
 
 def find_project_export_dir(base_path: Path, project_name: str) -> Optional[Path]:
@@ -96,6 +106,33 @@ def available_project_names(base_path: Path) -> List[str]:
         if child.is_dir() and (name := _read_project_metadata_name(child)) is not None
     ]
     return names
+
+
+def resolve_import_project_root(
+    path: str, workspace: str, project_name: str, to_project: Optional[str] = None
+) -> Tuple[Path, str]:
+    """Locate the exported project folder and resolve the destination project.
+
+    Shared by ``import_all`` and ``_import_by_type`` so the source lookup and the
+    not-found messaging stay in sync. Returns ``(project_root, target_project_name)``
+    where ``target_project_name`` is ``to_project`` when given, else ``project_name``.
+    Prints an error and exits with code 1 when no exported project records the name.
+    """
+    base_path = resolve_import_base_path(path, workspace)
+    project_root = find_project_export_dir(base_path, project_name)
+    if project_root is None:
+        available = available_project_names(base_path)
+        hint = (
+            f" Available: {', '.join(available)}"
+            if available
+            else " No exported projects were found."
+        )
+        console.print(
+            f"[red]No exported project named '{project_name}' under "
+            f"{base_path / 'projects'}.{hint}[/red]"
+        )
+        sys.exit(1)
+    return project_root, (to_project or project_name)
 
 
 def debug_print(message: str, debug: bool) -> None:
