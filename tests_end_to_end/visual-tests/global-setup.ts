@@ -9,6 +9,8 @@ const authFile = path.join(__dirname, AUTH_STATE_FILE);
 
 // Fixed names — no timestamp suffix so screenshots are identical across runs
 const PROJECT_NAME = 'visual-project';
+const DATASET_NAME = 'visual-dataset';
+const TEST_SUITE_NAME = 'visual-testsuite';
 
 async function globalSetup(_config: FullConfig) {
   const envConfig = getEnvironmentConfig();
@@ -60,6 +62,8 @@ async function globalSetup(_config: FullConfig) {
 
   // Clean up any leftover data from a previous run
   console.log('Cleaning up any existing test data...');
+  try { await client.deleteDataset(TEST_SUITE_NAME); } catch { /* ignore */ }
+  try { await client.deleteDataset(DATASET_NAME); } catch { /* ignore */ }
   try {
     await client.deleteProject(PROJECT_NAME);
     await client.waitForProjectDeleted(PROJECT_NAME, 30);

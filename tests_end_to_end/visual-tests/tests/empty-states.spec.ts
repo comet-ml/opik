@@ -5,6 +5,13 @@ import { LogsPage } from '../page-objects/logs.page';
 import { DatasetsPage } from '../page-objects/datasets.page';
 import { TestSuitesPage } from '../page-objects/test-suites.page';
 import { ExperimentsPage } from '../page-objects/experiments.page';
+import { DashboardsPage } from '../page-objects/dashboards.page';
+import { PromptsPage } from '../page-objects/prompts.page';
+import { AgentPlaygroundPage } from '../page-objects/agent-playground.page';
+import { OptimizationsPage } from '../page-objects/optimizations.page';
+import { AnnotationQueuesPage } from '../page-objects/annotation-queues.page';
+import { OnlineEvaluationPage } from '../page-objects/online-evaluation.page';
+import { AlertsPage } from '../page-objects/alerts.page';
 import { screenshot } from './utils/screenshot';
 
 test.setTimeout(300000);
@@ -58,5 +65,54 @@ test.describe('Visual Comparison - Empty States', () => {
     await experimentsPage.goto(projectId);
     await experimentsPage.waitForEmpty();
     await screenshot(page, 'E05-experiments-empty');
+  });
+
+  test('E06: Dashboards empty state', async ({ page }) => {
+    const dashboardsPage = new DashboardsPage(page, baseUrl, workspace);
+    await dashboardsPage.goto(projectId);
+    await dashboardsPage.waitForEmpty();
+    await screenshot(page, 'E06-dashboards-empty');
+  });
+
+  test('E07: Prompt Library empty state', async ({ page }) => {
+    const promptsPage = new PromptsPage(page, baseUrl, workspace);
+    await promptsPage.goto(projectId);
+    await promptsPage.waitForEmpty();
+    await screenshot(page, 'E07-prompts-empty');
+  });
+
+  test('E08: Agent Playground empty state', async ({ page }) => {
+    const agentPlaygroundPage = new AgentPlaygroundPage(page, baseUrl, workspace);
+    await agentPlaygroundPage.goto(projectId);
+    await agentPlaygroundPage.waitForEmpty();
+    await screenshot(page, 'E08-agent-playground-empty');
+  });
+
+  test('E09: Optimization runs empty state', async ({ page }) => {
+    const optimizationsPage = new OptimizationsPage(page, baseUrl, workspace);
+    await optimizationsPage.goto(projectId);
+    await optimizationsPage.waitForEmpty();
+    await screenshot(page, 'E09-optimizations-empty');
+  });
+
+  test('E10: Annotation queues empty state', async ({ page }) => {
+    const annotationQueuesPage = new AnnotationQueuesPage(page, baseUrl, workspace);
+    await annotationQueuesPage.goto(projectId);
+    await annotationQueuesPage.waitForEmpty();
+    await screenshot(page, 'E10-annotation-queues-empty');
+  });
+
+  test('E11: Online evaluation empty state', async ({ page }) => {
+    const onlineEvaluationPage = new OnlineEvaluationPage(page, baseUrl, workspace);
+    await onlineEvaluationPage.goto(projectId);
+    await onlineEvaluationPage.waitForEmpty();
+    await screenshot(page, 'E11-online-evaluation-empty');
+  });
+
+  test('E12: Alerts empty state', async ({ page }) => {
+    const alertsPage = new AlertsPage(page, baseUrl, workspace);
+    await alertsPage.goto(projectId);
+    await alertsPage.waitForEmpty();
+    await screenshot(page, 'E12-alerts-empty');
   });
 });
