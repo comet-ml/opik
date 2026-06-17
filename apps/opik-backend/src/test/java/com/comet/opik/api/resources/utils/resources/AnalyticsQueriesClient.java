@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @RequiredArgsConstructor
 public class AnalyticsQueriesClient {
 
-    private static final String RESOURCE_PATH = "%s/v1/internal/analytics-queries";
+    private static final String RESOURCE_PATH = "%s/v1/internal/analytics-queries/projects/%s";
 
     private final ClientSupport client;
     private final String baseURI;
@@ -31,11 +31,11 @@ public class AnalyticsQueriesClient {
     }
 
     public Response callExecute(UUID projectId, String query, String apiKey, String workspaceName) {
-        return client.target(RESOURCE_PATH.formatted(baseURI))
+        return client.target(RESOURCE_PATH.formatted(baseURI, projectId))
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
-                .post(Entity.entity(AnalyticsQueryRequest.builder().projectId(projectId).query(query).build(),
+                .post(Entity.entity(AnalyticsQueryRequest.builder().query(query).build(),
                         MediaType.APPLICATION_JSON_TYPE));
     }
 }

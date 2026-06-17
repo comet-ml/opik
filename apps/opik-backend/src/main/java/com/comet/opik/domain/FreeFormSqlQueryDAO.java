@@ -81,15 +81,18 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
                 .thenApply(FreeFormSqlQueryDAOImpl::readResult);
     }
 
+    /**
+     * try-with-resources closes {@link Records}, whose {@code close()} is a checked {@code Exception}; these run as a
+     * {@code thenApply} {@code Function}, which can't propagate checked exceptions, so we convert it to unchecked
+     * (RuntimeExceptions pass through unwrapped so the service's error mapping still sees the original cause).
+     */
     private static List<String> readNodeLabels(Records records) {
         try (records) {
             return StreamSupport.stream(records.spliterator(), false)
                     .map(node -> node.getString(EXPLAIN_AST_COLUMN))
                     .toList();
-        } catch (RuntimeException e) {
-            throw e;
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            throw e instanceof RuntimeException re ? re : new RuntimeException(e);
         }
     }
 
@@ -103,10 +106,8 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
                     .resultRows(records.getResultRows())
                     .readBytes(records.getReadBytes())
                     .build();
-        } catch (RuntimeException e) {
-            throw e;
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            throw e instanceof RuntimeException re ? re : new RuntimeException(e);
         }
     }
 }
