@@ -186,6 +186,12 @@ def import_all(
         # ------------------------------------------------------------------
         # Flush ingestion queue and check for upload failures
         # ------------------------------------------------------------------
+        # Total error count across all phases — computed before manifest.complete()
+        # so a partial failure never marks the manifest completed.
+        total_errors = sum(
+            value for key, value in total_stats.items() if key.endswith("_errors")
+        )
+
         if not dry_run:
             flushed = client.flush()
             if not flushed:
@@ -203,15 +209,16 @@ def import_all(
                 )
                 sys.exit(1)
 
+            # Mark complete only on a fully clean run, so a partial failure leaves
+            # the manifest in_progress and the next run resumes/retries instead of
+            # short-circuiting on manifest.is_completed.
             assert manifest is not None
-            manifest.complete()
+            if total_errors == 0:
+                manifest.complete()
 
         # ------------------------------------------------------------------
         # Summary
         # ------------------------------------------------------------------
-        total_errors = sum(
-            value for key, value in total_stats.items() if key.endswith("_errors")
-        )
         if total_errors > 0 and not dry_run:
             print_import_summary(total_stats)
             # Per-item errors were already printed in red by the importers; exit

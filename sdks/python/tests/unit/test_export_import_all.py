@@ -727,6 +727,44 @@ class TestImportAll:
 
         assert exc_info.value.code == 1
 
+    def test_phase_errors_leave_manifest_incomplete(self, tmp_path):
+        """A failed import must NOT mark the manifest completed, so a non---force
+        rerun resumes/retries instead of short-circuiting on is_completed."""
+        (tmp_path / _WORKSPACE / "projects" / _PROJECT / "datasets").mkdir(parents=True)
+        client = _make_import_client()
+        _seed_project_meta(tmp_path)
+
+        with (
+            patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client),
+            patch(
+                f"{_IMPORT_MODULE}.import_datasets_from_directory",
+                return_value={"datasets": 0, "datasets_errors": 1},
+            ),
+            patch(
+                f"{_IMPORT_MODULE}.import_prompts_from_directory",
+                return_value={"prompts": 0},
+            ),
+            patch(f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}),
+            patch(
+                f"{_IMPORT_MODULE}.import_experiments_from_directory", return_value={}
+            ),
+            pytest.raises(SystemExit),
+        ):
+            from opik.cli.imports.all import import_all
+
+            import_all(
+                workspace="ws",
+                project_name=_PROJECT,
+                path=str(tmp_path),
+                include=["datasets"],
+                dry_run=False,
+                force=False,
+                debug=False,
+            )
+
+        manifest = MigrationManifest(tmp_path / _WORKSPACE / "projects" / _PROJECT)
+        assert not manifest.is_completed
+
     def test_flush_timeout_exits_with_code_1(self, tmp_path):
         """If client.flush() returns False (timeout), import_all raises SystemExit(1)."""
         (tmp_path / _WORKSPACE / "projects" / _PROJECT / "datasets").mkdir(parents=True)

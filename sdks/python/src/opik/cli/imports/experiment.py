@@ -760,7 +760,7 @@ def recreate_experiments(
     dataset_item_id_map: Optional[Dict[str, str]] = None,
     debug: bool = False,
     manifest: Optional[MigrationManifest] = None,
-) -> int:
+) -> tuple[int, int]:
     """Recreate experiments from JSON files.
 
     Args:
@@ -769,12 +769,15 @@ def recreate_experiments(
         dataset_item_id_map: Mapping from original dataset_item_id to new dataset_item_id.
                             If None, will be treated as empty dict (all items will be skipped).
         manifest: Optional migration manifest for resumable imports.
+
+    Returns:
+        Tuple of ``(successful, failed)`` experiment counts.
     """
     experiment_files = find_experiment_files(project_dir)
 
     if not experiment_files:
         console.print(f"[yellow]No experiment files found in {project_dir}[/yellow]")
-        return 0
+        return 0, 0
 
     console.print(f"[green]Found {len(experiment_files)} experiment files[/green]")
 
@@ -799,7 +802,7 @@ def recreate_experiments(
             console.print(
                 f"[yellow]No experiments found matching pattern '{name_pattern}'[/yellow]"
             )
-            return 0
+            return 0, 0
 
     successful = 0
     failed = 0
@@ -843,7 +846,7 @@ def recreate_experiments(
             failed += 1
             continue
 
-    return successful
+    return successful, failed
 
 
 def _import_traces_for_project(

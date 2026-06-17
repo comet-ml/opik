@@ -319,6 +319,8 @@ def import_traces_from_directory(
         client.flush()
 
         # Handle experiment recreation if requested
+        experiments_recreated = 0
+        experiments_failed = 0
         if recreate_experiments_flag:
             experiments_dir = project_dir / "experiments"
             experiment_files = (
@@ -332,7 +334,7 @@ def import_traces_from_directory(
                     debug,
                 )
 
-                experiments_recreated = recreate_experiments(
+                experiments_recreated, experiments_failed = recreate_experiments(
                     client,
                     experiments_dir,
                     project_name,
@@ -356,6 +358,10 @@ def import_traces_from_directory(
             "projects_errors": 0,
             "traces": traces_imported,
             "traces_errors": traces_errors,
+            # Surface recreated-experiment failures so callers (and the CLI exit
+            # code) don't treat a partial traces import as a clean success.
+            "experiments": experiments_recreated,
+            "experiments_errors": experiments_failed,
         }
 
     except Exception as e:

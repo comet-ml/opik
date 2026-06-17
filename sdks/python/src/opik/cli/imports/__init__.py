@@ -172,6 +172,16 @@ def _import_by_type(
                 manifest=manifest,
             )
 
+        # Sum every "*_errors" counter, not just this item's: importers that
+        # cascade (e.g. experiments pull in datasets/prompts/traces, and the
+        # traces importer recreates experiments) and the whole-directory failure
+        # path report under other keys, and those failures must not be masked.
+        # Computed before manifest.complete() so a partial failure never marks
+        # the manifest completed.
+        total_errors = sum(
+            value for key, value in stats.items() if key.endswith("_errors")
+        )
+
         # Flush the async ingestion queue before returning so that all
         # enqueued traces/spans are persisted on the server.  Without this,
         # the process can exit while the background worker is still sending
@@ -197,10 +207,13 @@ def _import_by_type(
                 sys.exit(1)
 
             # ------------------------------------------------------------------
-            # Mark manifest complete (only on full success, not dry-run)
+            # Mark manifest complete only on a fully clean run. On any error we
+            # leave it in_progress so the next (non---force) run resumes/retries
+            # instead of short-circuiting on manifest.is_completed.
             # ------------------------------------------------------------------
             assert manifest is not None  # guaranteed: manifest is set when not dry_run
-            manifest.complete()
+            if total_errors == 0:
+                manifest.complete()
 
         # Display summary
         print_import_summary(stats)
@@ -221,13 +234,6 @@ def _import_by_type(
         stats_key = type_key_map.get(import_type, import_type + "s")
         label = label_map.get(import_type, import_type + "s")
         imported_count = stats.get(stats_key, 0)
-        # Sum every "*_errors" counter, not just this item's: importers that
-        # cascade (e.g. experiments pull in datasets/prompts/traces) and the
-        # whole-directory failure path report under other keys, and those
-        # failures must not be masked.
-        total_errors = sum(
-            value for key, value in stats.items() if key.endswith("_errors")
-        )
 
         if dry_run:
             console.print(
