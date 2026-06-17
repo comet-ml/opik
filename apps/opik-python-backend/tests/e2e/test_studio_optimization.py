@@ -17,7 +17,6 @@ actually ran (not the gpt-5-nano default).
 Bound the run via ``OPTIMIZER_MAX_TRIALS`` (set in CI) so it stays short.
 """
 
-import os
 from typing import Any
 
 import pytest
@@ -25,7 +24,7 @@ import pytest
 import opik
 from opik import synchronization
 
-from opik_backend.jobs.optimizer import process_optimizer_job
+from studio_helpers import assert_optimization_healthy, run_studio_job
 
 pytestmark = pytest.mark.e2e
 
@@ -60,48 +59,6 @@ def _studio_config(model: str, optimizer_type: str, dataset_name: str) -> dict[s
     }
 
 
-def _run_studio_job(
-    opik_client: opik.Opik,
-    project_name: str,
-    dataset_name: str,
-    studio_config: dict[str, Any],
-) -> dict[str, Any]:
-    """Pre-create the optimization record (as the Java backend would), then run
-    the real job handler. Returns the result dict from the subprocess."""
-    workspace = os.getenv("OPIK_WORKSPACE", "default")
-    optimization = opik_client.create_optimization(
-        dataset_name=dataset_name,
-        objective_name=studio_config["evaluation"]["metrics"][0]["type"],
-        project_name=project_name,
-    )
-    job_message = {
-        "optimization_id": optimization.id,
-        "workspace_id": workspace,
-        "workspace_name": workspace,
-        "config": studio_config,
-        "project_name": project_name,
-    }
-    return process_optimizer_job(job_message)
-
-
-def _assert_healthy(result: dict[str, Any]) -> None:
-    """Signals that the optimization actually ran end-to-end."""
-    assert result is not None, "no result returned"
-    assert "error" not in result, f"optimization errored: {result.get('error')}"
-    assert result.get("status") != "cancelled", "optimization was cancelled"
-    # Baseline established + a score produced, both in range.
-    assert result.get("initial_score") is not None, "no baseline score (it didn't establish a baseline)"
-    assert 0.0 <= result["initial_score"] <= 1.0, f"baseline {result['initial_score']} out of range"
-    assert result.get("score") is not None, "no final score"
-    assert 0.0 <= result["score"] <= 1.0, f"score {result['score']} out of range"
-    # Optimization shouldn't make the prompt worse than the baseline.
-    assert result["score"] >= result["initial_score"], (
-        f"optimized score {result['score']} regressed below baseline {result['initial_score']}"
-    )
-    # An optimized prompt was produced.
-    assert result.get("optimized_prompt"), "no optimized prompt produced"
-
-
 def _models_in_project(opik_client: opik.Opik, project_name: str) -> list[str]:
     return [
         (span.model or "")
@@ -133,9 +90,9 @@ def test_studio_optimization_runs_on_dataset_and_prompt(
 ) -> None:
     studio_config = _studio_config(_TASK_MODEL, optimizer_type, seeded_dataset.name)
 
-    result = _run_studio_job(opik_client, project_name, seeded_dataset.name, studio_config)
+    result = run_studio_job(opik_client, project_name, seeded_dataset.name, studio_config)
 
-    _assert_healthy(result)
+    assert_optimization_healthy(result)
 
     # The configured model actually ran (the model-passing regression fell back
     # to openai/gpt-5-nano). Spans land in ClickHouse with eventual consistency.

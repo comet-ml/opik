@@ -1,178 +1,81 @@
+"""End-to-end regression test for the Optimization Studio **CODE metric**.
+
+The CODE metric runs user-supplied Python through the executor infrastructure
+(``PYTHON_CODE_EXECUTOR_STRATEGY``) inside the optimization subprocess. This
+test exercises that path through the **real entrypoint** (``process_optimizer_job``),
+with the provider key stored in the workspace and resolved server-side via the
+gateway — the same pattern as ``test_studio_optimization`` — so no provider key
+is ever handed to the optimizer.
+
+Given the sentiment dataset and a one-message prompt, it asserts the run is
+healthy (baseline + optimized prompt + no regression), which only happens if the
+user's ``BaseMetric`` subclass executed and produced scores end-to-end.
+
+Bound the run via ``OPTIMIZER_MAX_TRIALS`` (set in CI) so it stays short.
 """
-E2E test for code metric optimization - loads config from frontend, runs via backend factories.
 
-Run with:
-    cd apps/opik-python-backend
-    PYTHONPATH=src OPENAI_API_KEY=your-key pytest tests/test_code_metric_optimization.py -v
-
-Requires:
-    - OPENAI_API_KEY environment variable
-    - Node.js (to parse frontend TypeScript)
-"""
-
-import json
-import os
-import subprocess
-from pathlib import Path
 from typing import Any
 
-import opik
 import pytest
 
-from opik_optimizer import ChatPrompt
+import opik
 
-from opik_backend.studio.metrics import MetricFactory
-from opik_backend.studio.optimizers import OptimizerFactory
-from opik_backend.studio.types import OptimizationConfig
+from studio_helpers import assert_optimization_healthy, run_studio_job
 
-pytestmark = pytest.mark.integration
+pytestmark = pytest.mark.e2e
 
-# Path to frontend constants file (relative to this test file:
-# apps/opik-python-backend/tests/e2e/ -> parents[3] == apps/)
-FRONTEND_CONSTANTS = (
-    Path(__file__).resolve().parents[3]
-    / "opik-frontend/src/constants/optimizations.ts"
-)
+# Bare model id (the runner adds the "openai/" gateway prefix); resolves to the
+# workspace Anthropic key server-side.
+_TASK_MODEL = "claude-haiku-4-5-20251001"
+
+# A user-authored BaseMetric: scores 1.0 when the gold label appears in the
+# model's output. `kwargs` carries the dataset item fields (here, `label`).
+_CODE_METRIC = '''
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
 
 
-def _load_frontend_template(
-    template_id: str = "opik-chatbot",
-) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """Load studio_config and dataset_items from the frontend TypeScript file."""
-    js_code = f'''
-const fs = require('fs');
-const content = fs.readFileSync('{FRONTEND_CONSTANTS}', 'utf-8');
+class LabelMatch(BaseMetric):
+    def __init__(self, name: str = "label_match"):
+        super().__init__(name=name)
 
-// Replace TypeScript enums with string values
-const processed = content
-    .replace(/LLM_MESSAGE_ROLE\\.system/g, '"system"')
-    .replace(/LLM_MESSAGE_ROLE\\.user/g, '"user"')
-    .replace(/LLM_MESSAGE_ROLE\\.assistant/g, '"assistant"')
-    .replace(/PROVIDER_MODEL_TYPE\\.[A-Z0-9_]+/g, '"gpt-4o-mini"')
-    .replace(/METRIC_TYPE\\.CODE/g, '"code"')
-    .replace(/METRIC_TYPE\\.G_EVAL/g, '"geval"')
-    .replace(/METRIC_TYPE\\.EQUALS/g, '"equals"')
-    .replace(/METRIC_TYPE\\.JSON_SCHEMA_VALIDATOR/g, '"json_schema_validator"')
-    .replace(/METRIC_TYPE\\.LEVENSHTEIN/g, '"levenshtein_ratio"')
-    .replace(/OPTIMIZER_TYPE\\.HIERARCHICAL_REFLECTIVE/g, '"hierarchical_reflective"')
-    .replace(/OPTIMIZER_TYPE\\.GEPA/g, '"gepa"')
-    .replace(/DEFAULT_HIERARCHICAL_REFLECTIVE_OPTIMIZER_CONFIGS\\.CONVERGENCE_THRESHOLD/g, '0.01')
-    .replace(/DEFAULT_HIERARCHICAL_REFLECTIVE_OPTIMIZER_CONFIGS\\.VERBOSE/g, 'false')
-    .replace(/DEFAULT_HIERARCHICAL_REFLECTIVE_OPTIMIZER_CONFIGS\\.SEED/g, '42')
-    .replace(/DEFAULT_GEPA_OPTIMIZER_CONFIGS\\.VERBOSE/g, 'false')
-    .replace(/DEFAULT_GEPA_OPTIMIZER_CONFIGS\\.SEED/g, '42');
-
-// Extract schema constant
-const schemaMatch = processed.match(/const EXPECTED_JSON_SCHEMA\\s*=\\s*(\\{{[\\s\\S]*?\\}});\\n\\n/);
-const EXPECTED_JSON_SCHEMA = schemaMatch ? eval('(' + schemaMatch[1] + ')') : {{}};
-
-// Extract all datasets
-const chatbotMatch = processed.match(/const CHATBOT_DATASET_ITEMS[^=]*=\\s*(\\[[\\s\\S]*?\\]);/);
-const CHATBOT_DATASET_ITEMS = chatbotMatch ? eval(chatbotMatch[1]) : [];
-
-const jsonMatch = processed.match(/const JSON_OUTPUT_DATASET_ITEMS[^=]*=\\s*(\\[[\\s\\S]*?\\]);/);
-const JSON_OUTPUT_DATASET_ITEMS = jsonMatch ? eval(jsonMatch[1]) : [];
-
-// Extract templates array
-const templatesMatch = processed.match(/OPTIMIZATION_DEMO_TEMPLATES[^=]*=\\s*(\\[[\\s\\S]*?\\]);/s);
-if (!templatesMatch) {{ console.error("Templates not found"); process.exit(1); }}
-
-const templates = eval(templatesMatch[1]);
-const template = templates.find(t => t.id === "{template_id}");
-if (!template) {{ console.error("Template not found"); process.exit(1); }}
-
-console.log(JSON.stringify({{
-    studio_config: template.studio_config,
-    dataset_items: template.dataset_items
-}}));
+    def score(self, output: str, **kwargs) -> ScoreResult:
+        label = str(kwargs.get("label", "")).strip().lower()
+        matched = bool(label) and label in (output or "").lower()
+        return ScoreResult(
+            name=self.name,
+            value=1.0 if matched else 0.0,
+            reason=f"label {label!r} {'found' if matched else 'missing'}",
+        )
 '''
-    result = subprocess.run(["node", "-e", js_code], capture_output=True, text=True)
-    if result.returncode != 0:
-        pytest.skip(f"Failed to parse frontend: {result.stderr}")
-
-    data = json.loads(result.stdout)
-    return data["studio_config"], data["dataset_items"]
 
 
-def test_optimization_with_code_metric() -> None:
-    """Run optimization using config loaded from frontend."""
-    if not os.getenv("OPENAI_API_KEY"):
-        pytest.skip("OPENAI_API_KEY is required")
+def _studio_config(model: str, dataset_name: str) -> dict[str, Any]:
+    return {
+        "dataset_name": dataset_name,
+        "prompt": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": 'Classify the sentiment of this movie review as '
+                    'exactly "positive" or "negative": {{text}}',
+                }
+            ]
+        },
+        "llm_model": {"model": model, "parameters": {}},
+        "evaluation": {"metrics": [{"type": "code", "parameters": {"code": _CODE_METRIC}}]},
+        "optimizer": {"type": "gepa", "parameters": {"seed": 42}},
+    }
 
-    # Load config from frontend
-    studio_config, dataset_items = _load_frontend_template("opik-chatbot")
 
-    # Parse config (same as backend)
-    config = OptimizationConfig.from_dict(studio_config)
+def test_code_metric_optimization_runs_end_to_end(
+    opik_client: opik.Opik,
+    anthropic_workspace_key: None,
+    project_name: str,
+    seeded_dataset: opik.Dataset,
+) -> None:
+    studio_config = _studio_config(_TASK_MODEL, seeded_dataset.name)
 
-    # Build metric (same as backend)
-    metric_fn = MetricFactory.build(
-        config.metric_type, config.metric_params, config.model
-    )
+    result = run_studio_job(opik_client, project_name, seeded_dataset.name, studio_config)
 
-    # Build optimizer (same as backend)
-    optimizer = OptimizerFactory.build(
-        config.optimizer_type,
-        config.model,
-        config.model_params,
-        config.optimizer_params,
-    )
-
-    # Create prompt (same as backend)
-    prompt = ChatPrompt(messages=config.prompt_messages)
-
-    # Create dataset
-    client = opik.Opik()
-    dataset_name = "test_code_metric_e2e"
-
-    try:
-        # Clean up any existing dataset
-        try:
-            existing = client.get_dataset(dataset_name)
-            existing.delete()
-        except Exception:
-            pass
-
-        # Create fresh dataset
-        dataset = client.get_or_create_dataset(dataset_name)
-        dataset.insert(dataset_items)
-
-        # Run optimization
-        result = optimizer.optimize_prompt(
-            prompt=prompt,
-            dataset=dataset,
-            metric=metric_fn,
-            n_samples=len(dataset_items),
-        )
-
-        # Basic result structure
-        assert result is not None
-        assert result.prompt is not None
-        assert result.score is not None
-
-        # Score should be in valid range [0.0, 1.0]
-        assert 0.0 <= result.score <= 1.0, (
-            f"Final score {result.score} out of valid range [0.0, 1.0]"
-        )
-
-        # Initial score should exist and be in valid range
-        assert result.initial_score is not None, "Initial score should be recorded"
-        assert 0.0 <= result.initial_score <= 1.0, (
-            f"Initial score {result.initial_score} out of valid range"
-        )
-
-        # Metric name should match our code metric (intent_accuracy from the demo template)
-        assert result.metric_name == "intent_accuracy", (
-            f"Expected metric_name 'intent_accuracy', got '{result.metric_name}'"
-        )
-
-        # Final score should be at least as good as initial (optimization shouldn't make it worse)
-        assert result.score >= result.initial_score, (
-            f"Final score {result.score} should be >= initial score {result.initial_score}"
-        )
-
-    finally:
-        try:
-            client.get_dataset(dataset_name).delete()
-        except Exception:
-            pass
+    assert_optimization_healthy(result)
