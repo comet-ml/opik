@@ -103,3 +103,23 @@ def test_algorithm_defaults_to_prompt_model_when_not_set():
     # and its parameters.
     assert optimizer.model == "openai/claude-haiku-4-5-20251001"
     assert optimizer.model_parameters.get("temperature") == 0.3
+
+
+def test_optimizer_params_preserved_without_separate_model():
+    # model_parameters set on the optimizer but no model — the optimizer should
+    # still default to the prompt model yet keep its own configured params
+    # (not silently drop them).
+    config = OptimizationConfig.from_dict(
+        _config(
+            task_model="claude-haiku-4-5-20251001",
+            task_params={"temperature": 0.3},
+            optimizer_params={"seed": 42, "model_parameters": {"temperature": 0.9}},
+        )
+    )
+
+    optimizer, prompt = optimizer_runner.build_optimizer_and_prompt(config)
+
+    assert optimizer.model == "openai/claude-haiku-4-5-20251001"
+    assert optimizer.model_parameters.get("temperature") == 0.9
+    # The prompt keeps its own params, independent of the optimizer's.
+    assert prompt.model_kwargs.get("temperature") == 0.3

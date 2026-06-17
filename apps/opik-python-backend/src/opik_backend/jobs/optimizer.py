@@ -179,7 +179,20 @@ def process_optimizer_job(*args: Any, **kwargs: Any) -> Dict[str, Any]:
                 # Check for errors (only if not cancelled)
                 if "error" in result:
                     logger.error(f"Optimization failed: {result.get('error')}")
-                    raise Exception(result.get("error", "Unknown error"))
+                    # Surface the subprocess traceback (when present) so callers
+                    # and CI see what failed inside the isolated process.
+                    error_message = result.get("error", "Unknown error")
+                    subprocess_traceback = result.get("traceback")
+                    if subprocess_traceback:
+                        logger.error(
+                            "Optimization subprocess traceback:\n%s",
+                            subprocess_traceback,
+                        )
+                        error_message = (
+                            f"{error_message}\n\n"
+                            f"Subprocess traceback:\n{subprocess_traceback}"
+                        )
+                    raise Exception(error_message)
                 
                 logger.info(f"Optimization completed successfully: {context.optimization_id}")
                 return result

@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import sys
+import traceback
 import warnings
 
 # =============================================================================
@@ -230,8 +231,15 @@ def build_optimizer_and_prompt(config):
         optimizer_model = _gateway_model(config.optimizer_model)
         optimizer_model_params = _with_stream(config.optimizer_model_params)
     else:
+        # No separate algorithm model — default to the prompt model. Still honor
+        # optimizer model_parameters if the config set them without a model
+        # (saved configs / API clients), instead of silently dropping them.
         optimizer_model = config.model
-        optimizer_model_params = config.model_params
+        optimizer_model_params = (
+            _with_stream(config.optimizer_model_params)
+            if config.optimizer_model_params is not None
+            else config.model_params
+        )
 
     config.optimizer_params = config.optimizer_params or {}
 
@@ -357,10 +365,12 @@ def main():
     except Exception as e:
         logger.exception(f"Optimization failed: {e}")
 
-        # Output error as JSON
+        # Output error as JSON, including the full traceback so the parent
+        # process (and CI) can surface what failed inside this subprocess.
         error_output = {
             "success": False,
             "error": str(e),
+            "traceback": traceback.format_exc(),
         }
         print(json.dumps(error_output))
         sys.exit(1)
