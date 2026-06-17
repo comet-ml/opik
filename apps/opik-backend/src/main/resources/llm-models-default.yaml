@@ -158,9 +158,7 @@ anthropic:
     structuredOutput: true
   - id: "claude-3-7-sonnet-20250219"
   - id: "claude-opus-4-20250514"
-    structuredOutput: true
   - id: "claude-sonnet-4-20250514"
-    structuredOutput: true
   - id: "claude-sonnet-4-5-20250929"
     structuredOutput: true
 gemini:
@@ -1386,6 +1384,8 @@ openrouter:
     label: "z-ai/glm-5-turbo"
   - id: "z-ai/glm-5.1"
     label: "z-ai/glm-5.1"
+  - id: "z-ai/glm-5.2"
+    label: "z-ai/glm-5.2"
   - id: "z-ai/glm-5v-turbo"
     label: "z-ai/glm-5v-turbo"
   - id: "~anthropic/claude-fable-latest"
