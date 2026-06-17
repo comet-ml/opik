@@ -3,8 +3,9 @@ package com.comet.opik.api.resources.v1.priv;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.AgentInsightsJob;
 import com.comet.opik.api.AgentInsightsJobRequest;
+import com.comet.opik.api.AgentInsightsJobUpdate;
 import com.comet.opik.domain.AgentInsightsJobService;
-import com.comet.opik.domain.AgentInsightsJobService.EnableResult;
+import com.comet.opik.domain.AgentInsightsJobService.CreateResult;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.RequiredPermissions;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
@@ -20,6 +21,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
@@ -48,15 +50,15 @@ public class AgentInsightsJobsResource {
     private final @NonNull Provider<RequestContext> requestContext;
 
     @POST
-    @Operation(operationId = "enableAgentInsightsJob", summary = "Enable Agent Insights job", description = "Enables the Agent Insights report for a project (idempotent on workspace+project) and triggers an immediate first run. Returns 201 on first enable, 200 if it already existed.", responses = {
+    @Operation(operationId = "createAgentInsightsJob", summary = "Create Agent Insights job", description = "Creates the Agent Insights job for a project (idempotent on workspace+project). Returns 201 on first create, 200 if it already existed. Does not trigger a run — use the trigger endpoint for that.", responses = {
             @ApiResponse(responseCode = "201", description = "Job created", headers = @Header(name = "Location", description = "URI of the created job", schema = @Schema(type = "string")), content = @Content(schema = @Schema(implementation = AgentInsightsJob.class))),
             @ApiResponse(responseCode = "200", description = "Job already existed", content = @Content(schema = @Schema(implementation = AgentInsightsJob.class))),
             @ApiResponse(responseCode = "404", description = "Project not found")
     })
     @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
-    public Response enable(@Valid @NotNull AgentInsightsJobRequest request,
+    public Response create(@Valid @NotNull AgentInsightsJobRequest request,
             @Context UriInfo uriInfo) {
-        EnableResult result = service.enable(request.projectId())
+        CreateResult result = service.create(request.projectId())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
@@ -83,18 +85,33 @@ public class AgentInsightsJobsResource {
         return Response.ok(job).build();
     }
 
-    @POST
-    @Path("/disable")
-    @Operation(operationId = "disableAgentInsightsJob", summary = "Disable Agent Insights job", description = "Disables the Agent Insights job for a project (flips status to disabled; never deletes). 404 if none exists.", responses = {
-            @ApiResponse(responseCode = "204", description = "Job disabled"),
+    @PATCH
+    @Operation(operationId = "updateAgentInsightsJob", summary = "Update Agent Insights job", description = "Partially updates the Agent Insights job for a project (e.g. status; never deletes). Returns the updated job, or 404 if none exists.", responses = {
+            @ApiResponse(responseCode = "200", description = "Job updated", content = @Content(schema = @Schema(implementation = AgentInsightsJob.class))),
             @ApiResponse(responseCode = "404", description = "Job not found")
     })
     @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
-    public Response disable(@Valid @NotNull AgentInsightsJobRequest request) {
-        service.disable(request.projectId())
+    public Response update(@QueryParam("project_id") @NotNull UUID projectId,
+            @Valid @NotNull AgentInsightsJobUpdate update) {
+        AgentInsightsJob job = service.update(projectId, update.status())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        return Response.noContent().build();
+        return Response.ok(job).build();
+    }
+
+    @POST
+    @Path("/trigger")
+    @Operation(operationId = "triggerAgentInsightsJob", summary = "Trigger Agent Insights job", description = "Triggers an immediate report run for an existing job (over the last 24h). Fire-and-forget; returns 202. 404 if none exists.", responses = {
+            @ApiResponse(responseCode = "202", description = "Run accepted"),
+            @ApiResponse(responseCode = "404", description = "Job not found")
+    })
+    @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
+    public Response trigger(@Valid @NotNull AgentInsightsJobRequest request) {
+        service.triggerNow(request.projectId())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        return Response.accepted().build();
     }
 }

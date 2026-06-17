@@ -118,12 +118,12 @@ class AgentInsightsJobsResourceTest {
     }
 
     @Test
-    @DisplayName("Enable creates the job (201) and is idempotent (200, same row, on repeat)")
-    void enable__firstThenRepeat__createsThen200() {
+    @DisplayName("Create makes the job (201) and is idempotent (200, same row, on repeat)")
+    void create__firstThenRepeat__createsThen200() {
         var projectId = createProject();
 
         UUID jobId;
-        try (var first = jobsClient.enable(projectId, API_KEY, WORKSPACE_NAME)) {
+        try (var first = jobsClient.create(projectId, API_KEY, WORKSPACE_NAME)) {
             assertThat(first.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
             var job = first.readEntity(AgentInsightsJob.class);
             jobId = job.id();
@@ -140,7 +140,7 @@ class AgentInsightsJobsResourceTest {
         }
 
         // Idempotent: enabling again does not create a duplicate (same id) and returns 200.
-        try (var second = jobsClient.enable(projectId, API_KEY, WORKSPACE_NAME)) {
+        try (var second = jobsClient.create(projectId, API_KEY, WORKSPACE_NAME)) {
             assertThat(second.getStatus()).isEqualTo(HttpStatus.SC_OK);
             var job = second.readEntity(AgentInsightsJob.class);
             assertThat(job.id()).isEqualTo(jobId);
@@ -149,31 +149,31 @@ class AgentInsightsJobsResourceTest {
     }
 
     @Test
-    @DisplayName("Enable for a non-existent project returns 404")
-    void enable__projectMissing__returns404() {
-        try (var response = jobsClient.enable(UUID.randomUUID(), API_KEY, WORKSPACE_NAME)) {
+    @DisplayName("Create for a non-existent project returns 404")
+    void create__projectMissing__returns404() {
+        try (var response = jobsClient.create(UUID.randomUUID(), API_KEY, WORKSPACE_NAME)) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
         }
     }
 
     @Test
-    @DisplayName("Enable without project_id fails validation (422)")
-    void enable__missingProjectId__returnsUnprocessableEntity() {
-        try (var response = jobsClient.enableRaw(Map.of(), API_KEY, WORKSPACE_NAME)) {
+    @DisplayName("Create without project_id fails validation (422)")
+    void create__missingProjectId__returnsUnprocessableEntity() {
+        try (var response = jobsClient.createRaw(Map.of(), API_KEY, WORKSPACE_NAME)) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
         }
     }
 
     @Test
-    @DisplayName("Get returns the job after enable, 404 when none exists")
-    void get__afterEnableAndWhenAbsent() {
+    @DisplayName("Get returns the job after create, 404 when none exists")
+    void get__afterCreateAndWhenAbsent() {
         var projectId = createProject();
 
         try (var absent = jobsClient.get(projectId, API_KEY, WORKSPACE_NAME)) {
             assertThat(absent.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
         }
 
-        jobsClient.enable(projectId, API_KEY, WORKSPACE_NAME).close();
+        jobsClient.create(projectId, API_KEY, WORKSPACE_NAME).close();
 
         try (var present = jobsClient.get(projectId, API_KEY, WORKSPACE_NAME)) {
             assertThat(present.getStatus()).isEqualTo(HttpStatus.SC_OK);
@@ -184,19 +184,21 @@ class AgentInsightsJobsResourceTest {
     }
 
     @Test
-    @DisplayName("Disable flips status to disabled without deleting; 404 when absent")
-    void disable__flipsStatus_andNotFoundWhenAbsent() {
+    @DisplayName("PATCH status=disabled flips status without deleting; 404 when absent")
+    void update__disablesWithoutDeleting_andNotFoundWhenAbsent() {
         var projectId = createProject();
 
         // 404 before any job exists
-        try (var missing = jobsClient.disable(projectId, API_KEY, WORKSPACE_NAME)) {
+        try (var missing = jobsClient.update(projectId, AgentInsightsJob.Status.DISABLED, API_KEY, WORKSPACE_NAME)) {
             assertThat(missing.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
         }
 
-        jobsClient.enable(projectId, API_KEY, WORKSPACE_NAME).close();
+        jobsClient.create(projectId, API_KEY, WORKSPACE_NAME).close();
 
-        try (var disabled = jobsClient.disable(projectId, API_KEY, WORKSPACE_NAME)) {
-            assertThat(disabled.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        try (var disabled = jobsClient.update(projectId, AgentInsightsJob.Status.DISABLED, API_KEY, WORKSPACE_NAME)) {
+            assertThat(disabled.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(disabled.readEntity(AgentInsightsJob.class).status())
+                    .isEqualTo(AgentInsightsJob.Status.DISABLED);
         }
 
         // Row is kept; status flipped to disabled (never deleted).
@@ -208,26 +210,42 @@ class AgentInsightsJobsResourceTest {
     }
 
     @Test
-    @DisplayName("Disabling an already-disabled job is idempotent (204, not 404)")
-    void disable__alreadyDisabled__isIdempotent() {
+    @DisplayName("PATCH can re-enable a disabled job")
+    void update__canReEnable() {
         var projectId = createProject();
-        jobsClient.enable(projectId, API_KEY, WORKSPACE_NAME).close();
-        jobsClient.disable(projectId, API_KEY, WORKSPACE_NAME).close();
+        jobsClient.create(projectId, API_KEY, WORKSPACE_NAME).close();
+        jobsClient.update(projectId, AgentInsightsJob.Status.DISABLED, API_KEY, WORKSPACE_NAME).close();
 
-        try (var again = jobsClient.disable(projectId, API_KEY, WORKSPACE_NAME)) {
-            assertThat(again.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
-        }
-        try (var get = jobsClient.get(projectId, API_KEY, WORKSPACE_NAME)) {
-            assertThat(get.readEntity(AgentInsightsJob.class).status())
-                    .isEqualTo(AgentInsightsJob.Status.DISABLED);
+        try (var reEnabled = jobsClient.update(projectId, AgentInsightsJob.Status.ENABLED, API_KEY, WORKSPACE_NAME)) {
+            assertThat(reEnabled.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(reEnabled.readEntity(AgentInsightsJob.class).status())
+                    .isEqualTo(AgentInsightsJob.Status.ENABLED);
         }
     }
 
     @Test
-    @DisplayName("Workspace isolation: a job enabled in one workspace is invisible to another")
+    @DisplayName("Trigger returns 202 for an existing job, 404 when absent")
+    void trigger__acceptedForExistingJob_andNotFoundWhenAbsent() {
+        var projectId = createProject();
+
+        // 404 before the job exists
+        try (var missing = jobsClient.trigger(projectId, API_KEY, WORKSPACE_NAME)) {
+            assertThat(missing.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+        }
+
+        jobsClient.create(projectId, API_KEY, WORKSPACE_NAME).close();
+
+        // No-op trigger client is bound by default, so the run is accepted but records nothing.
+        try (var triggered = jobsClient.trigger(projectId, API_KEY, WORKSPACE_NAME)) {
+            assertThat(triggered.getStatus()).isEqualTo(HttpStatus.SC_ACCEPTED);
+        }
+    }
+
+    @Test
+    @DisplayName("Workspace isolation: a job created in one workspace is invisible to another")
     void workspaceIsolation__jobNotVisibleAcrossWorkspaces() {
         var projectId = createProject();
-        jobsClient.enable(projectId, API_KEY, WORKSPACE_NAME).close();
+        jobsClient.create(projectId, API_KEY, WORKSPACE_NAME).close();
 
         try (var otherWorkspace = jobsClient.get(projectId, API_KEY_2, WORKSPACE_NAME_2)) {
             assertThat(otherWorkspace.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);

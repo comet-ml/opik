@@ -29,11 +29,12 @@ interface AgentInsightsJobDAO {
             @Bind("userName") String userName);
 
     @SqlUpdate("""
-            UPDATE agent_insights_jobs SET status = 'disabled', last_updated_by = :userName
+            UPDATE agent_insights_jobs SET status = :status, last_updated_by = :userName
             WHERE workspace_id = :workspaceId AND project_id = :projectId
             """)
-    int disable(@Bind("workspaceId") String workspaceId,
+    int updateStatus(@Bind("workspaceId") String workspaceId,
             @Bind("projectId") UUID projectId,
+            @Bind("status") String status,
             @Bind("userName") String userName);
 
     @SqlQuery("""

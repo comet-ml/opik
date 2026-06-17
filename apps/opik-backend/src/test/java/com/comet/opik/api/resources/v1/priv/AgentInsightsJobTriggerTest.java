@@ -138,12 +138,17 @@ class AgentInsightsJobTriggerTest {
     }
 
     @Test
-    @DisplayName("Enable triggers exactly one immediate run and records last_triggered_at")
-    void enable__triggersImmediateRunOnce() {
+    @DisplayName("Trigger fires exactly one run and records last_triggered_at; create alone does not")
+    void trigger__firesRunOnce() {
         var projectId = projectResourceClient.createProject(
                 "project-" + UUID.randomUUID(), API_KEY, WORKSPACE_NAME);
 
-        jobsClient.enable(projectId, API_KEY, WORKSPACE_NAME).close();
+        // Create does NOT trigger a run.
+        jobsClient.create(projectId, API_KEY, WORKSPACE_NAME).close();
+        assertThat(TRIGGERS.stream().anyMatch(t -> t.projectId().equals(projectId))).isFalse();
+
+        // The trigger endpoint fires the run.
+        jobsClient.trigger(projectId, API_KEY, WORKSPACE_NAME).close();
 
         // The enabled client fired exactly once, for this project, with a non-empty time window.
         var forProject = TRIGGERS.stream().filter(t -> t.projectId().equals(projectId)).toList();

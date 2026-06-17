@@ -1,6 +1,8 @@
 package com.comet.opik.api.resources.utils.resources;
 
+import com.comet.opik.api.AgentInsightsJob;
 import com.comet.opik.api.AgentInsightsJobRequest;
+import com.comet.opik.api.AgentInsightsJobUpdate;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -18,7 +20,7 @@ public class AgentInsightsJobResourceClient {
     private final ClientSupport client;
     private final String baseURI;
 
-    public Response enable(UUID projectId, String apiKey, String workspaceName) {
+    public Response create(UUID projectId, String apiKey, String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -26,7 +28,7 @@ public class AgentInsightsJobResourceClient {
                 .post(Entity.json(AgentInsightsJobRequest.builder().projectId(projectId).build()));
     }
 
-    public Response enableRaw(Object body, String apiKey, String workspaceName) {
+    public Response createRaw(Object body, String apiKey, String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -43,8 +45,17 @@ public class AgentInsightsJobResourceClient {
                 .get();
     }
 
-    public Response disable(UUID projectId, String apiKey, String workspaceName) {
-        return client.target(RESOURCE_PATH.formatted(baseURI) + "/disable")
+    public Response update(UUID projectId, AgentInsightsJob.Status status, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .queryParam("project_id", projectId)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .method("PATCH", Entity.json(AgentInsightsJobUpdate.builder().status(status).build()));
+    }
+
+    public Response trigger(UUID projectId, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI) + "/trigger")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)

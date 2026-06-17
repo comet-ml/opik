@@ -120,20 +120,24 @@ class AgentInsightsJobDAOTest {
     }
 
     @Test
-    @DisplayName("disable flips status to disabled; returns 0 when no row matches")
-    void disable__flipsStatus_andZeroWhenAbsent() {
+    @DisplayName("updateStatus flips status; returns 0 when no row matches")
+    void updateStatus__flipsStatus_andZeroWhenAbsent() {
         var workspaceId = UUID.randomUUID().toString();
         var projectId = UUID.randomUUID();
 
         int missing = template.inTransaction(WRITE, handle -> handle.attach(AgentInsightsJobDAO.class)
-                .disable(workspaceId, projectId, "user-" + UUID.randomUUID()));
+                .updateStatus(workspaceId, projectId, Status.DISABLED.getValue(), "user-" + UUID.randomUUID()));
         assertThat(missing).isZero();
 
         enable(UUID.randomUUID(), workspaceId, projectId, "user-" + UUID.randomUUID());
         template.inTransaction(WRITE, handle -> handle.attach(AgentInsightsJobDAO.class)
-                .disable(workspaceId, projectId, "user-" + UUID.randomUUID()));
-
+                .updateStatus(workspaceId, projectId, Status.DISABLED.getValue(), "user-" + UUID.randomUUID()));
         assertThat(find(workspaceId, projectId).orElseThrow().status()).isEqualTo(Status.DISABLED);
+
+        // ... and back to enabled (updateStatus is general, not disable-only).
+        template.inTransaction(WRITE, handle -> handle.attach(AgentInsightsJobDAO.class)
+                .updateStatus(workspaceId, projectId, Status.ENABLED.getValue(), "user-" + UUID.randomUUID()));
+        assertThat(find(workspaceId, projectId).orElseThrow().status()).isEqualTo(Status.ENABLED);
     }
 
     @Test
@@ -177,7 +181,8 @@ class AgentInsightsJobDAOTest {
         enable(enabledId, enabledWorkspace, enabledProject, "user-" + UUID.randomUUID());
         enable(UUID.randomUUID(), disabledWorkspace, disabledProject, "user-" + UUID.randomUUID());
         template.inTransaction(WRITE, handle -> handle.attach(AgentInsightsJobDAO.class)
-                .disable(disabledWorkspace, disabledProject, "user-" + UUID.randomUUID()));
+                .updateStatus(disabledWorkspace, disabledProject, Status.DISABLED.getValue(),
+                        "user-" + UUID.randomUUID()));
 
         List<EnabledJob> enabled = template.inTransaction(READ_ONLY,
                 handle -> handle.attach(AgentInsightsJobDAO.class).findAllEnabled());
