@@ -4,7 +4,6 @@ import com.clickhouse.client.api.ServerException;
 import com.clickhouse.client.api.metadata.NoSuchColumnException;
 import com.comet.opik.api.AnalyticsQueryResponse;
 import com.comet.opik.api.error.ErrorMessage;
-import com.comet.opik.domain.FreeFormSqlQueryDAO.FreeFormSqlResult;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
@@ -47,11 +46,17 @@ public class FreeFormSqlQueryService {
     private static final Attributes RESULT_REJECTED = Attributes.of(RESULT_KEY, "rejected");
     private static final Attributes RESULT_ERROR = Attributes.of(RESULT_KEY, "error");
 
-    private static final Attributes REASON_AST_SET_NODE = Attributes.of(REASON_KEY, "ast_set_node");
+    private static final Attributes REASON_SETTINGS_CLAUSE = Attributes.of(REASON_KEY, "settings_clause_rejected");
     private static final Attributes REASON_PARSE_ERROR = Attributes.of(REASON_KEY, "parse_error");
     private static final Attributes REASON_PERMISSION_DENIED = Attributes.of(REASON_KEY, "permission_denied");
     private static final Attributes REASON_CH_LIMIT = Attributes.of(REASON_KEY, "ch_limit");
     private static final Attributes REASON_OTHER = Attributes.of(REASON_KEY, "other");
+
+    // The parser models every SETTINGS/SET clause (top-level, subquery, CTE, FORMAT ... SETTINGS) as this AST node.
+    // Verified against ClickHouse 25.3.x: EXPLAIN AST prints it as the leading token "Set". Matching the exact node
+    // token (not a "Set" prefix) avoids false positives on Set-prefixed identifiers and keeps intent explicit; the
+    // SETTINGS rejection tests fail loudly if a future ClickHouse version renames the node.
+    private static final Set<String> SETTINGS_AST_NODES = Set.of("Set");
 
     // ClickHouse error codes surfaced to the caller as a clean 4xx rather than a 500.
     private static final int CH_TOO_MANY_ROWS = 158;
@@ -114,7 +119,7 @@ public class FreeFormSqlQueryService {
                         ? reject(REASON_PARSE_ERROR, startMillis, "Query rejected: could not be parsed", error)
                         : mapExecutionError(error, startMillis))
                 .flatMap(nodeLabels -> containsSetNode(nodeLabels)
-                        ? Mono.error(reject(REASON_AST_SET_NODE, startMillis,
+                        ? Mono.error(reject(REASON_SETTINGS_CLAUSE, startMillis,
                                 "Query rejected: SETTINGS/SET clauses are not allowed", null))
                         : runQuery(workspaceId, projectId, query, startMillis));
     }
@@ -127,12 +132,6 @@ public class FreeFormSqlQueryService {
                 })
                 .onErrorMap(error -> mapExecutionError(error, startMillis));
     }
-
-    // The parser models every SETTINGS/SET clause (top-level, subquery, CTE, FORMAT ... SETTINGS) as this AST node.
-    // Verified against ClickHouse 25.3.x: EXPLAIN AST prints it as the leading token "Set". Matching the exact node
-    // token (not a "Set" prefix) avoids false positives on Set-prefixed identifiers and keeps intent explicit; the
-    // SETTINGS rejection tests fail loudly if a future ClickHouse version renames the node.
-    private static final Set<String> SETTINGS_AST_NODES = Set.of("Set");
 
     private static boolean containsSetNode(List<String> nodeLabels) {
         return nodeLabels.stream()

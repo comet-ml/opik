@@ -40,6 +40,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
@@ -71,7 +72,7 @@ class AnalyticsQueriesExecutorResourceTest {
     private static final String WORKSPACE_NAME_B = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID_B = UUID.randomUUID().toString();
 
-    private static final String RESULT_QUERY = "SELECT toJSONString(map('id', toString(id))) AS result FROM traces ORDER BY id";
+    private static final String RESULT_QUERY = "SELECT toJSONString(map('id', toString(id), 'workspace_id', workspace_id, 'project_id', toString(project_id))) AS result FROM traces ORDER BY id";
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
@@ -146,20 +147,22 @@ class AnalyticsQueriesExecutorResourceTest {
     @Test
     @DisplayName("returns only the rows of the bound workspace/project")
     void executeQuery__whenBoundToWorkspaceProject__thenReturnsOnlyThatScope() {
-        assertResultIds(executorClient.execute(projectIdA, RESULT_QUERY, API_KEY_A, WORKSPACE_NAME_A), traceIdA);
-        assertResultIds(executorClient.execute(projectIdB, RESULT_QUERY, API_KEY_B, WORKSPACE_NAME_B), traceIdB);
+        assertScopedRows(executorClient.execute(projectIdA, RESULT_QUERY, API_KEY_A, WORKSPACE_NAME_A),
+                WORKSPACE_ID_A, projectIdA, traceIdA);
+        assertScopedRows(executorClient.execute(projectIdB, RESULT_QUERY, API_KEY_B, WORKSPACE_NAME_B),
+                WORKSPACE_ID_B, projectIdB, traceIdB);
     }
 
     @Test
     @DisplayName("a project from another workspace returns no rows")
     void executeQuery__whenProjectFromAnotherWorkspace__thenReturnsNoRows() {
-        assertResultIds(executorClient.execute(projectIdB, RESULT_QUERY, API_KEY_A, WORKSPACE_NAME_A));
+        assertNoRows(executorClient.execute(projectIdB, RESULT_QUERY, API_KEY_A, WORKSPACE_NAME_A));
     }
 
     @Test
     @DisplayName("a workspace querying another workspace's project returns no rows")
     void executeQuery__whenWorkspaceMismatch__thenReturnsNoRows() {
-        assertResultIds(executorClient.execute(projectIdA, RESULT_QUERY, API_KEY_B, WORKSPACE_NAME_B));
+        assertNoRows(executorClient.execute(projectIdA, RESULT_QUERY, API_KEY_B, WORKSPACE_NAME_B));
     }
 
     @ParameterizedTest
@@ -177,9 +180,10 @@ class AnalyticsQueriesExecutorResourceTest {
     @DisplayName("a Set-prefixed identifier is not mistaken for a SETTINGS node")
     void executeQuery__whenSetPrefixedIdentifier__thenAccepted() {
         // The AST guard matches the exact `Set` node token, so a `settings`-named CTE must not be falsely rejected.
-        var query = "WITH settings AS (SELECT id FROM traces) "
-                + "SELECT toJSONString(map('id', toString(id))) AS result FROM settings";
-        assertResultIds(executorClient.execute(projectIdA, query, API_KEY_A, WORKSPACE_NAME_A), traceIdA);
+        var query = "WITH settings AS (SELECT id, workspace_id, project_id FROM traces) "
+                + "SELECT toJSONString(map('id', toString(id), 'workspace_id', workspace_id, 'project_id', toString(project_id))) AS result FROM settings";
+        assertScopedRows(executorClient.execute(projectIdA, query, API_KEY_A, WORKSPACE_NAME_A),
+                WORKSPACE_ID_A, projectIdA, traceIdA);
     }
 
     @Test
@@ -220,10 +224,20 @@ class AnalyticsQueriesExecutorResourceTest {
         }
     }
 
-    private void assertResultIds(AnalyticsQueryResponse response, UUID... expectedIds) {
+    private void assertScopedRows(AnalyticsQueryResponse response, String expectedWorkspaceId, UUID expectedProjectId,
+            UUID... expectedTraceIds) {
         assertThat(response.results())
+                .allSatisfy(node -> {
+                    assertThat(node.get("workspace_id").asText()).isEqualTo(expectedWorkspaceId);
+                    assertThat(node.get("project_id").asText()).isEqualTo(expectedProjectId.toString());
+                })
                 .extracting(node -> node.get("id").asText())
-                .containsExactlyInAnyOrder(List.of(expectedIds).stream().map(UUID::toString).toArray(String[]::new));
+                .containsExactlyInAnyOrder(
+                        Stream.of(expectedTraceIds).map(UUID::toString).toArray(String[]::new));
+    }
+
+    private void assertNoRows(AnalyticsQueryResponse response) {
+        assertThat(response.results()).isEmpty();
     }
 
     private UUID createTrace(String projectName, String apiKey, String workspaceName) {

@@ -1,7 +1,6 @@
 package com.comet.opik.domain;
 
 import com.clickhouse.client.api.Client;
-import com.clickhouse.client.api.query.GenericRecord;
 import com.clickhouse.client.api.query.QuerySettings;
 import com.comet.opik.infrastructure.db.DatabaseAnalyticsModule;
 import com.comet.opik.utils.JsonUtils;
@@ -16,9 +15,9 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.StreamSupport;
 
 /**
  * Read-only ClickHouse access for caller-supplied free-form SQL. All queries run on the dedicated
@@ -38,9 +37,6 @@ public interface FreeFormSqlQueryDAO {
      * Executes {@code query} bounded to the given workspace/project and reads the single {@code result} column.
      */
     Mono<FreeFormSqlResult> execute(String workspaceId, UUID projectId, String query);
-
-    record FreeFormSqlResult(List<JsonNode> rows, long resultRows, long readBytes) {
-    }
 }
 
 @Singleton
@@ -69,11 +65,9 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
         return Mono.fromFuture(() -> readOnlyClient.queryRecords(EXPLAIN_AST_PREFIX + query))
                 .flatMap(records -> Mono.fromCallable(() -> {
                     try (records) {
-                        List<String> nodeLabels = new ArrayList<>();
-                        for (GenericRecord node : records) {
-                            nodeLabels.add(node.getString(EXPLAIN_AST_COLUMN));
-                        }
-                        return nodeLabels;
+                        return StreamSupport.stream(records.spliterator(), false)
+                                .map(node -> node.getString(EXPLAIN_AST_COLUMN))
+                                .toList();
                     }
                 }).subscribeOn(Schedulers.boundedElastic()));
     }
@@ -89,11 +83,14 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
         return Mono.fromFuture(() -> readOnlyClient.queryRecords(query, settings))
                 .flatMap(records -> Mono.fromCallable(() -> {
                     try (records) {
-                        List<JsonNode> rows = new ArrayList<>();
-                        for (GenericRecord record : records) {
-                            rows.add(JsonUtils.getJsonNodeFromString(record.getString(RESULT_COLUMN)));
-                        }
-                        return new FreeFormSqlResult(rows, records.getResultRows(), records.getReadBytes());
+                        List<JsonNode> rows = StreamSupport.stream(records.spliterator(), false)
+                                .map(record -> JsonUtils.getJsonNodeFromString(record.getString(RESULT_COLUMN)))
+                                .toList();
+                        return FreeFormSqlResult.builder()
+                                .rows(rows)
+                                .resultRows(records.getResultRows())
+                                .readBytes(records.getReadBytes())
+                                .build();
                     }
                 }).subscribeOn(Schedulers.boundedElastic()));
     }
