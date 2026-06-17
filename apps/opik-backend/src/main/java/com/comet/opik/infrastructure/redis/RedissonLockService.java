@@ -28,7 +28,7 @@ class RedissonLockService implements LockService {
 
     private final @NonNull RedissonReactiveClient redisClient;
     private final @NonNull DistributedLockConfig distributedLockConfig;
-    private final LockMetrics lockMetrics = new LockMetrics();
+    private final @NonNull LockMetrics lockMetrics;
 
     private record LockInstance(RPermitExpirableSemaphoreReactive semaphore, String permitId) {
 
@@ -69,8 +69,7 @@ class RedissonLockService implements LockService {
         var metricLock = lock.metricName();
         log.debug(TRYING_TO_LOCK_WITH, lock);
         return instrumentedAcquire(metricLock, acquireLock(semaphore, duration))
-                .flatMap(lockInstance -> runAction(lock, action, lockInstance)
-                        .doFinally(signalType -> lockMetrics.heldEnd(metricLock)));
+                .flatMap(lockInstance -> instrumentHeld(metricLock, runAction(lock, action, lockInstance)));
     }
 
     @Override
@@ -80,28 +79,49 @@ class RedissonLockService implements LockService {
         log.debug(TRYING_TO_LOCK_WITH, lock);
         return instrumentedAcquire(metricLock,
                 acquireLock(semaphore, Duration.ofMillis(distributedLockConfig.getLockTimeoutMS())))
-                .flatMapMany(lockInstance -> runStream(lock, stream, lockInstance)
-                        .doFinally(signalType -> lockMetrics.heldEnd(metricLock)));
+                .flatMapMany(lockInstance -> instrumentHeld(metricLock, runStream(lock, stream, lockInstance)));
     }
 
     /**
-     * Wrap a permit-acquire with waiting/held gauges + acquire-time/outcome metrics. {@code lock_waiting}
-     * is incremented on subscribe and decremented on any terminal signal (success, error, cancel), so a
-     * waiter that times out, errors, or is cancelled never leaks the gauge. {@code lock_held} is bumped
-     * once the permit is obtained; the caller decrements it when the held action terminates.
+     * Wraps a permit-acquire with the {@code lock_waiting} gauge and the acquire-outcome histogram.
+     * {@code lock_waiting} is incremented on subscribe and decremented on any terminal signal (success,
+     * error, cancel), so a waiter that times out, errors, or is cancelled never leaks the gauge.
+     * <p>Outcome is emitted precisely: {@code doOnSuccess} fires both for an emitted {@link LockInstance}
+     * (acquired) and for an empty completion (the wait elapsed without a permit), so a timed-out acquire
+     * is recorded as a failure — not silently dropped as it would be with {@code doOnNext} alone. The
+     * {@code lock_held} side is paired in {@link #instrumentHeld} so it brackets the held action.
      */
     private Mono<LockInstance> instrumentedAcquire(String metricLock, Mono<LockInstance> acquire) {
         return Mono.defer(() -> {
             long start = System.currentTimeMillis();
             lockMetrics.waitStart(metricLock);
             return acquire
-                    .doOnNext(lockInstance -> {
-                        lockMetrics.acquired(metricLock, System.currentTimeMillis() - start);
-                        lockMetrics.heldStart(metricLock);
+                    .doOnSuccess(lockInstance -> {
+                        long waitMillis = System.currentTimeMillis() - start;
+                        if (lockInstance != null) {
+                            lockMetrics.acquired(metricLock, waitMillis);
+                        } else {
+                            lockMetrics.acquireFailed(metricLock, waitMillis);
+                        }
                     })
-                    .doOnError(throwable -> lockMetrics.acquireFailed(metricLock))
+                    .doOnError(throwable -> lockMetrics.acquireFailed(metricLock, System.currentTimeMillis() - start))
                     .doFinally(signalType -> lockMetrics.waitEnd(metricLock));
         });
+    }
+
+    /** Brackets a held action with the {@code lock_held} gauge: {@code +1} on subscribe, {@code -1} on any
+     * terminal signal (success, error, cancel), so held start and end stay paired in one place. */
+    private <T> Mono<T> instrumentHeld(String metricLock, Mono<T> heldAction) {
+        return heldAction
+                .doOnSubscribe(subscription -> lockMetrics.heldStart(metricLock))
+                .doFinally(signalType -> lockMetrics.heldEnd(metricLock));
+    }
+
+    /** {@link Flux} variant of {@link #instrumentHeld(String, Mono)}. */
+    private <T> Flux<T> instrumentHeld(String metricLock, Flux<T> heldStream) {
+        return heldStream
+                .doOnSubscribe(subscription -> lockMetrics.heldStart(metricLock))
+                .doFinally(signalType -> lockMetrics.heldEnd(metricLock));
     }
 
     private RPermitExpirableSemaphoreReactive getSemaphore(Lock lock) {
@@ -192,7 +212,7 @@ class RedissonLockService implements LockService {
                             // An empty completion means the wait elapsed without obtaining a permit.
                             .doOnSuccess(permitId -> {
                                 if (permitId == null) {
-                                    lockMetrics.acquireFailed(metricLock);
+                                    lockMetrics.acquireFailed(metricLock, System.currentTimeMillis() - start);
                                 }
                             })
                             // If the lock is not acquired, run the fallback and return empty so the main action does not execute.
@@ -211,13 +231,13 @@ class RedissonLockService implements LockService {
                                             }
                                         });
                             }))
-                    .doFinally(signal -> lockMetrics.waitEnd(metricLock));
-        })
-                .onErrorResume(RedisException.class,
-                        redisException -> {
-                            lockMetrics.acquireFailed(metricLock);
-                            return handleError(failToAcquireLockAction, redisException).then(Mono.empty());
-                        });
+                    .doFinally(signal -> lockMetrics.waitEnd(metricLock))
+                    .onErrorResume(RedisException.class,
+                            redisException -> {
+                                lockMetrics.acquireFailed(metricLock, System.currentTimeMillis() - start);
+                                return handleError(failToAcquireLockAction, redisException).then(Mono.empty());
+                            });
+        });
     }
 
     @Override

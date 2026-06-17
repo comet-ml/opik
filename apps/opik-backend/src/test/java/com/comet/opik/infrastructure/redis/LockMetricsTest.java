@@ -29,7 +29,7 @@ class LockMetricsTest {
             metrics.waitEnd(LOCK);
             metrics.heldStart(LOCK);
             metrics.heldEnd(LOCK);
-            metrics.acquireFailed(LOCK);
+            metrics.acquireFailed(LOCK, 7);
         }).doesNotThrowAnyException();
     }
 
