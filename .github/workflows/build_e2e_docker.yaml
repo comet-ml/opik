@@ -35,7 +35,7 @@ jobs:
           else
             TAG="ci-e2e-${{ github.sha }}${{ inputs.include_guardrails == true && '-guardrails' || '' }}"
           fi
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Checkout
         uses: actions/checkout@v6
@@ -55,6 +55,7 @@ jobs:
           if [ "${{ inputs.include_guardrails }}" = "true" ]; then
             SERVICES="$SERVICES guardrails-backend"
           fi
+          # shellcheck disable=SC2086
           docker compose -f deployment/docker-compose/docker-compose.yaml \
             build $SERVICES
 

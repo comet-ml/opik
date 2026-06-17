@@ -86,10 +86,10 @@ jobs:
         env:
           TAG: ${{ needs.build-opik.outputs.image_tag }}
         run: |
-          docker pull ghcr.io/comet-ml/opik/opik-backend:$TAG
-          docker pull ghcr.io/comet-ml/opik/opik-python-backend:$TAG
-          docker tag ghcr.io/comet-ml/opik/opik-backend:$TAG ghcr.io/comet-ml/opik/opik-backend:latest
-          docker tag ghcr.io/comet-ml/opik/opik-python-backend:$TAG ghcr.io/comet-ml/opik/opik-python-backend:latest
+          docker pull "ghcr.io/comet-ml/opik/opik-backend:$TAG"
+          docker pull "ghcr.io/comet-ml/opik/opik-python-backend:$TAG"
+          docker tag "ghcr.io/comet-ml/opik/opik-backend:$TAG" ghcr.io/comet-ml/opik/opik-backend:latest
+          docker tag "ghcr.io/comet-ml/opik/opik-python-backend:$TAG" ghcr.io/comet-ml/opik/opik-python-backend:latest
 
       - name: Set up Node.js ${{matrix.node_version}}
         uses: actions/setup-node@v4.2.0
