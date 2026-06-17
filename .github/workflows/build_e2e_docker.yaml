@@ -30,10 +30,13 @@ jobs:
       - name: Set image tag
         id: tag
         run: |
+          SHA="${{ github.sha }}"
+          SHORT_SHA="${SHA:0:7}"
+          SUFFIX="${{ inputs.include_guardrails == true && '-guardrails' || '' }}"
           if [ -n "${{ github.event.pull_request.number }}" ]; then
-            TAG="ci-e2e-${{ github.event.pull_request.number }}${{ inputs.include_guardrails == true && '-guardrails' || '' }}"
+            TAG="ci-e2e-pr${{ github.event.pull_request.number }}-${SHORT_SHA}${SUFFIX}"
           else
-            TAG="ci-e2e-${{ github.sha }}${{ inputs.include_guardrails == true && '-guardrails' || '' }}"
+            TAG="ci-e2e-${SHORT_SHA}${SUFFIX}"
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
