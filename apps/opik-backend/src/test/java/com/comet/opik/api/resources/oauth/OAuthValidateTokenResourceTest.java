@@ -15,6 +15,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.Optional;
@@ -57,8 +58,9 @@ class OAuthValidateTokenResourceTest {
     }
 
     @ParameterizedTest
+    @NullSource // missing Authorization header
     @ValueSource(strings = {
-            "", // blank
+            "", // empty
             "opik_mcp_at_no-scheme", // bare token, no Bearer scheme
             "Basic " + "opik_mcp_at_live-token", // wrong scheme
             "Bearer opik_mcp_rt_refresh-token", // refresh token, not an access token
@@ -67,16 +69,6 @@ class OAuthValidateTokenResourceTest {
     @DisplayName("rejects anything that is not a Bearer access token without touching the service")
     void rejectsNonBearerAccessToken(String authHeader) {
         try (Response response = validate(authHeader)) {
-            assertThat(response.getStatus()).isEqualTo(Response.Status.UNAUTHORIZED.getStatusCode());
-        }
-
-        verify(mcpOAuthService, never()).validateAccessToken(any());
-    }
-
-    @Test
-    @DisplayName("rejects a missing Authorization header")
-    void rejectsMissingHeader() {
-        try (Response response = validate(null)) {
             assertThat(response.getStatus()).isEqualTo(Response.Status.UNAUTHORIZED.getStatusCode());
         }
 

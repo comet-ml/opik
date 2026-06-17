@@ -1,5 +1,6 @@
 package com.comet.opik.domain.mcpoauth;
 
+import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.lang3.Strings;
@@ -68,7 +69,7 @@ public class McpOAuthTokenUtils {
         return authHeader.substring(BEARER_PREFIX.length()).strip();
     }
 
-    public static String hash(String token) {
+    public static String hash(@NonNull String token) {
         return DigestUtils.sha256Hex(token);
     }
 
