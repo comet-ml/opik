@@ -225,6 +225,19 @@ def import_all(
         # ------------------------------------------------------------------
         # Summary
         # ------------------------------------------------------------------
+        total_errors = sum(
+            value for key, value in total_stats.items() if key.endswith("_errors")
+        )
+        if total_errors > 0 and not dry_run:
+            print_import_summary(total_stats)
+            # Per-item errors were already printed in red by the importers; exit
+            # non-zero so the failure is not masked by a 0 exit code.
+            console.print(
+                f"\n[bold red]Import completed with {total_errors} error(s) "
+                "(see messages above). Re-run the import to retry.[/bold red]"
+            )
+            sys.exit(1)
+
         console.print("\n[bold green]Import complete.[/bold green]")
         print_import_summary(total_stats)
 

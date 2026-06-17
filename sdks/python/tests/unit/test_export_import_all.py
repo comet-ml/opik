@@ -690,6 +690,43 @@ class TestImportAll:
 
         mock_ds.assert_not_called()
 
+    def test_phase_errors_exit_with_code_1(self, tmp_path):
+        """If an importer reports *_errors, import_all exits non-zero (fail-fast)
+        rather than masking the failure with a 0 exit code."""
+        (tmp_path / _WORKSPACE / "projects" / _PROJECT / "datasets").mkdir(parents=True)
+        client = _make_import_client()
+        _seed_project_meta(tmp_path)
+
+        with (
+            patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client),
+            patch(
+                f"{_IMPORT_MODULE}.import_datasets_from_directory",
+                return_value={"datasets": 1, "datasets_errors": 2},
+            ),
+            patch(
+                f"{_IMPORT_MODULE}.import_prompts_from_directory",
+                return_value={"prompts": 0},
+            ),
+            patch(f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}),
+            patch(
+                f"{_IMPORT_MODULE}.import_experiments_from_directory", return_value={}
+            ),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            from opik.cli.imports.all import import_all
+
+            import_all(
+                workspace="ws",
+                project_name=_PROJECT,
+                path=str(tmp_path),
+                include=["datasets"],
+                dry_run=False,
+                force=False,
+                debug=False,
+            )
+
+        assert exc_info.value.code == 1
+
     def test_flush_timeout_exits_with_code_1(self, tmp_path):
         """If client.flush() returns False (timeout), import_all raises SystemExit(1)."""
         (tmp_path / _WORKSPACE / "projects" / _PROJECT / "datasets").mkdir(parents=True)

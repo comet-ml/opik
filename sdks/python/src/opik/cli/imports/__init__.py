@@ -235,23 +235,32 @@ def _import_by_type(
         stats_key = type_key_map.get(import_type, import_type + "s")
         label = label_map.get(import_type, import_type + "s")
         imported_count = stats.get(stats_key, 0)
-        errors = stats.get(stats_key + "_errors", 0)
+        # Sum every "*_errors" counter, not just this item's: importers that
+        # cascade (e.g. experiments pull in datasets/prompts/traces) and the
+        # whole-directory failure path report under other keys, and those
+        # failures must not be masked.
+        total_errors = sum(
+            value for key, value in stats.items() if key.endswith("_errors")
+        )
 
         if dry_run:
             console.print(
                 f"[blue]Dry run complete: Would import {imported_count} {label}[/blue]"
             )
+        elif total_errors > 0:
+            # Individual errors were already printed in red by the importer;
+            # exit non-zero so the failure is not masked by a 0 exit code.
+            console.print(
+                f"[red]Import completed with {total_errors} error(s) while importing {label} "
+                "(see messages above). Re-run the import to retry.[/red]"
+            )
+            sys.exit(1)
+        elif imported_count == 0:
+            console.print(f"[yellow]No {label} were imported[/yellow]")
         else:
-            if errors > 0:
-                console.print(
-                    f"[yellow]Import completed with {errors} error(s) while importing {label}[/yellow]"
-                )
-            elif imported_count == 0:
-                console.print(f"[yellow]No {label} were imported[/yellow]")
-            else:
-                console.print(
-                    f"[green]Successfully imported {imported_count} {label}[/green]"
-                )
+            console.print(
+                f"[green]Successfully imported {imported_count} {label}[/green]"
+            )
 
     except Exception as e:
         console.print(f"[red]Error importing {import_type}: {e}[/red]")
