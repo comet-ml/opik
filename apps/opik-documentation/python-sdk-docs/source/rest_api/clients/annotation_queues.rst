@@ -31,7 +31,10 @@ Usage Example
    # Get traces and add them to the queue
    traces = client.search_traces(project_name="my-project")
    queue.add_traces(traces[:10])
-   
+
+   # Fetch all the traces currently in the queue
+   items = queue.get_items()
+
    # Get an existing queue by ID
    existing_queue = client.get_annotation_queue("queue-id")
    

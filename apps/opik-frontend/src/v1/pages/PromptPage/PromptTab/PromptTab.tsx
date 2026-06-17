@@ -9,9 +9,8 @@ import {
   PROMPT_TEMPLATE_STRUCTURE,
 } from "@/types/prompts";
 import Loader from "@/shared/Loader/Loader";
-import CodeHighlighter, {
-  SUPPORTED_LANGUAGE,
-} from "@/shared/CodeHighlighter/CodeHighlighter";
+import CodeHighlighter from "@/shared/CodeHighlighter/CodeHighlighter";
+import { SUPPORTED_LANGUAGE } from "@/constants/codeLanguage";
 import UseThisPromptDialog from "@/v1/pages/PromptPage/PromptTab/UseThisPromptDialog";
 import EditPromptVersionDialog from "@/v1/pages/PromptPage/PromptTab/EditPromptVersionDialog";
 import CommitHistory from "@/v1/pages/PromptPage/PromptTab/CommitHistory";

@@ -297,6 +297,63 @@ def verify_dataset(
         testlib.assert_dicts_equal(actual_item, expected_item, ignore_keys=["id"])
 
 
+def verify_dashboard(
+    opik_client: opik.Opik,
+    dashboard_id: str,
+    name: str = mock.ANY,
+    type: str = mock.ANY,
+    version: int = mock.ANY,
+    section_count: int = mock.ANY,
+    expected_widget_configs: Optional[Dict[str, Dict[str, Any]]] = None,
+    expected_widget_positions: Optional[Dict[str, Dict[str, int]]] = None,
+):
+    assert synchronization.until(
+        lambda: opik_client.get_dashboard(dashboard_id),
+        allow_errors=True,
+    ), f"Failed to get dashboard with id {dashboard_id}."
+
+    fetched = opik_client.get_dashboard(dashboard_id)
+    config = fetched.config
+
+    testlib.assert_equal(name, fetched.name)
+    testlib.assert_equal(type, fetched.type)
+    if version is not mock.ANY:
+        assert config["version"] == version
+    if section_count is not mock.ANY:
+        assert len(config["sections"]) == section_count
+
+    configs_by_type: Dict[str, List[Dict[str, Any]]] = {}
+    for section in config["sections"]:
+        for widget in section.get("widgets", []):
+            configs_by_type.setdefault(widget["type"], []).append(widget["config"])
+    if expected_widget_configs is not None:
+        for widget_type, expected_config in expected_widget_configs.items():
+            assert widget_type in configs_by_type, (
+                f"Expected widget of type {widget_type!r} not found in dashboard. "
+                f"Present types: {sorted(configs_by_type)}"
+            )
+            actual_config = configs_by_type[widget_type][0]
+            actual_subset = {key: actual_config.get(key) for key in expected_config}
+            testlib.assert_equal(expected_config, actual_subset)
+
+    # Every widget has a matching layout item and vice versa.
+    for section in config["sections"]:
+        section_widget_ids = {widget["id"] for widget in section.get("widgets", [])}
+        layout_ids = {item["i"] for item in section.get("layout", [])}
+        assert section_widget_ids == layout_ids, (
+            f"Widget/layout id mismatch in section {section.get('id')!r}"
+        )
+
+    if expected_widget_positions is not None:
+        layout_by_id = {
+            item.id: item for section in fetched.sections for item in section.layout
+        }
+        for widget_id, expected_pos in expected_widget_positions.items():
+            actual_item = layout_by_id[widget_id]
+            actual_subset = {key: getattr(actual_item, key) for key in expected_pos}
+            testlib.assert_equal(expected_pos, actual_subset)
+
+
 def verify_experiment(
     opik_client: opik.Opik,
     id: str,

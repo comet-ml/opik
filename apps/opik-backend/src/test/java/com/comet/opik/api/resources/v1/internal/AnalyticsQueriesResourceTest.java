@@ -17,7 +17,6 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
-import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -33,7 +32,6 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
-import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -56,10 +54,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("Analytics Queries Resource Test")
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class AnalyticsQueriesResourceTest {
-
-    private static final String RO_USER = "comet_readonly_freeform_sql_user";
-    private static final String RO_PASS = "freeform_sql_test_pass";
-    private static final String RO_PROFILE = "comet_llm_readonly_freeform_sql_profile";
 
     private static final String USER = UUID.randomUUID().toString();
 
@@ -100,10 +94,10 @@ class AnalyticsQueriesResourceTest {
                         .databaseAnalyticsFactory(databaseAnalyticsFactory)
                         .runtimeInfo(wireMock.runtimeInfo())
                         .redisUrl(REDIS.getRedisURI())
+                        // The read-only free-form SQL user is provisioned globally on the ClickHouse container
+                        // (users.xml) and wired by config-test.yml; the test only needs to flip the toggle on.
                         .customConfigs(List.of(
-                                new CustomConfig("serviceToggles.agentInsightsEnabled", "true"),
-                                new CustomConfig("databaseAnalyticsReadOnlyFreeFormSql.username", RO_USER),
-                                new CustomConfig("databaseAnalyticsReadOnlyFreeFormSql.password", RO_PASS)))
+                                new CustomConfig("serviceToggles.agentInsightsEnabled", "true")))
                         .build());
     }
 
@@ -119,7 +113,7 @@ class AnalyticsQueriesResourceTest {
     private UUID traceIdB;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, TransactionTemplateAsync clickHouseTemplate) {
+    void setUpAll(ClientSupport client) {
         var baseURI = TestUtils.getBaseUrl(client);
 
         ClientSupportUtils.config(client);
@@ -130,10 +124,6 @@ class AnalyticsQueriesResourceTest {
         projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         traceResourceClient = new TraceResourceClient(client, baseURI);
         analyticsQueriesClient = new AnalyticsQueriesClient(client, baseURI);
-
-        // Replicate the OPIK-6846 provisioning in the test container: a readonly user restricted to the 3 tables,
-        // with row policies that bind every query to the SQL_workspace_id / SQL_project_id custom settings.
-        provisionReadOnlyUser(clickHouseTemplate);
 
         String projectNameA = UUID.randomUUID().toString();
         projectIdA = projectResourceClient.createProject(projectNameA, API_KEY_A, WORKSPACE_NAME_A);
@@ -263,29 +253,5 @@ class AnalyticsQueriesResourceTest {
                 .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(workspaceName)))
                 .withRequestBody(matchingJsonPath("$.path", matching("/v1/internal/analytics-queries(/.*)?")))
                 .willReturn(okJson(AuthTestUtils.newWorkspaceAuthResponse(USER, workspaceId, workspaceName, null))));
-    }
-
-    private void provisionReadOnlyUser(TransactionTemplateAsync clickHouseTemplate) {
-        // The read-only sandbox profile (limits + CHANGEABLE_IN_READONLY custom settings) is defined in clickhouse.xml;
-        // here we only create the user and bind it to that profile, then grant access via SQL-managed RBAC below.
-        executeStatement(clickHouseTemplate,
-                "CREATE USER IF NOT EXISTS %s IDENTIFIED BY '%s' SETTINGS PROFILE '%s'".formatted(RO_USER, RO_PASS,
-                        RO_PROFILE));
-
-        for (String table : List.of("spans", "traces", "authored_feedback_scores")) {
-            executeStatement(clickHouseTemplate,
-                    "GRANT SELECT ON %s.%s TO %s".formatted(DATABASE_NAME, table, RO_USER));
-            executeStatement(clickHouseTemplate, """
-                    CREATE ROW POLICY IF NOT EXISTS %s_workspace_project_isolation ON %s.%s
-                    FOR SELECT USING
-                        workspace_id = getSetting('SQL_workspace_id')
-                        AND project_id = getSetting('SQL_project_id')
-                    AS RESTRICTIVE TO %s
-                    """.formatted(table, DATABASE_NAME, table, RO_USER));
-        }
-    }
-
-    private void executeStatement(TransactionTemplateAsync clickHouseTemplate, String sql) {
-        clickHouseTemplate.nonTransaction(connection -> Mono.from(connection.createStatement(sql).execute())).block();
     }
 }

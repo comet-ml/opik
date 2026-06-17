@@ -258,6 +258,28 @@ describe("hashCode", () => {
   it("should handle empty string", () => {
     expect(hashCode("")).toBe(0);
   });
+
+  it("should produce different sort orders for different user prefixes on UUIDs", () => {
+    const items = [
+      "11111111-1111-4111-8111-111111111111",
+      "22222222-2222-4222-8222-222222222222",
+      "33333333-3333-4333-8333-333333333333",
+      "44444444-4444-4444-8444-444444444444",
+      "55555555-5555-4555-8555-555555555555",
+      "66666666-6666-4666-8666-666666666666",
+    ];
+    const prefix1 = "miguelgrc" + "queue-id-1";
+    const prefix2 = "miguel-garc-a" + "queue-id-1";
+
+    const sorted1 = [...items].sort(
+      (a, b) => hashCode(prefix1 + a) - hashCode(prefix1 + b),
+    );
+    const sorted2 = [...items].sort(
+      (a, b) => hashCode(prefix2 + a) - hashCode(prefix2 + b),
+    );
+
+    expect(sorted1).not.toEqual(sorted2);
+  });
 });
 
 describe("getLastAnnotationByUser", () => {

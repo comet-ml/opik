@@ -30,28 +30,27 @@ public record ModelPrice(
     public static final int TIER_THRESHOLD_200K = 200_000;
 
     /**
-     * Backwards-compatible constructor: callers (and many existing unit tests) construct a
-     * ModelPrice without tier rates. Defaults the four tier-rate fields to zero so the
-     * effective-price helpers below fall through to the base rates.
+     * Returns a builder pre-populated with zero rates and the no-op {@code defaultCost} calculator.
+     * Callers only override the fields they care about, which keeps test fixtures and the empty
+     * placeholder concise without re-introducing overloaded constructors.
      */
-    public ModelPrice(BigDecimal inputPrice, BigDecimal outputPrice,
-            BigDecimal cacheCreationInputTokenPrice, BigDecimal cacheReadInputTokenPrice,
-            BigDecimal videoOutputPrice, BigDecimal audioInputCharacterPrice,
-            BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator) {
-        this(inputPrice, outputPrice, cacheCreationInputTokenPrice, cacheReadInputTokenPrice,
-                videoOutputPrice, audioInputCharacterPrice, calculator,
-                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
+    public static ModelPriceBuilder defaultBuilder() {
+        return builder()
+                .inputPrice(BigDecimal.ZERO)
+                .outputPrice(BigDecimal.ZERO)
+                .cacheCreationInputTokenPrice(BigDecimal.ZERO)
+                .cacheReadInputTokenPrice(BigDecimal.ZERO)
+                .videoOutputPrice(BigDecimal.ZERO)
+                .audioInputCharacterPrice(BigDecimal.ZERO)
+                .calculator(SpanCostCalculator::defaultCost)
+                .inputPriceAbove200kTokens(BigDecimal.ZERO)
+                .outputPriceAbove200kTokens(BigDecimal.ZERO)
+                .cacheCreationInputTokenPriceAbove200kTokens(BigDecimal.ZERO)
+                .cacheReadInputTokenPriceAbove200kTokens(BigDecimal.ZERO);
     }
 
     public static ModelPrice empty() {
-        return new ModelPrice(
-                BigDecimal.ZERO,
-                BigDecimal.ZERO,
-                BigDecimal.ZERO,
-                BigDecimal.ZERO,
-                BigDecimal.ZERO,
-                BigDecimal.ZERO,
-                SpanCostCalculator::defaultCost);
+        return defaultBuilder().build();
     }
 
     public BigDecimal effectiveInputPrice(int totalPromptTokens) {

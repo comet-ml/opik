@@ -77,7 +77,7 @@ class RedissonLockServiceTest {
                 .ttlInSeconds(TTL_IN_SECONDS)
                 .build();
         when(redisClient.getPermitExpirableSemaphore(any(CommonOptions.class))).thenReturn(semaphore);
-        lockService = new RedissonLockService(redisClient, config);
+        lockService = new RedissonLockService(redisClient, config, new LockMetrics());
     }
 
     @Test

@@ -1,6 +1,8 @@
 import { OpikClient } from "@/client/Client";
 import { TraceThread, AnnotationQueuePublic } from "@/rest_api/api";
-import { splitIntoBatches } from "@/utils/stream";
+import { serialization } from "@/rest_api";
+import { parseNdjsonStreamToArray, splitIntoBatches } from "@/utils/stream";
+import { parseThreadFilterString } from "@/utils/searchHelpers";
 import { logger } from "@/utils/logger";
 import { AnnotationQueueItemMissingIdError } from "./errors";
 import {
@@ -42,6 +44,50 @@ export class ThreadsAnnotationQueue extends BaseAnnotationQueue {
       logger.debug(`Adding ${batch.length} threads to annotation queue`);
       await this.addItemsBatch(batch);
     }
+  }
+
+  /**
+   * Fetches all threads currently assigned to this annotation queue.
+   *
+   * @param options.truncateImages When true (default), truncates inline base64
+   *   image data in input, output and metadata to slim payloads.
+   * @returns The threads in the queue.
+   */
+  public async getItems(options?: {
+    truncateImages?: boolean;
+  }): Promise<TraceThread[]> {
+    const truncate = options?.truncateImages ?? true;
+    const filters = parseThreadFilterString(
+      `annotation_queue_ids contains "${this.id}"`
+    );
+
+    logger.debug(`Fetching items from annotation queue "${this.name}"`);
+
+    const threads = await this.fetchAllItems<TraceThread>(
+      async (limit, lastRetrievedThreadModelId) => {
+        const streamResponse =
+          await this.opik.api.traces.searchTraceThreads({
+            projectId: this.projectId,
+            filters: filters ?? undefined,
+            limit,
+            lastRetrievedThreadModelId,
+            truncate,
+          });
+
+        return parseNdjsonStreamToArray<TraceThread>(
+          streamResponse,
+          serialization.TraceThread,
+          limit
+        );
+      },
+      (thread) => thread.threadModelId
+    );
+
+    logger.debug(
+      `Fetched ${threads.length} items from annotation queue "${this.name}"`
+    );
+
+    return threads;
   }
 
   public async removeThreads(threads: TraceThread[]): Promise<void> {

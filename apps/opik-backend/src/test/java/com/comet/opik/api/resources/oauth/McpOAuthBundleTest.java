@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.oauth;
 
+import com.comet.opik.domain.mcpoauth.McpOAuthScrubJob;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,6 +37,9 @@ class McpOAuthBundleTest {
                 .disableExtensions(
                         OAuthMetadataResource.class,
                         OAuthAuthorizeResource.class,
-                        OAuthTokenResource.class);
+                        OAuthTokenResource.class,
+                        OAuthRegisterResource.class,
+                        OAuthValidateTokenResource.class,
+                        McpOAuthScrubJob.class);
     }
 }

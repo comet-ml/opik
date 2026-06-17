@@ -2,12 +2,15 @@ package com.comet.opik.domain.mcpoauth;
 
 import lombok.experimental.UtilityClass;
 
+import java.util.List;
+
 @UtilityClass
 public class OAuthConstants {
 
     // RFC 6749 §4.1.3, §6 — grant types
     public static final String GRANT_AUTHORIZATION_CODE = "authorization_code";
     public static final String GRANT_REFRESH_TOKEN = "refresh_token";
+    public static final List<String> DEFAULT_GRANT_TYPES = List.of(GRANT_AUTHORIZATION_CODE, GRANT_REFRESH_TOKEN);
 
     // RFC 6749 §4.1.3, §6 + RFC 7009 §2.1 — token/revocation request parameter names
     public static final String PARAM_GRANT_TYPE = "grant_type";
@@ -20,6 +23,7 @@ public class OAuthConstants {
 
     // RFC 6749 §3.1.1 — response types
     public static final String RESPONSE_TYPE_CODE = "code";
+    public static final List<String> DEFAULT_RESPONSE_TYPES = List.of(RESPONSE_TYPE_CODE);
 
     // RFC 6749 §4.1.1, §4.1.2 + RFC 7636 + RFC 8707 — authorization request/response query parameters
     public static final String PARAM_RESPONSE_TYPE = "response_type";
@@ -56,6 +60,8 @@ public class OAuthConstants {
     public static final String TOKEN_PATH = "/oauth/token";
     public static final String REVOKE_PATH = "/oauth/revoke";
     public static final String REGISTER_PATH = "/oauth/register";
+
+    public static final String OAUTH_VALIDATE_TOKEN_RESOURCE_BASE_PATH = "/opik/auth-oauth";
 
     // RFC 6749 §4.1.2.1, §5.2 + RFC 8707 — error codes
     public static final String ERROR_INVALID_REQUEST = "invalid_request";

@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.ratelimit;
 
 import com.comet.opik.infrastructure.RateLimitConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.google.common.net.HttpHeaders;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
@@ -9,6 +10,7 @@ import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
 import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import jakarta.inject.Provider;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.Path;
@@ -16,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.aopalliance.intercept.MethodInterceptor;
 import org.aopalliance.intercept.MethodInvocation;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -39,6 +42,10 @@ class RateLimitInterceptor implements MethodInterceptor {
 
     private static final String KEY = "rate-limit:%s-%s";
 
+    private static final String WORKSPACE_ID_PLACEHOLDER = ":{workspaceId}";
+    private static final String API_KEY_PLACEHOLDER = ":{apiKey}";
+    private static final String CLIENT_IP_PLACEHOLDER = ":{clientIp}";
+
     // OpenTelemetry metrics - initialized once at class loading
     private static final Meter METER = GlobalOpenTelemetry.get().getMeter("opik.ratelimit");
     private static final AttributeKey<String> HTTP_ROUTE_KEY = AttributeKey.stringKey("http_route");
@@ -53,6 +60,7 @@ class RateLimitInterceptor implements MethodInterceptor {
     private final Provider<RequestContext> requestContext;
     private final Provider<RateLimitService> rateLimitService;
     private final RateLimitConfig rateLimitConfig;
+    private final Provider<HttpServletRequest> httpRequest;
 
     @Override
     public Object invoke(MethodInvocation invocation) throws Throwable {
@@ -123,15 +131,48 @@ class RateLimitInterceptor implements MethodInterceptor {
     }
 
     private String replaceLimitVariables(String limit) {
-        return limit
-                .replace(":{workspaceId}", requestContext.get().getWorkspaceId())
-                .replace(":{apiKey}", requestContext.get().getApiKey());
+        String result = limit;
+        if (result.contains(WORKSPACE_ID_PLACEHOLDER)) {
+            result = result.replace(WORKSPACE_ID_PLACEHOLDER, requestContext.get().getWorkspaceId());
+        }
+        if (result.contains(API_KEY_PLACEHOLDER)) {
+            result = result.replace(API_KEY_PLACEHOLDER, requestContext.get().getApiKey());
+        }
+        if (result.contains(CLIENT_IP_PLACEHOLDER)) {
+            result = result.replace(CLIENT_IP_PLACEHOLDER, getClientIp());
+        }
+        return result;
     }
 
     private String getBucketName(String limit) {
         return limit
-                .replace(":{workspaceId}", "")
-                .replace(":{apiKey}", "");
+                .replace(WORKSPACE_ID_PLACEHOLDER, "")
+                .replace(API_KEY_PLACEHOLDER, "")
+                .replace(CLIENT_IP_PLACEHOLDER, "");
+    }
+
+    /**
+     * Source IP for per-IP throttling on unauthenticated endpoints. The fronting nginx appends to X-Forwarded-For
+     * ($proxy_add_x_forwarded_for), so the right-most hop is the address nginx actually observed and is not
+     * client-spoofable; the left-most hops are attacker-controlled and must not key the bucket. Falls back to the
+     * direct remote address when the header is absent.
+     */
+    private String getClientIp() {
+        HttpServletRequest request = httpRequest.get();
+        if (request == null) {
+            return StringUtils.EMPTY;
+        }
+        String forwarded = request.getHeader(HttpHeaders.X_FORWARDED_FOR);
+        if (StringUtils.isNotBlank(forwarded)) {
+            String[] hops = forwarded.split(",");
+            if (hops.length > 0) {
+                String clientIp = hops[hops.length - 1].strip();
+                if (StringUtils.isNotBlank(clientIp)) {
+                    return clientIp;
+                }
+            }
+        }
+        return request.getRemoteAddr();
     }
 
     private LimitConfig getLimitOrDefault(String bucket, LimitConfig defaultLimit) {

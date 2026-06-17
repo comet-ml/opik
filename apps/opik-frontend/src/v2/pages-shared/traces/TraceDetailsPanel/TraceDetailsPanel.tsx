@@ -47,6 +47,7 @@ import {
   TRACE_TYPE_FOR_TREE,
 } from "@/constants/traces";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import { useVisibleSpans } from "@/v2/pages-shared/traces/hiddenSpans";
 
 const MAX_SPANS_LOAD_SIZE = 15000;
 const EMPTY_FILTERS: unknown[] = [];
@@ -211,6 +212,12 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
 
   const spanCount = spansData?.content?.length ?? 0;
 
+  const allSpans = useMemo(
+    () => spansData?.content ?? [],
+    [spansData?.content],
+  );
+  const displayedSpans = useVisibleSpans(allSpans);
+
   const traceType: BASE_TRACE_DATA_TYPE | undefined = trace
     ? TRACE_TYPE_FOR_TREE
     : undefined;
@@ -270,7 +277,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
       ) : (
         <TraceTreeViewer
           trace={trace}
-          spans={spansData?.content}
+          spans={displayedSpans}
           rowId={spanId || traceId}
           onSelectRow={handleRowSelect}
           search={search}

@@ -219,6 +219,28 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AuthorizationServerMetadata"
+  /oauth/register:
+    post:
+      tags:
+      - MCP OAuth
+      summary: OAuth Dynamic Client Registration Endpoint
+      description: OAuth 2.0 Dynamic Client Registration (RFC 7591). Registers a public
+        client for the MCP OAuth flow; throttled per source IP
+      operationId: registerOAuthClient
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientRegistrationRequest"
+      responses:
+        "201":
+          description: Registered client metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientRegistrationResponse"
+        "429":
+          description: Registration rate limit exceeded
   /oauth/revoke:
     post:
       tags:
@@ -9106,6 +9128,56 @@ components:
           type: array
           items:
             type: string
+    ClientRegistrationResponse:
+      type: object
+      properties:
+        client_id:
+          type: string
+        client_id_issued_at:
+          type: integer
+          format: int64
+        client_name:
+          type: string
+        logo_uri:
+          type: string
+        redirect_uris:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+        token_endpoint_auth_method:
+          type: string
+        grant_types:
+          type: array
+          items:
+            type: string
+        response_types:
+          type: array
+          items:
+            type: string
+    ClientRegistrationRequest:
+      required:
+      - client_name
+      - redirect_uris
+      type: object
+      properties:
+        client_name:
+          maxLength: 255
+          minLength: 0
+          type: string
+        redirect_uris:
+          maxItems: 10
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 2048
+            minLength: 0
+            type: string
+        logo_uri:
+          maxLength: 2048
+          minLength: 0
+          type: string
     TokenResponse:
       type: object
       properties:
@@ -20079,6 +20151,7 @@ components:
       - alertsEnabled
       - anthropicProviderEnabled
       - bedrockProviderEnabled
+      - costIntelligenceEnabled
       - customllmProviderEnabled
       - datasetExportEnabled
       - datasetVersioningEnabled
@@ -20123,6 +20196,8 @@ components:
         exportEnabled:
           type: boolean
         optimizationStudioEnabled:
+          type: boolean
+        costIntelligenceEnabled:
           type: boolean
         datasetVersioningEnabled:
           type: boolean

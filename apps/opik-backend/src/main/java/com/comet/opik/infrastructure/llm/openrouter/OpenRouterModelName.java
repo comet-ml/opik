@@ -527,6 +527,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     Z_AI_GLM_5("z-ai/glm-5"),
     Z_AI_GLM_5_TURBO("z-ai/glm-5-turbo"),
     Z_AI_GLM_5_1("z-ai/glm-5.1"),
+    Z_AI_GLM_5_2("z-ai/glm-5.2"),
     Z_AI_GLM_5V_TURBO("z-ai/glm-5v-turbo"),
     ANTHROPIC_CLAUDE_FABLE_LATEST("~anthropic/claude-fable-latest"),
     ANTHROPIC_CLAUDE_HAIKU_LATEST("~anthropic/claude-haiku-latest"),

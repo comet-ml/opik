@@ -1,0 +1,85 @@
+<clickhouse>
+    <!--
+        Mirrors the production Agent Insights read-only user provisioned by
+        apps/opik-backend/provision_agent_insights_readonly_user.sh: settings profile, user, the
+        per-table SELECT grants and the row policies. Loaded by ClickHouse at startup from
+        /etc/clickhouse-server/users.d/. Inert unless a test enables
+        serviceToggles.agentInsightsEnabled and points the freeform-SQL client credentials at
+        this user (config-test.yml already does).
+
+        The opik database is created by the container at startup via the CLICKHOUSE_DB env var
+        (configured in ClickHouseContainerUtils), so grants and row policies below bind against a
+        real database. ClickHouse also accepts grants on tables that don't yet exist — they're
+        applied when the table is later created by Liquibase migrations.
+    -->
+    <profiles>
+        <comet_llm_readonly_freeform_sql_profile>
+            <readonly>1</readonly>
+            <max_execution_time>180</max_execution_time>
+            <max_memory_usage>8589934592</max_memory_usage>
+            <max_result_rows>100000</max_result_rows>
+            <result_overflow_mode>throw</result_overflow_mode>
+            <max_rows_to_read>100000000</max_rows_to_read>
+            <read_overflow_mode>throw</read_overflow_mode>
+            <max_concurrent_queries_for_user>5</max_concurrent_queries_for_user>
+            <!--
+                Production sets SQL_workspace_id = '' / SQL_project_id = '' as defaults, but
+                ClickHouse's XML profile loader rejects an empty Field for custom settings. The
+                CHANGEABLE_IN_READONLY constraint alone is what triggers the explicit-allowlist
+                mode the probe is tested against (any other per-call setting change rejected);
+                defaults are populated at query time by the Agent Insights pipeline, not by the
+                probe.
+            -->
+            <constraints>
+                <SQL_workspace_id>
+                    <changeable_in_readonly/>
+                </SQL_workspace_id>
+                <SQL_project_id>
+                    <changeable_in_readonly/>
+                </SQL_project_id>
+            </constraints>
+        </comet_llm_readonly_freeform_sql_profile>
+    </profiles>
+
+    <users>
+        <comet_readonly_freeform_sql_user>
+            <password>opik</password>
+            <!--
+                ::/0 = "any IPv6 or IPv4 address" (the wildcard CIDR). Required because
+                XML-defined users without a <networks> entry are rejected by the loader, and
+                the test client connects from outside the container's localhost.
+            -->
+            <networks>
+                <ip>::/0</ip>
+            </networks>
+            <profile>comet_llm_readonly_freeform_sql_profile</profile>
+            <quota>default</quota>
+            <grants>
+                <query>GRANT SELECT ON opik.spans</query>
+                <query>GRANT SELECT ON opik.traces</query>
+                <query>GRANT SELECT ON opik.authored_feedback_scores</query>
+            </grants>
+            <!--
+                Row policies in the per-user <databases> XML form (production uses
+                CREATE ROW POLICY ... AS RESTRICTIVE; ClickHouse's XML loader accepts only the
+                permissive flavour in this nested shape). Functionally equivalent with a single
+                policy per user/table: both flavours allow only rows matching the filter.
+                The probe (SELECT 1) doesn't touch these tables — they're here for production
+                parity, not for what the probe exercises.
+            -->
+            <databases>
+                <opik>
+                    <spans>
+                        <filter>workspace_id = getSetting('SQL_workspace_id') AND project_id = getSetting('SQL_project_id')</filter>
+                    </spans>
+                    <traces>
+                        <filter>workspace_id = getSetting('SQL_workspace_id') AND project_id = getSetting('SQL_project_id')</filter>
+                    </traces>
+                    <authored_feedback_scores>
+                        <filter>workspace_id = getSetting('SQL_workspace_id') AND project_id = getSetting('SQL_project_id')</filter>
+                    </authored_feedback_scores>
+                </opik>
+            </databases>
+        </comet_readonly_freeform_sql_user>
+    </users>
+</clickhouse>
