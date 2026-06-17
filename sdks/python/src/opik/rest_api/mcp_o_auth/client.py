@@ -9,6 +9,7 @@ from ..types.authorize_context import AuthorizeContext
 from ..types.client_registration_response import ClientRegistrationResponse
 from ..types.consent_response import ConsentResponse
 from ..types.token_response import TokenResponse
+from ..types.validated_token import ValidatedToken
 from .raw_client import AsyncRawMcpOAuthClient, RawMcpOAuthClient
 
 # this is used as the default value for optional parameters
@@ -328,6 +329,29 @@ class McpOAuthClient:
             refresh_token=refresh_token,
             request_options=request_options,
         )
+        return _response.data
+
+    def validate_o_auth_token(self, *, request_options: typing.Optional[RequestOptions] = None) -> ValidatedToken:
+        """
+        Introspects a bearer access token and returns the identity it resolves to
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ValidatedToken
+            Validated token identity
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.mcp_o_auth.validate_o_auth_token()
+        """
+        _response = self._raw_client.validate_o_auth_token(request_options=request_options)
         return _response.data
 
 
@@ -665,4 +689,30 @@ class AsyncMcpOAuthClient:
             refresh_token=refresh_token,
             request_options=request_options,
         )
+        return _response.data
+
+    async def validate_o_auth_token(self, *, request_options: typing.Optional[RequestOptions] = None) -> ValidatedToken:
+        """
+        Introspects a bearer access token and returns the identity it resolves to
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ValidatedToken
+            Validated token identity
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.mcp_o_auth.validate_o_auth_token()
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.validate_o_auth_token(request_options=request_options)
         return _response.data

@@ -1,5 +1,8 @@
 export * from "./agentConfigs/client/requests/index.js";
 export * as agentConfigs from "./agentConfigs/index.js";
+export * from "./agentInsights/client/requests/index.js";
+export * as agentInsights from "./agentInsights/index.js";
+export * from "./agentInsights/types/index.js";
 export * from "./aiSpend/client/requests/index.js";
 export * as aiSpend from "./aiSpend/index.js";
 export * from "./alerts/client/requests/index.js";
@@ -72,6 +75,8 @@ export * as serviceToggles from "./serviceToggles/index.js";
 export * from "./spans/client/requests/index.js";
 export * as spans from "./spans/index.js";
 export * from "./spans/types/index.js";
+export * from "./systemAnalyticsQueries/client/requests/index.js";
+export * as systemAnalyticsQueries from "./systemAnalyticsQueries/index.js";
 export * as systemUsage from "./systemUsage/index.js";
 export * from "./traces/client/requests/index.js";
 export * as traces from "./traces/index.js";
