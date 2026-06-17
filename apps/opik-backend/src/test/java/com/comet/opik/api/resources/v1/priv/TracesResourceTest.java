@@ -6434,6 +6434,46 @@ class TracesResourceTest {
 
             TraceAssertions.assertThreads(expectedClosedThreads, closedThreadPage.content());
         }
+
+        @Test
+        @DisplayName("open thread: when projectId belongs to another workspace, then return not found")
+        void openTraceThread__whenProjectBelongsToAnotherWorkspace__thenReturnNotFound() {
+            // Workspace A owns the project
+            var workspaceNameA = RandomStringUtils.secure().nextAlphanumeric(10);
+            var apiKeyA = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKeyA, workspaceNameA, UUID.randomUUID().toString());
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            UUID projectId = projectResourceClient.createProject(projectName, apiKeyA, workspaceNameA);
+
+            // Workspace B does not own it
+            var workspaceNameB = RandomStringUtils.secure().nextAlphanumeric(10);
+            var apiKeyB = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKeyB, workspaceNameB, UUID.randomUUID().toString());
+
+            traceResourceClient.openTraceThread(randomUUID().toString(), projectId, projectName, apiKeyB,
+                    workspaceNameB, HttpStatus.SC_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("close threads: when projectId belongs to another workspace, then return not found")
+        void closeTraceThreads__whenProjectBelongsToAnotherWorkspace__thenReturnNotFound() {
+            // Workspace A owns the project
+            var workspaceNameA = RandomStringUtils.secure().nextAlphanumeric(10);
+            var apiKeyA = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKeyA, workspaceNameA, UUID.randomUUID().toString());
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            UUID projectId = projectResourceClient.createProject(projectName, apiKeyA, workspaceNameA);
+
+            // Workspace B does not own it
+            var workspaceNameB = RandomStringUtils.secure().nextAlphanumeric(10);
+            var apiKeyB = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKeyB, workspaceNameB, UUID.randomUUID().toString());
+
+            traceResourceClient.closeTraceThreads(Set.of(randomUUID().toString()), projectId, projectName, apiKeyB,
+                    workspaceNameB, HttpStatus.SC_NOT_FOUND);
+        }
     }
 
     @Nested
