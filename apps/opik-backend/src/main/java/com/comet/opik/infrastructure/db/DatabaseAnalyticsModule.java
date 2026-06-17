@@ -18,13 +18,17 @@ import ru.vyarus.dropwizard.guice.module.support.DropwizardAwareModule;
 
 public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfiguration> {
 
+    public static final String READ_ONLY_FREE_FORM_SQL_CLICKHOUSE_CLIENT = "readOnlyFreeFormSqlClickHouseClient";
+    public static final String CLICKHOUSE_HEALTH_CHECK_TIMEOUT = "clickhouse_health_check_timeout";
+
     private transient DatabaseAnalyticsFactory databaseAnalyticsFactory;
     private transient ConnectionFactory connectionFactory;
     private transient Client clickHouseClient;
+    private transient Client readOnlyFreeFormSqlClickHouseClient;
 
     @Override
     protected void configure() {
-        databaseAnalyticsFactory = configuration(DatabaseAnalyticsFactory.class);
+        databaseAnalyticsFactory = configuration().getDatabaseAnalytics();
         connectionFactory = R2dbcTelemetry.create(GlobalOpenTelemetry.get())
                 .wrapConnectionFactory(databaseAnalyticsFactory.build(), ConnectionFactoryOptions.builder().build());
 
@@ -36,11 +40,36 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
             }
         });
 
+        // Read-only client used for Agent Insights freeform SQL. The v2 client connects lazily, so building it is
+        // cheap and never contacts ClickHouse until a query runs; the agentInsightsEnabled toggle gates all usage.
+        readOnlyFreeFormSqlClickHouseClient = buildReadOnlyFreeFormSqlClient();
+        environment().lifecycle().manage(new Managed() {
+            @Override
+            public void stop() {
+                readOnlyFreeFormSqlClickHouseClient.close();
+            }
+        });
+
         ClickHouseLogAppenderConfig clickHouseLogAppenderConfig = configuration(ClickHouseLogAppenderConfig.class);
 
         // Initialize the UserFacingRuleLollingFactory
         UserFacingLoggingFactory.init(connectionFactory, clickHouseLogAppenderConfig.getBatchSize(),
                 clickHouseLogAppenderConfig.getFlushIntervalDuration());
+    }
+
+    // Reuse the main analytics connection params (same ClickHouse instance) and only swap in the restricted user's
+    // credentials. No queryParameters: the user runs under readonly=1 and would reject per-query server settings.
+    private Client buildReadOnlyFreeFormSqlClient() {
+        var main = configuration().getDatabaseAnalytics();
+        var credentials = configuration().getDatabaseAnalyticsReadOnlyFreeFormSql();
+        var factory = new DatabaseAnalyticsFactory();
+        factory.setProtocol(main.getProtocol());
+        factory.setHost(main.getHost());
+        factory.setPort(main.getPort());
+        factory.setDatabaseName(main.getDatabaseName());
+        factory.setUsername(credentials.getUsername());
+        factory.setPassword(credentials.getPassword());
+        return factory.buildClient();
     }
 
     @Provides
@@ -53,6 +82,13 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
     @Singleton
     public Client getClickHouseClient() {
         return clickHouseClient;
+    }
+
+    @Provides
+    @Singleton
+    @Named(READ_ONLY_FREE_FORM_SQL_CLICKHOUSE_CLIENT)
+    public Client getReadOnlyFreeFormSqlClickHouseClient() {
+        return readOnlyFreeFormSqlClickHouseClient;
     }
 
     @Provides
@@ -72,7 +108,7 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
 
     @Provides
     @Singleton
-    @Named("clickhouse_health_check_timeout")
+    @Named(CLICKHOUSE_HEALTH_CHECK_TIMEOUT)
     public Duration getHealthCheckTimeout() {
         return databaseAnalyticsFactory.getHealthCheckTimeout();
     }

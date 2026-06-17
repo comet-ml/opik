@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 2.0.58](https://img.shields.io/badge/Version-2.0.58-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.0.58](https://img.shields.io/badge/AppVersion-2.0.58-informational?style=flat-square)
+![Version: 2.0.68](https://img.shields.io/badge/Version-2.0.68-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.0.68](https://img.shields.io/badge/AppVersion-2.0.68-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -442,7 +442,7 @@ Call opik api on http://localhost:5173/api
 | global.useHelmHooks | bool | `true` |  |
 | localFE | bool | `false` |  |
 | localFEAddress | string | `"host.minikube.internal:5174"` |  |
-| mcpOAuth.enabled | bool | `false` | Render nginx locations (AS endpoints, consent UI, RFC 8414 discovery URL). Turn on together with opik-backend MCP_OAUTH_ENABLED=true and a path-prefix OPIK_BASE_URL (e.g. https://www.comet.com/opik). |
+| mcpOAuth.enabled | bool | `false` | Render nginx locations (AS endpoints, consent UI, discovery URL). Turn on together with opik-backend MCP_OAUTH_ENABLED=true and a path-prefix OPIK_BASE_URL (e.g. https://www.comet.com/opik). |
 | minio.auth.rootPassword | string | `"LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"` |  |
 | minio.auth.rootUser | string | `"THAAIOSFODNN7EXAMPLE"` |  |
 | minio.config.browserEnabled | bool | `false` |  |

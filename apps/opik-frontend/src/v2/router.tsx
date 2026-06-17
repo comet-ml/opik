@@ -26,10 +26,10 @@ import EmptyPageLayout from "@/v2/layout/EmptyPageLayout/EmptyPageLayout";
 import ProjectPage from "@/v2/pages/ProjectPage/ProjectPage";
 import ProjectsPage from "@/v2/pages/ProjectsPage/ProjectsPage";
 import LogsPage from "@/v2/pages/LogsPage/LogsPage";
-import WorkspacePage from "@/v2/pages/WorkspacePage/WorkspacePage";
 import RedirectProjects from "@/v2/redirect/RedirectProjects";
 import RedirectDatasets from "@/v2/redirect/RedirectDatasets";
 import { createV1RedirectRoutes } from "@/v2/redirect/v1RedirectConfig";
+import usePluginsStore from "@/store/PluginsStore";
 const PlaygroundPage = lazy(
   () => import("@/v2/pages/PlaygroundPage/PlaygroundPage"),
 );
@@ -63,6 +63,7 @@ import PromptsPage from "@/v2/pages/PromptsPage/PromptsPage";
 import PromptPage from "@/v2/pages/PromptPage/PromptPage";
 
 import OlliePage from "@/v2/pages/OlliePage/OlliePage";
+import ProjectHomePage from "@/v2/pages/ProjectHomePage/ProjectHomePage";
 import TracesTabRedirect from "@/v2/redirect/TracesTabRedirect";
 import ProjectDashboardsPage from "@/v2/pages/ProjectDashboardsPage/ProjectDashboardsPage";
 
@@ -170,7 +171,17 @@ const homeRoute = createRoute({
 const workspaceRoute = createRoute({
   path: "/$workspaceName",
   getParentRoute: () => workspaceGuardRoute,
-  component: WorkspacePage,
+});
+
+const workspaceIndexRoute = createRoute({
+  path: "/",
+  getParentRoute: () => workspaceRoute,
+  component: () => (
+    <Navigate
+      to="/$workspaceName/home"
+      params={{ workspaceName: useAppStore.getState().activeWorkspaceName }}
+    />
+  ),
 });
 
 // ----------- quickstart
@@ -223,12 +234,11 @@ const projectScopedRoute = createRoute({
   },
 });
 
-// TODO: OPIK-6260 - Restore ProjectHomePage as /home component once home page redesign is complete
-// ----------- project home (project-scoped) — temporarily shows Ollie
+// ----------- project home (project-scoped)
 const projectHomeRoute = createRoute({
   path: "/home",
   getParentRoute: () => projectScopedRoute,
-  component: OlliePage,
+  component: ProjectHomePage,
 });
 
 // ----------- ollie (project-scoped)
@@ -619,6 +629,10 @@ const automationLogsRoute = createRoute({
 
 const v1RedirectRoutes = createV1RedirectRoutes(workspaceRoute);
 
+const pluginWorkspaceGuardRoutes = usePluginsStore
+  .getState()
+  .collectRoutes({ workspaceGuard: workspaceGuardRoute });
+
 // ═══════════════════════════════════════════════════════════════
 // ROUTE TREE
 // ═══════════════════════════════════════════════════════════════
@@ -637,6 +651,7 @@ const routeTree = rootRoute.addChildren([
     baseRoute,
     homeRoute,
     workspaceRoute.addChildren([
+      workspaceIndexRoute,
       // Projects: workspace-level list + project-scoped routes
       projectsRoute.addChildren([
         projectsListRoute,
@@ -689,6 +704,7 @@ const routeTree = rootRoute.addChildren([
 
       // V1 compat redirects (workspace-level → project-scoped)
       ...v1RedirectRoutes,
+      ...pluginWorkspaceGuardRoutes,
     ]),
   ]),
 ]);

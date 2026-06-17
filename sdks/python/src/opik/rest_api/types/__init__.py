@@ -63,6 +63,8 @@ from .audio_url import AudioUrl
 from .audio_url_public import AudioUrlPublic
 from .audio_url_write import AudioUrlWrite
 from .auth_details_holder import AuthDetailsHolder
+from .authorization_server_metadata import AuthorizationServerMetadata
+from .authorize_context import AuthorizeContext
 from .automation_rule_evaluator import (
     AutomationRuleEvaluator,
     AutomationRuleEvaluator_LlmAsJudge,
@@ -207,6 +209,7 @@ from .chunked_output_json_node import ChunkedOutputJsonNode
 from .chunked_output_json_node_public import ChunkedOutputJsonNodePublic
 from .chunked_output_json_node_public_type import ChunkedOutputJsonNodePublicType
 from .chunked_output_json_node_type import ChunkedOutputJsonNodeType
+from .client_registration_response import ClientRegistrationResponse
 from .column import Column
 from .column_compare import ColumnCompare
 from .column_compare_types_item import ColumnCompareTypesItem
@@ -219,6 +222,7 @@ from .comment_public import CommentPublic
 from .complete_multipart_upload_request import CompleteMultipartUploadRequest
 from .complete_multipart_upload_request_entity_type import CompleteMultipartUploadRequestEntityType
 from .completion_tokens_details import CompletionTokensDetails
+from .consent_response import ConsentResponse
 from .count_value_stat_public import CountValueStatPublic
 from .create_session_response import CreateSessionResponse
 from .dashboard_page_public import DashboardPagePublic
@@ -384,6 +388,7 @@ from .feedback_update import (
 )
 from .function import Function
 from .function_call import FunctionCall
+from .generate_report_response import GenerateReportResponse
 from .group_content import GroupContent
 from .group_content_with_aggregations import GroupContentWithAggregations
 from .group_detail import GroupDetail
@@ -397,10 +402,14 @@ from .guardrail_write_name import GuardrailWriteName
 from .guardrail_write_result import GuardrailWriteResult
 from .guardrails_validation import GuardrailsValidation
 from .guardrails_validation_public import GuardrailsValidationPublic
+from .harness_entry import HarnessEntry
 from .ids_holder import IdsHolder
 from .image_url import ImageUrl
 from .image_url_public import ImageUrlPublic
 from .image_url_write import ImageUrlWrite
+from .item import Item
+from .item_impact import ItemImpact
+from .item_lock_info import ItemLockInfo
 from .json_list_string import JsonListString
 from .json_list_string_compare import JsonListStringCompare
 from .json_list_string_experiment_item_bulk_write_view import JsonListStringExperimentItemBulkWriteView
@@ -415,6 +424,7 @@ from .json_schema import JsonSchema
 from .kpi_card_response import KpiCardResponse
 from .kpi_metric import KpiMetric
 from .kpi_metric_type import KpiMetricType
+from .lane import Lane
 from .llm_as_judge_code import LlmAsJudgeCode
 from .llm_as_judge_code_public import LlmAsJudgeCodePublic
 from .llm_as_judge_code_write import LlmAsJudgeCodeWrite
@@ -446,6 +456,8 @@ from .local_runner_log_entry import LocalRunnerLogEntry
 from .local_runner_page import LocalRunnerPage
 from .local_runner_status import LocalRunnerStatus
 from .local_runner_type import LocalRunnerType
+from .lock_response import LockResponse
+from .locks_response import LocksResponse
 from .log_item import LogItem
 from .log_item_level import LogItemLevel
 from .log_page import LogPage
@@ -455,6 +467,7 @@ from .manual_evaluation_request import ManualEvaluationRequest
 from .manual_evaluation_request_entity_type import ManualEvaluationRequestEntityType
 from .manual_evaluation_response import ManualEvaluationResponse
 from .message import Message
+from .model_tiers import ModelTiers
 from .multipart_upload_part import MultipartUploadPart
 from .numerical_feedback_definition import NumericalFeedbackDefinition
 from .numerical_feedback_definition_create import NumericalFeedbackDefinitionCreate
@@ -464,9 +477,13 @@ from .numerical_feedback_detail import NumericalFeedbackDetail
 from .numerical_feedback_detail_create import NumericalFeedbackDetailCreate
 from .numerical_feedback_detail_public import NumericalFeedbackDetailPublic
 from .numerical_feedback_detail_update import NumericalFeedbackDetailUpdate
+from .o_auth_error import OAuthError
 from .ollama_connection_test_response import OllamaConnectionTestResponse
 from .ollama_instance_base_url_request import OllamaInstanceBaseUrlRequest
 from .ollama_model import OllamaModel
+from .ollie_report import OllieReport
+from .ollie_report_page import OllieReportPage
+from .ollie_report_status import OllieReportStatus
 from .optimization import Optimization
 from .optimization_page_public import OptimizationPagePublic
 from .optimization_public import OptimizationPublic
@@ -542,6 +559,7 @@ from .provider_api_key_public_provider import ProviderApiKeyPublicProvider
 from .recent_activity_item_public import RecentActivityItemPublic
 from .recent_activity_item_public_type import RecentActivityItemPublicType
 from .recent_activity_page_public import RecentActivityPagePublic
+from .report_preference import ReportPreference
 from .response_format import ResponseFormat
 from .response_format_type import ResponseFormatType
 from .result import Result
@@ -553,6 +571,7 @@ from .retention_rule_public_retention import RetentionRulePublicRetention
 from .score_name import ScoreName
 from .score_name_public import ScoreNamePublic
 from .service_toggles_config import ServiceTogglesConfig
+from .side import Side
 from .span import Span
 from .span_batch import SpanBatch
 from .span_enrichment_options import SpanEnrichmentOptions
@@ -584,6 +603,13 @@ from .span_write import SpanWrite
 from .span_write_source import SpanWriteSource
 from .span_write_type import SpanWriteType
 from .spans_count_response import SpansCountResponse
+from .spend_breakdown_response import SpendBreakdownResponse
+from .spend_composition_response import SpendCompositionResponse
+from .spend_metric_request import SpendMetricRequest
+from .spend_recommendations_response import SpendRecommendationsResponse
+from .spend_summary_response import SpendSummaryResponse
+from .spend_user_page import SpendUserPage
+from .spend_user_row import SpendUserRow
 from .start_multipart_upload_response import StartMultipartUploadResponse
 from .stream_options import StreamOptions
 from .studio_evaluation import StudioEvaluation
@@ -604,6 +630,7 @@ from .studio_optimizer_write import StudioOptimizerWrite
 from .studio_prompt import StudioPrompt
 from .studio_prompt_public import StudioPromptPublic
 from .studio_prompt_write import StudioPromptWrite
+from .token_response import TokenResponse
 from .token_usage_names import TokenUsageNames
 from .tool import Tool
 from .tool_call import ToolCall
@@ -671,6 +698,7 @@ from .webhook_test_result_status import WebhookTestResultStatus
 from .webhook_write import WebhookWrite
 from .welcome_wizard_tracking import WelcomeWizardTracking
 from .workspace_configuration import WorkspaceConfiguration
+from .workspace_info import WorkspaceInfo
 from .workspace_metric_request import WorkspaceMetricRequest
 from .workspace_metric_response import WorkspaceMetricResponse
 from .workspace_metrics_summary_request import WorkspaceMetricsSummaryRequest
@@ -744,6 +772,8 @@ __all__ = [
     "AudioUrlPublic",
     "AudioUrlWrite",
     "AuthDetailsHolder",
+    "AuthorizationServerMetadata",
+    "AuthorizeContext",
     "AutomationRuleEvaluator",
     "AutomationRuleEvaluatorAction",
     "AutomationRuleEvaluatorLlmAsJudge",
@@ -852,6 +882,7 @@ __all__ = [
     "ChunkedOutputJsonNodePublic",
     "ChunkedOutputJsonNodePublicType",
     "ChunkedOutputJsonNodeType",
+    "ClientRegistrationResponse",
     "Column",
     "ColumnCompare",
     "ColumnCompareTypesItem",
@@ -864,6 +895,7 @@ __all__ = [
     "CompleteMultipartUploadRequest",
     "CompleteMultipartUploadRequestEntityType",
     "CompletionTokensDetails",
+    "ConsentResponse",
     "CountValueStatPublic",
     "CreateSessionResponse",
     "DashboardPagePublic",
@@ -1022,6 +1054,7 @@ __all__ = [
     "Feedback_Numerical",
     "Function",
     "FunctionCall",
+    "GenerateReportResponse",
     "GroupContent",
     "GroupContentWithAggregations",
     "GroupDetail",
@@ -1035,10 +1068,14 @@ __all__ = [
     "GuardrailWriteResult",
     "GuardrailsValidation",
     "GuardrailsValidationPublic",
+    "HarnessEntry",
     "IdsHolder",
     "ImageUrl",
     "ImageUrlPublic",
     "ImageUrlWrite",
+    "Item",
+    "ItemImpact",
+    "ItemLockInfo",
     "JsonListString",
     "JsonListStringCompare",
     "JsonListStringExperimentItemBulkWriteView",
@@ -1053,6 +1090,7 @@ __all__ = [
     "KpiCardResponse",
     "KpiMetric",
     "KpiMetricType",
+    "Lane",
     "LlmAsJudgeCode",
     "LlmAsJudgeCodePublic",
     "LlmAsJudgeCodeWrite",
@@ -1084,6 +1122,8 @@ __all__ = [
     "LocalRunnerPage",
     "LocalRunnerStatus",
     "LocalRunnerType",
+    "LockResponse",
+    "LocksResponse",
     "LogItem",
     "LogItemLevel",
     "LogPage",
@@ -1093,6 +1133,7 @@ __all__ = [
     "ManualEvaluationRequestEntityType",
     "ManualEvaluationResponse",
     "Message",
+    "ModelTiers",
     "MultipartUploadPart",
     "NumericalFeedbackDefinition",
     "NumericalFeedbackDefinitionCreate",
@@ -1102,9 +1143,13 @@ __all__ = [
     "NumericalFeedbackDetailCreate",
     "NumericalFeedbackDetailPublic",
     "NumericalFeedbackDetailUpdate",
+    "OAuthError",
     "OllamaConnectionTestResponse",
     "OllamaInstanceBaseUrlRequest",
     "OllamaModel",
+    "OllieReport",
+    "OllieReportPage",
+    "OllieReportStatus",
     "Optimization",
     "OptimizationPagePublic",
     "OptimizationPublic",
@@ -1178,6 +1223,7 @@ __all__ = [
     "RecentActivityItemPublic",
     "RecentActivityItemPublicType",
     "RecentActivityPagePublic",
+    "ReportPreference",
     "ResponseFormat",
     "ResponseFormatType",
     "Result",
@@ -1189,6 +1235,7 @@ __all__ = [
     "ScoreName",
     "ScoreNamePublic",
     "ServiceTogglesConfig",
+    "Side",
     "Span",
     "SpanBatch",
     "SpanEnrichmentOptions",
@@ -1220,6 +1267,13 @@ __all__ = [
     "SpanWriteSource",
     "SpanWriteType",
     "SpansCountResponse",
+    "SpendBreakdownResponse",
+    "SpendCompositionResponse",
+    "SpendMetricRequest",
+    "SpendRecommendationsResponse",
+    "SpendSummaryResponse",
+    "SpendUserPage",
+    "SpendUserRow",
     "StartMultipartUploadResponse",
     "StreamOptions",
     "StudioEvaluation",
@@ -1240,6 +1294,7 @@ __all__ = [
     "StudioPrompt",
     "StudioPromptPublic",
     "StudioPromptWrite",
+    "TokenResponse",
     "TokenUsageNames",
     "Tool",
     "ToolCall",
@@ -1307,6 +1362,7 @@ __all__ = [
     "WebhookWrite",
     "WelcomeWizardTracking",
     "WorkspaceConfiguration",
+    "WorkspaceInfo",
     "WorkspaceMetricRequest",
     "WorkspaceMetricResponse",
     "WorkspaceMetricsSummaryRequest",

@@ -524,6 +524,7 @@ class RawExperimentsClient:
         dataset_name: str,
         items: typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView],
         experiment_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -540,6 +541,9 @@ class RawExperimentsClient:
         experiment_id : typing.Optional[str]
             Optional experiment ID. If provided, items will be added to the existing experiment and experimentName will be ignored. If not provided or experiment with that ID doesn't exist, a new experiment will be created with the given experimentName
 
+        project_name : typing.Optional[str]
+            Project for traces auto-created from items that provide evaluate_task_result (i.e. without an explicit trace). If null, the default project is used; relying on this fallback is deprecated, please provide project_name explicitly.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -554,6 +558,7 @@ class RawExperimentsClient:
                 "experiment_name": experiment_name,
                 "dataset_name": dataset_name,
                 "experiment_id": experiment_id,
+                "project_name": project_name,
                 "items": convert_and_respect_annotation_metadata(
                     object_=items,
                     annotation=typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView],
@@ -1664,6 +1669,7 @@ class AsyncRawExperimentsClient:
         dataset_name: str,
         items: typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView],
         experiment_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -1680,6 +1686,9 @@ class AsyncRawExperimentsClient:
         experiment_id : typing.Optional[str]
             Optional experiment ID. If provided, items will be added to the existing experiment and experimentName will be ignored. If not provided or experiment with that ID doesn't exist, a new experiment will be created with the given experimentName
 
+        project_name : typing.Optional[str]
+            Project for traces auto-created from items that provide evaluate_task_result (i.e. without an explicit trace). If null, the default project is used; relying on this fallback is deprecated, please provide project_name explicitly.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -1694,6 +1703,7 @@ class AsyncRawExperimentsClient:
                 "experiment_name": experiment_name,
                 "dataset_name": dataset_name,
                 "experiment_id": experiment_id,
+                "project_name": project_name,
                 "items": convert_and_respect_annotation_metadata(
                     object_=items,
                     annotation=typing.Sequence[ExperimentItemBulkRecordExperimentItemBulkWriteView],

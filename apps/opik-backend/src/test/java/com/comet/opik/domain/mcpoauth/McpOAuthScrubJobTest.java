@@ -1,127 +1,150 @@
 package com.comet.opik.domain.mcpoauth;
 
-import ch.qos.logback.classic.Level;
-import ch.qos.logback.classic.Logger;
-import ch.qos.logback.classic.spi.ILoggingEvent;
-import ch.qos.logback.core.read.ListAppender;
-import com.comet.opik.infrastructure.OpikConfiguration;
-import org.jdbi.v3.core.Handle;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
+import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
+import com.comet.opik.api.resources.utils.MigrationUtils;
+import com.comet.opik.api.resources.utils.MySQLContainerUtils;
+import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
+import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.api.resources.utils.resources.OAuthResourceClient;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
+import com.redis.testcontainers.RedisContainer;
+import org.awaitility.Awaitility;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.slf4j.LoggerFactory;
+import org.testcontainers.clickhouse.ClickHouseContainer;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.mysql.MySQLContainer;
+import ru.vyarus.dropwizard.guice.test.ClientSupport;
+import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
-import ru.vyarus.guicey.jdbi3.tx.TxAction;
 
-import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
 
+import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
-@ExtendWith(MockitoExtension.class)
+/**
+ * Smoke test for the wired scrub job: an authorization code and token pair are minted through the public OAuth
+ * endpoints, expire, and the job removes them when fired. The business-logic edge cases live in
+ * {@link McpOAuthScrubServiceTest}.
+ *
+ * <p>Deletion is asserted by reading rows back through the DAOs rather than the API. This is a deliberate, narrow
+ * exception: the validate endpoint returns 401 for both an expired-but-present token and one the scrub deleted, so the
+ * API cannot prove physical removal — a 401 would pass even if the job did nothing.
+ */
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("McpOAuthScrubJob")
+@ExtendWith(DropwizardAppExtensionProvider.class)
 class McpOAuthScrubJobTest {
 
-    private static final Duration ROTATION_GRACE = Duration.ofMinutes(5);
+    private static final String REDIRECT_URI = "http://localhost:1234/callback";
+    private static final String RESOURCE_URI = "http://localhost:8080/api/v1/mcp";
 
-    @Mock
-    private TransactionTemplate template;
-    @Mock
-    private Handle handle;
-    @Mock
-    private McpOAuthCodeDAO codeDAO;
-    @Mock
-    private McpOAuthTokenDAO tokenDAO;
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final GenericContainer<?> ZOOKEEPER = ClickHouseContainerUtils.newZookeeperContainer();
+    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(ZOOKEEPER);
+    private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
 
+    @RegisterApp
+    private final TestDropwizardAppExtension app;
+
+    {
+        Startables.deepStart(REDIS, CLICKHOUSE, MYSQL, ZOOKEEPER).join();
+
+        var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(CLICKHOUSE, DATABASE_NAME);
+
+        MigrationUtils.runMysqlDbMigration(MYSQL);
+        MigrationUtils.runClickhouseDbMigration(CLICKHOUSE);
+
+        // No react-service runtimeInfo on purpose: the app runs with local auth, so the consent step resolves to the
+        // default workspace without a session. TTLs are short so endpoint-minted artifacts expire within the test.
+        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
+                AppContextConfig.builder()
+                        .jdbcUrl(MYSQL.getJdbcUrl())
+                        .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                        .redisUrl(REDIS.getRedisURI())
+                        .customConfigs(List.of(
+                                new CustomConfig("mcpOAuth.enabled", "true"),
+                                new CustomConfig("mcpOAuth.baseUrl", "http://localhost:8080"),
+                                new CustomConfig("mcpOAuth.mcpResourceUri", RESOURCE_URI),
+                                new CustomConfig("mcpOAuth.accessTokenTtl", "PT1S"),
+                                new CustomConfig("mcpOAuth.refreshTokenTtl", "PT1S"),
+                                new CustomConfig("mcpOAuth.codeTtl", "PT1S"),
+                                new CustomConfig("mcpOAuth.refreshRotationGrace", "PT0S")))
+                        .build());
+    }
+
+    private TransactionTemplate transactionTemplate;
     private McpOAuthScrubJob job;
-    private Logger jobLogger;
-    private ListAppender<ILoggingEvent> logAppender;
+    private OAuthResourceClient oauthClient;
 
-    @BeforeEach
-    void setUp() {
-        var config = new OpikConfiguration();
-        config.getMcpOAuth().setRefreshRotationGrace(ROTATION_GRACE);
+    @BeforeAll
+    void setUpAll(ClientSupport clientSupport, TransactionTemplate transactionTemplate, McpOAuthScrubJob job) {
+        this.transactionTemplate = transactionTemplate;
+        this.job = job;
+        this.oauthClient = new OAuthResourceClient(
+                clientSupport, TestUtils.getBaseUrl(clientSupport), REDIRECT_URI, RESOURCE_URI);
+    }
 
-        job = new McpOAuthScrubJob(template, config);
+    @Test
+    @DisplayName("scrub removes codes and tokens minted through the OAuth endpoints once they expire")
+    void scrubsExpiredArtifactsFromOAuthFlow() {
+        var minted = oauthClient.mintArtifacts();
 
-        lenient().when(template.inTransaction(any(), any())).thenAnswer(invocation -> {
-            TxAction<?> callback = invocation.getArgument(1);
-            return callback.execute(handle);
+        String codeHash = McpOAuthTokenUtils.hash(minted.code());
+        String accessHash = McpOAuthTokenUtils.hash(minted.tokens().accessToken());
+        String refreshHash = McpOAuthTokenUtils.hash(minted.tokens().refreshToken());
+
+        // The exchanged code is single-use but its row lingers until it expires and the scrub deletes it.
+        Awaitility.await().atMost(10, TimeUnit.SECONDS).pollInterval(100, TimeUnit.MILLISECONDS)
+                .until(() -> isExpired(fetchCodeExpiry(codeHash)) && isExpired(fetchTokenExpiry(accessHash)));
+
+        job.doJob(null);
+
+        Awaitility.await().atMost(10, TimeUnit.SECONDS).pollInterval(100, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+            assertThat(codeExists(codeHash)).isFalse();
+            assertThat(tokenExists(accessHash)).isFalse();
+            assertThat(tokenExists(refreshHash)).isFalse();
         });
-        lenient().when(handle.attach(McpOAuthCodeDAO.class)).thenReturn(codeDAO);
-        lenient().when(handle.attach(McpOAuthTokenDAO.class)).thenReturn(tokenDAO);
-
-        logAppender = new ListAppender<>();
-        logAppender.start();
-        jobLogger = (Logger) LoggerFactory.getLogger(McpOAuthScrubJob.class);
-        jobLogger.addAppender(logAppender);
     }
 
-    @AfterEach
-    void tearDown() {
-        jobLogger.detachAppender(logAppender);
+    /** Polls the persisted expiry instant, which the API does not expose, to wait until the artifact is scrub-eligible. */
+    private Instant fetchCodeExpiry(String codeHash) {
+        return transactionTemplate.inTransaction(
+                handle -> handle.attach(McpOAuthCodeDAO.class).fetch(codeHash).map(McpOAuthCode::expiresAt)
+                        .orElse(null));
     }
 
-    @Test
-    @DisplayName("scrubs expired codes and trails the token threshold behind now by the rotation grace")
-    void appliesRotationGraceToTokenThreshold() {
-        var codeNow = ArgumentCaptor.forClass(Instant.class);
-        var tokenThreshold = ArgumentCaptor.forClass(Instant.class);
-
-        job.doJob(null);
-
-        verify(codeDAO).deleteExpired(codeNow.capture());
-        verify(tokenDAO).deleteExpiredAndRevoked(tokenThreshold.capture());
-
-        // Revoked tokens must remain queryable for the grace window, so their cutoff trails "now" by exactly the grace.
-        assertThat(tokenThreshold.getValue()).isEqualTo(codeNow.getValue().minus(ROTATION_GRACE));
+    /** Polls the persisted expiry instant, which the API does not expose, to wait until the artifact is scrub-eligible. */
+    private Instant fetchTokenExpiry(String tokenHash) {
+        return transactionTemplate.inTransaction(
+                handle -> handle.attach(McpOAuthTokenDAO.class).fetch(tokenHash).map(McpOAuthToken::expiresAt)
+                        .orElse(null));
     }
 
-    @ParameterizedTest(name = "failure in {0} transaction is swallowed")
-    @ValueSource(strings = {"codes", "tokens"})
-    @DisplayName("a DAO failure in either transaction is swallowed so a transient DB error never kills the scheduler")
-    void swallowsRuntimeExceptionFromEitherTransaction(String failing) {
-        if ("codes".equals(failing)) {
-            when(codeDAO.deleteExpired(any())).thenThrow(new RuntimeException("db down"));
-        } else {
-            when(tokenDAO.deleteExpiredAndRevoked(any())).thenThrow(new RuntimeException("db down"));
-        }
-
-        assertThatCode(() -> job.doJob(null)).doesNotThrowAnyException();
+    /** Reads the row back to assert physical deletion; see the class javadoc for why the API cannot verify this. */
+    private boolean codeExists(String codeHash) {
+        return transactionTemplate
+                .inTransaction(handle -> handle.attach(McpOAuthCodeDAO.class).fetch(codeHash).isPresent());
     }
 
-    @Test
-    @DisplayName("logs the removed counts when anything was scrubbed")
-    void logsSummaryWhenSomethingRemoved() {
-        when(codeDAO.deleteExpired(any())).thenReturn(3);
-        when(tokenDAO.deleteExpiredAndRevoked(any())).thenReturn(5);
-
-        job.doJob(null);
-
-        assertThat(logAppender.list)
-                .filteredOn(event -> event.getLevel() == Level.INFO)
-                .singleElement()
-                .satisfies(event -> assertThat(event.getFormattedMessage())
-                        .isEqualTo("MCP OAuth scrub: removed '3' expired codes, '5' expired/revoked tokens"));
+    /** Reads the row back to assert physical deletion; see the class javadoc for why the API cannot verify this. */
+    private boolean tokenExists(String tokenHash) {
+        return transactionTemplate
+                .inTransaction(handle -> handle.attach(McpOAuthTokenDAO.class).fetch(tokenHash).isPresent());
     }
 
-    @Test
-    @DisplayName("stays silent when nothing was scrubbed")
-    void doesNotLogWhenNothingRemoved() {
-        job.doJob(null);
-
-        assertThat(logAppender.list).noneMatch(event -> event.getLevel() == Level.INFO);
+    private static boolean isExpired(Instant expiresAt) {
+        return expiresAt != null && expiresAt.isBefore(Instant.now());
     }
 }

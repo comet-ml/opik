@@ -247,6 +247,13 @@ const PromptCard: React.FC<PromptCardProps> = ({
         ) : isVersionsLoading ? (
           <Skeleton className="h-3 w-8 shrink-0" />
         ) : null}
+        {rawPrompt.modified && (
+          <TooltipWrapper content="This run was edited after loading from the linked library version">
+            <span className="comet-body-xs shrink-0 rounded bg-muted px-1.5 text-light-slate">
+              modified
+            </span>
+          </TooltipWrapper>
+        )}
         <EnvironmentBadgeList
           names={environments}
           size="sm"

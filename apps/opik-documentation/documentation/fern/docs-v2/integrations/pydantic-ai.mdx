@@ -156,7 +156,7 @@ agent = Agent(
 
 # Run the agent
 result = agent.run_sync('Where does "hello world" come from?')
-print(result.data)
+print(result.output)
 ```
 
 <Frame>
@@ -172,6 +172,35 @@ You can group multiple agent calls into a conversation thread by setting `thread
 with logfire.span("chat_turn", thread_id=thread_id):
     result = agent.run_sync("What is machine learning?")
 ```
+
+## Combining with `@track`
+
+If you wrap your agent call in an `@track`-decorated function — for example to capture a clean entrypoint with its own input/output — the Pydantic AI / logfire spans and the `@track` span would normally land in two separate traces, since logfire produces OpenTelemetry spans while `@track` keeps its own context.
+
+Register `OpikSpanProcessor` on logfire's tracer provider to merge them into a single trace. The processor links the OpenTelemetry spans to the active `@track` span automatically — no header propagation or per-call wiring needed:
+
+```python
+import opik
+import logfire
+from pydantic_ai import Agent
+from opik.integrations.otel import OpikSpanProcessor
+
+logfire.configure(
+    send_to_logfire=False,
+    additional_span_processors=[OpikSpanProcessor()],
+)
+logfire.instrument_pydantic_ai()
+
+agent = Agent("openai:gpt-4o")
+
+@opik.track
+def run(question: str) -> str:
+    return agent.run_sync(question).output
+
+run('Where does "hello world" come from?')
+```
+
+The result is one trace with the `run` entrypoint as the root and the `agent run` / model spans nested underneath. See [Linking OpenTelemetry spans to an existing Opik trace](/integrations/opentelemetry-python-sdk#linking-opentelemetry-spans-to-an-existing-opik-trace) for the general mechanism.
 
 ## Further improvements
 

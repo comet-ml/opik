@@ -1,4 +1,5 @@
 import { ConstructorOpikConfig, loadConfig, OpikConfig } from "@/config/Config";
+import { isTracingActive } from "@/config/TracingRuntimeConfig";
 import { OpikApiError, OpikApiTimeoutError, serialization } from "@/rest_api";
 import type { ExperimentPublic, Trace as ITrace } from "@/rest_api/api";
 import * as OpikApi from "@/rest_api/api";
@@ -220,9 +221,11 @@ export class OpikClient {
       this
     );
 
-    this.traceBatchQueue.create(trace.data);
-    logger.debug("Trace added to the queue with ID:", trace.data.id);
-    this.displayTraceLog(trace.data.id, projectName);
+    if (isTracingActive()) {
+      this.traceBatchQueue.create(trace.data);
+      logger.debug("Trace added to the queue with ID:", trace.data.id);
+      this.displayTraceLog(trace.data.id, projectName);
+    }
 
     return trace;
   };

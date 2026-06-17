@@ -8,6 +8,7 @@ import { logger } from "@/utils/logger";
 import {
   mockAPIFunction,
   createMockHttpResponsePromise,
+  mockAPIFunctionWithStream,
 } from "../../mockUtils";
 import * as OpikApi from "@/rest_api/api";
 
@@ -208,6 +209,75 @@ describe("ThreadsAnnotationQueue", () => {
         expect(removeItemsSpy).toHaveBeenCalledWith("queue-id", {
           body: { ids: ["thread-model-1", "thread-model-2"] },
         });
+      });
+    });
+
+    describe("getItems", () => {
+      let searchThreadsSpy: MockInstance<
+        typeof client.api.traces.searchTraceThreads
+      >;
+
+      afterEach(() => {
+        searchThreadsSpy?.mockRestore();
+      });
+
+      it("should filter by the queue id and return parsed threads", async () => {
+        const queue = new ThreadsAnnotationQueue(
+          {
+            id: "queue-id",
+            name: "Thread Queue",
+            projectId: "project-id",
+            scope: "thread",
+          },
+          client
+        );
+
+        const ndjson = [
+          JSON.stringify({ id: "thread-1", thread_model_id: "thread-model-1" }),
+          JSON.stringify({ id: "thread-2", thread_model_id: "thread-model-2" }),
+        ].join("\n");
+
+        searchThreadsSpy = vi
+          .spyOn(client.api.traces, "searchTraceThreads")
+          .mockImplementation(() => mockAPIFunctionWithStream(ndjson));
+
+        const items = await queue.getItems();
+
+        expect(items.map((t) => t.threadModelId)).toEqual([
+          "thread-model-1",
+          "thread-model-2",
+        ]);
+
+        const request = searchThreadsSpy.mock.calls[0][0]!;
+        expect(request.projectId).toBe("project-id");
+        expect(request.truncate).toBe(true);
+        expect(request.filters).toEqual([
+          {
+            field: "annotation_queue_ids",
+            operator: "contains",
+            value: "queue-id",
+          },
+        ]);
+      });
+
+      it("should pass truncate=false when truncateImages is false", async () => {
+        const queue = new ThreadsAnnotationQueue(
+          {
+            id: "queue-id",
+            name: "Thread Queue",
+            projectId: "project-id",
+            scope: "thread",
+          },
+          client
+        );
+
+        searchThreadsSpy = vi
+          .spyOn(client.api.traces, "searchTraceThreads")
+          .mockImplementation(() => mockAPIFunctionWithStream(""));
+
+        await queue.getItems({ truncateImages: false });
+
+        expect(searchThreadsSpy.mock.calls[0][0]!.truncate).toBe(false);
       });
     });
   });

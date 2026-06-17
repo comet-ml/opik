@@ -758,7 +758,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 ) s ON s.trace_id = t.id
                 ARRAY JOIN mapKeys(usage) AS name, mapValues(usage) AS value
                 WHERE value > 0
-                AND name = '<sub_metric>'
+                AND name = :sub_metric
             )
             SELECT <bucket> AS bucket,
                     group_name,
@@ -798,7 +798,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         fs.value
                 FROM feedback_scores_final fs
                 JOIN traces_filtered t ON t.id = fs.entity_id
-                WHERE fs.name = '<sub_metric>'
+                WHERE fs.name = :sub_metric
             )
             SELECT <bucket> AS bucket,
                     group_name,
@@ -867,7 +867,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         fs.value
                 FROM feedback_scores_final fs
                 JOIN spans_filtered s ON s.id = fs.entity_id
-                WHERE fs.name = '<sub_metric>'
+                WHERE fs.name = :sub_metric
             )
             SELECT <bucket> AS bucket,
                     group_name,
@@ -982,7 +982,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 FROM spans_filtered s
                 ARRAY JOIN mapKeys(usage) AS name, mapValues(usage) AS value
                 WHERE value > 0
-                AND name = '<sub_metric>'
+                AND name = :sub_metric
             )
             SELECT <bucket> AS bucket,
                     group_name,
@@ -1034,7 +1034,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         project_id
                     FROM threads_filtered
                 ) t ON t.thread_model_id = fs.entity_id
-                WHERE fs.name = '<sub_metric>'
+                WHERE fs.name = :sub_metric
             )
             SELECT <bucket> AS bucket,
                     group_name,
@@ -1702,9 +1702,11 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             if (request.hasBreakdown()) {
                 template.add("group_expression",
                         getBreakdownGroupExpression(request.metricType(), request.breakdown()));
-                Optional.ofNullable(request.breakdown().subMetric())
-                        .map(BreakdownQueryBuilder::mapSubMetric)
-                        .ifPresent(subMetric -> template.add("sub_metric", subMetric));
+                if (QUANTILE_BREAKDOWN_METRICS.contains(request.metricType())) {
+                    Optional.ofNullable(request.breakdown().subMetric())
+                            .map(BreakdownQueryBuilder::mapQuantile)
+                            .ifPresent(subMetric -> template.add("sub_metric", subMetric));
+                }
             }
 
             // Add uuid flags for conditional SQL generation
@@ -1785,6 +1787,13 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 statement.bind("metadata_key", request.breakdown().metadataKey());
             }
 
+            // Bind sub_metric for name-based breakdowns (feedback scores, token usage). It is an
+            // arbitrary user-defined name, so it must be bound rather than substituted into the SQL.
+            if (request.hasBreakdown() && NAME_BREAKDOWN_METRICS.contains(metricType)) {
+                statement.bind("sub_metric",
+                        Optional.ofNullable(request.breakdown().subMetric()).orElse(""));
+            }
+
             if (THREAD_METRICS.contains(metricType)) {
                 Optional.ofNullable(request.threadFilters())
                         .ifPresent(filters -> {
@@ -1830,6 +1839,26 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             MetricType.THREAD_FEEDBACK_SCORES,
             MetricType.THREAD_AVERAGE_DURATION,
             MetricType.THREAD_COST);
+
+    /**
+     * Metric types whose {@code _WITH_BREAKDOWN} template uses {@code quantile(<sub_metric>)}, so sub_metric is a
+     * percentile validated by {@link BreakdownQueryBuilder#mapQuantile} and substituted as a numeric literal.
+     */
+    private static final Set<MetricType> QUANTILE_BREAKDOWN_METRICS = EnumSet.of(
+            MetricType.DURATION,
+            MetricType.THREAD_DURATION,
+            MetricType.SPAN_DURATION);
+
+    /**
+     * Metric types whose {@code _WITH_BREAKDOWN} template filters by {@code name = :sub_metric}, so sub_metric is an
+     * arbitrary user-defined feedback-score or token-usage name and is bound as a parameter rather than substituted.
+     */
+    private static final Set<MetricType> NAME_BREAKDOWN_METRICS = EnumSet.of(
+            MetricType.FEEDBACK_SCORES,
+            MetricType.THREAD_FEEDBACK_SCORES,
+            MetricType.TOKEN_USAGE,
+            MetricType.SPAN_FEEDBACK_SCORES,
+            MetricType.SPAN_TOKEN_USAGE);
 
     private String getTimeField(MetricType metricType) {
         return SPAN_TIME_METRICS.contains(metricType) ? "span_time" : "trace_time";

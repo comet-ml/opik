@@ -87,7 +87,12 @@ public class ClickHouseContainerUtils {
                     .withUsername("default")
                     .withPassword("")
                     .withCopyFileToContainer(MountableFile.forClasspathResource("clickhouse.xml"),
-                            "/etc/clickhouse-server/config.d/clickhouse.xml");
+                            "/etc/clickhouse-server/config.d/clickhouse.xml")
+                    // Provision the production-shape Agent Insights read-only user globally
+                    // (settings profile, user, per-table SELECT grants, row policies; mirrors
+                    // provision_agent_insights_readonly_user.sh). Loaded at server startup.
+                    .withCopyFileToContainer(MountableFile.forClasspathResource("users.xml"),
+                            "/etc/clickhouse-server/users.d/users.xml");
 
         } catch (Exception e) {
             throw new RuntimeException(e);

@@ -39,6 +39,8 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean optimizationStudioEnabled;
     @JsonProperty
+    @NotNull boolean costIntelligenceEnabled;
+    @JsonProperty
     @NotNull boolean datasetVersioningEnabled;
     @JsonProperty
     @NotNull boolean datasetExportEnabled;
@@ -64,7 +66,11 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean ollieEnabled;
     @JsonProperty
+    @NotNull boolean projectHomepageEnabled;
+    @JsonProperty
     @NotNull boolean agenticToolsEnabled;
+    @JsonProperty
+    @NotNull boolean agentInsightsEnabled;
 
     @NotNull Set<@NotBlank String> v2WorkspaceAllowlistIds = Set.of();
 

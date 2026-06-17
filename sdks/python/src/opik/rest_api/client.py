@@ -4,6 +4,7 @@ import typing
 
 import httpx
 from .agent_configs.client import AgentConfigsClient, AsyncAgentConfigsClient
+from .ai_spend.client import AiSpendClient, AsyncAiSpendClient
 from .alerts.client import AlertsClient, AsyncAlertsClient
 from .annotation_queues.client import AnnotationQueuesClient, AsyncAnnotationQueuesClient
 from .assertion_results.client import AssertionResultsClient, AsyncAssertionResultsClient
@@ -24,6 +25,7 @@ from .insights_views.client import AsyncInsightsViewsClient, InsightsViewsClient
 from .llm_models.client import AsyncLlmModelsClient, LlmModelsClient
 from .llm_provider_key.client import AsyncLlmProviderKeyClient, LlmProviderKeyClient
 from .manual_evaluation.client import AsyncManualEvaluationClient, ManualEvaluationClient
+from .mcp_o_auth.client import AsyncMcpOAuthClient, McpOAuthClient
 from .ollama.client import AsyncOllamaClient, OllamaClient
 from .ollie_state.client import AsyncOllieStateClient, OllieStateClient
 from .open_telemetry_ingestion.client import AsyncOpenTelemetryIngestionClient, OpenTelemetryIngestionClient
@@ -33,6 +35,7 @@ from .projects.client import AsyncProjectsClient, ProjectsClient
 from .prompts.client import AsyncPromptsClient, PromptsClient
 from .raw_client import AsyncRawOpikApi, RawOpikApi
 from .redirect.client import AsyncRedirectClient, RedirectClient
+from .reports.client import AsyncReportsClient, ReportsClient
 from .retention_rules.client import AsyncRetentionRulesClient, RetentionRulesClient
 from .runners.client import AsyncRunnersClient, RunnersClient
 from .service_toggles.client import AsyncServiceTogglesClient, ServiceTogglesClient
@@ -103,8 +106,10 @@ class OpikApi:
             timeout=_defaulted_timeout,
         )
         self._raw_client = RawOpikApi(client_wrapper=self._client_wrapper)
+        self.mcp_o_auth = McpOAuthClient(client_wrapper=self._client_wrapper)
         self.system_usage = SystemUsageClient(client_wrapper=self._client_wrapper)
         self.agent_configs = AgentConfigsClient(client_wrapper=self._client_wrapper)
+        self.ai_spend = AiSpendClient(client_wrapper=self._client_wrapper)
         self.alerts = AlertsClient(client_wrapper=self._client_wrapper)
         self.annotation_queues = AnnotationQueuesClient(client_wrapper=self._client_wrapper)
         self.assertion_results = AssertionResultsClient(client_wrapper=self._client_wrapper)
@@ -130,6 +135,7 @@ class OpikApi:
         self.pairing = PairingClient(client_wrapper=self._client_wrapper)
         self.projects = ProjectsClient(client_wrapper=self._client_wrapper)
         self.prompts = PromptsClient(client_wrapper=self._client_wrapper)
+        self.reports = ReportsClient(client_wrapper=self._client_wrapper)
         self.retention_rules = RetentionRulesClient(client_wrapper=self._client_wrapper)
         self.service_toggles = ServiceTogglesClient(client_wrapper=self._client_wrapper)
         self.spans = SpansClient(client_wrapper=self._client_wrapper)
@@ -252,8 +258,10 @@ class AsyncOpikApi:
             timeout=_defaulted_timeout,
         )
         self._raw_client = AsyncRawOpikApi(client_wrapper=self._client_wrapper)
+        self.mcp_o_auth = AsyncMcpOAuthClient(client_wrapper=self._client_wrapper)
         self.system_usage = AsyncSystemUsageClient(client_wrapper=self._client_wrapper)
         self.agent_configs = AsyncAgentConfigsClient(client_wrapper=self._client_wrapper)
+        self.ai_spend = AsyncAiSpendClient(client_wrapper=self._client_wrapper)
         self.alerts = AsyncAlertsClient(client_wrapper=self._client_wrapper)
         self.annotation_queues = AsyncAnnotationQueuesClient(client_wrapper=self._client_wrapper)
         self.assertion_results = AsyncAssertionResultsClient(client_wrapper=self._client_wrapper)
@@ -279,6 +287,7 @@ class AsyncOpikApi:
         self.pairing = AsyncPairingClient(client_wrapper=self._client_wrapper)
         self.projects = AsyncProjectsClient(client_wrapper=self._client_wrapper)
         self.prompts = AsyncPromptsClient(client_wrapper=self._client_wrapper)
+        self.reports = AsyncReportsClient(client_wrapper=self._client_wrapper)
         self.retention_rules = AsyncRetentionRulesClient(client_wrapper=self._client_wrapper)
         self.service_toggles = AsyncServiceTogglesClient(client_wrapper=self._client_wrapper)
         self.spans = AsyncSpansClient(client_wrapper=self._client_wrapper)

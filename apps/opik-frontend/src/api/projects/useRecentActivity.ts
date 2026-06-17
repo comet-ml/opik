@@ -1,4 +1,8 @@
-import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
+import {
+  QueryFunctionContext,
+  keepPreviousData,
+  useQuery,
+} from "@tanstack/react-query";
 import api, { PROJECTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { RecentActivityResponse } from "@/types/recent-activity";
 
@@ -31,6 +35,8 @@ export default function useRecentActivity(
   return useQuery({
     queryKey: [RECENT_ACTIVITY_KEY, params],
     queryFn: (context) => getRecentActivity(context, params),
+    staleTime: 0,
+    placeholderData: keepPreviousData,
     ...options,
   });
 }

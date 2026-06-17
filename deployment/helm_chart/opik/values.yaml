@@ -78,9 +78,8 @@ caCerts:
 
 # Opik MCP OAuth Authorization Server
 mcpOAuth:
-  # -- Render nginx locations (AS endpoints, consent UI, RFC 8414
-  # discovery URL). Turn on together with opik-backend MCP_OAUTH_ENABLED=true
-  # and a path-prefix OPIK_BASE_URL (e.g. https://www.comet.com/opik).
+  # -- Render nginx locations (AS endpoints, consent UI, discovery URL). Turn on together with
+  # opik-backend MCP_OAUTH_ENABLED=true and a path-prefix OPIK_BASE_URL (e.g. https://www.comet.com/opik).
   enabled: false
 
 

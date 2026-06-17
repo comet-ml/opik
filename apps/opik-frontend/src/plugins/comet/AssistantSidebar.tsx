@@ -117,6 +117,7 @@ function createHostListeners(): HostListeners {
     "context:changed": new Set(),
     "visibility:changed": new Set(),
     "runner:state-changed": new Set(),
+    "conversation:start": new Set(),
   };
 }
 
@@ -192,6 +193,9 @@ const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
           );
         }
     }
+  },
+  startConversation: (message: string) => {
+    emitHostEvent(refs.listeners, "conversation:start", { message });
   },
 });
 
@@ -456,6 +460,7 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
   return (
     <iframe
       ref={setIframeRef}
+      data-testid="ollie-assistant-iframe"
       src={meta.shellUrl}
       className="size-full border-none"
       // Radix's DismissableLayer sets pointer-events:none on the body when a

@@ -48,6 +48,22 @@ export const extractMessages = (value: unknown): MessageEntry[] | null => {
 export const getMetricLabel = (type: string): string =>
   OPTIMIZATION_METRIC_OPTIONS.find((opt) => opt.value === type)?.label || type;
 
+export const getMetricParamLabels = (
+  studioConfig: OptimizationStudioConfig,
+): string[] => {
+  const metric = studioConfig.evaluation?.metrics?.[0];
+  if (!metric?.parameters) return [];
+  return Object.entries(metric.parameters)
+    .filter(
+      ([, value]) =>
+        (typeof value === "string" && (value as string).trim()) ||
+        typeof value === "boolean",
+    )
+    .map(([key]) =>
+      key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+    );
+};
+
 export const buildConfigFromStudioConfig = (
   studioConfig: OptimizationStudioConfig,
 ): ConfigurationType => {
@@ -65,8 +81,23 @@ export const buildConfigFromStudioConfig = (
     config.Algorithm = getOptimizerLabel(studioConfig.optimizer.type);
   }
 
-  if (studioConfig.evaluation?.metrics?.[0]?.type) {
-    config.Metric = getMetricLabel(studioConfig.evaluation.metrics[0].type);
+  const metric = studioConfig.evaluation?.metrics?.[0];
+  if (metric?.type) {
+    config.Metric = getMetricLabel(metric.type);
+
+    if (metric.parameters) {
+      for (const [key, value] of Object.entries(metric.parameters)) {
+        if (
+          (typeof value === "string" && value.trim()) ||
+          typeof value === "boolean"
+        ) {
+          const label = key
+            .replace(/_/g, " ")
+            .replace(/\b\w/g, (c) => c.toUpperCase());
+          config[label] = value;
+        }
+      }
+    }
   }
 
   if (studioConfig.prompt?.messages) {

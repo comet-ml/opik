@@ -16,6 +16,7 @@ export interface OpikConfig {
   batchDelayMs?: number;
   holdUntilFlush?: boolean;
   promptCacheTtlSeconds?: number;
+  trackDisable?: boolean;
 }
 
 export interface ConstructorOpikConfig extends Omit<OpikConfig, "environment"> {
@@ -31,12 +32,20 @@ export const DEFAULT_CONFIG: Required<Omit<OpikConfig, "requestOptions" | "envir
   workspaceName: "default",
   batchDelayMs: 300,
   holdUntilFlush: false,
+  trackDisable: false,
 };
 
 function filterUndefined<T extends object>(obj: Partial<T>): Partial<T> {
   return Object.fromEntries(
     Object.entries(obj).filter(([, value]) => value !== undefined)
   ) as Partial<T>;
+}
+
+function parseBooleanFlag(value: string | undefined): boolean | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  return ["1", "true", "yes"].includes(String(value).toLowerCase());
 }
 
 function loadFromEnv(): Partial<OpikConfig> {
@@ -49,12 +58,8 @@ function loadFromEnv(): Partial<OpikConfig> {
     batchDelayMs: process.env.OPIK_BATCH_DELAY_MS
       ? Number(process.env.OPIK_BATCH_DELAY_MS)
       : undefined,
-    holdUntilFlush:
-      process.env.OPIK_HOLD_UNTIL_FLUSH === undefined
-        ? undefined
-        : ["1", "true", "yes"].includes(
-            String(process.env.OPIK_HOLD_UNTIL_FLUSH).toLowerCase()
-          ),
+    holdUntilFlush: parseBooleanFlag(process.env.OPIK_HOLD_UNTIL_FLUSH),
+    trackDisable: parseBooleanFlag(process.env.OPIK_TRACK_DISABLE),
     // parseInt returns NaN for non-numeric strings; `|| 1` converts NaN→1 before Math.max enforces the minimum
     promptCacheTtlSeconds: process.env.OPIK_PROMPT_CACHE_TTL_SECONDS
       ? Math.max(1, parseInt(process.env.OPIK_PROMPT_CACHE_TTL_SECONDS, 10) || 1)
@@ -91,6 +96,7 @@ function loadFromConfigFile(): Partial<OpikConfig> {
       apiUrl: config.opik.url_override,
       projectName: config.opik.project_name,
       workspaceName: config.opik.workspace,
+      trackDisable: parseBooleanFlag(config.opik.track_disable),
     });
   } catch (error) {
     logger.error(`Error loading config file ${expandedConfigFilePath}: ${error}`);
@@ -118,6 +124,13 @@ export function loadConfig(
 export function validateConfig(config: OpikConfig) {
   if (!config.apiUrl) {
     throw new Error("OPIK_URL_OVERRIDE is not set");
+  }
+
+  // When tracking is disabled, the SDK never sends data, so backend
+  // credentials are not required. Skip the cloud credential checks so an
+  // instrumented app can run without an API key or a local deployment.
+  if (config.trackDisable) {
+    return config;
   }
 
   const isCloudHost = isCloud(config.apiUrl);

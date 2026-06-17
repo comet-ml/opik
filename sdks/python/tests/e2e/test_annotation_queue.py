@@ -78,6 +78,15 @@ def test_annotation_queue__add_traces__happyflow(
     assert retrieved_queue.name == annotation_queue_name
     assert retrieved_queue.items_count == 2
 
+    # Retrieve the items in the queue
+    def queue_items_available():
+        return len(queue.get_items()) == 2
+
+    synchronization.wait_for_done(queue_items_available, timeout=30)
+
+    items = queue.get_items()
+    assert {item.id for item in items} == {trace1.id, trace2.id}
+
     # Remove one trace from queue
     queue.remove_traces([trace1])
 
@@ -179,6 +188,15 @@ def test_annotation_queue__add_threads__happyflow(
     assert retrieved_queue.id == queue.id
     assert retrieved_queue.name == annotation_queue_name
     assert retrieved_queue.items_count == 2
+
+    # Retrieve the items in the queue
+    def queue_items_available():
+        return len(queue.get_items()) == 2
+
+    synchronization.wait_for_done(queue_items_available, timeout=30)
+
+    items = queue.get_items()
+    assert {item.id for item in items} == thread_ids
 
     # Remove one thread from queue
     queue.remove_threads([threads[0]])

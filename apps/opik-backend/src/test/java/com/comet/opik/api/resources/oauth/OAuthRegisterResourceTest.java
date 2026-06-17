@@ -4,144 +4,84 @@ import com.comet.opik.domain.mcpoauth.ClientRegistrationRequest;
 import com.comet.opik.domain.mcpoauth.McpOAuthClient;
 import com.comet.opik.domain.mcpoauth.OAuthClientService;
 import com.comet.opik.domain.mcpoauth.OAuthConstants;
-import com.comet.opik.infrastructure.McpOAuthConfig;
-import com.comet.opik.infrastructure.OpikConfiguration;
-import com.comet.opik.infrastructure.ratelimit.RateLimitService;
-import jakarta.servlet.http.HttpServletRequest;
+import com.comet.opik.utils.JsonUtils;
+import io.dropwizard.testing.junit5.DropwizardExtensionsSupport;
+import io.dropwizard.testing.junit5.ResourceExtension;
+import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.Response;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.glassfish.jersey.test.grizzly.GrizzlyWebTestContainerFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import reactor.core.publisher.Mono;
 
-import java.time.Duration;
 import java.util.Set;
 
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.REGISTER_PATH;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.when;
 
-@ExtendWith(MockitoExtension.class)
+@ExtendWith(DropwizardExtensionsSupport.class)
 @DisplayName("OAuth Register Resource Test")
 class OAuthRegisterResourceTest {
 
-    @Mock
-    private OAuthClientService clientService;
-    @Mock
-    private RateLimitService rateLimitService;
-    @Mock
-    private OpikConfiguration opikConfig;
-    @Mock
-    private HttpServletRequest httpRequest;
+    private static final Set<String> REDIRECT_URIS = Set.of("http://example.com/cb");
 
-    private OAuthRegisterResource resource;
+    private static final OAuthClientService clientService = mock(OAuthClientService.class);
+
+    private static final ResourceExtension EXT = ResourceExtension.builder()
+            .setMapper(JsonUtils.getMapper())
+            .addResource(new OAuthRegisterResource(clientService))
+            .setTestContainerFactory(new GrizzlyWebTestContainerFactory())
+            .build();
 
     @BeforeEach
     void setUp() {
-        McpOAuthConfig mcpOAuthConfig = new McpOAuthConfig();
-        mcpOAuthConfig.setRegistrationRateLimit(10);
-        mcpOAuthConfig.setRegistrationRateLimitDuration(Duration.ofMinutes(1));
-        when(opikConfig.getMcpOAuth()).thenReturn(mcpOAuthConfig);
-
-        resource = new OAuthRegisterResource(clientService, rateLimitService, opikConfig);
-
-        lenient().when(httpRequest.getRemoteAddr()).thenReturn("10.0.0.1");
-        lenient().when(rateLimitService.isLimitExceeded(anyLong(), anyString(), any()))
-                .thenReturn(Mono.just(false));
-        lenient().when(rateLimitService.getRemainingTTL(anyString(), any()))
-                .thenReturn(Mono.just(60_000L));
+        reset(clientService);
     }
 
-    @Test
-    @DisplayName("register: returns 201 with Location header pointing at admin endpoint per RFC 7591 §3.2.1")
-    void register_returns201WithLocationHeader() {
-        String clientId = "client-123";
-        McpOAuthClient minted = McpOAuthClient.builder()
-                .clientId(clientId)
-                .name("Test Client")
-                .redirectUris(Set.of("http://example.com/cb"))
+    private McpOAuthClient minted(String clientId, String clientName) {
+        return McpOAuthClient.builder()
+                .id(clientId)
+                .name(clientName)
+                .redirectUris(REDIRECT_URIS)
                 .build();
-        when(clientService.register(any(ClientRegistrationRequest.class))).thenReturn(minted);
+    }
 
-        Response response = resource.register(ClientRegistrationRequest.builder()
-                .clientName("Test Client")
-                .redirectUris(Set.of("http://example.com/cb"))
-                .build(), httpRequest);
-
-        assertThat(response.getStatus()).isEqualTo(Response.Status.CREATED.getStatusCode());
-        assertThat(response.getLocation().getPath()).isEqualTo("/admin/mcp-oauth-clients/" + clientId);
-
-        ClientRegistrationResponse body = (ClientRegistrationResponse) response.getEntity();
-        ClientRegistrationResponse expected = ClientRegistrationResponse.builder()
-                .clientId(clientId)
-                .clientName("Test Client")
-                .redirectUris(Set.of("http://example.com/cb"))
-                .tokenEndpointAuthMethod(OAuthConstants.AUTH_METHOD_NONE)
-                .grantTypes(OAuthConstants.DEFAULT_GRANT_TYPES)
-                .responseTypes(OAuthConstants.DEFAULT_RESPONSE_TYPES)
-                .build();
-        assertThat(body).usingRecursiveComparison().isEqualTo(expected);
+    private Response register(String clientName) {
+        return EXT.target(REGISTER_PATH).request().post(Entity.json(ClientRegistrationRequest.builder()
+                .clientName(clientName)
+                .redirectUris(REDIRECT_URIS)
+                .build()));
     }
 
     @Test
-    @DisplayName("register: response body always omits clientIdIssuedAt (not surfaced by the client model)")
-    void register_clientIdIssuedAtAlwaysOmitted() {
-        McpOAuthClient minted = McpOAuthClient.builder()
-                .clientId("client-456")
-                .name("No-Timestamp Client")
-                .redirectUris(Set.of("http://example.com/cb"))
-                .build();
-        when(clientService.register(any(ClientRegistrationRequest.class))).thenReturn(minted);
+    @DisplayName("POST /oauth/register: returns 201 with body")
+    void register_success_returns201WithBody() {
+        String clientId = RandomStringUtils.secure().randomAlphanumeric(8);
+        String clientName = RandomStringUtils.randomAlphanumeric(8);
+        when(clientService.register(any(ClientRegistrationRequest.class))).thenReturn(minted(clientId, clientName));
 
-        Response response = resource.register(ClientRegistrationRequest.builder()
-                .clientName("No-Timestamp Client")
-                .redirectUris(Set.of("http://example.com/cb"))
-                .build(), httpRequest);
+        try (Response response = register(clientName)) {
+            assertThat(response.getStatus()).isEqualTo(Response.Status.CREATED.getStatusCode());
 
-        ClientRegistrationResponse body = (ClientRegistrationResponse) response.getEntity();
-        assertThat(body.clientIdIssuedAt()).isNull();
-    }
+            response.bufferEntity();
 
-    @Test
-    @DisplayName("register: per-IP rate limit exceeded returns 429 without registering")
-    void register_rateLimitExceeded_returns429() {
-        when(rateLimitService.isLimitExceeded(anyLong(), anyString(), any()))
-                .thenReturn(Mono.just(true));
-
-        Response response = resource.register(ClientRegistrationRequest.builder()
-                .clientName("Spammy Client")
-                .redirectUris(Set.of("http://example.com/cb"))
-                .build(), httpRequest);
-
-        assertThat(response.getStatus()).isEqualTo(Response.Status.TOO_MANY_REQUESTS.getStatusCode());
-        assertThat(response.getHeaderString("Retry-After")).isEqualTo("60");
-        OAuthError error = (OAuthError) response.getEntity();
-        assertThat(error.error()).isEqualTo("too_many_requests");
-        assertThat(error.errorDescription()).isEqualTo("registration rate limit exceeded");
-        verify(clientService, never()).register(any());
-    }
-
-    @Test
-    @DisplayName("register: rate limit bucket keys on last (nginx-appended) X-Forwarded-For hop, not the spoofable first")
-    void register_usesLastForwardedForHopAsRateLimitKey() {
-        when(httpRequest.getHeader("X-Forwarded-For")).thenReturn("1.2.3.4, 203.0.113.7");
-        when(rateLimitService.isLimitExceeded(anyLong(), anyString(), any()))
-                .thenReturn(Mono.just(true));
-
-        resource.register(ClientRegistrationRequest.builder()
-                .clientName("Client")
-                .redirectUris(Set.of("http://example.com/cb"))
-                .build(), httpRequest);
-
-        verify(rateLimitService).isLimitExceeded(anyLong(), eq("mcp_oauth_register:203.0.113.7"), any());
+            ClientRegistrationResponse expected = ClientRegistrationResponse.builder()
+                    .clientId(clientId)
+                    .clientName(clientName)
+                    .redirectUris(REDIRECT_URIS)
+                    .tokenEndpointAuthMethod(OAuthConstants.AUTH_METHOD_NONE)
+                    .grantTypes(OAuthConstants.DEFAULT_GRANT_TYPES)
+                    .responseTypes(OAuthConstants.DEFAULT_RESPONSE_TYPES)
+                    .build();
+            assertThat(response.readEntity(ClientRegistrationResponse.class))
+                    .usingRecursiveComparison()
+                    .isEqualTo(expected);
+        }
     }
 }

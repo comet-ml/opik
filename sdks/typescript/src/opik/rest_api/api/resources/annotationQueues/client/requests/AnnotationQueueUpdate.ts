@@ -11,4 +11,5 @@ export interface AnnotationQueueUpdate {
     commentsEnabled?: boolean;
     feedbackDefinitionNames?: string[];
     annotatorsPerItem?: number;
+    lockTimeoutSeconds?: number;
 }

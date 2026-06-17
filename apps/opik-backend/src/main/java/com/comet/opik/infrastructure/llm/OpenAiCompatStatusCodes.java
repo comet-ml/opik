@@ -26,6 +26,10 @@ public class OpenAiCompatStatusCodes {
             case "invalid_api_key" -> 401;
             case "internal_error" -> 500;
             case "invalid_request_error" -> 400;
+            // Per-parameter validation failures from OpenAI surface as 400 — typically model/
+            // parameter mismatches (e.g., 'top_p' on a reasoning model). Callers should pass
+            // either the {code:...} or the high-level {type:...} from the error JSON to this map.
+            case "unsupported_parameter" -> 400;
             case "rate_limit_exceeded" -> 429;
             case "insufficient_quota" -> 402;
             case "model_not_found" -> 404;

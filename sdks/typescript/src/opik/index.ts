@@ -1,6 +1,11 @@
 export { OpikClient as Opik } from "@/client/Client";
 export type { FeedbackScoreData } from "@/tracer/types";
 export type { OpikConfig } from "@/config/Config";
+export {
+  isTracingActive,
+  setTracingActive,
+  resetTracingToConfigDefault,
+} from "@/config/TracingRuntimeConfig";
 export { getTrackContext, track } from "@/decorators/track";
 export { generateId } from "@/utils/generateId";
 export { flushAll } from "@/utils/flushAll";

@@ -36,6 +36,7 @@ export interface HostEventMap {
   "context:changed": BridgeContext;
   "visibility:changed": { isOpen: boolean };
   "runner:state-changed": RunnerBridgeState;
+  "conversation:start": { message: string };
 }
 
 /** Sidebar → Host events */
@@ -63,6 +64,7 @@ export interface AssistantSidebarBridge {
     event: E,
     data: SidebarEventMap[E],
   ): void;
+  startConversation(message: string): void;
 }
 
 declare global {

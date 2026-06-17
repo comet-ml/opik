@@ -72,6 +72,11 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
     }
 
     @Override
+    protected MessageContext messageContext(ExperimentItemToProcess message) {
+        return new MessageContext(message.workspaceId(), message.workspaceName(), message.userName());
+    }
+
+    @Override
     protected Mono<Void> processEvent(ExperimentItemToProcess message) {
         return itemProcessor.process(message)
                 .thenReturn(true)

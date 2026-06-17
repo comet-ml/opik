@@ -152,27 +152,30 @@ class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
     }
 
     private Mono<Void> publishToRedisStream(DatasetExportJob job, String workspaceId) {
-        log.info("Publishing export job to Redis stream: '{}'", job.id());
+        return Mono.deferContextual(ctx -> {
+            log.info("Publishing export job to Redis stream: '{}'", job.id());
 
-        DatasetExportMessage message = DatasetExportMessage.builder()
-                .jobId(job.id())
-                .datasetId(job.datasetId())
-                .workspaceId(workspaceId)
-                .build();
+            DatasetExportMessage message = DatasetExportMessage.builder()
+                    .jobId(job.id())
+                    .datasetId(job.datasetId())
+                    .workspaceId(workspaceId)
+                    .workspaceName(ctx.getOrDefault(RequestContext.WORKSPACE_NAME, null))
+                    .build();
 
-        RStreamReactive<String, DatasetExportMessage> stream = redisClient.getStream(
-                exportConfig.getStreamName(),
-                exportConfig.getCodec());
+            RStreamReactive<String, DatasetExportMessage> stream = redisClient.getStream(
+                    exportConfig.getStreamName(),
+                    exportConfig.getCodec());
 
-        return stream.add(RedisStreamUtils.buildAddArgs(
-                DatasetExportConfig.PAYLOAD_FIELD, message, exportConfig))
-                .doOnNext(messageId -> log.info(
-                        "Export job published to Redis stream: jobId='{}', messageId='{}'",
-                        job.id(), messageId))
-                .doOnError(throwable -> log.error(
-                        "Failed to publish export job to Redis stream: jobId='{}'",
-                        job.id(), throwable))
-                .then();
+            return stream.add(RedisStreamUtils.buildAddArgs(
+                    DatasetExportConfig.PAYLOAD_FIELD, message, exportConfig))
+                    .doOnNext(messageId -> log.info(
+                            "Export job published to Redis stream: jobId='{}', messageId='{}'",
+                            job.id(), messageId))
+                    .doOnError(throwable -> log.error(
+                            "Failed to publish export job to Redis stream: jobId='{}'",
+                            job.id(), throwable))
+                    .then();
+        });
     }
 
     private static String formatLockKey(String workspaceId, UUID datasetId) {
