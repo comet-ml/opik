@@ -7,6 +7,38 @@ export interface PythonSdkClient {
     output: string;
     workspace?: string;
   }): Promise<{ id: string; name: string; project_id: string }>;
+  createNestedTrace(args: {
+    project_name: string;
+    name: string;
+    input?: Record<string, unknown>;
+    output?: Record<string, unknown>;
+    metadata?: Record<string, unknown>;
+    tags?: string[];
+    thread_id?: string;
+    feedback_scores?: Array<{ name: string; value: number; reason?: string }>;
+    spans: Array<{
+      name: string;
+      type?: 'general' | 'llm' | 'tool';
+      input?: Record<string, unknown>;
+      output?: Record<string, unknown>;
+      metadata?: Record<string, unknown>;
+      model?: string;
+      provider?: string;
+      usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+      total_cost?: number;
+      parent_index?: number;
+    }>;
+    workspace?: string;
+  }): Promise<{ id: string; name: string; project_id: string; span_count: number }>;
+  createFeedbackDefinition(args: {
+    name: string;
+    min?: number;
+    max?: number;
+    workspace?: string;
+  }): Promise<{ id: string; name: string }>;
+  // Workspace is resolved from the bridge's env (OPIK_WORKSPACE), the same as
+  // createFeedbackDefinition, so both operate on one workspace per run.
+  deleteFeedbackDefinition(args: { id: string }): Promise<void>;
   createDataset(args: {
     name: string;
     project_name: string;
@@ -36,6 +68,20 @@ export interface PythonSdkClient {
       score_value: number;
     }>;
   }>;
+  createTextPrompt(args: {
+    name: string;
+    prompt: string;
+    description?: string;
+    project_name?: string;
+    workspace?: string;
+  }): Promise<{ id: string; name: string }>;
+  createChatPrompt(args: {
+    name: string;
+    messages: Array<{ role: string; content: string }>;
+    description?: string;
+    project_name?: string;
+    workspace?: string;
+  }): Promise<{ id: string; name: string }>;
   createTestSuite(args: {
     name: string;
     project_name: string;
@@ -112,12 +158,25 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
       // is picked up after the bridge has already spawned.
       const apiKey = process.env.OPIK_API_KEY;
       if (apiKey) headers['X-Opik-Api-Key'] = apiKey;
-      const res = await fetch(`${bridgeUrl}${path}`, {
-        method,
-        headers: Object.keys(headers).length > 0 ? headers : undefined,
-        body: body !== undefined ? JSON.stringify(body) : undefined,
-        signal: ctrl.signal,
-      });
+      let res: Response;
+      try {
+        res = await fetch(`${bridgeUrl}${path}`, {
+          method,
+          headers: Object.keys(headers).length > 0 ? headers : undefined,
+          body: body !== undefined ? JSON.stringify(body) : undefined,
+          signal: ctrl.signal,
+        });
+      } catch (err) {
+        if (ctrl.signal.aborted) {
+          throw new PythonSdkBridgeError({
+            status: 0,
+            endpoint,
+            detail: 'client-timeout',
+            message: `opik-sdk-driver ${endpoint} aborted after ${REQUEST_TIMEOUT_MS}ms (client-side timeout — the bridge or backend did not respond in time)`,
+          });
+        }
+        throw err;
+      }
       if (res.ok) {
         return (await res.json()) as TResponse;
       }
@@ -150,8 +209,27 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
     async createTrace(args) {
       return request<{ id: string; name: string; project_id: string }>('POST', '/traces', args);
     },
+    async createNestedTrace(args) {
+      return request<{ id: string; name: string; project_id: string; span_count: number }>(
+        'POST',
+        '/traces/nested',
+        args,
+      );
+    },
+    async createFeedbackDefinition(args) {
+      return request<{ id: string; name: string }>('POST', '/feedback-definitions', args);
+    },
+    async deleteFeedbackDefinition({ id }) {
+      await request<{ deleted: boolean }>('DELETE', `/feedback-definitions/${id}`);
+    },
     async createDataset(args) {
       return request<{ id: string; name: string }>('POST', '/datasets', args);
+    },
+    async createTextPrompt(args) {
+      return request<{ id: string; name: string }>('POST', '/prompts/text', args);
+    },
+    async createChatPrompt(args) {
+      return request<{ id: string; name: string }>('POST', '/prompts/chat', args);
     },
     async evaluateExperiment(args) {
       return request<{

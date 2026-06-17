@@ -7,6 +7,8 @@ import { logger } from "@/utils/logger";
 
 export const ANNOTATION_QUEUE_ITEMS_MAX_BATCH_SIZE = 1000;
 
+export const ANNOTATION_QUEUE_GET_ITEMS_BATCH_SIZE = 2000;
+
 export interface AnnotationQueueData {
   id: string;
   name: string;
@@ -88,5 +90,35 @@ export abstract class BaseAnnotationQueue {
       body: { ids },
     });
     logger.debug(`Successfully removed ${ids.length} items from annotation queue`);
+  }
+
+  protected async fetchAllItems<T>(
+    fetchPage: (limit: number, lastRetrievedId?: string) => Promise<T[]>,
+    getCursor: (item: T) => string | undefined,
+  ): Promise<T[]> {
+    const items: T[] = [];
+    let lastRetrievedId: string | undefined;
+
+    while (true) {
+      const page = await fetchPage(
+        ANNOTATION_QUEUE_GET_ITEMS_BATCH_SIZE,
+        lastRetrievedId,
+      );
+      items.push(...page);
+
+      if (page.length < ANNOTATION_QUEUE_GET_ITEMS_BATCH_SIZE) {
+        break;
+      }
+
+      const nextCursor = getCursor(page[page.length - 1]);
+      // Stop when the backend gives us no cursor to advance past, or repeats the
+      // previous one, so we never loop forever or re-request the same page.
+      if (!nextCursor || nextCursor === lastRetrievedId) {
+        break;
+      }
+      lastRetrievedId = nextCursor;
+    }
+
+    return items;
   }
 }

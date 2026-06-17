@@ -153,11 +153,12 @@ anthropic:
   - id: "claude-opus-4-1-20250805"
     label: "Claude Opus 4.1"
     structuredOutput: true
+  - id: "claude-fable-5"
+    label: "Claude Fable 5"
+    structuredOutput: true
   - id: "claude-3-7-sonnet-20250219"
   - id: "claude-opus-4-20250514"
-    structuredOutput: true
   - id: "claude-sonnet-4-20250514"
-    structuredOutput: true
   - id: "claude-sonnet-4-5-20250929"
     structuredOutput: true
 gemini:
@@ -320,6 +321,8 @@ openrouter:
   - id: "anthropic/claude-3.7-sonnet:thinking"
     label: "anthropic/claude-3.7-sonnet:thinking"
     reasoning: true
+  - id: "anthropic/claude-fable-5"
+    label: "anthropic/claude-fable-5"
   - id: "anthropic/claude-haiku-4.5"
     label: "anthropic/claude-haiku-4.5"
   - id: "anthropic/claude-opus-4"
@@ -581,6 +584,7 @@ openrouter:
     label: "inception/mercury"
   - id: "inception/mercury-2"
     label: "inception/mercury-2"
+    structuredOutput: true
   - id: "inception/mercury-coder"
     label: "inception/mercury-coder"
   - id: "inclusionai/ling-2.6-1t"
@@ -828,6 +832,8 @@ openrouter:
     label: "moonshotai/kimi-k2.6"
   - id: "moonshotai/kimi-k2.6:free"
     label: "moonshotai/kimi-k2.6:free"
+  - id: "moonshotai/kimi-k2.7-code"
+    label: "moonshotai/kimi-k2.7-code"
   - id: "moonshotai/kimi-k2:free"
     label: "moonshotai/kimi-k2:free"
   - id: "moonshotai/kimi-linear-48b-a3b-instruct"
@@ -842,6 +848,8 @@ openrouter:
     label: "neversleep/noromaid-20b"
   - id: "nex-agi/deepseek-v3.1-nex-n1"
     label: "nex-agi/deepseek-v3.1-nex-n1"
+  - id: "nex-agi/nex-n2-pro:free"
+    label: "nex-agi/nex-n2-pro:free"
   - id: "nousresearch/deephermes-3-mistral-24b-preview"
     label: "nousresearch/deephermes-3-mistral-24b-preview"
   - id: "nousresearch/hermes-2-pro-llama-3-8b"
@@ -1376,8 +1384,12 @@ openrouter:
     label: "z-ai/glm-5-turbo"
   - id: "z-ai/glm-5.1"
     label: "z-ai/glm-5.1"
+  - id: "z-ai/glm-5.2"
+    label: "z-ai/glm-5.2"
   - id: "z-ai/glm-5v-turbo"
     label: "z-ai/glm-5v-turbo"
+  - id: "~anthropic/claude-fable-latest"
+    label: "~anthropic/claude-fable-latest"
   - id: "~anthropic/claude-haiku-latest"
     label: "~anthropic/claude-haiku-latest"
   - id: "~anthropic/claude-opus-latest"

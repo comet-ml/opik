@@ -187,7 +187,7 @@ class RemoteAuthServiceTest {
                         NOT_ALLOWED_TO_ACCESS_WORKSPACE),
                 arguments(HttpStatus.SC_SERVER_ERROR,
                         InternalServerErrorException.class,
-                        "HTTP 500 Internal Server Error"));
+                        "Unexpected error while authenticating user"));
     }
 
     @ParameterizedTest
@@ -341,10 +341,12 @@ class RemoteAuthServiceTest {
     @Test
     void testListEligibleWorkspaces__filtersDefaultWorkspaceAndMapsToWorkspaceInfo() throws JsonProcessingException {
         var sessionTokenValue = "session-" + UUID.randomUUID();
+        var production = podamFactory.manufacturePojo(WorkspaceInfo.class);
+        var staging = podamFactory.manufacturePojo(WorkspaceInfo.class);
         var responseJson = OBJECT_MAPPER.writeValueAsString(Arrays.asList(
-                Map.of("workspaceId", "ws-1", "workspaceName", "production"),
+                Map.of("workspaceId", production.id(), "workspaceName", production.name()),
                 Map.of("workspaceId", "ws-default", "workspaceName", DEFAULT_WORKSPACE_NAME),
-                Map.of("workspaceId", "ws-2", "workspaceName", "staging")));
+                Map.of("workspaceId", staging.id(), "workspaceName", staging.name())));
         WIRE_MOCK.server().stubFor(get(urlPathEqualTo("/workspaces"))
                 .withQueryParam("withoutExtendedData", equalTo("true"))
                 .withCookie(RequestContext.SESSION_COOKIE, equalTo(sessionTokenValue))
@@ -352,9 +354,7 @@ class RemoteAuthServiceTest {
 
         var result = remoteAuthService.listEligibleWorkspaces(sessionCookie(sessionTokenValue));
 
-        assertThat(result).containsExactly(
-                WorkspaceInfo.builder().id("ws-1").name("production").build(),
-                WorkspaceInfo.builder().id("ws-2").name("staging").build());
+        assertThat(result).containsExactly(production, staging);
     }
 
     @Test
@@ -369,7 +369,7 @@ class RemoteAuthServiceTest {
                 arguments(HttpStatus.SC_UNAUTHORIZED, ClientErrorException.class, NOT_LOGGED_USER),
                 arguments(HttpStatus.SC_FORBIDDEN, ClientErrorException.class, NOT_LOGGED_USER),
                 arguments(HttpStatus.SC_SERVER_ERROR, InternalServerErrorException.class,
-                        "HTTP 500 Internal Server Error"));
+                        "Unexpected error while listing workspaces"));
     }
 
     @ParameterizedTest

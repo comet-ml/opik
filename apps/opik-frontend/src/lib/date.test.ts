@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { millisecondsToSeconds } from "./date";
+import {
+  formatLocalTimeAsUtc,
+  formatUtcTimeAsLocal,
+  millisecondsToSeconds,
+} from "./date";
 
 describe("millisecondsToSeconds", () => {
   it("should return seconds with precision 3 when milliseconds <= 5", () => {
@@ -15,5 +19,24 @@ describe("millisecondsToSeconds", () => {
   it("should return seconds with precision 1 when milliseconds > 50", () => {
     expect(millisecondsToSeconds(100)).toBe(0.1);
     expect(millisecondsToSeconds(1000)).toBe(1);
+  });
+});
+
+describe("formatLocalTimeAsUtc / formatUtcTimeAsLocal roundtrip", () => {
+  it("should roundtrip a time value back to the original", () => {
+    const local = "14:30:00";
+    const utc = formatLocalTimeAsUtc(local);
+    const backToLocal = formatUtcTimeAsLocal(utc);
+    expect(backToLocal).toBe("2:30 PM");
+  });
+
+  it("should produce HH:mm:ss format for UTC output", () => {
+    const result = formatLocalTimeAsUtc("07:00:00");
+    expect(result).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+  });
+
+  it("should produce h:mm A format for local output", () => {
+    const result = formatUtcTimeAsLocal("12:00:00");
+    expect(result).toMatch(/^\d{1,2}:\d{2}\s(AM|PM)$/);
   });
 });

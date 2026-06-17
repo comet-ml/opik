@@ -24,6 +24,9 @@ public class OpikConfiguration extends JobConfiguration {
     private DatabaseAnalyticsFactory databaseAnalytics = new DatabaseAnalyticsFactory();
 
     @Valid @NotNull @JsonProperty
+    private DatabaseAnalyticsReadOnlyFreeFormSqlConfig databaseAnalyticsReadOnlyFreeFormSql = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
+
+    @Valid @NotNull @JsonProperty
     private AuthenticationConfig authentication = new AuthenticationConfig();
 
     @Valid @NotNull @JsonProperty
@@ -183,4 +186,7 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private EnvironmentConfig environment = new EnvironmentConfig();
+
+    @Valid @NotNull @JsonProperty
+    private ReportGenerationConfig reportGeneration = new ReportGenerationConfig();
 }

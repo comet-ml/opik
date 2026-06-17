@@ -2,9 +2,8 @@ import React, { useMemo } from "react";
 import isString from "lodash/isString";
 import { Alert, ALERT_EVENT_TYPE, ALERT_TYPE } from "@/types/alerts";
 import useWebhookExamplesQuery from "@/api/alerts/useWebhookExamplesQuery";
-import CodeHighlighter, {
-  SUPPORTED_LANGUAGE,
-} from "@/shared/CodeHighlighter/CodeHighlighter";
+import CodeHighlighter from "@/shared/CodeHighlighter/CodeHighlighter";
+import { SUPPORTED_LANGUAGE } from "@/constants/codeLanguage";
 import Loader from "@/shared/Loader/Loader";
 import { safelyParseJSON } from "@/lib/utils";
 import { applyFieldReplacements } from "@/v1/pages/AlertsPage/AddEditAlertPage/helpers";

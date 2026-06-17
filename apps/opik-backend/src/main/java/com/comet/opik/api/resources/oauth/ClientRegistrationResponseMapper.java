@@ -11,6 +11,7 @@ interface ClientRegistrationResponseMapper {
 
     ClientRegistrationResponseMapper INSTANCE = Mappers.getMapper(ClientRegistrationResponseMapper.class);
 
+    @Mapping(target = "clientId", source = "id")
     @Mapping(target = "clientName", source = "name")
     @Mapping(target = "clientIdIssuedAt", ignore = true)
     @Mapping(target = "tokenEndpointAuthMethod", expression = "java(OAuthConstants.AUTH_METHOD_NONE)")

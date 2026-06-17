@@ -16,6 +16,12 @@ ORIGINAL_COMMAND="$0 $@"
 # version_1) before invoking the script.
 export TOGGLE_FORCE_WORKSPACE_VERSION="${TOGGLE_FORCE_WORKSPACE_VERSION:-version_2}"
 
+# Agent Insights read-only freeform SQL is off by default for local dev (the feature is driven by the Ollie agent,
+# which isn't available locally). Set TOGGLE_AGENT_INSIGHTS_ENABLED=true before invoking to opt in: start_backend
+# then provisions the restricted read-only ClickHouse user/profile/policies and the JVM connects with the feature on.
+# Exported here so this single variable controls both the provisioning gate and the JAR-mode backend (config.yml).
+export TOGGLE_AGENT_INSIGHTS_ENABLED="${TOGGLE_AGENT_INSIGHTS_ENABLED:-false}"
+
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." &> /dev/null && pwd)"
@@ -36,6 +42,12 @@ OLLIE_PID_FILE="/tmp/${RESOURCE_PREFIX}-ollie.pid"
 OLLIE_LOG_FILE="/tmp/${RESOURCE_PREFIX}-ollie.log"
 # Sidecar so --stop can find the ollie repo even without OLLIE_REPO_PATH in scope.
 OLLIE_REPO_PATH_FILE="/tmp/${RESOURCE_PREFIX}-ollie.repo"
+
+# Private ai-spend FE plugin (Opik team only). Auto-detected at
+# $PROJECT_ROOT/../opik-plugin-ai-spend if not set; its src/ is symlinked into
+# the FE plugins folder so it compiles as part of opik. Opt out with
+# AI_SPEND_PLUGIN_PATH= (empty string).
+AI_SPEND_PLUGIN_LINK="$FRONTEND_DIR/src/plugins/ai-spend"
 
 # Ollie local dev integration (Opik team only).
 # Auto-detected at $PROJECT_ROOT/../ollie-assist if not explicitly set; see the
@@ -94,6 +106,18 @@ if [ -z "${OLLIE_REPO_PATH+set}" ]; then
         log_info "Auto-detected ollie-assist checkout at $OLLIE_REPO_PATH (export OLLIE_REPO_PATH= to opt out)"
     fi
     unset _ollie_candidate
+fi
+
+# Auto-detect a sibling opik-plugin-ai-spend checkout when AI_SPEND_PLUGIN_PATH
+# is unset entirely (mirrors the ollie-assist convention above). Setting
+# AI_SPEND_PLUGIN_PATH="" opts out.
+if [ -z "${AI_SPEND_PLUGIN_PATH+set}" ]; then
+    _ai_spend_candidate="$(cd "$PROJECT_ROOT/.." 2>/dev/null && pwd)/opik-plugin-ai-spend"
+    if [ -d "$_ai_spend_candidate/src" ]; then
+        AI_SPEND_PLUGIN_PATH="$_ai_spend_candidate"
+        log_info "Auto-detected ai-spend plugin checkout at $AI_SPEND_PLUGIN_PATH (export AI_SPEND_PLUGIN_PATH= to opt out)"
+    fi
+    unset _ai_spend_candidate
 fi
 
 # Function to find JAR files in target directory
@@ -644,6 +668,17 @@ start_backend() {
     export REDIS_URL="${REDIS_URL:-redis://:opik@localhost:${REDIS_PORT}/0}"
     export ANALYTICS_DB_PORT="${CLICKHOUSE_HTTP_PORT}"
 
+    # Agent Insights (read-only freeform SQL) — opt-in for local dev. When enabled, provision the restricted
+    # read-only ClickHouse user (via the shared script also used by the docker-compose backend container) and export
+    # its credentials so the locally-launched backend connects as that user. Default off: behavior unchanged. The
+    # script runs against the docker-compose ClickHouse on localhost:${ANALYTICS_DB_PORT} exported just above.
+    if [ "${TOGGLE_AGENT_INSIGHTS_ENABLED}" = "true" ]; then
+        export ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_USER="${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_USER:-comet_readonly_freeform_sql_user}"
+        export ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_PASS="${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_PASS:-opik}"
+        bash "$BACKEND_DIR/provision_agent_insights_readonly_user.sh"
+        log_debug "  TOGGLE_AGENT_INSIGHTS_ENABLED=true (read-only CH user: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_USER})"
+    fi
+
     log_debug "Backend configured with:"
     log_debug "  SERVER_APPLICATION_PORT=$SERVER_APPLICATION_PORT"
     log_debug "  SERVER_ADMIN_PORT=$SERVER_ADMIN_PORT"
@@ -696,6 +731,19 @@ start_backend() {
         log_error "Backend failed to start. Check logs: cat $BACKEND_LOG_FILE"
         rm -f "$BACKEND_PID_FILE"
         exit 1
+    fi
+}
+
+# Symlink the sibling private ai-spend plugin's source into the FE plugins
+# folder (gitignored) so it compiles as part of opik. Removes the link when no
+# sibling is present, so toggling the checkout is clean.
+sync_ai_spend_plugin_link() {
+    if [ -n "${AI_SPEND_PLUGIN_PATH:-}" ] && [ -d "${AI_SPEND_PLUGIN_PATH}/src" ]; then
+        ln -sfn "${AI_SPEND_PLUGIN_PATH}/src" "$AI_SPEND_PLUGIN_LINK"
+        log_info "Linked ai-spend plugin: $AI_SPEND_PLUGIN_LINK -> ${AI_SPEND_PLUGIN_PATH}/src"
+    elif [ -L "$AI_SPEND_PLUGIN_LINK" ]; then
+        rm -f "$AI_SPEND_PLUGIN_LINK"
+        log_info "Removed ai-spend plugin link (no sibling checkout)"
     fi
 }
 
@@ -752,6 +800,14 @@ start_frontend() {
         log_debug "  VITE_ASSISTANT_SIDEBAR_BASE_URL=$VITE_ASSISTANT_SIDEBAR_BASE_URL"
     elif ollie_enabled; then
         log_warning "OLLIE_REPO_PATH is set but ollie healthz is not responding; sidebar disabled"
+    fi
+
+    # Link the private ai-spend plugin (if checked out) and activate it
+    # alongside the local development plugin.
+    sync_ai_spend_plugin_link
+    if [ -L "$AI_SPEND_PLUGIN_LINK" ]; then
+        export VITE_FE_PLUGINS="development,ai-spend"
+        log_info "  VITE_FE_PLUGINS=$VITE_FE_PLUGINS"
     fi
 
     log_debug "Starting frontend with: npm run start"

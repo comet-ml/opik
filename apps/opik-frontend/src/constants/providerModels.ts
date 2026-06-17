@@ -138,6 +138,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1,
       label: "Claude Opus 4.1",
     },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5,
+      label: "Claude Fable 5",
+    },
   ],
 
   [PROVIDER_TYPE.OPEN_ROUTER]: [
@@ -252,6 +256,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_7_SONNET_THINKING,
       label: "anthropic/claude-3.7-sonnet:thinking",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_FABLE_5,
+      label: "anthropic/claude-fable-5",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_HAIKU_4_5,
@@ -1159,6 +1167,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "moonshotai/kimi-k2.6:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2_7_CODE,
+      label: "moonshotai/kimi-k2.7-code",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2_FREE,
       label: "moonshotai/kimi-k2:free",
     },
@@ -1185,6 +1197,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.NEX_AGI_DEEPSEEK_V3_1_NEX_N1,
       label: "nex-agi/deepseek-v3.1-nex-n1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.NEX_AGI_NEX_N2_PRO_FREE,
+      label: "nex-agi/nex-n2-pro:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_DEEPHERMES_3_MISTRAL_24B_PREVIEW,
@@ -2164,8 +2180,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "z-ai/glm-5.1",
     },
     {
+      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5_2,
+      label: "z-ai/glm-5.2",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5V_TURBO,
       label: "z-ai/glm-5v-turbo",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_FABLE_LATEST,
+      label: "~anthropic/claude-fable-latest",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_HAIKU_LATEST,

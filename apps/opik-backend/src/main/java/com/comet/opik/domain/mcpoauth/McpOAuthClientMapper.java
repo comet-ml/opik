@@ -10,7 +10,7 @@ interface McpOAuthClientMapper {
 
     McpOAuthClientMapper INSTANCE = Mappers.getMapper(McpOAuthClientMapper.class);
 
-    @Mapping(target = "clientId", source = "clientId")
+    @Mapping(target = "id", source = "clientId")
     @Mapping(target = "name", expression = "java(StringUtils.defaultIfBlank(request.clientName(), clientId))")
     @Mapping(target = "redirectUris", source = "request.redirectUris")
     @Mapping(target = "logoUri", source = "request.logoUri")

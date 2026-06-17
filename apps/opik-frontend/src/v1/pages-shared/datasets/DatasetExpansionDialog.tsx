@@ -664,7 +664,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
                 </div>
               </div>
             ) : (
-              "Generate Samples"
+              "Generate samples"
             )}
           </Button>
         </DialogFooter>

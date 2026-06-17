@@ -55,19 +55,23 @@ class TestTimeShiftDistances:
     
     def test_demo_spans_all_shifted_to_latest_trace_date(self):
         """
-        Verify that all demo spans end up with start_time after shift
-        being close to the shifted latest trace time.
+        Verify that all demo spans end up close in time to the shifted latest
+        trace after the shift.
         """
         time_shift = calculate_time_shift_to_now(demo_traces)
-        
+
         # Get latest trace end_time and shift it
         latest_trace_end = max(demo_traces, key=lambda t: t['end_time'])['end_time']
         shifted_latest_trace_end = apply_time_shift(latest_trace_end, time_shift)
-        
-        # All demo_spans should be from 2025-08-27 originally
+
+        # The shift is a fixed delta, so the gap between a span start and the
+        # latest trace end is preserved. Assert that gap stays within the demo
+        # data's own original span (one day) rather than comparing calendar
+        # dates — .date() equality breaks when the shift straddles midnight.
+        max_gap = datetime.timedelta(days=1)
         for span in demo_spans:
             shifted_span_start = apply_time_shift(span['start_time'], time_shift)
-            # Spans from 2025-08-27 should shift to same date as latest trace
-            assert shifted_span_start.date() == shifted_latest_trace_end.date(), \
-                f"Span start_time {shifted_span_start} doesn't match shifted trace end_time {shifted_latest_trace_end}"
+            gap = shifted_latest_trace_end - shifted_span_start
+            assert datetime.timedelta(0) <= gap <= max_gap, \
+                f"Span start_time {shifted_span_start} not within {max_gap} of shifted trace end_time {shifted_latest_trace_end} (gap {gap})"
     

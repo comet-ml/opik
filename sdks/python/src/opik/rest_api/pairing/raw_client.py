@@ -16,7 +16,6 @@ from ..errors.not_found_error import NotFoundError
 from ..errors.too_many_requests_error import TooManyRequestsError
 from ..errors.unprocessable_entity_error import UnprocessableEntityError
 from ..types.create_session_response import CreateSessionResponse
-from ..types.error_message import ErrorMessage
 from .types.create_session_request_type import CreateSessionRequestType
 
 # this is used as the default value for optional parameters
@@ -68,9 +67,9 @@ class RawPairingClient:
                 raise ForbiddenError(
                     headers=dict(_response.headers),
                     body=typing.cast(
-                        ErrorMessage,
+                        typing.Optional[typing.Any],
                         parse_obj_as(
-                            type_=ErrorMessage,  # type: ignore
+                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     ),
@@ -112,9 +111,9 @@ class RawPairingClient:
                 raise TooManyRequestsError(
                     headers=dict(_response.headers),
                     body=typing.cast(
-                        ErrorMessage,
+                        typing.Optional[typing.Any],
                         parse_obj_as(
-                            type_=ErrorMessage,  # type: ignore
+                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     ),
@@ -216,9 +215,9 @@ class RawPairingClient:
                 raise TooManyRequestsError(
                     headers=dict(_response.headers),
                     body=typing.cast(
-                        ErrorMessage,
+                        typing.Optional[typing.Any],
                         parse_obj_as(
-                            type_=ErrorMessage,  # type: ignore
+                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     ),
@@ -274,9 +273,9 @@ class AsyncRawPairingClient:
                 raise ForbiddenError(
                     headers=dict(_response.headers),
                     body=typing.cast(
-                        ErrorMessage,
+                        typing.Optional[typing.Any],
                         parse_obj_as(
-                            type_=ErrorMessage,  # type: ignore
+                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     ),
@@ -318,9 +317,9 @@ class AsyncRawPairingClient:
                 raise TooManyRequestsError(
                     headers=dict(_response.headers),
                     body=typing.cast(
-                        ErrorMessage,
+                        typing.Optional[typing.Any],
                         parse_obj_as(
-                            type_=ErrorMessage,  # type: ignore
+                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     ),
@@ -422,9 +421,9 @@ class AsyncRawPairingClient:
                 raise TooManyRequestsError(
                     headers=dict(_response.headers),
                     body=typing.cast(
-                        ErrorMessage,
+                        typing.Optional[typing.Any],
                         parse_obj_as(
-                            type_=ErrorMessage,  # type: ignore
+                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     ),

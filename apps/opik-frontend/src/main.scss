@@ -69,6 +69,11 @@
     /* Toggle colors */
     --toggle-outline-active: #f3f4fe;
 
+    /* Dataset/test-suite upload chip colors */
+    --upload-chip-bg: #bae6fd1a;
+    --upload-chip-border: #bae6fd99;
+    --upload-chip-icon-bg: #89deff;
+
     /* CodeMirror theme colors */
     --codemirror-background: #f8fafc;
     --codemirror-gutter: #94a3b8;
@@ -359,6 +364,11 @@
 
     /* Toggle colors - Dark Mode */
     --toggle-outline-active: #2c3c56;
+
+    /* Dataset/test-suite upload chip colors - Dark Mode */
+    --upload-chip-bg: #38bdf814;
+    --upload-chip-border: #38bdf833;
+    --upload-chip-icon-bg: #0ea5e9;
 
     /* Thread colors - Dark Mode */
     --thread-icon-background: #2e2932;
@@ -942,6 +952,19 @@
     white-space: pre-wrap;
     overflow-wrap: break-word;
     word-break: break-word;
+  }
+
+  :not(pre) > code {
+    @apply comet-code;
+    background-color: hsl(var(--muted));
+    border-radius: 0.25rem;
+    padding: 0.125rem 0.375rem;
+    font-size: inherit;
+
+    &::before,
+    &::after {
+      content: none;
+    }
   }
 }
 

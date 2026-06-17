@@ -1,4 +1,4 @@
-export { test, expect } from './test-suite.fixture';
+export { test, expect } from './traced-agent.fixture';
 export type { ProjectFixtures } from './project.fixture';
 export type { ScratchDir, ScratchDirFixtures } from './scratch-dir.fixture';
 export type {
@@ -20,4 +20,13 @@ export type {
   TestSuiteFixtures,
   TestSuiteItemSeed,
 } from './test-suite.fixture';
+export type {
+  FeedbackDefinitionRef,
+  FeedbackDefinitionFixtures,
+} from './feedback-definition.fixture';
+export type {
+  TracedAgentRef,
+  TracedAgentSpanRef,
+  TracedAgentFixtures,
+} from './traced-agent.fixture';
 export type { ProjectRef } from '../core/backend';

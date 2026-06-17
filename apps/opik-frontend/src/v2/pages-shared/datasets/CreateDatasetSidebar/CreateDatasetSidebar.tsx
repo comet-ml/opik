@@ -1,13 +1,12 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { ArrowUpRight, ChevronRight } from "lucide-react";
 
 import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
 import { Label } from "@/ui/label";
-import { Separator } from "@/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import { Textarea } from "@/ui/textarea";
-import { cn, escapeJsString } from "@/lib/utils";
+import { escapeJsString } from "@/lib/utils";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import {
   Accordion,
@@ -15,33 +14,24 @@ import {
   AccordionItem,
   CustomAccordionTrigger,
 } from "@/ui/accordion";
-import CodeHighlighter, {
-  SUPPORTED_LANGUAGE,
-} from "@/shared/CodeHighlighter/CodeHighlighter";
+import CodeHighlighter from "@/shared/CodeHighlighter/CodeHighlighter";
+import { SUPPORTED_LANGUAGE } from "@/constants/codeLanguage";
 
 import { Spinner } from "@/ui/spinner";
+import { useToast } from "@/ui/use-toast";
+import { ToastAction } from "@/ui/toast";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
 import ResizableSidePanelTopBar from "@/shared/ResizableSidePanel/ResizableSidePanelTopBar";
-import AssertionsField from "@/shared/AssertionField/AssertionsField";
-import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
-import DatasetUploadDescription from "@/v2/pages-shared/datasets/DatasetUploadDescription";
-import DatasetUploadField from "@/v2/pages-shared/datasets/DatasetUploadField";
+import EvaluationCriteriaSection from "@/shared/EvaluationCriteriaSection/EvaluationCriteriaSection";
+import DatasetCsvDropzone from "@/v2/pages-shared/datasets/DatasetCsvDropzone";
 import useDatasetForm from "@/v2/pages-shared/datasets/AddEditDatasetDialog/useDatasetForm";
 import useProjectById from "@/api/projects/useProjectById";
 import { useActiveProjectId } from "@/store/AppStore";
-import CreatedSuccess from "./CreatedSuccess";
 import { Dataset, DATASET_TYPE, DatasetListType } from "@/types/datasets";
-import { MAX_RUNS_PER_ITEM } from "@/types/test-suites";
-import {
-  PASS_CRITERIA_TITLE,
-  PASS_CRITERIA_DESCRIPTION,
-} from "@/constants/test-suites";
 
-enum Step {
-  NAME_DESCRIPTION,
-  UPLOAD_AND_CONFIG,
-  SUCCESS,
-}
+export type CreateDatasetMode = "upload" | "sdk";
+
+const DOCS_URL = buildDocsUrl("/evaluation/advanced/manage_datasets");
 
 const TYPE_CONFIG = {
   dataset: {
@@ -58,6 +48,7 @@ const TYPE_CONFIG = {
 
 type CreateDatasetSidebarProps = {
   type: DatasetListType;
+  mode: CreateDatasetMode;
   open: boolean;
   setOpen: (open: boolean) => void;
   onDatasetCreated?: (dataset: Dataset) => void;
@@ -65,20 +56,18 @@ type CreateDatasetSidebarProps = {
 
 const CreateDatasetSidebar: React.FunctionComponent<
   CreateDatasetSidebarProps
-> = ({ type, open, setOpen, onDatasetCreated }) => {
+> = ({ type, mode, open, setOpen, onDatasetCreated }) => {
   const config = TYPE_CONFIG[type];
   const entityLabel =
     config.entityName[0].toLowerCase() + config.entityName.slice(1);
 
-  const [step, setStep] = useState<Step>(Step.NAME_DESCRIPTION);
-  const [createdName, setCreatedName] = useState("");
-  const [navigateToEntity, setNavigateToEntity] = useState<(() => void) | null>(
-    null,
-  );
+  const [activeMode, setActiveMode] = useState<CreateDatasetMode>(mode);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [sdkLanguage, setSdkLanguage] = useState<"python" | "typescript">(
     "python",
   );
 
+  const { toast } = useToast();
   const activeProjectId = useActiveProjectId();
   const { data: activeProject } = useProjectById(
     { projectId: activeProjectId! },
@@ -86,17 +75,27 @@ const CreateDatasetSidebar: React.FunctionComponent<
   );
   const projectName = activeProject?.name ?? "";
 
-  const handleNameConflict = useCallback(() => {
-    setStep(Step.NAME_DESCRIPTION);
-  }, []);
-
   const handleCreateSuccess = useCallback(
     (dataset: Dataset, navigate: () => void) => {
-      setCreatedName(dataset.name);
-      setNavigateToEntity(() => navigate);
-      setStep(Step.SUCCESS);
+      setOpen(false);
+      toast({
+        title: `${config.entityName} created`,
+        description: `"${dataset.name}" is ready to use.`,
+        actions: [
+          <ToastAction
+            key="view"
+            variant="link"
+            size="sm"
+            className="px-0"
+            altText={`Go to ${entityLabel}`}
+            onClick={navigate}
+          >
+            Go to {entityLabel}
+          </ToastAction>,
+        ],
+      });
     },
-    [],
+    [setOpen, toast, config.entityName, entityLabel],
   );
 
   const {
@@ -109,15 +108,12 @@ const CreateDatasetSidebar: React.FunctionComponent<
     assertions,
     setAssertions,
     runsPerItem,
-    runsInput,
-    thresholdInput,
+    setRunsPerItem,
+    passThreshold,
+    setPassThreshold,
     uploadFile,
     uploadError,
-    uploadFormat,
     isSubmitting,
-    confirmOpen,
-    setConfirmOpen,
-    fileSizeLimit,
     typeLabel,
     submitHandler,
     handleFileSelect,
@@ -126,8 +122,8 @@ const CreateDatasetSidebar: React.FunctionComponent<
     setOpen,
     onDatasetCreated,
     skipEvaluationCriteria: config.skipEvaluationCriteria,
+    appendDateToAutoName: true,
     datasetType: config.datasetType,
-    onNameConflict: handleNameConflict,
     onCreateSuccess: handleCreateSuccess,
   });
 
@@ -148,12 +144,18 @@ const CreateDatasetSidebar: React.FunctionComponent<
       ? `import { Opik } from 'opik';\n\nconst client = new Opik();\nconst suite = await client.getOrCreateTestSuite({ name: "${jsEscapedName}", projectName: "${jsProjectName}" });`
       : `import { Opik } from 'opik';\n\nconst client = new Opik();\nconst dataset = await client.getOrCreateDataset("${jsEscapedName}", undefined, "${jsProjectName}");`;
 
+  // Sync the active mode with the option chosen in the create dropdown each
+  // time the panel opens; the user can still switch modes from inside.
+  useEffect(() => {
+    if (open) {
+      setActiveMode(mode);
+    }
+  }, [open, mode]);
+
   useEffect(() => {
     if (!open) {
       const timeout = setTimeout(() => {
-        setStep(Step.NAME_DESCRIPTION);
-        setCreatedName("");
-        setNavigateToEntity(null);
+        setAdvancedOpen(false);
         setSdkLanguage("python");
       }, 200);
       return () => clearTimeout(timeout);
@@ -162,313 +164,221 @@ const CreateDatasetSidebar: React.FunctionComponent<
 
   const handleClose = useCallback(() => setOpen(false), [setOpen]);
 
-  const isDirty =
-    step !== Step.SUCCESS &&
-    (name.length > 0 ||
-      description.length > 0 ||
-      uploadFile !== undefined ||
-      assertions.length > 0);
+  const hasValidUpload = uploadFile !== undefined && !uploadError;
 
-  const handleGoToEntity = useCallback(() => {
-    navigateToEntity?.();
-  }, [navigateToEntity]);
+  const canSubmit =
+    activeMode === "upload"
+      ? hasValidUpload && name.trim().length > 0
+      : name.trim().length > 0;
 
-  const handleCreateAnother = useCallback(() => {
-    setStep(Step.NAME_DESCRIPTION);
-    setCreatedName("");
-    setNavigateToEntity(null);
-    setName("");
-    setDescription("");
-    setAssertions([]);
-    setSdkLanguage("python");
-  }, [setName, setDescription, setAssertions]);
-
-  const renderStepNameDescription = () => (
-    <>
-      <div className="flex flex-col gap-2 pb-4">
-        <Label htmlFor={`${type}Name`}>Name</Label>
-        <Input
-          id={`${type}Name`}
-          placeholder={`Name your ${entityLabel}...`}
-          value={name}
-          className={
-            nameError && "!border-destructive focus-visible:!border-destructive"
-          }
-          onChange={(event) => {
-            setName(event.target.value);
-            setNameError(undefined);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && name.length > 0) {
-              event.preventDefault();
-              setStep(Step.UPLOAD_AND_CONFIG);
-            }
-          }}
-        />
-        <span
-          className={`comet-body-xs min-h-4 ${
-            nameError ? "text-destructive" : "invisible"
-          }`}
-        >
-          {nameError || " "}
-        </span>
-      </div>
-      <div className="flex flex-col gap-2 pb-4">
-        <Label htmlFor={`${type}Description`}>Description</Label>
-        <Textarea
-          id={`${type}Description`}
-          placeholder={`Describe your ${entityLabel}...`}
-          className="min-h-28"
-          value={description}
-          onChange={(event) => setDescription(event.target.value)}
-          maxLength={255}
-        />
-      </div>
-    </>
+  const renderNameField = () => (
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor={`${type}Name`}>Name</Label>
+      <Input
+        id={`${type}Name`}
+        dimension="sm"
+        placeholder={`Name your ${entityLabel}...`}
+        value={name}
+        className={
+          nameError && "!border-destructive focus-visible:!border-destructive"
+        }
+        onChange={(event) => {
+          setName(event.target.value);
+          setNameError(undefined);
+        }}
+      />
+      {nameError && (
+        <span className="comet-body-xs text-destructive">{nameError}</span>
+      )}
+    </div>
   );
 
-  const dataKindPrefix = type === "test_suite" ? "test " : "";
+  const renderDescriptionField = () => (
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor={`${type}Description`}>
+        Description{" "}
+        <span className="font-normal text-foreground">(optional)</span>
+      </Label>
+      <Textarea
+        id={`${type}Description`}
+        placeholder={`${config.entityName} description`}
+        className="min-h-16 text-sm"
+        value={description}
+        onChange={(event) => setDescription(event.target.value)}
+        maxLength={255}
+      />
+    </div>
+  );
 
-  const renderStepUploadAndConfig = () => (
+  const usesDefaultPolicy = runsPerItem === 1 && passThreshold === 1;
+
+  const renderEvaluationCriteria = () => (
+    <EvaluationCriteriaSection
+      suiteAssertions={[]}
+      editableAssertions={assertions}
+      onChangeAssertion={(index, value) =>
+        setAssertions((prev) => {
+          const next = [...prev];
+          next[index] = value;
+          return next;
+        })
+      }
+      onRemoveAssertion={(index) =>
+        setAssertions((prev) => prev.filter((_, i) => i !== index))
+      }
+      onAddAssertion={() => setAssertions((prev) => [...prev, ""])}
+      runsPerItem={runsPerItem}
+      passThreshold={passThreshold}
+      onRunsPerItemChange={setRunsPerItem}
+      onPassThresholdChange={setPassThreshold}
+      useGlobalPolicy={usesDefaultPolicy}
+      onRevertToDefaults={() => {
+        setRunsPerItem(1);
+        setPassThreshold(1);
+      }}
+      defaultRunsPerItem={1}
+      defaultPassThreshold={1}
+    />
+  );
+
+  const renderUploadMode = () => (
     <>
-      <div className="mb-4">
-        <h3 className="comet-body-s-accented">{`Add ${dataKindPrefix}data`}</h3>
-        <p className="comet-body-xs text-light-slate">
-          {`Choose how to provide your ${dataKindPrefix}data`}
-        </p>
-      </div>
-      <div className="mb-4">
-        <Label className="mb-2 block">Upload CSV or JSON</Label>
-        <DatasetUploadDescription
-          fileSizeLimit={fileSizeLimit}
-          docsUrl={buildDocsUrl("/evaluation/advanced/manage_datasets")}
-          className="mb-2 tracking-normal"
-        />
-        <DatasetUploadField
-          uploadFile={uploadFile}
-          uploadFormat={uploadFormat}
-          uploadError={uploadError}
-          onFileSelect={handleFileSelect}
-        />
-      </div>
-      <div className="mb-4">
-        <div className="mb-2">
-          <Label>Use SDK</Label>
+      <Label className="mb-2 block">File</Label>
+      <DatasetCsvDropzone
+        uploadFile={uploadFile}
+        uploadError={uploadError}
+        onFileSelect={handleFileSelect}
+        onUseSdk={() => {
+          // Defensive: never carry upload-only state (file or evaluation
+          // criteria) into the code-only flow.
+          handleFileSelect(undefined);
+          setAssertions([]);
+          setRunsPerItem(1);
+          setPassThreshold(1);
+          setActiveMode("sdk");
+        }}
+      />
+      {hasValidUpload && (
+        <div className="mt-4">
+          <div className="flex flex-col gap-3">
+            {renderNameField()}
+            {renderDescriptionField()}
+          </div>
+          {type === "test_suite" && (
+            <Accordion
+              type="single"
+              collapsible
+              className="mt-4"
+              value={advancedOpen ? "advanced" : ""}
+              onValueChange={(v) => setAdvancedOpen(v === "advanced")}
+            >
+              <AccordionItem value="advanced" className="border-b-0">
+                <CustomAccordionTrigger className="flex items-center gap-1 transition-all [&[data-state=open]>svg]:rotate-90">
+                  <span className="comet-body-xs">Advanced options</span>
+                  <ChevronRight className="size-3.5 shrink-0 transition-transform duration-200" />
+                </CustomAccordionTrigger>
+                <AccordionContent className="pt-4">
+                  {renderEvaluationCriteria()}
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          )}
         </div>
-        <Tabs
-          value={sdkLanguage}
-          onValueChange={(v) => setSdkLanguage(v as "python" | "typescript")}
-        >
-          <TabsList variant="underline" className="mb-0 gap-4">
-            <TabsTrigger variant="underline" size="sm" value="python">
-              Python
-            </TabsTrigger>
-            <TabsTrigger variant="underline" size="sm" value="typescript">
-              TypeScript
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="python" className="mt-0">
-            <div className="overflow-hidden rounded-b-md border border-t-0 border-border">
-              <CodeHighlighter
-                data={pythonSnippet}
-                language={SUPPORTED_LANGUAGE.python}
-              />
-            </div>
-          </TabsContent>
-          <TabsContent value="typescript" className="mt-0">
-            <div className="overflow-hidden rounded-b-md border border-t-0 border-border">
-              <CodeHighlighter
-                data={typescriptSnippet}
-                language={SUPPORTED_LANGUAGE.python}
-              />
-            </div>
-          </TabsContent>
-        </Tabs>
-      </div>
-      {type === "test_suite" && (
-        <Accordion type="single" collapsible>
-          <AccordionItem value="advanced" className="border-b-0">
-            <CustomAccordionTrigger className="flex items-center gap-1.5 py-4 transition-all [&[data-state=open]>svg]:rotate-90">
-              <ChevronRight className="size-4 shrink-0 transition-transform duration-200" />
-              <span className="comet-body-s">Advanced settings</span>
-            </CustomAccordionTrigger>
-            <AccordionContent className="pl-6">
-              <Separator className="mb-4" />
-              <div className="mb-4">
-                <h3 className="comet-body-s-accented">{PASS_CRITERIA_TITLE}</h3>
-                <p className="comet-body-xs text-light-slate">
-                  {PASS_CRITERIA_DESCRIPTION}
-                </p>
-              </div>
-              <div className="mb-4 flex gap-4">
-                <div className="flex flex-1 flex-col gap-1">
-                  <Label
-                    htmlFor="runsPerItem"
-                    className="comet-body-xs-accented"
-                  >
-                    Default runs per item
-                  </Label>
-                  <Input
-                    id="runsPerItem"
-                    dimension="sm"
-                    className={cn({
-                      "border-destructive": runsInput.isInvalid,
-                    })}
-                    type="number"
-                    min={1}
-                    max={MAX_RUNS_PER_ITEM}
-                    value={runsInput.displayValue}
-                    onChange={runsInput.onChange}
-                    onFocus={runsInput.onFocus}
-                    onBlur={runsInput.onBlur}
-                    onKeyDown={runsInput.onKeyDown}
-                  />
-                </div>
-                <div className="flex flex-1 flex-col gap-1">
-                  <Label
-                    htmlFor="passThreshold"
-                    className="comet-body-xs-accented"
-                  >
-                    Default pass threshold
-                  </Label>
-                  <Input
-                    id="passThreshold"
-                    dimension="sm"
-                    className={cn({
-                      "border-destructive": thresholdInput.isInvalid,
-                    })}
-                    type="number"
-                    min={1}
-                    max={runsPerItem}
-                    value={thresholdInput.displayValue}
-                    onChange={thresholdInput.onChange}
-                    onFocus={thresholdInput.onFocus}
-                    onBlur={thresholdInput.onBlur}
-                    onKeyDown={thresholdInput.onKeyDown}
-                  />
-                </div>
-              </div>
-              <div className="pb-4">
-                <AssertionsField
-                  variant="global"
-                  editableAssertions={assertions}
-                  onChangeEditable={(index, value) => {
-                    setAssertions((prev) => {
-                      const next = [...prev];
-                      next[index] = value;
-                      return next;
-                    });
-                  }}
-                  onRemoveEditable={(index) => {
-                    setAssertions((prev) => prev.filter((_, i) => i !== index));
-                  }}
-                  onAdd={() => setAssertions((prev) => [...prev, ""])}
-                  placeholder="e.g. Response should be factually accurate and cite sources"
-                />
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
       )}
     </>
   );
 
-  const renderFooter = () => {
-    if (step === Step.NAME_DESCRIPTION) {
-      return (
-        <div className="flex items-center justify-end gap-2">
-          <Button variant="outline" onClick={handleClose}>
-            Cancel
-          </Button>
-          <Button
-            disabled={name.length === 0}
-            onClick={() => setStep(Step.UPLOAD_AND_CONFIG)}
+  const renderSdkMode = () => (
+    <div className="flex flex-col gap-3">
+      {renderNameField()}
+      <Tabs
+        value={sdkLanguage}
+        onValueChange={(v) => setSdkLanguage(v as "python" | "typescript")}
+      >
+        <TabsList variant="segmented-primary">
+          <TabsTrigger
+            variant="segmented-primary"
+            size="sm"
+            value="python"
+            className="h-5"
           >
-            Next
-          </Button>
-        </div>
-      );
-    }
-
-    if (step === Step.UPLOAD_AND_CONFIG) {
-      return (
-        <div className="flex items-center justify-between">
-          <Button
-            variant="outline"
-            onClick={() => setStep(Step.NAME_DESCRIPTION)}
-            disabled={isSubmitting}
+            Python
+          </TabsTrigger>
+          <TabsTrigger
+            variant="segmented-primary"
+            size="sm"
+            value="typescript"
+            className="h-5"
           >
-            Back
-          </Button>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={handleClose}
-              disabled={isSubmitting}
-            >
-              Cancel
-            </Button>
-            <Button
-              disabled={isSubmitting}
-              onClick={uploadError ? () => setConfirmOpen(true) : submitHandler}
-            >
-              {isSubmitting && <Spinner size="small" className="mr-2" />}
-              {isSubmitting ? "Creating..." : "Create"}
-            </Button>
+            TypeScript
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="python" className="mt-2">
+          <div className="overflow-hidden rounded-md">
+            <CodeHighlighter
+              data={pythonSnippet}
+              language={SUPPORTED_LANGUAGE.python}
+            />
           </div>
-        </div>
-      );
-    }
+        </TabsContent>
+        <TabsContent value="typescript" className="mt-2">
+          <div className="overflow-hidden rounded-md">
+            <CodeHighlighter
+              data={typescriptSnippet}
+              language={SUPPORTED_LANGUAGE.python}
+            />
+          </div>
+        </TabsContent>
+      </Tabs>
+      {renderDescriptionField()}
+    </div>
+  );
 
-    return null;
-  };
+  const renderFooter = () => (
+    <div className="flex items-center justify-end gap-2">
+      <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
+        Cancel
+      </Button>
+      <Button disabled={isSubmitting || !canSubmit} onClick={submitHandler}>
+        {isSubmitting && <Spinner size="small" className="mr-2" />}
+        {isSubmitting ? "Creating..." : `Create ${entityLabel}`}
+      </Button>
+    </div>
+  );
 
   return (
-    <>
-      <ResizableSidePanel
-        panelId={`create-${type}-sidebar`}
-        entity={typeLabel}
-        open={open}
-        onClose={handleClose}
-        initialWidth={0.35}
-        minWidth={450}
-        blockOverlayClose={isDirty}
-        header={
-          <ResizableSidePanelTopBar
-            variant="form"
-            title={`Create ${entityLabel}`}
-            onClose={handleClose}
-          />
-        }
-      >
-        <div className="flex size-full flex-col">
-          <div className="flex-1 overflow-y-auto p-6 pt-4">
-            {step === Step.NAME_DESCRIPTION && renderStepNameDescription()}
-            {step === Step.UPLOAD_AND_CONFIG && renderStepUploadAndConfig()}
-            {step === Step.SUCCESS && (
-              <CreatedSuccess
-                entityName={config.entityName}
-                name={createdName}
-                onGoToEntity={handleGoToEntity}
-                onCreateAnother={handleCreateAnother}
-              />
-            )}
-          </div>
-          {step !== Step.SUCCESS && (
-            <div className="border-t px-6 py-4">{renderFooter()}</div>
-          )}
+    <ResizableSidePanel
+      panelId={`create-${type}-sidebar`}
+      entity={typeLabel}
+      open={open}
+      onClose={handleClose}
+      initialWidth={0.5}
+      minWidth={450}
+      blockOverlayClose
+      header={
+        <ResizableSidePanelTopBar
+          variant="form"
+          title={
+            <span className="comet-body-s-accented">{`Create ${entityLabel}`}</span>
+          }
+          onClose={handleClose}
+        >
+          <Button variant="outline" size="2xs" asChild>
+            <a href={DOCS_URL} target="_blank" rel="noopener noreferrer">
+              Docs
+              <ArrowUpRight className="ml-1 size-3 shrink-0" />
+            </a>
+          </Button>
+        </ResizableSidePanelTopBar>
+      }
+    >
+      <div className="flex size-full flex-col">
+        <div className="flex-1 overflow-y-auto pb-6 pl-9 pr-4 pt-4">
+          {activeMode === "upload" ? renderUploadMode() : renderSdkMode()}
         </div>
-      </ResizableSidePanel>
-      <ConfirmDialog
-        open={confirmOpen}
-        setOpen={setConfirmOpen}
-        onCancel={submitHandler}
-        title="File can't be uploaded"
-        description={`This file cannot be uploaded because it does not pass validation. If you continue, the ${typeLabel} will be created without any items. You can add items manually later, or go back and upload a valid file.`}
-        cancelText={`Create empty ${typeLabel}`}
-        confirmText="Go back"
-      />
-    </>
+        <div className="border-t py-4 pl-9 pr-4">{renderFooter()}</div>
+      </div>
+    </ResizableSidePanel>
   );
 };
 

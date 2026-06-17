@@ -1,7 +1,6 @@
 import { useState } from "react";
 import copy from "clipboard-copy";
 import {
-  ArrowUpRight,
   Check,
   Copy,
   KeyRound,
@@ -12,7 +11,6 @@ import {
   Sparkles,
   UserPlus,
 } from "lucide-react";
-
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import SupportHubSubMenu from "@/shared/SupportHub/SupportHubSubMenu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/ui/avatar";
@@ -34,7 +32,10 @@ import { useThemeOptions } from "@/hooks/useThemeOptions";
 import { APP_VERSION } from "@/constants/app";
 import { ADMIN_DASHBOARD_LABEL } from "@/constants/labels";
 import { cn, maskAPIKey } from "@/lib/utils";
-import useAppStore, { useDetectedWorkspaceVersion } from "@/store/AppStore";
+import useAppStore, {
+  useDetectedWorkspaceVersion,
+  useOpikWorkspaceName,
+} from "@/store/AppStore";
 import {
   getNewExperienceOptIn,
   getVersionOverride,
@@ -51,6 +52,7 @@ import { buildUrl } from "./utils";
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import InviteUsersPopover from "@/plugins/comet/InviteUsersPopover";
 import useUserPermission from "@/plugins/comet/useUserPermission";
+import UserMenuAppLinks from "@/plugins/comet/UserMenuAppLinks";
 
 const UserMenu = () => {
   const { toast } = useToast();
@@ -84,6 +86,7 @@ const UserMenu = () => {
   );
 
   const { canInviteMembers } = useUserPermission();
+  const opikWorkspaceName = useOpikWorkspaceName();
   const [inviteSearchQuery, setInviteSearchQuery] = useState("");
   const [isInviteSubmenuOpen, setIsInviteSubmenuOpen] = useState(false);
 
@@ -102,14 +105,6 @@ const UserMenu = () => {
   ) {
     return null;
   }
-
-  const handleSwitchToEM = () => {
-    window.location.href = buildUrl(
-      workspaceName,
-      workspaceName,
-      "&changeApplication=em",
-    );
-  };
 
   const organization = organizations.find((org) => {
     return org.id === workspace?.organizationId;
@@ -176,7 +171,7 @@ const UserMenu = () => {
           </div>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
-            <a href={buildUrl("account-settings", workspaceName)}>
+            <a href={buildUrl("account-settings", opikWorkspaceName)}>
               <DropdownMenuItem className="cursor-pointer">
                 <Settings className="mr-2 size-4" />
                 <span>Account settings</span>
@@ -186,7 +181,7 @@ const UserMenu = () => {
               <a
                 href={buildUrl(
                   `organizations/${workspace?.organizationId}`,
-                  workspaceName,
+                  opikWorkspaceName,
                 )}
               >
                 <DropdownMenuItem className="cursor-pointer">
@@ -224,7 +219,7 @@ const UserMenu = () => {
                           className="cursor-pointer rounded p-0.5 hover:text-foreground"
                           href={buildUrl(
                             "account-settings/apiKeys",
-                            workspaceName,
+                            opikWorkspaceName,
                           )}
                         >
                           <Settings2 className="size-3.5" />
@@ -272,7 +267,7 @@ const UserMenu = () => {
                 onSelect={(e) => {
                   e.preventDefault();
                   setNewExperienceOptIn(!hasOptedIn);
-                  navigateToWorkspaceRoot(workspaceName);
+                  navigateToWorkspaceRoot(opikWorkspaceName);
                 }}
               >
                 <Sparkles className="mr-2 size-4" />
@@ -285,21 +280,7 @@ const UserMenu = () => {
               </DropdownMenuItem>
             )}
           </DropdownMenuGroup>
-          {!isLLMOnlyOrganization && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="cursor-pointer"
-                onClick={handleSwitchToEM}
-              >
-                <span className="mr-2 flex size-4 items-center justify-center rounded bg-[var(--feature-experiment-management)] text-[6px] font-medium text-white">
-                  EM
-                </span>
-                <span className="truncate">Experiment Management</span>
-                <ArrowUpRight className="ml-auto size-4 shrink-0 text-light-slate" />
-              </DropdownMenuItem>
-            </>
-          )}
+          <UserMenuAppLinks isLLMOnlyOrganization={isLLMOnlyOrganization} />
           <DropdownMenuItem
             className="cursor-pointer"
             onClick={async () => {

@@ -5,6 +5,7 @@ import com.comet.opik.domain.mcpoauth.McpOAuthTokenUtils;
 import com.comet.opik.domain.mcpoauth.ValidatedToken;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import jakarta.inject.Inject;
+import jakarta.inject.Provider;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.core.Cookie;
@@ -21,15 +22,13 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
 
-import static com.comet.opik.domain.mcpoauth.OAuthConstants.BEARER_PREFIX;
-
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class AuthFilter implements ContainerRequestFilter {
 
     private final AuthService authService;
     private final McpOAuthService mcpOAuthService;
     private final OpikConfiguration opikConfig;
-    private final jakarta.inject.Provider<RequestContext> requestContext;
+    private final Provider<RequestContext> requestContext;
 
     @Override
     public void filter(ContainerRequestContext context) throws IOException {
@@ -48,7 +47,7 @@ public class AuthFilter implements ContainerRequestFilter {
                     .build();
             String authHeader = context.getHeaderString(HttpHeaders.AUTHORIZATION);
             if (opikConfig.getMcpOAuth().isEnabled() && McpOAuthTokenUtils.isMcpOAuthToken(authHeader)) {
-                String token = authHeader.substring(BEARER_PREFIX.length()).trim();
+                String token = McpOAuthTokenUtils.extractBearerToken(authHeader);
                 ValidatedToken validatedToken = mcpOAuthService.validateAccessTokenForWorkspace(
                         token, context.getHeaderString(RequestContext.WORKSPACE_HEADER));
                 authService.authorizeOAuth(validatedToken, contextInfo);

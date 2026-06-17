@@ -90,6 +90,18 @@ databaseAnalytics:
   #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
   healthCheckTimeout: ${ANALYTICS_DB_HEALTH_CHECK_TIMEOUT:-1s}
 
+# Description: credentials for the Agent Insights read-only free-form SQL ClickHouse user (restricted user with a
+#   read-only profile + row policies, provisioned by OPIK-6846). Only the user/password live here; the connection
+#   params (protocol/host/port/database) are reused from databaseAnalytics above (same ClickHouse instance). Only used
+#   when the serviceToggles.agentInsightsEnabled toggle is on.
+databaseAnalyticsReadOnlyFreeFormSql:
+  #  Default: comet_readonly_freeform_sql_user
+  #  Description: The read-only username used to connect to the server
+  username: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_USER:-comet_readonly_freeform_sql_user}
+  #  Default: opik
+  #  Description: The read-only user password used to connect to the server
+  password: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_PASS:-opik}
+
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
   # Default: ["/health-check"]
@@ -109,6 +121,12 @@ health:
       type: ready
     - name: clickhouse
       critical: true
+      type: ready
+    # Non-critical on purpose: this is an optional, toggle-gated feature (Agent Insights freeform SQL). A
+    # provisioning issue or transient CH rejection on the read-only user must degrade only that feature, not pull
+    # the whole backend out of readiness/traffic.
+    - name: clickhouse-readonly-freeform-sql
+      critical: false
       type: ready
     - name: mysql
       critical: true
@@ -200,12 +218,12 @@ mcpOAuth:
   # Default: PT30S
   # Description: Grace window during which a just-rotated refresh token is still accepted
   refreshRotationGrace: ${MCP_OAUTH_REFRESH_ROTATION_GRACE:-PT30S}
-  # Default: 20
-  # Description: Max dynamic client registrations (RFC 7591) accepted per source IP per window
-  registrationRateLimit: ${MCP_OAUTH_REGISTRATION_RATE_LIMIT:-20}
-  # Default: PT1H
-  # Description: Window for the dynamic client registration rate limit
-  registrationRateLimitDuration: ${MCP_OAUTH_REGISTRATION_RATE_LIMIT_DURATION:-PT1H}
+  # Default: PT5M
+  # Description: TTL of the Redis lock held by the scrub job. The lock is held until expiry (not released after the scrub), so keeping it close to the 5-minute schedule prevents staggered replicas from re-scrubbing within the same cycle.
+  scrubLockTimeout: ${MCP_OAUTH_SCRUB_LOCK_TIMEOUT:-PT5M}
+  # Default: PT0.1S
+  # Description: Maximum time the scrub job waits to acquire the Redis lock before giving up for this cycle
+  scrubLockWaitTime: ${MCP_OAUTH_SCRUB_LOCK_WAIT_TIME:-PT0.1S}
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#servers
 server:
@@ -480,6 +498,19 @@ rateLimit:
       userFacingBucketName: get_trace_stats
       # Description: Rate limit error message
       errorMessage: "You have exceeded the rate limit for this operation. Please try again later."
+    mcpOAuthRegister:
+      # Default: 20
+      # Description: Max dynamic client registrations (RFC 7591) accepted per source IP in the specified time bucket
+      limit: ${MCP_OAUTH_REGISTRATION_RATE_LIMIT:-20}
+      # Default: 3600
+      # Description: Time bucket size in seconds
+      durationInSeconds: ${MCP_OAUTH_REGISTRATION_RATE_LIMIT_DURATION_IN_SEC:-3600}
+      # Description: Header name to use for rate limiting
+      headerName: Mcp-OAuth-Register
+      # Description: User facing bucket name
+      userFacingBucketName: mcp_oauth_register
+      # Description: Rate limit error message
+      errorMessage: "You have exceeded the rate limit for MCP OAuth client registration. Please try again later."
 
 # Configuration for usage limit. This is not enabled by default for open source installations.
 # In order to support that, the remote authentication server must contain a `quotas` object in its authentication
@@ -947,6 +978,14 @@ ollieStateConfig:
   # Description: Maximum upload size in bytes for ollie state persistence
   maxUploadSizeBytes: ${OLLIE_STATE_MAX_UPLOAD_SIZE_BYTES:-52428800}
 
+reportGeneration:
+  # Default: "" (blank disables report generation)
+  # Description: URL for triggering Ollie report generation. Blank disables report generation.
+  # Locally: set REPORT_GENERATION_URL=http://localhost:9080/reports/generate
+  # Deployed: points to the Comet API (e.g. http://comet-api/opik/ollie/generate-report)
+  #   which resolves workspace credentials and proxies to Ollie.
+  url: ${REPORT_GENERATION_URL:-""}
+
 
 # Attachments configuration
 attachmentsConfig:
@@ -1054,6 +1093,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Optimization Studio feature is enabled
   optimizationStudioEnabled: ${TOGGLE_OPTIMIZATION_STUDIO_ENABLED:-"false"}
+  # Default: false
+  # Description: Whether or not the Cost Intelligence (AI Spend) feature is enabled
+  costIntelligenceEnabled: ${TOGGLE_COST_INTELLIGENCE_ENABLED:-"false"}
   # Default: true
   # Description: Whether or not OpenAI provider is enabled
   openaiProviderEnabled: ${TOGGLE_OPENAI_PROVIDER_ENABLED:-"true"}
@@ -1082,9 +1124,16 @@ serviceToggles:
   # Description: Whether or not the Ollie AI assistant integration is enabled.
   ollieEnabled: ${TOGGLE_OLLIE_ENABLED:-"false"}
   # Default: false
+  # Description: Whether the project homepage is enabled. When false, the Ollie page is the default project page.
+  projectHomepageEnabled: ${TOGGLE_PROJECT_HOMEPAGE_ENABLED:-"false"}
+  # Default: false
   # Description: Master switch for the agentic-tools path on LLM-as-judge online scoring. When false, the
   #   inline path is used regardless of context size. Threshold lives under onlineScoring.agenticToolsThresholdTokens.
   agenticToolsEnabled: ${TOGGLE_AGENTIC_TOOLS_ENABLED:-"false"}
+  # Default: false
+  # Description: Whether or not the Agent Insights freeform SQL path is enabled. Gates the read-only ClickHouse client
+  #   and the clickhouse-readonly-freeform-sql health check usage. When off, the read-only client is never queried.
+  agentInsightsEnabled: ${TOGGLE_AGENT_INSIGHTS_ENABLED:-"false"}
   # Default: "" (empty, no allowlisted workspaces)
   # Description: Comma-separated list of workspace IDs that should always receive V2 navigation.
   # Valid values: comma-separated workspace IDs (e.g. "ws-id-1,ws-id-2"), or "" (empty, disabled).
