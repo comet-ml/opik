@@ -9,9 +9,9 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.stream.Stream;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ValidationUtilsTest {
 
@@ -47,10 +47,11 @@ class ValidationUtilsTest {
     @MethodSource
     void validateDateRangeParameters(LocalDate fromDate, LocalDate toDate, boolean shouldThrow) {
         if (shouldThrow) {
-            assertThrows(BadRequestException.class,
-                    () -> ValidationUtils.validateDateRangeParameters(fromDate, toDate));
+            assertThatThrownBy(() -> ValidationUtils.validateDateRangeParameters(fromDate, toDate))
+                    .isInstanceOf(BadRequestException.class);
         } else {
-            assertDoesNotThrow(() -> ValidationUtils.validateDateRangeParameters(fromDate, toDate));
+            assertThatCode(() -> ValidationUtils.validateDateRangeParameters(fromDate, toDate))
+                    .doesNotThrowAnyException();
         }
     }
 
