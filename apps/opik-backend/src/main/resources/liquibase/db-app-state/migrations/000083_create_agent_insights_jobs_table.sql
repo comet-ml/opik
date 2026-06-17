@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset aadereiko:000082_create_agent_insights_jobs_table
+--changeset aadereiko:000083_create_agent_insights_jobs_table
 --comment: Create the agent_insights_jobs table — per-(workspace, project) Agent Insights report configuration
 
 CREATE TABLE IF NOT EXISTS agent_insights_jobs (
