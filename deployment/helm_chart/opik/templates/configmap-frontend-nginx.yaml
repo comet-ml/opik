@@ -159,9 +159,11 @@ data:
         # come before the prefix block — nginx exact-match wins, so the
         # React consent page renders from the SPA bundle while every other
         # /oauth/* path is rewritten to / and proxied to the backend.
+        # Clickjacking protection comes from the server-level CSP `frame-ancestors 'none'`
+        # above, which the consent page inherits. We deliberately do NOT set a per-location
+        # add_header here: nginx add_header is all-or-nothing per context, so a local
+        # add_header would drop the inherited CSP/HSTS/extraServerHeaders for this route.
         location = {{ $rootPath }}/oauth/consent {
-          # Consent screens are prime clickjacking targets; never allow framing.
-          add_header X-Frame-Options "DENY" always;
           try_files /dev/null {{ $rootPath }}/index.html;
         }
         location @mcp_oauth_backend {

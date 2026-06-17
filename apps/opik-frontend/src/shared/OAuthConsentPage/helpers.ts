@@ -41,12 +41,16 @@ export const parseParams = (search: string): ParsedParams | null => {
 // (OAuthClientService#resolveForRedirect throws "invalid redirect_uri" on a mismatch). An
 // unregistered redirect_uri therefore never reaches this function — the page shows the
 // terminal error card instead. RFC 6749 §4.1.2.1.
+//
+// Defense-in-depth: independent of the server-side check, only ever assign an http(s) URL
+// to window.location so a javascript:/data: scheme can never execute on this origin.
 export const denyAndRedirect = (
   redirectUri: string,
   state: string | null,
 ): boolean => {
   try {
     const url = new URL(redirectUri);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return false;
     url.searchParams.set("error", "access_denied");
     if (state) url.searchParams.set("state", state);
     window.location.href = url.toString();

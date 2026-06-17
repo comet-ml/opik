@@ -92,6 +92,14 @@ describe("denyAndRedirect", () => {
     expect(denyAndRedirect("not a url", "xyz")).toBe(false);
     expect(window.location.href).toBe("");
   });
+
+  it.each(["javascript:alert(1)", "data:text/html,<script>1</script>"])(
+    "rejects the non-http(s) scheme %s without navigating",
+    (uri) => {
+      expect(denyAndRedirect(uri, null)).toBe(false);
+      expect(window.location.href).toBe("");
+    },
+  );
 });
 
 describe("buildConsentRequest", () => {
