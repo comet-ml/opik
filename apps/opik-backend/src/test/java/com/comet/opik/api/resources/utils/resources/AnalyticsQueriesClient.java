@@ -16,9 +16,9 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @RequiredArgsConstructor
-public class AnalyticsQueriesExecutorClient {
+public class AnalyticsQueriesClient {
 
-    private static final String RESOURCE_PATH = "%s/v1/internal/analytics-queries-executor";
+    private static final String RESOURCE_PATH = "%s/v1/internal/analytics-queries";
 
     private final ClientSupport client;
     private final String baseURI;

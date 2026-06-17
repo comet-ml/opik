@@ -12,7 +12,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
-import com.comet.opik.api.resources.utils.resources.AnalyticsQueriesExecutorClient;
+import com.comet.opik.api.resources.utils.resources.AnalyticsQueriesClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -53,9 +53,9 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@DisplayName("Analytics Queries Executor Resource Test")
+@DisplayName("Analytics Queries Resource Test")
 @ExtendWith(DropwizardAppExtensionProvider.class)
-class AnalyticsQueriesExecutorResourceTest {
+class AnalyticsQueriesResourceTest {
 
     private static final String RO_USER = "comet_readonly_freeform_sql_user";
     private static final String RO_PASS = "freeform_sql_test_pass";
@@ -111,7 +111,7 @@ class AnalyticsQueriesExecutorResourceTest {
 
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
-    private AnalyticsQueriesExecutorClient executorClient;
+    private AnalyticsQueriesClient analyticsQueriesClient;
 
     private UUID projectIdA;
     private UUID projectIdB;
@@ -129,7 +129,7 @@ class AnalyticsQueriesExecutorResourceTest {
 
         projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         traceResourceClient = new TraceResourceClient(client, baseURI);
-        executorClient = new AnalyticsQueriesExecutorClient(client, baseURI);
+        analyticsQueriesClient = new AnalyticsQueriesClient(client, baseURI);
 
         // Replicate the OPIK-6846 provisioning in the test container: a readonly user restricted to the 3 tables,
         // with row policies that bind every query to the SQL_workspace_id / SQL_project_id custom settings.
@@ -147,22 +147,22 @@ class AnalyticsQueriesExecutorResourceTest {
     @Test
     @DisplayName("returns only the rows of the bound workspace/project")
     void executeQuery__whenBoundToWorkspaceProject__thenReturnsOnlyThatScope() {
-        assertScopedRows(executorClient.execute(projectIdA, RESULT_QUERY, API_KEY_A, WORKSPACE_NAME_A),
+        assertScopedRows(analyticsQueriesClient.execute(projectIdA, RESULT_QUERY, API_KEY_A, WORKSPACE_NAME_A),
                 WORKSPACE_ID_A, projectIdA, traceIdA);
-        assertScopedRows(executorClient.execute(projectIdB, RESULT_QUERY, API_KEY_B, WORKSPACE_NAME_B),
+        assertScopedRows(analyticsQueriesClient.execute(projectIdB, RESULT_QUERY, API_KEY_B, WORKSPACE_NAME_B),
                 WORKSPACE_ID_B, projectIdB, traceIdB);
     }
 
     @Test
     @DisplayName("a project from another workspace returns no rows")
     void executeQuery__whenProjectFromAnotherWorkspace__thenReturnsNoRows() {
-        assertNoRows(executorClient.execute(projectIdB, RESULT_QUERY, API_KEY_A, WORKSPACE_NAME_A));
+        assertNoRows(analyticsQueriesClient.execute(projectIdB, RESULT_QUERY, API_KEY_A, WORKSPACE_NAME_A));
     }
 
     @Test
     @DisplayName("a workspace querying another workspace's project returns no rows")
     void executeQuery__whenWorkspaceMismatch__thenReturnsNoRows() {
-        assertNoRows(executorClient.execute(projectIdA, RESULT_QUERY, API_KEY_B, WORKSPACE_NAME_B));
+        assertNoRows(analyticsQueriesClient.execute(projectIdA, RESULT_QUERY, API_KEY_B, WORKSPACE_NAME_B));
     }
 
     @ParameterizedTest
@@ -182,7 +182,7 @@ class AnalyticsQueriesExecutorResourceTest {
         // The AST guard matches the exact `Set` node token, so a `settings`-named CTE must not be falsely rejected.
         var query = "WITH settings AS (SELECT id, workspace_id, project_id FROM traces) "
                 + "SELECT toJSONString(map('id', toString(id), 'workspace_id', workspace_id, 'project_id', toString(project_id))) AS result FROM settings";
-        assertScopedRows(executorClient.execute(projectIdA, query, API_KEY_A, WORKSPACE_NAME_A),
+        assertScopedRows(analyticsQueriesClient.execute(projectIdA, query, API_KEY_A, WORKSPACE_NAME_A),
                 WORKSPACE_ID_A, projectIdA, traceIdA);
     }
 
@@ -219,7 +219,7 @@ class AnalyticsQueriesExecutorResourceTest {
     }
 
     private void assertBadRequest(String query) {
-        try (Response response = executorClient.callExecute(projectIdA, query, API_KEY_A, WORKSPACE_NAME_A)) {
+        try (Response response = analyticsQueriesClient.callExecute(projectIdA, query, API_KEY_A, WORKSPACE_NAME_A)) {
             assertThat(response.getStatus()).isEqualTo(Response.Status.BAD_REQUEST.getStatusCode());
         }
     }
@@ -255,25 +255,16 @@ class AnalyticsQueriesExecutorResourceTest {
         wireMock.server().stubFor(post(urlPathEqualTo("/opik/auth"))
                 .withHeader(HttpHeaders.AUTHORIZATION, equalTo(apiKey))
                 .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(workspaceName)))
-                .withRequestBody(matchingJsonPath("$.path", matching("/v1/internal/analytics-queries-executor.*")))
+                .withRequestBody(matchingJsonPath("$.path", matching("/v1/internal/analytics-queries(/.*)?")))
                 .willReturn(okJson(AuthTestUtils.newWorkspaceAuthResponse(USER, workspaceId, workspaceName, null))));
     }
 
     private void provisionReadOnlyUser(TransactionTemplateAsync clickHouseTemplate) {
+        // The read-only sandbox profile (limits + CHANGEABLE_IN_READONLY custom settings) is defined in clickhouse.xml;
+        // here we only create the user and bind it to that profile, then grant access via SQL-managed RBAC below.
         executeStatement(clickHouseTemplate,
-                "CREATE USER IF NOT EXISTS %s IDENTIFIED BY '%s'".formatted(RO_USER, RO_PASS));
-        executeStatement(clickHouseTemplate, """
-                CREATE SETTINGS PROFILE IF NOT EXISTS %s SETTINGS
-                    readonly = 1,
-                    max_execution_time = 180,
-                    max_result_rows = 100000,
-                    result_overflow_mode = 'throw',
-                    max_rows_to_read = 100000000,
-                    read_overflow_mode = 'throw',
-                    SQL_workspace_id = '' CHANGEABLE_IN_READONLY,
-                    SQL_project_id = '' CHANGEABLE_IN_READONLY
-                TO %s
-                """.formatted(RO_PROFILE, RO_USER));
+                "CREATE USER IF NOT EXISTS %s IDENTIFIED BY '%s' SETTINGS PROFILE '%s'".formatted(RO_USER, RO_PASS,
+                        RO_PROFILE));
 
         for (String table : List.of("spans", "traces", "authored_feedback_scores")) {
             executeStatement(clickHouseTemplate,

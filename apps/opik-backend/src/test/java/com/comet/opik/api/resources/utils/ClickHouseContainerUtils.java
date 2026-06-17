@@ -87,7 +87,9 @@ public class ClickHouseContainerUtils {
                     .withUsername("default")
                     .withPassword("")
                     .withCopyFileToContainer(MountableFile.forClasspathResource("clickhouse.xml"),
-                            "/etc/clickhouse-server/config.d/clickhouse.xml");
+                            "/etc/clickhouse-server/config.d/clickhouse.xml")
+                    .withCopyFileToContainer(MountableFile.forClasspathResource("clickhouse-users.xml"),
+                            "/etc/clickhouse-server/users.d/clickhouse-users.xml");
 
         } catch (Exception e) {
             throw new RuntimeException(e);

@@ -9,7 +9,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
-import com.comet.opik.api.resources.utils.resources.AnalyticsQueriesExecutorClient;
+import com.comet.opik.api.resources.utils.resources.AnalyticsQueriesClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.redis.testcontainers.RedisContainer;
@@ -40,9 +40,9 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@DisplayName("Analytics Queries Executor Resource Disabled Test")
+@DisplayName("Analytics Queries Resource Disabled Test")
 @ExtendWith(DropwizardAppExtensionProvider.class)
-class AnalyticsQueriesExecutorResourceDisabledTest {
+class AnalyticsQueriesResourceDisabledTest {
 
     private static final String USER = UUID.randomUUID().toString();
     private static final String API_KEY = UUID.randomUUID().toString();
@@ -79,7 +79,7 @@ class AnalyticsQueriesExecutorResourceDisabledTest {
                         .build());
     }
 
-    private AnalyticsQueriesExecutorClient executorClient;
+    private AnalyticsQueriesClient analyticsQueriesClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
@@ -87,19 +87,19 @@ class AnalyticsQueriesExecutorResourceDisabledTest {
 
         ClientSupportUtils.config(client);
 
-        executorClient = new AnalyticsQueriesExecutorClient(client, baseURI);
+        analyticsQueriesClient = new AnalyticsQueriesClient(client, baseURI);
 
         wireMock.server().stubFor(post(urlPathEqualTo("/opik/auth"))
                 .withHeader(HttpHeaders.AUTHORIZATION, equalTo(API_KEY))
                 .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(WORKSPACE_NAME)))
-                .withRequestBody(matchingJsonPath("$.path", matching("/v1/internal/analytics-queries-executor.*")))
+                .withRequestBody(matchingJsonPath("$.path", matching("/v1/internal/analytics-queries.*")))
                 .willReturn(okJson(AuthTestUtils.newWorkspaceAuthResponse(USER, WORKSPACE_ID, WORKSPACE_NAME, null))));
     }
 
     @Test
     @DisplayName("when Agent Insights toggle is off then returns 501")
     void executeQuery__whenToggleOff__thenReturns501() {
-        try (Response response = executorClient.callExecute(UUID.randomUUID(), "SELECT 1 AS result", API_KEY,
+        try (Response response = analyticsQueriesClient.callExecute(UUID.randomUUID(), "SELECT 1 AS result", API_KEY,
                 WORKSPACE_NAME)) {
 
             assertThat(response.getStatus()).isEqualTo(Response.Status.NOT_IMPLEMENTED.getStatusCode());

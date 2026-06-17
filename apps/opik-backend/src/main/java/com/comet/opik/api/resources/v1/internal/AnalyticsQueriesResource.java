@@ -38,14 +38,14 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
  * <p>The caller's final query must return exactly one column named {@code result}, produced via
  * {@code toJSONString(...)}.
  */
-@Path("/v1/internal/analytics-queries-executor")
+@Path("/v1/internal/analytics-queries")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 @Timed
 @Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Tag(name = "System analytics queries", description = "Internal endpoint to run Agent Insights free-form SQL")
-public class AnalyticsQueriesExecutorResource {
+public class AnalyticsQueriesResource {
 
     private final @NonNull FreeFormSqlQueryService freeFormSqlQueryService;
     private final @NonNull Provider<RequestContext> requestContext;

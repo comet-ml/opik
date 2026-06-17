@@ -22,8 +22,8 @@ public class AuthFilter implements ContainerRequestFilter {
 
     // Compiled once and reused across requests rather than recompiled on every path check.
     private static final Pattern PRIVATE_PATH_PATTERN = Pattern.compile("/v1/private/.*");
-    private static final Pattern ANALYTICS_QUERIES_EXECUTOR_PATH_PATTERN = Pattern
-            .compile("/v1/internal/analytics-queries-executor.*");
+    private static final Pattern ANALYTICS_QUERIES_PATH_PATTERN = Pattern
+            .compile("/v1/internal/analytics-queries(/.*)?");
     private static final Pattern SESSION_PATH_PATTERN = Pattern.compile("/v1/session/.*");
 
     private final AuthService authService;
@@ -42,7 +42,7 @@ public class AuthFilter implements ContainerRequestFilter {
         // Unlike other /v1/internal/* endpoints, the Agent Insights query executor must be authenticated: it derives
         // the bounding workspace_id from auth (see OPIK-6814 / Agent Insights technical design).
         if (PRIVATE_PATH_PATTERN.matcher(path).matches()
-                || ANALYTICS_QUERIES_EXECUTOR_PATH_PATTERN.matcher(path).matches()) {
+                || ANALYTICS_QUERIES_PATH_PATTERN.matcher(path).matches()) {
             authService.authenticate(headers, sessionToken, ContextInfoHolder.builder()
                     .uriInfo(uriInfo)
                     .method(context.getMethod())

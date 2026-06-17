@@ -4,13 +4,16 @@ import com.clickhouse.client.api.ServerException;
 import com.clickhouse.client.api.metadata.NoSuchColumnException;
 import com.comet.opik.api.AnalyticsQueryResponse;
 import com.comet.opik.api.error.ErrorMessage;
+import com.google.common.base.Throwables;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
-import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongHistogram;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.InternalServerErrorException;
+import jakarta.ws.rs.ServiceUnavailableException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
@@ -42,15 +45,22 @@ public class FreeFormSqlQueryService {
     private static final AttributeKey<String> RESULT_KEY = stringKey("result");
     private static final AttributeKey<String> REASON_KEY = stringKey("reason");
 
-    private static final Attributes RESULT_SUCCESS = Attributes.of(RESULT_KEY, "success");
-    private static final Attributes RESULT_REJECTED = Attributes.of(RESULT_KEY, "rejected");
-    private static final Attributes RESULT_ERROR = Attributes.of(RESULT_KEY, "error");
+    // The terminal outcome of a query, carrying its (result, reason) metric tags. The duration histogram is tagged
+    // with these and its per-tag count is the query counter, so no separate counters are needed.
+    private enum Outcome {
+        SUCCESS("success", "none"),
+        SETTINGS_CLAUSE("rejected", "settings_clause_rejected"),
+        PARSE_ERROR("rejected", "parse_error"),
+        PERMISSION_DENIED("error", "permission_denied"),
+        CH_LIMIT("error", "ch_limit"),
+        OTHER("error", "other");
 
-    private static final Attributes REASON_SETTINGS_CLAUSE = Attributes.of(REASON_KEY, "settings_clause_rejected");
-    private static final Attributes REASON_PARSE_ERROR = Attributes.of(REASON_KEY, "parse_error");
-    private static final Attributes REASON_PERMISSION_DENIED = Attributes.of(REASON_KEY, "permission_denied");
-    private static final Attributes REASON_CH_LIMIT = Attributes.of(REASON_KEY, "ch_limit");
-    private static final Attributes REASON_OTHER = Attributes.of(REASON_KEY, "other");
+        private final Attributes attributes;
+
+        Outcome(String result, String reason) {
+            this.attributes = Attributes.of(RESULT_KEY, result, REASON_KEY, reason);
+        }
+    }
 
     // The parser models every SETTINGS/SET clause (top-level, subquery, CTE, FORMAT ... SETTINGS) as this AST node.
     // Verified against ClickHouse 25.3.x: EXPLAIN AST prints it as the leading token "Set". Matching the exact node
@@ -70,8 +80,6 @@ public class FreeFormSqlQueryService {
 
     private final FreeFormSqlQueryDAO freeFormSqlQueryDAO;
 
-    private final LongCounter executed;
-    private final LongCounter rejected;
     private final LongHistogram duration;
     private final LongHistogram resultRows;
     private final LongHistogram bytesRead;
@@ -81,17 +89,10 @@ public class FreeFormSqlQueryService {
         this.freeFormSqlQueryDAO = freeFormSqlQueryDAO;
 
         var meter = GlobalOpenTelemetry.get().getMeter(METRIC_NAMESPACE);
-        this.executed = meter
-                .counterBuilder("%s.executed".formatted(METRIC_NAMESPACE))
-                .setDescription("Number of free-form SQL queries handled, tagged by result")
-                .build();
-        this.rejected = meter
-                .counterBuilder("%s.rejected".formatted(METRIC_NAMESPACE))
-                .setDescription("Number of free-form SQL queries that did not succeed, tagged by reason")
-                .build();
         this.duration = meter
                 .histogramBuilder("%s.duration".formatted(METRIC_NAMESPACE))
-                .setDescription("Duration of a single free-form SQL query, tagged by result")
+                .setDescription(
+                        "Duration of a single free-form SQL query, tagged by result and reason; its count is also the query counter")
                 .setUnit("ms")
                 .ofLongs()
                 .build();
@@ -116,10 +117,10 @@ public class FreeFormSqlQueryService {
                 // (unparseable input, statement-stacking) is reported as parse_error; any other failure (transport,
                 // permissions, ...) is routed through the standard execution-error mapping so it isn't mislabelled.
                 .onErrorMap(error -> isSyntaxError(error)
-                        ? reject(REASON_PARSE_ERROR, startMillis, "Query rejected: could not be parsed", error)
+                        ? reject(Outcome.PARSE_ERROR, startMillis, "Query rejected: could not be parsed", error)
                         : mapExecutionError(error, startMillis))
                 .flatMap(nodeLabels -> containsSetNode(nodeLabels)
-                        ? Mono.error(reject(REASON_SETTINGS_CLAUSE, startMillis,
+                        ? Mono.error(reject(Outcome.SETTINGS_CLAUSE, startMillis,
                                 "Query rejected: SETTINGS/SET clauses are not allowed", null))
                         : runQuery(workspaceId, projectId, query, startMillis));
     }
@@ -140,15 +141,14 @@ public class FreeFormSqlQueryService {
     }
 
     private void recordSuccess(FreeFormSqlResult result, long startMillis) {
-        executed.add(1, RESULT_SUCCESS);
-        duration.record(elapsed(startMillis), RESULT_SUCCESS);
+        duration.record(elapsed(startMillis), Outcome.SUCCESS.attributes);
         resultRows.record(result.resultRows());
         bytesRead.record(result.readBytes());
     }
 
     private WebApplicationException mapExecutionError(Throwable error, long startMillis) {
         if (findCause(error, NoSuchColumnException.class) != null) {
-            return error(REASON_OTHER, startMillis, Response.Status.BAD_REQUEST,
+            return error(Outcome.OTHER, startMillis, Response.Status.BAD_REQUEST,
                     "Query must return exactly one column named 'result'", error);
         }
 
@@ -156,54 +156,51 @@ public class FreeFormSqlQueryService {
         if (serverException == null) {
             // No response from ClickHouse (connection/transport failure): an infrastructure problem, not a bad query,
             // so surface it as 5xx for alerting instead of a misleading 400.
-            return error(REASON_OTHER, startMillis, Response.Status.SERVICE_UNAVAILABLE, "Query execution failed",
+            return error(Outcome.OTHER, startMillis, Response.Status.SERVICE_UNAVAILABLE, "Query execution failed",
                     error);
         }
 
         int code = serverException.getCode();
         if (CH_LIMIT_CODES.contains(code)) {
             // Constant message: the raw ClickHouse text (which can carry schema/tenant details) stays in logs only.
-            return error(REASON_CH_LIMIT, startMillis, Response.Status.BAD_REQUEST,
+            return error(Outcome.CH_LIMIT, startMillis, Response.Status.BAD_REQUEST,
                     "Query exceeded ClickHouse limits", error);
         }
         if (code == CH_ACCESS_DENIED) {
-            return error(REASON_PERMISSION_DENIED, startMillis, Response.Status.BAD_REQUEST,
+            return error(Outcome.PERMISSION_DENIED, startMillis, Response.Status.BAD_REQUEST,
                     "Query rejected: access denied", error);
         }
         // ClickHouse responded with an error: the failure is attributable to the query, so return 4xx.
-        return error(REASON_OTHER, startMillis, Response.Status.BAD_REQUEST, "Query execution failed", error);
+        return error(Outcome.OTHER, startMillis, Response.Status.BAD_REQUEST, "Query execution failed", error);
     }
 
-    private WebApplicationException reject(Attributes reason, long startMillis, String message, Throwable cause) {
-        executed.add(1, RESULT_REJECTED);
-        rejected.add(1, reason);
-        duration.record(elapsed(startMillis), RESULT_REJECTED);
+    private WebApplicationException reject(Outcome outcome, long startMillis, String message, Throwable cause) {
         log.info("Free-form SQL query rejected: {}", message, cause);
-        return httpError(Response.Status.BAD_REQUEST, message);
+        return fail(outcome, startMillis, Response.Status.BAD_REQUEST, message);
     }
 
-    private WebApplicationException error(Attributes reason, long startMillis, Response.Status status, String message,
+    private WebApplicationException error(Outcome outcome, long startMillis, Response.Status status, String message,
             Throwable cause) {
-        executed.add(1, RESULT_ERROR);
-        rejected.add(1, reason);
-        duration.record(elapsed(startMillis), RESULT_ERROR);
         log.warn("Free-form SQL query failed: {}", message, cause);
-        return httpError(status, message);
+        return fail(outcome, startMillis, status, message);
     }
 
-    private static WebApplicationException httpError(Response.Status status, String message) {
-        return new WebApplicationException(Response.status(status)
-                .entity(new ErrorMessage(List.of(message)))
-                .build());
+    private WebApplicationException fail(Outcome outcome, long startMillis, Response.Status status, String message) {
+        duration.record(elapsed(startMillis), outcome.attributes);
+        var response = Response.status(status).entity(new ErrorMessage(List.of(message))).build();
+        return switch (status) {
+            case BAD_REQUEST -> new BadRequestException(response);
+            case SERVICE_UNAVAILABLE -> new ServiceUnavailableException(response);
+            default -> new InternalServerErrorException(response);
+        };
     }
 
     private static <T extends Throwable> T findCause(Throwable throwable, Class<T> type) {
-        for (Throwable current = throwable; current != null; current = current.getCause()) {
-            if (type.isInstance(current)) {
-                return type.cast(current);
-            }
-        }
-        return null;
+        return Throwables.getCausalChain(throwable).stream()
+                .filter(type::isInstance)
+                .map(type::cast)
+                .findFirst()
+                .orElse(null);
     }
 
     private static boolean isSyntaxError(Throwable error) {
