@@ -7,9 +7,9 @@ type ExplainKindConfig = {
   question: (target: ExplainTarget) => string;
 };
 
-// Only `trace.error` ships at launch (D-D). Cost/Duration are reserved for
-// when their data is enrichable; keep this registry the single place a new
-// kind is added so the button/popover stay generic.
+// The three contextual explain actions (OPIK-6425): error, cost, latency — all
+// in the Traces table. This registry is the single place a kind's label + seed
+// question live, so the button/popover stay generic.
 export const AI_EXPLAIN_REGISTRY: Partial<
   Record<ExplainKind, ExplainKindConfig>
 > = {
@@ -20,6 +20,14 @@ export const AI_EXPLAIN_REGISTRY: Partial<
         .exception_type;
       return type ? `Explain this error: ${type}` : "Explain this error";
     },
+  },
+  "trace.cost": {
+    label: "Explain cost",
+    question: () => "Explain this cost",
+  },
+  "trace.duration": {
+    label: "Explain duration",
+    question: () => "Explain this duration",
   },
 };
 
