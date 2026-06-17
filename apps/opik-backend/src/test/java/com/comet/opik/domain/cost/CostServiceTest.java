@@ -39,6 +39,26 @@ class CostServiceTest {
     }
 
     @Test
+    void calculateCostBillsAudioPromptTokensAtAudioRateForOpenAiAudioModels() {
+        // gpt-4o-audio-preview publishes input_cost_per_audio_token (4e-5) which is 16x the
+        // standard input rate (2.5e-6). Before this change, audio input tokens were billed at
+        // the standard input rate, under-charging audio-heavy traces by ~80%. The Python SDK
+        // (openai_chat_completions_usage.PromptTokensDetails.audio_tokens) flattens the count
+        // under "original_usage.prompt_tokens_details.audio_tokens".
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1_000,
+                "completion_tokens", 200,
+                "original_usage.prompt_tokens_details.audio_tokens", 300);
+
+        BigDecimal cost = CostService.calculateCost("gpt-4o-audio-preview", "openai", usage, null);
+
+        // gpt-4o-audio-preview: input 2.5e-6, output 1e-5, input_audio 4e-5
+        // non-audio prompt = 1000 - 300 = 700
+        // 700 * 2.5e-6 + 300 * 4e-5 + 200 * 1e-5 = 0.00175 + 0.012 + 0.002 = 0.01575
+        assertThat(cost).isEqualByComparingTo("0.01575");
+    }
+
+    @Test
     void calculateCostUsesAnthropicCacheCalculatorForClaudeOnVertexAI() {
         // Claude models hosted on Google Vertex AI ship under the litellm_provider
         // "vertex_ai-anthropic_models" (canonical provider "anthropic_vertexai"), separate from
