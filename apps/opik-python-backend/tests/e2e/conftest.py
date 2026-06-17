@@ -14,11 +14,14 @@ workspace, and the studio job processor routes LLM calls through the backend's
 import os
 import uuid
 from collections.abc import Iterator
+from typing import Any, Callable
 
 import httpx
 import pytest
 
 import opik
+
+from opik_backend.jobs.optimizer import process_optimizer_job
 
 _PROVIDER = "anthropic"
 
@@ -27,10 +30,6 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line(
         "markers",
         "e2e: end-to-end test requiring a running Opik backend with a workspace provider key",
-    )
-    config.addinivalue_line(
-        "markers",
-        "integration: integration test requiring a running Opik backend and a provider key",
     )
 
 
@@ -93,13 +92,26 @@ def anthropic_workspace_key() -> None:
 
 
 @pytest.fixture()
-def project_name() -> str:
-    """Unique per test so trace assertions never see another run's spans."""
-    return f"optstudio-e2e-{uuid.uuid4().hex[:8]}"
+def project_name(opik_client: opik.Opik) -> Iterator[str]:
+    """Unique per test so trace assertions never see another run's spans.
+
+    The optimization creates the project lazily (by logging traces to it), so we
+    just hand out the name and delete the project on teardown (best-effort —
+    tolerates the never-created / already-deleted case).
+    """
+    name = f"optstudio-e2e-{uuid.uuid4().hex[:8]}"
+    yield name
+    try:
+        project_id = opik_client.rest_client.projects.retrieve_project(name=name).id
+        opik_client.rest_client.projects.delete_project_by_id(project_id)
+    except Exception:
+        pass
 
 
 @pytest.fixture()
-def seeded_dataset(opik_client: opik.Opik) -> Iterator[opik.Dataset]:
+def seeded_sentiment_classification_dataset(
+    opik_client: opik.Opik,
+) -> Iterator[opik.Dataset]:
     """A small sentiment-classification dataset the optimizer can iterate on.
 
     Items expose `text` (referenced by the prompt as `{{text}}`) and `label`
@@ -119,3 +131,43 @@ def seeded_dataset(opik_client: opik.Opik) -> Iterator[opik.Dataset]:
         opik_client.delete_dataset(name=name)
     except Exception:
         pass
+
+
+@pytest.fixture()
+def run_studio_optimization(
+    opik_client: opik.Opik,
+) -> Iterator[Callable[[str, str, dict[str, Any]], dict[str, Any]]]:
+    """Run a studio optimization through the **real entrypoint**.
+
+    Pre-creates the optimization record (as the Java backend would), then calls
+    the job handler the RQ worker calls, which sets up the gateway env and runs
+    ``optimizer_runner.py`` as an isolated subprocess. Returns the subprocess
+    result dict. Optimization records created here are deleted on teardown.
+    """
+    created_optimization_ids: list[str] = []
+    workspace = os.getenv("OPIK_WORKSPACE", "default")
+
+    def _run(
+        project_name: str, dataset_name: str, studio_config: dict[str, Any]
+    ) -> dict[str, Any]:
+        optimization = opik_client.create_optimization(
+            dataset_name=dataset_name,
+            objective_name=studio_config["evaluation"]["metrics"][0]["type"],
+            project_name=project_name,
+        )
+        created_optimization_ids.append(optimization.id)
+        job_message = {
+            "optimization_id": optimization.id,
+            "workspace_id": workspace,
+            "workspace_name": workspace,
+            "config": studio_config,
+            "project_name": project_name,
+        }
+        return process_optimizer_job(job_message)
+
+    yield _run
+    if created_optimization_ids:
+        try:
+            opik_client.delete_optimizations(created_optimization_ids)
+        except Exception:
+            pass

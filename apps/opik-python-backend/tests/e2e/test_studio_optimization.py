@@ -1,62 +1,101 @@
-"""End-to-end regression test for Optimization Studio.
+"""End-to-end regression tests for Optimization Studio.
 
-Drives the **real entrypoint** — ``process_optimizer_job`` (the function the RQ
-worker calls), which sets up the gateway env and runs ``optimizer_runner.py`` as
-an isolated subprocess — so the production wiring (gateway routing, the
-``openai/`` model prefix, the ``ChatPrompt(model=...)`` construction, role
-derivation) is actually exercised. It skips only the Java REST enqueue and the
-RQ queue itself by calling the job handler directly.
+Each test drives the **real entrypoint** — ``process_optimizer_job`` (the
+function the RQ worker calls), via the ``run_studio_optimization`` fixture —
+which sets up the gateway env and runs ``optimizer_runner.py`` as an isolated
+subprocess. So the production wiring (gateway routing, the ``openai/`` model
+prefix, the ``ChatPrompt(model=...)`` construction, role derivation) is actually
+exercised. Only the Java REST enqueue and the RQ queue itself are skipped.
 
 The Anthropic key lives in the backend workspace (stored by the
 ``anthropic_workspace_key`` fixture from a CI secret); the optimizer reaches it
-only through the gateway. Given a dataset and the prompt from the job context,
-the test asserts the run is healthy (baseline + optimized prompt + no
-regression) and uses the produced traces to confirm the configured model(s)
-actually ran (not the gpt-5-nano default).
+only through the gateway, never directly.
+
+Coverage:
+- the supported optimizers (GEPA, hierarchical reflective) with an ``equals``
+  metric, asserting a healthy run and confirming via traces that the configured
+  model actually ran (not the SDK default);
+- the ``code`` metric variant, which runs user-supplied Python through the
+  executor inside the optimization subprocess.
 
 Bound the run via ``OPTIMIZER_MAX_TRIALS`` (set in CI) so it stays short.
 """
 
-from typing import Any
+from typing import Any, Callable
 
 import pytest
 
 import opik
 from opik import synchronization
 
-from studio_helpers import assert_optimization_healthy, run_studio_job
+from llm_constants import (
+    ANTHROPIC_CLAUDE_HAIKU,
+    ANTHROPIC_CLAUDE_HAIKU_SHORT,
+    OPENAI_GPT_NANO,
+)
 
 pytestmark = pytest.mark.e2e
 
-# Bare model id (the runner adds the "openai/" gateway prefix); resolves to the
-# workspace Anthropic key server-side.
-_TASK_MODEL = "claude-haiku-4-5-20251001"
+RunStudioOptimization = Callable[[str, str, dict[str, Any]], dict[str, Any]]
+
+_PROMPT_MESSAGE = {
+    "role": "user",
+    "content": 'Classify the sentiment of this movie review as exactly '
+    '"positive" or "negative": {{text}}',
+}
+
+# A user-authored BaseMetric for the code-metric variant: scores 1.0 when the
+# gold label appears in the model's output. `kwargs` carries the dataset item
+# fields (here, `label`).
+_CODE_METRIC = '''
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
 
 
-def _studio_config(model: str, optimizer_type: str, dataset_name: str) -> dict[str, Any]:
+class LabelMatch(BaseMetric):
+    def __init__(self, name: str = "label_match"):
+        super().__init__(name=name)
+
+    def score(self, output: str, **kwargs) -> ScoreResult:
+        label = str(kwargs.get("label", "")).strip().lower()
+        matched = bool(label) and label in (output or "").lower()
+        return ScoreResult(
+            name=self.name,
+            value=1.0 if matched else 0.0,
+            reason=f"label {label!r} {'found' if matched else 'missing'}",
+        )
+'''
+
+
+def _studio_config(
+    model: str, dataset_name: str, optimizer_type: str, metric: dict[str, Any]
+) -> dict[str, Any]:
     """A job-context config with a single USER message (the regression case)."""
     return {
         "dataset_name": dataset_name,
-        "prompt": {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": 'Classify the sentiment of this movie review as '
-                    'exactly "positive" or "negative": {{text}}',
-                }
-            ]
-        },
+        "prompt": {"messages": [_PROMPT_MESSAGE]},
         "llm_model": {"model": model, "parameters": {}},
-        "evaluation": {
-            "metrics": [
-                {
-                    "type": "equals",
-                    "parameters": {"reference_key": "label", "case_sensitive": False},
-                }
-            ]
-        },
+        "evaluation": {"metrics": [metric]},
         "optimizer": {"type": optimizer_type, "parameters": {"seed": 42}},
     }
+
+
+def _assert_optimization_healthy(result: dict[str, Any]) -> None:
+    """Signals that the optimization actually ran end-to-end."""
+    assert result is not None, "no result returned"
+    assert "error" not in result, f"optimization errored: {result.get('error')}"
+    assert result.get("status") != "cancelled", "optimization was cancelled"
+    # Baseline established + a score produced, both in range.
+    assert result.get("initial_score") is not None, "no baseline score (it didn't establish a baseline)"
+    assert 0.0 <= result["initial_score"] <= 1.0, f"baseline {result['initial_score']} out of range"
+    assert result.get("score") is not None, "no final score"
+    assert 0.0 <= result["score"] <= 1.0, f"score {result['score']} out of range"
+    # Optimization shouldn't make the prompt worse than the baseline.
+    assert result["score"] >= result["initial_score"], (
+        f"optimized score {result['score']} regressed below baseline {result['initial_score']}"
+    )
+    # An optimized prompt was produced.
+    assert result.get("optimized_prompt"), "no optimized prompt produced"
 
 
 def _models_in_project(opik_client: opik.Opik, project_name: str) -> list[str]:
@@ -85,23 +124,46 @@ def test_studio_optimization_runs_on_dataset_and_prompt(
     opik_client: opik.Opik,
     anthropic_workspace_key: None,
     project_name: str,
-    seeded_dataset: opik.Dataset,
+    seeded_sentiment_classification_dataset: opik.Dataset,
+    run_studio_optimization: RunStudioOptimization,
     optimizer_type: str,
 ) -> None:
-    studio_config = _studio_config(_TASK_MODEL, optimizer_type, seeded_dataset.name)
+    dataset_name = seeded_sentiment_classification_dataset.name
+    metric = {
+        "type": "equals",
+        "parameters": {"reference_key": "label", "case_sensitive": False},
+    }
+    studio_config = _studio_config(ANTHROPIC_CLAUDE_HAIKU, dataset_name, optimizer_type, metric)
 
-    result = run_studio_job(opik_client, project_name, seeded_dataset.name, studio_config)
+    result = run_studio_optimization(project_name, dataset_name, studio_config)
 
-    assert_optimization_healthy(result)
+    _assert_optimization_healthy(result)
 
     # The configured model actually ran (the model-passing regression fell back
-    # to openai/gpt-5-nano). Spans land in ClickHouse with eventual consistency.
-    _wait_for_model(opik_client, project_name, "claude-haiku")
+    # to the SDK default). Spans land in ClickHouse with eventual consistency.
+    _wait_for_model(opik_client, project_name, ANTHROPIC_CLAUDE_HAIKU_SHORT)
     models = _models_in_project(opik_client, project_name)
     # Healthy volume: it evaluated the dataset, not just a single call.
-    assert sum("claude-haiku" in m.lower() for m in models) >= 2, (
+    assert sum(ANTHROPIC_CLAUDE_HAIKU_SHORT in m.lower() for m in models) >= 2, (
         f"expected multiple model calls, saw {models}"
     )
-    assert not any("gpt-5-nano" in m for m in models), (
+    assert not any(OPENAI_GPT_NANO in m for m in models), (
         f"SDK default model leaked into traces: {models}"
     )
+
+
+def test_studio_optimization_with_code_metric(
+    anthropic_workspace_key: None,
+    project_name: str,
+    seeded_sentiment_classification_dataset: opik.Dataset,
+    run_studio_optimization: RunStudioOptimization,
+) -> None:
+    dataset_name = seeded_sentiment_classification_dataset.name
+    metric = {"type": "code", "parameters": {"code": _CODE_METRIC}}
+    studio_config = _studio_config(ANTHROPIC_CLAUDE_HAIKU, dataset_name, "gepa", metric)
+
+    result = run_studio_optimization(project_name, dataset_name, studio_config)
+
+    # A healthy run only happens if the user's BaseMetric executed via the
+    # executor and produced scores end-to-end.
+    _assert_optimization_healthy(result)
