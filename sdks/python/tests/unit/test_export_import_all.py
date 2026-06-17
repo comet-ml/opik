@@ -352,6 +352,36 @@ class TestMigrationManifest:
 
 
 # ---------------------------------------------------------------------------
+# resolve_import_base_path
+# ---------------------------------------------------------------------------
+
+
+class TestResolveImportBasePath:
+    """Import base-path resolution: workspace-scoped with cross-workspace fallback."""
+
+    def test_prefers_workspace_segment_when_present(self, tmp_path):
+        from opik.cli.imports.utils import resolve_import_base_path
+
+        (tmp_path / "ws" / "projects").mkdir(parents=True)
+        # Same-workspace round-trip: <path>/<workspace>/projects exists.
+        assert resolve_import_base_path(str(tmp_path), "ws") == tmp_path / "ws"
+
+    def test_falls_back_to_path_for_cross_workspace(self, tmp_path):
+        from opik.cli.imports.utils import resolve_import_base_path
+
+        # Data exported from workspace "src" lives at <path>/projects; importing
+        # into workspace "dst" (no <path>/dst/projects) falls back to <path>.
+        (tmp_path / "projects").mkdir(parents=True)
+        assert resolve_import_base_path(str(tmp_path), "dst") == tmp_path
+
+    def test_falls_back_when_nothing_present(self, tmp_path):
+        from opik.cli.imports.utils import resolve_import_base_path
+
+        # Neither layout exists → return <path> (caller surfaces a not-found error).
+        assert resolve_import_base_path(str(tmp_path), "ws") == tmp_path
+
+
+# ---------------------------------------------------------------------------
 # _merge_stats
 # ---------------------------------------------------------------------------
 

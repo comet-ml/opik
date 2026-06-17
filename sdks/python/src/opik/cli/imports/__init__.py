@@ -1,7 +1,6 @@
 """Import command for Opik CLI."""
 
 import sys
-from pathlib import Path
 from typing import Dict, Optional
 
 import click
@@ -21,6 +20,7 @@ from .utils import (
     find_project_export_dir,
     no_attachments_option,
     print_import_summary,
+    resolve_import_base_path,
     to_project_option,
 )
 
@@ -71,10 +71,10 @@ def _import_by_type(
             client = opik.Opik(workspace=workspace)
 
         # Locate the exported project folder by its recorded name (folders are
-        # keyed by id on disk; project.json holds the human name). The workspace
-        # segment mirrors the export layout (PATH/WORKSPACE/projects/<id>/) so
-        # the same --path round-trips between export and import.
-        base_path = Path(path) / workspace
+        # keyed by id on disk; project.json holds the human name). Prefers
+        # PATH/WORKSPACE/projects/ (symmetric with export) and falls back to
+        # PATH/projects/ for cross-workspace imports.
+        base_path = resolve_import_base_path(path, workspace)
         project_root = find_project_export_dir(base_path, project_name)
         if project_root is None:
             available = available_project_names(base_path)

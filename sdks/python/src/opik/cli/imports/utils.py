@@ -41,6 +41,22 @@ def to_project_option() -> Callable:
 console = Console()
 
 
+def resolve_import_base_path(path: str, workspace: str) -> Path:
+    """Resolve the directory that contains ``projects/`` for import.
+
+    Prefers ``<path>/<workspace>/`` — symmetric with the export layout
+    (``<path>/<workspace>/projects/<id>/``), so the same ``--path`` round-trips
+    within a workspace. Falls back to ``<path>/`` when the workspace segment is
+    absent, which is the cross-workspace case: when importing into a different
+    workspace than the data was exported from, point ``--path`` at the exported
+    workspace directory and the project folders are found directly under it.
+    """
+    workspace_scoped = Path(path) / workspace
+    if (workspace_scoped / "projects").is_dir():
+        return workspace_scoped
+    return Path(path)
+
+
 def _read_project_metadata_name(project_dir: Path) -> Optional[str]:
     """Return the recorded project name from ``<project_dir>/project.json``."""
     meta = project_dir / PROJECT_METADATA_FILENAME

@@ -459,6 +459,12 @@ Export writes to `<--path>/<workspace>/projects/<project_id>/`, and import reads
 the same layout, so use the same `--path` on both sides. Add `--to-project <NAME>`
 to import into a different destination project.
 
+To import into a **different workspace** than the data was exported from, point
+`--path` at the exported workspace directory (the export `--path` plus the source
+workspace), e.g. `opik export ws-a my-project all --path ./data` writes to
+`./data/ws-a/...`, then `opik import ws-b my-project all --path ./data/ws-a`
+imports it into `ws-b`.
+
 ```bash
 # Step 1: Export from source (run with source API key / Opik URL)
 # Writes to ./migration_data/my-workspace/projects/<project_id>/
