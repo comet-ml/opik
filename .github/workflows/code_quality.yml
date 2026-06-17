@@ -1,0 +1,198 @@
+name: '🐙 Code Quality'
+run-name: "🐙 Code Quality ${{ github.ref_name }} by @${{ github.actor }}"
+
+# Lint + format + typecheck across all languages, driven by the root
+# .pre-commit-config.yaml (the source of truth for which checks run on which
+# paths). Changed-files-only, mirroring local commits: PRs lint the whole PR diff
+# (base..head); pushes to main lint the push range. A full-repo audit is available
+# on demand via workflow_dispatch.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      all_files:
+        description: "Run all hooks against the whole repo (full audit)"
+        type: boolean
+        default: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  # Needed to post/update the sticky per-hook timing comment on PRs. On fork PRs
+  # the token is read-only regardless, so the comment step is guarded below.
+  pull-requests: write
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          # Diff refs (base/head, push before/after) must be reachable.
+          fetch-depth: 0
+
+      # Resolve the diff range once (reused for area-detection and the pre-commit
+      # run), and detect which heavy-toolchain areas changed so we only provision
+      # JDK/Maven/Node for PRs that actually touch Java/FE/TS. A Python- or
+      # docs-only PR skips those setups entirely. The Python hooks need no toolchain
+      # (pre-commit provisions them in isolated envs).
+      - name: Detect changed areas
+        id: changed
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+        run: |
+          case "$EVENT" in
+            pull_request) FROM="$PR_BASE"; TO="$PR_HEAD" ;;
+            push)
+              FROM="$PUSH_BEFORE"; TO="$PUSH_AFTER"
+              if [ "$FROM" = "0000000000000000000000000000000000000000" ]; then FROM="${TO}^"; fi ;;
+            *) FROM=""; TO="" ;;  # workflow_dispatch: full audit, provision everything
+          esac
+          echo "from=$FROM" >> "$GITHUB_OUTPUT"
+          echo "to=$TO" >> "$GITHUB_OUTPUT"
+          changed() {
+            if [ -z "$FROM" ]; then echo "true"; return; fi   # dispatch → assume changed
+            if git diff --name-only "$FROM..$TO" -- "$1" | grep -q .; then echo "true"; else echo "false"; fi
+          }
+          {
+            echo "java=$(changed 'apps/opik-backend/**/*.java')"
+            echo "frontend=$(changed 'apps/opik-frontend/src/**')"
+            echo "ts=$(changed 'sdks/typescript/**')"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up JDK 25
+        if: steps.changed.outputs.java == 'true'
+        uses: actions/setup-java@v4
+        with:
+          java-version: "25"
+          distribution: "corretto"
+          cache: maven
+
+      - name: Set up Node.js
+        if: steps.changed.outputs.frontend == 'true' || steps.changed.outputs.ts == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install frontend deps
+        if: steps.changed.outputs.frontend == 'true'
+        run: npm ci
+        working-directory: apps/opik-frontend
+
+      - name: Install TypeScript SDK deps
+        if: steps.changed.outputs.ts == 'true'
+        run: npm ci
+        working-directory: sdks/typescript
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Cache pre-commit environments
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      # Run pre-commit (changed-files-only, mirroring local commits), capturing
+      # both the verbose output and the exit code so we can render a timing table
+      # before failing the job. PR: whole PR diff. Push: the push range. Manual:
+      # full-repo audit.
+      - name: Run pre-commit
+        id: precommit
+        env:
+          # Reuse the diff range resolved by "Detect changed areas". Empty (manual
+          # dispatch) => full-repo audit.
+          FROM: ${{ steps.changed.outputs.from }}
+          TO: ${{ steps.changed.outputs.to }}
+        run: |
+          set -o pipefail
+          if [ -n "$FROM" ]; then
+            args=(--from-ref "$FROM" --to-ref "$TO")
+          else
+            args=(--all-files)
+          fi
+          # Capture output for the table; tee so the raw log still shows live.
+          # Don't let a lint failure abort the step — record it and fail later.
+          set +e
+          uvx pre-commit run "${args[@]}" --show-diff-on-failure --verbose 2>&1 \
+            | tee /tmp/precommit-output.log
+          echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+          set -e
+
+      - name: Render timing table
+        if: always()
+        env:
+          PRECOMMIT_EXIT: ${{ steps.precommit.outputs.exit_code }}
+        run: |
+          {
+            # Hidden marker lets find-comment locate this PR's existing comment so
+            # it's updated in place each run (no per-commit spam).
+            echo "<!-- precommit-timing -->"
+            echo "### ⏱️ pre-commit per-hook timing"
+            echo ""
+            if [ -s /tmp/precommit-output.log ]; then
+              ./scripts/precommit-timing-table.sh /tmp/precommit-output.log
+            else
+              echo "_No pre-commit output captured._"
+            fi
+            # Remediation — only when at least one hook failed, so green runs stay clean.
+            if [ "${PRECOMMIT_EXIT:-0}" != "0" ]; then
+              echo ""
+              echo "> [!WARNING]"
+              echo "> **Lint failed.** Fix locally, then push again:"
+              echo "> \`\`\`bash"
+              echo "> pip install pre-commit   # or: brew install pre-commit"
+              echo "> make hooks               # install the git hook (once per clone)"
+              echo "> make precommit           # run the same checks on your changed files"
+              echo "> \`\`\`"
+              echo "> Formatters fix files in place — review the changes, \`git add\`, and commit."
+              echo "> Or apply the diff shown in the failed CI step directly."
+            fi
+          } > /tmp/precommit-table.md
+          cat /tmp/precommit-table.md >> "$GITHUB_STEP_SUMMARY"
+
+      # One comment per PR, overwritten each run (no per-commit spam). Skipped on
+      # fork PRs (read-only token) and non-PR events. find-comment locates the
+      # prior comment by the hidden marker; create-or-update edits it or creates
+      # it once.
+      - name: Find prior timing comment
+        id: find_comment
+        if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
+        uses: peter-evans/find-comment@v3
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: github-actions[bot]
+          body-includes: "<!-- precommit-timing -->"
+
+      - name: Post or update timing comment
+        if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-id: ${{ steps.find_comment.outputs.comment-id }}
+          edit-mode: replace
+          body-path: /tmp/precommit-table.md
+
+      # Fork PRs get no sticky comment (read-only token), so the remediation must
+      # also live in the failed step log — the one place every contributor can see.
+      - name: Fail if pre-commit failed
+        if: steps.precommit.outputs.exit_code != '0'
+        run: |
+          echo "::error::Lint failed (pre-commit exit ${{ steps.precommit.outputs.exit_code }}). Fix locally:"
+          echo "  pip install pre-commit   # or: brew install pre-commit"
+          echo "  make hooks               # install the git hook (once per clone)"
+          echo "  make precommit           # run the same checks on your changed files"
+          echo "Formatters fix files in place — review, git add, and commit. Or apply the diff shown above."
+          exit 1
