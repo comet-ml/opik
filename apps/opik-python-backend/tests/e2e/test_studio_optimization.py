@@ -21,6 +21,7 @@ Coverage:
 Bound the run via ``OPTIMIZER_MAX_TRIALS`` (set in CI) so it stays short.
 """
 
+import re
 from typing import Any, Callable
 
 import pytest
@@ -38,10 +39,13 @@ pytestmark = pytest.mark.e2e
 
 RunStudioOptimization = Callable[[str, str, dict[str, Any]], dict[str, Any]]
 
+# The dataset variable the prompt substitutes; the optimized prompt must keep it
+# (the FE-style `{{text}}` is converted to optimizer-style `{text}` before the run).
+_PROMPT_VARIABLE = "text"
 _PROMPT_MESSAGE = {
     "role": "user",
     "content": 'Classify the sentiment of this movie review as exactly '
-    '"positive" or "negative": {{text}}',
+    '"positive" or "negative": {{' + _PROMPT_VARIABLE + '}}',
 }
 
 # A user-authored BaseMetric for the code-metric variant: scores 1.0 when the
@@ -94,8 +98,23 @@ def _assert_optimization_healthy(result: dict[str, Any]) -> None:
     assert result["score"] >= result["initial_score"], (
         f"optimized score {result['score']} regressed below baseline {result['initial_score']}"
     )
-    # An optimized prompt was produced.
-    assert result.get("optimized_prompt"), "no optimized prompt produced"
+    # A well-formed optimized prompt was produced: a non-empty list of
+    # role/content messages that still carries the dataset variable. A mangled
+    # or variable-less prompt would be unusable even with a healthy score.
+    optimized_prompt = result.get("optimized_prompt")
+    assert isinstance(optimized_prompt, list) and optimized_prompt, (
+        f"optimized prompt is not a non-empty message list: {optimized_prompt!r}"
+    )
+    assert all(
+        isinstance(message, dict)
+        and isinstance(message.get("role"), str)
+        and isinstance(message.get("content"), str)
+        for message in optimized_prompt
+    ), f"optimized prompt has malformed messages: {optimized_prompt!r}"
+    assert any(
+        re.search(r"\{+\s*" + _PROMPT_VARIABLE + r"\s*\}+", message["content"])
+        for message in optimized_prompt
+    ), f"optimized prompt dropped the {{{_PROMPT_VARIABLE}}} variable: {optimized_prompt!r}"
 
 
 def _models_in_project(opik_client: opik.Opik, project_name: str) -> list[str]:
@@ -119,6 +138,21 @@ def _wait_for_model(opik_client: opik.Opik, project_name: str, substring: str) -
     )
 
 
+def _assert_only_configured_model_ran(opik_client: opik.Opik, project_name: str) -> None:
+    """The configured model actually ran, and the SDK default never leaked (the
+    model-passing regression fell back to it). Spans land in ClickHouse with
+    eventual consistency, so wait for the expected model to appear."""
+    _wait_for_model(opik_client, project_name, ANTHROPIC_CLAUDE_HAIKU_SHORT)
+    models = _models_in_project(opik_client, project_name)
+    # Healthy volume: it evaluated the dataset, not just a single call.
+    assert sum(ANTHROPIC_CLAUDE_HAIKU_SHORT in m.lower() for m in models) >= 2, (
+        f"expected multiple model calls, saw {models}"
+    )
+    assert not any(OPENAI_GPT_NANO in m for m in models), (
+        f"SDK default model leaked into traces: {models}"
+    )
+
+
 @pytest.mark.parametrize("optimizer_type", ["gepa", "hierarchical_reflective"])
 def test_studio_optimization_runs_on_dataset_and_prompt(
     opik_client: opik.Opik,
@@ -138,21 +172,11 @@ def test_studio_optimization_runs_on_dataset_and_prompt(
     result = run_studio_optimization(project_name, dataset_name, studio_config)
 
     _assert_optimization_healthy(result)
-
-    # The configured model actually ran (the model-passing regression fell back
-    # to the SDK default). Spans land in ClickHouse with eventual consistency.
-    _wait_for_model(opik_client, project_name, ANTHROPIC_CLAUDE_HAIKU_SHORT)
-    models = _models_in_project(opik_client, project_name)
-    # Healthy volume: it evaluated the dataset, not just a single call.
-    assert sum(ANTHROPIC_CLAUDE_HAIKU_SHORT in m.lower() for m in models) >= 2, (
-        f"expected multiple model calls, saw {models}"
-    )
-    assert not any(OPENAI_GPT_NANO in m for m in models), (
-        f"SDK default model leaked into traces: {models}"
-    )
+    _assert_only_configured_model_ran(opik_client, project_name)
 
 
 def test_studio_optimization_with_code_metric(
+    opik_client: opik.Opik,
     anthropic_workspace_key: None,
     project_name: str,
     seeded_sentiment_classification_dataset: opik.Dataset,
@@ -167,3 +191,4 @@ def test_studio_optimization_with_code_metric(
     # A healthy run only happens if the user's BaseMetric executed via the
     # executor and produced scores end-to-end.
     _assert_optimization_healthy(result)
+    _assert_only_configured_model_ran(opik_client, project_name)
