@@ -121,8 +121,7 @@ else
     echo "Composite action(s) staged but no workflow references them. Skipping actionlint."
   else
     echo "Workflow/composite-action files have been changed. Running actionlint..."
-    # Match CI: suppress info-level shellcheck noise (SC2086 backlog tracked in OPIK-6323).
-    if ! printf '%s\n' "$files_to_lint" | SHELLCHECK_OPTS="--severity=warning" xargs actionlint --; then
+    if ! printf '%s\n' "$files_to_lint" | xargs actionlint --; then
       echo "actionlint found issues. Please fix them before committing."
       exit 1
     fi
