@@ -1,5 +1,6 @@
 package com.comet.opik.api;
 
+import com.comet.opik.api.validation.MaxJsonSize;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -38,6 +39,7 @@ public record AgentInsightsReport(
             @NotNull @PositiveOrZero Long totalCount,
             @NotNull @PositiveOrZero Long usersImpacted,
             @NotNull @PositiveOrZero Long totalUsers,
-            JsonNode metadata) {
+            // 65,535 = the metadata TEXT column's byte limit; reject oversized payloads at the boundary
+            @MaxJsonSize(65_535) JsonNode metadata) {
     }
 }

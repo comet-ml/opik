@@ -334,24 +334,6 @@ class AgentInsightsResourceTest {
         }
 
         @Test
-        @DisplayName("Metadata exceeding the column byte limit returns 400")
-        void reportIssuesWhenMetadataTooLargeThenBadRequest() {
-            var projectId = createProject();
-            var oversizedMetadata = JsonUtils.getJsonNodeFromString(
-                    "{\"blob\":\"%s\"}".formatted("a".repeat(70_000)));
-
-            var reportRequest = AgentInsightsReport.builder()
-                    .projectId(projectId)
-                    .reportDay(DAY_1)
-                    .issues(List.of(reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(),
-                            rndUserCount()).toBuilder().metadata(oversizedMetadata).build()))
-                    .build();
-
-            agentInsightsResourceClient.reportIssues(reportRequest, API_KEY, TEST_WORKSPACE,
-                    HttpStatus.SC_BAD_REQUEST);
-        }
-
-        @Test
         @DisplayName("Cross-workspace: an issue is not accessible from another workspace")
         void getIssueWhenInAnotherWorkspaceThenNotFound() {
             var issueId = UUID.randomUUID();
@@ -443,7 +425,14 @@ class AgentInsightsResourceTest {
                             .issues(List.of(validIssue.toBuilder().totalUsers(null).build())).build(),
                     // null issue element
                     AgentInsightsReport.builder().projectId(UUID.randomUUID()).reportDay(DAY_1)
-                            .issues(Collections.singletonList(null)).build());
+                            .issues(Collections.singletonList(null)).build(),
+                    // metadata exceeding the column byte limit
+                    AgentInsightsReport.builder().projectId(UUID.randomUUID()).reportDay(DAY_1)
+                            .issues(List.of(validIssue.toBuilder()
+                                    .metadata(JsonUtils.getJsonNodeFromString(
+                                            "{\"blob\":\"%s\"}".formatted("a".repeat(70_000))))
+                                    .build()))
+                            .build());
         }
 
         @ParameterizedTest
