@@ -137,10 +137,6 @@ def _build_dataset_item_id_map(
                 original_dataset_item_id = item_data.get("dataset_item_id")
                 dataset_item_data = item_data.get("dataset_item_data")
 
-                # Fallback to input for older exports
-                if not dataset_item_data:
-                    dataset_item_data = item_data.get("input")
-
                 if not original_dataset_item_id or not dataset_item_data:
                     continue
 
