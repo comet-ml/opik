@@ -159,10 +159,18 @@ class RateLimitInterceptor implements MethodInterceptor {
      */
     private String getClientIp() {
         HttpServletRequest request = httpRequest.get();
+        if (request == null) {
+            return StringUtils.EMPTY;
+        }
         String forwarded = request.getHeader(HttpHeaders.X_FORWARDED_FOR);
         if (StringUtils.isNotBlank(forwarded)) {
             String[] hops = forwarded.split(",");
-            return hops[hops.length - 1].trim();
+            if (hops.length > 0) {
+                String clientIp = hops[hops.length - 1].strip();
+                if (StringUtils.isNotBlank(clientIp)) {
+                    return clientIp;
+                }
+            }
         }
         return request.getRemoteAddr();
     }

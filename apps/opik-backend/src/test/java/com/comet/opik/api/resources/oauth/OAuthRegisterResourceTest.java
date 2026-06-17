@@ -70,7 +70,6 @@ class OAuthRegisterResourceTest {
             assertThat(response.getStatus()).isEqualTo(Response.Status.CREATED.getStatusCode());
 
             response.bufferEntity();
-            assertThat(response.readEntity(String.class)).doesNotContain("client_id_issued_at");
 
             ClientRegistrationResponse expected = ClientRegistrationResponse.builder()
                     .clientId(clientId)

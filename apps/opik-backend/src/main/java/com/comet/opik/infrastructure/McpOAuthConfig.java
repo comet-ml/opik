@@ -41,6 +41,12 @@ public class McpOAuthConfig {
     @Valid @JsonProperty
     @NotNull private Duration refreshRotationGrace;
 
+    @Valid @JsonProperty
+    @NotNull private Duration scrubLockTimeout;
+
+    @Valid @JsonProperty
+    @NotNull private Duration scrubLockWaitTime;
+
     public String getIssuer() {
         return StringUtils.stripEnd(baseUrl, "/");
     }
