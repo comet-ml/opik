@@ -332,9 +332,12 @@ class TraceThreadServiceImpl implements TraceThreadService {
     }
 
     private Mono<Instant> getWorkspaceTimeout(Instant now, Duration defaultTimeoutToMarkThreadAsInactive) {
+        // A workspace configuration may exist with a null timeoutToMarkThreadAsInactive (e.g. only
+        // truncationOnTables is set). mapNotNull drops that null so it falls through to the default,
+        // instead of map() emitting null and Reactor throwing "mapper returned a null value".
         return workspaceConfigurationService.getConfiguration()
-                .map(WorkspaceConfiguration::timeoutToMarkThreadAsInactive)
-                .switchIfEmpty(Mono.just(defaultTimeoutToMarkThreadAsInactive))
+                .mapNotNull(WorkspaceConfiguration::timeoutToMarkThreadAsInactive)
+                .defaultIfEmpty(defaultTimeoutToMarkThreadAsInactive)
                 .map(now::minus);
     }
 

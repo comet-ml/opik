@@ -330,6 +330,57 @@ class TraceThreadsClosingJobTest {
             });
         }
 
+        @Test
+        @DisplayName("Should close trace threads when workspace configuration has a null timeout, falling back to default")
+        void shouldCloseTraceThreadsWhenWorkspaceConfigurationTimeoutIsNull() {
+            // Given
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+            var threadId = UUID.randomUUID().toString();
+
+            // A workspace configuration that exists but leaves timeoutToMarkThreadAsInactive unset
+            // (only truncationOnTables is configured). This used to make the closing subscriber throw
+            // "The mapper returned a null value." and the thread would never close.
+            WorkspaceConfiguration configuration = WorkspaceConfiguration.builder()
+                    .truncationOnTables(true)
+                    .build();
+
+            workspaceResourceClient.upsertWorkspaceConfiguration(configuration, apiKey, workspaceName);
+
+            // Create multiple trace within same thread
+            List<Trace> traces = createListOfTraces(projectName, threadId);
+
+            var expectedCreatedAt = Instant.now();
+
+            // When: Creating trace threads
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            Instant expectedLastUpdatedAt = getExpectedLastUpdatedAt(traces);
+
+            var expectedTraceThreadModel = createTraceThreadModel(threadId, projectId, expectedCreatedAt,
+                    expectedLastUpdatedAt, DEFAULT_USER, TraceThreadStatus.INACTIVE, traces);
+
+            // Allow the default timeout (1s in config-test.yml) to elapse
+            Mono.delay(Duration.ofSeconds(1)).block();
+
+            var expectedLastUpdateAt = Instant.now();
+            TraceThread expectedUpdatedTraceThreadModel = expectedTraceThreadModel.toBuilder()
+                    .lastUpdatedAt(expectedLastUpdateAt)
+                    .build();
+
+            // Then: the thread is closed using the default timeout instead of failing with an NPE
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                verifyClosedThreads(projectId, projectName, apiKey, workspaceName,
+                        List.of(expectedUpdatedTraceThreadModel));
+            });
+        }
+
         private void verifyClosedThreads(UUID projectId, String projectName, String apiKey, String workspaceName,
                 List<TraceThread> expectedClosedTraceThreadModels) {
 
