@@ -31,7 +31,7 @@ const MetricDateRangeSelect: React.FC<MetricDateRangeSelectProps> = ({
       minDate={minDate}
       maxDate={maxDate}
     >
-      <DateRangeSelect.Trigger />
+      <DateRangeSelect.Trigger className="h-7" />
       <DateRangeSelect.Content>
         <DateRangeSelect.PresetOption value={DATE_RANGE_PRESET_PAST_24_HOURS} />
         <DateRangeSelect.PresetOption value={DATE_RANGE_PRESET_PAST_3_DAYS} />

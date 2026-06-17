@@ -87,7 +87,7 @@ type ChartMetricConfig = {
   labelsMap?: Record<string, string>;
 };
 
-const CHART_GREEN = "var(--chart-green)";
+const CHART_VIOLET = "var(--chart-violet)";
 const CHART_RED = "var(--chart-red)";
 const CHART_BLUE = "var(--chart-blue)";
 const CHART_TEAL = "var(--chart-teal)";
@@ -130,7 +130,7 @@ const getChartConfig = (
       return {
         metricName: COUNT_METRIC_MAP[entityType],
         chartType: CHART_TYPE.bar,
-        colorMap: { [entityType]: CHART_GREEN },
+        colorMap: { [entityType]: CHART_VIOLET },
       };
     case "errors":
       return {
