@@ -5,7 +5,7 @@ import json
 import sys
 from collections import deque
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import click
 import opik
@@ -13,8 +13,7 @@ from opik.types import FeedbackScoreDict
 from rich.console import Console
 from rich.table import Table
 
-if TYPE_CHECKING:
-    from ..migration_manifest import MigrationManifest
+from ..migration_manifest import MANIFEST_FILENAME, MigrationManifest
 
 PROJECT_METADATA_FILENAME = "project.json"
 
@@ -169,8 +168,54 @@ def destination_manifest_dir(project_root: Path, destination_project_name: str) 
     return project_root / "import_manifests" / dest_key
 
 
+def setup_import_manifest(
+    project_root: Path,
+    destination_project_name: str,
+    dry_run: bool,
+    force: bool,
+) -> Tuple[Optional[MigrationManifest], bool]:
+    """Construct and initialize the per-destination import manifest.
+
+    Shared by ``import_all`` and ``_import_by_type`` so the start/resume/force
+    lifecycle stays in one place. The manifest's ``base_path`` is ``project_root``
+    (so file keys under ``project_root/datasets`` etc. resolve), while the SQLite
+    file lives in the per-destination subdir from :func:`destination_manifest_dir`.
+
+    Returns ``(manifest, already_completed)``. ``manifest`` is ``None`` for dry
+    runs. When ``already_completed`` is ``True`` (a prior run finished and
+    ``--force`` was not given), the caller should return without re-importing.
+    """
+    if dry_run:
+        return None, False
+
+    manifest_file = (
+        destination_manifest_dir(project_root, destination_project_name)
+        / MANIFEST_FILENAME
+    )
+    manifest = MigrationManifest(project_root, manifest_path=manifest_file)
+    if force:
+        if MigrationManifest.exists(project_root, manifest_path=manifest_file):
+            manifest.reset()
+            console.print(
+                "[yellow]--force: discarding existing manifest, starting fresh[/yellow]"
+            )
+    else:
+        if manifest.is_completed:
+            console.print(
+                "[green]Import already completed. Use --force to re-import.[/green]"
+            )
+            return manifest, True
+        elif manifest.is_in_progress:
+            console.print(
+                f"[blue]Resuming interrupted import: "
+                f"{manifest.completed_count()} file(s) already completed[/blue]"
+            )
+    manifest.start()
+    return manifest, False
+
+
 def finalize_import(
-    manifest: Optional["MigrationManifest"],
+    manifest: Optional[MigrationManifest],
     client: opik.Opik,
     total_errors: int,
     dry_run: bool,

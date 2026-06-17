@@ -8,7 +8,6 @@ from rich.console import Console
 
 import opik
 
-from ..migration_manifest import MigrationManifest
 from .all import import_all_command
 from .dataset import import_datasets_from_directory
 from .experiment import import_experiments_from_directory
@@ -16,11 +15,11 @@ from .project import import_traces_from_directory
 from .prompt import import_prompts_from_directory
 from .utils import (
     debug_print,
-    destination_manifest_dir,
     finalize_import,
     no_attachments_option,
     print_import_summary,
     resolve_import_project_root,
+    setup_import_manifest,
     to_project_option,
 )
 
@@ -80,36 +79,14 @@ def _import_by_type(
             path, workspace, project_name, to_project
         )
 
-        # ------------------------------------------------------------------
-        # Manifest lifecycle management
-        # MigrationManifest is only constructed for real (non-dry-run) imports
-        # so that --dry-run never creates the manifest DB on disk. The manifest
-        # is keyed by the destination project so importing the same source into
-        # different --to-project targets keeps independent resume state.
-        # ------------------------------------------------------------------
-        manifest: Optional[MigrationManifest] = None
-        manifest_dir = destination_manifest_dir(project_root, target_project_name)
-
-        if not dry_run:
-            manifest = MigrationManifest(manifest_dir)
-            if force:
-                if MigrationManifest.exists(manifest_dir):
-                    manifest.reset()
-                    console.print(
-                        "[yellow]--force: discarding existing manifest, starting fresh[/yellow]"
-                    )
-            else:
-                if manifest.is_completed:
-                    console.print(
-                        "[green]Import already completed. Use --force to re-import.[/green]"
-                    )
-                    return
-                elif manifest.is_in_progress:
-                    console.print(
-                        f"[blue]Resuming interrupted import: "
-                        f"{manifest.completed_count()} file(s) already completed[/blue]"
-                    )
-            manifest.start()
+        # Construct + initialize the per-destination manifest (keyed by the
+        # destination project so different --to-project targets keep independent
+        # resume state). Skipped for --dry-run.
+        manifest, already_completed = setup_import_manifest(
+            project_root, target_project_name, dry_run, force
+        )
+        if already_completed:
+            return
 
         # ------------------------------------------------------------------
         # Determine source directory (project-nested layout)

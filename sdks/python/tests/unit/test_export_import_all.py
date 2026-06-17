@@ -392,6 +392,56 @@ class TestResolveImportBasePath:
 
 
 # ---------------------------------------------------------------------------
+# setup_import_manifest
+# ---------------------------------------------------------------------------
+
+
+class TestSetupImportManifest:
+    """The per-destination manifest must key files relative to project_root even
+    though the SQLite db lives in a per-destination subdir."""
+
+    def test_files_under_project_root_are_keyable(self, tmp_path):
+        from opik.cli.imports.utils import (
+            setup_import_manifest,
+            destination_manifest_dir,
+        )
+
+        project_root = tmp_path / _WORKSPACE / "projects" / _PROJECT
+        (project_root / "datasets").mkdir(parents=True)
+        ds_file = project_root / "datasets" / "dataset_x.json"
+        ds_file.write_text("{}")
+
+        manifest, already_completed = setup_import_manifest(
+            project_root, "dest", dry_run=False, force=False
+        )
+        assert manifest is not None
+        assert not already_completed
+
+        # Regression: file keys are relative to project_root, so marking a file
+        # under project_root/datasets must not raise ValueError.
+        manifest.mark_file_completed(ds_file)
+        manifest.save()
+        assert manifest.is_file_completed(ds_file)
+
+        # The SQLite db lives in the per-destination subdir, not at project_root.
+        assert (
+            destination_manifest_dir(project_root, "dest") / "migration_manifest.db"
+        ).exists()
+        assert not (project_root / "migration_manifest.db").exists()
+
+    def test_dry_run_creates_no_manifest(self, tmp_path):
+        from opik.cli.imports.utils import setup_import_manifest
+
+        project_root = tmp_path / _WORKSPACE / "projects" / _PROJECT
+        project_root.mkdir(parents=True)
+        manifest, already_completed = setup_import_manifest(
+            project_root, "dest", dry_run=True, force=False
+        )
+        assert manifest is None
+        assert not already_completed
+
+
+# ---------------------------------------------------------------------------
 # _merge_stats
 # ---------------------------------------------------------------------------
 
