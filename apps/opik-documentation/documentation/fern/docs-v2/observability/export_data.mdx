@@ -148,10 +148,10 @@ On disk, folders and files are keyed by **ID**: data lands under `<path>/<worksp
 ### Export
 
 ```bash
-opik export WORKSPACE PROJECT TYPE [NAME] [OPTIONS]
+opik export WORKSPACE PROJECT ITEM [NAME] [OPTIONS]
 ```
 
-`TYPE` is one of: `all`, `dataset`, `traces`, `experiment`, `prompt`
+`ITEM` is one of: `all`, `dataset`, `traces`, `experiment`, `prompt`
 
 ```bash
 # Export everything in a project
@@ -174,7 +174,7 @@ opik export my-workspace my-project traces --format csv --path ./csv_data
 ### Import
 
 ```bash
-opik import WORKSPACE PROJECT TYPE [NAME] [OPTIONS]
+opik import WORKSPACE PROJECT ITEM [NAME] [OPTIONS]
 ```
 
 ```bash

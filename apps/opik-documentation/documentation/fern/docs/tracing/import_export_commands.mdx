@@ -16,14 +16,14 @@ The export/import command-line functions enable you to:
 - **Migrate**: Move data between projects or environments, including experiments and prompts
 - **Backup**: Create local backups of specific project data
 
-## `opik export WORKSPACE PROJECT TYPE [NAME]`
+## `opik export WORKSPACE PROJECT ITEM [NAME]`
 
 Exports specific data types from the specified project to local files.
 
 **Arguments:**
 - `WORKSPACE`: The workspace name to export from
 - `PROJECT`: The project to export from (every dataset, prompt, and experiment belongs to it)
-- `TYPE`: The type of data to export (`all`, `dataset`, `traces`, `experiment`, or `prompt`)
+- `ITEM`: The kind of data to export (`all`, `dataset`, `traces`, `experiment`, or `prompt`)
 - `NAME`: Exact name of the item to export (not used with `all` or `traces`)
 
 **Options:**
@@ -127,14 +127,14 @@ opik export my-workspace my-project dataset "my-dataset" --debug --force
 opik export my-workspace my-project traces --page-size 100
 ```
 
-## `opik import WORKSPACE PROJECT TYPE [NAME]`
+## `opik import WORKSPACE PROJECT ITEM [NAME]`
 
 Imports specific data types from local files into the specified project.
 
 **Arguments:**
 - `WORKSPACE`: The workspace name to import to
 - `PROJECT`: The project to import into (every dataset, prompt, and experiment belongs to it)
-- `TYPE`: The type of data to import (`all`, `dataset`, `traces`, `experiment`, or `prompt`)
+- `ITEM`: The kind of data to import (`all`, `dataset`, `traces`, `experiment`, or `prompt`)
 - `NAME`: Name pattern to match items (case-insensitive substring matching; not used with `all` or `traces`)
 
 **Options:**
