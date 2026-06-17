@@ -54,6 +54,11 @@ export interface ExplainTarget {
   payload: Record<string, unknown>;
 }
 
+/** Props for the plugin-provided ExplainButton, surfaced via PluginsStore. */
+export interface ExplainButtonProps {
+  target: ExplainTarget;
+}
+
 /** Host → Sidebar events */
 export interface HostEventMap {
   "context:changed": BridgeContext;
