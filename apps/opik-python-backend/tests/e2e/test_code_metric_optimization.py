@@ -26,9 +26,10 @@ from opik_backend.studio.types import OptimizationConfig
 
 pytestmark = pytest.mark.integration
 
-# Path to frontend constants file (relative to this test file)
+# Path to frontend constants file (relative to this test file:
+# apps/opik-python-backend/tests/e2e/ -> parents[3] == apps/)
 FRONTEND_CONSTANTS = (
-    Path(__file__).resolve().parents[2]
+    Path(__file__).resolve().parents[3]
     / "opik-frontend/src/constants/optimizations.ts"
 )
 

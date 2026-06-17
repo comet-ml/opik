@@ -1,5 +1,5 @@
-name: Optimization Studio E2E Tests
-run-name: "Optimization Studio E2E Tests ${{ github.ref_name }} by @${{ github.actor }}"
+name: Python BE E2E Tests
+run-name: "Python BE E2E Tests ${{ github.ref_name }} by @${{ github.actor }}"
 permissions:
   contents: read
   checks: write
@@ -8,18 +8,14 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
-      - 'apps/opik-python-backend/src/opik_backend/studio/**'
-      - 'apps/opik-python-backend/src/opik_backend/jobs/optimizer_runner.py'
-      - 'apps/opik-python-backend/e2e_tests/**'
-      - '.github/workflows/optimization_studio_e2e.yml'
+      - 'apps/opik-python-backend/**'
+      - '.github/workflows/python_backend_e2e_tests.yml'
   push:
     branches:
       - 'main'
     paths:
-      - 'apps/opik-python-backend/src/opik_backend/studio/**'
-      - 'apps/opik-python-backend/src/opik_backend/jobs/optimizer_runner.py'
-      - 'apps/opik-python-backend/e2e_tests/**'
-      - '.github/workflows/optimization_studio_e2e.yml'
+      - 'apps/opik-python-backend/**'
+      - '.github/workflows/python_backend_e2e_tests.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -30,16 +26,18 @@ env:
   OPIK_SENTRY_ENABLE: False
   OPIK_URL_OVERRIDE: http://localhost:8080
   OPIK_WORKSPACE: default
-  # Stored in the workspace by the test (model-storage principle); the optimizer
-  # reaches the provider only through the backend gateway, never via this key.
+  # Provider keys are stored in the workspace by the tests (model-storage
+  # principle); the optimizer reaches the provider only through the backend
+  # gateway, never via these directly.
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   # Keep the optimization short — we only need it to start, iterate, and finish.
   OPTIMIZER_MAX_TRIALS: "1"
   OPTSTUDIO_DATASET_SAMPLES: "4"
 
 jobs:
-  run-studio-e2e:
-    name: Optimization Studio E2E
+  run-python-be-e2e:
+    name: Python BE E2E
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -73,20 +71,20 @@ jobs:
           pip install -r requirements.txt -r tests/test_requirements.txt
           pip install .
 
-      - name: Run Optimization Studio E2E tests
+      - name: Run Python BE E2E tests
         run: |
           cd ${{ github.workspace }}/apps/opik-python-backend
           # Retry transient LLM/network failures so a flaky provider call
           # doesn't fail the run; the assertions themselves are deterministic.
           # --log-cli-level streams logs live (incl. the subprocess error +
-          # traceback surfaced by process_optimizer_job) so failures are
-          # fully visible in CI even though the run happens in a child process.
+          # traceback surfaced by process_optimizer_job) so failures are fully
+          # visible even though the optimization runs in a child process.
           # --durations=0 logs how long each test took.
-          pytest e2e_tests -m e2e -vv \
+          pytest tests/e2e -vv \
             --reruns 2 --reruns-delay 5 \
             --log-cli-level=INFO \
             --durations=0 \
-            --junitxml=${{ github.workspace }}/studio_e2e_results.xml
+            --junitxml=${{ github.workspace }}/python_be_e2e_results.xml
 
       - name: Publish Test Report
         uses: EnricoMi/publish-unit-test-result-action/linux@v2
@@ -94,8 +92,8 @@ jobs:
         with:
           action_fail: true
           comment_mode: failures
-          check_name: Optimization Studio E2E Tests Results
-          files: ${{ github.workspace }}/studio_e2e_results.xml
+          check_name: Python BE E2E Tests Results
+          files: ${{ github.workspace }}/python_be_e2e_results.xml
 
       - name: Keep BE logs on failure
         if: failure()
@@ -108,7 +106,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: studio-e2e-be-logs
+          name: python-be-e2e-be-logs
           path: |
             ${{ github.workspace }}/backend.log
             ${{ github.workspace }}/python-backend.log

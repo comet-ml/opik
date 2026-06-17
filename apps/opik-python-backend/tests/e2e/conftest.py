@@ -27,6 +27,10 @@ def pytest_configure(config: pytest.Config) -> None:
         "markers",
         "e2e: end-to-end test requiring a running Opik backend with a workspace provider key",
     )
+    config.addinivalue_line(
+        "markers",
+        "integration: integration test requiring a running Opik backend and a provider key",
+    )
 
 
 def _backend_base() -> str | None:
