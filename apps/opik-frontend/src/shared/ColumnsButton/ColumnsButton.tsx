@@ -51,7 +51,7 @@ const ColumnsButton = <TColumnData,>({
               variant="outline"
               size={size}
               data-testid="columns-button"
-              className="font-normal"
+              className="font-normal focus-visible:border-primary focus-visible:ring-0"
             >
               Columns
               <div className="ml-1 rounded bg-muted-disabled px-1 text-muted-slate">
