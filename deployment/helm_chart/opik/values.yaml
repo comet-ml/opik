@@ -277,6 +277,13 @@ component:
       OPIK_URL_OVERRIDE: "http://opik-backend:8080"
       # Redis URL for Optimization Studio log streaming
       REDIS_URL: redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/
+      # Run the Optimization Studio RQ worker in this service. Required for
+      # Studio runs to execute: the Java backend enqueues jobs to the
+      # "opik:optimizer-cloud" queue, and without a worker consuming it they
+      # stay stuck in "initialized". The code default is "false" (the
+      # python-backend is also a standalone code executor), so it must be
+      # enabled explicitly here for k8s deployments.
+      RQ_WORKER_ENABLED: "true"
 
       # ============================================================
       # Optimization Studio Configuration (optional)
