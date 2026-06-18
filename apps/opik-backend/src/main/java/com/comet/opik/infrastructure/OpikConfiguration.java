@@ -164,6 +164,9 @@ public class OpikConfiguration extends JobConfiguration {
     private LocalRunnerConfig localRunner = new LocalRunnerConfig();
 
     @Valid @NotNull @JsonProperty
+    private StreamConsumerReaperConfig streamConsumerReaper = new StreamConsumerReaperConfig();
+
+    @Valid @NotNull @JsonProperty
     private ExperimentAggregatesConfig experimentAggregates = new ExperimentAggregatesConfig();
 
     @Valid @NotNull @JsonProperty

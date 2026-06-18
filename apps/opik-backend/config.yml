@@ -1232,6 +1232,23 @@ localRunner:
   # Description: Maximum payload size in bytes for bridge command args and results
   bridgeMaxPayloadBytes: ${OPIK_RUNNER_BRIDGE_MAX_PAYLOAD_BYTES:-1048576}
 
+# Orphaned Redis stream-consumer reaper (OPIK-6982). Non-graceful pod exits (OOMKill/SIGKILL/crash) leak
+# stream consumers that Redis never removes; this job deletes consumers idle beyond the threshold with no
+# pending entries. One instance runs per cycle (distributed lock with hold-until-expiry).
+streamConsumerReaper:
+  # Default: true
+  # Description: Whether the orphaned stream-consumer reaper job is enabled
+  enabled: ${OPIK_STREAM_CONSUMER_REAPER_ENABLED:-true}
+  # Default: 1h
+  # Description: Interval between reaper job executions
+  jobInterval: ${OPIK_STREAM_CONSUMER_REAPER_JOB_INTERVAL:-1h}
+  # Default: 1d
+  # Description: Consumers idle beyond this (and with no pending entries) are removed
+  idleThreshold: ${OPIK_STREAM_CONSUMER_REAPER_IDLE_THRESHOLD:-1d}
+  # Default: 10m
+  # Description: How long the reaper holds its distributed lock (until expiry) to prevent concurrent fleet-wide runs
+  lockDuration: ${OPIK_STREAM_CONSUMER_REAPER_LOCK_DURATION:-10m}
+
 # Trace Thread configuration
 traceThreadConfig:
   # Default: true
