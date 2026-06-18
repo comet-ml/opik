@@ -1,7 +1,6 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.AgentInsightsJob;
-import com.comet.opik.api.Project;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -16,8 +15,6 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
-import java.time.Duration;
-import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
 
@@ -29,15 +26,12 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @Slf4j
 public class AgentInsightsJobService {
 
-    private static final Duration TRIGGER_WINDOW = Duration.ofHours(24);
-
     private final @NonNull TransactionTemplate transactionTemplate;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull ProjectService projectService;
-    private final @NonNull AgentInsightsReportClient agentInsightsReportClient;
 
-    // Creates the job; 409 if one already exists for the (workspace, project). Does not trigger a run.
+    // Creates the job; 409 if one already exists for the (workspace, project).
     public Mono<AgentInsightsJob> create(@NonNull UUID projectId) {
         var ctx = requestContext.get();
         String workspaceId = ctx.getWorkspaceId();
@@ -85,38 +79,19 @@ public class AgentInsightsJobService {
         })).subscribeOn(Schedulers.boundedElastic());
     }
 
-    // Triggers an immediate run for an existing job (last 24h). 404 if absent.
+    // 404 if the job does not exist.
     public Mono<Void> triggerNow(@NonNull UUID projectId) {
-        var ctx = requestContext.get();
-        String workspaceId = ctx.getWorkspaceId();
-        String workspaceName = ctx.getWorkspaceName();
+        String workspaceId = requestContext.get().getWorkspaceId();
         return Mono.fromCallable(() -> {
-            String projectName = projectService.findByIds(workspaceId, Set.of(projectId))
-                    .stream().findFirst().map(Project::name)
-                    .orElseThrow(() -> new NotFoundException("Project not found: " + projectId));
-            AgentInsightsJob job = transactionTemplate.inTransaction(READ_ONLY,
+            transactionTemplate.inTransaction(READ_ONLY,
                     handle -> handle.attach(AgentInsightsJobDAO.class)
                             .findByProject(workspaceId, projectId)
                             .orElseThrow(() -> new NotFoundException(
                                     "Agent insights job not found for project: " + projectId)));
-            triggerImmediate(job, workspaceName, projectName);
+            // TODO(OPIK-6853): enqueue the run on a bounded async queue (Redisson) for the scheduler
+            // worker to execute. Until then the trigger is accepted but performs no work.
+            log.info("Agent Insights run requested for project '{}' (no-op until OPIK-6853)", projectId);
             return null;
         }).subscribeOn(Schedulers.boundedElastic()).then();
-    }
-
-    private void triggerImmediate(AgentInsightsJob job, String workspaceName, String projectName) {
-        try {
-            if (!agentInsightsReportClient.isEnabled()) {
-                log.info("Agent Insights trigger disabled; skipping run for project '{}'", job.projectId());
-                return;
-            }
-            Instant periodEnd = Instant.now();
-            Instant periodStart = periodEnd.minus(TRIGGER_WINDOW);
-            agentInsightsReportClient.triggerAgentInsights(idGenerator.generateId().toString(),
-                    job.projectId(), projectName, workspaceName, periodStart, periodEnd);
-        } catch (Exception e) {
-            // Best-effort: a trigger failure must not fail the request.
-            log.error("Failed to trigger Agent Insights run for project '{}'", job.projectId(), e);
-        }
     }
 }

@@ -20,7 +20,7 @@ import java.util.UUID;
 public record AgentInsightsJob(
         @JsonIgnore String workspaceId,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
-        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) UUID projectId,
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY, requiredMode = Schema.RequiredMode.REQUIRED) UUID projectId,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Status status,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
