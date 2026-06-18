@@ -37,6 +37,7 @@ export type FeedbackScoreValueByAuthorMap = Record<
     span_type?: string;
     span_id?: string;
     source_queue_id?: string;
+    author?: string;
   }
 >;
 

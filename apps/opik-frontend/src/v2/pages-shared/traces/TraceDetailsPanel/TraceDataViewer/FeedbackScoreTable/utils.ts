@@ -6,21 +6,15 @@ import { ExpandingFeedbackScoreRow } from "./types";
 import { getIsMultiValueFeedbackScore } from "@/lib/feedback-scores";
 import { PARENT_ROW_ID_PREFIX } from "./constants";
 
-/**
- * Extracts the author name from a composite key (author_spanId) or returns the key as-is.
- * This is used for span feedback scores where the backend uses composite keys to uniquely identify
- * each span's feedback score even when multiple spans have the same author.
- *
- * The format is guaranteed to be `author_spanId`, so we extract the author part by splitting
- * from the right (using lastIndexOf) to handle author names that may contain underscores.
- */
-export const extractAuthorName = (key: string): string => {
-  // Extract just the author part before the last underscore
-  const lastUnderscore = key.lastIndexOf("_");
-  if (lastUnderscore !== -1) {
-    return key.substring(0, lastUnderscore);
+export const getAuthorName = (
+  key: string,
+  entry?: FeedbackScoreValueByAuthorMap[string],
+): string => {
+  if (entry?.author) {
+    return entry.author;
   }
-  return key;
+  const lastUnderscore = key.lastIndexOf("_");
+  return lastUnderscore !== -1 ? key.substring(0, lastUnderscore) : key;
 };
 
 /**
@@ -45,9 +39,7 @@ const createChildRow = (
     isSpanFeedbackScores = false,
     useAuthorKeyInId = false,
   } = options;
-  const authorName = isSpanFeedbackScores
-    ? extractAuthorName(authorKey)
-    : authorKey;
+  const authorName = score.author ?? getAuthorName(authorKey, score);
 
   // Generate ID based on context
   let id: string;
@@ -66,15 +58,17 @@ const createChildRow = (
     id,
     ...parentScore,
     value: score.value,
+    reason: score.reason,
     category_name: score.category_name,
     value_by_author: isSpanFeedbackScores
       ? { [authorKey]: score }
       : parentScore.value_by_author,
     name: parentScore.name,
     author: authorName,
+    source_queue_id: score.source_queue_id,
+    source: score.source || parentScore.source,
   };
 
-  // Add span metadata if this is a span feedback score
   if (isSpanFeedbackScores) {
     baseRow.span_id = score.span_id;
     baseRow.span_type = spanType || score.span_type;
