@@ -6,27 +6,37 @@ import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
+import org.jdbi.v3.sqlobject.statement.SqlBatch;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
-import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterConstructorMapper(TraceThreadIdModel.class)
 interface TraceThreadIdDAO {
 
-    @SqlUpdate("""
+    @SqlBatch("""
                 INSERT INTO project_trace_threads(id, project_id, thread_id, created_by, created_at)
                 VALUES (:thread.id, :thread.projectId, :thread.threadId, :thread.createdBy, :thread.createdAt)
             """)
-    void save(@BindMethods("thread") TraceThreadIdModel rule);
+    void save(@BindMethods("thread") List<TraceThreadIdModel> threads);
+
+    default void save(TraceThreadIdModel thread) {
+        save(List.of(thread));
+    }
 
     @SqlQuery("""
                 SELECT * FROM project_trace_threads
-                WHERE project_id = :projectId AND thread_id = :threadId
+                WHERE project_id = :projectId AND thread_id IN (<threadIds>)
             """)
-    TraceThreadIdModel findByProjectIdAndThreadId(@Bind("projectId") UUID projectId, @Bind("threadId") String threadId);
+    List<TraceThreadIdModel> findByProjectIdAndThreadIds(@Bind("projectId") UUID projectId,
+            @BindList("threadIds") List<String> threadIds);
+
+    default Optional<TraceThreadIdModel> findByProjectIdAndThreadId(UUID projectId, String threadId) {
+        return findByProjectIdAndThreadIds(projectId, List.of(threadId)).stream().findFirst();
+    }
 
     @SqlQuery("""
                 SELECT * FROM project_trace_threads
