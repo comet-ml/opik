@@ -356,6 +356,58 @@ class OpenTelemetryMapperTest {
     }
 
     @Test
+    void testLogfireModelNameMapsToMetadataNotModel() {
+        // `model_name` rides on the PydanticAI agent-run span, which is not an LLM call. It must
+        // not set the span model or flip the span type to llm — it belongs in metadata.
+        var attributes = List.of(
+                KeyValue.newBuilder()
+                        .setKey("model_name")
+                        .setValue(AnyValue.newBuilder().setStringValue("gemini-2.5-flash-lite"))
+                        .build());
+
+        var spanBuilder = Span.builder()
+                .id(UUID.randomUUID())
+                .traceId(UUID.randomUUID())
+                .projectId(UUID.randomUUID())
+                .startTime(Instant.now());
+
+        OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+
+        var span = spanBuilder.build();
+
+        assertThat(span.model()).isNull();
+        assertThat(span.type()).isNotEqualTo(SpanType.llm);
+        assertThat(span.metadata().get("model_name").asText()).isEqualTo("gemini-2.5-flash-lite");
+    }
+
+    @Test
+    void testInvokeAgentSpanIsTypedGeneralNotLlm() {
+        // The agent-run span carries gen_ai.system_instructions (llm-typed rule) but is not an LLM
+        // call; gen_ai.operation.name=invoke_agent must force it back to general.
+        var attributes = List.of(
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.operation.name")
+                        .setValue(AnyValue.newBuilder().setStringValue("invoke_agent"))
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.system_instructions")
+                        .setValue(AnyValue.newBuilder().setStringValue("You are a helpful assistant"))
+                        .build());
+
+        var spanBuilder = Span.builder()
+                .id(UUID.randomUUID())
+                .traceId(UUID.randomUUID())
+                .projectId(UUID.randomUUID())
+                .startTime(Instant.now());
+
+        OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+
+        var span = spanBuilder.build();
+
+        assertThat(span.type()).isEqualTo(SpanType.general);
+    }
+
+    @Test
     void testGenAiToolCallArgumentsAndResultMapToInputAndOutput() {
         // The OTel GenAI tool-call convention carries the tool span's I/O: arguments -> input,
         // result -> output. These must win over the broad `gen_ai.tool.` METADATA prefix, while

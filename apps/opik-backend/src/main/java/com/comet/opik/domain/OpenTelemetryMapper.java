@@ -214,6 +214,12 @@ public class OpenTelemetryMapper {
         // vs Gemini API canonical name using server.address, so cost lookup can match a price row.
         provider = GoogleProviderResolver.resolve(provider, metadata);
 
+        // Agent-run spans (gen_ai.operation.name=invoke_agent) are not LLM calls. Other attributes
+        // on them (e.g. gen_ai.system_instructions) would otherwise type them as llm; force general.
+        if ("invoke_agent".equals(metadata.path("gen_ai.operation.name").asText(null))) {
+            spanBuilder.type(SpanType.general);
+        }
+
         if (model != null) {
             spanBuilder.model(model);
         }
