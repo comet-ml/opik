@@ -419,6 +419,8 @@ openrouter:
   - id: "cohere/command-r7b-12-2024"
     label: "cohere/command-r7b-12-2024"
     structuredOutput: true
+  - id: "cohere/north-mini-code:free"
+    label: "cohere/north-mini-code:free"
   - id: "deepcogito/cogito-v2-preview-deepseek-671b"
     label: "deepcogito/cogito-v2-preview-deepseek-671b"
   - id: "deepcogito/cogito-v2-preview-llama-109b-moe"
