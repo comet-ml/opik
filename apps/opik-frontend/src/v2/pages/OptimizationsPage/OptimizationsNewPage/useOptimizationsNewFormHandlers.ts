@@ -24,8 +24,6 @@ import {
   extractMetricNameFromCode,
 } from "@/lib/optimizations";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
-import useProviderKeys from "@/api/provider-keys/useProviderKeys";
-import { useModelOptions } from "@/v2/pages-shared/llm/PromptModelSelect/useModelOptions";
 import { updateProviderConfig } from "@/lib/modelUtils";
 import useDatasetSamplePreview from "./useDatasetSamplePreview";
 
@@ -69,21 +67,7 @@ export const useOptimizationsNewFormHandlers = () => {
     datasetId,
   });
 
-  const { calculateModelProvider, providerModels } = useLLMProviderModelsData();
-
-  const { data: providerKeysData } = useProviderKeys(
-    { workspaceName },
-    { staleTime: 1000 },
-  );
-  const configuredProvidersList = useMemo(
-    () => providerKeysData?.content ?? [],
-    [providerKeysData?.content],
-  );
-  const { freeModelOption, groupOptions } = useModelOptions(
-    configuredProvidersList,
-    providerModels,
-    "",
-  );
+  const { calculateModelProvider } = useLLMProviderModelsData();
 
   const handleDatasetChange = useCallback(
     (id: string | null) => {
@@ -302,45 +286,6 @@ export const useOptimizationsNewFormHandlers = () => {
     return () => setBreadcrumbParam("optimizationsNew", "new", "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Pre-select a model that the workspace can actually display. The form seeds
-  // a hardcoded default (gpt-4o-mini), but the model picker only lists models
-  // from configured providers — so on a workspace without that provider the
-  // field renders empty. Once provider data loads, fall back to the first
-  // available model, or clear the seeded default when nothing is available so
-  // validation ("Model is required") blocks submission instead of letting a
-  // run start against a model the gateway can't resolve.
-  useEffect(() => {
-    // Wait until the provider-keys query has settled; otherwise the empty list
-    // below is just "still loading", not "no providers configured".
-    if (!providerKeysData) return;
-
-    const availableModels = [
-      ...(freeModelOption ? [freeModelOption.value] : []),
-      ...groupOptions.flatMap((group) => group.options.map((o) => o.value)),
-    ];
-
-    const currentModel = form.getValues("modelName");
-
-    if (availableModels.length === 0) {
-      if (currentModel) {
-        form.setValue("modelName", "" as PROVIDER_MODEL_TYPE, {
-          shouldValidate: true,
-        });
-      }
-      return;
-    }
-
-    if (currentModel && availableModels.includes(currentModel)) return;
-
-    handleModelChange(availableModels[0] as PROVIDER_MODEL_TYPE);
-  }, [
-    providerKeysData,
-    freeModelOption,
-    groupOptions,
-    form,
-    handleModelChange,
-  ]);
 
   return {
     form,

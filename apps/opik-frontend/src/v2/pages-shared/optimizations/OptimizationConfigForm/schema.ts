@@ -185,6 +185,10 @@ const getDefaultModelConfig = (model: PROVIDER_MODEL_TYPE) => {
 
 export const convertOptimizationStudioToFormData = (
   optimization?: Partial<Optimization> | null,
+  // Models the workspace can actually run (resolved from configured providers).
+  // The default model is picked from this list so we never seed a model the
+  // gateway can't resolve; pass `[]` while provider data is still loading.
+  availableModels: string[] = [],
 ): OptimizationConfigFormType => {
   const existingConfig = optimization?.studio_config?.llm_model?.parameters as
     | LLMPromptConfigsType
@@ -208,14 +212,25 @@ export const convertOptimizationStudioToFormData = (
     (optimization?.studio_config?.evaluation.metrics[0]?.type as METRIC_TYPE) ||
     METRIC_TYPE.EQUALS;
 
+  // Resolve a model the workspace can run: prefer the configured one (rerun /
+  // template) when available, otherwise the first available model, otherwise
+  // "" so the "Model is required" validation blocks submission instead of
+  // seeding a model the gateway can't resolve.
+  const configuredModel = optimization?.studio_config?.llm_model?.model;
   const modelName =
-    optimization?.studio_config?.llm_model?.model ||
-    PROVIDER_MODEL_TYPE.GPT_4O_MINI;
+    configuredModel && availableModels.includes(configuredModel)
+      ? configuredModel
+      : availableModels[0] ?? "";
 
-  const defaultConfig = getDefaultModelConfig(modelName as PROVIDER_MODEL_TYPE);
-  const modelConfig = hasExistingConfig
-    ? { ...defaultConfig, ...existingConfig }
-    : defaultConfig;
+  const keptConfiguredModel =
+    Boolean(modelName) && modelName === configuredModel;
+  const defaultConfig = modelName
+    ? getDefaultModelConfig(modelName as PROVIDER_MODEL_TYPE)
+    : ({} as LLMPromptConfigsType);
+  const modelConfig =
+    hasExistingConfig && keptConfiguredModel
+      ? { ...defaultConfig, ...existingConfig }
+      : defaultConfig;
 
   return {
     name: optimization?.name || "Optimization studio run",
