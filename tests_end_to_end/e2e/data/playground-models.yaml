@@ -38,6 +38,19 @@ providers:
         enabled: true
         options:
           temperature: 0
+  openrouter-custom:
+    display_name: "OpenRouter (Custom)"
+    provider_type: "custom"
+    provider_name: "openrouter"
+    base_url: "https://openrouter.ai/api/v1"
+    api_key_env_var: "OPENROUTER_API_KEY"
+    models:
+      - name: "openai/gpt-4o-mini"
+        ui_selector: "openai/gpt-4o-mini"
+        enabled: true
+        options:
+          temperature: 0
+          max_tokens: 128
 test_config:
   test_prompt: "Explain what is an LLM in one paragraph."
   response_timeout_seconds: 60
