@@ -41,7 +41,7 @@ const ExplainPopover = ({ target, onContinue }: Props) => {
         {/* The owl's eye-circles are bottom-heavy in the 13x13 viewBox, so
             items-center leaves extra space above it. Lift it ~1px to optically
             center against the label. (Tune against Figma.) */}
-        <OllieOwl className="relative -top-px size-4 shrink-0 text-[#F46E41]" />
+        <OllieOwl className="relative -top-px size-4 shrink-0 text-[var(--color-ollie)]" />
         <span className="leading-4 text-foreground">Ollie</span>
       </div>
       <div className="my-1 h-px w-full bg-border" />
@@ -53,7 +53,7 @@ const ExplainPopover = ({ target, onContinue }: Props) => {
         <div role="status" aria-live="polite">
           {loading && (
             <div className="flex items-center gap-2">
-              <span className="size-2 shrink-0 animate-ollie-breathe rounded-full bg-[#00D14C]" />
+              <span className="size-2 shrink-0 animate-ollie-breathe rounded-full bg-[var(--color-ollie-live)]" />
               <span className="leading-4 text-muted-slate">Thinking...</span>
             </div>
           )}

@@ -55,18 +55,18 @@ const ExplainButton = ({ target }: ExplainButtonProps) => {
             // centered. Anchored by its LEFT (resting width ~26px incl. inset)
             // so it grows RIGHT over the next cell on hover. z-10 so the grown
             // pill sits above the neighbouring cell.
-            "group/explain absolute left-[calc(100%-26px)] top-1/2 z-10 flex -translate-y-1/2 items-center rounded-full border border-[#F46E41] p-1 text-white opacity-0 shadow-[0px_4px_3px_rgba(244,110,65,0.1),0px_2px_2px_rgba(244,110,65,0.1)] transition-all",
+            "group/explain absolute left-[calc(100%-26px)] top-1/2 z-10 flex -translate-y-1/2 items-center rounded-full border border-[var(--color-ollie)] p-1 text-white opacity-0 shadow-[var(--shadow-ollie)] transition-all",
             // Collapsed icon button (Figma 351:31623): -45deg gradient, p-1.
-            "bg-[linear-gradient(-45deg,#F59E0B_0%,#F46E41_100%)]",
+            "bg-[linear-gradient(-45deg,var(--color-ollie-amber)_0%,var(--color-ollie)_100%)]",
             // Expanded pill (Figma 351:31659): gradient rotates to -18deg and
             // right padding grows to pr-1.5. Resting state keeps symmetric p-1
             // so the icon-only button stays a circle.
-            "group-hover/explain:bg-[linear-gradient(-18deg,#F59E0B_0%,#F46E41_100%)] group-hover/explain:pr-1.5",
+            "group-hover/explain:bg-[linear-gradient(-18deg,var(--color-ollie-amber)_0%,var(--color-ollie)_100%)] group-hover/explain:pr-1.5",
             // Revealed on cell-content hover...
             "pointer-events-none group-hover/cell:pointer-events-auto group-hover/cell:opacity-100",
             // ...or kept visible + expanded while the popover is open.
             open &&
-              "pointer-events-auto bg-[linear-gradient(-18deg,#F59E0B_0%,#F46E41_100%)] pr-1.5 opacity-100",
+              "pointer-events-auto bg-[linear-gradient(-18deg,var(--color-ollie-amber)_0%,var(--color-ollie)_100%)] pr-1.5 opacity-100",
           )}
         >
           <OllieOwl className="size-3 shrink-0" />
