@@ -1,7 +1,6 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.AgentInsightsJob;
-import com.comet.opik.api.AgentInsightsJob.EnabledJob;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -19,7 +18,6 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -106,12 +104,6 @@ public class AgentInsightsJobService {
         }).subscribeOn(Schedulers.boundedElastic()).then();
     }
 
-    // Cross-workspace; used by the scheduler (OPIK-6853), never from a request thread.
-    public List<EnabledJob> findAllEnabled() {
-        return transactionTemplate.inTransaction(READ_ONLY,
-                handle -> handle.attach(AgentInsightsJobDAO.class).findAllEnabled());
-    }
-
     private void triggerImmediate(AgentInsightsJob job, String workspaceName, String projectName) {
         try {
             if (!agentInsightsReportClient.isEnabled()) {
@@ -122,12 +114,8 @@ public class AgentInsightsJobService {
             Instant periodStart = periodEnd.minus(TRIGGER_WINDOW);
             agentInsightsReportClient.triggerAgentInsights(idGenerator.generateId().toString(),
                     job.projectId(), projectName, workspaceName, periodStart, periodEnd);
-            transactionTemplate.inTransaction(WRITE, handle -> {
-                handle.attach(AgentInsightsJobDAO.class).markTriggered(job.id(), periodEnd);
-                return null;
-            });
         } catch (Exception e) {
-            // Best-effort: a trigger failure must not fail the request (the cron retries).
+            // Best-effort: a trigger failure must not fail the request.
             log.error("Failed to trigger Agent Insights run for project '{}'", job.projectId(), e);
         }
     }

@@ -1,6 +1,5 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.AgentInsightsJob;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -158,10 +157,5 @@ class AgentInsightsJobTriggerTest {
         assertThat(trigger.periodStart()).isNotNull();
         assertThat(trigger.periodEnd()).isNotNull();
         assertThat(trigger.periodStart()).isBefore(trigger.periodEnd());
-
-        // markTriggered persisted the run time.
-        try (var get = jobsClient.get(projectId, API_KEY, WORKSPACE_NAME)) {
-            assertThat(get.readEntity(AgentInsightsJob.class).lastTriggeredAt()).isNotNull();
-        }
     }
 }

@@ -7,7 +7,6 @@ CREATE TABLE IF NOT EXISTS agent_insights_jobs (
     workspace_id VARCHAR(150) NOT NULL,
     project_id CHAR(36) NOT NULL,
     status ENUM('enabled', 'disabled') NOT NULL DEFAULT 'enabled',
-    last_triggered_at TIMESTAMP(6) NULL,
     created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     created_by VARCHAR(255) NOT NULL DEFAULT 'admin',
     last_updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),

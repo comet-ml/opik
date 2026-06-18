@@ -1,7 +1,6 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.AgentInsightsJob;
-import com.comet.opik.api.AgentInsightsJob.EnabledJob;
 import com.comet.opik.api.AgentInsightsJob.Status;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
@@ -25,8 +24,6 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
-import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -96,7 +93,6 @@ class AgentInsightsJobDAOTest {
         assertThat(job.status()).isEqualTo(Status.ENABLED);
         assertThat(job.createdBy()).isEqualTo(userName);
         assertThat(job.lastUpdatedBy()).isEqualTo(userName);
-        assertThat(job.lastTriggeredAt()).isNull();
         assertThat(job.createdAt()).isNotNull();
         assertThat(job.lastUpdatedAt()).isNotNull();
     }
@@ -145,49 +141,5 @@ class AgentInsightsJobDAOTest {
 
         assertThat(find(workspaceId, projectId)).isPresent();
         assertThat(find(otherWorkspaceId, projectId)).isEmpty();
-    }
-
-    @Test
-    @DisplayName("markTriggered sets last_triggered_at")
-    void markTriggered__setsTimestamp() {
-        var workspaceId = UUID.randomUUID().toString();
-        var projectId = UUID.randomUUID();
-        var id = UUID.randomUUID();
-
-        create(id, workspaceId, projectId, "user-" + UUID.randomUUID());
-        template.inTransaction(WRITE, handle -> {
-            handle.attach(AgentInsightsJobDAO.class).markTriggered(id, Instant.now());
-            return null;
-        });
-
-        assertThat(find(workspaceId, projectId).orElseThrow().lastTriggeredAt()).isNotNull();
-    }
-
-    @Test
-    @DisplayName("findAllEnabled returns enabled jobs (with workspace + project) across workspaces, excludes disabled")
-    void findAllEnabled__enabledOnly() {
-        var enabledId = UUID.randomUUID();
-        var enabledWorkspace = UUID.randomUUID().toString();
-        var enabledProject = UUID.randomUUID();
-        var disabledWorkspace = UUID.randomUUID().toString();
-        var disabledProject = UUID.randomUUID();
-
-        create(enabledId, enabledWorkspace, enabledProject, "user-" + UUID.randomUUID());
-        create(UUID.randomUUID(), disabledWorkspace, disabledProject, "user-" + UUID.randomUUID());
-        template.inTransaction(WRITE, handle -> handle.attach(AgentInsightsJobDAO.class)
-                .updateStatus(disabledWorkspace, disabledProject, Status.DISABLED.getValue(),
-                        "user-" + UUID.randomUUID()));
-
-        List<EnabledJob> enabled = template.inTransaction(READ_ONLY,
-                handle -> handle.attach(AgentInsightsJobDAO.class).findAllEnabled());
-
-        // The projection carries workspace_id (the scheduler needs it) — assert it is populated correctly.
-        assertThat(enabled)
-                .anySatisfy(job -> {
-                    assertThat(job.id()).isEqualTo(enabledId);
-                    assertThat(job.workspaceId()).isEqualTo(enabledWorkspace);
-                    assertThat(job.projectId()).isEqualTo(enabledProject);
-                });
-        assertThat(enabled).noneMatch(job -> job.projectId().equals(disabledProject));
     }
 }
