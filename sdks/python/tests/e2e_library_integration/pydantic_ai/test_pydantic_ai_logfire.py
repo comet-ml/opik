@@ -17,6 +17,7 @@ A ``TestModel`` is used so the test is hermetic (no LLM provider key needed).
 """
 
 import asyncio
+import json
 import urllib.parse
 
 import logfire
@@ -332,3 +333,125 @@ def test_pydantic_ai_logfire__nested_track_and_otel__cross_origin_nesting(
             trace_id=trace_id,
             parent_span_id=agent_run.id,
         )
+
+
+def test_pydantic_ai_logfire__tool_span_logs_its_output(
+    opik_client: opik.Opik,
+):
+    """A PydanticAI tool's return value must land on the tool span's OUTPUT.
+
+    The logfire instrumentation emits the result under the ``tool_response``
+    attribute; without an explicit mapping it falls into the default INPUT
+    bucket, so the tool span renders no output in the UI.
+    """
+    config = opik_config.OpikConfig()
+    exporter = _build_otlp_exporter(config)
+
+    logfire.configure(
+        send_to_logfire=False,
+        console=False,
+        additional_span_processors=[
+            BatchSpanProcessor(exporter),
+            OpikSpanProcessor(),
+        ],
+    )
+    logfire.instrument_pydantic_ai()
+
+    agent = Agent(TestModel())
+
+    @agent.tool_plain
+    def get_weather(city: str) -> str:
+        return f"Sunny in {city}"
+
+    ID_STORAGE = {}
+
+    @opik.track(name="run_entrypoint")
+    def run() -> str:
+        ID_STORAGE["trace_id"] = opik_context.get_current_trace_data().id
+        return str(agent.run_sync("What is the weather?").output)
+
+    run()
+    opik.flush_tracker()
+    logfire.force_flush()
+
+    trace_id = ID_STORAGE["trace_id"]
+
+    def _tool_span():
+        spans = opik_client.search_spans(
+            project_name=opik_client.config.project_name, trace_id=trace_id
+        )
+        tool_span = next((span for span in spans if span.name == "running tool"), None)
+        return tool_span if tool_span is not None and tool_span.output else None
+
+    if not synchronization.until(lambda: _tool_span() is not None, max_try_seconds=15):
+        raise AssertionError(
+            "Expected the PydanticAI tool span to be ingested with a non-empty "
+            "output within timeout"
+        )
+
+    tool_span = _tool_span()
+    # the tool's return value is mapped to OUTPUT, not INPUT
+    assert "tool_response" in tool_span.output
+    assert "Sunny in" in json.dumps(tool_span.output)
+    assert "tool_response" not in (tool_span.input or {})
+
+
+def test_pydantic_ai_logfire__tool_error_is_logged_as_error_info(
+    opik_client: opik.Opik,
+):
+    """When a PydanticAI tool raises, the OTel ``exception`` event must surface as
+    the Opik span's ``error_info`` instead of being buried in raw event metadata.
+    """
+    config = opik_config.OpikConfig()
+    exporter = _build_otlp_exporter(config)
+
+    logfire.configure(
+        send_to_logfire=False,
+        console=False,
+        additional_span_processors=[
+            BatchSpanProcessor(exporter),
+            OpikSpanProcessor(),
+        ],
+    )
+    logfire.instrument_pydantic_ai()
+
+    agent = Agent(TestModel())
+
+    @agent.tool_plain
+    def failing_tool() -> str:
+        raise RuntimeError("boom: upstream 502")
+
+    ID_STORAGE = {}
+
+    @opik.track(name="run_entrypoint")
+    def run() -> None:
+        ID_STORAGE["trace_id"] = opik_context.get_current_trace_data().id
+        try:
+            agent.run_sync("call the tool")
+        except Exception:
+            # the tool error propagates out of the agent run; we only care that
+            # it was recorded on the span, not about handling it here
+            pass
+
+    run()
+    opik.flush_tracker()
+    logfire.force_flush()
+
+    trace_id = ID_STORAGE["trace_id"]
+
+    def _error_spans():
+        spans = opik_client.search_spans(
+            project_name=opik_client.config.project_name, trace_id=trace_id
+        )
+        return [span for span in spans if span.error_info is not None]
+
+    if not synchronization.until(lambda: len(_error_spans()) > 0, max_try_seconds=15):
+        raise AssertionError(
+            "Expected at least one span with error_info populated from the tool "
+            "exception within timeout"
+        )
+
+    error_info = _error_spans()[0].error_info
+    assert error_info.exception_type == "RuntimeError"
+    assert "boom: upstream 502" in (error_info.message or "")
+    assert error_info.traceback

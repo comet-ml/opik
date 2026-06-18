@@ -41,6 +41,13 @@ public final class LogfireMappingRules {
                     .rule("tools").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.INPUT).build(),
             OpenTelemetryMappingRule.builder()
                     .rule("tool_responses").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.OUTPUT).build(),
+            // PydanticAI tool-execution spans carry the call arguments under `tool_arguments` and
+            // the returned value under `tool_response`. Without these rules `tool_response` falls
+            // through to the default INPUT bucket, so the tool span shows no output in the UI.
+            OpenTelemetryMappingRule.builder()
+                    .rule("tool_arguments").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.INPUT).build(),
+            OpenTelemetryMappingRule.builder()
+                    .rule("tool_response").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.OUTPUT).build(),
             OpenTelemetryMappingRule.builder()
                     .rule("usage").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.USAGE)
                     .spanType(SpanType.llm).build(),
