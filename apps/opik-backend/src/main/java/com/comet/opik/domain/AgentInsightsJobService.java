@@ -15,7 +15,6 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
-import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -38,18 +37,17 @@ public class AgentInsightsJobService {
         String userName = ctx.getUserName();
 
         return Mono.fromCallable(() -> {
-            if (projectService.findByIds(workspaceId, Set.of(projectId)).isEmpty()) {
-                throw new NotFoundException("Project not found: " + projectId);
-            }
+            projectService.validateProjectIdExists(projectId, workspaceId);
 
             return transactionTemplate.inTransaction(WRITE, handle -> {
                 var dao = handle.attach(AgentInsightsJobDAO.class);
-                if (dao.findByProject(workspaceId, projectId).isPresent()) {
-                    throw new EntityAlreadyExistsException(new ErrorMessage(409,
-                            "Agent insights job already exists for project: " + projectId));
-                }
-                dao.create(idGenerator.generateId(), workspaceId, projectId, userName);
-                return dao.findByProject(workspaceId, projectId).orElseThrow();
+                // Insert-only; the unique key (workspace_id, project_id) makes this race-safe — a
+                // concurrent create surfaces as a constraint violation, mapped to 409.
+                return EntityConstraintHandler.handle(() -> {
+                    dao.create(idGenerator.generateId(), workspaceId, projectId, userName);
+                    return dao.findByProject(workspaceId, projectId).orElseThrow();
+                }).withError(() -> new EntityAlreadyExistsException(new ErrorMessage(409,
+                        "Agent insights job already exists for project: " + projectId)));
             });
         }).subscribeOn(Schedulers.boundedElastic());
     }
