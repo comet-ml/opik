@@ -141,6 +141,14 @@ public interface FeedbackScoreMapper {
             if (tuple.size() > 6 && tuple.get(6) != null) {
                 builder.spanId((String) tuple.get(6));
             }
+            // source_queue_id is the 8th element (index 7)
+            if (tuple.size() > 7 && tuple.get(7) != null) {
+                String sourceQueueId = tuple.get(7).toString();
+                if (StringUtils.isNotEmpty(sourceQueueId)
+                        && !CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(sourceQueueId)) {
+                    builder.sourceQueueId(sourceQueueId);
+                }
+            }
 
             ValueEntry valueEntry = builder.build();
 
@@ -225,6 +233,13 @@ public interface FeedbackScoreMapper {
                 if (tuple.size() > 6 && tuple.get(6) != null && !tuple.get(6).isNull()) {
                     builder.spanId(tuple.get(6).asText());
                 }
+                if (tuple.size() > 7 && tuple.get(7) != null && !tuple.get(7).isNull()) {
+                    String sourceQueueId = tuple.get(7).asText();
+                    if (StringUtils.isNotEmpty(sourceQueueId)
+                            && !CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(sourceQueueId)) {
+                        builder.sourceQueueId(sourceQueueId);
+                    }
+                }
 
                 result.put(author, builder.build());
             } else if (tuple.isObject() && !tuple.isEmpty()) {
@@ -240,6 +255,13 @@ public interface FeedbackScoreMapper {
                 }
                 if (tuple.has("span_id") && !tuple.get("span_id").isNull()) {
                     builder.spanId(tuple.get("span_id").asText());
+                }
+                if (tuple.has("source_queue_id") && !tuple.get("source_queue_id").isNull()) {
+                    String sourceQueueId = tuple.get("source_queue_id").asText();
+                    if (StringUtils.isNotEmpty(sourceQueueId)
+                            && !CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(sourceQueueId)) {
+                        builder.sourceQueueId(sourceQueueId);
+                    }
                 }
 
                 result.put(author, builder.build());
