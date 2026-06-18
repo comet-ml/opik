@@ -13,7 +13,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -40,9 +39,7 @@ class QuotaAwareHttpClientTest {
         // Both LangChain4j's internal retry and Opik's outer retry skip NonRetriableException. The body must be
         // the message (so it still maps to 402 downstream) and there must be no HttpException cause (otherwise
         // ExceptionMapper.findRoot() would unwrap it and re-map the 429 to a retryable RateLimitException).
-        var thrown = catchThrowable(() -> client.execute(request));
-
-        assertThat(thrown)
+        assertThatThrownBy(() -> client.execute(request))
                 .isInstanceOf(NonRetriableException.class)
                 .hasMessage(QUOTA_BODY)
                 .hasNoCause();
