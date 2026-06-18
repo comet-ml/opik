@@ -182,7 +182,7 @@ spec:
                   value: application/json
             timeoutSeconds: 2
             periodSeconds: 10
-            initialDelaySeconds: 0
+            initialDelaySeconds: {{ .initialDelaySeconds | default 0 }}
             successThreshold: 1
             failureThreshold: 2
             {{- else }}
