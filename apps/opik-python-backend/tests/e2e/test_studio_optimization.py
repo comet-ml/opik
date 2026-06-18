@@ -87,7 +87,8 @@ def _studio_config(
 def _assert_optimization_healthy(result: dict[str, Any]) -> None:
     """Signals that the optimization actually ran end-to-end."""
     assert result is not None, "no result returned"
-    assert "error" not in result, f"optimization errored: {result.get('error')}"
+    # An error result raises inside process_optimizer_job, so it never reaches
+    # here; a cancellation returns a dict, so guard against that one explicitly.
     assert result.get("status") != "cancelled", "optimization was cancelled"
     # Baseline established + a score produced, both in range.
     assert result.get("initial_score") is not None, "no baseline score (it didn't establish a baseline)"

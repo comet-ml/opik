@@ -213,8 +213,8 @@ def build_optimizer_and_prompt(config):
     parameters; the optimizer/algorithm uses its own configured model and
     parameters (GEPA's reflection LM, hierarchical's reasoning model), defaulting
     to the prompt model when none was picked. Both models are routed through the
-    gateway. Mutates ``config.model``/``config.model_params`` to their
-    gateway-routed form so the metric (built afterwards) uses the same model.
+    gateway. ``config`` is not modified — the gateway-routed task model is
+    carried on the returned ``prompt.model``, which the metric reuses.
 
     Returns ``(optimizer, prompt)``.
     """
@@ -224,8 +224,8 @@ def build_optimizer_and_prompt(config):
         ensure_default_model_params,
     )
 
-    config.model = _gateway_model(config.model)
-    config.model_params = _with_stream(config.model_params)
+    task_model = _gateway_model(config.model)
+    task_params = _with_stream(config.model_params)
 
     if config.optimizer_model:
         optimizer_model = _gateway_model(config.optimizer_model)
@@ -234,29 +234,27 @@ def build_optimizer_and_prompt(config):
         # No separate algorithm model — default to the prompt model. Still honor
         # optimizer model_parameters if the config set them without a model
         # (saved configs / API clients), instead of silently dropping them.
-        optimizer_model = config.model
+        optimizer_model = task_model
         optimizer_model_params = (
             _with_stream(config.optimizer_model_params)
             if config.optimizer_model_params is not None
-            else config.model_params
+            else task_params
         )
-
-    config.optimizer_params = config.optimizer_params or {}
 
     # The factory injects defaults (e.g. max_tokens) into the optimizer params.
     optimizer = OptimizerFactory.build(
         config.optimizer_type,
         optimizer_model,
         optimizer_model_params,
-        config.optimizer_params,
+        config.optimizer_params or {},
     )
     # Set the model on the prompt itself — the optimizer uses its own model for
     # reasoning, while baseline/per-trial task calls run through the prompt's
     # model. Apply the same max_tokens default so task calls don't truncate.
     prompt = ChatPrompt(
         messages=config.prompt_messages,
-        model=config.model,
-        model_parameters=ensure_default_model_params(config.model_params),
+        model=task_model,
+        model_parameters=ensure_default_model_params(task_params),
     )
     return optimizer, prompt
 
@@ -326,11 +324,12 @@ def main():
             # configured parameters. See build_optimizer_and_prompt.
             optimizer, prompt = build_optimizer_and_prompt(config)
 
-            # Build metric function (uses the now gateway-routed prompt model).
+            # Build metric function — reuse the prompt's gateway-routed model so
+            # LLM-as-judge metrics route through the gateway too.
             metric_fn = MetricFactory.build(
                 config.metric_type,
                 config.metric_params,
-                config.model,
+                prompt.model,
                 dataset_items_provider=lambda: list(dataset.get_items()),
             )
 
