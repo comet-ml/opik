@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit;
 @Data
 public class StreamConsumerReaperConfig {
 
-    @Valid @JsonProperty
+    @JsonProperty
     private boolean enabled = true;
 
     /**
@@ -42,10 +42,11 @@ public class StreamConsumerReaperConfig {
     private Duration idleThreshold = Duration.days(1);
 
     /**
-     * Lock TTL, held until expiry, that suppresses concurrent fleet-wide runs. Also bounds how long a single reap
-     * pass may run. A reap pass is light (per-stream {@code XINFO GROUPS}/{@code XINFO CONSUMERS} + a few
-     * {@code XGROUP DELCONSUMER}), so this is well below {@link #getJobInterval()}; an occasional extra pass within
-     * a cycle is harmless since {@code XGROUP DELCONSUMER} is idempotent.
+     * Lock TTL, held until expiry, that suppresses other instances from reaping until it elapses. It does NOT
+     * cancel an in-flight reap pass ({@code bestEffortLock} does not bound the action) — the pass runs to
+     * completion even if the lease expires first. Kept well below {@link #getJobInterval()}; if the lease expires
+     * mid-cycle and another instance runs an extra pass, that is harmless since {@code XGROUP DELCONSUMER} is
+     * idempotent and a pass is light (per-stream {@code XINFO GROUPS}/{@code XINFO CONSUMERS} + a few deletes).
      */
     @Valid @NotNull @JsonProperty
     @MinDuration(value = 1, unit = TimeUnit.SECONDS)

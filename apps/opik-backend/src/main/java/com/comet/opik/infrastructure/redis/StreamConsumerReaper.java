@@ -37,7 +37,9 @@ public class StreamConsumerReaper {
     private static final AttributeKey<String> STREAM_KEY = AttributeKey.stringKey("stream");
     private static final AttributeKey<String> GROUP_KEY = AttributeKey.stringKey("consumer_group");
 
-    // Redis error when XINFO GROUPS targets a stream key that has never been created.
+    // When XINFO GROUPS targets a stream key that was never created, Redisson raises a generic
+    // org.redisson.client.RedisException whose message is "ERR no such key. channel: ... command: (XINFO GROUPS)..."
+    // There is no typed exception for this, so we match the stable Redis error token below.
     private static final String NO_SUCH_KEY = "no such key";
 
     private final RedissonReactiveClient redisson;
@@ -117,6 +119,14 @@ public class StreamConsumerReaper {
                 });
     }
 
+    /**
+     * Best-effort classification of the "stream key doesn't exist yet" case. Confirmed against a real Redis:
+     * Redisson raises a generic {@code org.redisson.client.RedisException} with message {@code "ERR no such key..."}
+     * — there is no typed exception to catch, so this is a substring match (mirroring the existing
+     * {@code NOGROUP}/{@code BUSYGROUP} handling in {@code BaseRedisSubscriber}) and could break on a Redis/Redisson
+     * version bump. The downside is bounded — a misclassification only changes the log level/metric of a best-effort
+     * cleanup job; correctness (which consumers get reaped) is unaffected.
+     */
     private static boolean isNoSuchKey(Throwable throwable) {
         return Objects.toString(throwable.getMessage(), "").contains(NO_SUCH_KEY);
     }
