@@ -64,32 +64,46 @@ export function findValueByAuthor(
   value_by_author: FeedbackScoreValueByAuthorMap | undefined,
   userName: string,
   sourceQueueId?: string,
+  options?: { prefixMatch?: boolean },
 ): FeedbackScoreValueByAuthorMap[string] | undefined {
   if (!value_by_author || !userName) {
     return undefined;
   }
+
+  const { prefixMatch = false } = options ?? {};
 
   if (sourceQueueId) {
     const compositeKey = `${userName}_${sourceQueueId}`;
     if (value_by_author[compositeKey]) {
       return value_by_author[compositeKey];
     }
-    // Try with span suffix: userName_queueId_spanId
     const matchingKey = Object.keys(value_by_author).find((key) =>
       key.startsWith(`${compositeKey}_`),
     );
     return matchingKey ? value_by_author[matchingKey] : undefined;
   }
 
-  // No sourceQueueId: try exact match, then prefix
   if (value_by_author[userName]) {
     return value_by_author[userName];
+  }
+
+  if (!prefixMatch) {
+    return undefined;
   }
 
   const matchingKey = Object.keys(value_by_author).find((key) =>
     key.startsWith(`${userName}_`),
   );
   return matchingKey ? value_by_author[matchingKey] : undefined;
+}
+
+export function hasAnyValueByAuthor(
+  value_by_author: FeedbackScoreValueByAuthorMap | undefined,
+  userName: string,
+): boolean {
+  return !!findValueByAuthor(value_by_author, userName, undefined, {
+    prefixMatch: true,
+  });
 }
 
 export const setExperimentsCompareCache = async (
