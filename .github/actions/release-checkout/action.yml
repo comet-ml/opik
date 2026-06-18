@@ -28,6 +28,25 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Validate release inputs
+      # GHA's `required: true` on workflow_dispatch inputs is not enforced when a
+      # `default:` is also set — an omitted dispatch falls back to the default,
+      # which is "" for the calling workflows' `version` input (the empty value
+      # is a deliberate sentinel for the non-release / PR build path). That's
+      # fine for `is_release=false`, but a release dispatch with `version=""`
+      # would resolve to `refs/tags/` and break `actions/checkout` with a cryptic
+      # git error. Fail fast here with a clear ::error:: so the operator sees the
+      # real problem.
+      if: ${{ inputs.is_release == 'true' }}
+      shell: bash
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+      run: |
+        if [ -z "${INPUT_VERSION}" ]; then
+          echo "::error title=release-checkout::is_release=true requires a non-empty version input (would resolve to 'refs/tags/' otherwise). Pass version=X.Y.Z via workflow_dispatch / workflow_call."
+          exit 1
+        fi
+
     - name: Checkout
       uses: actions/checkout@v6
       with:
