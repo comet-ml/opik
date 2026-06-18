@@ -178,6 +178,13 @@ module.exports = {
           "0%": { backgroundPosition: "200% 0" },
           "100%": { backgroundPosition: "-200% 0" },
         },
+        // Outward box-shadow ring (inherits the dot's currentColor) + opacity
+        // fade — the "thinking" beacon, matching ollie-assist's status dot.
+        "beacon-pulse": {
+          "0%": { boxShadow: "0 0 0 0 currentColor", opacity: "1" },
+          "70%": { boxShadow: "0 0 0 5px transparent", opacity: "0.7" },
+          "100%": { boxShadow: "0 0 0 0 transparent", opacity: "1" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -187,6 +194,7 @@ module.exports = {
         "ollie-text-in": "ollie-text-in 300ms ease-out",
         "caret-blink": "caret-blink 1.25s ease-out infinite",
         shimmer: "shimmer 1.8s ease-in-out infinite",
+        "beacon-pulse": "beacon-pulse 1.4s ease-out infinite",
       },
       boxShadow: {
         "action-card": "var(--action-card-shadow)",

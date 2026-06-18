@@ -53,7 +53,7 @@ const ExplainPopover = ({ target, onContinue }: Props) => {
         <div role="status" aria-live="polite">
           {loading && (
             <div className="flex items-center gap-2">
-              <span className="size-2 shrink-0 animate-ollie-breathe rounded-full bg-[var(--color-ollie-live)]" />
+              <span className="size-2 shrink-0 rounded-full bg-[var(--color-ollie-live)] text-[var(--color-ollie-live)] motion-safe:animate-beacon-pulse" />
               <span className="leading-4 text-muted-slate">Thinking...</span>
             </div>
           )}
