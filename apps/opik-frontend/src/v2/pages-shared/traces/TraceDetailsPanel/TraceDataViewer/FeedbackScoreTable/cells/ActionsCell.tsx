@@ -21,7 +21,8 @@ const ActionsCell: React.FunctionComponent<
     context.row.original,
   );
 
-  const isUserOwner = context.row.original.created_by === currentUserName;
+  const row = context.row.original;
+  const isUserOwner = (row.author ?? row.created_by) === currentUserName;
 
   if (isParentFeedbackScoreRow || !isUserOwner) {
     return null;

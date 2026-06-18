@@ -264,9 +264,9 @@ class MultiValueFeedbackScoresE2ETest {
         assertThat(actualTrace.feedbackScores()).hasSize(1);
         assertThat(actualTrace.feedbackScores().getFirst().valueByAuthor()).hasSize(2);
 
-        // Delete user 2 feedback score (must be authenticated as user 2)
+        // Delete user 2 feedback score
         traceResourceClient.deleteTraceFeedbackScore(
-                DeleteFeedbackScore.builder().name(user1Score.name()).build(), traceId, API_KEY2,
+                DeleteFeedbackScore.builder().name(user1Score.name()).author(USER2).build(), traceId, API_KEY1,
                 TEST_WORKSPACE);
 
         // verify only user 1 score is present
@@ -303,7 +303,7 @@ class MultiValueFeedbackScoresE2ETest {
 
         // Delete scoped to wrong queue B — should be a no-op
         traceResourceClient.deleteTraceFeedbackScore(
-                DeleteFeedbackScore.builder().name(score.name()).sourceQueueId(queueIdB).build(),
+                DeleteFeedbackScore.builder().name(score.name()).author(USER1).sourceQueueId(queueIdB).build(),
                 traceId, API_KEY1, TEST_WORKSPACE);
 
         // Score should still be present and match the original
@@ -320,7 +320,7 @@ class MultiValueFeedbackScoresE2ETest {
 
         // Delete scoped to correct queue A — should remove the score
         traceResourceClient.deleteTraceFeedbackScore(
-                DeleteFeedbackScore.builder().name(score.name()).sourceQueueId(queueIdA).build(),
+                DeleteFeedbackScore.builder().name(score.name()).author(USER1).sourceQueueId(queueIdA).build(),
                 traceId, API_KEY1, TEST_WORKSPACE);
 
         // Score should be gone
@@ -433,9 +433,9 @@ class MultiValueFeedbackScoresE2ETest {
         assertThat(actualSpan.feedbackScores()).hasSize(1);
         assertThat(actualSpan.feedbackScores().getFirst().valueByAuthor()).hasSize(2);
 
-        // Delete user 2 feedback score (must be authenticated as user 2)
+        // Delete user 2 feedback score
         spanResourceClient.deleteSpanFeedbackScore(
-                DeleteFeedbackScore.builder().name(user1Score.name()).build(), spanId, API_KEY2,
+                DeleteFeedbackScore.builder().name(user1Score.name()).author(USER2).build(), spanId, API_KEY1,
                 TEST_WORKSPACE);
 
         // verify only user 1 score is present
@@ -499,9 +499,9 @@ class MultiValueFeedbackScoresE2ETest {
         assertThat(actualThread.feedbackScores()).hasSize(1);
         assertThat(actualThread.feedbackScores().getFirst().valueByAuthor()).hasSize(2);
 
-        // Delete user 2 feedback score (must be authenticated as user 2)
+        // Delete user 2 feedback score
         traceResourceClient.deleteThreadFeedbackScores(projectName, threadId, Set.of(user1Score.name()), USER2,
-                API_KEY2,
+                API_KEY1,
                 TEST_WORKSPACE);
 
         // verify only user 1 score is present
