@@ -74,7 +74,7 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
   const indicatorColor = colorIndicator
     ? fieldType === "input"
       ? "var(--color-green)"
-      : "var(--color-primary)"
+      : "var(--chart-violet)"
     : null;
 
   return (

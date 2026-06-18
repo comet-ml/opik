@@ -406,7 +406,11 @@ const PlaygroundPrompt = ({
               trigger={
                 <div>
                   <TooltipWrapper content="Load prompt">
-                    <Button variant="minimal" size="icon-sm">
+                    <Button
+                      variant="minimal"
+                      size="icon-sm"
+                      data-testid="load-prompt-button"
+                    >
                       <FileTerminal />
                     </Button>
                   </TooltipWrapper>
@@ -429,6 +433,7 @@ const PlaygroundPrompt = ({
                   size="icon-sm"
                   onClick={handleSaveChatPrompt}
                   disabled={!canCreatePrompts && !selectedChatPromptId}
+                  data-testid="playground-save-prompt-button"
                 >
                   <Save />
                 </Button>

@@ -6434,6 +6434,79 @@ class TracesResourceTest {
 
             TraceAssertions.assertThreads(expectedClosedThreads, closedThreadPage.content());
         }
+
+        @Test
+        @DisplayName("open thread: when projectId belongs to another workspace, then return not found")
+        void openTraceThread__whenProjectBelongsToAnotherWorkspace__thenReturnNotFound() {
+            // Workspace A owns the project
+            var workspaceNameA = RandomStringUtils.secure().nextAlphanumeric(10);
+            var apiKeyA = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKeyA, workspaceNameA, UUID.randomUUID().toString());
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            UUID projectId = projectResourceClient.createProject(projectName, apiKeyA, workspaceNameA);
+
+            // Workspace B does not own it
+            var workspaceNameB = RandomStringUtils.secure().nextAlphanumeric(10);
+            var apiKeyB = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKeyB, workspaceNameB, UUID.randomUUID().toString());
+
+            traceResourceClient.openTraceThread(randomUUID().toString(), projectId, projectName, apiKeyB,
+                    workspaceNameB, HttpStatus.SC_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("close threads: when projectId belongs to another workspace, then return not found")
+        void closeTraceThreads__whenProjectBelongsToAnotherWorkspace__thenReturnNotFound() {
+            // Workspace A owns the project
+            var workspaceNameA = RandomStringUtils.secure().nextAlphanumeric(10);
+            var apiKeyA = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKeyA, workspaceNameA, UUID.randomUUID().toString());
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            UUID projectId = projectResourceClient.createProject(projectName, apiKeyA, workspaceNameA);
+
+            // Workspace B does not own it
+            var workspaceNameB = RandomStringUtils.secure().nextAlphanumeric(10);
+            var apiKeyB = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKeyB, workspaceNameB, UUID.randomUUID().toString());
+
+            traceResourceClient.closeTraceThreads(Set.of(randomUUID().toString()), projectId, projectName, apiKeyB,
+                    workspaceNameB, HttpStatus.SC_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("close threads: when thread belongs to a different project in the same workspace, then return not found")
+        void closeTraceThreads__whenThreadBelongsToAnotherProject__thenReturnNotFound() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            // Project A owns the thread
+            var projectNameA = RandomStringUtils.secure().nextAlphanumeric(10);
+            UUID projectIdA = projectResourceClient.createProject(projectNameA, apiKey, workspaceName);
+            var threadId = randomUUID().toString();
+
+            Trace trace = createTrace().toBuilder()
+                    .threadId(threadId)
+                    .projectId(projectIdA)
+                    .projectName(projectNameA)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                var page = traceResourceClient.getTraceThreads(projectIdA, projectNameA, apiKey, workspaceName,
+                        List.of(), List.of(), Map.of());
+                assertThat(page.content()).hasSize(1);
+            });
+
+            // Project B (same workspace) does not contain the thread
+            var projectNameB = RandomStringUtils.secure().nextAlphanumeric(10);
+            UUID projectIdB = projectResourceClient.createProject(projectNameB, apiKey, workspaceName);
+
+            traceResourceClient.closeTraceThreads(Set.of(threadId), projectIdB, projectNameB, apiKey, workspaceName,
+                    HttpStatus.SC_NOT_FOUND);
+        }
     }
 
     @Nested

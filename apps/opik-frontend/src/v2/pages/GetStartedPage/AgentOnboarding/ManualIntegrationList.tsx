@@ -116,10 +116,7 @@ const ManualIntegrationList: React.FC<ManualIntegrationListProps> = ({
             ))}
 
             <a
-              href={buildDocsUrl(
-                "/integrations/overview",
-                "&utm_source=opik_frontend&utm_medium=onboarding&utm_campaign=integrations_docs",
-              )}
+              href={buildDocsUrl("/integrations/overview")}
               target="_blank"
               rel="noopener noreferrer"
               className="flex h-8 items-center gap-1 rounded-lg border bg-background px-3 py-1.5 transition-all duration-200 hover:bg-primary-foreground"

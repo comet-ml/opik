@@ -786,19 +786,14 @@ public class TracesResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        // Validate project identifier and get projectId
-        UUID projectId = projectService.validateProjectIdentifier(identifier.projectId(), identifier.projectName(),
-                workspaceId);
+        log.info("Open trace thread_id: '{}' for project_id: '{}', project_name: '{}' on workspace_id: '{}'",
+                identifier.threadId(), identifier.projectId(), identifier.projectName(), workspaceId);
 
-        log.info("Open trace thread_id: '{}' and project_id: '{}' on workspace_id: '{}'", identifier.threadId(),
-                projectId, workspaceId);
-
-        traceThreadService.openThread(projectId, identifier.threadId())
+        traceThreadService.openThread(identifier.projectId(), identifier.projectName(), identifier.threadId())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Opened trace thread_id: '{}' and project_id: '{}' on workspace_id: '{}'", identifier.threadId(),
-                projectId, workspaceId);
+        log.info("Opened trace thread_id: '{}' on workspace_id: '{}'", identifier.threadId(), workspaceId);
 
         return Response.noContent().build();
     }
@@ -815,24 +810,19 @@ public class TracesResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        // Validate project identifier and get projectId
-        UUID projectId = projectService.validateProjectIdentifier(identifier.projectId(), identifier.projectName(),
-                workspaceId);
-
         // Handle both single and batch operations
         Set<String> threadIds = CollectionUtils.isNotEmpty(identifier.threadIds())
                 ? Set.copyOf(identifier.threadIds())
                 : Set.of(identifier.threadId());
 
-        log.info("Close trace thread_ids: '{}' and project_id: '{}' on workspace_id: '{}'", threadIds,
-                projectId, workspaceId);
+        log.info("Close trace thread_ids: '{}' for project_id: '{}', project_name: '{}' on workspace_id: '{}'",
+                threadIds, identifier.projectId(), identifier.projectName(), workspaceId);
 
-        traceThreadService.closeThreads(projectId, threadIds)
+        traceThreadService.closeThreads(identifier.projectId(), identifier.projectName(), threadIds)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Closed trace thread_ids: '{}' and project_id: '{}' on workspace_id: '{}'", threadIds,
-                projectId, workspaceId);
+        log.info("Closed trace thread_ids: '{}' on workspace_id: '{}'", threadIds, workspaceId);
 
         return Response.noContent().build();
     }

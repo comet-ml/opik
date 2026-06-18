@@ -585,6 +585,11 @@ public class TraceResourceClient extends BaseCommentResourceClient {
 
     public void openTraceThread(String threadId, UUID projectId, String projectName, String apiKey,
             String workspaceName) {
+        openTraceThread(threadId, projectId, projectName, apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+    }
+
+    public void openTraceThread(String threadId, UUID projectId, String projectName, String apiKey,
+            String workspaceName, int expectedStatus) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("threads")
                 .path("open")
@@ -594,7 +599,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .put(Entity.json(TraceThreadIdentifier.builder().projectId(projectId).projectName(projectName)
                         .threadId(threadId).build()))) {
 
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
         }
     }
 
@@ -615,6 +620,11 @@ public class TraceResourceClient extends BaseCommentResourceClient {
 
     public void closeTraceThreads(Set<String> threadIds, UUID projectId, String projectName, String apiKey,
             String workspaceName) {
+        closeTraceThreads(threadIds, projectId, projectName, apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+    }
+
+    public void closeTraceThreads(Set<String> threadIds, UUID projectId, String projectName, String apiKey,
+            String workspaceName, int expectedStatus) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("threads")
                 .path("close")
@@ -624,7 +634,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .put(Entity.json(TraceThreadBatchIdentifier.builder().projectId(projectId).projectName(projectName)
                         .threadIds(threadIds).build()))) {
 
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
         }
     }
 
