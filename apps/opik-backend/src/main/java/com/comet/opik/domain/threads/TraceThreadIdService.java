@@ -62,8 +62,8 @@ class TraceThreadIdServiceImpl implements TraceThreadIdService {
     @Cacheable(name = "GET_OR_CREATE_TRACE_THREAD_ID", key = "$workspaceId +'-'+ $projectId +'-'+ $threadId", returnType = TraceThreadIdModel.class)
     public Mono<TraceThreadIdModel> getOrCreateTraceThreadId(@NonNull String workspaceId, @NonNull UUID projectId,
             @NonNull String threadId, Instant timestamp) {
-        Preconditions.checkArgument(!StringUtils.isBlank(workspaceId), "Workspace ID cannot be blank");
-        Preconditions.checkArgument(!StringUtils.isBlank(threadId), "Thread ID cannot be blank");
+        Preconditions.checkArgument(StringUtils.isNotBlank(workspaceId), "Workspace ID cannot be blank");
+        Preconditions.checkArgument(StringUtils.isNotBlank(threadId), "Thread ID cannot be blank");
 
         return Mono.fromCallable(() -> projectService.get(projectId, workspaceId))
                 .flatMap(project -> getTraceThreadId(threadId, project.id())
@@ -86,7 +86,7 @@ class TraceThreadIdServiceImpl implements TraceThreadIdService {
     @Override
     public Mono<List<TraceThreadIdModel>> getOrCreateTraceThreadIds(String workspaceId,
             @NonNull UUID projectId, Map<String, Instant> threadIdToTimestamp) {
-        Preconditions.checkArgument(!StringUtils.isBlank(workspaceId), "Workspace ID cannot be blank");
+        Preconditions.checkArgument(StringUtils.isNotBlank(workspaceId), "Workspace ID cannot be blank");
 
         if (MapUtils.isEmpty(threadIdToTimestamp)) {
             return Mono.just(List.of());
@@ -136,16 +136,17 @@ class TraceThreadIdServiceImpl implements TraceThreadIdService {
                         result.addAll(created);
                         return result;
                     }))
-                    .withRetry(3, () -> new EntityAlreadyExistsException(
-                            new ErrorMessage("Failed to resolve trace thread ids for project: " + projectId)));
+                    .withRetry(3, () -> new EntityAlreadyExistsException(new ErrorMessage(
+                            "Failed to resolve trace thread ids for project: '%s', workspace: '%s'"
+                                    .formatted(projectId, workspaceId))));
         }).subscribeOn(Schedulers.boundedElastic()));
     }
 
     @Cacheable(name = "GET_TRACE_THREAD_ID", key = "$workspaceId +'-'+ $projectId +'-'+ $threadId", returnType = UUID.class)
     public Mono<UUID> getThreadModelId(@NonNull String workspaceId, @NonNull UUID projectId,
             @NonNull String threadId) {
-        Preconditions.checkArgument(!StringUtils.isBlank(workspaceId), "Workspace ID cannot be blank");
-        Preconditions.checkArgument(!StringUtils.isBlank(threadId), "Thread ID cannot be blank");
+        Preconditions.checkArgument(StringUtils.isNotBlank(workspaceId), "Workspace ID cannot be blank");
+        Preconditions.checkArgument(StringUtils.isNotBlank(threadId), "Thread ID cannot be blank");
 
         return Mono.fromCallable(() -> projectService.get(projectId, workspaceId))
                 .flatMap(project -> getTraceThreadId(threadId, project.id())
@@ -203,7 +204,8 @@ class TraceThreadIdServiceImpl implements TraceThreadIdService {
 
     private Mono<TraceThreadIdModel> getTraceThreadId(String threadId, UUID projectId) {
         return Mono.fromCallable(() -> transactionTemplate.inTransaction(TransactionTemplateAsync.READ_ONLY,
-                handle -> handle.attach(TraceThreadIdDAO.class).findByProjectIdAndThreadId(projectId, threadId)));
+                handle -> handle.attach(TraceThreadIdDAO.class).findByProjectIdAndThreadId(projectId, threadId)
+                        .orElse(null)));
     }
 
     private Mono<TraceThreadIdModel> createThread(String threadId, UUID projectId, Instant timestamp) {
@@ -228,7 +230,7 @@ class TraceThreadIdServiceImpl implements TraceThreadIdService {
                             log.error(
                                     "Failed to create thread trying to retrieve it with project id '{}' and thread id '{}'",
                                     projectId, threadModel.threadId());
-                            return traceThreadDAO.findByProjectIdAndThreadId(projectId, threadId);
+                            return traceThreadDAO.findByProjectIdAndThreadId(projectId, threadId).orElse(null);
                         });
             });
 

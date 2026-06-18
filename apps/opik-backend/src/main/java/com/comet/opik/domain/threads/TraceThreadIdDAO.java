@@ -10,6 +10,7 @@ import org.jdbi.v3.sqlobject.statement.SqlBatch;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
@@ -33,8 +34,8 @@ interface TraceThreadIdDAO {
     List<TraceThreadIdModel> findByProjectIdAndThreadIds(@Bind("projectId") UUID projectId,
             @BindList("threadIds") List<String> threadIds);
 
-    default TraceThreadIdModel findByProjectIdAndThreadId(UUID projectId, String threadId) {
-        return findByProjectIdAndThreadIds(projectId, List.of(threadId)).stream().findFirst().orElse(null);
+    default Optional<TraceThreadIdModel> findByProjectIdAndThreadId(UUID projectId, String threadId) {
+        return findByProjectIdAndThreadIds(projectId, List.of(threadId)).stream().findFirst();
     }
 
     @SqlQuery("""

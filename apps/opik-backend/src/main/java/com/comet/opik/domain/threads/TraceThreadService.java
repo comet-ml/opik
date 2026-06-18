@@ -420,7 +420,10 @@ class TraceThreadServiceImpl implements TraceThreadService {
             List<TraceThread> threads) {
         Map<String, Instant> needIds = threads.stream()
                 .filter(thread -> thread.threadModelId() == null)
-                .collect(Collectors.toMap(TraceThread::id, TraceThread::createdAt, (a, b) -> a));
+                // On a duplicate threadId, keep the earliest createdAt — the thread-model id is derived
+                // from the first trace's timestamp.
+                .collect(Collectors.toMap(TraceThread::id, TraceThread::createdAt,
+                        (a, b) -> a.isBefore(b) ? a : b));
 
         if (needIds.isEmpty()) {
             return Mono.just(threads);
