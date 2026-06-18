@@ -356,6 +356,42 @@ class OpenTelemetryMapperTest {
     }
 
     @Test
+    void testGenAiToolCallArgumentsAndResultMapToInputAndOutput() {
+        // The OTel GenAI tool-call convention carries the tool span's I/O: arguments -> input,
+        // result -> output. These must win over the broad `gen_ai.tool.` METADATA prefix, while
+        // other gen_ai.tool.* attributes (e.g. call.id) still go to metadata.
+        var attributes = List.of(
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.tool.call.arguments")
+                        .setValue(AnyValue.newBuilder().setStringValue("{\"city\":\"Paris\"}"))
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.tool.call.result")
+                        .setValue(AnyValue.newBuilder().setStringValue("Sunny in Paris"))
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.tool.call.id")
+                        .setValue(AnyValue.newBuilder().setStringValue("call_abc123"))
+                        .build());
+
+        var spanBuilder = Span.builder()
+                .id(UUID.randomUUID())
+                .traceId(UUID.randomUUID())
+                .projectId(UUID.randomUUID())
+                .startTime(Instant.now());
+
+        OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+
+        var span = spanBuilder.build();
+
+        assertThat(span.input().has("gen_ai.tool.call.arguments")).isTrue();
+        assertThat(span.output().has("gen_ai.tool.call.result")).isTrue();
+        // a non-I/O tool attribute still lands in metadata, not input/output
+        assertThat(span.metadata().has("gen_ai.tool.call.id")).isTrue();
+        assertThat(span.input().has("gen_ai.tool.call.id")).isFalse();
+    }
+
+    @Test
     void testLlmIsStreamingMapsToMetadata() {
         var attributes = List.of(
                 KeyValue.newBuilder()
