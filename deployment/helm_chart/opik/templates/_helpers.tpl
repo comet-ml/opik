@@ -121,8 +121,9 @@ Note: Directives are sorted alphabetically to ensure deterministic output
 {{/*
 Renders a container probe (liveness / readiness / startup) from a probe spec.
 Supports two shapes for the same spec:
-  1. Simplified path/port: only `path` and `port` are set with hard coded values 
-     for the other probe fields. This is a common case for HTTP probes.
+  1. Simplified path/port: only `path` and `port` are set, with hard coded
+     defaults for the other probe fields. `initialDelaySeconds` is honored if
+     the caller sets it, defaulting to 0. This is a common case for HTTP probes.
   2. Full definition: any other spec is emitted verbatim, so values.yaml can
      define httpGet/exec/tcpSocket plus any probe timing fields directly.
 Usage:
@@ -139,7 +140,7 @@ httpGet:
       value: application/json
 timeoutSeconds: 2
 periodSeconds: 10
-initialDelaySeconds: 0
+initialDelaySeconds: {{ .initialDelaySeconds | default 0 }}
 successThreshold: 1
 failureThreshold: 2
 {{- else }}
