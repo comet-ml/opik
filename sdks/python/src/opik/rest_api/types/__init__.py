@@ -23,6 +23,8 @@ from .agent_insights_issue_page import AgentInsightsIssuePage
 from .agent_insights_issue_status import AgentInsightsIssueStatus
 from .agent_insights_issue_with_details import AgentInsightsIssueWithDetails
 from .agent_insights_issue_with_details_status import AgentInsightsIssueWithDetailsStatus
+from .agent_insights_job import AgentInsightsJob
+from .agent_insights_job_status import AgentInsightsJobStatus
 from .aggregation_data import AggregationData
 from .alert import Alert
 from .alert_alert_type import AlertAlertType
@@ -741,6 +743,8 @@ __all__ = [
     "AgentInsightsIssueStatus",
     "AgentInsightsIssueWithDetails",
     "AgentInsightsIssueWithDetailsStatus",
+    "AgentInsightsJob",
+    "AgentInsightsJobStatus",
     "AggregationData",
     "Alert",
     "AlertAlertType",
