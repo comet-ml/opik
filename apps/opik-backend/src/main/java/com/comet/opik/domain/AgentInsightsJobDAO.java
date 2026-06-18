@@ -21,9 +21,8 @@ interface AgentInsightsJobDAO {
     @SqlUpdate("""
             INSERT INTO agent_insights_jobs (id, workspace_id, project_id, status, created_by, last_updated_by)
             VALUES (:id, :workspaceId, :projectId, 'enabled', :userName, :userName)
-            ON DUPLICATE KEY UPDATE status = 'enabled', last_updated_by = :userName
             """)
-    void enable(@Bind("id") UUID id,
+    void create(@Bind("id") UUID id,
             @Bind("workspaceId") String workspaceId,
             @Bind("projectId") UUID projectId,
             @Bind("userName") String userName);

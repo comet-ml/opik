@@ -7,11 +7,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 
-/**
- * Partial update for an Agent Insights job. Only the provided (non-null) fields are applied; today the
- * single mutable field is {@code status} (enable/disable), but the shape is a PATCH so more fields can
- * be added without changing the contract.
- */
+/** Partial (PATCH) update for an Agent Insights job; today the only mutable field is {@code status}. */
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)

@@ -21,7 +21,7 @@ import java.util.UUID;
 public record AgentInsightsJob(
         @JsonIgnore String workspaceId,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
-        UUID projectId,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) UUID projectId,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Status status,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastTriggeredAt,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
@@ -49,11 +49,7 @@ public record AgentInsightsJob(
         }
     }
 
-    /**
-     * Lightweight cross-workspace projection used by the scheduler (OPIK-6853). Unlike the
-     * user-facing queries, this intentionally carries {@code workspaceId} because the cron runs in a
-     * system context and needs it to scope the trace check and the trigger payload.
-     */
+    // Cross-workspace projection for the scheduler: carries workspaceId (the cron runs in system context).
     @Builder(toBuilder = true)
     public record EnabledJob(@NonNull UUID id, @NonNull String workspaceId, @NonNull UUID projectId) {
     }

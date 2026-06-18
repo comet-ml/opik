@@ -33,7 +33,6 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
-import java.util.Map;
 import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -118,15 +117,13 @@ class AgentInsightsJobsResourceTest {
     }
 
     @Test
-    @DisplayName("Create makes the job (201) and is idempotent (200, same row, on repeat)")
-    void create__firstThenRepeat__createsThen200() {
+    @DisplayName("Create makes the job (201); creating again returns 409")
+    void create__firstThenConflict() {
         var projectId = createProject();
 
-        UUID jobId;
         try (var first = jobsClient.create(projectId, API_KEY, WORKSPACE_NAME)) {
             assertThat(first.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
             var job = first.readEntity(AgentInsightsJob.class);
-            jobId = job.id();
             assertThat(job.id()).isNotNull();
             assertThat(job.projectId()).isEqualTo(projectId);
             assertThat(job.status()).isEqualTo(AgentInsightsJob.Status.ENABLED);
@@ -135,16 +132,11 @@ class AgentInsightsJobsResourceTest {
             assertThat(job.lastUpdatedBy()).isEqualTo(USER);
             assertThat(job.createdAt()).isNotNull();
             assertThat(job.lastUpdatedAt()).isNotNull();
-            // No-op trigger client is bound by default, so no immediate run was recorded.
-            assertThat(job.lastTriggeredAt()).isNull();
         }
 
-        // Idempotent: enabling again does not create a duplicate (same id) and returns 200.
+        // Create is not idempotent: a second create for the same project conflicts.
         try (var second = jobsClient.create(projectId, API_KEY, WORKSPACE_NAME)) {
-            assertThat(second.getStatus()).isEqualTo(HttpStatus.SC_OK);
-            var job = second.readEntity(AgentInsightsJob.class);
-            assertThat(job.id()).isEqualTo(jobId);
-            assertThat(job.status()).isEqualTo(AgentInsightsJob.Status.ENABLED);
+            assertThat(second.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
         }
     }
 
@@ -153,14 +145,6 @@ class AgentInsightsJobsResourceTest {
     void create__projectMissing__returns404() {
         try (var response = jobsClient.create(UUID.randomUUID(), API_KEY, WORKSPACE_NAME)) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
-        }
-    }
-
-    @Test
-    @DisplayName("Create without project_id fails validation (422)")
-    void create__missingProjectId__returnsUnprocessableEntity() {
-        try (var response = jobsClient.createRaw(Map.of(), API_KEY, WORKSPACE_NAME)) {
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
         }
     }
 

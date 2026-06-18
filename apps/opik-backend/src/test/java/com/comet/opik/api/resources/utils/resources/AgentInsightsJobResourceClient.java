@@ -1,7 +1,6 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.AgentInsightsJob;
-import com.comet.opik.api.AgentInsightsJobRequest;
 import com.comet.opik.api.AgentInsightsJobUpdate;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.ws.rs.client.Entity;
@@ -21,24 +20,15 @@ public class AgentInsightsJobResourceClient {
     private final String baseURI;
 
     public Response create(UUID projectId, String apiKey, String workspaceName) {
-        return client.target(RESOURCE_PATH.formatted(baseURI))
+        return client.target(RESOURCE_PATH.formatted(baseURI) + "/" + projectId)
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(AgentInsightsJobRequest.builder().projectId(projectId).build()));
-    }
-
-    public Response createRaw(Object body, String apiKey, String workspaceName) {
-        return client.target(RESOURCE_PATH.formatted(baseURI))
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(body));
+                .post(Entity.json(""));
     }
 
     public Response get(UUID projectId, String apiKey, String workspaceName) {
-        return client.target(RESOURCE_PATH.formatted(baseURI))
-                .queryParam("project_id", projectId)
+        return client.target(RESOURCE_PATH.formatted(baseURI) + "/" + projectId)
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
@@ -46,8 +36,7 @@ public class AgentInsightsJobResourceClient {
     }
 
     public Response update(UUID projectId, AgentInsightsJob.Status status, String apiKey, String workspaceName) {
-        return client.target(RESOURCE_PATH.formatted(baseURI))
-                .queryParam("project_id", projectId)
+        return client.target(RESOURCE_PATH.formatted(baseURI) + "/" + projectId)
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
@@ -55,10 +44,10 @@ public class AgentInsightsJobResourceClient {
     }
 
     public Response trigger(UUID projectId, String apiKey, String workspaceName) {
-        return client.target(RESOURCE_PATH.formatted(baseURI) + "/trigger")
+        return client.target(RESOURCE_PATH.formatted(baseURI) + "/" + projectId + "/trigger")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(AgentInsightsJobRequest.builder().projectId(projectId).build()));
+                .post(Entity.json(""));
     }
 }

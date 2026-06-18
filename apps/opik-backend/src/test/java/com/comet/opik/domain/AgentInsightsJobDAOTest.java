@@ -12,6 +12,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.redis.testcontainers.RedisContainer;
+import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -32,6 +33,7 @@ import java.util.UUID;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
@@ -66,9 +68,9 @@ class AgentInsightsJobDAOTest {
         wireMock.server().stop();
     }
 
-    private void enable(UUID id, String workspaceId, UUID projectId, String userName) {
+    private void create(UUID id, String workspaceId, UUID projectId, String userName) {
         template.inTransaction(WRITE, handle -> {
-            handle.attach(AgentInsightsJobDAO.class).enable(id, workspaceId, projectId, userName);
+            handle.attach(AgentInsightsJobDAO.class).create(id, workspaceId, projectId, userName);
             return null;
         });
     }
@@ -79,14 +81,14 @@ class AgentInsightsJobDAOTest {
     }
 
     @Test
-    @DisplayName("enable inserts a fully-populated row; status enabled")
-    void enable__insertsRow() {
+    @DisplayName("create inserts a fully-populated row; status enabled")
+    void create__insertsRow() {
         var workspaceId = UUID.randomUUID().toString();
         var projectId = UUID.randomUUID();
         var id = UUID.randomUUID();
         var userName = "user-" + UUID.randomUUID();
 
-        enable(id, workspaceId, projectId, userName);
+        create(id, workspaceId, projectId, userName);
 
         var job = find(workspaceId, projectId).orElseThrow();
         assertThat(job.id()).isEqualTo(id);
@@ -100,23 +102,15 @@ class AgentInsightsJobDAOTest {
     }
 
     @Test
-    @DisplayName("enable is idempotent on (workspace, project): no duplicate, keeps original id + created_by")
-    void enable__isIdempotent() {
+    @DisplayName("create is insert-only: a second create on (workspace, project) violates the unique key")
+    void create__duplicateThrows() {
         var workspaceId = UUID.randomUUID().toString();
         var projectId = UUID.randomUUID();
-        var firstId = UUID.randomUUID();
-        var secondId = UUID.randomUUID();
-        var firstUser = "user-" + UUID.randomUUID();
-        var secondUser = "user-" + UUID.randomUUID();
 
-        enable(firstId, workspaceId, projectId, firstUser);
-        enable(secondId, workspaceId, projectId, secondUser);
+        create(UUID.randomUUID(), workspaceId, projectId, "user-" + UUID.randomUUID());
 
-        var job = find(workspaceId, projectId).orElseThrow();
-        assertThat(job.id()).isEqualTo(firstId); // unique key keeps the original row
-        assertThat(job.status()).isEqualTo(Status.ENABLED);
-        assertThat(job.createdBy()).isEqualTo(firstUser); // unchanged on upsert
-        assertThat(job.lastUpdatedBy()).isEqualTo(secondUser); // updated on upsert
+        assertThatThrownBy(() -> create(UUID.randomUUID(), workspaceId, projectId, "user-" + UUID.randomUUID()))
+                .isInstanceOf(UnableToExecuteStatementException.class);
     }
 
     @Test
@@ -129,7 +123,7 @@ class AgentInsightsJobDAOTest {
                 .updateStatus(workspaceId, projectId, Status.DISABLED.getValue(), "user-" + UUID.randomUUID()));
         assertThat(missing).isZero();
 
-        enable(UUID.randomUUID(), workspaceId, projectId, "user-" + UUID.randomUUID());
+        create(UUID.randomUUID(), workspaceId, projectId, "user-" + UUID.randomUUID());
         template.inTransaction(WRITE, handle -> handle.attach(AgentInsightsJobDAO.class)
                 .updateStatus(workspaceId, projectId, Status.DISABLED.getValue(), "user-" + UUID.randomUUID()));
         assertThat(find(workspaceId, projectId).orElseThrow().status()).isEqualTo(Status.DISABLED);
@@ -147,7 +141,7 @@ class AgentInsightsJobDAOTest {
         var otherWorkspaceId = UUID.randomUUID().toString();
         var projectId = UUID.randomUUID();
 
-        enable(UUID.randomUUID(), workspaceId, projectId, "user-" + UUID.randomUUID());
+        create(UUID.randomUUID(), workspaceId, projectId, "user-" + UUID.randomUUID());
 
         assertThat(find(workspaceId, projectId)).isPresent();
         assertThat(find(otherWorkspaceId, projectId)).isEmpty();
@@ -160,7 +154,7 @@ class AgentInsightsJobDAOTest {
         var projectId = UUID.randomUUID();
         var id = UUID.randomUUID();
 
-        enable(id, workspaceId, projectId, "user-" + UUID.randomUUID());
+        create(id, workspaceId, projectId, "user-" + UUID.randomUUID());
         template.inTransaction(WRITE, handle -> {
             handle.attach(AgentInsightsJobDAO.class).markTriggered(id, Instant.now());
             return null;
@@ -178,8 +172,8 @@ class AgentInsightsJobDAOTest {
         var disabledWorkspace = UUID.randomUUID().toString();
         var disabledProject = UUID.randomUUID();
 
-        enable(enabledId, enabledWorkspace, enabledProject, "user-" + UUID.randomUUID());
-        enable(UUID.randomUUID(), disabledWorkspace, disabledProject, "user-" + UUID.randomUUID());
+        create(enabledId, enabledWorkspace, enabledProject, "user-" + UUID.randomUUID());
+        create(UUID.randomUUID(), disabledWorkspace, disabledProject, "user-" + UUID.randomUUID());
         template.inTransaction(WRITE, handle -> handle.attach(AgentInsightsJobDAO.class)
                 .updateStatus(disabledWorkspace, disabledProject, Status.DISABLED.getValue(),
                         "user-" + UUID.randomUUID()));

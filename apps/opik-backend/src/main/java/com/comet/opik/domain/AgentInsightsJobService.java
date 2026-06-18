@@ -3,7 +3,9 @@ package com.comet.opik.domain;
 import com.comet.opik.api.AgentInsightsJob;
 import com.comet.opik.api.AgentInsightsJob.EnabledJob;
 import com.comet.opik.api.Project;
+import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
@@ -29,8 +31,6 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @Slf4j
 public class AgentInsightsJobService {
 
-    // Manual-trigger window: the last 24h (no "had-traces" gate — that's a cron-only optimization in
-    // OPIK-6853). See design doc §4.
     private static final Duration TRIGGER_WINDOW = Duration.ofHours(24);
 
     private final @NonNull TransactionTemplate transactionTemplate;
@@ -39,27 +39,25 @@ public class AgentInsightsJobService {
     private final @NonNull ProjectService projectService;
     private final @NonNull AgentInsightsReportClient agentInsightsReportClient;
 
-    public record CreateResult(AgentInsightsJob job, boolean created) {
-    }
-
-    // Creates the job (idempotent on workspace+project). Does NOT trigger a run — use triggerNow for that.
-    public Mono<CreateResult> create(@NonNull UUID projectId) {
+    // Creates the job; 409 if one already exists for the (workspace, project). Does not trigger a run.
+    public Mono<AgentInsightsJob> create(@NonNull UUID projectId) {
         var ctx = requestContext.get();
         String workspaceId = ctx.getWorkspaceId();
         String userName = ctx.getUserName();
 
         return Mono.fromCallable(() -> {
-            // 404 if the project does not exist in this workspace.
             if (projectService.findByIds(workspaceId, Set.of(projectId)).isEmpty()) {
                 throw new NotFoundException("Project not found: " + projectId);
             }
 
             return transactionTemplate.inTransaction(WRITE, handle -> {
                 var dao = handle.attach(AgentInsightsJobDAO.class);
-                boolean existed = dao.findByProject(workspaceId, projectId).isPresent();
-                dao.enable(idGenerator.generateId(), workspaceId, projectId, userName);
-                AgentInsightsJob job = dao.findByProject(workspaceId, projectId).orElseThrow();
-                return new CreateResult(job, !existed);
+                if (dao.findByProject(workspaceId, projectId).isPresent()) {
+                    throw new EntityAlreadyExistsException(new ErrorMessage(409,
+                            "Agent insights job already exists for project: " + projectId));
+                }
+                dao.create(idGenerator.generateId(), workspaceId, projectId, userName);
+                return dao.findByProject(workspaceId, projectId).orElseThrow();
             });
         }).subscribeOn(Schedulers.boundedElastic());
     }
@@ -74,7 +72,7 @@ public class AgentInsightsJobService {
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
-    // Partial update (today: status; never deletes). 404 if the job does not exist; returns the updated job.
+    // Partial update (status); never deletes.
     public Mono<AgentInsightsJob> update(@NonNull UUID projectId, @NonNull AgentInsightsJob.Status status) {
         var ctx = requestContext.get();
         String workspaceId = ctx.getWorkspaceId();
@@ -89,7 +87,7 @@ public class AgentInsightsJobService {
         })).subscribeOn(Schedulers.boundedElastic());
     }
 
-    // Triggers an immediate report run for an existing job over the last 24h. 404 if the job does not exist.
+    // Triggers an immediate run for an existing job (last 24h). 404 if absent.
     public Mono<Void> triggerNow(@NonNull UUID projectId) {
         var ctx = requestContext.get();
         String workspaceId = ctx.getWorkspaceId();
@@ -129,8 +127,7 @@ public class AgentInsightsJobService {
                 return null;
             });
         } catch (Exception e) {
-            // Best-effort: a trigger failure must not fail the request. Catch broadly on purpose — the
-            // nightly cron (OPIK-6853) retries, so any failure here is non-fatal.
+            // Best-effort: a trigger failure must not fail the request (the cron retries).
             log.error("Failed to trigger Agent Insights run for project '{}'", job.projectId(), e);
         }
     }
