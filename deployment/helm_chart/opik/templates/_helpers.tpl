@@ -119,6 +119,36 @@ Note: Directives are sorted alphabetically to ensure deterministic output
 {{- end -}}
 
 {{/*
+Renders a container probe (liveness / readiness / startup) from a probe spec.
+Supports two shapes for the same spec:
+  1. Simplified path/port: only `path` and `port` are set with hard coded values 
+     for the other probe fields. This is a common case for HTTP probes.
+  2. Full definition: any other spec is emitted verbatim, so values.yaml can
+     define httpGet/exec/tcpSocket plus any probe timing fields directly.
+Usage:
+{{- include "opik.probe" $value.livenessProbe | nindent 12 }}
+*/}}
+{{- define "opik.probe" -}}
+{{- if and .path .port }}
+{{- /* Backward compatibility: simplified path/port definition */}}
+httpGet:
+  path: {{ .path }}
+  port: {{ .port }}
+  httpHeaders:
+    - name: Accept
+      value: application/json
+timeoutSeconds: 2
+periodSeconds: 10
+initialDelaySeconds: 0
+successThreshold: 1
+failureThreshold: 2
+{{- else }}
+{{- /* Full probe definition from values.yaml */}}
+{{- toYaml . }}
+{{- end }}
+{{- end -}}
+
+{{/*
 Renders a value that contains template perhaps with scope if the scope is present.
 Usage:
 {{ include "common.tplvalues.render" (dict "value" .Values.path.to.value "context" $) }}
