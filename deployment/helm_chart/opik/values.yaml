@@ -76,6 +76,13 @@ caCerts:
     subPath: cacerts
 
 
+# Opik MCP OAuth Authorization Server
+mcpOAuth:
+  # -- Render nginx locations (AS endpoints, consent UI, discovery URL). Turn on together with
+  # opik-backend MCP_OAUTH_ENABLED=true and a path-prefix OPIK_BASE_URL (e.g. https://www.comet.com/opik).
+  enabled: false
+
+
 component:
   backend:
     enabled: true
@@ -270,7 +277,7 @@ component:
       OPIK_URL_OVERRIDE: "http://opik-backend:8080"
       # Redis URL for Optimization Studio log streaming
       REDIS_URL: redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/
-      
+
       # ============================================================
       # Optimization Studio Configuration (optional)
       # ============================================================
@@ -293,7 +300,7 @@ component:
       # OPTSTUDIO_LLM_MAX_TOKENS: "8192"
       # TTL for failed RQ jobs in Redis in seconds (default: 86400 = 1 day)
       # RQ_WORKER_TTL_FAILURE: "86400"
-    
+
     # LLM provider API keys are no longer injected via environment variables.
     # Configure them per workspace in the Opik UI under "AI Providers" — the
     # backend resolves the key from workspace settings when the Optimization
@@ -315,7 +322,7 @@ component:
     # secretRefs:
     #   - name: "opik-aws-credentials"    # Contains AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
     secretRefs: []
-    
+
     envFrom:
       - configMapRef:
           name: opik-python-backend
@@ -349,7 +356,7 @@ component:
       #           - 224.0.0.0/4
       #           # Broadcast address
       #           - 255.255.255.255/32
-      
+
     service:
       type: ClusterIP
       ports:

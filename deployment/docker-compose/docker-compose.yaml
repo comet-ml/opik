@@ -136,7 +136,7 @@ services:
 
   backend:
     image: ghcr.io/comet-ml/opik/opik-backend:${OPIK_VERSION:-latest}
-    pull_policy: always
+    pull_policy: ${OPIK_BACKEND_PULL_POLICY:-always}
     profiles:
       - backend
       - opik
@@ -276,7 +276,7 @@ services:
 
   guardrails-backend:
     image: ghcr.io/comet-ml/opik/opik-guardrails-backend:${OPIK_VERSION:-latest}
-    pull_policy: always
+    pull_policy: ${OPIK_GUARDRAILS_BACKEND_PULL_POLICY:-always}
     profiles:
       - guardrails
     build:

@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 const PROJECT_NAME = 'visual-project';
+const EMPTY_PROJECT_NAME = 'visual-empty-project';
 const DATASET_NAME = 'visual-dataset';
 const TEST_SUITE_NAME = 'visual-testsuite';
 
@@ -27,6 +28,7 @@ async function globalTeardown() {
   try { await client.deleteDataset(TEST_SUITE_NAME); } catch { /* ignore */ }
   try { await client.deleteDataset(DATASET_NAME); } catch { /* ignore */ }
   try { await client.deleteProject(PROJECT_NAME); } catch { /* ignore */ }
+  try { await client.deleteProject(EMPTY_PROJECT_NAME); } catch { /* ignore */ }
 }
 
 export default globalTeardown;

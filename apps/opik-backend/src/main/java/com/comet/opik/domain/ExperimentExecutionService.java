@@ -85,6 +85,7 @@ public class ExperimentExecutionService {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
+            String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, null);
 
             String projectName = request.projectName() != null
                     ? request.projectName()
@@ -108,7 +109,7 @@ public class ExperimentExecutionService {
                                             return streamDatasetItems(request)
                                                     .flatMapIterable(item -> buildMessages(
                                                             item, request, experimentIds, datasetExecutionPolicy,
-                                                            projectName, workspaceId, userName, batchId,
+                                                            projectName, workspaceId, workspaceName, userName, batchId,
                                                             opikPromptsByVariant))
                                                     .collectList()
                                                     .flatMap(messages -> {
@@ -240,6 +241,7 @@ public class ExperimentExecutionService {
             ExecutionPolicy datasetExecutionPolicy,
             String projectName,
             String workspaceId,
+            String workspaceName,
             String userName,
             UUID batchId,
             List<List<OpikPromptEntry>> opikPromptsByVariant) {
@@ -262,6 +264,7 @@ public class ExperimentExecutionService {
                         .versionHash(request.versionHash())
                         .projectName(projectName)
                         .workspaceId(workspaceId)
+                        .workspaceName(workspaceName)
                         .userName(userName)
                         .allExperimentIds(experimentIds)
                         .opikPrompts(opikPrompts)

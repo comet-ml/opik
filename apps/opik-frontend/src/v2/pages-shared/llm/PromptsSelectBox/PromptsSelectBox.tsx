@@ -184,7 +184,12 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
         trigger={
           <div>
             <TooltipWrapper content="Load prompt">
-              <Button variant="minimal" size="icon-sm" disabled={disabled}>
+              <Button
+                variant="minimal"
+                size="icon-sm"
+                disabled={disabled}
+                data-testid="load-text-prompt-button"
+              >
                 <FileTerminal />
               </Button>
             </TooltipWrapper>

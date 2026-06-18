@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -42,13 +43,13 @@ public class OAuthRegisterResource {
     @Operation(operationId = "registerOAuthClient", summary = "OAuth Dynamic Client Registration Endpoint", description = "OAuth 2.0 Dynamic Client Registration (RFC 7591). Registers a public client for the MCP OAuth flow; throttled per source IP", responses = {
             @ApiResponse(responseCode = "201", description = "Registered client metadata", content = @Content(schema = @Schema(implementation = ClientRegistrationResponse.class))),
             @ApiResponse(responseCode = "429", description = "Registration rate limit exceeded")})
-    public Response register(@NonNull @Valid ClientRegistrationRequest request) {
+    public Response register(@NotNull @Valid ClientRegistrationRequest request) {
 
         log.info("MCP OAuth client registration request '{}'", request.clientName());
 
         McpOAuthClient client = clientService.register(request);
         ClientRegistrationResponse body = ClientRegistrationResponseMapper.INSTANCE.toResponse(client);
-        log.info("MCP OAuth client registered '{}'", client.id());
+        log.info("MCP OAuth client registered '{}' '{}'", client.id(), client.name());
         return Response.status(Response.Status.CREATED).entity(body).build();
     }
 }

@@ -1,0 +1,92 @@
+name: Build E2E Docker Images
+
+on:
+  workflow_call:
+    inputs:
+      include_guardrails:
+        description: "Build and include guardrails-backend image"
+        required: false
+        default: false
+        type: boolean
+    outputs:
+      image_tag:
+        description: "The GHCR image tag used for this build"
+        value: ${{ jobs.build.outputs.image_tag }}
+
+env:
+  DOCKER_REGISTRY: ghcr.io/comet-ml/opik
+
+jobs:
+  build:
+    name: Build E2E Docker Images
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Set image tag
+        id: tag
+        run: |
+          SHA="${{ github.sha }}"
+          SHORT_SHA="${SHA:0:7}"
+          SUFFIX="${{ inputs.include_guardrails == true && '-guardrails' || '' }}"
+          if [ -n "${{ github.event.pull_request.number }}" ]; then
+            TAG="ci-e2e-pr${{ github.event.pull_request.number }}-${SHORT_SHA}${SUFFIX}"
+          else
+            TAG="ci-e2e-${SHORT_SHA}${SUFFIX}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build E2E Docker images
+        env:
+          COMPOSE_BAKE: false
+        run: |
+          SERVICES="backend python-backend"
+          if [ "${{ inputs.include_guardrails }}" = "true" ]; then
+            SERVICES="$SERVICES guardrails-backend"
+          fi
+          # shellcheck disable=SC2086
+          docker compose -f deployment/docker-compose/docker-compose.yaml \
+            build $SERVICES
+
+      - name: Push images to GHCR
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+
+          IMAGES="opik-backend opik-python-backend"
+          if [ "${{ inputs.include_guardrails }}" = "true" ]; then
+            IMAGES="${IMAGES} opik-guardrails-backend"
+          fi
+
+          # Tag all images first (cheap, sequential)
+          for IMAGE in ${IMAGES}; do
+            docker tag "${{ env.DOCKER_REGISTRY }}/${IMAGE}:latest" \
+              "${{ env.DOCKER_REGISTRY }}/${IMAGE}:${TAG}"
+          done
+
+          # Push all images in parallel
+          PIDS=()
+          for IMAGE in ${IMAGES}; do
+            docker push "${{ env.DOCKER_REGISTRY }}/${IMAGE}:${TAG}" &
+            PIDS+=($!)
+          done
+
+          # Wait for all pushes, fail if any fails
+          FAILED=0
+          for PID in "${PIDS[@]}"; do
+            wait "${PID}" || FAILED=1
+          done
+          exit "${FAILED}"

@@ -1,5 +1,10 @@
 name: TypeScript SDK E2E Tests
 run-name: "TypeScript SDK E2E Tests ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+  packages: write
 on:
   workflow_dispatch:
   pull_request:
@@ -48,13 +53,17 @@ jobs:
           match-regex: '^sdks/typescript/|^\.github/workflows/typescript_sdk_e2e_tests\.yml$'
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+  build-opik:
+    uses: ./.github/workflows/build_e2e_docker.yaml
+
   run-e2e:
-    needs: select-matrix
+    needs: [select-matrix, build-opik]
     name: TypeScript SDK E2E Tests Node ${{matrix.node_version}}
     permissions:
       contents: read
       checks: write
       pull-requests: write
+      packages: read
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -66,6 +75,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull Docker images from GHCR
+        env:
+          TAG: ${{ needs.build-opik.outputs.image_tag }}
+        run: |
+          docker pull "ghcr.io/comet-ml/opik/opik-backend:$TAG"
+          docker pull "ghcr.io/comet-ml/opik/opik-python-backend:$TAG"
+          docker tag "ghcr.io/comet-ml/opik/opik-backend:$TAG" ghcr.io/comet-ml/opik/opik-backend:latest
+          docker tag "ghcr.io/comet-ml/opik/opik-python-backend:$TAG" ghcr.io/comet-ml/opik/opik-python-backend:latest
+
       - name: Set up Node.js ${{matrix.node_version}}
         uses: actions/setup-node@v4.2.0
         with:
@@ -76,9 +101,11 @@ jobs:
           OPIK_USAGE_REPORT_ENABLED: false
           COMPOSE_BAKE: false
           TOGGLE_RUNNERS_ENABLED: "true"
+          OPIK_BACKEND_PULL_POLICY: never
+          PYTHON_BACKEND_PULL_POLICY: never
         run: |
           cd ${{ github.workspace }}
-          ./opik.sh --backend --port-mapping --build
+          ./opik.sh --backend --port-mapping
 
       - name: Check Opik server availability
         shell: bash

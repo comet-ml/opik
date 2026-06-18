@@ -17,6 +17,12 @@ from .agent_config_value_public import AgentConfigValuePublic
 from .agent_config_value_public_type import AgentConfigValuePublicType
 from .agent_config_value_write import AgentConfigValueWrite
 from .agent_config_value_write_type import AgentConfigValueWriteType
+from .agent_insights_issue import AgentInsightsIssue
+from .agent_insights_issue_detail import AgentInsightsIssueDetail
+from .agent_insights_issue_page import AgentInsightsIssuePage
+from .agent_insights_issue_status import AgentInsightsIssueStatus
+from .agent_insights_issue_with_details import AgentInsightsIssueWithDetails
+from .agent_insights_issue_with_details_status import AgentInsightsIssueWithDetailsStatus
 from .aggregation_data import AggregationData
 from .alert import Alert
 from .alert_alert_type import AlertAlertType
@@ -37,6 +43,7 @@ from .alert_trigger_write import AlertTriggerWrite
 from .alert_trigger_write_event_type import AlertTriggerWriteEventType
 from .alert_write import AlertWrite
 from .alert_write_alert_type import AlertWriteAlertType
+from .analytics_query_response import AnalyticsQueryResponse
 from .annotation_queue import AnnotationQueue
 from .annotation_queue_batch import AnnotationQueueBatch
 from .annotation_queue_item_ids import AnnotationQueueItemIds
@@ -560,6 +567,7 @@ from .recent_activity_item_public import RecentActivityItemPublic
 from .recent_activity_item_public_type import RecentActivityItemPublicType
 from .recent_activity_page_public import RecentActivityPagePublic
 from .report_preference import ReportPreference
+from .reported_issue import ReportedIssue
 from .response_format import ResponseFormat
 from .response_format_type import ResponseFormatType
 from .result import Result
@@ -679,6 +687,7 @@ from .usage import Usage
 from .user_defined_metric_python_code import UserDefinedMetricPythonCode
 from .user_defined_metric_python_code_public import UserDefinedMetricPythonCodePublic
 from .user_defined_metric_python_code_write import UserDefinedMetricPythonCodeWrite
+from .validated_token import ValidatedToken
 from .value_entry import ValueEntry
 from .value_entry_compare import ValueEntryCompare
 from .value_entry_compare_source import ValueEntryCompareSource
@@ -726,6 +735,12 @@ __all__ = [
     "AgentConfigValuePublicType",
     "AgentConfigValueWrite",
     "AgentConfigValueWriteType",
+    "AgentInsightsIssue",
+    "AgentInsightsIssueDetail",
+    "AgentInsightsIssuePage",
+    "AgentInsightsIssueStatus",
+    "AgentInsightsIssueWithDetails",
+    "AgentInsightsIssueWithDetailsStatus",
     "AggregationData",
     "Alert",
     "AlertAlertType",
@@ -746,6 +761,7 @@ __all__ = [
     "AlertTriggerWriteEventType",
     "AlertWrite",
     "AlertWriteAlertType",
+    "AnalyticsQueryResponse",
     "AnnotationQueue",
     "AnnotationQueueBatch",
     "AnnotationQueueItemIds",
@@ -1224,6 +1240,7 @@ __all__ = [
     "RecentActivityItemPublicType",
     "RecentActivityPagePublic",
     "ReportPreference",
+    "ReportedIssue",
     "ResponseFormat",
     "ResponseFormatType",
     "Result",
@@ -1343,6 +1360,7 @@ __all__ = [
     "UserDefinedMetricPythonCode",
     "UserDefinedMetricPythonCodePublic",
     "UserDefinedMetricPythonCodeWrite",
+    "ValidatedToken",
     "ValueEntry",
     "ValueEntryCompare",
     "ValueEntryCompareSource",

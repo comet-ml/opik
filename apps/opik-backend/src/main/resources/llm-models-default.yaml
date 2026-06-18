@@ -158,9 +158,7 @@ anthropic:
     structuredOutput: true
   - id: "claude-3-7-sonnet-20250219"
   - id: "claude-opus-4-20250514"
-    structuredOutput: true
   - id: "claude-sonnet-4-20250514"
-    structuredOutput: true
   - id: "claude-sonnet-4-5-20250929"
     structuredOutput: true
 gemini:
@@ -421,6 +419,8 @@ openrouter:
   - id: "cohere/command-r7b-12-2024"
     label: "cohere/command-r7b-12-2024"
     structuredOutput: true
+  - id: "cohere/north-mini-code:free"
+    label: "cohere/north-mini-code:free"
   - id: "deepcogito/cogito-v2-preview-deepseek-671b"
     label: "deepcogito/cogito-v2-preview-deepseek-671b"
   - id: "deepcogito/cogito-v2-preview-llama-109b-moe"
@@ -1386,6 +1386,8 @@ openrouter:
     label: "z-ai/glm-5-turbo"
   - id: "z-ai/glm-5.1"
     label: "z-ai/glm-5.1"
+  - id: "z-ai/glm-5.2"
+    label: "z-ai/glm-5.2"
   - id: "z-ai/glm-5v-turbo"
     label: "z-ai/glm-5v-turbo"
   - id: "~anthropic/claude-fable-latest"

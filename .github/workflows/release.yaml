@@ -167,7 +167,7 @@ jobs:
           sed -i "s/^version:.*/version: ${{ needs.set-version.outputs.version }}/" Chart.yaml
           sed -i "s/^appVersion:.*/appVersion: ${{ needs.set-version.outputs.version }}/" Chart.yaml
           echo "Updated Chart.yaml version and appVersion to: ${{ needs.set-version.outputs.version }}"
-          cat Chart.yaml | grep -E "^version:|^appVersion:"
+          grep -E "^version:|^appVersion:" Chart.yaml
           cd -
 
       - name: Bump version.txt for next release

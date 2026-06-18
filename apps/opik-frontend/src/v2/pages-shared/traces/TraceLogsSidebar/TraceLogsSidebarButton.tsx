@@ -61,7 +61,12 @@ const TraceLogsSidebarButton: React.FunctionComponent<
   const trigger =
     variant === "icon" ? (
       <TooltipWrapper content="Go to logs">
-        <Button variant="outline" size="icon-2xs" onClick={handleOpen}>
+        <Button
+          data-testid="playground-logs-sidebar-button"
+          variant="outline"
+          size="icon-2xs"
+          onClick={handleOpen}
+        >
           <ListTree />
         </Button>
       </TooltipWrapper>

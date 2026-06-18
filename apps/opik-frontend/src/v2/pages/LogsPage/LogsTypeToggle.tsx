@@ -19,13 +19,13 @@ const LogsTypeToggle: React.FC<LogsTypeToggleProps> = ({
       variant="secondary"
       className="w-fit"
     >
-      <ToggleGroupItem value={LOGS_TYPE.threads} size="sm">
+      <ToggleGroupItem value={LOGS_TYPE.threads} size="xs">
         Threads
       </ToggleGroupItem>
-      <ToggleGroupItem value={LOGS_TYPE.traces} size="sm">
+      <ToggleGroupItem value={LOGS_TYPE.traces} size="xs">
         Traces
       </ToggleGroupItem>
-      <ToggleGroupItem value={LOGS_TYPE.spans} size="sm">
+      <ToggleGroupItem value={LOGS_TYPE.spans} size="xs">
         Spans
       </ToggleGroupItem>
     </ToggleGroup>
