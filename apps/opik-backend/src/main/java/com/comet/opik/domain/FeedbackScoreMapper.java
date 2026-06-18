@@ -149,6 +149,10 @@ public interface FeedbackScoreMapper {
                     builder.sourceQueueId(sourceQueueId);
                 }
             }
+            // source_queue_id is the 9th element (index 8)
+            if (tuple.size() > 8 && tuple.get(8) != null) {
+                builder.author(getIfNotEmpty(tuple.get(8)));
+            }
 
             ValueEntry valueEntry = builder.build();
 
@@ -240,6 +244,9 @@ public interface FeedbackScoreMapper {
                         builder.sourceQueueId(sourceQueueId);
                     }
                 }
+                if (tuple.size() > 8 && tuple.get(8) != null && !tuple.get(8).isNull()) {
+                    builder.author(tuple.get(8).asText());
+                }
 
                 result.put(author, builder.build());
             } else if (tuple.isObject() && !tuple.isEmpty()) {
@@ -262,6 +269,9 @@ public interface FeedbackScoreMapper {
                             && !CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(sourceQueueId)) {
                         builder.sourceQueueId(sourceQueueId);
                     }
+                }
+                if (tuple.has("author") && !tuple.get("author").isNull()) {
+                    builder.author(tuple.get("author").asText());
                 }
 
                 result.put(author, builder.build());
