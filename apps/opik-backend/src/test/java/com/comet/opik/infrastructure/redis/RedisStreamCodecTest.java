@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.redis;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.StreamReadConstraints;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.redis.testcontainers.RedisContainer;
 import lombok.extern.slf4j.Slf4j;
@@ -274,6 +275,28 @@ class RedisStreamCodecTest {
         assertThat(retrievedPayload.get("data")).isEqualTo(largeValue);
 
         log.info("SUCCESS: Configured 100MB codec read {}MB payload", payloadSize / MB);
+    }
+
+    @Test
+    @DisplayName("Stream mapper ignores unknown properties so a payload with an extra field still decodes")
+    void shouldIgnoreUnknownPropertiesInStreamMapper() throws Exception {
+        ObjectMapper mapper = RedisStreamCodec.buildStreamMapper();
+
+        // Guards against FAIL_ON_UNKNOWN_PROPERTIES being reintroduced, which would break rolling upgrades
+        // when a newer version adds a field to a stream payload that an older consumer cannot recognise.
+        assertThat(mapper.isEnabled(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)).isFalse();
+
+        var payloadWithExtraField = """
+                {"name":"foo","value":42,"new_field_from_newer_version":"ignored"}
+                """;
+
+        var decoded = mapper.readValue(payloadWithExtraField, SamplePayload.class);
+
+        assertThat(decoded).isEqualTo(new SamplePayload("foo", 42));
+    }
+
+    // Mirrors a stream payload; an older consumer must tolerate fields added by a newer producer.
+    record SamplePayload(String name, int value) {
     }
 
 }

@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.oauth;
 
+import com.comet.opik.domain.mcpoauth.McpOAuthScrubJob;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import ru.vyarus.dropwizard.guice.module.installer.bundle.GuiceyBundle;
 import ru.vyarus.dropwizard.guice.module.installer.bundle.GuiceyEnvironment;
@@ -23,7 +24,9 @@ public class McpOAuthBundle implements GuiceyBundle {
                     OAuthMetadataResource.class,
                     OAuthAuthorizeResource.class,
                     OAuthTokenResource.class,
-                    OAuthRegisterResource.class);
+                    OAuthRegisterResource.class,
+                    OAuthValidateTokenResource.class,
+                    McpOAuthScrubJob.class);
         }
     }
 }

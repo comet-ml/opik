@@ -19,6 +19,7 @@ import ru.vyarus.dropwizard.guice.module.support.DropwizardAwareModule;
 public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfiguration> {
 
     public static final String READ_ONLY_FREE_FORM_SQL_CLICKHOUSE_CLIENT = "readOnlyFreeFormSqlClickHouseClient";
+    public static final String CLICKHOUSE_HEALTH_CHECK_TIMEOUT = "clickhouse_health_check_timeout";
 
     private transient DatabaseAnalyticsFactory databaseAnalyticsFactory;
     private transient ConnectionFactory connectionFactory;
@@ -107,7 +108,7 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
 
     @Provides
     @Singleton
-    @Named("clickhouse_health_check_timeout")
+    @Named(CLICKHOUSE_HEALTH_CHECK_TIMEOUT)
     public Duration getHealthCheckTimeout() {
         return databaseAnalyticsFactory.getHealthCheckTimeout();
     }

@@ -40,9 +40,6 @@ jobs:
       - name: Run actionlint
         env:
           BASE_REF: ${{ github.base_ref }}
-          # Suppress info-level shellcheck noise (SC2086 backlog tracked in OPIK-6323).
-          # Real issues at warning+ severity still gate.
-          SHELLCHECK_OPTS: --severity=warning
         run: |
           mapfile -t CHANGED_WORKFLOWS < <(git diff --name-only --diff-filter=d "origin/${BASE_REF}...HEAD" -- '.github/workflows/*.yml' '.github/workflows/*.yaml')
           mapfile -t CHANGED_ACTIONS < <(git diff --name-only --diff-filter=d "origin/${BASE_REF}...HEAD" -- '.github/actions/**')

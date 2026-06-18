@@ -29,7 +29,35 @@ PyPI release lands, replace `uvx opik-mcp` in any snippet on this page with
 `uvx --from git+https://github.com/comet-ml/opik-mcp.git opik-mcp`.
 </Tip>
 
-## Setting up the MCP server
+## Quick setup with the Opik CLI
+
+The easiest way to connect the MCP server is the Opik CLI. It detects your AI
+host (Claude Code, Cursor, VS Code Copilot) and sets it up for you.
+
+When you run [`opik configure`](/tracing/advanced/sdk_configuration), it offers
+to set up the MCP server at the end:
+
+> Set up the Opik MCP server for an AI assistant (Claude Code, Cursor, VS Code)? (y/N)
+
+Already configured Opik? Run the wizard on its own at any time:
+
+```bash
+opik mcp configure
+```
+
+That's it — restart your AI host and ask **"list my Opik projects"** to confirm
+it works.
+
+<Note>
+You need [`uv`](https://docs.astral.sh/uv/) installed (`brew install uv` or
+`curl -LsSf https://astral.sh/uv/install.sh | sh`). If your host isn't detected,
+use [Manual setup](#manual-setup) below.
+</Note>
+
+## Manual setup
+
+Prefer to wire it up yourself, or your host wasn't detected? Configure any host
+by hand below.
 
 <Tip>
 `OPIK_WORKSPACE` is **optional** — you can omit the `OPIK_WORKSPACE` line/key

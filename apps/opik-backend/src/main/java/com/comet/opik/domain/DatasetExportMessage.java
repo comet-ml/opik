@@ -11,5 +11,6 @@ import java.util.UUID;
 public record DatasetExportMessage(
         @NotNull UUID jobId,
         @NotNull UUID datasetId,
-        @NotNull String workspaceId) {
+        @NotNull String workspaceId,
+        String workspaceName) {
 }
