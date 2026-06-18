@@ -648,9 +648,6 @@ serviceToggles:
   # Description: Whether the deployment is expected to produce demo project data on signup
   demoDataEnabled: "true"
   # Default: false
-  # Description: Whether or not Optimization Studio feature is enabled
-  optimizationStudioEnabled: "false"
-  # Default: false
   # Description: Whether or not the Cost Intelligence (AI Spend) feature is enabled
   costIntelligenceEnabled: "false"
   # Default: true

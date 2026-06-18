@@ -13,6 +13,7 @@ import {
   getOptimizationDefaultConfigByProvider,
 } from "@/lib/optimizations";
 import { getProviderFromModel } from "@/lib/provider";
+import { sanitizeConfigForRequest } from "@/lib/modelUtils";
 import { PROVIDER_MODEL_TYPE, LLMPromptConfigsType } from "@/types/providers";
 
 export const GepaOptimizerParamsSchema = z.object({
@@ -253,7 +254,13 @@ export const convertFormDataToStudioConfig = (
       // Cast intentionally — StudioLlmModel.model is typed against the
       // deprecated enum (OPIK-5022 removes it).
       model: formData.modelName as PROVIDER_MODEL_TYPE,
-      parameters: formData.modelConfig,
+      // Drop params the model doesn't accept (e.g. temperature on models that
+      // deprecate it) before the gateway rejects the request — same last-mile
+      // hardening the playground applies.
+      parameters: sanitizeConfigForRequest(
+        formData.modelName as PROVIDER_MODEL_TYPE,
+        formData.modelConfig,
+      ),
     },
     evaluation: {
       metrics: [
