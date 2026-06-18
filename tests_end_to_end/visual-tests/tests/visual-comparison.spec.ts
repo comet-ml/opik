@@ -54,6 +54,8 @@ test.describe('Visual Comparison - Opik UI', () => {
     await client.waitForDatasetItemsCount(TEST_SUITE_NAME, 2, 15);
 
     const experiment = await client.createExperimentForProject(EXPERIMENT_NAME, DATASET_NAME, projectName());
+    fs.writeFileSync(STATE_FILE, JSON.stringify({ experimentId: experiment.id }, null, 2));
+
     const testSuiteExperiment = await client.createTestSuiteExperimentForProject(TEST_SUITE_EXP_NAME, TEST_SUITE_NAME, projectName());
     fs.writeFileSync(STATE_FILE, JSON.stringify({ experimentId: experiment.id, testSuiteExperimentId: testSuiteExperiment.id }, null, 2));
 

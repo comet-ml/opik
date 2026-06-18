@@ -12,7 +12,7 @@ export class DashboardsPage extends BasePage {
     await this.dismissWelcomeDialogIfPresent();
   }
 
-  async waitForEmpty(): Promise<void> {
+  async waitForLoaded(): Promise<void> {
     await this.page.getByText('At a glance').waitFor({ state: 'visible', timeout: 20000 });
   }
 }

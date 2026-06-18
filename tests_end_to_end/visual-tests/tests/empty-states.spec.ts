@@ -19,7 +19,7 @@ test.setTimeout(300000);
 test.describe('Visual Comparison - Empty States', () => {
   let projectId = '';
   const { baseUrl, workspace } = getEnvironmentConfig().getConfig();
-  const projectName = () => process.env.VISUAL_PROJECT_NAME!;
+  const projectName = () => process.env.VISUAL_EMPTY_PROJECT_NAME!;
 
   test.beforeAll(async ({ browser }) => {
     const page = await browser.newPage();
@@ -67,11 +67,11 @@ test.describe('Visual Comparison - Empty States', () => {
     await screenshot(page, 'E05-experiments-empty');
   });
 
-  test('E06: Dashboards empty state', async ({ page }) => {
+  test('E06: Dashboards default view', async ({ page }) => {
     const dashboardsPage = new DashboardsPage(page, baseUrl, workspace);
     await dashboardsPage.goto(projectId);
-    await dashboardsPage.waitForEmpty();
-    await screenshot(page, 'E06-dashboards-empty');
+    await dashboardsPage.waitForLoaded();
+    await screenshot(page, 'E06-dashboards-default');
   });
 
   test('E07: Prompt Library empty state', async ({ page }) => {
