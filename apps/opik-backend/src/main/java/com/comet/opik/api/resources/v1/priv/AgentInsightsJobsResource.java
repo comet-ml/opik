@@ -4,7 +4,6 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.AgentInsightsJob;
 import com.comet.opik.api.AgentInsightsJobUpdate;
 import com.comet.opik.domain.AgentInsightsJobService;
-import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.RequiredPermissions;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import io.swagger.v3.oas.annotations.Operation;
@@ -14,7 +13,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
-import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
@@ -33,8 +31,6 @@ import lombok.RequiredArgsConstructor;
 
 import java.util.UUID;
 
-import static com.comet.opik.utils.AsyncUtils.setRequestContext;
-
 @Path("/v1/private/agent-insights/jobs")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
@@ -44,7 +40,6 @@ import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 public class AgentInsightsJobsResource {
 
     private final @NonNull AgentInsightsJobService service;
-    private final @NonNull Provider<RequestContext> requestContext;
 
     @POST
     @Path("/{projectId}")
@@ -55,9 +50,7 @@ public class AgentInsightsJobsResource {
     })
     @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
     public Response create(@PathParam("projectId") @NotNull UUID projectId, @Context UriInfo uriInfo) {
-        AgentInsightsJob job = service.create(projectId)
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .block();
+        AgentInsightsJob job = service.create(projectId);
 
         return Response.created(uriInfo.getAbsolutePathBuilder().build()).entity(job).build();
     }
@@ -70,9 +63,7 @@ public class AgentInsightsJobsResource {
     })
     @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
     public Response get(@PathParam("projectId") @NotNull UUID projectId) {
-        AgentInsightsJob job = service.getByProject(projectId)
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .block();
+        AgentInsightsJob job = service.getByProject(projectId);
 
         return Response.ok(job).build();
     }
@@ -86,9 +77,7 @@ public class AgentInsightsJobsResource {
     @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
     public Response update(@PathParam("projectId") @NotNull UUID projectId,
             @Valid @NotNull AgentInsightsJobUpdate update) {
-        AgentInsightsJob job = service.update(projectId, update.status())
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .block();
+        AgentInsightsJob job = service.update(projectId, update.status());
 
         return Response.ok(job).build();
     }
@@ -101,9 +90,7 @@ public class AgentInsightsJobsResource {
     })
     @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
     public Response trigger(@PathParam("projectId") @NotNull UUID projectId) {
-        service.triggerNow(projectId)
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .block();
+        service.triggerNow(projectId);
 
         return Response.accepted().build();
     }
