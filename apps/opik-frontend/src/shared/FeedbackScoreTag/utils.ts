@@ -1,6 +1,11 @@
 import { categoryOptionLabelRenderer } from "@/lib/feedback-scores";
 import { FeedbackScoreValueByAuthorMap } from "@/types/traces";
 
+export type UserEntry = {
+  mapKey: string;
+  entry: FeedbackScoreValueByAuthorMap[string];
+};
+
 export const getIsCategoricFeedbackScore = (categoryNames = "") => {
   return !!categoryNames.split(",").filter((v) => !!v?.trim()).length;
 };
@@ -8,9 +13,10 @@ export const getIsCategoricFeedbackScore = (categoryNames = "") => {
 export const getCategoricFeedbackScoreValuesMap = (
   valueByAuthor: FeedbackScoreValueByAuthorMap,
 ) => {
-  const scoreMap: Map<string, { users: string[]; value: string }> = new Map();
+  const scoreMap: Map<string, { users: UserEntry[]; value: string }> =
+    new Map();
 
-  Object.entries(valueByAuthor).forEach(([author, score]) => {
+  Object.entries(valueByAuthor).forEach(([mapKey, score]) => {
     if (!score.category_name) return;
 
     if (!scoreMap.has(score.category_name)) {
@@ -19,7 +25,7 @@ export const getCategoricFeedbackScoreValuesMap = (
         value: categoryOptionLabelRenderer(score.category_name, score.value),
       });
     }
-    scoreMap.get(score.category_name)?.users.push(author);
+    scoreMap.get(score.category_name)?.users.push({ mapKey, entry: score });
   });
 
   return scoreMap;

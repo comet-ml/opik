@@ -35,6 +35,7 @@ import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspace;
 import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
 
 @ImplementedBy(FeedbackScoreDAOImpl.class)
 public interface FeedbackScoreDAO {
@@ -415,9 +416,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .filter(StringUtils::isNotBlank)
                     .ifPresent(author -> deleteAuthoredFeedbackScore.add("author", "author"));
 
-            if (score.sourceQueueId() != null) {
-                deleteAuthoredFeedbackScore.add("source_queue_id", "source_queue_id");
-            }
+            deleteAuthoredFeedbackScore.add("source_queue_id", "source_queue_id");
 
             var statement2 = connection.createStatement(deleteAuthoredFeedbackScore.render());
             statement2
@@ -429,9 +428,10 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .filter(StringUtils::isNotBlank)
                     .ifPresent(author -> statement2.bind("author", author));
 
-            if (score.sourceQueueId() != null) {
-                statement2.bind("source_queue_id", score.sourceQueueId().toString());
-            }
+            statement2.bind("source_queue_id",
+                    score.sourceQueueId() != null
+                            ? score.sourceQueueId().toString()
+                            : CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE);
 
             return deleteNonAuthoredOperation
                     .then(Mono.from(statement2.execute()))
