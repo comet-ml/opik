@@ -23,7 +23,10 @@ import com.comet.opik.api.resources.utils.resources.WorkspaceResourceClient;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.TraceThreadConfig;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.google.inject.Injector;
+import com.google.inject.Key;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.awaitility.Awaitility;
@@ -38,6 +41,7 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import reactor.core.publisher.Mono;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -101,18 +105,25 @@ class TraceThreadsClosingJobTest {
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
+    // Buffer added on top of a configured timeout when waiting for a thread to become inactive,
+    // so waits track the actual configuration instead of a literal coupled to config-test.yml.
+    private static final Duration CLOSURE_WAIT_BUFFER = Duration.ofMillis(500);
+
     private String baseURI;
     private ClientSupport client;
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
     private WorkspaceResourceClient workspaceResourceClient;
+    private Duration defaultThreadTimeout;
 
     @BeforeAll
 
-    void setUpAll(ClientSupport client) {
+    void setUpAll(ClientSupport client, Injector injector) {
 
         this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
+        this.defaultThreadTimeout = injector.getInstance(Key.get(TraceThreadConfig.class, Config.class))
+                .getTimeoutToMarkThreadAsInactive().toJavaDuration();
 
         ClientSupportUtils.config(client);
 
@@ -160,7 +171,8 @@ class TraceThreadsClosingJobTest {
             var expectedTraceThreadModel = createTraceThreadModel(threadId, projectId, expectedCreatedAt,
                     expectedLastUpdatedAt, DEFAULT_USER, TraceThreadStatus.INACTIVE, traces);
 
-            Mono.delay(Duration.ofSeconds(1)).block();
+            // Wait for the configured default timeout to elapse so the thread is eligible for closure
+            Mono.delay(defaultThreadTimeout.plus(CLOSURE_WAIT_BUFFER)).block();
 
             var expectedLastUpdateAt = Instant.now();
             TraceThread expectedUpdatedTraceThreadModel = expectedTraceThreadModel.toBuilder()
@@ -168,10 +180,11 @@ class TraceThreadsClosingJobTest {
                     .build();
 
             // Then
-            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
-                verifyClosedThreads(projectId, projectName, apiKey, workspaceName,
-                        List.of(expectedUpdatedTraceThreadModel));
-            });
+            Awaitility.await().atMost(30, TimeUnit.SECONDS).pollInterval(500, TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> {
+                        verifyClosedThreads(projectId, projectName, apiKey, workspaceName,
+                                List.of(expectedUpdatedTraceThreadModel));
+                    });
         }
 
         @Test
@@ -302,18 +315,18 @@ class TraceThreadsClosingJobTest {
             var expectedActiveTraceThreadModel = createTraceThreadModel(threadId, projectId, expectedCreatedAt,
                     expectedLastUpdatedAt, DEFAULT_USER, TraceThreadStatus.ACTIVE, traces);
 
-            // Wait for the job to process the created thread
-            Mono.delay(Duration.ofSeconds(1)).block();
+            // Wait less than the custom timeout so the thread is still active
+            Mono.delay(customTimeout.dividedBy(2)).block();
 
             // Then: Verify that threads are created as ACTIVE first
-            Awaitility.await().pollInterval(100, TimeUnit.MILLISECONDS).untilAsserted(() -> {
-                verifyOpenThreads(projectId, projectName, apiKey, workspaceName,
-                        List.of(expectedActiveTraceThreadModel));
-            });
+            Awaitility.await().atMost(30, TimeUnit.SECONDS).pollInterval(100, TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> {
+                        verifyOpenThreads(projectId, projectName, apiKey, workspaceName,
+                                List.of(expectedActiveTraceThreadModel));
+                    });
 
-            // Wait for custom timeout duration + some buffer (2-second total)
-            // This should be enough to trigger closure with custom timeout
-            Mono.delay(Duration.ofSeconds(2)).block();
+            // Wait the rest of the custom timeout (plus a buffer) so the thread becomes eligible for closure
+            Mono.delay(customTimeout.plus(CLOSURE_WAIT_BUFFER)).block();
 
             var expectedTraceThreadModel = createTraceThreadModel(threadId, projectId, expectedCreatedAt,
                     expectedLastUpdatedAt, DEFAULT_USER, TraceThreadStatus.INACTIVE, traces);
@@ -324,10 +337,11 @@ class TraceThreadsClosingJobTest {
                     .build();
 
             // Then: Verify threads are closed according to workspace custom timeout
-            Awaitility.await().pollInterval(200, TimeUnit.MILLISECONDS).untilAsserted(() -> {
-                verifyClosedThreads(projectId, projectName, apiKey, workspaceName,
-                        List.of(expectedUpdatedTraceThreadModel));
-            });
+            Awaitility.await().atMost(30, TimeUnit.SECONDS).pollInterval(200, TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> {
+                        verifyClosedThreads(projectId, projectName, apiKey, workspaceName,
+                                List.of(expectedUpdatedTraceThreadModel));
+                    });
         }
 
         @Test
@@ -366,8 +380,8 @@ class TraceThreadsClosingJobTest {
             var expectedTraceThreadModel = createTraceThreadModel(threadId, projectId, expectedCreatedAt,
                     expectedLastUpdatedAt, DEFAULT_USER, TraceThreadStatus.INACTIVE, traces);
 
-            // Allow the default timeout (1s in config-test.yml) to elapse
-            Mono.delay(Duration.ofSeconds(1)).block();
+            // With a null workspace timeout, closure falls back to the configured default; wait it out
+            Mono.delay(defaultThreadTimeout.plus(CLOSURE_WAIT_BUFFER)).block();
 
             var expectedLastUpdateAt = Instant.now();
             TraceThread expectedUpdatedTraceThreadModel = expectedTraceThreadModel.toBuilder()
