@@ -52,12 +52,23 @@ jobs:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
 
+      - name: Resolve published package name
+        if: ${{ env.IS_RELEASE }}
+        id: resolve_pkg_name
+        shell: bash
+        working-directory: sdks/typescript/src/opik/configure
+        run: |
+          # Derive from package.json so the preflight always probes the actual publish
+          # target, even if the package is renamed (e.g., opik-configure -> opik-ts).
+          PKG=$(node -p "require('./package.json').name")
+          echo "name=${PKG}" >> "$GITHUB_OUTPUT"
+
       - name: NPM token preflight
         if: ${{ env.IS_RELEASE }}
         uses: ./.github/actions/npm-token-preflight
         with:
           npm_token: ${{ secrets.NPM_TOKEN }}
-          package_name: opik-configure
+          package_name: ${{ steps.resolve_pkg_name.outputs.name }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
