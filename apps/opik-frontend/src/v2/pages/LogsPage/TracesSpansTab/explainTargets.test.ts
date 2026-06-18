@@ -50,6 +50,17 @@ describe("buildDurationTarget", () => {
   it("returns null when duration is not a number", () => {
     expect(buildDurationTarget(base)).toBeNull();
   });
+  it("returns null for a zero / non-finite duration (no value to explain)", () => {
+    expect(
+      buildDurationTarget({ ...base, duration: 0 } as ExplainableRow),
+    ).toBeNull();
+    expect(
+      buildDurationTarget({ ...base, duration: NaN } as ExplainableRow),
+    ).toBeNull();
+    expect(
+      buildDurationTarget({ ...base, duration: Infinity } as ExplainableRow),
+    ).toBeNull();
+  });
 });
 
 describe("buildCostTarget", () => {
@@ -82,9 +93,18 @@ describe("buildCostTarget", () => {
       payload: { total_estimated_cost: 0.5 },
     });
   });
-  it("returns null when cost is 0 or absent", () => {
+  it("returns null when cost is 0, non-finite, or absent", () => {
     expect(
       buildCostTarget({ ...base, total_estimated_cost: 0 } as ExplainableRow),
+    ).toBeNull();
+    expect(
+      buildCostTarget({ ...base, total_estimated_cost: NaN } as ExplainableRow),
+    ).toBeNull();
+    expect(
+      buildCostTarget({
+        ...base,
+        total_estimated_cost: Infinity,
+      } as ExplainableRow),
     ).toBeNull();
     expect(buildCostTarget(base)).toBeNull();
   });

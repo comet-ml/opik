@@ -59,6 +59,18 @@ export interface ExplainButtonProps {
   target: ExplainTarget;
 }
 
+/**
+ * Host↔shell bridge protocol version.
+ *
+ * 2 = explain/chat events added (`explain:run`/`explain:cancel`/`chat:continue`
+ * + `console:ready`/`explain:chunk`/`explain:done`/`explain:error`).
+ *
+ * ⚠️ MUST move in lockstep with `ollie-console/src/bridge.ts`; the console's
+ * VER-4 assertions guard the event-shape contract. Bump here AND there together
+ * whenever a bridge event is added/removed/reshaped.
+ */
+export const BRIDGE_PROTOCOL_VERSION = 2;
+
 /** Host → Sidebar events */
 export interface HostEventMap {
   "context:changed": BridgeContext;

@@ -9,6 +9,7 @@ import { useParams, useRouter } from "@tanstack/react-router";
 import {
   AssistantSidebarBridge,
   AssistantSurfaceVariant,
+  BRIDGE_PROTOCOL_VERSION,
   BridgeContext,
   BridgeSurface,
   HostEventMap,
@@ -38,11 +39,6 @@ import useExplainStore, {
   ConsoleEmit,
   handleConsoleEvent,
 } from "@/plugins/comet/explain/explainStore";
-
-// 2 = explain/chat events added (`explain:run`/`explain:cancel`/`chat:continue`
-// + `console:ready`/`explain:chunk`/`explain:done`/`explain:error`). MUST move
-// in lockstep with `ollie-console/src/bridge.ts`; VER-4 asserts the contract.
-const BRIDGE_PROTOCOL_VERSION = 2;
 
 interface AssistantSidebarLoaderProps {
   error: string | null;
@@ -428,6 +424,9 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
   // buttons gate on one shared value rather than each calling the backend hook.
   useEffect(() => {
     useExplainStore.getState().setReady(isBackendReady);
+    // On unmount, drop readiness so the buttons can't linger as enabled.
+    // (clearEmit also resets this; explicit cleanup makes it self-contained.)
+    return () => useExplainStore.getState().setReady(false);
   }, [isBackendReady]);
 
   // Emit context changes to sidebar listeners

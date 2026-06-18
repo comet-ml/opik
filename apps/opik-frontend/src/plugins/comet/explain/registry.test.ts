@@ -26,4 +26,12 @@ describe("AI_EXPLAIN_REGISTRY", () => {
       getExplainConfig("trace.duration")?.question(t("trace.duration")),
     ).toBe("Explain this duration");
   });
+  it("falls back to a generic error question when exception_type is absent", () => {
+    expect(
+      getExplainConfig("trace.error")?.question({
+        ...t("trace.error"),
+        payload: {},
+      }),
+    ).toBe("Explain this error");
+  });
 });

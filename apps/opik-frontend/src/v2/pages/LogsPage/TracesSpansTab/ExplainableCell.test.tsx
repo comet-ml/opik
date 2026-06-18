@@ -6,9 +6,9 @@ import { ExplainTarget } from "@/types/assistant-sidebar";
 
 let mockButton: ((props: { target: ExplainTarget }) => JSX.Element) | null =
   null;
+// withExplain reads the slot via usePluginsStore.getState() (no per-row hook).
 vi.mock("@/store/PluginsStore", () => ({
-  default: (selector: (s: { ExplainButton: unknown }) => unknown) =>
-    selector({ ExplainButton: mockButton }),
+  default: { getState: () => ({ ExplainButton: mockButton }) },
 }));
 
 import { withExplain } from "./ExplainableCell";

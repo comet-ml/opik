@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { v4 as uuidv4 } from "uuid";
 import {
+  BRIDGE_PROTOCOL_VERSION,
   ExplainKind,
   ExplainTarget,
   HostEventMap,
@@ -26,11 +27,16 @@ export interface ExplainEntry {
 }
 
 // Max concurrent in-flight explains; cached (done) results don't count.
-const MAX_IN_FLIGHT = 4;
+const MAX_IN_FLIGHT = 3;
+
+// Cap on cached entries. Oldest *settled* entries are evicted past this so a
+// long session (many cells explained) can't grow the cache without bound.
+const MAX_CACHED = 200;
 
 // Scoped by projectId so cached answers / streaming routes can't collide
-// across projects.
-const cellKey = (t: ExplainTarget) => `${t.projectId}:${t.kind}:${t.entityId}`;
+// across projects. Exported so tests key off the single source of truth.
+export const cellKey = (t: ExplainTarget) =>
+  `${t.projectId}:${t.kind}:${t.entityId}`;
 
 type ExplainState = {
   // Results cached per cell, so reopening a popover shows the answer (or its
@@ -40,6 +46,11 @@ type ExplainState = {
   // what multiplexes several parallel streams over the single bridge.
   routes: Record<string, string>;
   capabilities: string[];
+  // The console's bridge protocol version, from its `console:ready` handshake;
+  // null until it arrives. Gates the buttons: we only show Explain when the
+  // console is on a bridge at least as new as ours (see useCanExplain), so a
+  // protocol skew can't silently no-op the explain events.
+  consoleBridgeVersion: number | null;
   // Whether the assistant pod is live (mirrored from useAssistantBackend by the
   // owning sidebar). Gates the buttons together with `capabilities`.
   ready: boolean;
@@ -49,8 +60,11 @@ type ExplainState = {
   setEmit: (emit: ConsoleEmit) => void;
   clearEmit: (emit: ConsoleEmit) => void;
 
-  explain: (target: ExplainTarget) => void;
+  // Returns true if there's now something to show (a fresh stream dispatched,
+  // or a cached/in-flight result reused); false when throttled by MAX_IN_FLIGHT.
+  explain: (target: ExplainTarget) => boolean;
   retry: (target: ExplainTarget) => void;
+  cancel: (target: ExplainTarget) => void;
   continueChat: (target: ExplainTarget, question: string) => void;
 
   onConsoleReady: (data: SidebarEventMap["console:ready"]) => void;
@@ -97,10 +111,63 @@ const removeEntry = (s: ExplainState, key: string): ExplainState => {
   return { ...s, entries, routes: omit(s.routes, entry.explainId) };
 };
 
+// Evict oldest settled (done/error) entries until there's room for one more,
+// leaving in-flight streams untouched. Bounds the cache; see MAX_CACHED.
+const evictToCap = (s: ExplainState, cap: number): ExplainState => {
+  let count = Object.keys(s.entries).length;
+  if (count < cap) return s;
+  const oldestFirst = Object.keys(s.entries)
+    .filter((k) => s.entries[k].phase !== "loading")
+    .sort((a, b) => s.entries[a].startedAt - s.entries[b].startedAt);
+  let next = s;
+  for (const key of oldestFirst) {
+    if (count < cap) break;
+    next = removeEntry(next, key);
+    count -= 1;
+  }
+  return next;
+};
+
+// Friendly, retryable message shown when all in-flight slots are taken.
+const AT_CAPACITY_MESSAGE =
+  "Too many explanations in progress. Close one and try again.";
+
+// Build a fresh entry for a cell. Defaults to a "loading" stream; pass a patch
+// (e.g. an error) to override.
+const makeEntry = (
+  target: ExplainTarget,
+  patch: Partial<ExplainEntry> = {},
+): ExplainEntry => ({
+  explainId: uuidv4(),
+  kind: target.kind,
+  phase: "loading",
+  text: "",
+  startedAt: performance.now(),
+  ...patch,
+});
+
+// Insert/replace a cell's entry (evicting to the cache cap first). Tracks a
+// route only for entries that will receive streamed chunks.
+const withEntry = (
+  s: ExplainState,
+  key: string,
+  entry: ExplainEntry,
+  routed: boolean,
+): Pick<ExplainState, "entries" | "routes"> => {
+  const trimmed = evictToCap(s, MAX_CACHED);
+  return {
+    entries: { ...trimmed.entries, [key]: entry },
+    routes: routed
+      ? { ...trimmed.routes, [entry.explainId]: key }
+      : trimmed.routes,
+  };
+};
+
 const useExplainStore = create<ExplainState>((set, get) => ({
   entries: {},
   routes: {},
   capabilities: [],
+  consoleBridgeVersion: null,
   ready: false,
   emit: null,
 
@@ -110,47 +177,84 @@ const useExplainStore = create<ExplainState>((set, get) => ({
   // can't drop a newer instance's channel.
   clearEmit: (emit) => {
     if (get().emit === emit) {
-      set({ emit: null, capabilities: [], ready: false });
+      set({
+        emit: null,
+        capabilities: [],
+        consoleBridgeVersion: null,
+        ready: false,
+      });
     }
   },
 
   explain: (target) => {
     const key = cellKey(target);
     const cached = get().entries[key];
-    if (cached && cached.phase !== "error") return; // reuse cache / in-flight
+    if (cached && cached.phase !== "error") return true; // reuse cache / in-flight
+
     const inFlight = Object.values(get().entries).filter(
       (e) => e.phase === "loading",
     ).length;
-    if (inFlight >= MAX_IN_FLIGHT) return;
-    const explainId = uuidv4();
-    set((s) => ({
-      entries: {
-        ...s.entries,
-        [key]: {
-          explainId,
-          kind: target.kind,
-          phase: "loading",
-          text: "",
-          startedAt: performance.now(),
-        },
-      },
-      routes: { ...s.routes, [explainId]: key },
-    }));
-    get().emit?.("explain:run", { explainId, target });
+    if (inFlight >= MAX_IN_FLIGHT) {
+      // At capacity: surface a clear, retryable error rather than leave the
+      // popover stuck on "Thinking…" forever. No stream is dispatched.
+      const entry = makeEntry(target, {
+        phase: "error",
+        error: AT_CAPACITY_MESSAGE,
+      });
+      set((s) => withEntry(s, key, entry, false));
+      return false;
+    }
+
+    const entry = makeEntry(target);
+    set((s) => withEntry(s, key, entry, true));
+    get().emit?.("explain:run", { explainId: entry.explainId, target });
+    return true;
   },
 
   retry: (target) => {
+    // If retried while still streaming, stop the old stream before replacing it
+    // (mirrors cancel()). Today Retry only shows after an error, but this keeps
+    // the action safe if it's ever invoked mid-stream.
+    const prev = get().entries[cellKey(target)];
+    if (prev?.phase === "loading") {
+      get().emit?.("explain:cancel", { explainId: prev.explainId });
+    }
     set((s) => removeEntry(s, cellKey(target)));
     get().explain(target);
   },
 
+  // Stop an in-flight stream and reset the cell so reopening starts a fresh
+  // explain. No-op unless the cell is mid-stream — cached done/error entries
+  // stay put. Without the reset, `explain()` would short-circuit on the stale
+  // "loading" entry and the popover would pulse "Thinking…" forever.
+  cancel: (target) => {
+    const key = cellKey(target);
+    const entry = get().entries[key];
+    if (!entry || entry.phase !== "loading") return;
+    get().emit?.("explain:cancel", { explainId: entry.explainId });
+    set((s) => removeEntry(s, key));
+  },
+
   continueChat: (target, question) => {
     const entry = get().entries[cellKey(target)];
-    if (!entry || entry.phase !== "done") return;
+    // Offered as soon as any text has streamed in (done OR still loading);
+    // refuse on empty / errored cells.
+    if (!entry || entry.phase === "error" || entry.text.length === 0) return;
+    // Mid-stream continue: the chat takes over in the sidebar, so stop the
+    // (paid) cell stream and freeze the partial text as the cached answer.
+    // Dropping the route here also makes the popover-close cancel() a no-op
+    // (phase is now "done"), so the stream isn't cancelled twice.
+    if (entry.phase === "loading") {
+      get().emit?.("explain:cancel", { explainId: entry.explainId });
+      set((s) =>
+        patchEntry(s, entry.explainId, () => ({ phase: "done" }), true),
+      );
+    }
     get().emit?.("chat:continue", { question, answer: entry.text, target });
   },
 
-  onConsoleReady: ({ capabilities }) => set({ capabilities }),
+  onConsoleReady: ({ bridgeVersion, capabilities }) =>
+    set({ capabilities, consoleBridgeVersion: bridgeVersion }),
 
   onChunk: ({ explainId, delta }) =>
     set((s) =>
@@ -225,9 +329,27 @@ export const handleConsoleEvent = (
 export const useExplainEntry = (target: ExplainTarget) =>
   useExplainStore((s) => s.entries[cellKey(target)]);
 
-// Single gate selector: pod live AND the console advertised the "explain"
-// capability. Read by the (per-row) button — no per-row backend hooks.
+// Single gate selector, read by the (per-row) button — no per-row backend
+// hooks. Show Explain only when the whole Olli integration is actually usable:
+//   1. pod live (`ready`),
+//   2. the console advertised the "explain" capability (its remote on/off —
+//      old/incapable builds simply omit it), and
+//   3. the console's bridge is at least as new as ours, so the explain events
+//      we emit are understood (a skew would otherwise silently no-op). Newer
+//      consoles stay compatible (old contracts are kept), hence `>=`.
 export const useCanExplain = () =>
-  useExplainStore((s) => s.ready && s.capabilities.includes("explain"));
+  useExplainStore(
+    (s) =>
+      // Bridge connected (clearEmit wipes the rest atomically, but checking
+      // emit makes "needs a live bridge" explicit and self-documenting)...
+      s.emit !== null &&
+      // ...pod live...
+      s.ready &&
+      // ...console advertised the "explain" capability (its remote on/off)...
+      s.capabilities.includes("explain") &&
+      // ...and its bridge is at least as new as ours (newer stays compatible).
+      s.consoleBridgeVersion !== null &&
+      s.consoleBridgeVersion >= BRIDGE_PROTOCOL_VERSION,
+  );
 
 export default useExplainStore;

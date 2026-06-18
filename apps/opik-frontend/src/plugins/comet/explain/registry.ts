@@ -10,9 +10,9 @@ type ExplainKindConfig = {
 // The three contextual explain actions (OPIK-6425): error, cost, latency — all
 // in the Traces table. This registry is the single place a kind's label + seed
 // question live, so the button/popover stay generic.
-export const AI_EXPLAIN_REGISTRY: Partial<
-  Record<ExplainKind, ExplainKindConfig>
-> = {
+// Total Record (not Partial): adding a new ExplainKind without a config here is
+// a compile error at this declaration, instead of a silently missing button.
+export const AI_EXPLAIN_REGISTRY: Record<ExplainKind, ExplainKindConfig> = {
   "trace.error": {
     label: "Explain error",
     question: (target) => {
@@ -31,5 +31,8 @@ export const AI_EXPLAIN_REGISTRY: Partial<
   },
 };
 
-export const getExplainConfig = (kind: ExplainKind) =>
-  AI_EXPLAIN_REGISTRY[kind];
+// Returns `| undefined` so callers keep their defensive guards even though the
+// registry is currently total.
+export const getExplainConfig = (
+  kind: ExplainKind,
+): ExplainKindConfig | undefined => AI_EXPLAIN_REGISTRY[kind];

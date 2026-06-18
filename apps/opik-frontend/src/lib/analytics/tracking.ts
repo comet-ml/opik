@@ -21,6 +21,7 @@ export const OpikEvent = {
   EXPLAIN_COMPLETED: "opik_explain_completed",
   EXPLAIN_ERRORED: "opik_explain_errored",
   EXPLAIN_CONTINUE_CLICKED: "opik_explain_continue_clicked",
+  EXPLAIN_RETRIED: "opik_explain_retried",
 } as const;
 
 type OpikEventValues = (typeof OpikEvent)[keyof typeof OpikEvent];
