@@ -1,0 +1,36 @@
+---
+name: Release-aware Checkout
+description: |
+  Checkout the repository at the release tag when is_release=true (so the build
+  is reproducible from the version label), or at the dispatch ref otherwise.
+  Used by both typescript_sdk_publish.yml and typescript_sdk_integration_publish.yml
+  to keep the tag-pinning convention in one place.
+
+  Convention: tag name == version string. Locks release builds to the commit
+  the tag points to. Non-release runs (build-only PR / push triggers) keep
+  the dispatch ref because there's no tag to pin to.
+inputs:
+  is_release:
+    required: true
+    description: "When true, check out refs/tags/<version>; otherwise check out the dispatch ref."
+  version:
+    required: true
+    description: "Version string (used as the tag name when is_release=true)."
+  github_token:
+    required: false
+    description: "Token for the checkout. Defaults to GITHUB_TOKEN if omitted."
+    default: ""
+  fetch-depth:
+    required: false
+    description: "Passed through to actions/checkout."
+    default: "0"
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ inputs.is_release == 'true' && format('refs/tags/{0}', inputs.version) || github.ref }}
+        fetch-depth: ${{ inputs.fetch-depth }}
+        token: ${{ inputs.github_token || github.token }}

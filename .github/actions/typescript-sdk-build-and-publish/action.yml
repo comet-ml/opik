@@ -69,23 +69,38 @@ runs:
       id: version
       shell: bash
       working-directory: ${{ inputs.working_directory }}
+      env:
+        # Read inputs via env, not `${{ }}` substitution, so a malicious dispatch
+        # input can't inject shell tokens (OWASP / GHA security hardening).
+        INPUT_VERSION: ${{ inputs.version }}
       run: |
-        if [ -n "${{ inputs.version }}" ]; then
-          # Use provided version
-          VERSION="${{ inputs.version }}"
+        if [ -n "${INPUT_VERSION}" ]; then
+          # Validate against a permissive semver regex (X.Y.Z + optional
+          # prerelease/build suffix). Anything else fails fast.
+          if ! [[ "${INPUT_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?(\+[A-Za-z0-9.-]+)?$ ]]; then
+            echo "::error title=Generate version::inputs.version='${INPUT_VERSION}' does not match the expected semver shape (X.Y.Z[-pre][+build])."
+            exit 1
+          fi
+          VERSION="${INPUT_VERSION}"
         else
-          # For push/PR: use package.json version with short SHA (not published)
+          # For push/PR: use package.json version with short SHA (not published).
           PACKAGE_VERSION=$(node -p "require('./package.json').version")
           SHORT_SHA=$(git rev-parse --short HEAD)
           VERSION="${PACKAGE_VERSION}-${SHORT_SHA}"
         fi
-        echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+        echo "VERSION=${VERSION}" >> "$GITHUB_OUTPUT"
         echo "Generated version: ${VERSION}"
 
     - name: Update version
       if: ${{ inputs.is_release == 'true' }}
       shell: bash
       working-directory: ${{ inputs.working_directory }}
+      env:
+        # `RELEASE_VERSION` comes via env (not `${{ }}` substitution) so it can't
+        # inject shell tokens into the `npm version` command (OWASP). Even though
+        # the `Generate version` step now regex-validates inputs.version, env+
+        # quoted is the defense-in-depth shape recommended by GHA security docs.
+        RELEASE_VERSION: ${{ steps.version.outputs.VERSION }}
       # `--allow-same-version` treats "package.json already at this version" as a
       # successful no-op instead of erroring `Version not changed`. The operator's
       # intent on dispatch is "publish this version" — package.json already being
@@ -94,7 +109,7 @@ runs:
       # already-released version (where the prior run's commit-version step landed
       # on the dispatched ref) fails here before reaching the publish step's own
       # already-published skip.
-      run: npm version ${{ steps.version.outputs.VERSION }} --no-git-tag-version --allow-same-version
+      run: npm version "${RELEASE_VERSION}" --no-git-tag-version --allow-same-version
 
     - name: Build package
       shell: bash
