@@ -70,7 +70,7 @@ public class EventListenerRegistrar implements GuiceyLifecycleListener {
                     try {
                         return new ListenerInfo(injector.get().getInstance(rawType), rawType);
                     } catch (Exception e) {
-                        log.error("Failed to get instance for {}: {}", rawType, e.getMessage());
+                        log.error("Failed to get instance for '{}'", rawType, e);
                         return null;
                     }
                 })
