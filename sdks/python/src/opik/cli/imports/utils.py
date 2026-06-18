@@ -192,9 +192,16 @@ def setup_import_manifest(
         destination_manifest_dir(project_root, destination_project_name)
         / MANIFEST_FILENAME
     )
+    # Capture existence BEFORE constructing — the constructor creates the SQLite
+    # file, which would otherwise make the --force "existing manifest" check
+    # tautologically true (and reset/warn against a manifest that never existed)
+    # on a first run.
+    manifest_existed = MigrationManifest.exists(
+        project_root, manifest_path=manifest_file
+    )
     manifest = MigrationManifest(project_root, manifest_path=manifest_file)
     if force:
-        if MigrationManifest.exists(project_root, manifest_path=manifest_file):
+        if manifest_existed:
             manifest.reset()
             console.print(
                 "[yellow]--force: discarding existing manifest, starting fresh[/yellow]"

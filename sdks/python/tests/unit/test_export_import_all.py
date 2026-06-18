@@ -400,7 +400,9 @@ class TestSetupImportManifest:
     """The per-destination manifest must key files relative to project_root even
     though the SQLite db lives in a per-destination subdir."""
 
-    def test_files_under_project_root_are_keyable(self, tmp_path):
+    def test_setup_import_manifest__files_under_project_root__allows_marking_files_completed_without_value_error(
+        self, tmp_path
+    ):
         from opik.cli.imports.utils import (
             setup_import_manifest,
             destination_manifest_dir,
@@ -429,7 +431,7 @@ class TestSetupImportManifest:
         ).exists()
         assert not (project_root / "migration_manifest.db").exists()
 
-    def test_dry_run_creates_no_manifest(self, tmp_path):
+    def test_setup_import_manifest__dry_run__returns_no_manifest(self, tmp_path):
         from opik.cli.imports.utils import setup_import_manifest
 
         project_root = tmp_path / _WORKSPACE / "projects" / _PROJECT
@@ -439,6 +441,45 @@ class TestSetupImportManifest:
         )
         assert manifest is None
         assert not already_completed
+
+    def test_setup_import_manifest__force_on_fresh_run__does_not_warn_about_discarding(
+        self, tmp_path, capsys
+    ):
+        from opik.cli.imports.utils import setup_import_manifest
+
+        project_root = tmp_path / _WORKSPACE / "projects" / _PROJECT
+        project_root.mkdir(parents=True)
+        # No manifest exists yet — constructing it must not make --force think it
+        # is discarding a prior manifest.
+        manifest, already_completed = setup_import_manifest(
+            project_root, "dest", dry_run=False, force=True
+        )
+        assert manifest is not None
+        assert not already_completed
+        assert "discarding existing manifest" not in capsys.readouterr().out
+
+    def test_setup_import_manifest__force_with_existing_manifest__warns_and_resets(
+        self, tmp_path, capsys
+    ):
+        from opik.cli.imports.utils import setup_import_manifest
+
+        project_root = tmp_path / _WORKSPACE / "projects" / _PROJECT
+        project_root.mkdir(parents=True)
+        # First run creates and completes a manifest.
+        first, _ = setup_import_manifest(
+            project_root, "dest", dry_run=False, force=False
+        )
+        assert first is not None
+        first.complete()
+        capsys.readouterr()  # discard output so far
+
+        # A --force run with a pre-existing manifest discards it and proceeds.
+        second, already_completed = setup_import_manifest(
+            project_root, "dest", dry_run=False, force=True
+        )
+        assert second is not None
+        assert not already_completed  # reset() cleared the completed status
+        assert "discarding existing manifest" in capsys.readouterr().out
 
 
 # ---------------------------------------------------------------------------
