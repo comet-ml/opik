@@ -836,12 +836,35 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           <LogsTypeToggle value={logsType} onValueChange={onLogsTypeChange} />
         </div>
         <div className="flex items-center gap-2">
+          <DataTableRowHeightSelector
+            type={height as ROW_HEIGHT}
+            setType={setHeight}
+            size="icon-xs"
+          />
+          <ColumnsButton
+            columns={DEFAULT_COLUMNS}
+            selectedColumns={selectedColumns}
+            onSelectionChange={setSelectedColumns}
+            order={columnsOrder}
+            onOrderChange={setColumnsOrder}
+            sections={columnSections}
+            layout="labeled"
+            size="xs"
+          />
+          <Separator orientation="vertical" className="mx-2 h-6" />
           <MetricDateRangeSelect
             value={dateRange}
             onChangeValue={handleDateRangeChange}
             minDate={minDate}
             maxDate={maxDate}
             hideAlltime
+          />
+          <Separator orientation="vertical" className="mx-2 h-6" />
+          <RefreshButton
+            tooltip="Refresh threads list"
+            size="2xs"
+            isFetching={isFetching}
+            onRefresh={() => refetch()}
           />
         </div>
       </PageBodyStickyContainer>
@@ -860,49 +883,6 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           dateRange={dateRange}
           logsSource={LOGS_SOURCE.sdk}
         />
-      </PageBodyStickyContainer>
-      <PageBodyStickyContainer
-        className="pb-0 pt-3"
-        direction="bidirectional"
-        limitWidth
-      >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <SearchInput
-              searchText={search as string}
-              setSearchText={setSearch}
-              placeholder="Search threads..."
-              className="w-[320px]"
-              dimension="xs"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <DataTableRowHeightSelector
-              type={height as ROW_HEIGHT}
-              setType={setHeight}
-              layout="labeled"
-              size="2xs"
-            />
-            <ColumnsButton
-              columns={DEFAULT_COLUMNS}
-              selectedColumns={selectedColumns}
-              onSelectionChange={setSelectedColumns}
-              order={columnsOrder}
-              onOrderChange={setColumnsOrder}
-              sections={columnSections}
-              layout="labeled"
-              size="2xs"
-            />
-            <Separator orientation="vertical" className="mx-1 h-6" />
-            <RefreshButton
-              tooltip="Refresh threads list"
-              size="2xs"
-              label="Refresh"
-              isFetching={isFetching}
-              onRefresh={() => refetch()}
-            />
-          </div>
-        </div>
       </PageBodyStickyContainer>
 
       {selectedRows.length > 0 ? (
@@ -938,6 +918,15 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             onClearAll={clearAllThreadChips}
             openChipId={threadOpenChipId}
             onOpenChipIdChange={setThreadOpenChipId}
+            prefix={
+              <SearchInput
+                searchText={search as string}
+                setSearchText={setSearch}
+                placeholder="Search by anything"
+                className="w-[200px] shrink-0"
+                dimension="xs"
+              />
+            }
           />
         </PageBodyStickyContainer>
       )}

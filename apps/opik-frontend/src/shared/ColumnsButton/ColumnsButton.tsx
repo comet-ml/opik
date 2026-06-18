@@ -47,7 +47,12 @@ const ColumnsButton = <TColumnData,>({
       <TooltipWrapper content="Columns">
         <DropdownMenuTrigger asChild>
           {layout === "labeled" ? (
-            <Button variant="outline" size={size} data-testid="columns-button">
+            <Button
+              variant="outline"
+              size={size}
+              data-testid="columns-button"
+              className="font-normal"
+            >
               Columns
               <div className="ml-1 rounded bg-muted-disabled px-1 text-muted-slate">
                 {selectedCount}/{totalCount}
