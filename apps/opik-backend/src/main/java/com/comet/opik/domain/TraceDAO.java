@@ -2833,7 +2833,13 @@ class TraceDAOImpl implements TraceDAO {
                 ) inner_t
                 GROUP BY inner_t.workspace_id, inner_t.project_id, inner_t.thread_id
             ) t
-            LEFT JOIN trace_threads tt ON t.workspace_id = tt.workspace_id
+            LEFT JOIN (
+                SELECT workspace_id, project_id, thread_id, id, status
+                FROM trace_threads
+                WHERE workspace_id = :workspace_id
+                  AND project_id = :project_id
+                  AND thread_id IN :thread_ids
+            ) tt ON t.workspace_id = tt.workspace_id
               AND t.project_id = tt.project_id
               AND t.id = tt.thread_id
             SETTINGS log_comment = '<log_comment>'
