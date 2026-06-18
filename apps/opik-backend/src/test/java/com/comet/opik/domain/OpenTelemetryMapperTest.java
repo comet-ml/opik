@@ -356,6 +356,36 @@ class OpenTelemetryMapperTest {
     }
 
     @Test
+    void testLogfireLevelNumIsDroppedNotLeakedIntoInput() {
+        // logfire's internal severity attribute appears on warning/error spans; it must not
+        // pollute the span input.
+        var attributes = List.of(
+                KeyValue.newBuilder()
+                        .setKey("logfire.level_num")
+                        .setValue(AnyValue.newBuilder().setIntValue(17))
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("tool_arguments")
+                        .setValue(AnyValue.newBuilder().setStringValue("{\"query\":\"x\"}"))
+                        .build());
+
+        var spanBuilder = Span.builder()
+                .id(UUID.randomUUID())
+                .traceId(UUID.randomUUID())
+                .projectId(UUID.randomUUID())
+                .startTime(Instant.now());
+
+        OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+
+        var span = spanBuilder.build();
+
+        assertThat(span.input().has("logfire.level_num")).isFalse();
+        assertThat(span.metadata() == null || !span.metadata().has("logfire.level_num")).isTrue();
+        // a real input attribute alongside it is still captured
+        assertThat(span.input().has("tool_arguments")).isTrue();
+    }
+
+    @Test
     void testLogfireModelNameMapsToMetadataNotModel() {
         // `model_name` rides on the PydanticAI agent-run span, which is not an LLM call. It must
         // not set the span model or flip the span type to llm — it belongs in metadata.
