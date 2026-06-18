@@ -1,9 +1,9 @@
 package com.comet.opik.infrastructure.events;
 
+import com.comet.opik.infrastructure.GuiceBindings;
 import com.google.common.eventbus.EventBus;
 import com.google.common.eventbus.Subscribe;
 import com.google.inject.Injector;
-import com.google.inject.Key;
 import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycle;
@@ -12,6 +12,7 @@ import ru.vyarus.dropwizard.guice.module.lifecycle.event.GuiceyLifecycleEvent;
 import ru.vyarus.dropwizard.guice.module.lifecycle.event.InjectorPhaseEvent;
 
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -63,22 +64,22 @@ public class EventListenerRegistrar implements GuiceyLifecycleListener {
     }
 
     private Set<ListenerInfo> findAllEventListeners() {
-        return injector.get().getAllBindings().keySet().stream()
+        return GuiceBindings.boundRawTypes(injector.get())
                 .filter(this::isAnEventListener)
-                .map(key -> {
+                .map(rawType -> {
                     try {
-                        return new ListenerInfo(injector.get().getInstance(key), key.getTypeLiteral().getRawType());
+                        return new ListenerInfo(injector.get().getInstance(rawType), rawType);
                     } catch (Exception e) {
-                        log.error("Failed to get instance for {}: {}", key, e.getMessage());
+                        log.error("Failed to get instance for {}: {}", rawType, e.getMessage());
                         return null;
                     }
                 })
+                .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
     }
 
-    private boolean isAnEventListener(Key<?> key) {
-        return key.getTypeLiteral().getRawType().isAnnotationPresent(EagerSingleton.class) &&
-                hasSubscribeMethod(key.getTypeLiteral().getRawType());
+    private boolean isAnEventListener(Class<?> clazz) {
+        return clazz.isAnnotationPresent(EagerSingleton.class) && hasSubscribeMethod(clazz);
     }
 
     private boolean hasSubscribeMethod(Class<?> clazz) {

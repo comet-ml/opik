@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.jobs;
 
 import com.comet.opik.api.resources.v1.events.BaseRedisSubscriber;
+import com.comet.opik.infrastructure.GuiceBindings;
 import com.comet.opik.infrastructure.StreamConsumerReaperConfig;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.infrastructure.redis.StreamConsumerReaper;
@@ -103,11 +104,9 @@ public class StreamConsumerReaperJob extends Job implements InterruptableJob {
      * Package-private for testing against the real application Guice context.
      */
     List<String> discoverStreamNames() {
-        List<String> streamNames = injector.getAllBindings().keySet().stream()
-                .map(key -> key.getTypeLiteral().getRawType())
+        List<String> streamNames = GuiceBindings.boundRawTypes(injector)
                 .filter(BaseRedisSubscriber.class::isAssignableFrom)
                 .filter(type -> !Modifier.isAbstract(type.getModifiers()))
-                .distinct()
                 .map(type -> (BaseRedisSubscriber) injector.getInstance(type))
                 .map(BaseRedisSubscriber::getStreamName)
                 .distinct()

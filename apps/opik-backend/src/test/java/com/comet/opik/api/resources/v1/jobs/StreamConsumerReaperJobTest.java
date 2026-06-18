@@ -7,6 +7,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -82,8 +83,10 @@ class StreamConsumerReaperJobTest {
     private StreamConsumerReaperJob reaperJob;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, StreamConsumerReaperJob reaperJob) {
-        this.reaperJob = reaperJob;
+    void setUpAll(ClientSupport client, Injector injector) {
+        // Resolve the job from the real application injector (the reaper is disabled in config-test.yml, so the
+        // job isn't scheduled — but the bean is still injectable, which is what we assert discovery against).
+        this.reaperJob = injector.getInstance(StreamConsumerReaperJob.class);
     }
 
     @Test

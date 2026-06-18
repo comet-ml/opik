@@ -15,6 +15,7 @@ import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.util.Collection;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -35,6 +36,9 @@ public class StreamConsumerReaper {
 
     private static final AttributeKey<String> STREAM_KEY = AttributeKey.stringKey("stream");
     private static final AttributeKey<String> GROUP_KEY = AttributeKey.stringKey("consumer_group");
+
+    // Redis error when XINFO GROUPS targets a stream key that has never been created.
+    private static final String NO_SUCH_KEY = "no such key";
 
     private final RedissonReactiveClient redisson;
     private final LongCounter reapedConsumers;
@@ -74,9 +78,15 @@ public class StreamConsumerReaper {
                 .flatMap(group -> reapGroup(stream, streamName, group.getName(), idleThresholdMillis))
                 .reduce(0L, Long::sum)
                 .onErrorResume(throwable -> {
-                    // The stream may not exist yet (never created) — XINFO GROUPS returns "ERR no such key".
-                    // Nothing to reap; log at debug and move on.
-                    log.debug("Skipping reaper for stream '{}': '{}'", streamName, throwable.getMessage());
+                    if (isNoSuchKey(throwable)) {
+                        // The stream hasn't been created yet (no producer/consumer activity) — nothing to reap.
+                        log.info("Skipping reaper for stream '{}', stream may not exist", streamName, throwable);
+                    } else {
+                        // ACL/connection/timeout/etc.: surface it (metric + warn) instead of silently skipping,
+                        // but still return 0 so the other streams are reaped.
+                        reaperErrors.add(1, Attributes.of(STREAM_KEY, streamName));
+                        log.warn("Failed to reap orphaned consumers for stream '{}'", streamName, throwable);
+                    }
                     return Mono.just(0L);
                 });
     }
@@ -105,5 +115,9 @@ public class StreamConsumerReaper {
                     log.warn("Failed to list consumers for group '{}' on stream '{}'", group, streamName, throwable);
                     return Mono.just(0L);
                 });
+    }
+
+    private static boolean isNoSuchKey(Throwable throwable) {
+        return Objects.toString(throwable.getMessage(), "").contains(NO_SUCH_KEY);
     }
 }
