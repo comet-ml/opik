@@ -862,7 +862,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           <Separator orientation="vertical" className="mx-2 h-6" />
           <RefreshButton
             tooltip="Refresh threads list"
-            size="2xs"
+            size="icon-xs"
             isFetching={isFetching}
             onRefresh={() => refetch()}
           />

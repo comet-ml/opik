@@ -25,7 +25,7 @@ const OPTIONS: DropdownOption<ROW_HEIGHT>[] = [
 
 const DataTableRowHeightSelector: React.FunctionComponent<
   DataTableRowHeightSelectorProps
-> = ({ type, setType, layout = "icon", size = "sm" }) => {
+> = ({ type, setType, layout = "icon", size = "icon-sm" }) => {
   const handleSelect = useCallback(
     (value: ROW_HEIGHT) => {
       setType(value);
