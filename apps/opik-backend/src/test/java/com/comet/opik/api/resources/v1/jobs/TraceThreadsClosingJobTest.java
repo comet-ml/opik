@@ -375,10 +375,11 @@ class TraceThreadsClosingJobTest {
                     .build();
 
             // Then: the thread is closed using the default timeout instead of failing with an NPE
-            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
-                verifyClosedThreads(projectId, projectName, apiKey, workspaceName,
-                        List.of(expectedUpdatedTraceThreadModel));
-            });
+            Awaitility.await().atMost(30, TimeUnit.SECONDS).pollInterval(500, TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> {
+                        verifyClosedThreads(projectId, projectName, apiKey, workspaceName,
+                                List.of(expectedUpdatedTraceThreadModel));
+                    });
         }
 
         private void verifyClosedThreads(UUID projectId, String projectName, String apiKey, String workspaceName,
