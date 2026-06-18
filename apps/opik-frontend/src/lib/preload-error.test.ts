@@ -56,4 +56,23 @@ describe("setupPreloadErrorHandler", () => {
 
     expect(reload).toHaveBeenCalledTimes(2);
   });
+
+  it("still recovers when sessionStorage access throws", () => {
+    const securityError = () => {
+      throw new DOMException("blocked", "SecurityError");
+    };
+    vi.spyOn(window.sessionStorage, "getItem").mockImplementation(
+      securityError,
+    );
+    vi.spyOn(window.sessionStorage, "setItem").mockImplementation(
+      securityError,
+    );
+
+    setupPreloadErrorHandler();
+
+    const event = dispatchPreloadError();
+
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(event.defaultPrevented).toBe(true);
+  });
 });

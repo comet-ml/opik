@@ -4,6 +4,26 @@ const RELOAD_GUARD_KEY = "opik-preload-error-reloaded-at";
 // within this window, stop reloading and let the error surface instead.
 const RELOAD_GUARD_WINDOW = 10 * 1000;
 
+// `sessionStorage` can throw (e.g. SecurityError in a sandboxed iframe or when
+// storage is blocked in strict privacy mode). Recovery must not depend on it,
+// so reads/writes are guarded: a failed read allows the reload, a failed write
+// just loses the loop guard for that case.
+const readLastReloadAt = (): number => {
+  try {
+    return Number(window.sessionStorage.getItem(RELOAD_GUARD_KEY) ?? 0);
+  } catch {
+    return 0;
+  }
+};
+
+const writeLastReloadAt = (value: number): void => {
+  try {
+    window.sessionStorage.setItem(RELOAD_GUARD_KEY, String(value));
+  } catch {
+    // Storage unavailable — reload still proceeds without the time-based guard.
+  }
+};
+
 /**
  * Handles Vite's `vite:preloadError` event, which fires when a lazily-imported
  * chunk fails to load. The most common cause in production is a new deploy:
@@ -21,11 +41,8 @@ const RELOAD_GUARD_WINDOW = 10 * 1000;
 export const setupPreloadErrorHandler = () => {
   window.addEventListener("vite:preloadError", (event) => {
     const now = Date.now();
-    const lastReloadAt = Number(
-      window.sessionStorage.getItem(RELOAD_GUARD_KEY) ?? 0,
-    );
 
-    if (now - lastReloadAt < RELOAD_GUARD_WINDOW) {
+    if (now - readLastReloadAt() < RELOAD_GUARD_WINDOW) {
       // We already reloaded very recently and still hit a preload error — stop
       // reloading and let the error propagate to the error boundary.
       return;
@@ -34,7 +51,7 @@ export const setupPreloadErrorHandler = () => {
     // Prevent Vite from throwing the error so the page can recover quietly.
     event.preventDefault();
 
-    window.sessionStorage.setItem(RELOAD_GUARD_KEY, String(now));
+    writeLastReloadAt(now);
     window.location.reload();
   });
 };
