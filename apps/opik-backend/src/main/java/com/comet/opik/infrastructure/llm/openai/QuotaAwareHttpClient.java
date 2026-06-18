@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm.openai;
 
+import com.comet.opik.infrastructure.llm.DelegatingHttpClientBuilder;
 import dev.langchain4j.exception.HttpException;
 import dev.langchain4j.exception.NonRetriableException;
 import dev.langchain4j.http.client.HttpClient;
@@ -9,9 +10,10 @@ import dev.langchain4j.http.client.HttpRequest;
 import dev.langchain4j.http.client.SuccessfulHttpResponse;
 import dev.langchain4j.http.client.sse.ServerSentEventListener;
 import dev.langchain4j.http.client.sse.ServerSentEventParser;
+import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
-
-import java.time.Duration;
+import lombok.RequiredArgsConstructor;
+import org.apache.commons.lang3.StringUtils;
 
 /**
  * {@link HttpClient} decorator that marks OpenAI {@code insufficient_quota} (HTTP 429, out-of-credits)
@@ -36,16 +38,12 @@ import java.time.Duration;
  * </ul>
  * Rate-limit 429s and every other status are passed through unchanged and remain retryable.
  */
+@RequiredArgsConstructor
 public class QuotaAwareHttpClient implements HttpClient {
 
-    private static final int TOO_MANY_REQUESTS = 429;
     private static final String INSUFFICIENT_QUOTA = "insufficient_quota";
 
-    private final HttpClient delegate;
-
-    public QuotaAwareHttpClient(@NonNull HttpClient delegate) {
-        this.delegate = delegate;
-    }
+    private final @NonNull HttpClient delegate;
 
     @Override
     public SuccessfulHttpResponse execute(HttpRequest request) {
@@ -68,9 +66,8 @@ public class QuotaAwareHttpClient implements HttpClient {
     }
 
     private static boolean isInsufficientQuota(HttpException httpException) {
-        return httpException.statusCode() == TOO_MANY_REQUESTS
-                && httpException.getMessage() != null
-                && httpException.getMessage().contains(INSUFFICIENT_QUOTA);
+        return httpException.statusCode() == Response.Status.TOO_MANY_REQUESTS.getStatusCode()
+                && StringUtils.containsIgnoreCase(httpException.getMessage(), INSUFFICIENT_QUOTA);
     }
 
     /**
@@ -80,39 +77,15 @@ public class QuotaAwareHttpClient implements HttpClient {
         return new Builder(HttpClientBuilderLoader.loadHttpClientBuilder());
     }
 
-    private static final class Builder implements HttpClientBuilder {
+    private static final class Builder extends DelegatingHttpClientBuilder {
 
-        private final HttpClientBuilder delegate;
-
-        private Builder(@NonNull HttpClientBuilder delegate) {
-            this.delegate = delegate;
+        private Builder(HttpClientBuilder delegate) {
+            super(delegate);
         }
 
         @Override
-        public Duration connectTimeout() {
-            return delegate.connectTimeout();
-        }
-
-        @Override
-        public HttpClientBuilder connectTimeout(Duration connectTimeout) {
-            delegate.connectTimeout(connectTimeout);
-            return this;
-        }
-
-        @Override
-        public Duration readTimeout() {
-            return delegate.readTimeout();
-        }
-
-        @Override
-        public HttpClientBuilder readTimeout(Duration readTimeout) {
-            delegate.readTimeout(readTimeout);
-            return this;
-        }
-
-        @Override
-        public HttpClient build() {
-            return new QuotaAwareHttpClient(delegate.build());
+        protected HttpClient wrap(HttpClient delegate) {
+            return new QuotaAwareHttpClient(delegate);
         }
     }
 }
