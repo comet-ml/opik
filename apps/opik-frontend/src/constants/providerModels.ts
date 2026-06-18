@@ -439,6 +439,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "cohere/command-r7b-12-2024",
     },
     {
+      value: PROVIDER_MODEL_TYPE.COHERE_NORTH_MINI_CODE_FREE,
+      label: "cohere/north-mini-code:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.DEEPCOGITO_COGITO_V2_PREVIEW_DEEPSEEK_671B,
       label: "deepcogito/cogito-v2-preview-deepseek-671b",
     },
