@@ -40,6 +40,11 @@ on:
         required: false
         description: Build multiarch images
         default: true
+      ai_spend_plugin_ref:
+        type: string
+        required: false
+        default: "main"
+        description: Git ref (branch/tag/SHA) of opik-plugin-ai-spend to bake into the comet frontend
     secrets:
       OPIK_FE_SENTRY_DSN:
         required: false
@@ -133,7 +138,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: comet-ml/opik-plugin-ai-spend
-          ref: main
+          ref: ${{ inputs.ai_spend_plugin_ref }}
           token: ${{ secrets.OPIK_PLUGIN_AI_SPEND_TOKEN }}
           path: .ai-spend-plugin
 

@@ -31,6 +31,11 @@ on:
         required: false
         description: Build multiarch images
         default: true
+      ai_spend_plugin_ref:
+        type: string
+        required: false
+        description: opik-plugin-ai-spend ref (branch/tag/SHA) to bake into the comet frontend
+        default: "main"
   workflow_call:
     inputs:
       version:
@@ -61,6 +66,11 @@ on:
         required: false
         description: Build multiarch images
         default: true
+      ai_spend_plugin_ref:
+        type: string
+        required: false
+        description: opik-plugin-ai-spend ref (branch/tag/SHA) to bake into the comet frontend
+        default: "main"
 
     outputs:
       version:
@@ -195,6 +205,7 @@ jobs:
       is_release: ${{ inputs.is_release || false }}
       is_adhoc: ${{ inputs.is_adhoc || false }}
       build_arm64: ${{ github.event_name == 'push' || inputs.build_arm64 }}
+      ai_spend_plugin_ref: ${{ inputs.ai_spend_plugin_ref || 'main' }}
 
   create-git-tag:
     if: |
