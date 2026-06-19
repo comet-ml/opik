@@ -20836,7 +20836,6 @@ components:
       - alertsEnabled
       - anthropicProviderEnabled
       - bedrockProviderEnabled
-      - costIntelligenceEnabled
       - customllmProviderEnabled
       - datasetExportEnabled
       - datasetVersioningEnabled
@@ -20881,8 +20880,6 @@ components:
         exportEnabled:
           type: boolean
         optimizationStudioEnabled:
-          type: boolean
-        costIntelligenceEnabled:
           type: boolean
         datasetVersioningEnabled:
           type: boolean
