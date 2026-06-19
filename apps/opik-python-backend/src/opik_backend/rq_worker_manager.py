@@ -7,7 +7,7 @@ when the Flask application starts under Gunicorn.
 Environment Variables (for self-hosted deployments):
     OPTSTUDIO_MAX_CONCURRENT_JOBS: Number of parallel optimization workers (default: 5)
     RQ_QUEUE_NAMES: Comma-separated queue names to listen to (default: opik:optimizer-cloud)
-    RQ_WORKER_ENABLED: Enable/disable RQ worker (default: false)
+    RQ_WORKER_ENABLED: Enable/disable RQ worker (default: true)
 """
 
 import logging
@@ -337,7 +337,7 @@ def init_rq_worker(app: Optional[object] = None) -> None:
     and competes for jobs from the shared queue.
 
     Environment Variables:
-        RQ_WORKER_ENABLED: Enable/disable RQ worker (default: false)
+        RQ_WORKER_ENABLED: Enable/disable RQ worker (default: true)
         OPTSTUDIO_MAX_CONCURRENT_JOBS: Number of parallel workers (default: 5)
         RQ_QUEUE_NAMES: Comma-separated queue names (default: opik:optimizer-cloud)
 
