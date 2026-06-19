@@ -64,6 +64,7 @@
     "@opentelemetry/sdk-node": ">=0.56.0"
   },
   "devDependencies": {
+    "@ai-sdk/anthropic": "^3.0.85",
     "@eslint/js": "^9.38.0",
     "@opentelemetry/auto-instrumentations-node": "^0.66.0",
     "ai": "^6.0.13",
