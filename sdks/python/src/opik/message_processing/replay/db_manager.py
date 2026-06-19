@@ -37,11 +37,13 @@ class MessageStatus(IntEnum):
         registered: Message queued for delivery.
         delivered: Message delivered successfully.
         failed: Delivery failed.
+        replaying: Message is currently being replayed by the leader.
     """
 
     registered = 1
     delivered = 2
     failed = 3
+    replaying = 4
 
 
 @unique
@@ -373,9 +375,10 @@ class DBManager:
         total_replayed = 0
         for db_messages in self.fetch_failed_messages_batched(self.batch_size):
             params = [
-                (int(MessageStatus.registered), message.id) for message in db_messages
+                (int(MessageStatus.replaying), message.id) for message in db_messages
             ]
-            # Mark the batch as in-progress so it is not re-fetched concurrently.
+            # Mark the batch as being replayed so it is not re-fetched concurrently
+            # and a new leader can later identify messages left behind by a dead one.
             with self.__lock__:
                 if self.closed:
                     LOGGER.debug(
@@ -536,6 +539,38 @@ class DBManager:
                 LOGGER.error(msg)
                 self._mark_as_db_failed(msg)
                 return -1
+
+    def reset_replaying_messages(self) -> int:
+        """Reset messages left in the replaying state back to failed.
+
+        Called when a new replay leader acquires the lock. Messages that were
+        marked ``replaying`` by a previous leader may not have been delivered if
+        that leader died, so they must be eligible for replay again.
+        """
+        if not self.initialized:
+            LOGGER.debug("Not initialized - reset replaying messages ignored")
+            return 0
+
+        with self.__lock__:
+            if self.closed:
+                LOGGER.warning("Already closed - reset replaying messages ignored")
+                return 0
+
+            try:
+                with self.conn:
+                    c = self.conn.execute(
+                        "UPDATE messages SET status = ? WHERE status = ?",
+                        (MessageStatus.failed, MessageStatus.replaying),
+                    )
+                    LOGGER.debug(
+                        "Reset %d replaying message(s) back to failed", c.rowcount
+                    )
+                    return c.rowcount
+            except Exception as ex:
+                msg = f"reset_replaying_messages: failed to reset replaying messages, reason: {ex}"
+                LOGGER.error(msg)
+                self._mark_as_db_failed(msg)
+                raise
 
     def _mark_as_db_failed(self, message: str) -> None:
         self.status = DBManagerStatus.error

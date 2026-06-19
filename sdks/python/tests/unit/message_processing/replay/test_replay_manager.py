@@ -669,6 +669,7 @@ class TestReplayManagerSingleFileMode:
             follower = rm2 if leader is rm1 else rm1
             assert follower.is_replay_leader is False
 
+
             leader.close()
             # After the leader closes, the follower can acquire the lock on next tick.
             follower._loop()
@@ -676,3 +677,53 @@ class TestReplayManagerSingleFileMode:
         finally:
             rm2.close()
             rm1.close()
+
+    def test_single_file_mode__new_leader_resets_replaying_messages(
+        self, tmp_path
+    ):
+        """A new leader resets replaying messages left by a dead leader."""
+        db_file = str(tmp_path / "replay.db")
+        monitor = mock.MagicMock(spec=connection_monitor.OpikConnectionMonitor)
+        monitor.tick.return_value = connection_monitor.ConnectionStatus.connection_ok
+
+        dead_leader = replay_manager.ReplayManager(
+            monitor=monitor,
+            batch_size=10,
+            batch_replay_delay=0.01,
+            tick_interval_seconds=0.05,
+            db_file=db_file,
+        )
+        dead_leader.set_replay_callback(lambda m: None)
+
+        try:
+            assert dead_leader.is_replay_leader is True
+            msg = _create_trace_message(message_id=None, trace_id="orphan-trace")
+            dead_leader.register_message(msg, status=db_manager.MessageStatus.failed)
+
+            # Simulate the leader replaying but dying before delivery.
+            dead_leader.flush()
+            row = dead_leader.database_manager.conn.execute(
+                "SELECT status FROM messages WHERE message_id = ?", (msg.message_id,)
+            ).fetchone()
+            assert row[0] == db_manager.MessageStatus.replaying
+        finally:
+            dead_leader.close()
+
+        # A new process acquiring the lock should reset replaying -> failed and replay.
+        new_leader = replay_manager.ReplayManager(
+            monitor=monitor,
+            batch_size=10,
+            batch_replay_delay=0.01,
+            tick_interval_seconds=0.05,
+            db_file=db_file,
+        )
+        replayed: List[messages.BaseMessage] = []
+        new_leader.set_replay_callback(lambda m: replayed.append(m))
+
+        try:
+            assert new_leader.is_replay_leader is True
+            new_leader.flush()
+            assert len(replayed) == 1
+            assert replayed[0].trace_id == "orphan-trace"
+        finally:
+            new_leader.close()

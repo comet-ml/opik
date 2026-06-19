@@ -518,10 +518,10 @@ class TestReplayFailedMessages:
         assert result == 3
         assert callback.call_count == 3
 
-    def test_replay_failed_messages__after_replay__status_updated_to_registered(
+    def test_replay_failed_messages__after_replay__status_updated_to_replaying(
         self, manager: db_manager.DBManager
     ):
-        """Test that replayed messages have their status updated to registered."""
+        """Test that replayed messages have their status updated to replaying."""
         message_id = 1
         msg = _create_trace_message(message_id=message_id)
         manager.register_message(msg, status=db_manager.MessageStatus.failed)
@@ -529,11 +529,28 @@ class TestReplayFailedMessages:
         callback = mock.Mock()
         manager.replay_failed_messages(callback)
 
-        # Check status was updated to registered
+        # Check status was updated to replaying so a new leader can detect
+        # messages left behind by a dead leader.
         cursor = manager.conn.execute(
             "SELECT status FROM messages WHERE message_id = ?", (message_id,)
         )
-        assert cursor.fetchone()[0] == db_manager.MessageStatus.registered
+        assert cursor.fetchone()[0] == db_manager.MessageStatus.replaying
+
+    def test_reset_replaying_messages__moves_replaying_back_to_failed(
+        self, manager: db_manager.DBManager
+    ):
+        """Messages left replaying by a dead leader are reset to failed."""
+        msg = _create_trace_message(message_id=1)
+        manager.register_message(msg, status=db_manager.MessageStatus.failed)
+        manager.replay_failed_messages(mock.Mock())
+
+        reset_count = manager.reset_replaying_messages()
+
+        assert reset_count == 1
+        cursor = manager.conn.execute(
+            "SELECT status FROM messages WHERE message_id = ?", (1,)
+        )
+        assert cursor.fetchone()[0] == db_manager.MessageStatus.failed
 
     def test_replay_failed_messages__callback_invocation__receives_deserialized_messages(
         self, manager: db_manager.DBManager
