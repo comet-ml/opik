@@ -42,6 +42,8 @@ tags:
   description: System usage related resource
 - name: Agent Configs
   description: Agent configuration management
+- name: Agent Insights Jobs
+  description: "Per-(workspace, project) Agent Insights report configuration"
 - name: Agent Insights
   description: Agent Insights report results
 - name: AI Spend
@@ -936,6 +938,110 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/agent-insights/jobs/{projectId}:
+    get:
+      tags:
+      - Agent Insights Jobs
+      summary: Get Agent Insights job
+      description: "Returns the Agent Insights job for the (workspace, project), or\
+        \ 404 if none exists."
+      operationId: getAgentInsightsJob
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentInsightsJob"
+        "404":
+          description: Job not found
+    post:
+      tags:
+      - Agent Insights Jobs
+      summary: Create Agent Insights job
+      description: Creates the Agent Insights job for a project. 409 if one already
+        exists.
+      operationId: createAgentInsightsJob
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "201":
+          description: Job created
+          headers:
+            Location:
+              description: URI of the created job
+              style: simple
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentInsightsJob"
+        "404":
+          description: Project not found
+        "409":
+          description: Job already exists
+    patch:
+      tags:
+      - Agent Insights Jobs
+      summary: Update Agent Insights job
+      description: "Partially updates the Agent Insights job for a project (e.g. status;\
+        \ never deletes). Returns the updated job, or 404 if none exists."
+      operationId: updateAgentInsightsJob
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentInsightsJobUpdate"
+        required: true
+      responses:
+        "200":
+          description: Job updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentInsightsJob"
+        "404":
+          description: Job not found
+  /v1/private/agent-insights/jobs/{projectId}/trigger:
+    post:
+      tags:
+      - Agent Insights Jobs
+      summary: Trigger Agent Insights job
+      description: Triggers an immediate report run for an existing job (over the
+        last 24h). Fire-and-forget; returns 202. 404 if none exists.
+      operationId: triggerAgentInsightsJob
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "202":
+          description: Run accepted
+        "404":
+          description: Job not found
   /v1/private/agent-insights/issues:
     get:
       tags:
@@ -9877,6 +9983,50 @@ components:
       properties:
         blueprint_name:
           type: string
+    AgentInsightsJob:
+      required:
+      - project_id
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        project_id:
+          type: string
+          format: uuid
+          readOnly: true
+        status:
+          type: string
+          readOnly: true
+          enum:
+          - enabled
+          - disabled
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+    AgentInsightsJobUpdate:
+      required:
+      - status
+      type: object
+      properties:
+        status:
+          type: string
+          description: New status for the job
+          enum:
+          - enabled
+          - disabled
     AgentInsightsIssue:
       type: object
       properties:
