@@ -245,18 +245,16 @@ public class SpanService {
     }
 
     private Mono<Long> insertUpdate(Project project, SpanUpdate spanUpdate, UUID id) {
-        return idGenerator
-                .validateIdForUpdateAsync(id, SPAN_KEY)
-                .then(Mono.deferContextual(ctx -> {
-                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-                    String userName = ctx.get(RequestContext.USER_NAME);
-                    String projectName = project.name();
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+            String projectName = project.name();
 
-                    // Strip attachments OUTSIDE the database transaction
-                    return attachmentStripperService.stripAttachments(
-                            spanUpdate, id, workspaceId, userName, projectName)
-                            .flatMap(processedUpdate -> spanDAO.partialInsert(id, project.id(), processedUpdate));
-                }));
+            // Strip attachments OUTSIDE the database transaction
+            return attachmentStripperService.stripAttachments(
+                    spanUpdate, id, workspaceId, userName, projectName)
+                    .flatMap(processedUpdate -> spanDAO.partialInsert(id, project.id(), processedUpdate));
+        });
     }
 
     private Mono<Project> getProjectById(SpanUpdate spanUpdate) {
