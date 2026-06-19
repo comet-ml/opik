@@ -2,9 +2,11 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.AgentInsightsIssue;
 import com.comet.opik.api.AgentInsightsIssueDetail;
+import com.comet.opik.api.AgentInsightsIssueSeverity;
 import com.comet.opik.api.AgentInsightsIssueStatus;
 import com.comet.opik.api.AgentInsightsIssueWithDetails;
 import com.comet.opik.api.AgentInsightsReport;
+import com.comet.opik.infrastructure.db.AgentInsightsIssueSeverityColumnMapper;
 import com.comet.opik.infrastructure.db.AgentInsightsIssueStatusColumnMapper;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import com.comet.opik.utils.JsonUtils;
@@ -36,19 +38,22 @@ import java.util.UUID;
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterArgumentFactory(AgentInsightsIssueStatusColumnMapper.class)
 @RegisterColumnMapper(AgentInsightsIssueStatusColumnMapper.class)
+@RegisterArgumentFactory(AgentInsightsIssueSeverityColumnMapper.class)
+@RegisterColumnMapper(AgentInsightsIssueSeverityColumnMapper.class)
 interface AgentInsightsIssueDAO {
 
     @SqlBatch("""
             INSERT INTO agent_insights_issues
-                (id, workspace_id, project_id, name, description, cause, suggested_fix, traces_query, created_by, last_updated_by)
+                (id, workspace_id, project_id, name, description, cause, suggested_fix, traces_query, severity, created_by, last_updated_by)
             VALUES (:id, :workspace_id, :project_id, :bean.name, :bean.description, :bean.cause, :bean.suggestedFix,
-                    :bean.tracesQuery, :user_name, :user_name)
+                    :bean.tracesQuery, :bean.severity, :user_name, :user_name)
             ON DUPLICATE KEY UPDATE
                 name = :bean.name,
                 description = :bean.description,
                 cause = :bean.cause,
                 suggested_fix = :bean.suggestedFix,
                 traces_query = :bean.tracesQuery,
+                severity = :bean.severity,
                 last_updated_by = :user_name
             """)
     void upsertIssues(
@@ -83,7 +88,7 @@ interface AgentInsightsIssueDAO {
             @Bind("metadata") List<String> metadata);
 
     @SqlQuery("""
-            SELECT i.id, i.name, i.description, i.cause, i.suggested_fix, i.status, i.traces_query,
+            SELECT i.id, i.name, i.description, i.cause, i.suggested_fix, i.status, i.severity, i.traces_query,
                    SUM(d.`count`) AS total_occurrences,
                    SUM(d.total_count) AS total,
                    SUM(d.users_impacted) AS users_impacted,
@@ -101,6 +106,7 @@ interface AgentInsightsIssueDAO {
                 AND i.project_id = :project_id
                 AND d.report_day BETWEEN :from_date AND :to_date
                 <if(status)> AND i.status = :status <endif>
+                <if(severity)> AND i.severity = :severity <endif>
             GROUP BY i.id
             ORDER BY <if(sort_fields)> <sort_fields>, <endif> last_seen DESC, total_occurrences DESC, i.id DESC
             LIMIT :limit OFFSET :offset
@@ -113,6 +119,7 @@ interface AgentInsightsIssueDAO {
             @Bind("from_date") LocalDate fromDate,
             @Bind("to_date") LocalDate toDate,
             @Define("status") @Bind("status") AgentInsightsIssueStatus status,
+            @Define("severity") @Bind("severity") AgentInsightsIssueSeverity severity,
             @Define("sort_fields") String sortFields,
             @Bind("limit") int limit,
             @Bind("offset") int offset);
@@ -128,6 +135,7 @@ interface AgentInsightsIssueDAO {
                 AND i.project_id = :project_id
                 AND d.report_day BETWEEN :from_date AND :to_date
                 <if(status)> AND i.status = :status <endif>
+                <if(severity)> AND i.severity = :severity <endif>
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
@@ -136,10 +144,11 @@ interface AgentInsightsIssueDAO {
             @Bind("project_id") UUID projectId,
             @Bind("from_date") LocalDate fromDate,
             @Bind("to_date") LocalDate toDate,
-            @Define("status") @Bind("status") AgentInsightsIssueStatus status);
+            @Define("status") @Bind("status") AgentInsightsIssueStatus status,
+            @Define("severity") @Bind("severity") AgentInsightsIssueSeverity severity);
 
     @SqlQuery("""
-            SELECT id, name, description, cause, suggested_fix, status, traces_query, created_by, created_at, last_updated_by, last_updated_at
+            SELECT id, name, description, cause, suggested_fix, status, severity, traces_query, created_by, created_at, last_updated_by, last_updated_at
             FROM agent_insights_issues
             WHERE workspace_id = :workspace_id AND project_id = :project_id AND id = :id
             """)
@@ -180,6 +189,7 @@ interface AgentInsightsIssueDAO {
 
         @Override
         public AgentInsightsIssueWithDetails map(ResultSet rs, StatementContext ctx) throws SQLException {
+            String severityStr = rs.getString("severity");
             return AgentInsightsIssueWithDetails.builder()
                     .id(UUID.fromString(rs.getString("id")))
                     .name(rs.getString("name"))
@@ -187,6 +197,7 @@ interface AgentInsightsIssueDAO {
                     .cause(rs.getString("cause"))
                     .suggestedFix(rs.getString("suggested_fix"))
                     .status(AgentInsightsIssueStatus.fromString(rs.getString("status")))
+                    .severity(severityStr != null ? AgentInsightsIssueSeverity.fromString(severityStr) : null)
                     .tracesQuery(rs.getString("traces_query"))
                     .createdBy(rs.getString("created_by"))
                     .createdAt(rs.getTimestamp("created_at").toInstant())

@@ -21,6 +21,7 @@ public record AgentInsightsIssue(
         String cause,
         String suggestedFix,
         AgentInsightsIssueStatus status,
+        AgentInsightsIssueSeverity severity,
         String tracesQuery,
         @Schema(description = "SUM(count) over the requested window") long totalOccurrences,
         @Schema(description = "SUM(total_count) over the requested window") long total,
