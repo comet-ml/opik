@@ -25,7 +25,7 @@ import { mockAPIFunction } from "./mockUtils";
 const MODEL = "claude-haiku-4-5";
 const PROMPT = "Reply with a one-sentence greeting.";
 
-// Minimal view of the trace payload the exporter sends to the Opik REST client.
+// Minimal views of the payloads the exporter sends to the Opik REST client.
 type TracePayload = {
   input?: unknown;
   output?: Record<string, unknown>;
@@ -33,8 +33,14 @@ type TracePayload = {
   errorInfo?: { exceptionType?: string };
 };
 
+type SpanPayload = {
+  type?: string;
+  usage?: Record<string, number>;
+};
+
 type Captured = {
   trace: TracePayload;
+  spans: SpanPayload[];
   updateCalled: boolean;
 };
 
@@ -73,9 +79,9 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)(
       const updateSpan = vi
         .spyOn(client.api.spans, "updateSpan")
         .mockImplementation(mockAPIFunction as never);
-      vi.spyOn(client.api.spans, "createSpans").mockImplementation(
-        mockAPIFunction as never
-      );
+      const createSpans = vi
+        .spyOn(client.api.spans, "createSpans")
+        .mockImplementation(mockAPIFunction as never);
 
       sdk.start();
       await call();
@@ -84,18 +90,36 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)(
       const traces = createTraces.mock.calls.flatMap(
         (c) => c[0].traces
       ) as TracePayload[];
+      const spans = createSpans.mock.calls.flatMap(
+        (c) => c[0].spans
+      ) as SpanPayload[];
 
       return {
         trace: traces.at(-1)!,
+        spans,
         updateCalled:
           updateTrace.mock.calls.length > 0 || updateSpan.mock.calls.length > 0,
       };
     }
 
+    // Token usage must live on an LLM span, never on the trace.
+    function expectUsageOnLlmSpanOnly(captured: Captured) {
+      expect((captured.trace as { usage?: unknown }).usage).toBeUndefined();
+      const llmWithUsage = captured.spans.filter(
+        (span) => span.type === "llm" && (span.usage?.total_tokens ?? 0) > 0
+      );
+      expect(llmWithUsage.length).toBeGreaterThan(0);
+      // No non-LLM span carries usage.
+      const nonLlmWithUsage = captured.spans.filter(
+        (span) => span.type !== "llm" && span.usage !== undefined
+      );
+      expect(nonLlmWithUsage).toHaveLength(0);
+    }
+
     // ─────────────────────────── Tests ───────────────────────────
 
     it("generateText logs the prompt, some output and token usage", async () => {
-      const { trace, updateCalled } = await capture(async () => {
+      const captured = await capture(async () => {
         await generateText({
           model: anthropic(MODEL),
           prompt: PROMPT,
@@ -103,14 +127,14 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)(
         });
       });
 
-      expect(JSON.stringify(trace.input)).toContain(PROMPT); // expected input
-      expect(Object.keys(trace.output ?? {}).length).toBeGreaterThan(0); // some output
-      expect(trace.usage?.total_tokens ?? 0).toBeGreaterThan(0); // token usage
-      expect(updateCalled).toBe(false); // create-only
+      expect(JSON.stringify(captured.trace.input)).toContain(PROMPT); // expected input
+      expect(Object.keys(captured.trace.output ?? {}).length).toBeGreaterThan(0); // some output
+      expect(captured.updateCalled).toBe(false); // create-only
+      expectUsageOnLlmSpanOnly(captured); // token usage, LLM span only
     }, 60_000);
 
     it("streamText logs the prompt, some output and token usage", async () => {
-      const { trace, updateCalled } = await capture(async () => {
+      const captured = await capture(async () => {
         const result = streamText({
           model: anthropic(MODEL),
           prompt: PROMPT,
@@ -120,10 +144,10 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)(
         await result.consumeStream();
       });
 
-      expect(JSON.stringify(trace.input)).toContain(PROMPT); // expected input
-      expect(Object.keys(trace.output ?? {}).length).toBeGreaterThan(0); // some output
-      expect(trace.usage?.total_tokens ?? 0).toBeGreaterThan(0); // token usage
-      expect(updateCalled).toBe(false); // create-only
+      expect(JSON.stringify(captured.trace.input)).toContain(PROMPT); // expected input
+      expect(Object.keys(captured.trace.output ?? {}).length).toBeGreaterThan(0); // some output
+      expect(captured.updateCalled).toBe(false); // create-only
+      expectUsageOnLlmSpanOnly(captured); // token usage, LLM span only
     }, 60_000);
 
     it("captures error information when the model call fails", async () => {

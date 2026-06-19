@@ -231,10 +231,11 @@ export class OpikExporter implements SpanExporter {
     const rootOtelSpan = pickRootSpan(otelSpans, parentOf);
     const rootOtelSpanId = rootOtelSpan.spanContext().spanId;
 
-    // Prefer the root span's own input/output/usage — this preserves AI SDK
-    // v4/v5/v6, where the root model call carries them. Fall back to the
-    // model-call spans when the root is an orchestration span that carries none
-    // (e.g. eve's `ai.eve.turn`).
+    // Prefer the root span's own input/output — this preserves AI SDK v4/v5/v6,
+    // where the root model call carries them. Fall back to the model-call spans
+    // when the root is an orchestration span that carries none (e.g. eve's
+    // `ai.eve.turn`). Token usage is intentionally NOT set on the trace: it
+    // lives only on LLM spans, and the trace total is aggregated from them.
     const llmSpans = sortByStart(
       otelSpans.filter((otelSpan) => getSpanType(otelSpan.attributes) === "llm")
     );
@@ -244,9 +245,6 @@ export class OpikExporter implements SpanExporter {
     );
     const output = preferRoot(getSpanOutput(rootOtelSpan.attributes), () =>
       lastNonEmpty(llmSpans, getSpanOutput)
-    );
-    const usage = preferRoot(getSpanUsage(rootOtelSpan.attributes), () =>
-      firstNonEmpty(llmSpans, getSpanUsage)
     );
 
     const errorInfo =
@@ -264,7 +262,6 @@ export class OpikExporter implements SpanExporter {
       output,
       metadata: { ...mergeMetadata(otelSpans), ...this.metadata },
       tags: this.tags,
-      usage,
       threadId: this.resolveThreadId(otelSpans),
       projectName,
       ...(errorInfo && { errorInfo }),

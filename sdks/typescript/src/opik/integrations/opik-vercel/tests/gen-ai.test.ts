@@ -185,7 +185,7 @@ describe("OpikExporter - AI SDK v7 / GenAI (eve) spans", () => {
 
   // ──────────────────────────────── Tests ─────────────────────────────────
 
-  it("captures the prompt, answer and token usage in OpenAI chat shape", async () => {
+  it("captures the prompt and answer in OpenAI chat shape on the trace", async () => {
     const result = await exportSpans(TURN_SPAN, CHAT_SPAN, TOOL_SPAN);
 
     expect(result.code).toBe(0);
@@ -203,16 +203,25 @@ describe("OpikExporter - AI SDK v7 / GenAI (eve) spans", () => {
           },
         ],
       },
-      // token usage, including cache tokens
-      usage: {
-        prompt_tokens: 5170,
-        completion_tokens: 54,
-        total_tokens: 5224,
-        "original_usage.cache_read_input_tokens": 5167,
-        "original_usage.cache_creation_input_tokens": 48,
-      },
       // multi-turn grouping via the eve session id
       threadId: SESSION_ID,
+    });
+    // The trace itself never carries token usage; the backend aggregates it
+    // from the LLM spans.
+    expect((lastTrace() as { usage?: unknown }).usage).toBeUndefined();
+  });
+
+  it("records token usage (incl. cache tokens) on the LLM span", async () => {
+    await exportSpans(TURN_SPAN, CHAT_SPAN, TOOL_SPAN);
+
+    const chat = createdSpans().find((span) => span.name?.startsWith("chat"));
+    expect(chat!.type).toBe("llm");
+    expect(chat!.usage).toMatchObject({
+      prompt_tokens: 5170,
+      completion_tokens: 54,
+      total_tokens: 5224,
+      "original_usage.cache_read_input_tokens": 5167,
+      "original_usage.cache_creation_input_tokens": 48,
     });
   });
 
