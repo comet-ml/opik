@@ -161,7 +161,10 @@ public class FilterUtils {
 
                     findTraceThreadIdPushdownFilter(filters)
                             .ifPresent(idFilter -> template.add("traces_pushdown_filter", true));
+
                 });
+        Optional.ofNullable(traceSearchCriteria.annotationQueueId())
+                .ifPresent(queueId -> template.add("annotation_queue_id", queueId.toString()));
         Optional.ofNullable(traceSearchCriteria.lastReceivedId())
                 .ifPresent(lastReceivedTraceId -> template.add("last_received_id", lastReceivedTraceId));
 
@@ -192,8 +195,10 @@ public class FilterUtils {
 
                     findTraceThreadIdPushdownFilter(filters)
                             .ifPresent(idFilter -> statement.bind("thread_id_pushdown", idFilter.value()));
-                });
 
+                });
+        Optional.ofNullable(traceSearchCriteria.annotationQueueId())
+                .ifPresent(queueId -> statement.bind("annotation_queue_id", queueId.toString()));
         Optional.ofNullable(traceSearchCriteria.lastReceivedId())
                 .ifPresent(lastReceivedTraceId -> statement.bind("last_received_id", lastReceivedTraceId));
         // Bind UUID BETWEEN bounds for time-based filtering

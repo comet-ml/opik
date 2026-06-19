@@ -40,6 +40,7 @@ public class FeedbackScoreAssertionUtils {
                                 .createdAt(null)
                                 .lastUpdatedAt(null)
                                 .valueByAuthor(null)
+                                .sourceQueueId(null)
                                 .build())
                         .toList())
                 .build();
