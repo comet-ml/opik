@@ -16,4 +16,5 @@ export interface GetTraceThreadsRequest {
     search?: string;
     fromTime?: Date;
     toTime?: Date;
+    annotationQueueId?: string;
 }

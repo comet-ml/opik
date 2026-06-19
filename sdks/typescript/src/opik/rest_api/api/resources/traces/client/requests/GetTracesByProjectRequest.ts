@@ -17,4 +17,5 @@ export interface GetTracesByProjectRequest {
     search?: string;
     fromTime?: Date;
     toTime?: Date;
+    annotationQueueId?: string;
 }
