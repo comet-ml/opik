@@ -13,12 +13,14 @@ import com.comet.opik.api.resources.v1.jobs.PromptProjectMigrationJob;
 import com.comet.opik.api.resources.v1.jobs.RetentionCatchUpJob;
 import com.comet.opik.api.resources.v1.jobs.RetentionEstimationJob;
 import com.comet.opik.api.resources.v1.jobs.RetentionSlidingWindowJob;
+import com.comet.opik.api.resources.v1.jobs.StreamConsumerReaperJob;
 import com.comet.opik.api.resources.v1.jobs.TraceThreadsClosingJob;
 import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
 import com.comet.opik.infrastructure.LlmModelRegistryConfig;
 import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.RetentionConfig;
+import com.comet.opik.infrastructure.StreamConsumerReaperConfig;
 import com.comet.opik.infrastructure.TraceThreadConfig;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryRefreshJob;
 import com.google.inject.Injector;
@@ -60,6 +62,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 setMetricsAlertJob();
                 setExperimentDenormalizationJob();
                 setLocalRunnerReaperJob();
+                setStreamConsumerReaperJob();
                 setRetentionJobs();
                 setLlmModelRegistryRefreshJob();
                 scheduleDatasetVersionItemsTotalMigrationJobIfEnabled();
@@ -146,6 +149,20 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
 
         scheduleRepeatingJob(LocalRunnerReaperJob.class,
                 localRunnerConfig.getReaperJobInterval().toJavaDuration(), null);
+    }
+
+    private void setStreamConsumerReaperJob() {
+        StreamConsumerReaperConfig reaperConfig = injector.get().getInstance(OpikConfiguration.class)
+                .getStreamConsumerReaper();
+
+        if (!reaperConfig.enabled()) {
+            log.info("Stream consumer reaper job is disabled, skipping job setup");
+            return;
+        }
+
+        scheduleRepeatingJob(StreamConsumerReaperJob.class,
+                reaperConfig.jobInterval().toJavaDuration(),
+                reaperConfig.startupDelay().toJavaDuration());
     }
 
     private void setRetentionJobs() {
