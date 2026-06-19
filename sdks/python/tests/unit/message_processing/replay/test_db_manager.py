@@ -235,15 +235,31 @@ class TestRegisterMessage:
         message = _create_trace_message(message_id=1)
         manager.register_message(message)  # Should not raise
 
-    def test_register_message__message_id_none__raises_value_error(
+    def test_register_message__message_id_none__auto_assigns_sqlite_id(
         self, manager: db_manager.DBManager
     ):
-        """Test that registering a message without message_id raises an error."""
+        """Test that registering a message without message_id gets an auto-increment id."""
         message = _create_trace_message(message_id=1)
         message.message_id = None
+        expected_json = message_serialization.serialize_message(message)
 
-        with pytest.raises(ValueError, match="Message ID expected"):
-            manager.register_message(message)
+        manager.register_message(message)
+
+        assert message.message_id is not None
+        assert message.message_id >= 1
+
+        cursor = manager.conn.execute(
+            "SELECT message_id, status, message_type, message_json FROM messages WHERE message_id = ?",
+            (message.message_id,),
+        )
+        row = cursor.fetchone()
+        assert row is not None
+        assert row[0] == message.message_id
+        assert row[1] == db_manager.MessageStatus.registered
+        assert row[2] == message.message_type
+        # Serialization happened before the id was assigned, so the stored JSON
+        # contains message_id null.
+        assert row[3] == expected_json
 
 
 class TestRegisterMessages:
@@ -536,6 +552,8 @@ class TestReplayFailedMessages:
         assert len(received_messages) == 1
         assert isinstance(received_messages[0], messages.CreateTraceMessage)
         assert received_messages[0].trace_id == "trace-1"
+        # The DB row ID must be restored so replay can update/delete the right row.
+        assert received_messages[0].message_id == 1
 
     def test_replay_failed_messages__manager_closed__returns_zero(
         self, manager: db_manager.DBManager
@@ -889,3 +907,75 @@ class TestDbMessageToMessage:
 
         with pytest.raises(ValueError, match="Unsupported message type"):
             db_manager.db_message_to_message(db_message)
+
+
+class TestGetMaxMessageId:
+    def test_get_max_message_id__empty_db(self, manager: db_manager.DBManager):
+        assert manager.get_max_message_id() == -1
+
+    def test_get_max_message_id__with_messages(self, manager: db_manager.DBManager):
+        for i in range(3):
+            msg = _create_trace_message(message_id=i + 10)
+            manager.register_message(msg)
+
+        assert manager.get_max_message_id() == 12
+
+    def test_get_max_message_id__after_restart_with_single_file(self, tmp_path):
+        """In single-file mode, message ids persist across DBManager restarts."""
+        db_file = str(tmp_path / "replay.db")
+        mgr1 = db_manager.DBManager(batch_size=10, batch_replay_delay=0.1, db_file=db_file)
+        msg = _create_trace_message(message_id=None)
+        mgr1.register_message(msg)
+        max_id = msg.message_id
+        mgr1.close()
+
+        mgr2 = db_manager.DBManager(batch_size=10, batch_replay_delay=0.1, db_file=db_file)
+        assert mgr2.get_max_message_id() == max_id
+        mgr2.close()
+
+    def test_get_max_message_id__after_close(self, manager: db_manager.DBManager):
+        manager.close()
+        assert manager.get_max_message_id() == -1
+
+    def test_get_max_message_id__db_failed(self, manager: db_manager.DBManager):
+        manager._mark_as_db_failed("test failure")
+        assert manager.get_max_message_id() == -1
+
+
+class TestSingleFileMode:
+    def test_single_file_mode__multiple_managers_share_same_db(self, tmp_path):
+        db_file = str(tmp_path / "replay.db")
+        mgr1 = db_manager.DBManager(batch_size=10, batch_replay_delay=0.1, db_file=db_file)
+        mgr2 = db_manager.DBManager(batch_size=10, batch_replay_delay=0.1, db_file=db_file)
+
+        try:
+            assert mgr1.db_file == db_file
+            assert mgr2.db_file == db_file
+
+            msg1 = _create_trace_message(message_id=None, trace_id="trace-1")
+            msg2 = _create_trace_message(message_id=None, trace_id="trace-2")
+            mgr1.register_message(msg1)
+            mgr2.register_message(msg2)
+
+            assert msg1.message_id is not None
+            assert msg2.message_id is not None
+            assert msg1.message_id != msg2.message_id
+        finally:
+            mgr1.close()
+            mgr2.close()
+
+    def test_single_file_mode__failed_messages_persist_across_restarts(self, tmp_path):
+        db_file = str(tmp_path / "replay.db")
+        mgr1 = db_manager.DBManager(batch_size=10, batch_replay_delay=0.1, db_file=db_file)
+        msg = _create_trace_message(message_id=None, trace_id="persisted")
+        mgr1.register_message(msg, status=db_manager.MessageStatus.failed)
+        mgr1.close()
+
+        mgr2 = db_manager.DBManager(batch_size=10, batch_replay_delay=0.1, db_file=db_file)
+        try:
+            assert mgr2.failed_messages_count() == 1
+            replayed = []
+            mgr2.replay_failed_messages(lambda m: replayed.append(m))
+            assert len(replayed) == 1
+        finally:
+            mgr2.close()

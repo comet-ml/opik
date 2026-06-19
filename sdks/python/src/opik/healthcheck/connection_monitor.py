@@ -45,6 +45,7 @@ class OpikConnectionMonitor:
         ping_interval: float,
         check_timeout: float,
         probe: connection_probe.ConnectionProbe,
+        assume_connected: bool = True,
     ):
         """
         Initializes an instance of the class to handle connection probing and monitoring.
@@ -56,9 +57,13 @@ class OpikConnectionMonitor:
                 considered lost if no response is received.
             probe: An instance of the ``connection_probe.ConnectionProbe`` class used for
                 sending probe requests and handling connectivity checks.
+            assume_connected: Whether to assume the server is connected at startup.
+                Defaults to True to preserve existing behavior. When using a persistent
+                offline replay db, set this to False so the first successful ping returns
+                connection_restored and triggers replay of failed messages.
         """
         self._check_timeout = check_timeout
-        self._has_server_connection = True
+        self._has_server_connection = assume_connected
         self._probe = probe
 
         self.last_beat = float("-inf")
@@ -86,10 +91,11 @@ class OpikConnectionMonitor:
             failure_reason: Optional reason for the connection failure. Defaults to None if no reason
                 is provided.
         """
-        if self._has_server_connection:
+        if self._has_server_connection or self.disconnect_time == 0.0:
             # save the first disconnection time and reason
             self.disconnect_time = time.time()
-            self.disconnect_reason = failure_reason
+            if failure_reason is not None:
+                self.disconnect_reason = failure_reason
 
         self._has_server_connection = False
 

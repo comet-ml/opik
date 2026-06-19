@@ -59,6 +59,7 @@ setup(
         "tqdm",
         "uuid6",
         "jinja2",
+        "filelock>=3.0.0",
         "watchfiles>=1.0.0,<2.0.0",
         # tree-sitter is used for JS/TS syntax checking in bridge handlers.
         # Pre-built wheels are missing for musllinux_aarch64 (Alpine on ARM64),

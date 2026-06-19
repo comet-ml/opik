@@ -4,8 +4,10 @@ import time
 from typing import Optional
 
 from opik.healthcheck import connection_monitor
-from . import db_manager, types
+from . import db_manager, file_lock, types
 from .. import messages
+
+LockHandleType = Optional[file_lock.FileLock]
 
 
 LOGGER = logging.getLogger(__name__)
@@ -19,13 +21,16 @@ def _check_message_id(message_id: Optional[int]) -> None:
 
 class ReplayManager(threading.Thread):
     """
-    Manages replaying messages to the server for a connection management system.
+    Manages replaying failed messages to the Opik server.
 
-    The ReplayManager is responsible for ensuring that messages which fail to be
-    delivered due to dropped connections are replayed to the server
-    when the connection is restored. It continuously monitors the connection status
-    and triggers failed message replays as necessary. The class runs in its own
-    thread, leveraging the threading.Thread base class.
+    The manager runs a background thread that monitors the connection to the
+    OPIK server. When the connection is restored, only the process that holds
+    the replay leader lock replays failed messages from the shared SQLite file.
+    If the leader dies, another process can acquire the lock on a subsequent tick
+    and take over replay duties.
+
+    When no persistent ``db_file`` is configured, a temporary file is used and
+    this process is always treated as the replay leader.
     """
 
     def __init__(
@@ -34,17 +39,16 @@ class ReplayManager(threading.Thread):
         batch_size: int,
         batch_replay_delay: float,
         tick_interval_seconds: float,
+        db_file: Optional[str] = None,
     ):
         """
-        Initializes the ReplayManager instance.
-
-        Creates the replay manager thread with a specified connection monitor and tick interval.
-
         Args:
-            monitor: An instance of OpikConnectionMonitor used for monitoring the connection.
-            batch_size: The size of batches for processing.
-            batch_replay_delay: The delay (in seconds) between replaying batches of messages.
-            tick_interval_seconds: Interval in seconds between execution ticks. Default is 0.3.
+            monitor: Connection monitor used to detect server connectivity.
+            batch_size: Number of failed messages to replay in one batch.
+            batch_replay_delay: Delay in seconds between replay batches.
+            tick_interval_seconds: Interval between thread ticks.
+            db_file: Optional path to a persistent SQLite file. Multiple processes
+                can share this file using SQLite WAL mode.
         """
         super().__init__(daemon=True, name="ReplayManager")
         self._stop_running = threading.Event()
@@ -53,13 +57,37 @@ class ReplayManager(threading.Thread):
         self._tick_interval_seconds = tick_interval_seconds
         self._next_tick_time = time.time() + self._tick_interval_seconds
 
-        self._next_message_id = 0
-        self._message_id_lock = threading.RLock()
-
+        self._db_file = db_file
         self._db_manager = db_manager.DBManager(
             batch_size=batch_size,
             batch_replay_delay=batch_replay_delay,
+            db_file=db_file,
         )
+
+        self._replay_lock: LockHandleType = None
+        self._is_replay_leader = False
+        self._try_acquire_replay_lock()
+
+    def _try_acquire_replay_lock(self) -> None:
+        """Attempt to become the replay leader. Always leader in temp-file mode."""
+        if self._db_file is None:
+            self._is_replay_leader = True
+            return
+
+        if self._is_replay_leader:
+            return
+
+        lock = file_lock.acquire_replay_lock(self._db_file)
+        if lock is not None:
+            self._replay_lock = lock
+            self._is_replay_leader = True
+            LOGGER.debug("This process is now the replay leader for %s", self._db_file)
+
+    def _release_replay_lock(self) -> None:
+        if self._replay_lock is not None:
+            file_lock.release_replay_lock(self._replay_lock)
+            self._replay_lock = None
+        self._is_replay_leader = False
 
     def start(self) -> None:
         self._check_replay_callback()
@@ -78,6 +106,11 @@ class ReplayManager(threading.Thread):
         return self._db_manager
 
     @property
+    def is_replay_leader(self) -> bool:
+        """Returns True if this process currently holds the replay leader lock."""
+        return self._is_replay_leader
+
+    @property
     def has_server_connection(self) -> bool:
         """Checks if SDK has a connection to the OPIK server."""
         return self._monitor.has_server_connection
@@ -88,12 +121,6 @@ class ReplayManager(threading.Thread):
         status: db_manager.MessageStatus = db_manager.MessageStatus.registered,
     ) -> None:
         """Registers a message to be replayed if the connection is lost."""
-        with self._message_id_lock:
-            # set message ID if not set yet
-            if message.message_id is None:
-                message.message_id = self._next_message_id
-                self._next_message_id += 1
-
         try:
             self._db_manager.register_message(message, status=status)
         except Exception as ex:
@@ -137,14 +164,24 @@ class ReplayManager(threading.Thread):
         self._replay_callback = callback
 
     def close(self) -> None:
-        """Stop the replay manager."""
+        """Stop the replay manager and release locks."""
         self._stop_running.set()
 
+        if self.ident is not None and self.is_alive():
+            self.join(timeout=5.0)
+
+        if not self._db_manager.closed:
+            self._db_manager.close()
+
+        self._release_replay_lock()
+
     def flush(self) -> None:
-        """Force replay of all failed messages to the server."""
+        """Force replay of all failed messages to the server if this is the leader."""
         self._check_replay_callback()
-        # ignore MyPy check because already asserted above
-        self._replay_failed_messages()
+        if self._is_replay_leader:
+            self._replay_failed_messages()
+        else:
+            LOGGER.debug("flush skipped: this process is not the replay leader")
 
     def _loop(self) -> None:
         sleep_time = self._next_tick_time - time.time()
@@ -154,9 +191,14 @@ class ReplayManager(threading.Thread):
 
         try:
             status = self._monitor.tick()
+
+            # Allow leadership to move if the current leader dies.
+            if not self._is_replay_leader:
+                self._try_acquire_replay_lock()
+
             if status == connection_monitor.ConnectionStatus.connection_restored:
-                # the connection was restored, replay all failed messages
-                self._replay_failed_messages()
+                if self._is_replay_leader:
+                    self._replay_failed_messages()
                 self._monitor.reset()
         except Exception as ex:
             LOGGER.warning(
@@ -177,7 +219,6 @@ class ReplayManager(threading.Thread):
     def _replay_failed_messages(self) -> None:
         self._check_replay_callback()
         try:
-            # ignore MyPy check because already asserted above
             replayed = self._db_manager.replay_failed_messages(
                 self._replay_callback  # type: ignore
             )

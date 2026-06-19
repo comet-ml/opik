@@ -2,10 +2,9 @@
 that failed to reach the Opik server. DBManager exposes helpers for the full
 message lifecycle: register_message(s), fetch_failed_messages_batched, and
 replay_failed_messages (which accepts a ReplayCallback, typically Streamer.put,
-to re-inject messages). The manager tracks three states — undefined, initialized, closed,
-and error — and if the underlying database becomes unavailable, it marks itself
-as failed (error) and logs that resiliency features are disabled. The standalone helper
-db_message_to_message raises ValueError for unsupported message types.
+to re-inject messages). The manager tracks three states — undefined, initialized,
+closed, and error — and if the underlying database becomes unavailable, it marks
+itself as failed (error) and logs that resiliency features are disabled.
 """
 
 import logging
@@ -34,16 +33,10 @@ class MessageStatus(IntEnum):
     """
     Represents the status of a message.
 
-    This enumeration defines the potential statuses that a message can
-    have in a messaging system. Used for categorizing messages based on
-    their lifecycle stage or outcome.
-
     Attributes:
-        registered: Represents a message that has been successfully
-            registered but not yet processed or delivered.
-        delivered : Represents a message that has been successfully
-            delivered to its recipient.
-        failed: Represents a message for which delivery has failed.
+        registered: Message queued for delivery.
+        delivered: Message delivered successfully.
+        failed: Delivery failed.
     """
 
     registered = 1
@@ -53,11 +46,7 @@ class MessageStatus(IntEnum):
 
 @unique
 class DBManagerStatus(IntEnum):
-    """Represents various status values for a manager.
-
-    Defines a set of distinct states that a manager can occupy during its lifecycle.
-    This can be used to track and manage the status of a manager in an application.
-    """
+    """Lifecycle states for DBManager."""
 
     undefined = 1
     initialized = 2
@@ -66,20 +55,7 @@ class DBManagerStatus(IntEnum):
 
 
 class DBMessage(NamedTuple):
-    """
-    Represents a database message entity.
-
-    This class is used to encapsulate information about messages stored in
-    or retrieved from a database. It provides a structured format for handling
-    message data, including its unique identifier, type, JSON content, and
-    current status.
-
-    Attributes:
-        id: The unique identifier of the message.
-        type: The type/category of the message.
-        json: The JSON-encoded content of the message.
-        status: The current status of the message.
-    """
+    """Database row representation of a stored message."""
 
     id: int
     type: str
@@ -87,22 +63,20 @@ class DBMessage(NamedTuple):
     status: MessageStatus
 
 
-def _preprocess_registered_message(message: messages.BaseMessage) -> str:
-    if message.message_id is None:
-        raise ValueError("Message ID expected")
-
+def _serialize_message(message: messages.BaseMessage) -> str:
     return message_serialization.serialize_message(message)
 
 
 class DBManager:
     """
-    Manages message storage, batch processing, and database operations within a replay
-    system.
+    Thread-safe SQLite store for replay messages.
 
-    This class provides functionalities to handle message registrations, batch updates,
-    and database schema management. It ensures thread-safe operations, cleans up
-    temporary files, and handles database connections as part of its lifecycle.
+    When ``db_file`` is provided, it is used as a single shared SQLite file.
+    Multiple processes can write concurrently because the connection runs in
+    WAL (write-ahead logging) mode.
 
+    When ``db_file`` is ``None``, a temporary directory and file are created and
+    cleaned up on close.
     """
 
     def __init__(
@@ -113,27 +87,23 @@ class DBManager:
         conn: Optional[sqlite3.Connection] = None,
         sync_lock: Optional[threading.RLock] = None,
     ) -> None:
-        """
-        Initializes the Manager class, setting up the database connection, temporary
-        directory, and other necessary properties for managing batch operations.
-
-        Args:
-            batch_size: The size of batches for processing.
-            batch_replay_delay: The delay (in seconds) between replaying batches of messages.
-            db_file: Path to the database file. If not provided, a
-                temporary file will be created in a temporary directory.
-            conn: A pre-existing database connection.
-                If not provided, a new connection is created.
-        """
         self.batch_size = batch_size
         self.batch_replay_delay = batch_replay_delay
         self.status = DBManagerStatus.undefined
-        self.tmp_dir = tempfile.mkdtemp()
+        self.tmp_dir: Optional[str] = None
+
         if db_file is None:
+            # Default mode: temporary file + automatic cleanup.
+            self.tmp_dir = tempfile.mkdtemp()
             db_file = os.path.join(self.tmp_dir, DEFAULT_DB_FILE)
+        else:
+            # Single shared file mode: ensure the parent directory exists.
+            parent_dir = os.path.dirname(os.path.abspath(db_file))
+            if parent_dir:
+                os.makedirs(parent_dir, exist_ok=True)
 
         self.db_file = db_file
-        # open DB connection if appropriate
+
         if conn is None:
             conn = sqlite3.connect(self.db_file, check_same_thread=False)
         self.conn = conn
@@ -144,22 +114,28 @@ class DBManager:
             self.__lock__ = sync_lock
 
         # Non-reentrant mutex that serializes concurrent replay_failed_messages
-        # calls. Producers (register_message / update_message) use self.__lock__,
-        # so they are never affected by this mutex.
+        # calls. Producers use self.__lock__, so they are never blocked by replay.
         self._replay_mutex = threading.Lock()
 
         self._create_db_schema()
 
+    def _configure_wal(self) -> None:
+        """Enable WAL mode so multiple processes can write concurrently."""
+        with self.conn:
+            self.conn.execute("PRAGMA journal_mode=WAL")
+            self.conn.execute("PRAGMA busy_timeout=5000")
+
     def _create_db_schema(self) -> None:
         try:
+            self._configure_wal()
             with self.__lock__:
                 with self.conn:
                     self.conn.execute(
                         """CREATE TABLE IF NOT EXISTS messages
-                                            (message_id INTEGER NOT NULL PRIMARY KEY,
-                                            status INTEGER NOT NULL,
-                                            message_type TEXT NOT NULL,
-                                            message_json TEXT NOT NULL)"""
+                            (message_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                             status INTEGER NOT NULL,
+                             message_type TEXT NOT NULL,
+                             message_json TEXT NOT NULL)"""
                     )
                     self.status = DBManagerStatus.initialized
         except Exception as ex:
@@ -168,14 +144,7 @@ class DBManager:
             LOGGER.warning(msg, exc_info=True)
 
     def close(self) -> None:
-        """
-        Closes the current manager, releasing all associated resources.
-
-        This method ensures the proper cleanup of resources such as database connections
-        and temporary directories. It performs the operations within a thread-safe context
-        by acquiring an internal lock. If the manager is already closed, the method will
-        return immediately without performing any actions.
-        """
+        """Release all associated resources."""
         if self.closed:
             return
 
@@ -190,7 +159,7 @@ class DBManager:
                     "Failed to close messages DB connection: %s", e, exc_info=True
                 )
 
-            # delete temporary data
+            # Delete temporary data.
             if self.tmp_dir is not None:
                 try:
                     LOGGER.debug("Cleaning temporary data dir: %r", self.tmp_dir)
@@ -209,18 +178,8 @@ class DBManager:
         status: MessageStatus = MessageStatus.registered,
     ) -> None:
         """
-        Registers a message into the database if the system is initialized and not closed.
-
-        This method processes the given message, converts it into a JSON format, and
-        inserts it into the database with the provided or default status. If the system
-        is either not initialized or already closed, the message registration will be
-        ignored.
-
-        Args:
-            message: The message object to be registered. This
-                object must have attributes such as `message_id` and `message_type`.
-            status: The status of the message to be registered.
-                Defaults to `MessageStatus.registered`.
+        Persist a message. If ``message.message_id`` is ``None``, SQLite assigns
+        an auto-increment primary key and updates ``message.message_id`` with it.
         """
         if not self.initialized:
             LOGGER.debug("Not initialized - register message ignored")
@@ -231,21 +190,23 @@ class DBManager:
                 LOGGER.warning("Already closed - register message ignored")
                 return
 
-            message_json = _preprocess_registered_message(message)
-            # insert into DB
-            values = (
-                message.message_id,
-                status,
-                message.message_type,
-                message_json,
-            )
+            message_json = _serialize_message(message)
+
             try:
                 with self.conn:
-                    self.conn.execute(
-                        "INSERT INTO messages(message_id, status, message_type, message_json) VALUES (?,?,?,?)"
-                        " ON CONFLICT(message_id) DO UPDATE SET status = excluded.status, message_type = excluded.message_type, message_json = excluded.message_json",
-                        values,
-                    )
+                    if message.message_id is None:
+                        cursor = self.conn.execute(
+                            "INSERT INTO messages(status, message_type, message_json) VALUES (?, ?, ?)",
+                            (status, message.message_type, message_json),
+                        )
+                        message.message_id = cursor.lastrowid
+                    else:
+                        self.conn.execute(
+                            "INSERT INTO messages(message_id, status, message_type, message_json) VALUES (?, ?, ?, ?)"
+                            " ON CONFLICT(message_id) DO UPDATE SET status = excluded.status,"
+                            " message_type = excluded.message_type, message_json = excluded.message_json",
+                            (message.message_id, status, message.message_type, message_json),
+                        )
             except Exception as ex:
                 self._mark_as_db_failed(
                     f"register_message: failed to insert message into DB, reason: {ex}"
@@ -257,16 +218,7 @@ class DBManager:
         messages_batch: List[messages.BaseMessage],
         status: MessageStatus = MessageStatus.registered,
     ) -> None:
-        """
-        Registers a batch of messages in the database. If the system is not initialized or
-        already closed, the operation is ignored.
-
-        Args:
-            messages_batch: A list of message objects to be
-                registered in the database.
-            status: The status to be associated with the registered messages.
-                Defaults to MessageStatus.registered.
-        """
+        """Persist a batch of messages under a single lock."""
         if not self.initialized:
             LOGGER.debug("Not initialized - register messages list ignored")
             return
@@ -276,25 +228,23 @@ class DBManager:
                 LOGGER.warning("Already closed - register messages list ignored")
                 return
 
-            values = []
-            for message in messages_batch:
-                message_json = _preprocess_registered_message(message)
-                values.append(
-                    (
-                        message.message_id,
-                        status,
-                        message.message_type,
-                        message_json,
-                    )
-                )
-
             try:
                 with self.conn:
-                    self.conn.executemany(
-                        "INSERT INTO messages(message_id, status, message_type, message_json) VALUES (?,?,?,?)"
-                        " ON CONFLICT(message_id) DO UPDATE SET status = excluded.status, message_type = excluded.message_type, message_json = excluded.message_json",
-                        values,
-                    )
+                    for message in messages_batch:
+                        message_json = _serialize_message(message)
+                        if message.message_id is None:
+                            cursor = self.conn.execute(
+                                "INSERT INTO messages(status, message_type, message_json) VALUES (?, ?, ?)",
+                                (status, message.message_type, message_json),
+                            )
+                            message.message_id = cursor.lastrowid
+                        else:
+                            self.conn.execute(
+                                "INSERT INTO messages(message_id, status, message_type, message_json) VALUES (?, ?, ?, ?)"
+                                " ON CONFLICT(message_id) DO UPDATE SET status = excluded.status,"
+                                " message_type = excluded.message_type, message_json = excluded.message_json",
+                                (message.message_id, status, message.message_type, message_json),
+                            )
             except Exception as ex:
                 self._mark_as_db_failed(
                     f"register_messages: failed to insert messages into DB, reason: {ex}"
@@ -304,17 +254,7 @@ class DBManager:
     def update_messages_batch(
         self, message_ids: List[int], status: MessageStatus
     ) -> None:
-        """
-        Updates the status of a batch of messages in the messages database table or deletes
-        the messages if their status is 'delivered'. The function ensures thread safety
-        and performs operations only if the instance is initialized and not closed.
-
-        Args:
-            message_ids: A list of message IDs to be updated or deleted.
-            status: The new status to be assigned to the messages or to
-                determine if messages should be deleted when the status is 'delivered'.
-
-        """
+        """Update the status of a batch of messages, deleting delivered rows."""
         if not self.initialized:
             LOGGER.debug(
                 "Not initialized - messages batch update ignored, size: %d, status: %r",
@@ -366,18 +306,7 @@ class DBManager:
                 raise
 
     def update_message(self, message_id: int, status: MessageStatus) -> None:
-        """
-        Updates the status of a message in the database or removes it if delivered.
-
-        This method is responsible for updating the status of a message in the database
-        or removing delivered messages along with their associated data. The operation
-        is ignored if the instance is not initialized or already closed.
-
-        Args:
-            message_id: The unique identifier of the message to be updated.
-            status: The new status to set for the message. If the status
-                is `MessageStatus.delivered`, the message will be removed.
-        """
+        """Update the status of a single message or delete it if delivered."""
         if not self.initialized:
             LOGGER.debug(
                 "Not initialized - message update ignored, id: %d, status: %r",
@@ -397,7 +326,6 @@ class DBManager:
             try:
                 with self.conn:
                     if status == MessageStatus.delivered:
-                        # remove delivered messages
                         self.conn.execute(
                             "DELETE FROM messages WHERE message_id = ?", (message_id,)
                         )
@@ -414,30 +342,10 @@ class DBManager:
 
     def replay_failed_messages(self, replay_callback: ReplayCallback) -> int:
         """
-        Replays previously failed messages by fetching them in batches, marking them as
-        "in progress," and invoking the provided callback for processing.
+        Replays previously failed messages in batches.
 
-        This method processes messages marked as failed in the database by updating
-        their status and invoking the replay callback. It supports batch processing to
-        limit memory usage. If the system is not initialized or already closed, the
-        replay process is skipped. Errors encountered during the replay or while
-        updating the database are logged, and the replay process halts.
-
-        The lock is held only for the minimal critical sections (closed check and the
-        DB status update that marks each batch as in-progress). It is released before
-        calling the replay callback and before sleeping between batches so that
-        producers (register_message / update_message) are never blocked during replay.
-
-        Concurrent calls are serialized by a non-blocking mutex: if a replay is
-        already in progress, the second caller returns 0 immediately, preventing
-        duplicate re-fetching of the same failed messages.
-
-        Args:
-            replay_callback: A callback function that processes the
-                replayed messages.
-
-        Returns:
-            int: The total count of successfully replayed messages.
+        Concurrent calls are serialized by a non-blocking mutex so the same failed
+        messages are not fetched twice.
         """
         if self.closed:
             LOGGER.debug("DBManager already closed")
@@ -447,11 +355,6 @@ class DBManager:
             LOGGER.debug("Not initialized - messages replay ignored")
             return 0
 
-        # Prevent concurrent replay calls from re-fetching the same failed
-        # messages.  The SELECT in fetch_failed_messages_batched runs outside
-        # self.__lock__, so without this guard two simultaneous callers could
-        # both see the same rows before either has had a chance to mark them
-        # as in-progress.
         if not self._replay_mutex.acquire(blocking=False):
             LOGGER.debug("Replay already in progress - skipping concurrent call")
             return 0
@@ -462,7 +365,6 @@ class DBManager:
             self._replay_mutex.release()
 
     def _replay_failed_messages_impl(self, replay_callback: ReplayCallback) -> int:
-        # The initial closed check — short critical section, no loop held inside.
         with self.__lock__:
             if self.closed:
                 LOGGER.warning("Already closed - messages replay ignored")
@@ -473,8 +375,7 @@ class DBManager:
             params = [
                 (int(MessageStatus.registered), message.id) for message in db_messages
             ]
-            # Critical section: check closed and mark the batch as "in progress"
-            # so the same messages are not re-fetched on a concurrent replay call.
+            # Mark the batch as in-progress so it is not re-fetched concurrently.
             with self.__lock__:
                 if self.closed:
                     LOGGER.debug(
@@ -499,16 +400,12 @@ class DBManager:
                     )
                     raise
 
-            # Lock released — replay callback and inter-batch sleep run without
-            # blocking producers (register_message / update_message).
             replayed = self._replay_messages(
                 db_messages=db_messages, replay_callback=replay_callback
             )
             total_replayed += replayed
 
-            # Sleep without the lock so producers are not blocked during the pause.
-            # Applied only after a full batch to avoid unnecessary delays on the
-            # last (partial) batch.
+            # Pause between full batches without holding the lock.
             if replayed >= self.batch_size:
                 time.sleep(self.batch_replay_delay)
 
@@ -533,109 +430,59 @@ class DBManager:
                     e,
                     exc_info=True,
                 )
-                # mark the message as failed in the DB
                 self.update_message(message.id, MessageStatus.failed)
 
         return replayed
 
     def get_message(self, message_id: int) -> Optional[messages.BaseMessage]:
-        """
-        Fetches a message by its unique identifier.
-
-        This method retrieves a message from the database using the provided message ID. If a corresponding
-        database message is found, it converts the database message to a message object and returns it.
-        If no message is found for the given ID, the method returns None.
-
-        Args:
-            message_id: The unique identifier of the message to retrieve.
-
-        Returns:
-            The converted message object if found, otherwise None.
-        """
+        """Fetch a single message by id."""
         db_message = self.get_db_message(message_id)
         if db_message is not None:
             return db_message_to_message(db_message)
-        else:
-            return None
+        return None
 
     def get_db_message(self, message_id: int) -> Optional[DBMessage]:
-        """
-        Retrieves a database message based on the provided message ID.
-
-        This method queries the database for a message record that corresponds to the
-        given message ID. If a matching message record is found, it constructs and
-        returns a `DBMessage` object containing the message's details. If no record is
-        found, it returns `None`.
-
-        Args:
-            message_id: The ID of the message to retrieve.
-
-        Returns:
-            A `DBMessage` object containing the details of the
-            retrieved message if found, otherwise `None`.
-        """
-        with self.conn:
-            c = self.conn.execute(
-                "SELECT message_id, message_type, message_json, status FROM messages WHERE message_id = ?",
-                (message_id,),
-            )
-            row = c.fetchone()
-            if row is not None:
-                return DBMessage(
-                    id=row[0], type=row[1], json=row[2], status=MessageStatus(row[3])
-                )
-            else:
+        """Fetch a single database row by id."""
+        with self.__lock__:
+            if self.closed:
                 return None
+            try:
+                with self.conn:
+                    c = self.conn.execute(
+                        "SELECT message_id, message_type, message_json, status FROM messages WHERE message_id = ?",
+                        (message_id,),
+                    )
+                    row = c.fetchone()
+                    if row is not None:
+                        return DBMessage(
+                            id=row[0],
+                            type=row[1],
+                            json=row[2],
+                            status=MessageStatus(row[3]),
+                        )
+                    return None
+            except Exception as ex:
+                self._mark_as_db_failed(
+                    f"get_db_message: failed to query DB, reason: {ex}"
+                )
+                raise
 
     @property
     def closed(self) -> bool:
-        """
-        Determines if the manager is currently closed.
-
-        This property evaluates whether the manager's `status` is equivalent to
-        `DBManagerStatus.closed`. If so, it indicates that the manager is not
-        active or operational.
-
-        Returns:
-            bool: True if the manager's status is `DBManagerStatus.closed`, False otherwise.
-        """
         return self.status == DBManagerStatus.closed
 
     @property
     def initialized(self) -> bool:
-        """
-        Indicates whether the manager's status is currently set to 'initialized'.
-
-        This property provides a lookup to determine if the manager is currently in the
-        initialized state, based on its status attribute.
-
-        Returns:
-            bool: True if the manager's status is 'initialized', False otherwise.
-        """
         return self.status == DBManagerStatus.initialized
 
     @property
     def failed(self) -> bool:
-        """
-        Checks if the current status indicates a failure.
-
-        The `failed` property evaluates whether the `status` attribute of the
-        manager is equal to `ManagerStatus.error`. This serves as an indicator
-        of whether an error state has been encountered.
-
-        Returns:
-            bool: True if the status is `ManagerStatus.error`, otherwise False.
-        """
         return self.status == DBManagerStatus.error
 
     def fetch_failed_messages_batched(
         self, batch_size: int
     ) -> Iterator[List[DBMessage]]:
-        """Fetch failed messages from DB in bounded batches to avoid OOM.
-
-        Uses cursor-based pagination with message_id for efficient iteration.
-        Yields batches of DBMessage objects until no more failed messages remain.
-        """
+        """Yield failed messages in bounded batches ordered by message_id."""
         last_seen_id = -1
         while True:
             batch: List[DBMessage] = []
@@ -669,7 +516,7 @@ class DBManager:
             yield batch
 
     def failed_messages_count(self) -> int:
-        """Returns the number of failed messages in the DB or -1 if not initialized, closed, or failed."""
+        """Return the number of failed messages or -1 if unavailable."""
         if not self.initialized:
             LOGGER.debug("Not initialized - failed messages count ignored")
             return -1
@@ -698,6 +545,29 @@ class DBManager:
             message,
         )
 
+    def get_max_message_id(self) -> int:
+        """Return the maximum message_id or -1 if empty/unavailable."""
+        if not self.initialized:
+            LOGGER.debug("Not initialized - get_max_message_id ignored")
+            return -1
+
+        with self.__lock__:
+            if self.closed:
+                LOGGER.warning("Already closed - get_max_message_id ignored")
+                return -1
+
+            try:
+                with self.conn:
+                    row = self.conn.execute(
+                        "SELECT COALESCE(MAX(message_id), -1) FROM messages"
+                    ).fetchone()
+                    return row[0]
+            except Exception as ex:
+                msg = f"get_max_message_id: failed to query DB, reason: {ex}"
+                LOGGER.error(msg, exc_info=True)
+                self._mark_as_db_failed(msg)
+                return -1
+
 
 SUPPORTED_MESSAGE_TYPES = {
     messages.CreateTraceMessage.message_type: messages.CreateTraceMessage,
@@ -717,30 +587,17 @@ SUPPORTED_MESSAGE_TYPES = {
 
 
 def db_message_to_message(db_message: DBMessage) -> messages.BaseMessage:
-    """
-    Converts a database message object to a corresponding application message object.
-
-    This function maps a database message type to its associated application message
-    class using a predefined dictionary of supported message types. If the type is not
-    supported, an exception is raised. The message is then deserialized from its JSON
-    representation into the appropriate application message class.
-
-    Args:
-        db_message: The database message object containing the type and serialized JSON
-            data to be deserialized.
-
-    Returns:
-        The deserialized application message object corresponding to the provided
-        database message type.
-
-    Raises:
-        ValueError: If the database message contains an unsupported or unrecognized
-        message type.
-    """
+    """Deserialize a DB row into a message object."""
     message_class = SUPPORTED_MESSAGE_TYPES.get(db_message.type)
     if message_class is None:
         raise ValueError(f"Unsupported message type: {db_message.type}")
 
-    return message_serialization.deserialize_message(
+    message = message_serialization.deserialize_message(
         message_class, json_str=db_message.json
     )
+    # The DB row ID is the authoritative message_id. It is intentionally not
+    # serialized into message_json so the same message object can be stored
+    # under different IDs; restore it here so replay can update/delete the
+    # correct row.
+    message.message_id = db_message.id
+    return message

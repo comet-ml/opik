@@ -117,3 +117,17 @@ def test_save_to_file_does_not_persist_environment(mock_expanduser, mock_open_fi
     parsed_config.read_string(written_content)
 
     assert "environment" not in parsed_config["opik"]
+
+
+def test_offline_db_file_defaults_to_none():
+    config = OpikConfig()
+
+    assert config.offline_db_file is None
+
+
+def test_offline_db_file_loaded_from_env(monkeypatch):
+    monkeypatch.setenv("OPIK_OFFLINE_DB_FILE", "/tmp/opik-replay.db")
+
+    config = OpikConfig()
+
+    assert config.offline_db_file == "/tmp/opik-replay.db"

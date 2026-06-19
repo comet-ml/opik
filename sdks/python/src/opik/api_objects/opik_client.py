@@ -259,6 +259,7 @@ class Opik:
             ping_interval=self._config.connection_monitor_ping_interval,
             check_timeout=self._config.connection_monitor_check_timeout,
             probe=probe,
+            assume_connected=self._config.offline_db_file is None,
         )
 
         fallback_replay = replay_manager.ReplayManager(
@@ -266,6 +267,7 @@ class Opik:
             batch_size=self._config.replay_batch_size,
             batch_replay_delay=self._config.replay_batch_replay_delay,
             tick_interval_seconds=self._config.replay_tick_interval,
+            db_file=self._config.offline_db_file,
         )
         return fallback_replay
 

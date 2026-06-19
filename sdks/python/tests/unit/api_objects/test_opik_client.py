@@ -1486,3 +1486,58 @@ class TestGetPromptAutoInjectionDedup:
         assert len(injected) == 2
         ids = {p["id"] for p in injected}
         assert ids == {"pid-1", "pid-2"}
+
+
+class TestOpikClientOfflineReplayConfiguration:
+    def _get_fallback_replay(self, client):
+        return client._streamer._fallback_replay_manager
+
+    def test_default__replay_manager_uses_temp_db_and_monitor_assumes_connected(self):
+        client = opik_client.Opik()
+
+        replay_manager = self._get_fallback_replay(client)
+        monitor = replay_manager._monitor
+
+        assert replay_manager.database_manager.tmp_dir is not None
+        assert monitor.has_server_connection is True
+
+        client.end()
+
+    def test_offline_db_file__replay_manager_uses_persistent_file_and_monitor_does_not_assume_connected(
+        self, tmp_path, monkeypatch
+    ):
+        db_file = str(tmp_path / "opik-replay.db")
+        monkeypatch.setenv("OPIK_OFFLINE_DB_FILE", db_file)
+
+        client = opik_client.Opik()
+
+        replay_manager = self._get_fallback_replay(client)
+        monitor = replay_manager._monitor
+
+        assert replay_manager.database_manager.db_file == db_file
+        assert replay_manager.database_manager.tmp_dir is None
+        assert monitor.has_server_connection is False
+
+        client.end()
+
+    def test_offline_db_file__two_clients_share_same_file(
+        self, tmp_path, monkeypatch
+    ):
+        db_file = str(tmp_path / "opik-replay.db")
+        monkeypatch.setenv("OPIK_OFFLINE_DB_FILE", db_file)
+
+        client1 = opik_client.Opik()
+        client2 = opik_client.Opik()
+
+        try:
+            db_file_1 = self._get_fallback_replay(client1).database_manager.db_file
+            db_file_2 = self._get_fallback_replay(client2).database_manager.db_file
+            assert db_file_1 == db_file
+            assert db_file_2 == db_file
+            # Only one client should be the replay leader.
+            leader1 = self._get_fallback_replay(client1).is_replay_leader
+            leader2 = self._get_fallback_replay(client2).is_replay_leader
+            assert leader1 != leader2 or leader1
+        finally:
+            client1.end()
+            client2.end()

@@ -308,6 +308,18 @@ class OpikConfig(pydantic_settings.BaseSettings):
     Env var: OPIK_PROMPT_CACHE_TTL_SECONDS
     """
 
+    offline_db_file: Optional[str] = None
+    """
+    Path to a persistent SQLite file used by the offline replay manager.
+
+    When set, the SDK stores failed messages in this file. Multiple processes
+    on the same host can share the file using SQLite WAL mode; only one process
+    at a time is elected as the replay leader and replays failed messages.
+
+    When not set, the SDK uses a temporary file that is cleaned on shutdown
+    (default behavior).
+    """
+
     @property
     def config_file_fullpath(self) -> pathlib.Path:
         config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)

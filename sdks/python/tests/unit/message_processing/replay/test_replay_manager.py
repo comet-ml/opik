@@ -569,3 +569,110 @@ class TestEndToEnd:
         assert isinstance(replayed[0], messages.CreateTraceMessage)
         assert replayed[0].trace_id == "trace-1"
         monitor.reset.assert_called()
+
+
+class TestReplayManagerSingleFileMode:
+    def test_single_file_mode__two_managers_share_same_db_file(self, tmp_path):
+        db_file = str(tmp_path / "replay.db")
+        rm1 = replay_manager.ReplayManager(
+            monitor=mock.MagicMock(spec=connection_monitor.OpikConnectionMonitor),
+            batch_size=10,
+            batch_replay_delay=0.01,
+            tick_interval_seconds=0.05,
+            db_file=db_file,
+        )
+        rm2 = replay_manager.ReplayManager(
+            monitor=mock.MagicMock(spec=connection_monitor.OpikConnectionMonitor),
+            batch_size=10,
+            batch_replay_delay=0.01,
+            tick_interval_seconds=0.05,
+            db_file=db_file,
+        )
+
+        try:
+            assert rm1.database_manager.db_file == db_file
+            assert rm2.database_manager.db_file == db_file
+        finally:
+            rm1.close()
+            rm2.close()
+
+    def test_single_file_mode__only_leader_replays_failed_messages(self, tmp_path):
+        db_file = str(tmp_path / "replay.db")
+        monitor = mock.MagicMock(spec=connection_monitor.OpikConnectionMonitor)
+        monitor.tick.return_value = connection_monitor.ConnectionStatus.connection_restored
+
+        rm1 = replay_manager.ReplayManager(
+            monitor=monitor,
+            batch_size=10,
+            batch_replay_delay=0.01,
+            tick_interval_seconds=0.05,
+            db_file=db_file,
+        )
+        rm1.set_replay_callback(lambda m: None)
+
+        rm2 = replay_manager.ReplayManager(
+            monitor=monitor,
+            batch_size=10,
+            batch_replay_delay=0.01,
+            tick_interval_seconds=0.05,
+            db_file=db_file,
+        )
+        rm2.set_replay_callback(lambda m: None)
+
+        try:
+            # One of the managers should have acquired the replay leader lock.
+            assert rm1.is_replay_leader != rm2.is_replay_leader or rm1.is_replay_leader
+            leader = rm1 if rm1.is_replay_leader else rm2
+            follower = rm2 if leader is rm1 else rm1
+            assert leader.is_replay_leader is True
+            assert follower.is_replay_leader is False
+
+            # Register a failed message using the follower so it lands in the shared db.
+            msg = _create_trace_message(message_id=None, trace_id="shared-trace")
+            follower.register_message(msg, status=db_manager.MessageStatus.failed)
+
+            replayed_by_leader: List[messages.BaseMessage] = []
+            leader.set_replay_callback(lambda m: replayed_by_leader.append(m))
+
+            leader._loop()
+
+            assert len(replayed_by_leader) == 1
+            assert replayed_by_leader[0].trace_id == "shared-trace"
+        finally:
+            rm1.close()
+            rm2.close()
+
+    def test_single_file_mode__follower_becomes_leader_after_leader_closes(
+        self, tmp_path
+    ):
+        db_file = str(tmp_path / "replay.db")
+        monitor = mock.MagicMock(spec=connection_monitor.OpikConnectionMonitor)
+        monitor.tick.return_value = connection_monitor.ConnectionStatus.connection_ok
+
+        rm1 = replay_manager.ReplayManager(
+            monitor=monitor,
+            batch_size=10,
+            batch_replay_delay=0.01,
+            tick_interval_seconds=0.05,
+            db_file=db_file,
+        )
+        rm2 = replay_manager.ReplayManager(
+            monitor=monitor,
+            batch_size=10,
+            batch_replay_delay=0.01,
+            tick_interval_seconds=0.05,
+            db_file=db_file,
+        )
+
+        try:
+            leader = rm1 if rm1.is_replay_leader else rm2
+            follower = rm2 if leader is rm1 else rm1
+            assert follower.is_replay_leader is False
+
+            leader.close()
+            # After the leader closes, the follower can acquire the lock on next tick.
+            follower._loop()
+            assert follower.is_replay_leader is True
+        finally:
+            rm2.close()
+            rm1.close()

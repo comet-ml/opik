@@ -69,6 +69,29 @@ class TestOpikConnectionMonitorConnectionFailed:
         assert monitor.disconnect_reason == "First error"
 
 
+class TestOpikConnectionMonitorAssumeConnected:
+    """Tests for OpikConnectionMonitor assume_connected parameter."""
+
+    def test_init__assume_connected_false__first_successful_tick_returns_restored(
+        self, mock_probe
+    ):
+        mock_probe.check_connection.return_value = ProbeResult(
+            is_healthy=True, error_message=None
+        )
+        monitor = OpikConnectionMonitor(
+            ping_interval=5.0,
+            check_timeout=2.0,
+            probe=mock_probe,
+            assume_connected=False,
+        )
+
+        with mock.patch("time.time", return_value=100.0):
+            status = monitor.tick()
+
+        assert status == ConnectionStatus.connection_restored
+        assert monitor.has_server_connection is True
+
+
 class TestOpikConnectionMonitorTick:
     """Tests for OpikConnectionMonitor.tick method."""
 
