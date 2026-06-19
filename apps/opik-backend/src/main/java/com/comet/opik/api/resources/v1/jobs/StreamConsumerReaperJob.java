@@ -18,6 +18,7 @@ import org.quartz.JobExecutionContext;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.lang.reflect.Modifier;
 import java.time.Duration;
@@ -46,7 +47,7 @@ public class StreamConsumerReaperJob extends Job implements InterruptableJob {
     private final @NonNull Injector injector;
     private final @NonNull StreamConsumerReaper reaper;
     private final @NonNull LockService lockService;
-    private final @NonNull StreamConsumerReaperConfig config;
+    private final @NonNull @Config("streamConsumerReaper") StreamConsumerReaperConfig config;
 
     private final AtomicBoolean interrupted = new AtomicBoolean(false);
 
