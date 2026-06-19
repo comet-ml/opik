@@ -2,6 +2,14 @@
 
 # isort: skip_file
 
-from .types import AgentInsightsIssueUpdateStatus, FindAgentInsightsIssuesRequestStatus
+from .types import (
+    AgentInsightsIssueUpdateStatus,
+    FindAgentInsightsIssuesRequestSeverity,
+    FindAgentInsightsIssuesRequestStatus,
+)
 
-__all__ = ["AgentInsightsIssueUpdateStatus", "FindAgentInsightsIssuesRequestStatus"]
+__all__ = [
+    "AgentInsightsIssueUpdateStatus",
+    "FindAgentInsightsIssuesRequestSeverity",
+    "FindAgentInsightsIssuesRequestStatus",
+]

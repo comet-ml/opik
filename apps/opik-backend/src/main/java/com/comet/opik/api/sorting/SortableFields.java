@@ -65,6 +65,7 @@ public class SortableFields {
     public static final String ENVIRONMENT = "environment";
     public static final String LAST_SEEN = "last_seen";
     public static final String TOTAL_OCCURRENCES = "total_occurrences";
+    public static final String SEVERITY = "severity";
 
     /** Wide text columns deferred past pagination by the TraceDAO/SpanDAO page_wide optimization. */
     private static final Set<String> WIDE_TEXT_FIELDS = Set.of(INPUT, OUTPUT, METADATA);

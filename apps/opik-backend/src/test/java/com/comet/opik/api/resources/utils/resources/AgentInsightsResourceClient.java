@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.AgentInsightsIssue;
+import com.comet.opik.api.AgentInsightsIssueSeverity;
 import com.comet.opik.api.AgentInsightsIssueStatus;
 import com.comet.opik.api.AgentInsightsIssueUpdate;
 import com.comet.opik.api.AgentInsightsIssueWithDetails;
@@ -57,12 +58,13 @@ public class AgentInsightsResourceClient {
     }
 
     public AgentInsightsIssue.AgentInsightsIssuePage findIssues(UUID projectId, LocalDate fromDate, LocalDate toDate,
-            AgentInsightsIssueStatus status, List<SortingField> sorting, Integer page, Integer size,
-            String apiKey, String workspaceName, int expectedStatus) {
+            AgentInsightsIssueStatus status, AgentInsightsIssueSeverity severity, List<SortingField> sorting,
+            Integer page, Integer size, String apiKey, String workspaceName, int expectedStatus) {
         try (var actualResponse = findIssuesWithResponse(projectId,
                 fromDate == null ? null : fromDate.toString(),
                 toDate == null ? null : toDate.toString(),
                 status == null ? null : status.getValue(),
+                severity == null ? null : severity.getValue(),
                 CollectionUtils.isEmpty(sorting) ? null : JsonUtils.writeValueAsString(sorting),
                 page, size, apiKey, workspaceName)) {
 
@@ -77,7 +79,7 @@ public class AgentInsightsResourceClient {
     }
 
     public Response findIssuesWithResponse(UUID projectId, String fromDate, String toDate, String status,
-            String sorting, Integer page, Integer size, String apiKey, String workspaceName) {
+            String severity, String sorting, Integer page, Integer size, String apiKey, String workspaceName) {
         WebTarget target = client.target(ISSUES_PATH.formatted(baseURI));
 
         if (projectId != null) {
@@ -91,6 +93,9 @@ public class AgentInsightsResourceClient {
         }
         if (status != null) {
             target = target.queryParam("status", status);
+        }
+        if (severity != null) {
+            target = target.queryParam("severity", severity);
         }
         if (sorting != null) {
             target = target.queryParam("sorting", URLEncoder.encode(sorting, StandardCharsets.UTF_8));

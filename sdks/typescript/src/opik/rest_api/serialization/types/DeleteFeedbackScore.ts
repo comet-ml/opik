@@ -10,11 +10,13 @@ export const DeleteFeedbackScore: core.serialization.ObjectSchema<
 > = core.serialization.object({
     name: core.serialization.string(),
     author: core.serialization.string().optional(),
+    sourceQueueId: core.serialization.property("source_queue_id", core.serialization.string().optional()),
 });
 
 export declare namespace DeleteFeedbackScore {
     export interface Raw {
         name: string;
         author?: string | null;
+        source_queue_id?: string | null;
     }
 }

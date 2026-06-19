@@ -56,6 +56,7 @@ class RawSpansClient:
         *,
         text: str,
         id: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -72,6 +73,8 @@ class RawSpansClient:
         text : str
 
         id : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -94,6 +97,7 @@ class RawSpansClient:
             json={
                 "id": id,
                 "text": text,
+                "source_queue_id": source_queue_id,
                 "created_at": created_at,
                 "last_updated_at": last_updated_at,
                 "created_by": created_by,
@@ -122,6 +126,7 @@ class RawSpansClient:
         source: FeedbackScoreSource,
         category_name: typing.Optional[str] = OMIT,
         reason: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -145,6 +150,8 @@ class RawSpansClient:
         category_name : typing.Optional[str]
 
         reason : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -172,6 +179,7 @@ class RawSpansClient:
                 "value": value,
                 "reason": reason,
                 "source": source,
+                "source_queue_id": source_queue_id,
                 "created_at": created_at,
                 "last_updated_at": last_updated_at,
                 "created_by": created_by,
@@ -826,6 +834,7 @@ class RawSpansClient:
         *,
         name: str,
         author: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -838,6 +847,8 @@ class RawSpansClient:
         name : str
 
         author : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -852,6 +863,7 @@ class RawSpansClient:
             json={
                 "name": name,
                 "author": author,
+                "source_queue_id": source_queue_id,
             },
             headers={
                 "content-type": "application/json",
@@ -1196,6 +1208,7 @@ class RawSpansClient:
         *,
         text: str,
         id: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -1212,6 +1225,8 @@ class RawSpansClient:
         text : str
 
         id : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -1234,6 +1249,7 @@ class RawSpansClient:
             json={
                 "id": id,
                 "text": text,
+                "source_queue_id": source_queue_id,
                 "created_at": created_at,
                 "last_updated_at": last_updated_at,
                 "created_by": created_by,
@@ -1275,6 +1291,7 @@ class AsyncRawSpansClient:
         *,
         text: str,
         id: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -1291,6 +1308,8 @@ class AsyncRawSpansClient:
         text : str
 
         id : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -1313,6 +1332,7 @@ class AsyncRawSpansClient:
             json={
                 "id": id,
                 "text": text,
+                "source_queue_id": source_queue_id,
                 "created_at": created_at,
                 "last_updated_at": last_updated_at,
                 "created_by": created_by,
@@ -1341,6 +1361,7 @@ class AsyncRawSpansClient:
         source: FeedbackScoreSource,
         category_name: typing.Optional[str] = OMIT,
         reason: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -1364,6 +1385,8 @@ class AsyncRawSpansClient:
         category_name : typing.Optional[str]
 
         reason : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -1391,6 +1414,7 @@ class AsyncRawSpansClient:
                 "value": value,
                 "reason": reason,
                 "source": source,
+                "source_queue_id": source_queue_id,
                 "created_at": created_at,
                 "last_updated_at": last_updated_at,
                 "created_by": created_by,
@@ -2045,6 +2069,7 @@ class AsyncRawSpansClient:
         *,
         name: str,
         author: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -2057,6 +2082,8 @@ class AsyncRawSpansClient:
         name : str
 
         author : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2071,6 +2098,7 @@ class AsyncRawSpansClient:
             json={
                 "name": name,
                 "author": author,
+                "source_queue_id": source_queue_id,
             },
             headers={
                 "content-type": "application/json",
@@ -2416,6 +2444,7 @@ class AsyncRawSpansClient:
         *,
         text: str,
         id: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -2432,6 +2461,8 @@ class AsyncRawSpansClient:
         text : str
 
         id : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -2454,6 +2485,7 @@ class AsyncRawSpansClient:
             json={
                 "id": id,
                 "text": text,
+                "source_queue_id": source_queue_id,
                 "created_at": created_at,
                 "last_updated_at": last_updated_at,
                 "created_by": created_by,

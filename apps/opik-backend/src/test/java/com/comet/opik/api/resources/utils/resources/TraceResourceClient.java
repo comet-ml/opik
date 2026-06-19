@@ -324,8 +324,18 @@ public class TraceResourceClient extends BaseCommentResourceClient {
             String author,
             String apiKey,
             String workspaceName) {
+        deleteThreadFeedbackScores(projectName, threadId, scoreNames, author, null, apiKey, workspaceName);
+    }
+
+    public void deleteThreadFeedbackScores(String projectName,
+            String threadId,
+            Set<String> scoreNames,
+            String author,
+            UUID sourceQueueId,
+            String apiKey,
+            String workspaceName) {
         try (var response = callDeleteThreadFeedbackScores(
-                projectName, threadId, scoreNames, author, apiKey, workspaceName)) {
+                projectName, threadId, scoreNames, author, sourceQueueId, apiKey, workspaceName)) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
     }
@@ -334,6 +344,16 @@ public class TraceResourceClient extends BaseCommentResourceClient {
             String threadId,
             Set<String> scoreNames,
             String author,
+            String apiKey,
+            String workspaceName) {
+        return callDeleteThreadFeedbackScores(projectName, threadId, scoreNames, author, null, apiKey, workspaceName);
+    }
+
+    public Response callDeleteThreadFeedbackScores(String projectName,
+            String threadId,
+            Set<String> scoreNames,
+            String author,
+            UUID sourceQueueId,
             String apiKey,
             String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
@@ -348,6 +368,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                         .threadId(threadId)
                         .names(scoreNames)
                         .author(author)
+                        .sourceQueueId(sourceQueueId)
                         .build()));
     }
 
@@ -585,6 +606,11 @@ public class TraceResourceClient extends BaseCommentResourceClient {
 
     public void openTraceThread(String threadId, UUID projectId, String projectName, String apiKey,
             String workspaceName) {
+        openTraceThread(threadId, projectId, projectName, apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+    }
+
+    public void openTraceThread(String threadId, UUID projectId, String projectName, String apiKey,
+            String workspaceName, int expectedStatus) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("threads")
                 .path("open")
@@ -594,7 +620,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .put(Entity.json(TraceThreadIdentifier.builder().projectId(projectId).projectName(projectName)
                         .threadId(threadId).build()))) {
 
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
         }
     }
 
@@ -615,6 +641,11 @@ public class TraceResourceClient extends BaseCommentResourceClient {
 
     public void closeTraceThreads(Set<String> threadIds, UUID projectId, String projectName, String apiKey,
             String workspaceName) {
+        closeTraceThreads(threadIds, projectId, projectName, apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+    }
+
+    public void closeTraceThreads(Set<String> threadIds, UUID projectId, String projectName, String apiKey,
+            String workspaceName, int expectedStatus) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("threads")
                 .path("close")
@@ -624,7 +655,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .put(Entity.json(TraceThreadBatchIdentifier.builder().projectId(projectId).projectName(projectName)
                         .threadIds(threadIds).build()))) {
 
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
         }
     }
 

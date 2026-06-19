@@ -187,6 +187,7 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                     .flatMap(queue -> annotationQueueDAO.getDistinctAnnotatorCount(
                             itemId, queue.projectId(),
                             queue.scope().getValue(),
+                            queueId,
                             queue.feedbackDefinitionNames())
                             .map(scoredCount -> Map.entry(queue, scoredCount)))
                     .flatMap(entry -> lockService.tryLock(

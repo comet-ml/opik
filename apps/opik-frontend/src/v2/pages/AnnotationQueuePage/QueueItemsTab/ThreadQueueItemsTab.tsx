@@ -310,6 +310,7 @@ const ThreadQueueItemsTab: React.FunctionComponent<
       size: size as number,
       search: search as string,
       truncate: truncationEnabled,
+      annotationQueueId: annotationQueue.id,
     },
     {
       placeholderData: keepPreviousData,

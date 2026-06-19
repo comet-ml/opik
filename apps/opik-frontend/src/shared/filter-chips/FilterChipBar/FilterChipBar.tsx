@@ -34,6 +34,7 @@ export interface FilterChipBarProps {
   onClearAll: () => void;
   openChipId: string | null;
   onOpenChipIdChange: (id: string | null) => void;
+  prefix?: React.ReactNode;
 }
 
 const FilterChipBar: React.FC<FilterChipBarProps> = ({
@@ -49,6 +50,7 @@ const FilterChipBar: React.FC<FilterChipBarProps> = ({
   onClearAll,
   openChipId,
   onOpenChipIdChange,
+  prefix,
 }) => {
   const appliedCount = useMemo(() => {
     let count = 0;
@@ -68,6 +70,7 @@ const FilterChipBar: React.FC<FilterChipBarProps> = ({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
+      {prefix}
       {chipsPinned.map((def) => {
         const isOpen = def.id === openChipId;
         const handleOpenChange = buildOnOpenChange(def.id);

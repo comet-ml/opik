@@ -590,6 +590,7 @@ export class TracesClient {
             search,
             fromTime,
             toTime,
+            annotationQueueId,
         } = request;
         const _queryParams: Record<string, unknown> = {
             page,
@@ -604,6 +605,7 @@ export class TracesClient {
             search,
             from_time: fromTime?.toISOString(),
             to_time: toTime?.toISOString(),
+            annotation_queue_id: annotationQueueId,
         };
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
             this._options?.headers,
@@ -1966,6 +1968,7 @@ export class TracesClient {
             search,
             fromTime,
             toTime,
+            annotationQueueId,
         } = request;
         const _queryParams: Record<string, unknown> = {
             page,
@@ -1979,6 +1982,7 @@ export class TracesClient {
             search,
             from_time: fromTime?.toISOString(),
             to_time: toTime?.toISOString(),
+            annotation_queue_id: annotationQueueId,
         };
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
             this._options?.headers,

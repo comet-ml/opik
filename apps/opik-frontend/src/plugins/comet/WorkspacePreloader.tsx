@@ -43,6 +43,24 @@ const redirectToEM = () => {
   window.location.href = buildUrl("");
 };
 
+// Dedicated key (not redirectURLAfterLogin, which the SSO modal overwrites) so the
+// MCP OAuth return survives both email and SSO logins. comet-react consumes it post-login.
+const MCP_OAUTH_REDIRECT_URL_KEY = "mcpOAuthRedirectURL";
+
+// Persist the MCP OAuth authorize URL (carried as ?returnTo= by opik-backend) before
+// bouncing to login, so the user returns there after authenticating.
+const persistMcpOAuthReturn = () => {
+  const returnTo = new URLSearchParams(window.location.search).get("returnTo");
+  if (!returnTo) return;
+  try {
+    if (new URL(returnTo).origin === window.location.origin) {
+      window.localStorage.setItem(MCP_OAUTH_REDIRECT_URL_KEY, returnTo);
+    }
+  } catch {
+    // ignore a malformed returnTo
+  }
+};
+
 const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
   children,
 }) => {
@@ -128,6 +146,7 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
   }
 
   if (!user || !user.loggedIn) {
+    persistMcpOAuthReturn();
     window.location.href =
       workspaceNameFromURL === DEFAULT_WORKSPACE_NAME || !workspaceNameFromURL
         ? buildUrl("login")

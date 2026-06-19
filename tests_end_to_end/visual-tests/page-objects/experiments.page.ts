@@ -20,6 +20,11 @@ export class ExperimentsPage extends BasePage {
     ]);
   }
 
+  async waitForEmpty(): Promise<void> {
+    await this.page.getByRole('heading', { name: 'Experiments', exact: true }).waitFor({ state: 'visible', timeout: 10000 });
+    await this.page.getByRole('heading', { name: /no experiments yet/i }).waitFor({ state: 'visible', timeout: 20000 });
+  }
+
   async waitForExperiment(experimentName: string): Promise<void> {
     await this.page.getByText(experimentName).first().waitFor({ state: 'visible', timeout: 15000 });
   }

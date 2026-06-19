@@ -25,9 +25,11 @@ public final class LogfireMappingRules {
             OpenTelemetryMappingRule.builder()
                     .rule("logfire.metrics").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.DROP)
                     .build(),
+            // `model_name` rides on the PydanticAI agent-run span (not an LLM call). Keep it as
+            // metadata: mapping it to MODEL would also flip the agent-run span's type to `llm` and
+            // attach a model to it. The real LLM/chat span gets its model from `gen_ai.request.model`.
             OpenTelemetryMappingRule.builder()
-                    .rule("model_name").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.MODEL)
-                    .spanType(SpanType.llm).build(),
+                    .rule("model_name").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
             OpenTelemetryMappingRule.builder()
                     .rule("params").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.INPUT).build(),
             OpenTelemetryMappingRule.builder()
@@ -41,6 +43,13 @@ public final class LogfireMappingRules {
                     .rule("tools").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.INPUT).build(),
             OpenTelemetryMappingRule.builder()
                     .rule("tool_responses").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.OUTPUT).build(),
+            // PydanticAI tool-execution spans carry the call arguments under `tool_arguments` and
+            // the returned value under `tool_response`. Without these rules `tool_response` falls
+            // through to the default INPUT bucket, so the tool span shows no output in the UI.
+            OpenTelemetryMappingRule.builder()
+                    .rule("tool_arguments").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.INPUT).build(),
+            OpenTelemetryMappingRule.builder()
+                    .rule("tool_response").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.OUTPUT).build(),
             OpenTelemetryMappingRule.builder()
                     .rule("usage").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.USAGE)
                     .spanType(SpanType.llm).build(),

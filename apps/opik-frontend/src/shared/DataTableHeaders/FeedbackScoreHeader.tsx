@@ -7,7 +7,6 @@ import { FeedbackScoreCustomMeta } from "@/types/feedback-scores";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { formatScoreDisplay } from "@/lib/feedback-scores";
 import useWorkspaceColorMap from "@/hooks/useWorkspaceColorMap";
-import { cn } from "@/lib/utils";
 
 const FeedbackScoreHeader = <TData,>(
   context: HeaderContext<TData, unknown>,
@@ -21,11 +20,9 @@ const FeedbackScoreHeader = <TData,>(
   const effectiveColorKey = scoreName ?? header ?? "";
   const color = getColor(effectiveColorKey, colorMap);
 
-  const { className, onClickHandler, renderSort, isSorted } = useSortableHeader(
-    {
-      column,
-    },
-  );
+  const { className, onClickHandler, renderSort } = useSortableHeader({
+    column,
+  });
 
   const formattedScore =
     scoreValue !== undefined ? formatScoreDisplay(scoreValue) : null;
@@ -46,11 +43,7 @@ const FeedbackScoreHeader = <TData,>(
       />
       {header ? (
         <TooltipWrapper content={header} side="top">
-          <span
-            className={cn("truncate", isSorted && "text-foreground-secondary")}
-          >
-            {header}
-          </span>
+          <span className="truncate">{header}</span>
         </TooltipWrapper>
       ) : (
         <span className="truncate"></span>

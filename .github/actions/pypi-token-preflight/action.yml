@@ -1,0 +1,81 @@
+---
+name: PyPI Token Preflight
+description: |
+  Validate PYPI_API_TOKEN before publish: confirms the token has the expected
+  format and is accepted by the PyPI upload endpoint. Fails fast with an
+  actionable message so we never reach `twine upload` with a bad token.
+inputs:
+  pypi_token:
+    required: true
+    description: PYPI_API_TOKEN secret value (passed via env, never echoed)
+  package_name:
+    required: true
+    description: Package name being published (for diagnostics only; PyPI does not gate at this layer)
+  upload_url:
+    required: false
+    description: PyPI upload endpoint
+    default: "https://upload.pypi.org/legacy/"
+
+runs:
+  using: composite
+  steps:
+    - name: PyPI token preflight (${{ inputs.package_name }})
+      shell: bash
+      env:
+        PYPI_TOKEN: ${{ inputs.pypi_token }}
+        PACKAGE_NAME: ${{ inputs.package_name }}
+        UPLOAD_URL: ${{ inputs.upload_url }}
+      run: |
+        set -e
+
+        if [ -z "${PYPI_TOKEN:-}" ]; then
+          echo "::error title=PyPI preflight::PYPI_API_TOKEN is empty. The secret is not configured or not exposed to this job."
+          exit 1
+        fi
+
+        if [[ "$PYPI_TOKEN" != pypi-* ]]; then
+          echo "::error title=PyPI preflight::PYPI_API_TOKEN does not start with 'pypi-'. PyPI API tokens must use the 'pypi-' prefix."
+          exit 1
+        fi
+
+        echo "Token format OK (pypi-* prefix)."
+        echo "==> Probing PyPI upload endpoint: ${UPLOAD_URL}"
+
+        # POST with no multipart body. PyPI's response distinguishes auth from payload errors:
+        #   401/403 -> token rejected (bad/expired/wrong-scope)
+        #   400/422 -> token accepted, but request body invalid (this is the success case for a preflight)
+        #   200    -> shouldn't happen without a real upload, but also indicates auth OK
+        HTTP_CODE=$(curl -s -o /tmp/pypi_probe_body -w "%{http_code}" \
+          -X POST \
+          -u "__token__:${PYPI_TOKEN}" \
+          -H "User-Agent: opik-release-preflight" \
+          "${UPLOAD_URL}" || echo "000")
+
+        echo "HTTP ${HTTP_CODE}"
+
+        case "$HTTP_CODE" in
+          400|422)
+            echo "Token accepted by PyPI (HTTP ${HTTP_CODE} = empty/invalid payload, but auth passed)."
+            exit 0
+            ;;
+          200)
+            echo "::warning title=PyPI preflight::Unexpected 200 OK from an empty POST; treating as auth-success."
+            exit 0
+            ;;
+          401|403)
+            echo "::error title=PyPI preflight::PYPI_API_TOKEN was rejected by ${UPLOAD_URL} (HTTP ${HTTP_CODE}). Token is invalid, expired, revoked, or not scoped for ${PACKAGE_NAME}."
+            echo "Response body:"
+            cat /tmp/pypi_probe_body || true
+            exit 1
+            ;;
+          000)
+            echo "::error title=PyPI preflight::Could not reach ${UPLOAD_URL} at all. Network or DNS issue on the runner."
+            exit 1
+            ;;
+          *)
+            echo "::warning title=PyPI preflight::Unexpected HTTP ${HTTP_CODE} from ${UPLOAD_URL}. Continuing — publish step will be the source of truth."
+            echo "Response body:"
+            cat /tmp/pypi_probe_body || true
+            exit 0
+            ;;
+        esac

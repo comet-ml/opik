@@ -13,6 +13,7 @@ export interface FindAgentInsightsIssuesRequest {
     fromDate?: string;
     toDate?: string;
     status?: OpikApi.FindAgentInsightsIssuesRequestStatus;
+    severity?: OpikApi.FindAgentInsightsIssuesRequestSeverity;
     sorting?: string;
     page?: number;
     size?: number;
