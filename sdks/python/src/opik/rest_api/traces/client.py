@@ -55,6 +55,7 @@ class TracesClient:
         *,
         text: str,
         id: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -71,6 +72,8 @@ class TracesClient:
         text : str
 
         id : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -97,6 +100,7 @@ class TracesClient:
             id_,
             text=text,
             id=id,
+            source_queue_id=source_queue_id,
             created_at=created_at,
             last_updated_at=last_updated_at,
             created_by=created_by,
@@ -111,6 +115,7 @@ class TracesClient:
         *,
         text: str,
         id: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -127,6 +132,8 @@ class TracesClient:
         text : str
 
         id : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -153,6 +160,7 @@ class TracesClient:
             id_,
             text=text,
             id=id,
+            source_queue_id=source_queue_id,
             created_at=created_at,
             last_updated_at=last_updated_at,
             created_by=created_by,
@@ -170,6 +178,7 @@ class TracesClient:
         source: FeedbackScoreSource,
         category_name: typing.Optional[str] = OMIT,
         reason: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -193,6 +202,8 @@ class TracesClient:
         category_name : typing.Optional[str]
 
         reason : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -224,6 +235,7 @@ class TracesClient:
             source=source,
             category_name=category_name,
             reason=reason,
+            source_queue_id=source_queue_id,
             created_at=created_at,
             last_updated_at=last_updated_at,
             created_by=created_by,
@@ -400,6 +412,7 @@ class TracesClient:
         search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
+        annotation_queue_id: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> TracePagePublic:
         """
@@ -431,6 +444,8 @@ class TracesClient:
 
         to_time : typing.Optional[dt.datetime]
 
+        annotation_queue_id : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -458,6 +473,7 @@ class TracesClient:
             search=search,
             from_time=from_time,
             to_time=to_time,
+            annotation_queue_id=annotation_queue_id,
             request_options=request_options,
         )
         return _response.data
@@ -742,6 +758,7 @@ class TracesClient:
         thread_id: str,
         names: typing.Sequence[str],
         author: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -757,6 +774,8 @@ class TracesClient:
 
         author : typing.Optional[str]
 
+        source_queue_id : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -771,7 +790,12 @@ class TracesClient:
         client.traces.delete_thread_feedback_scores(project_name='project_name', thread_id='thread_id', names=['names'], )
         """
         _response = self._raw_client.delete_thread_feedback_scores(
-            project_name=project_name, thread_id=thread_id, names=names, author=author, request_options=request_options
+            project_name=project_name,
+            thread_id=thread_id,
+            names=names,
+            author=author,
+            source_queue_id=source_queue_id,
+            request_options=request_options,
         )
         return _response.data
 
@@ -807,6 +831,7 @@ class TracesClient:
         *,
         name: str,
         author: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -819,6 +844,8 @@ class TracesClient:
         name : str
 
         author : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -834,7 +861,7 @@ class TracesClient:
         client.traces.delete_trace_feedback_score(id='id', name='name', )
         """
         _response = self._raw_client.delete_trace_feedback_score(
-            id, name=name, author=author, request_options=request_options
+            id, name=name, author=author, source_queue_id=source_queue_id, request_options=request_options
         )
         return _response.data
 
@@ -1182,6 +1209,7 @@ class TracesClient:
         search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
+        annotation_queue_id: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> TraceThreadPage:
         """
@@ -1211,6 +1239,8 @@ class TracesClient:
 
         to_time : typing.Optional[dt.datetime]
 
+        annotation_queue_id : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -1237,6 +1267,7 @@ class TracesClient:
             search=search,
             from_time=from_time,
             to_time=to_time,
+            annotation_queue_id=annotation_queue_id,
             request_options=request_options,
         )
         return _response.data
@@ -1540,6 +1571,7 @@ class TracesClient:
         *,
         text: str,
         id: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -1556,6 +1588,8 @@ class TracesClient:
         text : str
 
         id : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -1582,6 +1616,7 @@ class TracesClient:
             comment_id,
             text=text,
             id=id,
+            source_queue_id=source_queue_id,
             created_at=created_at,
             last_updated_at=last_updated_at,
             created_by=created_by,
@@ -1596,6 +1631,7 @@ class TracesClient:
         *,
         text: str,
         id: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -1612,6 +1648,8 @@ class TracesClient:
         text : str
 
         id : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -1638,6 +1676,7 @@ class TracesClient:
             comment_id,
             text=text,
             id=id,
+            source_queue_id=source_queue_id,
             created_at=created_at,
             last_updated_at=last_updated_at,
             created_by=created_by,
@@ -1668,6 +1707,7 @@ class AsyncTracesClient:
         *,
         text: str,
         id: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -1684,6 +1724,8 @@ class AsyncTracesClient:
         text : str
 
         id : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -1713,6 +1755,7 @@ class AsyncTracesClient:
             id_,
             text=text,
             id=id,
+            source_queue_id=source_queue_id,
             created_at=created_at,
             last_updated_at=last_updated_at,
             created_by=created_by,
@@ -1727,6 +1770,7 @@ class AsyncTracesClient:
         *,
         text: str,
         id: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -1743,6 +1787,8 @@ class AsyncTracesClient:
         text : str
 
         id : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -1772,6 +1818,7 @@ class AsyncTracesClient:
             id_,
             text=text,
             id=id,
+            source_queue_id=source_queue_id,
             created_at=created_at,
             last_updated_at=last_updated_at,
             created_by=created_by,
@@ -1789,6 +1836,7 @@ class AsyncTracesClient:
         source: FeedbackScoreSource,
         category_name: typing.Optional[str] = OMIT,
         reason: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -1812,6 +1860,8 @@ class AsyncTracesClient:
         category_name : typing.Optional[str]
 
         reason : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -1846,6 +1896,7 @@ class AsyncTracesClient:
             source=source,
             category_name=category_name,
             reason=reason,
+            source_queue_id=source_queue_id,
             created_at=created_at,
             last_updated_at=last_updated_at,
             created_by=created_by,
@@ -2034,6 +2085,7 @@ class AsyncTracesClient:
         search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
+        annotation_queue_id: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> TracePagePublic:
         """
@@ -2065,6 +2117,8 @@ class AsyncTracesClient:
 
         to_time : typing.Optional[dt.datetime]
 
+        annotation_queue_id : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -2095,6 +2149,7 @@ class AsyncTracesClient:
             search=search,
             from_time=from_time,
             to_time=to_time,
+            annotation_queue_id=annotation_queue_id,
             request_options=request_options,
         )
         return _response.data
@@ -2394,6 +2449,7 @@ class AsyncTracesClient:
         thread_id: str,
         names: typing.Sequence[str],
         author: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -2408,6 +2464,8 @@ class AsyncTracesClient:
         names : typing.Sequence[str]
 
         author : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2426,7 +2484,12 @@ class AsyncTracesClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.delete_thread_feedback_scores(
-            project_name=project_name, thread_id=thread_id, names=names, author=author, request_options=request_options
+            project_name=project_name,
+            thread_id=thread_id,
+            names=names,
+            author=author,
+            source_queue_id=source_queue_id,
+            request_options=request_options,
         )
         return _response.data
 
@@ -2465,6 +2528,7 @@ class AsyncTracesClient:
         *,
         name: str,
         author: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -2477,6 +2541,8 @@ class AsyncTracesClient:
         name : str
 
         author : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2495,7 +2561,7 @@ class AsyncTracesClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.delete_trace_feedback_score(
-            id, name=name, author=author, request_options=request_options
+            id, name=name, author=author, source_queue_id=source_queue_id, request_options=request_options
         )
         return _response.data
 
@@ -2872,6 +2938,7 @@ class AsyncTracesClient:
         search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
+        annotation_queue_id: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> TraceThreadPage:
         """
@@ -2900,6 +2967,8 @@ class AsyncTracesClient:
         from_time : typing.Optional[dt.datetime]
 
         to_time : typing.Optional[dt.datetime]
+
+        annotation_queue_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2930,6 +2999,7 @@ class AsyncTracesClient:
             search=search,
             from_time=from_time,
             to_time=to_time,
+            annotation_queue_id=annotation_queue_id,
             request_options=request_options,
         )
         return _response.data
@@ -3253,6 +3323,7 @@ class AsyncTracesClient:
         *,
         text: str,
         id: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -3269,6 +3340,8 @@ class AsyncTracesClient:
         text : str
 
         id : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -3298,6 +3371,7 @@ class AsyncTracesClient:
             comment_id,
             text=text,
             id=id,
+            source_queue_id=source_queue_id,
             created_at=created_at,
             last_updated_at=last_updated_at,
             created_by=created_by,
@@ -3312,6 +3386,7 @@ class AsyncTracesClient:
         *,
         text: str,
         id: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -3328,6 +3403,8 @@ class AsyncTracesClient:
         text : str
 
         id : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -3357,6 +3434,7 @@ class AsyncTracesClient:
             comment_id,
             text=text,
             id=id,
+            source_queue_id=source_queue_id,
             created_at=created_at,
             last_updated_at=last_updated_at,
             created_by=created_by,

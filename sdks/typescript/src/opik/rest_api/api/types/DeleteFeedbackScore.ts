@@ -3,4 +3,5 @@
 export interface DeleteFeedbackScore {
     name: string;
     author?: string;
+    sourceQueueId?: string;
 }
