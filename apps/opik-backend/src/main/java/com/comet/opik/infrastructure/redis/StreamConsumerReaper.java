@@ -15,8 +15,8 @@ import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * Removes orphaned Redis stream consumers — those left behind when a backend process exits non-gracefully
@@ -36,6 +36,9 @@ public class StreamConsumerReaper {
 
     private static final AttributeKey<String> STREAM_KEY = AttributeKey.stringKey("stream");
     private static final AttributeKey<String> GROUP_KEY = AttributeKey.stringKey("consumer_group");
+    private static final AttributeKey<String> RESULT_KEY = AttributeKey.stringKey("result");
+    private static final String RESULT_SUCCESS = "success";
+    private static final String RESULT_ERROR = "error";
 
     // When XINFO GROUPS targets a stream key that was never created, Redisson raises a generic
     // org.redisson.client.RedisException whose message is "ERR no such key. channel: ... command: (XINFO GROUPS)..."
@@ -43,20 +46,16 @@ public class StreamConsumerReaper {
     private static final String NO_SUCH_KEY = "no such key";
 
     private final RedissonReactiveClient redisson;
-    private final LongCounter reapedConsumers;
-    private final LongCounter reaperErrors;
+    private final LongCounter reaperConsumers;
 
     @Inject
     public StreamConsumerReaper(@NonNull RedissonReactiveClient redisson) {
         this.redisson = redisson;
         var meter = GlobalOpenTelemetry.getMeter("opik.redis");
-        this.reapedConsumers = meter
-                .counterBuilder("opik_redis_stream_reaped_consumers")
-                .setDescription("Orphaned (idle beyond threshold, no pending) stream consumers removed by the reaper")
-                .build();
-        this.reaperErrors = meter
-                .counterBuilder("opik_redis_stream_reaper_errors")
-                .setDescription("Errors while reaping orphaned stream consumers")
+        this.reaperConsumers = meter
+                .counterBuilder("opik_redis_stream_reaper_consumers")
+                .setDescription(
+                        "Stream consumer reaper outcomes, tagged by result: 'success' (orphan removed) or 'error'")
                 .build();
     }
 
@@ -65,10 +64,14 @@ public class StreamConsumerReaper {
      *
      * @return the total number of consumers removed
      */
-    public Mono<Long> reap(@NonNull Collection<String> streamNames, @NonNull Duration idleThreshold) {
+    public Mono<Long> reap(Collection<String> streamNames, @NonNull Duration idleThreshold) {
+        if (streamNames == null || streamNames.isEmpty()) {
+            return Mono.just(0L);
+        }
         long idleThresholdMillis = idleThreshold.toMillis();
-        // De-duplicate: online-scoring streams are distinct keys but multiple subscribers may report the same name.
-        return Flux.fromIterable(Set.copyOf(streamNames))
+        // De-duplicate while preserving order: online-scoring streams are distinct keys but multiple subscribers may
+        // report the same name.
+        return Flux.fromIterable(new LinkedHashSet<>(streamNames))
                 .flatMap(streamName -> reapStream(streamName, idleThresholdMillis))
                 .reduce(0L, Long::sum);
     }
@@ -86,7 +89,7 @@ public class StreamConsumerReaper {
                     } else {
                         // ACL/connection/timeout/etc.: surface it (metric + warn) instead of silently skipping,
                         // but still return 0 so the other streams are reaped.
-                        reaperErrors.add(1, Attributes.of(STREAM_KEY, streamName));
+                        reaperConsumers.add(1, Attributes.of(STREAM_KEY, streamName, RESULT_KEY, RESULT_ERROR));
                         log.warn("Failed to reap orphaned consumers for stream '{}'", streamName, throwable);
                     }
                     return Mono.just(0L);
@@ -100,20 +103,24 @@ public class StreamConsumerReaper {
                 .filter(consumer -> consumer.getIdleTime() > idleThresholdMillis && consumer.getPending() == 0)
                 .flatMap(consumer -> stream.removeConsumer(group, consumer.getName())
                         .doOnSuccess(pending -> {
-                            reapedConsumers.add(1, Attributes.of(STREAM_KEY, streamName, GROUP_KEY, group));
+                            reaperConsumers.add(1,
+                                    Attributes.of(STREAM_KEY, streamName, GROUP_KEY, group, RESULT_KEY,
+                                            RESULT_SUCCESS));
                             log.info("Reaped orphaned consumer '{}' from group '{}' on stream '{}', idle '{}' ms",
                                     consumer.getName(), group, streamName, consumer.getIdleTime());
                         })
                         .thenReturn(1L)
                         .onErrorResume(throwable -> {
-                            reaperErrors.add(1, Attributes.of(STREAM_KEY, streamName, GROUP_KEY, group));
+                            reaperConsumers.add(1,
+                                    Attributes.of(STREAM_KEY, streamName, GROUP_KEY, group, RESULT_KEY, RESULT_ERROR));
                             log.warn("Failed to reap consumer '{}' from group '{}' on stream '{}'",
                                     consumer.getName(), group, streamName, throwable);
                             return Mono.just(0L);
                         }))
                 .reduce(0L, Long::sum)
                 .onErrorResume(throwable -> {
-                    reaperErrors.add(1, Attributes.of(STREAM_KEY, streamName, GROUP_KEY, group));
+                    reaperConsumers.add(1,
+                            Attributes.of(STREAM_KEY, streamName, GROUP_KEY, group, RESULT_KEY, RESULT_ERROR));
                     log.warn("Failed to list consumers for group '{}' on stream '{}'", group, streamName, throwable);
                     return Mono.just(0L);
                 });

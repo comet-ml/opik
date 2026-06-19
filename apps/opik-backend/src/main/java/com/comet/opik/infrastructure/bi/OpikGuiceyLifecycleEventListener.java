@@ -155,13 +155,14 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
         StreamConsumerReaperConfig reaperConfig = injector.get().getInstance(OpikConfiguration.class)
                 .getStreamConsumerReaper();
 
-        if (!reaperConfig.isEnabled()) {
+        if (!reaperConfig.enabled()) {
             log.info("Stream consumer reaper job is disabled, skipping job setup");
             return;
         }
 
         scheduleRepeatingJob(StreamConsumerReaperJob.class,
-                reaperConfig.getJobInterval().toJavaDuration(), null);
+                reaperConfig.jobInterval().toJavaDuration(),
+                reaperConfig.startupDelay().toJavaDuration());
     }
 
     private void setRetentionJobs() {

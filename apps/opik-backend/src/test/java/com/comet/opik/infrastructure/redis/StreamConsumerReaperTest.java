@@ -71,6 +71,7 @@ class StreamConsumerReaperTest {
     void shouldReapIdleConsumerWithNoPendingEntries() {
         // A consumer that registered but never had work: idle grows, pending stays 0 — the orphan case.
         stream.createConsumer(GROUP, "orphan-consumer").block();
+        assertThat(listConsumerNames()).contains("orphan-consumer");
 
         // Let it become idle beyond the (tiny) threshold used by this test.
         waitForMillis(600);

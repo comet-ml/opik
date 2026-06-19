@@ -10,11 +10,14 @@ import io.dropwizard.jobs.Job;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.quartz.DisallowConcurrentExecution;
 import org.quartz.InterruptableJob;
 import org.quartz.JobExecutionContext;
+import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.lang.reflect.Modifier;
 import java.time.Duration;
@@ -35,29 +38,23 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
 @Slf4j
 @Singleton
 @DisallowConcurrentExecution
+@RequiredArgsConstructor(onConstructor_ = @Inject)
 public class StreamConsumerReaperJob extends Job implements InterruptableJob {
 
     private static final Lock JOB_LOCK = new Lock("stream_consumer_reaper:lock");
 
-    private final Injector injector;
-    private final StreamConsumerReaper reaper;
-    private final LockService lockService;
-    private final StreamConsumerReaperConfig config;
+    private final @NonNull Injector injector;
+    private final @NonNull StreamConsumerReaper reaper;
+    private final @NonNull LockService lockService;
+    private final @NonNull StreamConsumerReaperConfig config;
 
     private final AtomicBoolean interrupted = new AtomicBoolean(false);
-    // Subscribers are fixed after startup, so the discovered stream names are computed once and cached.
+
+    /** Subscribers are fixed after startup, so the discovered stream names are computed once and cached. */
     private final AtomicReference<List<String>> streamNamesCache = new AtomicReference<>();
 
-    @Inject
-    public StreamConsumerReaperJob(@NonNull Injector injector,
-            @NonNull StreamConsumerReaper reaper,
-            @NonNull LockService lockService,
-            @NonNull StreamConsumerReaperConfig config) {
-        this.injector = injector;
-        this.reaper = reaper;
-        this.lockService = lockService;
-        this.config = config;
-    }
+    /** Tracks the in-flight reactive pass so {@link #interrupt()} can dispose it (cancels the actual chain). */
+    private final AtomicReference<Disposable> currentExecution = new AtomicReference<>();
 
     @Override
     public void doJob(JobExecutionContext context) {
@@ -74,28 +71,43 @@ public class StreamConsumerReaperJob extends Job implements InterruptableJob {
             return;
         }
 
-        lockService.bestEffortLock(
+        var subscription = lockService.bestEffortLock(
                 JOB_LOCK,
-                reaper.reap(streamNames, config.getIdleThreshold().toJavaDuration())
-                        .doOnSuccess(count -> {
-                            if (count > 0) {
-                                log.info(
-                                        "Stream consumer reaper removed '{}' orphaned consumer(s) across '{}' stream(s)",
-                                        count, streamNames.size());
-                            } else {
-                                log.debug("Stream consumer reaper found no orphaned consumers across '{}' stream(s)",
-                                        streamNames.size());
-                            }
-                        }),
-                Mono.fromRunnable(() -> log.info(
+                Mono.defer(() -> {
+                    if (interrupted.get()) {
+                        log.info("Stream consumer reaper interrupted before processing, skipping");
+                        return Mono.empty();
+                    }
+                    return reaper.reap(streamNames, config.idleThreshold().toJavaDuration())
+                            .doOnSuccess(count -> {
+                                if (count > 0) {
+                                    log.info(
+                                            "Stream consumer reaper removed orphaned consumer(s), removed='{}', streams='{}'",
+                                            count, streamNames.size());
+                                } else {
+                                    log.debug("Stream consumer reaper found no orphaned consumers, streams='{}'",
+                                            streamNames.size());
+                                }
+                            });
+                }),
+                Mono.fromRunnable(() -> log.debug(
                         "Could not acquire lock for stream consumer reaper, another instance is running")),
-                config.getLockDuration().toJavaDuration(),
+                config.lockDuration().toJavaDuration(),
                 Duration.ZERO,
                 true) // holdUntilExpiry: prevent redundant runs across instances until the next cycle
-                .subscribe(
-                        __ -> {
-                        },
-                        error -> log.error("Stream consumer reaper failed", error));
+                // Resume on errors so the recurring job stays alive.
+                .onErrorResume(throwable -> {
+                    if (interrupted.get()) {
+                        log.warn("Stream consumer reaper interrupted", throwable);
+                    } else {
+                        log.error("Stream consumer reaper failed", throwable);
+                    }
+                    return Mono.empty();
+                })
+                .doFinally(signal -> currentExecution.set(null))
+                .subscribeOn(Schedulers.boundedElastic())
+                .subscribe();
+        currentExecution.set(subscription);
     }
 
     /**
@@ -111,7 +123,8 @@ public class StreamConsumerReaperJob extends Job implements InterruptableJob {
                 .map(BaseRedisSubscriber::getStreamName)
                 .distinct()
                 .toList();
-        log.info("Discovered '{}' stream(s) to reap orphaned consumers from: '{}'", streamNames.size(), streamNames);
+        log.info("Discovered stream(s) to reap orphaned consumers from, count='{}', streams='{}'",
+                streamNames.size(), streamNames);
         return streamNames;
     }
 
@@ -119,5 +132,10 @@ public class StreamConsumerReaperJob extends Job implements InterruptableJob {
     public void interrupt() {
         interrupted.set(true);
         log.info("Stream consumer reaper job interrupted");
+        var execution = currentExecution.get();
+        if (execution != null && !execution.isDisposed()) {
+            execution.dispose();
+            log.info("Stream consumer reaper job interrupted successfully");
+        }
     }
 }

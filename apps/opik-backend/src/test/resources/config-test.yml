@@ -725,6 +725,7 @@ localRunner:
 streamConsumerReaper:
   enabled: false
   jobInterval: 1h
+  startupDelay: 0s
   idleThreshold: 1d
   lockDuration: 10m
 
