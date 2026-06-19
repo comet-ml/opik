@@ -611,12 +611,20 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "google/gemini-3-flash-preview",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_PRO_IMAGE,
+      label: "google/gemini-3-pro-image",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_PRO_IMAGE_PREVIEW,
       label: "google/gemini-3-pro-image-preview",
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_PRO_PREVIEW,
       label: "google/gemini-3-pro-preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_1_FLASH_IMAGE,
+      label: "google/gemini-3.1-flash-image",
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_1_FLASH_IMAGE_PREVIEW,
@@ -1644,8 +1652,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "perplexity/sonar-reasoning-pro",
     },
     {
+      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_M_1,
+      label: "poolside/laguna-m.1",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_M_1_FREE,
       label: "poolside/laguna-m.1:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_XS_2,
+      label: "poolside/laguna-xs.2",
     },
     {
       value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_XS_2_FREE,
