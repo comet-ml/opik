@@ -590,7 +590,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 FROM feedback_scores_grouped
             )
             <endif>
-            <if(annotation_queue_filters)>
+            <if(annotation_queue_filters || annotation_queue_id)>
             , thread_annotation_queue_ids AS (
                  SELECT thread_id,
                         groupArray(id) AS annotation_queue_ids
@@ -664,7 +664,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 <if(uuid_from_time)>INNER<else>LEFT<endif> JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
                     AND t.project_id = tt.project_id
                     AND t.id = tt.thread_id
-                <if(annotation_queue_filters)>
+                <if(annotation_queue_filters || annotation_queue_id)>
                 LEFT JOIN thread_annotation_queue_ids as ttaqi ON ttaqi.thread_id = tt.thread_model_id
                 <endif>
                 WHERE workspace_id = :workspace_id
@@ -1243,7 +1243,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     AND t.project_id = tt.project_id
                     AND t.id = tt.thread_id
                 LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
-                <if(annotation_queue_filters)>
+                <if(annotation_queue_filters || annotation_queue_id)>
                 LEFT JOIN thread_annotation_queue_ids as ttaqi ON ttaqi.thread_id = tt.thread_model_id
                 <endif>
                 WHERE workspace_id = :workspace_id
