@@ -114,8 +114,10 @@ const CHAT_SPAN = makeSpan(
   { traceId: "trace1", spanId: "chat", startMs: 100, endMs: 1100 }
 );
 
-// eve wraps each model call in an `invoke_agent` span that repeats the call's
-// token usage. It is an orchestration span (type `general`), not a model call.
+// eve wraps each model call in an `invoke_agent` span that repeats the model
+// call's full `gen_ai.usage` (verified against real eve telemetry). It is an
+// orchestration span (type `general`), not a model call — the exporter must
+// drop this usage so the trace total isn't double-counted.
 const INVOKE_AGENT_SPAN = makeSpan(
   "gen_ai",
   "invoke_agent claude-haiku-4-5",
@@ -123,6 +125,8 @@ const INVOKE_AGENT_SPAN = makeSpan(
     "gen_ai.operation.name": "invoke_agent",
     "gen_ai.usage.input_tokens": 5170,
     "gen_ai.usage.output_tokens": 54,
+    "gen_ai.usage.cache_read.input_tokens": 5167,
+    "gen_ai.usage.cache_creation.input_tokens": 48,
   },
   { traceId: "trace1", spanId: "agent", startMs: 50, endMs: 1150 }
 );
