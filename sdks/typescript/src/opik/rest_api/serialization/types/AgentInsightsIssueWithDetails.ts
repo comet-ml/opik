@@ -4,6 +4,7 @@ import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { AgentInsightsIssueDetail } from "./AgentInsightsIssueDetail.js";
+import { AgentInsightsIssueWithDetailsSeverity } from "./AgentInsightsIssueWithDetailsSeverity.js";
 import { AgentInsightsIssueWithDetailsStatus } from "./AgentInsightsIssueWithDetailsStatus.js";
 
 export const AgentInsightsIssueWithDetails: core.serialization.ObjectSchema<
@@ -16,6 +17,7 @@ export const AgentInsightsIssueWithDetails: core.serialization.ObjectSchema<
     cause: core.serialization.string().optional(),
     suggestedFix: core.serialization.property("suggested_fix", core.serialization.string().optional()),
     status: AgentInsightsIssueWithDetailsStatus.optional(),
+    severity: AgentInsightsIssueWithDetailsSeverity.optional(),
     tracesQuery: core.serialization.property("traces_query", core.serialization.string().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
@@ -32,6 +34,7 @@ export declare namespace AgentInsightsIssueWithDetails {
         cause?: string | null;
         suggested_fix?: string | null;
         status?: AgentInsightsIssueWithDetailsStatus.Raw | null;
+        severity?: AgentInsightsIssueWithDetailsSeverity.Raw | null;
         traces_query?: string | null;
         created_by?: string | null;
         created_at?: string | null;

@@ -10,6 +10,7 @@ from ..types.agent_insights_issue_with_details import AgentInsightsIssueWithDeta
 from ..types.reported_issue import ReportedIssue
 from .raw_client import AsyncRawAgentInsightsClient, RawAgentInsightsClient
 from .types.agent_insights_issue_update_status import AgentInsightsIssueUpdateStatus
+from .types.find_agent_insights_issues_request_severity import FindAgentInsightsIssuesRequestSeverity
 from .types.find_agent_insights_issues_request_status import FindAgentInsightsIssuesRequestStatus
 
 # this is used as the default value for optional parameters
@@ -38,6 +39,7 @@ class AgentInsightsClient:
         from_date: typing.Optional[dt.date] = None,
         to_date: typing.Optional[dt.date] = None,
         status: typing.Optional[FindAgentInsightsIssuesRequestStatus] = None,
+        severity: typing.Optional[FindAgentInsightsIssuesRequestSeverity] = None,
         sorting: typing.Optional[str] = None,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
@@ -55,6 +57,8 @@ class AgentInsightsClient:
         to_date : typing.Optional[dt.date]
 
         status : typing.Optional[FindAgentInsightsIssuesRequestStatus]
+
+        severity : typing.Optional[FindAgentInsightsIssuesRequestSeverity]
 
         sorting : typing.Optional[str]
 
@@ -81,6 +85,7 @@ class AgentInsightsClient:
             from_date=from_date,
             to_date=to_date,
             status=status,
+            severity=severity,
             sorting=sorting,
             page=page,
             size=size,
@@ -120,7 +125,7 @@ class AgentInsightsClient:
         import datetime
         from Opik import ReportedIssue
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.agent_insights.report_agent_insights_issues(project_id='project_id', report_day=datetime.date.fromisoformat("2023-01-15", ), issues=[ReportedIssue(name='name', count=1000000, total_count=1000000, users_impacted=1000000, total_users=1000000, )], )
+        client.agent_insights.report_agent_insights_issues(project_id='project_id', report_day=datetime.date.fromisoformat("2023-01-15", ), issues=[ReportedIssue(name='name', severity="critical", count=1000000, total_count=1000000, users_impacted=1000000, total_users=1000000, )], )
         """
         _response = self._raw_client.report_agent_insights_issues(
             project_id=project_id, report_day=report_day, issues=issues, request_options=request_options
@@ -228,6 +233,7 @@ class AsyncAgentInsightsClient:
         from_date: typing.Optional[dt.date] = None,
         to_date: typing.Optional[dt.date] = None,
         status: typing.Optional[FindAgentInsightsIssuesRequestStatus] = None,
+        severity: typing.Optional[FindAgentInsightsIssuesRequestSeverity] = None,
         sorting: typing.Optional[str] = None,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
@@ -245,6 +251,8 @@ class AsyncAgentInsightsClient:
         to_date : typing.Optional[dt.date]
 
         status : typing.Optional[FindAgentInsightsIssuesRequestStatus]
+
+        severity : typing.Optional[FindAgentInsightsIssuesRequestSeverity]
 
         sorting : typing.Optional[str]
 
@@ -274,6 +282,7 @@ class AsyncAgentInsightsClient:
             from_date=from_date,
             to_date=to_date,
             status=status,
+            severity=severity,
             sorting=sorting,
             page=page,
             size=size,
@@ -315,7 +324,7 @@ class AsyncAgentInsightsClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.agent_insights.report_agent_insights_issues(project_id='project_id', report_day=datetime.date.fromisoformat("2023-01-15", ), issues=[ReportedIssue(name='name', count=1000000, total_count=1000000, users_impacted=1000000, total_users=1000000, )], )
+            await client.agent_insights.report_agent_insights_issues(project_id='project_id', report_day=datetime.date.fromisoformat("2023-01-15", ), issues=[ReportedIssue(name='name', severity="critical", count=1000000, total_count=1000000, users_impacted=1000000, total_users=1000000, )], )
         asyncio.run(main())
         """
         _response = await self._raw_client.report_agent_insights_issues(

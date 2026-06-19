@@ -1075,6 +1075,15 @@ paths:
           - open
           - resolved
           - closed
+      - name: severity
+        in: query
+        schema:
+          type: string
+          enum:
+          - critical
+          - high
+          - medium
+          - low
       - name: sorting
         in: query
         schema:
@@ -10061,6 +10070,13 @@ components:
           - open
           - resolved
           - closed
+        severity:
+          type: string
+          enum:
+          - critical
+          - high
+          - medium
+          - low
         traces_query:
           type: string
         total_occurrences:
@@ -10159,6 +10175,13 @@ components:
           - open
           - resolved
           - closed
+        severity:
+          type: string
+          enum:
+          - critical
+          - high
+          - medium
+          - low
         traces_query:
           type: string
         created_by:
@@ -10199,6 +10222,7 @@ components:
       required:
       - count
       - name
+      - severity
       - total_count
       - total_users
       - users_impacted
@@ -10219,6 +10243,13 @@ components:
           type: string
         traces_query:
           type: string
+        severity:
+          type: string
+          enum:
+          - critical
+          - high
+          - medium
+          - low
         count:
           type: integer
           format: int64
