@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AgentInsightsIssue;
+import com.comet.opik.api.AgentInsightsIssueSeverity;
 import com.comet.opik.api.AgentInsightsIssueStatus;
 import com.comet.opik.api.AgentInsightsIssueUpdate;
 import com.comet.opik.api.AgentInsightsReport;
@@ -162,6 +163,7 @@ class AgentInsightsResourceTest {
                 .cause("Cause of " + name)
                 .suggestedFix("Fix for " + name)
                 .tracesQuery("SELECT 1")
+                .severity(AgentInsightsIssueSeverity.MEDIUM)
                 .count(count)
                 .totalCount(totalCount)
                 .usersImpacted(usersImpacted)
@@ -181,7 +183,7 @@ class AgentInsightsResourceTest {
 
     private AgentInsightsIssue.AgentInsightsIssuePage findIssues(UUID projectId, LocalDate fromDate,
             LocalDate toDate) {
-        return agentInsightsResourceClient.findIssues(projectId, fromDate, toDate, null, null, null, null,
+        return agentInsightsResourceClient.findIssues(projectId, fromDate, toDate, null, null, null, null, null,
                 API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
     }
 
@@ -426,6 +428,9 @@ class AgentInsightsResourceTest {
                     // null issue element
                     AgentInsightsReport.builder().projectId(UUID.randomUUID()).reportDay(DAY_1)
                             .issues(Collections.singletonList(null)).build(),
+                    // missing severity (required field)
+                    AgentInsightsReport.builder().projectId(UUID.randomUUID()).reportDay(DAY_1)
+                            .issues(List.of(validIssue.toBuilder().severity(null).build())).build(),
                     // metadata exceeding the column byte limit
                     AgentInsightsReport.builder().projectId(UUID.randomUUID()).reportDay(DAY_1)
                             .issues(List.of(validIssue.toBuilder()
@@ -528,7 +533,7 @@ class AgentInsightsResourceTest {
             report(projectId, DAY_3,
                     List.of(reportedIssue(nameB, rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())));
 
-            var page = agentInsightsResourceClient.findIssues(projectId, null, null, null, null, null, null,
+            var page = agentInsightsResourceClient.findIssues(projectId, null, null, null, null, null, null, null,
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
             assertThat(page.total()).isEqualTo(2);
             assertThat(page.content()).extracting(AgentInsightsIssue::name)
@@ -557,14 +562,14 @@ class AgentInsightsResourceTest {
                     .extracting(AgentInsightsIssue::name)
                     .containsExactly(nameC, nameB, nameA);
 
-            var byOccurrences = agentInsightsResourceClient.findIssues(projectId, DAY_1, DAY_3, null,
+            var byOccurrences = agentInsightsResourceClient.findIssues(projectId, DAY_1, DAY_3, null, null,
                     sortBy(SortableFields.TOTAL_OCCURRENCES, Direction.DESC), null, null, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_OK);
             assertThat(byOccurrences.content())
                     .extracting(AgentInsightsIssue::name)
                     .containsExactly(nameA, nameB, nameC);
 
-            var byLastSeen = agentInsightsResourceClient.findIssues(projectId, DAY_1, DAY_3, null,
+            var byLastSeen = agentInsightsResourceClient.findIssues(projectId, DAY_1, DAY_3, null, null,
                     sortBy(SortableFields.LAST_SEEN, Direction.DESC), null, null, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_OK);
             assertThat(byLastSeen.content())
@@ -596,7 +601,8 @@ class AgentInsightsResourceTest {
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
             var resolvedPage = agentInsightsResourceClient.findIssues(projectId, DAY_1, DAY_1,
-                    AgentInsightsIssueStatus.RESOLVED, null, null, null, API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+                    AgentInsightsIssueStatus.RESOLVED, null, null, null, null, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_OK);
             assertThat(resolvedPage.total()).isEqualTo(1);
             assertThat(resolvedPage.content().getFirst().name()).isEqualTo(nameB);
 
@@ -620,7 +626,7 @@ class AgentInsightsResourceTest {
                     reportedIssue(nameB, countB, totalCount, impacted, totalUsers),
                     reportedIssue(nameC, countC, totalCount, impacted, totalUsers)));
 
-            var firstPage = agentInsightsResourceClient.findIssues(projectId, DAY_1, DAY_1, null,
+            var firstPage = agentInsightsResourceClient.findIssues(projectId, DAY_1, DAY_1, null, null,
                     sortBy(SortableFields.TOTAL_OCCURRENCES, Direction.DESC), 1, 2, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_OK);
             assertThat(firstPage.total()).isEqualTo(3);
@@ -629,7 +635,7 @@ class AgentInsightsResourceTest {
                     .extracting(AgentInsightsIssue::name)
                     .containsExactly(nameA, nameB);
 
-            var secondPage = agentInsightsResourceClient.findIssues(projectId, DAY_1, DAY_1, null,
+            var secondPage = agentInsightsResourceClient.findIssues(projectId, DAY_1, DAY_1, null, null,
                     sortBy(SortableFields.TOTAL_OCCURRENCES, Direction.DESC), 2, 2, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_OK);
             assertThat(secondPage.content())
@@ -646,7 +652,7 @@ class AgentInsightsResourceTest {
                     List.of(reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(),
                             rndUserCount())));
 
-            var page = agentInsightsResourceClient.findIssues(projectId, DAY_1, DAY_1, null, null, null, null,
+            var page = agentInsightsResourceClient.findIssues(projectId, DAY_1, DAY_1, null, null, null, null, null,
                     OTHER_API_KEY, OTHER_WORKSPACE, HttpStatus.SC_OK);
             assertThat(page.total()).isZero();
             assertThat(page.content()).isEmpty();
@@ -666,7 +672,7 @@ class AgentInsightsResourceTest {
         void findIssuesWhenQueryParamsAreInvalidThenBadRequest(String fromDate, String toDate, String status,
                 String sorting) {
             try (var response = agentInsightsResourceClient.findIssuesWithResponse(UUID.randomUUID(), fromDate,
-                    toDate, status, sorting, null, null, API_KEY, TEST_WORKSPACE)) {
+                    toDate, status, null, sorting, null, null, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
             }
         }
@@ -683,7 +689,7 @@ class AgentInsightsResourceTest {
         @DisplayName("Out-of-bounds page or size returns 400")
         void findIssuesWhenPaginationOutOfBoundsThenBadRequest(int page, int size) {
             try (var response = agentInsightsResourceClient.findIssuesWithResponse(UUID.randomUUID(), null, null,
-                    null, null, page, size, API_KEY, TEST_WORKSPACE)) {
+                    null, null, null, page, size, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
             }
         }
@@ -692,7 +698,7 @@ class AgentInsightsResourceTest {
         @DisplayName("Missing required project_id returns 400")
         void findIssuesWhenProjectIdMissingThenBadRequest() {
             try (var response = agentInsightsResourceClient.findIssuesWithResponse(null, null, null, null, null,
-                    null, null, API_KEY, TEST_WORKSPACE)) {
+                    null, null, null, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
             }
         }
@@ -891,6 +897,92 @@ class AgentInsightsResourceTest {
     }
 
     @Nested
+    @DisplayName("Severity Behavior:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class SeverityBehavior {
+
+        @Test
+        @DisplayName("Reported severity is returned in both the list and detail responses")
+        void severityIsStoredAndReturnedInListAndDetailResponse() {
+            var projectId = createProject();
+            var name = rndName();
+
+            report(projectId, DAY_1, List.of(
+                    reportedIssue(name, rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())
+                            .toBuilder().severity(AgentInsightsIssueSeverity.CRITICAL).build()));
+
+            var page = findIssues(projectId, DAY_1, DAY_1);
+            assertThat(page.total()).isEqualTo(1);
+            assertThat(page.content().getFirst().severity()).isEqualTo(AgentInsightsIssueSeverity.CRITICAL);
+
+            var issueId = page.content().getFirst().id();
+            var detail = agentInsightsResourceClient.getIssue(issueId, projectId, DAY_1, DAY_1,
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+            assertThat(detail.severity()).isEqualTo(AgentInsightsIssueSeverity.CRITICAL);
+        }
+
+        Stream<Arguments> severityFilterCases() {
+            return Stream.of(
+                    Arguments.of(AgentInsightsIssueSeverity.CRITICAL, 1),
+                    Arguments.of(AgentInsightsIssueSeverity.HIGH, 1),
+                    // edge: LOW was never reported — filter must return zero results, not an error
+                    Arguments.of(AgentInsightsIssueSeverity.LOW, 0));
+        }
+
+        @ParameterizedTest
+        @MethodSource("severityFilterCases")
+        @DisplayName("Severity filter returns only issues with the matching severity")
+        void findIssuesWhenSeverityFilterIsSetThenOnlyMatchingIssues(
+                AgentInsightsIssueSeverity filterSeverity, int expectedCount) {
+            var projectId = createProject();
+
+            report(projectId, DAY_1, List.of(
+                    reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())
+                            .toBuilder().severity(AgentInsightsIssueSeverity.CRITICAL).build(),
+                    reportedIssue(rndName(), rndOccurrences(), rndTotalCount(), rndUserCount(), rndUserCount())
+                            .toBuilder().severity(AgentInsightsIssueSeverity.HIGH).build()));
+
+            var page = agentInsightsResourceClient.findIssues(projectId, DAY_1, DAY_1, null,
+                    filterSeverity, null, null, null, API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+            assertThat(page.total()).isEqualTo(expectedCount);
+        }
+
+        @Test
+        @DisplayName("Sorting by severity ASC places critical (highest priority) first")
+        void findIssuesSortBySeverityAscGivesCriticalFirst() {
+            var projectId = createProject();
+            var nameLow = rndName();
+            var nameCritical = rndName();
+            var nameMedium = rndName();
+            long totalCount = rndTotalCount(), impacted = rndUserCount(), totalUsers = rndUserCount();
+
+            report(projectId, DAY_1, List.of(
+                    reportedIssue(nameLow, rndOccurrences(), totalCount, impacted, totalUsers)
+                            .toBuilder().severity(AgentInsightsIssueSeverity.LOW).build(),
+                    reportedIssue(nameCritical, rndOccurrences(), totalCount, impacted, totalUsers)
+                            .toBuilder().severity(AgentInsightsIssueSeverity.CRITICAL).build(),
+                    reportedIssue(nameMedium, rndOccurrences(), totalCount, impacted, totalUsers)
+                            .toBuilder().severity(AgentInsightsIssueSeverity.MEDIUM).build()));
+
+            var ascPage = agentInsightsResourceClient.findIssues(projectId, DAY_1, DAY_1, null, null,
+                    sortBy(SortableFields.SEVERITY, Direction.ASC), null, null, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_OK);
+            assertThat(ascPage.content())
+                    .extracting(AgentInsightsIssue::name)
+                    .containsExactly(nameCritical, nameMedium, nameLow);
+        }
+
+        @Test
+        @DisplayName("Unknown severity query param value returns 400")
+        void findIssuesWhenUnknownSeverityParamThenBadRequest() {
+            try (var response = agentInsightsResourceClient.findIssuesWithResponse(UUID.randomUUID(), null, null,
+                    null, "unknown-severity", null, null, null, API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
+        }
+    }
+
+    @Nested
     @DisplayName("Date Range Validation:")
     class DateRangeValidation {
 
@@ -902,7 +994,7 @@ class AgentInsightsResourceTest {
             var fromDate = DAY_2;
             var toDate = DAY_1;
 
-            agentInsightsResourceClient.findIssues(projectId, fromDate, toDate, null, null, null, null,
+            agentInsightsResourceClient.findIssues(projectId, fromDate, toDate, null, null, null, null, null,
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_BAD_REQUEST);
         }
 
