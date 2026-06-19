@@ -19,6 +19,8 @@ export * from "./AgentInsightsIssuePage.js";
 export * from "./AgentInsightsIssueStatus.js";
 export * from "./AgentInsightsIssueWithDetails.js";
 export * from "./AgentInsightsIssueWithDetailsStatus.js";
+export * from "./AgentInsightsJob.js";
+export * from "./AgentInsightsJobStatus.js";
 export * from "./AggregationData.js";
 export * from "./Alert.js";
 export * from "./AlertAlertType.js";
