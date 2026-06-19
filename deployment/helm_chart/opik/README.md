@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 2.0.68](https://img.shields.io/badge/Version-2.0.68-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.0.68](https://img.shields.io/badge/AppVersion-2.0.68-informational?style=flat-square)
+![Version: 2.0.73](https://img.shields.io/badge/Version-2.0.73-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.0.73](https://img.shields.io/badge/AppVersion-2.0.73-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -82,7 +82,7 @@ Call opik api on http://localhost:5173/api
 | Repository | Name | Version |
 |------------|------|---------|
 | https://comet-ml.github.io/comet-mysql-helm/ | mysql | 1.0.7 |
-| https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.6 |
+| https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.27.1 |
 | oci://registry-1.docker.io/cloudpirates | minio | 0.10.0 |
 | oci://registry-1.docker.io/cloudpirates | redis | 0.23.0 |
 | oci://registry-1.docker.io/cloudpirates | zookeeper | 0.6.0 |
@@ -157,7 +157,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.extraVolumeClaimTemplates | list | `[]` |  |
 | clickhouse.extraVolumeMounts | list | `[]` | Additional volume mounts for the ClickHouse server container. Use this to mount volumes that ClickHouse server needs direct access to, such as a backup disk for embedded backups (BACKUP TO Disk(...)). The mount name can reference a CHI volumeClaimTemplate defined in `clickhouse.extraVolumeClaimTemplates` (matched by name automatically by the ClickHouse operator), or a volume defined in `clickhouse.extraVolumes`. |
 | clickhouse.extraVolumes | list | `[]` | Additional pod-level volumes for the ClickHouse pod, independent of the backup server sidecar. Use this for non-PVC volume types (configMap, secret, emptyDir, hostPath, etc.) that should be available to the ClickHouse server container. For persistent storage, prefer defining a CHI-managed PVC via `clickhouse.extraVolumeClaimTemplates` and referencing it by name in `extraVolumeMounts` above. |
-| clickhouse.image | string | `"altinity/clickhouse-server:25.3.8.10041.altinitystable"` |  |
+| clickhouse.image | string | `"altinity/clickhouse-server:25.8.16.10002.altinitystable"` |  |
 | clickhouse.livenessProbe.failureThreshold | int | `10` |  |
 | clickhouse.livenessProbe.httpGet.path | string | `"/ping"` |  |
 | clickhouse.livenessProbe.httpGet.port | int | `8123` |  |
