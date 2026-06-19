@@ -233,6 +233,7 @@ class AgentInsightsResourceTest {
                     .cause("Cause of " + nameA)
                     .suggestedFix("Fix for " + nameA)
                     .status(AgentInsightsIssueStatus.OPEN)
+                    .severity(AgentInsightsIssueSeverity.MEDIUM)
                     .tracesQuery("SELECT 1")
                     .totalOccurrences(occurrences)
                     .total(totalCount)
