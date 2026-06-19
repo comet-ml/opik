@@ -66,4 +66,25 @@ export class PromptDetailPage {
       await expect(this.activeVersionLabel()).toHaveText(label);
     });
   }
+
+  /** Open the "Use" dropdown and click "Load in Prompt playground", then wait for the Playground URL.
+   * A confirmation dialog may appear if the playground is not empty — handle it if present. */
+  async loadInPlayground(): Promise<void> {
+    return test.step('load prompt into Playground', async () => {
+      await this.page.getByRole('button', { name: 'Use' }).click();
+      await this.page.getByRole('menuitem', { name: 'Load in Prompt playground' }).click();
+      // A confirmation dialog appears only when the playground already has content.
+      // If it shows up within a short window, click through it; otherwise proceed.
+      const dialog = this.page.getByRole('dialog', { name: 'Load prompt' });
+      const confirmBtn = dialog.getByRole('button', { name: 'Load prompt' });
+      const appeared = await confirmBtn.isVisible().catch(() => false);
+      if (!appeared) {
+        await confirmBtn.waitFor({ state: 'visible', timeout: 3000 }).catch(() => {});
+      }
+      if (await confirmBtn.isVisible().catch(() => false)) {
+        await confirmBtn.click();
+      }
+      await this.page.waitForURL((url) => url.pathname.includes('/playground'));
+    });
+  }
 }

@@ -3,6 +3,7 @@
 export interface Comment {
     id?: string;
     text: string;
+    sourceQueueId?: string;
     createdAt?: Date;
     lastUpdatedAt?: Date;
     createdBy?: string;

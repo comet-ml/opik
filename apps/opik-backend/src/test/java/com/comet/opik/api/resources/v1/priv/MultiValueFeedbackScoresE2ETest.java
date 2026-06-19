@@ -277,6 +277,58 @@ class MultiValueFeedbackScoresE2ETest {
     }
 
     @Test
+    @DisplayName("delete trace score scoped by source_queue_id: wrong queue is a no-op, correct queue deletes")
+    void deleteTraceFeedbackScoreScopedBySourceQueueId() {
+        var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .id(null)
+                .projectName(DEFAULT_PROJECT)
+                .usage(null)
+                .feedbackScores(null)
+                .startTime(Instant.now().truncatedTo(ChronoUnit.HOURS))
+                .build();
+        var traceId = traceResourceClient.createTrace(trace, API_KEY1, TEST_WORKSPACE);
+
+        var queueIdA = randomUUID();
+        var queueIdB = randomUUID();
+
+        // Score from queue A
+        var score = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                .sourceQueueId(queueIdA)
+                .build();
+        traceResourceClient.feedbackScore(traceId, score, TEST_WORKSPACE, API_KEY1);
+
+        // Verify score is present
+        var actualTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY1);
+        assertThat(actualTrace.feedbackScores()).hasSize(1);
+
+        // Delete scoped to wrong queue B — should be a no-op
+        traceResourceClient.deleteTraceFeedbackScore(
+                DeleteFeedbackScore.builder().name(score.name()).author(USER1).sourceQueueId(queueIdB).build(),
+                traceId, API_KEY1, TEST_WORKSPACE);
+
+        // Score should still be present and match the original
+        actualTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY1);
+        assertThat(actualTrace.feedbackScores()).singleElement().satisfies(actual -> {
+            assertThat(actual)
+                    .usingRecursiveComparison()
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .ignoringFields("createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
+                            "sourceQueueId", "valueByAuthor")
+                    .isEqualTo(score);
+            assertThat(actual.valueByAuthor().keySet()).containsExactly(USER1);
+        });
+
+        // Delete scoped to correct queue A — should remove the score
+        traceResourceClient.deleteTraceFeedbackScore(
+                DeleteFeedbackScore.builder().name(score.name()).author(USER1).sourceQueueId(queueIdA).build(),
+                traceId, API_KEY1, TEST_WORKSPACE);
+
+        // Score should be gone
+        actualTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY1);
+        assertThat(actualTrace.feedbackScores()).isNullOrEmpty();
+    }
+
+    @Test
     @DisplayName("test score span by multiple authors")
     void testScoreSpanByMultipleAuthors() {
         // create spans
@@ -460,6 +512,84 @@ class MultiValueFeedbackScoresE2ETest {
         assertThat(actualThread.feedbackScores()).hasSize(1);
         assertThat(actualThread.feedbackScores().getFirst().valueByAuthor()).hasSize(1);
         assertThat(actualThread.feedbackScores().getFirst().valueByAuthor().keySet()).containsExactly(USER1);
+    }
+
+    @Test
+    @DisplayName("delete thread score scoped by source_queue_id: wrong queue is a no-op, correct queue deletes")
+    void deleteThreadFeedbackScoreScopedBySourceQueueId() {
+        var threadId = randomUUID().toString();
+        var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+        UUID projectId = projectResourceClient.createProject(projectName, API_KEY1, TEST_WORKSPACE);
+
+        traceResourceClient.openTraceThread(threadId, null, projectName, API_KEY1, TEST_WORKSPACE);
+
+        var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .id(null)
+                .threadId(threadId)
+                .projectName(projectName)
+                .usage(null)
+                .feedbackScores(null)
+                .startTime(Instant.now().truncatedTo(ChronoUnit.HOURS))
+                .build();
+        traceResourceClient.batchCreateTraces(List.of(trace), API_KEY1, TEST_WORKSPACE);
+        traceResourceClient.closeTraceThread(threadId, null, projectName, API_KEY1, TEST_WORKSPACE);
+
+        Awaitility.await().pollInterval(100, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+            TraceThread thread = traceResourceClient.getTraceThread(threadId, projectId, API_KEY1, TEST_WORKSPACE);
+            assertThat(thread.threadModelId()).isNotNull();
+        });
+
+        var queueIdA = randomUUID();
+        var queueIdB = randomUUID();
+        var score = factory.manufacturePojo(FeedbackScore.class);
+
+        // Score from queue A
+        traceResourceClient.threadFeedbackScores(
+                List.of(FeedbackScoreBatchItemThread.builder()
+                        .threadId(threadId)
+                        .projectName(projectName)
+                        .name(score.name())
+                        .categoryName(score.categoryName())
+                        .value(score.value())
+                        .reason(score.reason())
+                        .source(score.source())
+                        .sourceQueueId(queueIdA)
+                        .build()),
+                API_KEY1, TEST_WORKSPACE);
+
+        // Verify score is present
+        var actualThreads = traceResourceClient.getTraceThreads(projectId, projectName, API_KEY1,
+                TEST_WORKSPACE, null, null, Map.of());
+        assertThat(actualThreads.content()).hasSize(1);
+        assertThat(actualThreads.content().getFirst().feedbackScores()).hasSize(1);
+
+        // Delete scoped to wrong queue B — should be a no-op
+        traceResourceClient.deleteThreadFeedbackScores(projectName, threadId, Set.of(score.name()), USER1,
+                queueIdB, API_KEY1, TEST_WORKSPACE);
+
+        // Score should still be present and match the original
+        actualThreads = traceResourceClient.getTraceThreads(projectId, projectName, API_KEY1,
+                TEST_WORKSPACE, null, null, Map.of());
+        assertThat(actualThreads.content()).hasSize(1);
+        assertThat(actualThreads.content().getFirst().feedbackScores()).singleElement().satisfies(actual -> {
+            assertThat(actual)
+                    .usingRecursiveComparison()
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .ignoringFields("createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
+                            "sourceQueueId", "valueByAuthor")
+                    .isEqualTo(score);
+            assertThat(actual.valueByAuthor().keySet()).containsExactly(USER1);
+        });
+
+        // Delete scoped to correct queue A — should remove the score
+        traceResourceClient.deleteThreadFeedbackScores(projectName, threadId, Set.of(score.name()), USER1,
+                queueIdA, API_KEY1, TEST_WORKSPACE);
+
+        // Score should be gone
+        actualThreads = traceResourceClient.getTraceThreads(projectId, projectName, API_KEY1,
+                TEST_WORKSPACE, null, null, Map.of());
+        assertThat(actualThreads.content()).hasSize(1);
+        assertThat(actualThreads.content().getFirst().feedbackScores()).isNullOrEmpty();
     }
 
     @Test

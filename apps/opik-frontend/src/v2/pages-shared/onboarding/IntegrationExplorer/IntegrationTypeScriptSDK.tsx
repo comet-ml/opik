@@ -9,10 +9,7 @@ const IntegrationTypeScriptSDK: React.FC = () => {
 
   return (
     <a
-      href={buildDocsUrl(
-        "/reference/typescript-sdk/overview",
-        "&utm_source=opik_frontend&utm_medium=integration_explorer&utm_campaign=typescript_sdk&utm_content=integration_card",
-      )}
+      href={buildDocsUrl("/reference/typescript-sdk/overview")}
       target="_blank"
       rel="noopener noreferrer"
     >

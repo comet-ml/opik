@@ -20,6 +20,7 @@ class FeedbackScoreBatchItemThread(UniversalBaseModel):
     reason: typing.Optional[str] = None
     source: FeedbackScoreBatchItemThreadSource
     author: typing.Optional[str] = None
+    source_queue_id: typing.Optional[str] = None
     thread_id: str
 
     if IS_PYDANTIC_V2:

@@ -17,6 +17,7 @@ type UseThreadFeedbackScoreSetMutationParams = {
   projectName: string;
   projectId: string;
   scores: UseThreadFeedbackScoreSetMutationScore[];
+  sourceQueueId?: string;
 };
 
 const useThreadFeedbackScoreSetMutation = () => {
@@ -28,6 +29,7 @@ const useThreadFeedbackScoreSetMutation = () => {
       threadId,
       projectName,
       scores,
+      sourceQueueId,
     }: UseThreadFeedbackScoreSetMutationParams) => {
       const { data } = await api.put(
         `${TRACES_REST_ENDPOINT}threads/feedback-scores`,
@@ -40,6 +42,7 @@ const useThreadFeedbackScoreSetMutation = () => {
             source: FEEDBACK_SCORE_TYPE.ui,
             value,
             reason,
+            source_queue_id: sourceQueueId,
           })),
         },
       );

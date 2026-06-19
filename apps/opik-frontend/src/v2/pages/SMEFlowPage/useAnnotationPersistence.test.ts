@@ -110,7 +110,7 @@ describe("useAnnotationPersistence", () => {
       act(() => result.current.flushPendingChanges());
 
       expect(mockCreateTraceComment).toHaveBeenCalledWith(
-        { traceId: "trace-1", text: "hello" },
+        { traceId: "trace-1", text: "hello", sourceQueueId: "queue-1" },
         expect.objectContaining({ onSuccess: expect.any(Function) }),
       );
     });
@@ -226,7 +226,7 @@ describe("useAnnotationPersistence", () => {
       act(() => result.current.flushPendingChanges());
 
       expect(mockCreateTraceComment).toHaveBeenCalledWith(
-        { traceId: "trace-1", text: "new text" },
+        { traceId: "trace-1", text: "new text", sourceQueueId: "queue-1" },
         expect.any(Object),
       );
     });
@@ -255,7 +255,7 @@ describe("useAnnotationPersistence", () => {
 
       expect(mockCreateTraceComment).toHaveBeenCalledTimes(2);
       expect(mockCreateTraceComment).toHaveBeenLastCalledWith(
-        { traceId: "trace-2", text: "item2 comment" },
+        { traceId: "trace-2", text: "item2 comment", sourceQueueId: "queue-1" },
         expect.any(Object),
       );
       expect(mockUpdateTraceComment).not.toHaveBeenCalled();
@@ -275,6 +275,7 @@ describe("useAnnotationPersistence", () => {
           traceId: "trace-1",
           name: "accuracy",
           value: 0.8,
+          sourceQueueId: "queue-1",
         }),
       );
     });
@@ -290,6 +291,7 @@ describe("useAnnotationPersistence", () => {
       expect(mockDeleteTraceFeedbackScore).toHaveBeenCalledWith({
         traceId: "trace-1",
         name: "accuracy",
+        sourceQueueId: "queue-1",
       });
     });
 
@@ -383,7 +385,7 @@ describe("useAnnotationPersistence", () => {
 
       expect(mockCreateTraceComment).toHaveBeenCalledTimes(2);
       expect(mockCreateTraceComment).toHaveBeenLastCalledWith(
-        { traceId: "trace-2", text: "new" },
+        { traceId: "trace-2", text: "new", sourceQueueId: "queue-1" },
         expect.any(Object),
       );
     });

@@ -95,6 +95,7 @@ const PromptLibraryMenu: React.FC<PromptLibraryMenuProps> = ({
       <PopoverContent
         align="end"
         className="w-[320px] p-0"
+        data-testid="prompt-library-menu"
         onCloseAutoFocus={(e) => e.preventDefault()}
         onInteractOutside={(e) => {
           const target = e.target as HTMLElement | null;
@@ -200,6 +201,7 @@ const PromptRow: React.FC<PromptRowProps> = ({
         sideOffset={8}
         className="w-[220px] p-1"
         data-prompt-versions-submenu=""
+        data-testid="prompt-versions-submenu"
       >
         <PromptVersionsList
           promptId={prompt.id}

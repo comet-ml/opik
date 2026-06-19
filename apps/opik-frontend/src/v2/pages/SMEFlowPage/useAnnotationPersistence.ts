@@ -106,12 +106,17 @@ export function useAnnotationPersistence({
               threadId: getAnnotationQueueItemId(thread),
               projectId: thread.project_id,
               text: currentText,
+              sourceQueueId: annotationQueue?.id,
             },
             { onSuccess: onCommentCreated, onError: onCommentCreateError },
           );
         } else {
           createTraceComment(
-            { traceId: item.id, text: currentText },
+            {
+              traceId: item.id,
+              text: currentText,
+              sourceQueueId: annotationQueue?.id,
+            },
             { onSuccess: onCommentCreated, onError: onCommentCreateError },
           );
         }
@@ -172,6 +177,7 @@ export function useAnnotationPersistence({
             projectId: thread.project_id,
             projectName: annotationQueue.project_name,
             names: deletedScores.map((s) => s.name),
+            sourceQueueId: annotationQueue.id,
           });
         }
         if (changedScores.length) {
@@ -179,6 +185,7 @@ export function useAnnotationPersistence({
             threadId: thread.id,
             projectId: thread.project_id,
             projectName: annotationQueue.project_name,
+            sourceQueueId: annotationQueue.id,
             scores: changedScores.map((s) => ({
               name: s.name,
               categoryName: s.category_name,
@@ -189,7 +196,11 @@ export function useAnnotationPersistence({
         }
       } else {
         deletedScores.forEach((score) => {
-          deleteTraceFeedbackScore({ traceId: item.id, name: score.name });
+          deleteTraceFeedbackScore({
+            traceId: item.id,
+            name: score.name,
+            sourceQueueId: annotationQueue?.id,
+          });
         });
         changedScores.forEach((score) => {
           setTraceFeedbackScore({
@@ -198,6 +209,7 @@ export function useAnnotationPersistence({
             categoryName: score.category_name,
             value: score.value,
             reason: score.reason,
+            sourceQueueId: annotationQueue?.id,
           });
         });
       }

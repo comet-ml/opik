@@ -4,6 +4,7 @@ permissions:
   contents: read
   checks: write
   pull-requests: write
+  packages: write
 on:
     workflow_dispatch:
     pull_request:
@@ -48,8 +49,13 @@ jobs:
                   match-regex: '^sdks/python/|^\.github/workflows/python_sdk_e2e_tests\.yml$'
                   github-token: ${{ secrets.GITHUB_TOKEN }}
 
+    build-opik:
+        uses: ./.github/workflows/build_e2e_docker.yaml
+        with:
+          include_guardrails: true
+
     run-e2e:
-        needs: select-matrix
+        needs: [select-matrix, build-opik]
         name: Python SDK E2E Tests ${{matrix.python_version}}
         runs-on: ubuntu-latest
         timeout-minutes: 30
@@ -62,6 +68,24 @@ jobs:
         - name: Checkout
           uses: actions/checkout@v6
 
+        - name: Login to GHCR
+          uses: docker/login-action@v3
+          with:
+            registry: ghcr.io
+            username: ${{ github.actor }}
+            password: ${{ secrets.GITHUB_TOKEN }}
+
+        - name: Pull Docker images from GHCR
+          env:
+            TAG: ${{ needs.build-opik.outputs.image_tag }}
+          run: |
+            docker pull "ghcr.io/comet-ml/opik/opik-backend:$TAG"
+            docker pull "ghcr.io/comet-ml/opik/opik-python-backend:$TAG"
+            docker pull "ghcr.io/comet-ml/opik/opik-guardrails-backend:$TAG"
+            docker tag "ghcr.io/comet-ml/opik/opik-backend:$TAG" ghcr.io/comet-ml/opik/opik-backend:latest
+            docker tag "ghcr.io/comet-ml/opik/opik-python-backend:$TAG" ghcr.io/comet-ml/opik/opik-python-backend:latest
+            docker tag "ghcr.io/comet-ml/opik/opik-guardrails-backend:$TAG" ghcr.io/comet-ml/opik/opik-guardrails-backend:latest
+
         - name: Setup Python ${{matrix.python_version}}
           uses: actions/setup-python@v5
           with:
@@ -73,9 +97,12 @@ jobs:
             # Avoid Buildx Bake concurrent image export collisions in CI.
             COMPOSE_BAKE: false
             TOGGLE_RUNNERS_ENABLED: "true"
+            OPIK_BACKEND_PULL_POLICY: never
+            PYTHON_BACKEND_PULL_POLICY: never
+            OPIK_GUARDRAILS_BACKEND_PULL_POLICY: never
           run: |
             cd ${{ github.workspace }}
-            ./opik.sh --backend --port-mapping --build
+            ./opik.sh --backend --port-mapping --guardrails
 
         - name: Check Opik server availability
           shell: bash
@@ -142,5 +169,4 @@ jobs:
           if: always()
           run: |
             cd ${{ github.workspace }}
-            ./opik.sh --stop
-
+            ./opik.sh --stop --guardrails

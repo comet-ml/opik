@@ -20,6 +20,7 @@ class FeedbackScoreBatchItem(UniversalBaseModel):
     reason: typing.Optional[str] = None
     source: FeedbackScoreBatchItemSource
     author: typing.Optional[str] = None
+    source_queue_id: typing.Optional[str] = None
     id: str
 
     if IS_PYDANTIC_V2:

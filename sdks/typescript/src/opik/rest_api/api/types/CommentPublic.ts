@@ -3,6 +3,7 @@
 export interface CommentPublic {
     id?: string;
     text: string;
+    sourceQueueId?: string;
     createdAt?: Date;
     lastUpdatedAt?: Date;
     createdBy?: string;

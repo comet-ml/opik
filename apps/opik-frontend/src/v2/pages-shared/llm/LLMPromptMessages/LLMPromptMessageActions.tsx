@@ -395,6 +395,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
               <Button
                 variant="minimal"
                 size="icon-2xs"
+                data-testid="save-text-prompt-button"
                 onClick={() => {
                   resetKeyRef.current = resetKeyRef.current + 1;
                   setOpen("save");
