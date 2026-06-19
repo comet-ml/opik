@@ -44,7 +44,7 @@ on:
         type: string
         required: false
         default: "main"
-        description: Git ref (branch/tag/SHA) of opik-plugin-ai-spend to bake into the comet frontend
+        description: ai-spend plugin ref
     secrets:
       OPIK_FE_SENTRY_DSN:
         required: false

@@ -34,7 +34,7 @@ on:
       ai_spend_plugin_ref:
         type: string
         required: false
-        description: opik-plugin-ai-spend ref (branch/tag/SHA) to bake into the comet frontend
+        description: ai-spend plugin ref
         default: "main"
   workflow_call:
     inputs:
@@ -69,7 +69,7 @@ on:
       ai_spend_plugin_ref:
         type: string
         required: false
-        description: opik-plugin-ai-spend ref (branch/tag/SHA) to bake into the comet frontend
+        description: ai-spend plugin ref
         default: "main"
 
     outputs:
