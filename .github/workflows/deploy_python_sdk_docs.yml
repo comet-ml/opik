@@ -20,13 +20,15 @@ jobs:
       - name: checkout
         uses: actions/checkout@v6
       
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
       - name: Build Python SDK docs
         run: |
             echo "Build sdk documentation"
             cd apps/opik-documentation/python-sdk-docs
-            pip -V
-            pip install -r requirements.txt
-            pip install ../../../sdks/python
+            uv pip install --system -r requirements.txt
+            uv pip install --system ../../../sdks/python
             make build
       
       - name: Upload sdk docs to S3 ${{ inputs.environment }}
