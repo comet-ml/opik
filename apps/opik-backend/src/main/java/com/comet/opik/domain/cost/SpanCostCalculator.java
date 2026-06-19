@@ -28,10 +28,21 @@ class SpanCostCalculator {
                 ? Math.max(0, promptTokens - audioInputTokens)
                 : promptTokens;
 
+        int completionTokens = usage.getOrDefault("completion_tokens", 0);
+        // Audio output tokens (OpenAI audio-preview / realtime) likewise carry a separate rate;
+        // they're nested under original_usage.completion_tokens_details.audio_tokens.
+        int audioOutputTokens = usage.getOrDefault("original_usage.completion_tokens_details.audio_tokens",
+                usage.getOrDefault("completion_tokens_details.audio_tokens", 0));
+
+        BigDecimal outputAudioRate = modelPrice.outputAudioTokenPrice();
+        int nonAudioCompletionTokens = outputAudioRate.compareTo(BigDecimal.ZERO) > 0
+                ? Math.max(0, completionTokens - audioOutputTokens)
+                : completionTokens;
+
         return modelPrice.inputPrice().multiply(BigDecimal.valueOf(nonAudioPromptTokens))
                 .add(inputAudioRate.multiply(BigDecimal.valueOf(audioInputTokens)))
-                .add(modelPrice.outputPrice()
-                        .multiply(BigDecimal.valueOf(usage.getOrDefault("completion_tokens", 0))));
+                .add(modelPrice.outputPrice().multiply(BigDecimal.valueOf(nonAudioCompletionTokens)))
+                .add(outputAudioRate.multiply(BigDecimal.valueOf(audioOutputTokens)));
     }
 
     public static BigDecimal textGenerationWithCacheCostOpenAI(@NonNull ModelPrice modelPrice,
