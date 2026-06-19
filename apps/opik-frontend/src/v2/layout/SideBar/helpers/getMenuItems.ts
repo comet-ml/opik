@@ -90,14 +90,18 @@ const getMenuItems = ({
           label: "Logs",
           disabled: !projectPrefix,
         },
-        {
-          id: "signals",
-          path: projectPath("/signals"),
-          type: MENU_ITEM_TYPE.router,
-          icon: Radar,
-          label: "Signals",
-          disabled: !projectPrefix,
-        },
+        ...(showOlliePage
+          ? [
+              {
+                id: "diagnostics",
+                path: projectPath("/diagnostics"),
+                type: MENU_ITEM_TYPE.router as const,
+                icon: Radar,
+                label: "Diagnostics",
+                disabled: !projectPrefix,
+              },
+            ]
+          : []),
         ...(canViewDashboards
           ? [
               {

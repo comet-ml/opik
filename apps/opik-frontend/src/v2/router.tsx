@@ -253,13 +253,13 @@ const logsRoute = createRoute({
   },
 });
 
-// ----------- signals (project-scoped)
-const signalsRoute = createRoute({
-  path: "/signals",
+// ----------- diagnostics (project-scoped)
+const diagnosticsRoute = createRoute({
+  path: "/diagnostics",
   getParentRoute: () => projectScopedRoute,
   component: SignalsPage,
   staticData: {
-    title: "Signals",
+    title: "Diagnostics",
   },
 });
 
@@ -664,7 +664,7 @@ const routeTree = rootRoute.addChildren([
           projectHomeRoute,
           ollieRoute,
           logsRoute,
-          signalsRoute,
+          diagnosticsRoute,
           projectDashboardsRoute.addChildren([projectDashboardsIndexRoute]),
           tracesRedirectRoute,
           experimentsRoute.addChildren([

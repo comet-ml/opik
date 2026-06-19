@@ -1,106 +1,80 @@
-export enum ISSUE_SEVERITY {
-  high = "high",
-  medium = "medium",
-  low = "low",
-}
+// Types mirror the Agent Insights backend API
+// (apps/opik-backend .../api/AgentInsightsIssue*.java, served at
+// /v1/private/agent-insights). Snake_case fields match the JSON payloads.
 
-export enum ISSUE_CATEGORY {
-  tool_failure = "tool_failure",
-  hallucination = "hallucination",
-  timeout = "timeout",
-  quality = "quality",
-  cost = "cost",
-  other = "other",
-}
-
-export enum ISSUE_STATUS {
+export enum AGENT_INSIGHTS_ISSUE_STATUS {
   open = "open",
   resolved = "resolved",
-  archived = "archived",
+  closed = "closed",
 }
 
-export enum SIGNALS_SORT {
-  severity = "severity",
-  occurrences = "occurrences",
-  last_seen = "last_seen",
-  first_seen = "first_seen",
-}
-
-export interface OccurrencePoint {
-  time: string;
+// Per-day breakdown row, used for the occurrence-over-time chart.
+export interface AgentInsightsIssueDetail {
+  report_day: string;
   count: number;
+  total_count: number;
+  users_impacted: number;
+  total_users: number;
+  metadata?: unknown;
 }
 
-export interface IssueExampleTrace {
+// List item — metrics are aggregated over the requested time window.
+export interface AgentInsightsIssue {
   id: string;
-  duration: number;
-  span_count: number;
-  cost: number;
-  model: string;
-  last_updated_at: string;
+  name: string;
+  description?: string;
+  cause?: string;
+  suggested_fix?: string;
+  status: AGENT_INSIGHTS_ISSUE_STATUS;
+  traces_query?: string;
+  total_occurrences: number;
+  total: number;
+  users_impacted: number;
+  total_users: number;
+  first_seen?: string;
+  last_seen?: string;
+  days_reported: number;
+  created_by?: string;
+  created_at?: string;
+  last_updated_by?: string;
+  last_updated_at?: string;
 }
 
-export enum PROMPT_DIFF_LINE_TYPE {
-  context = "context",
-  added = "added",
-  removed = "removed",
+// Detail response: the issue plus its per-day breakdown within the window.
+export interface AgentInsightsIssueWithDetails {
+  id: string;
+  name: string;
+  description?: string;
+  cause?: string;
+  suggested_fix?: string;
+  status: AGENT_INSIGHTS_ISSUE_STATUS;
+  traces_query?: string;
+  created_by?: string;
+  created_at?: string;
+  last_updated_by?: string;
+  last_updated_at?: string;
+  details: AgentInsightsIssueDetail[];
 }
 
-export interface PromptDiffLine {
-  type: PROMPT_DIFF_LINE_TYPE;
-  text: string;
+export interface AgentInsightsIssuesPage {
+  page: number;
+  size: number;
+  total: number;
+  content: AgentInsightsIssue[];
 }
 
-export interface OllieFix {
-  analyzed_traces: number;
-  root_cause: string;
-  // Estimated share (0..1) of affected traces the fix would resolve
-  resolution_rate: number;
-  // Unified line-based diff of the suggested system-prompt change
-  suggested_prompt_change?: PromptDiffLine[];
+// Per-(workspace, project) job that produces the insights report.
+export enum AGENT_INSIGHTS_JOB_STATUS {
+  enabled = "enabled",
+  disabled = "disabled",
 }
 
-export interface Issue {
+export interface AgentInsightsJob {
   id: string;
   project_id: string;
-  name: string;
-  severity: ISSUE_SEVERITY;
-  category: ISSUE_CATEGORY;
-  status: ISSUE_STATUS;
-  // Short one-line description shown in the list
-  short_description: string;
-  // Long description shown in the detail "Summary" section
-  summary: string;
-  occurrences: number;
-  users_impacted: number;
-  // Share of traces affected, expressed as a fraction (0..1)
-  rate: number;
-  first_seen_at: string;
-  last_seen_at: string;
-  ollie_fix?: OllieFix;
-  occurrences_over_time: OccurrencePoint[];
-  example_traces: IssueExampleTrace[];
-}
-
-export interface IssuesListResponse {
-  content: Issue[];
-  total: number;
-  sortable_by: string[];
-}
-
-export interface SignalsStatValue {
-  value: number;
-  // Trend vs previous period. `percentage` trends are fractions (0.12 = +12%),
-  // `absolute` trends are raw deltas (+3 issues).
-  trend?: number;
-  trend_type?: "percentage" | "absolute";
-  // Whether an increase is good (e.g. resolved) or bad (e.g. open issues)
-  trend_direction_positive?: boolean;
-}
-
-export interface SignalsStats {
-  traces_affected: SignalsStatValue;
-  open_issues: SignalsStatValue;
-  resolved_this_week: SignalsStatValue;
-  last_scan_at: string;
+  status: AGENT_INSIGHTS_JOB_STATUS;
+  created_at?: string;
+  created_by?: string;
+  last_updated_at?: string;
+  last_updated_by?: string;
 }

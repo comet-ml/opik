@@ -2,10 +2,10 @@ import React, { useMemo } from "react";
 import LineChart from "@/shared/Charts/LineChart/LineChart";
 import { ChartConfig } from "@/ui/chart";
 import { formatDate } from "@/lib/date";
-import { OccurrencePoint } from "@/types/signals";
+import { AgentInsightsIssueDetail } from "@/types/signals";
 
 type OccurrenceChartProps = {
-  data: OccurrencePoint[];
+  data: AgentInsightsIssueDetail[];
 };
 
 const config: ChartConfig = {
@@ -17,7 +17,7 @@ const config: ChartConfig = {
 
 const OccurrenceChart: React.FC<OccurrenceChartProps> = ({ data }) => {
   const chartData = useMemo(
-    () => data.map((point) => ({ time: point.time, count: point.count })),
+    () => data.map((point) => ({ time: point.report_day, count: point.count })),
     [data],
   );
 

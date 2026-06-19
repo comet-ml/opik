@@ -1,7 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { StringParam, useQueryParam } from "use-query-params";
-import { Issue, ISSUE_STATUS, SIGNALS_SORT } from "@/types/signals";
-import useProjectIssuesList from "@/api/signals/useProjectIssuesList";
+import {
+  AGENT_INSIGHTS_ISSUE_STATUS,
+  AgentInsightsIssue,
+} from "@/types/signals";
+import { Sorting } from "@/types/sorting";
+import useAgentInsightsIssuesList from "@/api/signals/useAgentInsightsIssuesList";
 import Loader from "@/shared/Loader/Loader";
 import NoData from "@/shared/NoData/NoData";
 import {
@@ -14,29 +18,55 @@ import {
 import IssueListItem from "@/v2/pages/SignalsPage/IssuesTab/IssueListItem";
 import IssueDetail from "@/v2/pages/SignalsPage/IssuesTab/IssueDetail";
 
-const SORT_OPTIONS: { value: SIGNALS_SORT; label: string }[] = [
-  { value: SIGNALS_SORT.severity, label: "By severity" },
-  { value: SIGNALS_SORT.occurrences, label: "By occurrences" },
-  { value: SIGNALS_SORT.last_seen, label: "By last seen" },
-  { value: SIGNALS_SORT.first_seen, label: "By first seen" },
+// Sort values map to the backend's sortable fields (last_seen, total_occurrences).
+const SORT_OPTIONS: { value: string; label: string; sorting: Sorting }[] = [
+  {
+    value: "last_seen",
+    label: "By last seen",
+    sorting: [{ id: "last_seen", desc: true }],
+  },
+  {
+    value: "total_occurrences",
+    label: "By occurrences",
+    sorting: [{ id: "total_occurrences", desc: true }],
+  },
 ];
+
+const PAGE_SIZE = 100;
 
 type IssuesTabProps = {
   projectId: string;
+  showResolved?: boolean;
 };
 
-const IssuesTab: React.FC<IssuesTabProps> = ({ projectId }) => {
-  const [sort, setSort] = useState<SIGNALS_SORT>(SIGNALS_SORT.severity);
+const IssuesTab: React.FC<IssuesTabProps> = ({
+  projectId,
+  showResolved = false,
+}) => {
+  const status = showResolved
+    ? AGENT_INSIGHTS_ISSUE_STATUS.resolved
+    : AGENT_INSIGHTS_ISSUE_STATUS.open;
+  const [sortValue, setSortValue] = useState<string>(SORT_OPTIONS[0].value);
   const [activeIssueId, setActiveIssueId] = useQueryParam(
     "issue",
     StringParam,
     { updateType: "replaceIn" },
   );
 
-  const { data, isPending } = useProjectIssuesList({
+  const sorting = useMemo(
+    () =>
+      SORT_OPTIONS.find((o) => o.value === sortValue)?.sorting ?? [
+        { id: "last_seen", desc: true },
+      ],
+    [sortValue],
+  );
+
+  const { data, isPending } = useAgentInsightsIssuesList({
     projectId,
-    status: ISSUE_STATUS.open,
-    sort,
+    status,
+    sorting,
+    page: 1,
+    size: PAGE_SIZE,
   });
 
   const issues = useMemo(() => data?.content ?? [], [data]);
@@ -56,11 +86,8 @@ const IssuesTab: React.FC<IssuesTabProps> = ({ projectId }) => {
     [issues, activeIssueId],
   );
 
-  const handleSelect = (issue: Issue) => setActiveIssueId(issue.id);
-
-  // TODO(signals-backend): wire to resolve/archive mutations once available.
-  const handleResolve = () => {};
-  const handleArchive = () => {};
+  const handleSelect = (issue: AgentInsightsIssue) =>
+    setActiveIssueId(issue.id);
 
   if (isPending) {
     return <Loader />;
@@ -69,24 +96,25 @@ const IssuesTab: React.FC<IssuesTabProps> = ({ projectId }) => {
   if (!issues.length) {
     return (
       <NoData
-        title="No issues yet"
-        message="Once we scan your traces, detected issues will show up here."
+        title={showResolved ? "No resolved issues" : "No open issues"}
+        message={
+          showResolved
+            ? "Issues you resolve will show up here."
+            : "Once we scan your traces, detected issues will show up here."
+        }
         className="h-[400px]"
       />
     );
   }
 
   return (
-    <div className="flex min-h-[500px] gap-4">
+    <div className="flex min-h-[500px] gap-2">
       {/* Issue list */}
-      <div className="flex w-[360px] shrink-0 flex-col rounded-md border bg-background">
-        <div className="flex h-10 items-center justify-between border-b border-border pl-4 pr-2">
+      <div className="flex w-[360px] shrink-0 flex-col overflow-hidden rounded-md border bg-background">
+        <div className="flex h-10 items-center justify-between border-b border-border bg-[#F8FAFC] pl-4 pr-2">
           <span className="comet-body-xs-accented">Issues</span>
-          <Select
-            value={sort}
-            onValueChange={(value) => setSort(value as SIGNALS_SORT)}
-          >
-            <SelectTrigger className="h-7 w-auto gap-1 border-none px-2 text-xs shadow-none hover:shadow-none [&>svg]:size-3 [&>svg]:opacity-100">
+          <Select value={sortValue} onValueChange={setSortValue}>
+            <SelectTrigger className="h-7 w-auto gap-1 border-none bg-transparent px-2 text-xs shadow-none hover:shadow-none [&>svg]:size-3 [&>svg]:opacity-100">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -115,13 +143,9 @@ const IssuesTab: React.FC<IssuesTabProps> = ({ projectId }) => {
       </div>
 
       {/* Issue detail */}
-      <div className="min-w-0 flex-1 rounded-md border bg-background p-4">
+      <div className="min-w-0 flex-1 overflow-hidden rounded-md border bg-background">
         {activeIssue && (
-          <IssueDetail
-            issue={activeIssue}
-            onResolve={handleResolve}
-            onArchive={handleArchive}
-          />
+          <IssueDetail issue={activeIssue} projectId={projectId} />
         )}
       </div>
     </div>
