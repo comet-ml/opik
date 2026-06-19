@@ -6,6 +6,7 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .agent_insights_issue_detail import AgentInsightsIssueDetail
+from .agent_insights_issue_with_details_severity import AgentInsightsIssueWithDetailsSeverity
 from .agent_insights_issue_with_details_status import AgentInsightsIssueWithDetailsStatus
 
 
@@ -16,6 +17,7 @@ class AgentInsightsIssueWithDetails(UniversalBaseModel):
     cause: typing.Optional[str] = None
     suggested_fix: typing.Optional[str] = None
     status: typing.Optional[AgentInsightsIssueWithDetailsStatus] = None
+    severity: typing.Optional[AgentInsightsIssueWithDetailsSeverity] = None
     traces_query: typing.Optional[str] = None
     created_by: typing.Optional[str] = None
     created_at: typing.Optional[dt.datetime] = None

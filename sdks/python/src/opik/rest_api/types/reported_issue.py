@@ -5,6 +5,7 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .json_node import JsonNode
+from .reported_issue_severity import ReportedIssueSeverity
 
 
 class ReportedIssue(UniversalBaseModel):
@@ -14,6 +15,7 @@ class ReportedIssue(UniversalBaseModel):
     cause: typing.Optional[str] = None
     suggested_fix: typing.Optional[str] = None
     traces_query: typing.Optional[str] = None
+    severity: ReportedIssueSeverity
     count: int
     total_count: int
     users_impacted: int

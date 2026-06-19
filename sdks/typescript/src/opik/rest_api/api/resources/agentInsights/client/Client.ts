@@ -51,7 +51,7 @@ export class AgentInsightsClient {
         request: OpikApi.FindAgentInsightsIssuesRequest,
         requestOptions?: AgentInsightsClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.AgentInsightsIssuePage>> {
-        const { projectId, fromDate, toDate, status, sorting, page, size } = request;
+        const { projectId, fromDate, toDate, status, severity, sorting, page, size } = request;
         const _queryParams: Record<string, unknown> = {
             project_id: projectId,
             from_date: fromDate,
@@ -59,6 +59,13 @@ export class AgentInsightsClient {
             status:
                 status != null
                     ? serializers.FindAgentInsightsIssuesRequestStatus.jsonOrThrow(status, {
+                          unrecognizedObjectKeys: "strip",
+                          omitUndefined: true,
+                      })
+                    : undefined,
+            severity:
+                severity != null
+                    ? serializers.FindAgentInsightsIssuesRequestSeverity.jsonOrThrow(severity, {
                           unrecognizedObjectKeys: "strip",
                           omitUndefined: true,
                       })
@@ -143,6 +150,7 @@ export class AgentInsightsClient {
      *         reportDay: "2023-01-15",
      *         issues: [{
      *                 name: "name",
+     *                 severity: "critical",
      *                 count: 1000000,
      *                 totalCount: 1000000,
      *                 usersImpacted: 1000000,

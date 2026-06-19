@@ -18,6 +18,7 @@ from ..types.agent_insights_issue_page import AgentInsightsIssuePage
 from ..types.agent_insights_issue_with_details import AgentInsightsIssueWithDetails
 from ..types.reported_issue import ReportedIssue
 from .types.agent_insights_issue_update_status import AgentInsightsIssueUpdateStatus
+from .types.find_agent_insights_issues_request_severity import FindAgentInsightsIssuesRequestSeverity
 from .types.find_agent_insights_issues_request_status import FindAgentInsightsIssuesRequestStatus
 
 # this is used as the default value for optional parameters
@@ -35,6 +36,7 @@ class RawAgentInsightsClient:
         from_date: typing.Optional[dt.date] = None,
         to_date: typing.Optional[dt.date] = None,
         status: typing.Optional[FindAgentInsightsIssuesRequestStatus] = None,
+        severity: typing.Optional[FindAgentInsightsIssuesRequestSeverity] = None,
         sorting: typing.Optional[str] = None,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
@@ -52,6 +54,8 @@ class RawAgentInsightsClient:
         to_date : typing.Optional[dt.date]
 
         status : typing.Optional[FindAgentInsightsIssuesRequestStatus]
+
+        severity : typing.Optional[FindAgentInsightsIssuesRequestSeverity]
 
         sorting : typing.Optional[str]
 
@@ -75,6 +79,7 @@ class RawAgentInsightsClient:
                 "from_date": str(from_date) if from_date is not None else None,
                 "to_date": str(to_date) if to_date is not None else None,
                 "status": status,
+                "severity": severity,
                 "sorting": sorting,
                 "page": page,
                 "size": size,
@@ -381,6 +386,7 @@ class AsyncRawAgentInsightsClient:
         from_date: typing.Optional[dt.date] = None,
         to_date: typing.Optional[dt.date] = None,
         status: typing.Optional[FindAgentInsightsIssuesRequestStatus] = None,
+        severity: typing.Optional[FindAgentInsightsIssuesRequestSeverity] = None,
         sorting: typing.Optional[str] = None,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
@@ -398,6 +404,8 @@ class AsyncRawAgentInsightsClient:
         to_date : typing.Optional[dt.date]
 
         status : typing.Optional[FindAgentInsightsIssuesRequestStatus]
+
+        severity : typing.Optional[FindAgentInsightsIssuesRequestSeverity]
 
         sorting : typing.Optional[str]
 
@@ -421,6 +429,7 @@ class AsyncRawAgentInsightsClient:
                 "from_date": str(from_date) if from_date is not None else None,
                 "to_date": str(to_date) if to_date is not None else None,
                 "status": status,
+                "severity": severity,
                 "sorting": sorting,
                 "page": page,
                 "size": size,
