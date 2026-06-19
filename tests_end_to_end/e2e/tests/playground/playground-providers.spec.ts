@@ -13,12 +13,24 @@ interface ModelEntry {
   options?: Record<string, string | number>;
 }
 
-interface ProviderEntry {
+interface BuiltInProviderEntry {
   display_name: string;
+  provider_type?: 'builtin';
   provider_name: ProviderName;
   api_key_env_var: string;
   models: ModelEntry[];
 }
+
+interface CustomProviderEntry {
+  display_name: string;
+  provider_type: 'custom';
+  provider_name: string;
+  base_url: string;
+  api_key_env_var: string;
+  models: ModelEntry[];
+}
+
+type ProviderEntry = BuiltInProviderEntry | CustomProviderEntry;
 
 interface ProvidersConfig {
   providers: Record<string, ProviderEntry>;
@@ -55,7 +67,16 @@ test.describe('Playground — provider sanity', { tag: ['@provider-sanity', '@pl
       await test.step(`Ensure ${provider.provider_name} provider key is configured`, async () => {
         const cfg = new ConfigurationPage(page);
         await cfg.gotoAiProviders();
-        await cfg.ensureProviderConfigured(provider.provider_name, apiKey!);
+        if (provider.provider_type === 'custom') {
+          await cfg.ensureCustomProviderConfigured({
+            providerName: provider.provider_name,
+            baseUrl: provider.base_url,
+            apiKey: apiKey!,
+            models: provider.models.map((m) => m.name).join(','),
+          });
+        } else {
+          await cfg.ensureProviderConfigured(provider.provider_name, apiKey!);
+        }
       });
 
       await test.step(`Run a simple prompt against ${model.ui_selector} with options ${JSON.stringify(
