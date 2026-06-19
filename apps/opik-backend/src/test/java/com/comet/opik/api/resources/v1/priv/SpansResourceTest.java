@@ -3839,8 +3839,8 @@ class SpansResourceTest {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
                 assertThat(actualResponse.hasEntity()).isTrue();
-                assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
-                        .contains("span id must be a version 7 UUID");
+                assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class).getDetails())
+                        .isEqualTo("span id must be a version 7 UUID");
             }
         }
 

@@ -5293,7 +5293,9 @@ class TracesResourceTest {
                     .build();
 
             try (var actualResponse = traceResourceClient.callFeedbackScores(List.of(score), API_KEY, TEST_WORKSPACE)) {
-                assertErrorResponse(actualResponse, "trace id must be a version 7 UUID", 400);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
+                assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class).getDetails())
+                        .isEqualTo("trace id must be a version 7 UUID");
             }
         }
 
