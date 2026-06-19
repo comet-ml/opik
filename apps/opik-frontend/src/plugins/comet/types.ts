@@ -55,6 +55,7 @@ export interface Organization {
   role: ORGANIZATION_ROLE_TYPE;
   onlyAdminsInviteByEmail: boolean;
   workspaceRolesEnabled: boolean;
+  costIntelligenceEnabled: boolean;
 }
 
 export enum ManagementPermissionsNames {

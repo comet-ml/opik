@@ -5,8 +5,6 @@ import { cn } from "@/lib/utils";
 import { useOpikWorkspaceName } from "@/store/AppStore";
 import { useAiSpend } from "@/contexts/AiSpendContext";
 import usePluginsStore from "@/store/PluginsStore";
-import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { buildUrl } from "./utils";
 
 type AppLinkItemProps = {
@@ -68,16 +66,9 @@ const UserMenuAppLinks = ({ isLLMOnlyOrganization }: UserMenuAppLinksProps) => {
   const hasAiSpendPlugin = usePluginsStore((state) =>
     state.hasPlugin("ai-spend"),
   );
-  const costIntelligenceFeatureEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.COST_INTELLIGENCE_ENABLED,
-  );
-
   const showOpikReturn = Boolean(isSpendWorkspaceActive);
   const showCostIntelligence =
-    hasAiSpendPlugin &&
-    hasAiSpendAccess &&
-    costIntelligenceFeatureEnabled &&
-    !isSpendWorkspaceActive;
+    hasAiSpendPlugin && hasAiSpendAccess && !isSpendWorkspaceActive;
   const showExperimentManagement = !isLLMOnlyOrganization;
 
   if (!showOpikReturn && !showCostIntelligence && !showExperimentManagement) {
