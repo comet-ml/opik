@@ -24,6 +24,8 @@ from .types import (
     AgentInsightsIssueStatus,
     AgentInsightsIssueWithDetails,
     AgentInsightsIssueWithDetailsStatus,
+    AgentInsightsJob,
+    AgentInsightsJobStatus,
     AggregationData,
     Alert,
     AlertAlertType,
@@ -692,6 +694,7 @@ from .errors import (
 from . import (
     agent_configs,
     agent_insights,
+    agent_insights_jobs,
     ai_spend,
     alerts,
     annotation_queues,
@@ -732,6 +735,7 @@ from . import (
     workspaces,
 )
 from .agent_insights import AgentInsightsIssueUpdateStatus, FindAgentInsightsIssuesRequestStatus
+from .agent_insights_jobs import AgentInsightsJobUpdateStatus
 from .alerts import GetWebhookExamplesRequestAlertType
 from .assertion_results import AssertionResultBatchEntityType
 from .attachments import (
@@ -801,6 +805,9 @@ __all__ = [
     "AgentInsightsIssueUpdateStatus",
     "AgentInsightsIssueWithDetails",
     "AgentInsightsIssueWithDetailsStatus",
+    "AgentInsightsJob",
+    "AgentInsightsJobStatus",
+    "AgentInsightsJobUpdateStatus",
     "AggregationData",
     "Alert",
     "AlertAlertType",
@@ -1506,6 +1513,7 @@ __all__ = [
     "WorkspaceVersionOpikVersion",
     "agent_configs",
     "agent_insights",
+    "agent_insights_jobs",
     "ai_spend",
     "alerts",
     "annotation_queues",

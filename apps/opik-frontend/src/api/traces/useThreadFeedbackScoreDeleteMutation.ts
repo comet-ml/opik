@@ -11,6 +11,7 @@ type UseThreadFeedbackScoreDeleteMutationParams = {
   projectId: string;
   projectName: string;
   author?: string;
+  sourceQueueId?: string;
 };
 
 const useThreadFeedbackScoreDeleteMutation = () => {
@@ -24,6 +25,7 @@ const useThreadFeedbackScoreDeleteMutation = () => {
       threadId,
       projectName,
       author,
+      sourceQueueId,
     }: UseThreadFeedbackScoreDeleteMutationParams) => {
       const endpoint = `${TRACES_REST_ENDPOINT}threads/feedback-scores/delete`;
 
@@ -32,6 +34,7 @@ const useThreadFeedbackScoreDeleteMutation = () => {
         thread_id: threadId,
         project_name: projectName,
         author: author ?? currentUserName,
+        source_queue_id: sourceQueueId,
       });
 
       return data;

@@ -24,12 +24,18 @@ jobs:
           with:
                 python-version: 3.9
 
+        - name: PyPI token preflight
+          uses: ./.github/actions/pypi-token-preflight
+          with:
+            pypi_token: ${{ secrets.PYPI_API_TOKEN }}
+            package_name: opik-optimizer
+
         - name: Build pip package
           run: |
                 cd sdks/opik_optimizer
                 pip3 install -U pip build
                 python3 -m build --sdist --wheel --outdir dist/ .
-                
+
         - name: Publish package distributions to PyPI
           uses: pypa/gh-action-pypi-publish@v1.12.4
           with:
