@@ -284,19 +284,26 @@ export class OpikExporter implements SpanExporter {
           ? this.opikSpanId(parentOtelSpanId)
           : undefined;
       const spanErrorInfo = this.getErrorInfo(otelSpan);
+      const spanType = getSpanType(otelSpan.attributes);
 
       this.client.spanBatchQueue.create({
         id: this.opikSpanId(otelSpanId),
         traceId,
         ...(parentSpanId ? { parentSpanId } : {}),
         name: otelSpan.name,
-        type: getSpanType(otelSpan.attributes),
+        type: spanType,
         startTime: new Date(startMs(otelSpan)),
         endTime: new Date(endMs(otelSpan)),
         input: getSpanInput(otelSpan.attributes),
         output: getSpanOutput(otelSpan.attributes),
         metadata: getSpanMetadata(otelSpan.attributes),
-        usage: getSpanUsage(otelSpan.attributes),
+        // Only LLM spans carry token usage. eve emits the same usage on both
+        // the agent/step wrapper and the underlying model-call span, so keeping
+        // it on non-LLM spans would double-count when the trace usage is
+        // aggregated across spans.
+        ...(spanType === "llm"
+          ? { usage: getSpanUsage(otelSpan.attributes) }
+          : {}),
         projectName,
         ...(spanErrorInfo && { errorInfo: spanErrorInfo }),
       });

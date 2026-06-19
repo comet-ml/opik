@@ -114,6 +114,19 @@ const CHAT_SPAN = makeSpan(
   { traceId: "trace1", spanId: "chat", startMs: 100, endMs: 1100 }
 );
 
+// eve wraps each model call in an `invoke_agent` span that repeats the call's
+// token usage. It is an orchestration span (type `general`), not a model call.
+const INVOKE_AGENT_SPAN = makeSpan(
+  "gen_ai",
+  "invoke_agent claude-haiku-4-5",
+  {
+    "gen_ai.operation.name": "invoke_agent",
+    "gen_ai.usage.input_tokens": 5170,
+    "gen_ai.usage.output_tokens": 54,
+  },
+  { traceId: "trace1", spanId: "agent", startMs: 50, endMs: 1150 }
+);
+
 const TOOL_SPAN = makeSpan(
   "gen_ai",
   "execute_tool get_weather",
@@ -311,6 +324,21 @@ describe("OpikExporter - AI SDK v7 / GenAI (eve) spans", () => {
       input: { messages: [{ role: "user", content: "hi" }] },
       errorInfo: { exceptionType: "APICallError", message: "Rate limit exceeded" },
     });
+  });
+
+  it("attaches token usage only to LLM spans (no double counting)", async () => {
+    // The agent wrapper and the model call report the same usage; counting both
+    // would double the trace total once usage is aggregated across spans.
+    await exportSpans(TURN_SPAN, INVOKE_AGENT_SPAN, CHAT_SPAN, TOOL_SPAN);
+
+    const spans = createdSpans();
+    const agent = spans.find((span) => span.name?.startsWith("invoke_agent"));
+    const chat = spans.find((span) => span.name?.startsWith("chat"));
+
+    expect(agent!.type).toBe("general");
+    expect(agent!.usage).toBeUndefined(); // no tokens on the orchestration span
+    expect(chat!.type).toBe("llm");
+    expect(chat!.usage).toMatchObject({ prompt_tokens: 5170, completion_tokens: 54 });
   });
 
   // ── create-only contract (upsert, never update) ──
