@@ -8309,6 +8309,13 @@ paths:
           description: "Filter traces created up to this time (ISO-8601 format). If\
             \ not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
+      - name: annotation_queue_id
+        in: query
+        schema:
+          type: string
+          description: Filter traces belonging to this annotation queue and scope
+            feedback scores/comments to it
+          format: uuid
       responses:
         "200":
           description: Trace resource
@@ -8793,6 +8800,13 @@ paths:
           description: "Filter trace threads created up to this time (ISO-8601 format).\
             \ If not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
+      - name: annotation_queue_id
+        in: query
+        schema:
+          type: string
+          description: Filter threads belonging to this annotation queue and scope
+            feedback scores/comments to it
+          format: uuid
       responses:
         "200":
           description: Trace threads resource
@@ -14014,6 +14028,9 @@ components:
         text:
           minLength: 1
           type: string
+        source_queue_id:
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -14286,6 +14303,9 @@ components:
           - ui
           - sdk
           - online_scoring
+        source_queue_id:
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -14730,6 +14750,9 @@ components:
         text:
           minLength: 1
           type: string
+        source_queue_id:
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -15011,6 +15034,9 @@ components:
           - ui
           - sdk
           - online_scoring
+        source_queue_id:
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -16771,6 +16797,9 @@ components:
           - ui
           - sdk
           - online_scoring
+        source_queue_id:
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -16974,6 +17003,9 @@ components:
         text:
           minLength: 1
           type: string
+        source_queue_id:
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -21156,6 +21188,9 @@ components:
           type: string
         author:
           type: string
+        source_queue_id:
+          type: string
+          format: uuid
     ErrorInfo_Public:
       required:
       - exception_type
@@ -21196,6 +21231,9 @@ components:
           - ui
           - sdk
           - online_scoring
+        source_queue_id:
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -21417,6 +21455,9 @@ components:
           - online_scoring
         author:
           type: string
+        source_queue_id:
+          type: string
+          format: uuid
         id:
           type: string
           format: uuid
@@ -21762,6 +21803,9 @@ components:
             type: string
         author:
           type: string
+        source_queue_id:
+          type: string
+          format: uuid
     DeleteTraceThreads:
       required:
       - thread_ids
@@ -22133,6 +22177,9 @@ components:
           - online_scoring
         author:
           type: string
+        source_queue_id:
+          type: string
+          format: uuid
         thread_id:
           minLength: 1
           type: string

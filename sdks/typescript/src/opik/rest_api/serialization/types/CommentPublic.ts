@@ -8,6 +8,7 @@ export const CommentPublic: core.serialization.ObjectSchema<serializers.CommentP
     core.serialization.object({
         id: core.serialization.string().optional(),
         text: core.serialization.string(),
+        sourceQueueId: core.serialization.property("source_queue_id", core.serialization.string().optional()),
         createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
         lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
         createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
@@ -18,6 +19,7 @@ export declare namespace CommentPublic {
     export interface Raw {
         id?: string | null;
         text: string;
+        source_queue_id?: string | null;
         created_at?: string | null;
         last_updated_at?: string | null;
         created_by?: string | null;
