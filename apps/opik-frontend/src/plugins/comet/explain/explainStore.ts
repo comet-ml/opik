@@ -14,7 +14,9 @@ export type ConsoleEmit = <E extends keyof HostEventMap>(
   data: HostEventMap[E],
 ) => void;
 
-export type ExplainPhase = "loading" | "done" | "error";
+// "waking" is an intermediate of "loading": still streaming, but slow to start
+// (a cold pod). It reads as in-flight everywhere `isPending` is used.
+export type ExplainPhase = "loading" | "waking" | "done" | "error";
 
 export interface ExplainEntry {
   explainId: string;
@@ -22,6 +24,9 @@ export interface ExplainEntry {
   phase: ExplainPhase;
   text: string;
   error?: string;
+  // Machine-readable error reason (from the console's explain:error, or our own
+  // watchdog/pod-loss). Drives contextual copy; absent on success.
+  code?: string;
   startedAt: number;
   firstTokenAt?: number;
 }
@@ -33,10 +38,22 @@ const MAX_IN_FLIGHT = 3;
 // long session (many cells explained) can't grow the cache without bound.
 const MAX_CACHED = 200;
 
+// Watchdog thresholds for a stream that has produced no chunk yet. A *live* pod
+// streams (or sends a terminal error) well before TIMEOUT_MS — it pings every
+// ~15s — so this only catches a request that never reached a live pod (cold
+// start / pod down), which would otherwise be an unbounded "Thinking…".
+const WAKING_MS = 10_000; // no chunk yet → swap "Thinking…" for a "waking" hint
+const TIMEOUT_MS = 30_000; // still no chunk → give up with a retryable error
+
 // Scoped by projectId so cached answers / streaming routes can't collide
 // across projects. Exported so tests key off the single source of truth.
 export const cellKey = (t: ExplainTarget) =>
   `${t.projectId}:${t.kind}:${t.entityId}`;
+
+// loading | waking are both "in flight": they hold a route, count against the
+// in-flight cap, and must never be evicted from the cache.
+const isPending = (phase: ExplainPhase) =>
+  phase === "loading" || phase === "waking";
 
 type ExplainState = {
   // Results cached per cell, so reopening a popover shows the answer (or its
@@ -117,7 +134,7 @@ const evictToCap = (s: ExplainState, cap: number): ExplainState => {
   let count = Object.keys(s.entries).length;
   if (count < cap) return s;
   const oldestFirst = Object.keys(s.entries)
-    .filter((k) => s.entries[k].phase !== "loading")
+    .filter((k) => !isPending(s.entries[k].phase))
     .sort((a, b) => s.entries[a].startedAt - s.entries[b].startedAt);
   let next = s;
   for (const key of oldestFirst) {
@@ -163,139 +180,241 @@ const withEntry = (
   };
 };
 
-const useExplainStore = create<ExplainState>((set, get) => ({
-  entries: {},
-  routes: {},
-  capabilities: [],
-  consoleBridgeVersion: null,
-  ready: false,
-  emit: null,
+// Per-stream watchdog handles (waking + hard timeout), keyed by explainId. Kept
+// outside the store state — they're side-effect handles, not render data.
+type StreamTimers = {
+  waking: ReturnType<typeof setTimeout>;
+  timeout: ReturnType<typeof setTimeout>;
+};
+const streamTimers = new Map<string, StreamTimers>();
+const clearStreamTimers = (explainId: string) => {
+  const t = streamTimers.get(explainId);
+  if (!t) return;
+  clearTimeout(t.waking);
+  clearTimeout(t.timeout);
+  streamTimers.delete(explainId);
+};
 
-  setReady: (ready) => set({ ready }),
-  setEmit: (emit) => set({ emit }),
-  // Ownership-guarded (mirrors window.opikBridge): a stale sidebar unmount
-  // can't drop a newer instance's channel.
-  clearEmit: (emit) => {
-    if (get().emit === emit) {
-      set({
-        emit: null,
-        capabilities: [],
-        consoleBridgeVersion: null,
-        ready: false,
-      });
-    }
-  },
+// Friendly, contextual copy per error code. The console may send a `code` with
+// explain:error; the watchdog/pod-loss paths set their own. Unknown/absent code
+// falls back to the raw message, then a generic line.
+const ERROR_COPY = {
+  waking: "Ollie is waking up — give it a moment and retry.",
+  timeout: "Ollie took too long to respond. Try again.",
+  unavailable: "Ollie is unavailable right now. Try again shortly.",
+  rate_limited: "Too many requests right now. Try again in a moment.",
+} as const;
+const errorCopy = (code: string | undefined, message: string | undefined) =>
+  (code ? ERROR_COPY[code as keyof typeof ERROR_COPY] : undefined) ??
+  message ??
+  "Something went wrong.";
 
-  explain: (target) => {
-    const key = cellKey(target);
-    const cached = get().entries[key];
-    if (cached && cached.phase !== "error") return true; // reuse cache / in-flight
+const useExplainStore = create<ExplainState>((set, get) => {
+  // Resolve the still-live entry for an explainId; undefined once its route is
+  // retired (settled/cancelled), which makes a late watchdog fire a no-op.
+  const liveEntry = (explainId: string): ExplainEntry | undefined => {
+    const key = get().routes[explainId];
+    return key ? get().entries[key] : undefined;
+  };
 
-    const inFlight = Object.values(get().entries).filter(
-      (e) => e.phase === "loading",
-    ).length;
-    if (inFlight >= MAX_IN_FLIGHT) {
-      // At capacity: surface a clear, retryable error rather than leave the
-      // popover stuck on "Thinking…" forever. No stream is dispatched.
-      const entry = makeEntry(target, {
-        phase: "error",
-        error: AT_CAPACITY_MESSAGE,
-      });
-      set((s) => withEntry(s, key, entry, false));
-      return false;
-    }
-
-    const entry = makeEntry(target);
-    set((s) => withEntry(s, key, entry, true));
-    get().emit?.("explain:run", { explainId: entry.explainId, target });
-    return true;
-  },
-
-  retry: (target) => {
-    // If retried while still streaming, stop the old stream before replacing it
-    // (mirrors cancel()). Today Retry only shows after an error, but this keeps
-    // the action safe if it's ever invoked mid-stream.
-    const prev = get().entries[cellKey(target)];
-    if (prev?.phase === "loading") {
-      get().emit?.("explain:cancel", { explainId: prev.explainId });
-    }
-    set((s) => removeEntry(s, cellKey(target)));
-    get().explain(target);
-  },
-
-  // Stop an in-flight stream and reset the cell so reopening starts a fresh
-  // explain. No-op unless the cell is mid-stream — cached done/error entries
-  // stay put. Without the reset, `explain()` would short-circuit on the stale
-  // "loading" entry and the popover would pulse "Thinking…" forever.
-  cancel: (target) => {
-    const key = cellKey(target);
-    const entry = get().entries[key];
-    if (!entry || entry.phase !== "loading") return;
-    get().emit?.("explain:cancel", { explainId: entry.explainId });
-    set((s) => removeEntry(s, key));
-  },
-
-  continueChat: (target, question) => {
-    const entry = get().entries[cellKey(target)];
-    // Offered as soon as any text has streamed in (done OR still loading);
-    // refuse on empty / errored cells.
-    if (!entry || entry.phase === "error" || entry.text.length === 0) return;
-    // Mid-stream continue: the chat takes over in the sidebar, so stop the
-    // (paid) cell stream and freeze the partial text as the cached answer.
-    // Dropping the route here also makes the popover-close cancel() a no-op
-    // (phase is now "done"), so the stream isn't cancelled twice.
-    if (entry.phase === "loading") {
-      get().emit?.("explain:cancel", { explainId: entry.explainId });
-      set((s) =>
-        patchEntry(s, entry.explainId, () => ({ phase: "done" }), true),
-      );
-    }
-    get().emit?.("chat:continue", { question, answer: entry.text, target });
-  },
-
-  onConsoleReady: ({ bridgeVersion, capabilities }) =>
-    set({ capabilities, consoleBridgeVersion: bridgeVersion }),
-
-  onChunk: ({ explainId, delta }) =>
-    set((s) =>
-      patchEntry(s, explainId, (e) => ({
-        phase: "loading",
-        text: e.text + delta,
-        firstTokenAt: e.firstTokenAt ?? performance.now(),
-      })),
-    ),
-
-  // Completion/error telemetry fires from the store (once per stream, keyed by
-  // the still-present route) — the popover's lifecycle doesn't match the
-  // stream's, so reporting from the UI would double-count or miss events.
-  onDone: ({ explainId }) => {
-    const entry = get().entries[get().routes[explainId]];
-    if (entry) {
-      trackEvent(OpikEvent.EXPLAIN_COMPLETED, {
-        kind: entry.kind,
-        ttft_ms: entry.firstTokenAt
-          ? Math.round(entry.firstTokenAt - entry.startedAt)
-          : null,
-      });
-    }
-    set((s) => patchEntry(s, explainId, () => ({ phase: "done" }), true));
-  },
-
-  onError: ({ explainId, message }) => {
-    const entry = get().entries[get().routes[explainId]];
-    if (entry) {
-      trackEvent(OpikEvent.EXPLAIN_ERRORED, { kind: entry.kind });
-    }
+  // Settle a cell into an error: stop its watchdog, report telemetry, store the
+  // code + copy, and retire the route. Shared by console errors, the hard
+  // timeout, and pod loss so all three behave identically.
+  const settleError = (
+    explainId: string,
+    code: string | undefined,
+    message: string,
+  ) => {
+    clearStreamTimers(explainId);
+    const entry = liveEntry(explainId);
+    if (!entry) return;
+    trackEvent(OpikEvent.EXPLAIN_ERRORED, { kind: entry.kind });
     set((s) =>
       patchEntry(
         s,
         explainId,
-        () => ({ phase: "error", error: message }),
+        () => ({ phase: "error", error: message, code }),
         true,
       ),
     );
-  },
-}));
+  };
+
+  // Fail every in-flight cell — used when the pod/bridge goes away so open
+  // popovers can't hang on "Thinking…/waking" forever.
+  const failInFlight = (code: keyof typeof ERROR_COPY) => {
+    const { entries } = get();
+    Object.keys(entries).forEach((key) => {
+      const entry = entries[key];
+      if (isPending(entry.phase)) {
+        settleError(entry.explainId, code, ERROR_COPY[code]);
+      }
+    });
+  };
+
+  return {
+    entries: {},
+    routes: {},
+    capabilities: [],
+    consoleBridgeVersion: null,
+    ready: false,
+    emit: null,
+
+    // A pod that goes unready can't complete an in-flight stream — fail them so
+    // the popover offers a retry instead of a permanent "Thinking…".
+    setReady: (ready) => {
+      if (!ready) failInFlight("unavailable");
+      set({ ready });
+    },
+    setEmit: (emit) => set({ emit }),
+    // Ownership-guarded (mirrors window.opikBridge): a stale sidebar unmount
+    // can't drop a newer instance's channel.
+    clearEmit: (emit) => {
+      if (get().emit === emit) {
+        failInFlight("unavailable");
+        set({
+          emit: null,
+          capabilities: [],
+          consoleBridgeVersion: null,
+          ready: false,
+        });
+      }
+    },
+
+    explain: (target) => {
+      const key = cellKey(target);
+      const cached = get().entries[key];
+      if (cached && cached.phase !== "error") return true; // reuse cache / in-flight
+
+      const inFlight = Object.values(get().entries).filter((e) =>
+        isPending(e.phase),
+      ).length;
+      if (inFlight >= MAX_IN_FLIGHT) {
+        // At capacity: surface a clear, retryable error rather than leave the
+        // popover stuck on "Thinking…" forever. No stream is dispatched.
+        const entry = makeEntry(target, {
+          phase: "error",
+          error: AT_CAPACITY_MESSAGE,
+        });
+        set((s) => withEntry(s, key, entry, false));
+        return false;
+      }
+
+      const entry = makeEntry(target);
+      set((s) => withEntry(s, key, entry, true));
+      get().emit?.("explain:run", { explainId: entry.explainId, target });
+
+      // Watchdog: a request that never reaches a live pod yields no chunk at
+      // all. Nudge to "waking", then fail, so the popover can't hang. Both are
+      // cleared on the first chunk / any settle (the guards below also no-op if
+      // a chunk has since arrived or the cell was retried/cancelled).
+      const { explainId } = entry;
+      const stalled = (e: ExplainEntry | undefined): e is ExplainEntry =>
+        e?.explainId === explainId && e.firstTokenAt === undefined;
+      const waking = setTimeout(() => {
+        const e = liveEntry(explainId);
+        if (stalled(e) && e.phase === "loading") {
+          set((s) => patchEntry(s, explainId, () => ({ phase: "waking" })));
+        }
+      }, WAKING_MS);
+      const timeout = setTimeout(() => {
+        const e = liveEntry(explainId);
+        if (stalled(e) && isPending(e.phase)) {
+          get().emit?.("explain:cancel", { explainId });
+          settleError(explainId, "timeout", ERROR_COPY.timeout);
+        } else {
+          clearStreamTimers(explainId);
+        }
+      }, TIMEOUT_MS);
+      streamTimers.set(explainId, { waking, timeout });
+      return true;
+    },
+
+    retry: (target) => {
+      // If retried while still streaming, stop the old stream before replacing
+      // it (mirrors cancel()). Today Retry only shows after an error, but this
+      // keeps the action safe if it's ever invoked mid-stream.
+      const prev = get().entries[cellKey(target)];
+      if (prev) {
+        clearStreamTimers(prev.explainId);
+        if (isPending(prev.phase)) {
+          get().emit?.("explain:cancel", { explainId: prev.explainId });
+        }
+      }
+      set((s) => removeEntry(s, cellKey(target)));
+      get().explain(target);
+    },
+
+    // Stop an in-flight stream and reset the cell so reopening starts a fresh
+    // explain. No-op unless the cell is mid-stream — cached done/error entries
+    // stay put. Without the reset, `explain()` would short-circuit on the stale
+    // pending entry and the popover would pulse "Thinking…" forever.
+    cancel: (target) => {
+      const key = cellKey(target);
+      const entry = get().entries[key];
+      if (!entry || !isPending(entry.phase)) return;
+      clearStreamTimers(entry.explainId);
+      get().emit?.("explain:cancel", { explainId: entry.explainId });
+      set((s) => removeEntry(s, key));
+    },
+
+    continueChat: (target, question) => {
+      const entry = get().entries[cellKey(target)];
+      // Offered as soon as any text has streamed in (done OR still loading);
+      // refuse on empty / errored cells.
+      if (!entry || entry.phase === "error" || entry.text.length === 0) return;
+      // Mid-stream continue: the chat takes over in the sidebar, so stop the
+      // (paid) cell stream and freeze the partial text as the cached answer.
+      // Dropping the route here also makes the popover-close cancel() a no-op
+      // (phase is now "done"), so the stream isn't cancelled twice.
+      if (isPending(entry.phase)) {
+        clearStreamTimers(entry.explainId);
+        get().emit?.("explain:cancel", { explainId: entry.explainId });
+        set((s) =>
+          patchEntry(s, entry.explainId, () => ({ phase: "done" }), true),
+        );
+      }
+      get().emit?.("chat:continue", { question, answer: entry.text, target });
+    },
+
+    onConsoleReady: ({ bridgeVersion, capabilities }) =>
+      set({ capabilities, consoleBridgeVersion: bridgeVersion }),
+
+    onChunk: ({ explainId, delta }) => {
+      // First chunk proves the pod is alive and streaming → retire the watchdog
+      // (idempotent: a no-op on every chunk after the first).
+      clearStreamTimers(explainId);
+      set((s) =>
+        patchEntry(s, explainId, (e) => ({
+          phase: "loading",
+          text: e.text + delta,
+          firstTokenAt: e.firstTokenAt ?? performance.now(),
+        })),
+      );
+    },
+
+    // Completion/error telemetry fires from the store (once per stream, keyed by
+    // the still-present route) — the popover's lifecycle doesn't match the
+    // stream's, so reporting from the UI would double-count or miss events.
+    onDone: ({ explainId }) => {
+      clearStreamTimers(explainId);
+      const entry = get().entries[get().routes[explainId]];
+      if (entry) {
+        trackEvent(OpikEvent.EXPLAIN_COMPLETED, {
+          kind: entry.kind,
+          ttft_ms: entry.firstTokenAt
+            ? Math.round(entry.firstTokenAt - entry.startedAt)
+            : null,
+        });
+      }
+      set((s) => patchEntry(s, explainId, () => ({ phase: "done" }), true));
+    },
+
+    // A structured `code` (from the console, or our own watchdog/pod-loss) maps
+    // to contextual copy; otherwise fall back to the raw message.
+    onError: ({ explainId, message, code }) =>
+      settleError(explainId, code, errorCopy(code, message)),
+  };
+});
 
 /**
  * Forward a shell→host bridge event to the explain store. Returns false when

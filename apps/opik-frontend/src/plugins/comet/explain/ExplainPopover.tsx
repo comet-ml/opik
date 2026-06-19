@@ -30,10 +30,14 @@ const ExplainPopover = ({ target, onContinue }: Props) => {
   // popover only handles the user-action "Continue"/"Retry" events below.
   const question = getExplainConfig(target.kind)?.question(target);
 
-  const loading =
-    !entry || (entry.phase === "loading" && entry.text.length === 0);
-  const isError = !loading && entry.phase === "error";
-  const hasText = !loading && entry.phase !== "error" && entry.text.length > 0;
+  const phase = entry?.phase;
+  // "Thinking…" until the first chunk; "waking" is the same wait, just slow to
+  // start (cold pod). Once text streams, show it; on error, show the reason.
+  const thinking = !entry || (phase === "loading" && entry.text.length === 0);
+  const waking = phase === "waking";
+  const isError = phase === "error";
+  const hasText =
+    (phase === "loading" || phase === "done") && (entry?.text.length ?? 0) > 0;
 
   return (
     <div className="flex flex-col">
@@ -51,24 +55,36 @@ const ExplainPopover = ({ target, onContinue }: Props) => {
             updates are announced — a region inserted only once content arrives
             is often missed by screen readers. */}
         <div role="status" aria-live="polite">
-          {loading && (
+          {thinking && (
             <div className="flex items-center gap-2">
               <span className="size-2 shrink-0 rounded-full bg-[var(--color-ollie-live)] text-[var(--color-ollie-live)] motion-safe:animate-beacon-pulse" />
               <span className="leading-4 text-muted-slate">Thinking...</span>
             </div>
           )}
 
+          {waking && (
+            <div className="flex items-center gap-2">
+              <span className="size-2 shrink-0 rounded-full bg-[var(--color-ollie-live)] text-[var(--color-ollie-live)] motion-safe:animate-beacon-pulse" />
+              <span className="leading-4 text-muted-slate">
+                Ollie is waking up…
+              </span>
+            </div>
+          )}
+
           {isError && (
             <p className="leading-4 text-destructive">
-              {entry.error ?? "Something went wrong."}
+              {entry?.error ?? "Something went wrong."}
             </p>
           )}
 
-          {!loading && !isError && entry.text.length === 0 && (
-            <p className="leading-4 text-muted-slate">
-              No explanation available.
-            </p>
-          )}
+          {!thinking &&
+            !waking &&
+            !isError &&
+            (entry?.text.length ?? 0) === 0 && (
+              <p className="leading-4 text-muted-slate">
+                No explanation available.
+              </p>
+            )}
 
           {hasText && (
             <div className="relative">

@@ -42,6 +42,12 @@ describe("ExplainPopover", () => {
     expect(screen.getByText("Thinking...")).toBeInTheDocument();
   });
 
+  it("shows the 'waking up' hint for a waking entry", () => {
+    seed(entry({ phase: "waking", text: "" }));
+    renderPopover();
+    expect(screen.getByText("Ollie is waking up…")).toBeInTheDocument();
+  });
+
   it("shows the error message and a Retry button on error", () => {
     seed(entry({ phase: "error", error: "boom" }));
     renderPopover();

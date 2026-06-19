@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import useExplainStore, {
   cellKey,
   ConsoleEmit,
@@ -40,7 +40,17 @@ const reset = (emit?: ConsoleEmit) =>
   });
 
 describe("explainStore", () => {
-  beforeEach(() => reset());
+  // Fake timers so the watchdog (waking/timeout) is deterministic and no real
+  // setTimeout leaks across tests.
+  beforeEach(() => {
+    vi.useFakeTimers();
+    reset();
+  });
+
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  });
 
   it("starts a stream and emits explain:run", () => {
     const emit = vi.fn();
@@ -381,5 +391,87 @@ describe("explainStore", () => {
     const live = useExplainStore.getState().entries[key("live")];
     expect(live).toBeDefined();
     expect(live.phase).toBe("loading"); // a settled entry was evicted, not this
+  });
+
+  it("nudges a stalled stream to 'waking' when no chunk arrives", () => {
+    reset(vi.fn());
+    useExplainStore.getState().explain(target("e1"));
+    expect(useExplainStore.getState().entries[key("e1")].phase).toBe("loading");
+
+    vi.advanceTimersByTime(10_000);
+
+    expect(useExplainStore.getState().entries[key("e1")].phase).toBe("waking");
+  });
+
+  it("times out a stalled stream into a retryable error and cancels it", () => {
+    const emit = vi.fn();
+    reset(emit);
+    useExplainStore.getState().explain(target("e1"));
+    const { explainId } = Object.values(useExplainStore.getState().entries)[0];
+
+    vi.advanceTimersByTime(30_000);
+
+    const entry = useExplainStore.getState().entries[key("e1")];
+    expect(entry.phase).toBe("error");
+    expect(entry.code).toBe("timeout");
+    expect(emit).toHaveBeenCalledWith("explain:cancel", { explainId });
+    // Route retired, so a late chunk that finally arrives is ignored.
+    expect(useExplainStore.getState().routes[explainId]).toBeUndefined();
+  });
+
+  it("a streamed chunk retires the watchdog (no waking, no timeout)", () => {
+    const emit = vi.fn();
+    reset(emit);
+    useExplainStore.getState().explain(target("e1"));
+    const { explainId } = Object.values(useExplainStore.getState().entries)[0];
+    useExplainStore.getState().onChunk({ explainId, delta: "hi" });
+
+    vi.advanceTimersByTime(60_000);
+
+    const entry = useExplainStore.getState().entries[key("e1")];
+    expect(entry.phase).toBe("loading");
+    expect(entry.text).toBe("hi");
+  });
+
+  it("fails in-flight cells when the pod goes unready (setReady false)", () => {
+    reset(vi.fn());
+    useExplainStore.getState().explain(target("e1"));
+
+    useExplainStore.getState().setReady(false);
+
+    const entry = useExplainStore.getState().entries[key("e1")];
+    expect(entry.phase).toBe("error");
+    expect(entry.code).toBe("unavailable");
+  });
+
+  it("fails in-flight cells when the bridge tears down (clearEmit)", () => {
+    const emit = vi.fn();
+    reset(emit);
+    useExplainStore.getState().explain(target("e1"));
+
+    useExplainStore.getState().clearEmit(emit);
+
+    const entry = useExplainStore.getState().entries[key("e1")];
+    expect(entry.phase).toBe("error");
+    expect(entry.code).toBe("unavailable");
+    expect(useExplainStore.getState().emit).toBeNull();
+  });
+
+  it("maps a structured explain:error code to contextual copy", () => {
+    reset(vi.fn());
+    useExplainStore.getState().explain(target("e1"));
+    const { explainId } = Object.values(useExplainStore.getState().entries)[0];
+
+    handleConsoleEvent("explain:error", {
+      explainId,
+      message: "raw upstream text",
+      code: "unavailable",
+    });
+
+    const entry = useExplainStore.getState().entries[key("e1")];
+    expect(entry.phase).toBe("error");
+    expect(entry.code).toBe("unavailable");
+    expect(entry.error).not.toBe("raw upstream text"); // friendly copy wins
+    expect(entry.error).toMatch(/unavailable/i);
   });
 });

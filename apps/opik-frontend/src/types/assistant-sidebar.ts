@@ -31,9 +31,19 @@ export interface RunnerBridgeState {
   runnerId: string | null;
 }
 
-/** The cell kinds the Explain feature understands. Only `trace.error` ships
- * at launch (D-D); `trace.cost`/`trace.duration` are registry-reserved. */
-export type ExplainKind = "trace.error" | "trace.cost" | "trace.duration";
+/** The cell kinds the Explain feature understands, one per (entity, metric)
+ * pair surfaced in the Logs tables. Traces & Spans expose error/duration/cost;
+ * Threads expose duration/cost only (no per-thread error). The console's
+ * ExplainRunner must understand every kind here (coordinate when adding). */
+export type ExplainKind =
+  | "trace.error"
+  | "trace.cost"
+  | "trace.duration"
+  | "span.error"
+  | "span.duration"
+  | "span.cost"
+  | "thread.duration"
+  | "thread.cost";
 
 /**
  * The cell data the host already has on the row, handed verbatim to the
@@ -104,7 +114,11 @@ export interface SidebarEventMap {
   "console:ready": { bridgeVersion: number; capabilities: string[] };
   "explain:chunk": { explainId: string; delta: string };
   "explain:done": { explainId: string };
-  "explain:error": { explainId: string; message: string };
+  // `code` is an optional, machine-readable reason (e.g. "unavailable",
+  // "rate_limited") the host maps to contextual copy; falls back to `message`.
+  // Additive/optional — mirror in `ollie-console/src/bridge.ts` when the console
+  // starts sending it.
+  "explain:error": { explainId: string; message: string; code?: string };
 }
 
 export interface AssistantSidebarBridge {

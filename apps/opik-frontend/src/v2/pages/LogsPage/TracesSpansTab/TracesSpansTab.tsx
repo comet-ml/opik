@@ -106,11 +106,14 @@ import EnvironmentCell from "@/shared/DataTableCells/EnvironmentCell";
 import CostCell from "@/shared/DataTableCells/CostCell";
 import ErrorCell from "@/shared/DataTableCells/ErrorCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
-import { withExplain } from "@/v2/pages/LogsPage/TracesSpansTab/ExplainableCell";
+import { withExplain } from "@/v2/pages/LogsPage/explain/withExplain";
 import {
   buildCostTarget,
   buildDurationTarget,
   buildErrorTarget,
+  buildSpanCostTarget,
+  buildSpanDurationTarget,
+  buildSpanErrorTarget,
 } from "@/v2/pages/LogsPage/TracesSpansTab/explainTargets";
 import FeedbackScoreCell from "@/shared/DataTableCells/FeedbackScoreCell";
 import PrettyCell from "@/shared/DataTableCells/PrettyCell";
@@ -158,15 +161,6 @@ const formatSpanScoreLabel = (scoreName: string): string =>
 
 const parseSpanScoreName = (label: string): string =>
   label.replace(SPAN_FEEDBACK_SCORE_SUFFIX, "");
-
-// Error/Duration/Cost cells get the Ollie Explain button (OPIK-6425), scoped
-// to this table. The button is a no-op in OSS (PluginsStore slot is empty).
-const ErrorExplainCell = withExplain(ErrorCell as never, buildErrorTarget);
-const DurationExplainCell = withExplain(
-  DurationCell as never,
-  buildDurationTarget,
-);
-const CostExplainCell = withExplain(CostCell as never, buildCostTarget);
 
 const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
   {
@@ -219,13 +213,13 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     label: "Errors",
     statisticKey: "error_count",
     type: COLUMN_TYPE.errors,
-    cell: ErrorExplainCell as never,
+    cell: ErrorCell as never,
   },
   {
     id: "duration",
     label: "Duration",
     type: COLUMN_TYPE.duration,
-    cell: DurationExplainCell as never,
+    cell: DurationCell as never,
     statisticDataFormater: formatDuration,
     statisticTooltipFormater: formatDuration,
   },
@@ -272,7 +266,7 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     id: "total_estimated_cost",
     label: "Estimated cost",
     type: COLUMN_TYPE.cost,
-    cell: CostExplainCell as never,
+    cell: CostCell as never,
     explainer: EXPLAINERS_MAP[EXPLAINER_ID.hows_the_cost_estimated],
     size: 160,
     statisticDataFormater: formatCost,
@@ -1459,6 +1453,29 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     [setThreadId, setTraceId],
   );
 
+  // Error/Duration/Cost cells get the Ollie Explain button (OPIK-6425). Wrapped
+  // here (not at module scope) so the builder set follows the active view: the
+  // Spans view emits span.* targets, the Traces view emits trace.*. entityId is
+  // the row id in both cases — the backend resolves a span's parent trace. The
+  // button is a no-op in OSS (the PluginsStore slot is empty).
+  const explainCells = useMemo(() => {
+    const isSpans = type === TRACE_DATA_TYPE.spans;
+    return {
+      error_info: withExplain(
+        ErrorCell as never,
+        isSpans ? buildSpanErrorTarget : buildErrorTarget,
+      ),
+      duration: withExplain(
+        DurationCell as never,
+        isSpans ? buildSpanDurationTarget : buildDurationTarget,
+      ),
+      total_estimated_cost: withExplain(
+        CostCell as never,
+        isSpans ? buildSpanCostTarget : buildCostTarget,
+      ),
+    };
+  }, [type]);
+
   const columnData = useMemo(() => {
     return [
       {
@@ -1468,18 +1485,25 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         cell: IdCell as never,
         sortable: true,
       },
-      ...SHARED_COLUMNS.map((col) =>
-        col.id === "tags"
-          ? {
-              ...col,
-              customMeta: {
-                ...col.customMeta,
-                onItemClick: addTagFilter,
-                getItemTooltip: (tag: string) => `Filter by tag: "${tag}"`,
-              },
-            }
-          : col,
-      ),
+      ...SHARED_COLUMNS.map((col) => {
+        if (col.id === "tags") {
+          return {
+            ...col,
+            customMeta: {
+              ...col.customMeta,
+              onItemClick: addTagFilter,
+              getItemTooltip: (tag: string) => `Filter by tag: "${tag}"`,
+            },
+          };
+        }
+        if (col.id in explainCells) {
+          return {
+            ...col,
+            cell: explainCells[col.id as keyof typeof explainCells] as never,
+          };
+        }
+        return col;
+      }),
       ...(type === TRACE_DATA_TYPE.traces
         ? [
             {
@@ -1559,7 +1583,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         : []),
       // Note: metadataColumnsData is NOT added here - it goes in columnSections instead
     ];
-  }, [type, handleThreadIdClick, isGuardrailsEnabled, addTagFilter]);
+  }, [
+    type,
+    handleThreadIdClick,
+    isGuardrailsEnabled,
+    addTagFilter,
+    explainCells,
+  ]);
 
   const columns = useMemo(() => {
     return [

@@ -11,16 +11,15 @@ vi.mock("@/store/PluginsStore", () => ({
   default: { getState: () => ({ ExplainButton: mockButton }) },
 }));
 
-import { withExplain } from "./ExplainableCell";
+import { withExplain } from "./withExplain";
 
-const ctx = (row: Partial<BaseTraceData> & { project_id?: string }) =>
-  ({ row: { original: row } }) as unknown as CellContext<BaseTraceData, never>;
+type Row = Partial<BaseTraceData> & { project_id?: string };
+
+const ctx = (row: Row) =>
+  ({ row: { original: row } }) as unknown as CellContext<Row, never>;
 
 const Base = () => <span>base</span>;
-const buildTarget = (row: {
-  id?: string;
-  project_id?: string;
-}): ExplainTarget | null =>
+const buildTarget = (row: Row): ExplainTarget | null =>
   row.project_id
     ? {
         kind: "trace.error",
