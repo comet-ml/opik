@@ -491,9 +491,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             Optional.ofNullable(author)
                     .filter(StringUtils::isNotBlank)
                     .ifPresent(a -> template2.add("author", "author"));
-            if (sourceQueueId != null) {
-                template2.add("source_queue_id", "source_queue_id");
-            }
+            template2.add("source_queue_id", "source_queue_id");
 
             var statement2 = connection.createStatement(template2.render())
                     .bind("entity_ids", Set.of(entityId))
@@ -503,9 +501,10 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             Optional.ofNullable(author)
                     .filter(StringUtils::isNotBlank)
                     .ifPresent(a -> statement2.bind("author", a));
-            if (sourceQueueId != null) {
-                statement2.bind("source_queue_id", sourceQueueId.toString());
-            }
+            statement2.bind("source_queue_id",
+                    sourceQueueId != null
+                            ? sourceQueueId.toString()
+                            : CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE);
 
             return deleteNonAuthoredOperation
                     .then(Mono.from(statement2.execute()))
