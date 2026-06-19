@@ -6,3 +6,4 @@ ALTER TABLE agent_insights_issues
     ADD COLUMN severity ENUM ('critical','high','medium','low') NULL DEFAULT NULL AFTER status;
 
 --rollback ALTER TABLE agent_insights_issues DROP COLUMN severity;
+
