@@ -21,9 +21,18 @@ def acquire_replay_lock(db_file: str) -> Optional[FileLock]:
     lock does not interfere with SQLite's own file locking. Returns a
     :class:`filelock.FileLock` instance on success, or ``None`` if another
     process already holds the lock.
+
+    Raises:
+        RuntimeError: If the ``filelock`` package is not installed. It is a
+            declared dependency of the SDK and is required for replay leader
+            election when using a persistent offline database.
     """
     if not _HAS_FILELOCK:
-        return None
+        raise RuntimeError(
+            "The 'filelock' package is required for offline replay leader election "
+            "but is not installed. Please install opik with its dependencies "
+            "(e.g. 'pip install opik')."
+        )
 
     lock_path = _replay_lock_path(db_file)
     parent_dir = os.path.dirname(os.path.abspath(lock_path))

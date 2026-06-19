@@ -95,6 +95,7 @@ class Streamer:
                 cleanup in e2e tests where assertions already polled the
                 backend during the test body).
         """
+
         with self._lock:
             if self._drain:
                 # Already closed — make the call idempotent so atexit can fire
@@ -106,6 +107,10 @@ class Streamer:
                     timeout=timeout,
                     sleep_time=0.1,
                 )
+                # Replay any FAILED messages while the streamer still accepts
+                # new messages. After _drain=True the replay callback's put()
+                # would be dropped, so this must happen first.
+                self._fallback_replay_manager.flush()
             self._drain = True
 
         self._batch_preprocessor.stop(flush=flush)

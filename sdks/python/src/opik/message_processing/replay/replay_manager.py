@@ -167,9 +167,15 @@ class ReplayManager(threading.Thread):
         """Stop the replay manager and release locks."""
         self._stop_running.set()
 
+        # Wait for the background thread to actually exit before releasing the
+        # cross-process replay lock. If the thread is still inside
+        # _replay_failed_messages(), releasing the lock now would allow another
+        # process to acquire leadership and start replaying the same shared db.
         if self.ident is not None and self.is_alive():
-            self.join(timeout=5.0)
+            self.join()
 
+        # The thread's run() finally block closes the DBManager. If the thread
+        # was never started, close it here.
         if not self._db_manager.closed:
             self._db_manager.close()
 
