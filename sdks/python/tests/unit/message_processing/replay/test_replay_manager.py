@@ -634,7 +634,7 @@ class TestReplayManagerSingleFileMode:
             replayed_by_leader: List[messages.BaseMessage] = []
             leader.set_replay_callback(lambda m: replayed_by_leader.append(m))
 
-            leader._loop()
+            leader.flush()
 
             assert len(replayed_by_leader) == 1
             assert replayed_by_leader[0].trace_id == "shared-trace"
