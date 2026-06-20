@@ -55,6 +55,12 @@ class Streamer:
         Returns ``True`` if the message was accepted by the streamer (queued or
         consumed by a preprocessor). Returns ``False`` if the streamer is draining
         or if preprocessing failed, so callers that need durability can react.
+
+        Args:
+            message: The message to enqueue.
+            force: If ``True``, enqueue the message even while the streamer is
+                draining. This is used for internal replay paths that must run
+                during shutdown.
         """
         with self._lock:
             if self._drain and not force:
