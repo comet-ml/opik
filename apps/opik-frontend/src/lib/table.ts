@@ -122,8 +122,10 @@ export const mapColumnDataFields = <TColumnData, TData>(
   columnData: ColumnData<TColumnData>,
 ): ColumnDef<TData> => {
   return {
-    ...(columnData.accessorFn && { accessorFn: columnData.accessorFn }),
-    accessorKey: columnData.id,
+    id: columnData.id,
+    ...(columnData.accessorFn
+      ? { accessorFn: columnData.accessorFn }
+      : { accessorKey: columnData.id }),
     header: (columnData.header ?? TypeHeader) as never,
     meta: {
       type: columnData.type,
