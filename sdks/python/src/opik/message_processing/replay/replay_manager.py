@@ -83,15 +83,10 @@ class ReplayManager(threading.Thread):
             self._is_replay_leader = True
             # A previous leader may have died while replaying messages, leaving
             # them in the ``replaying`` state. Reset them so this leader can
-            # replay them again.
-            try:
-                self._db_manager.reset_replaying_messages()
-            except Exception:
-                # If resetting fails, release the lock so another process can try.
-                file_lock.release_replay_lock(self._replay_lock)
-                self._replay_lock = None
-                self._is_replay_leader = False
-                raise
+            # replay them again. A failure here is swallowed by
+            # reset_replaying_messages(), which marks the DB as failed; the
+            # process still becomes leader but offline replay is disabled.
+            self._db_manager.reset_replaying_messages()
             LOGGER.debug("This process is now the replay leader for %s", self._db_file)
 
     def _release_replay_lock(self) -> None:

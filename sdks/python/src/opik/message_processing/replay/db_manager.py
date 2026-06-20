@@ -46,6 +46,20 @@ class MessageStatus(IntEnum):
     replaying = 4
 
 
+def _message_status_from_int(value: int) -> MessageStatus:
+    """Return the MessageStatus for an integer value.
+
+    If the value is unknown (e.g. written by a newer/older SDK version), fall
+    back to ``failed`` so the message remains eligible for replay rather than
+    crashing the reader.
+    """
+    try:
+        return MessageStatus(value)
+    except ValueError:
+        LOGGER.warning("Unknown message status value %r, treating as failed", value)
+        return MessageStatus.failed
+
+
 @unique
 class DBManagerStatus(IntEnum):
     """Lifecycle states for DBManager."""
@@ -374,56 +388,71 @@ class DBManager:
 
         total_replayed = 0
         for db_messages in self.fetch_failed_messages_batched(self.batch_size):
-            params = [
-                (int(MessageStatus.replaying), message.id) for message in db_messages
-            ]
-            # Mark the batch as being replayed so it is not re-fetched concurrently
-            # and a new leader can later identify messages left behind by a dead one.
-            with self.__lock__:
-                if self.closed:
-                    LOGGER.debug(
-                        "Closed during replay - stopping after %d replayed",
-                        total_replayed,
-                    )
-                    break
-                try:
-                    with self.conn:
-                        c = self.conn.executemany(
-                            "UPDATE messages SET status = ? WHERE message_id = ?",
-                            params,
-                        )
-                        LOGGER.debug(
-                            "Updated %d DB message records for %d failed messages",
-                            c.rowcount,
-                            len(db_messages),
-                        )
-                except Exception as ex:
-                    self._mark_as_db_failed(
-                        f"replay_failed_messages: failed to update messages in the DB, reason: {ex}"
-                    )
-                    raise
-
-            replayed = self._replay_messages(
+            # Replay first, then mark the accepted messages as replaying. This
+            # keeps rows in the FAILED state if the callback cannot accept the
+            # message (e.g. the streamer is draining or preprocessing failed).
+            accepted_ids = self._replay_messages(
                 db_messages=db_messages, replay_callback=replay_callback
             )
-            total_replayed += replayed
+
+            if accepted_ids:
+                with self.__lock__:
+                    if self.closed:
+                        LOGGER.debug(
+                            "Closed during replay - stopping after %d replayed",
+                            total_replayed,
+                        )
+                        break
+                    try:
+                        with self.conn:
+                            params = [
+                                (int(MessageStatus.replaying), message_id)
+                                for message_id in accepted_ids
+                            ]
+                            c = self.conn.executemany(
+                                "UPDATE messages SET status = ? WHERE message_id = ?",
+                                params,
+                            )
+                            LOGGER.debug(
+                                "Marked %d DB message records as replaying",
+                                c.rowcount,
+                            )
+                    except Exception as ex:
+                        self._mark_as_db_failed(
+                            f"replay_failed_messages: failed to mark replaying messages in the DB, reason: {ex}"
+                        )
+                        raise
+
+            total_replayed += len(accepted_ids)
 
             # Pause between full batches without holding the lock.
-            if replayed >= self.batch_size:
+            if len(accepted_ids) >= self.batch_size:
                 time.sleep(self.batch_replay_delay)
 
         return total_replayed
 
     def _replay_messages(
         self, db_messages: List[DBMessage], replay_callback: ReplayCallback
-    ) -> int:
+    ) -> List[int]:
+        """Invoke the replay callback for each failed message.
+
+        Returns the list of message ids that the callback accepted. Rows stay
+        FAILED if the callback declines the message or raises.
+        """
         LOGGER.debug("Replaying %d failed messages to streamer", len(db_messages))
-        replayed = 0
+        accepted_ids: List[int] = []
         for message in db_messages:
             try:
                 base_message = db_message_to_message(message)
-                replay_callback(base_message)
-                replayed += 1
+                accepted = replay_callback(base_message)
+                if accepted is False:
+                    LOGGER.warning(
+                        "Replay callback declined message with id=%r, type=%r, leaving as failed",
+                        message.id,
+                        message.type,
+                    )
+                    continue
+                accepted_ids.append(message.id)
             except Exception as e:
                 LOGGER.error(
                     "Failed to replay message with id=%r, type=%r, status=%r, reason: %s",
@@ -433,9 +462,8 @@ class DBManager:
                     e,
                     exc_info=True,
                 )
-                self.update_message(message.id, MessageStatus.failed)
 
-        return replayed
+        return accepted_ids
 
     def get_message(self, message_id: int) -> Optional[messages.BaseMessage]:
         """Fetch a single message by id."""
@@ -461,7 +489,7 @@ class DBManager:
                             id=row[0],
                             type=row[1],
                             json=row[2],
-                            status=MessageStatus(row[3]),
+                            status=_message_status_from_int(row[3]),
                         )
                     return None
             except Exception as ex:
@@ -567,10 +595,13 @@ class DBManager:
                     )
                     return c.rowcount
             except Exception as ex:
+                # Bootstrap errors during leader election should not crash the
+                # application. Mark the DB as failed (which disables offline replay
+                # resiliency) and swallow the error so the caller can continue.
                 msg = f"reset_replaying_messages: failed to reset replaying messages, reason: {ex}"
                 LOGGER.error(msg)
                 self._mark_as_db_failed(msg)
-                raise
+                return 0
 
     def _mark_as_db_failed(self, message: str) -> None:
         self.status = DBManagerStatus.error

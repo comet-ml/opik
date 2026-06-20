@@ -49,10 +49,16 @@ class Streamer:
     def use_batching(self) -> bool:
         return self._batch_preprocessor._batch_manager is not None
 
-    def put(self, message: messages.BaseMessage, force: bool = False) -> None:
+    def put(self, message: messages.BaseMessage, force: bool = False) -> bool:
+        """Enqueue a message for background processing.
+
+        Returns ``True`` if the message was accepted by the streamer (queued or
+        consumed by a preprocessor). Returns ``False`` if the streamer is draining
+        or if preprocessing failed, so callers that need durability can react.
+        """
         with self._lock:
             if self._drain and not force:
-                return
+                return False
 
             self._idle = False
             try:
@@ -75,11 +81,15 @@ class Streamer:
                             logger=LOGGER,
                         )
                     self._message_queue.put(preprocessed_message)
+
+                return True
             except Exception as ex:
                 LOGGER.error(
                     "Failed to process message by streamer: %s", ex, exc_info=ex
                 )
-            self._idle = True
+                return False
+            finally:
+                self._idle = True
 
     def close(self, timeout: Optional[int] = None, *, flush: bool = True) -> bool:
         """

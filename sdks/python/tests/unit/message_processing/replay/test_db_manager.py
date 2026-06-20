@@ -531,10 +531,9 @@ class TestReplayFailedMessages:
 
         # Check status was updated to replaying so a new leader can detect
         # messages left behind by a dead leader.
-        cursor = manager.conn.execute(
-            "SELECT status FROM messages WHERE message_id = ?", (message_id,)
-        )
-        assert cursor.fetchone()[0] == db_manager.MessageStatus.replaying
+        db_msg = manager.get_db_message(message_id)
+        assert db_msg is not None
+        assert db_msg.status == db_manager.MessageStatus.replaying
 
     def test_reset_replaying_messages__moves_replaying_back_to_failed(
         self, manager: db_manager.DBManager
@@ -547,10 +546,9 @@ class TestReplayFailedMessages:
         reset_count = manager.reset_replaying_messages()
 
         assert reset_count == 1
-        cursor = manager.conn.execute(
-            "SELECT status FROM messages WHERE message_id = ?", (1,)
-        )
-        assert cursor.fetchone()[0] == db_manager.MessageStatus.failed
+        db_msg = manager.get_db_message(1)
+        assert db_msg is not None
+        assert db_msg.status == db_manager.MessageStatus.failed
 
     def test_replay_failed_messages__callback_invocation__receives_deserialized_messages(
         self, manager: db_manager.DBManager
