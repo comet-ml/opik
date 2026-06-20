@@ -42,6 +42,9 @@ RUN apk add --no-cache --upgrade libexpat
 # Runtime-only OS deps: tini (PID 1 reaper) + python3 interpreter.
 RUN apk add --no-cache tini python3
 
+# Create non-root user for security
+RUN addgroup -S opik && adduser -S opik -G opik
+
 WORKDIR /opt/opik-python-backend
 
 # Slimmed, bytecode-only venv from the builder.
@@ -65,6 +68,9 @@ COPY src ./src
 COPY entrypoint.sh demo_data_entrypoint.sh ./
 RUN chmod u+x entrypoint.sh demo_data_entrypoint.sh
 
+# Ensure the non-root user owns the working directory
+RUN chown -R opik:opik /opt/opik-python-backend
+
 EXPOSE 8000
 
 # Runs as root: needs the Docker socket to spawn sandbox-executor containers.
@@ -80,6 +86,9 @@ ENV PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS=3
 ENV PYTHON_CODE_EXECUTOR_STRATEGY="docker"
 ENV PYTHON_CODE_EXECUTOR_ALLOW_NETWORK=false
 ENV OPIK_VERSION=${OPIK_VERSION}
+
+# Run as non-root user
+USER opik
 
 ENTRYPOINT ["tini", "--"]
 CMD ["./entrypoint.sh"]
