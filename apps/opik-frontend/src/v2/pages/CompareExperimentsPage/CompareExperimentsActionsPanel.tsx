@@ -3,6 +3,7 @@ import get from "lodash/get";
 import slugify from "slugify";
 import uniq from "lodash/uniq";
 import first from "lodash/first";
+import groupBy from "lodash/groupBy";
 
 import CompareExperimentsButton from "@/v2/pages/CompareExperimentsPage/CompareExperimentsButton/CompareExperimentsButton";
 import EvaluateExperimentTracesButton from "@/v2/pages/CompareExperimentsPage/EvaluateExperimentTracesButton/EvaluateExperimentTracesButton";
@@ -20,6 +21,7 @@ import {
   COLUMN_ID_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_DURATION_ID,
+  COLUMN_PASSED_ID,
   COLUMN_USAGE_ID,
 } from "@/types/shared";
 import {
@@ -27,8 +29,11 @@ import {
   EXPERIMENT_ITEM_DATASET_PREFIX,
 } from "@/constants/experiments";
 import { Separator } from "@/ui/separator";
+import {
+  getExperimentExportIds,
+  getExperimentExportPrefix,
+} from "@/lib/compare-experiments-export";
 
-const COLUMN_PASSED_ID = "passed";
 const COLUMN_TOTAL_ESTIMATED_COST_ID = "total_estimated_cost";
 
 const EXPERIMENT_ITEM_COLUMNS = [
@@ -41,7 +46,7 @@ const EXPERIMENT_ITEM_COLUMNS = [
 const FLAT_COLUMNS = [COLUMN_CREATED_AT_ID, COLUMN_ID_ID];
 
 const processNestedExportColumn = (
-  item: ExperimentItem,
+  item: ExperimentItem | undefined,
   column: string,
   accumulator: Record<string, unknown>,
   rowData: object,
@@ -52,7 +57,9 @@ const processNestedExportColumn = (
 
   if (prefixColumnKey === COLUMN_FEEDBACK_SCORES_ID) {
     const scoreName = keys.slice(1).join(".");
-    const scoreObject = item.feedback_scores?.find((f) => f.name === scoreName);
+    const scoreObject = item?.feedback_scores?.find(
+      (f) => f.name === scoreName,
+    );
     accumulator[`${prefix}${column}`] = get(scoreObject, "value", "-");
 
     if (scoreObject?.reason) {
@@ -99,11 +106,18 @@ type CompareExperimentsActionsPanelProps = {
   selectedRows?: ExperimentsCompare[];
   columnsToExport?: string[];
   experiments?: Experiment[];
+  experimentsIds?: string[];
 };
 
 const CompareExperimentsActionsPanel: React.FC<
   CompareExperimentsActionsPanelProps
-> = ({ getDataForExport, selectedRows = [], columnsToExport, experiments }) => {
+> = ({
+  getDataForExport,
+  selectedRows = [],
+  columnsToExport,
+  experiments,
+  experimentsIds = [],
+}) => {
   const disabled = !selectedRows?.length;
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
 
@@ -127,9 +141,20 @@ const CompareExperimentsActionsPanel: React.FC<
       {},
     );
 
-    const isCompare = localExperiments?.length > 1;
+    const isCompare = experimentsIds.length > 1 || localExperiments.length > 1;
 
     return rows.map((row) => {
+      const itemsByExperiment = groupBy(
+        row.experiment_items ?? [],
+        (item) => item.experiment_id,
+      );
+      const rowExperimentIds = Object.keys(itemsByExperiment);
+      const exportExperimentIds = getExperimentExportIds(
+        experimentsIds,
+        localExperiments,
+        rowExperimentIds,
+      );
+
       return columnsToExport.reduce<Record<string, unknown>>(
         (accumulator, column) => {
           if (FLAT_COLUMNS.includes(column)) {
@@ -138,17 +163,17 @@ const CompareExperimentsActionsPanel: React.FC<
             return accumulator;
           }
 
-          const prefix = first(column.split(".")) as string;
+          const columnPrefix = first(column.split(".")) as string;
           const isDatasetColumn = !(
-            EXPERIMENT_ITEM_COLUMNS.includes(prefix) ||
-            prefix === COLUMN_FEEDBACK_SCORES_ID ||
-            prefix === COLUMN_PASSED_ID
+            EXPERIMENT_ITEM_COLUMNS.includes(columnPrefix) ||
+            columnPrefix === COLUMN_FEEDBACK_SCORES_ID ||
+            columnPrefix === COLUMN_PASSED_ID
           );
 
           if (isDatasetColumn) {
             // Handle dataset columns with "data." prefix
             const fieldName =
-              prefix === EXPERIMENT_ITEM_DATASET_PREFIX
+              columnPrefix === EXPERIMENT_ITEM_DATASET_PREFIX
                 ? column.replace(`${EXPERIMENT_ITEM_DATASET_PREFIX}.`, "")
                 : column;
             accumulator[`dataset.${fieldName}`] = get(row.data, fieldName, "-");
@@ -157,15 +182,32 @@ const CompareExperimentsActionsPanel: React.FC<
           }
 
           if (isCompare) {
-            (row.experiment_items ?? []).forEach((item) => {
-              const prefix = `${nameMap[item.experiment_id] ?? "unknown"}.`;
-              processNestedExportColumn(
-                item,
-                column,
-                accumulator,
-                row.data,
-                prefix,
+            exportExperimentIds.forEach((experimentId) => {
+              const experimentPrefix = getExperimentExportPrefix(
+                experimentId,
+                nameMap,
               );
+              const items = itemsByExperiment[experimentId] ?? [];
+
+              if (items.length === 0) {
+                processNestedExportColumn(
+                  undefined,
+                  column,
+                  accumulator,
+                  row.data,
+                  experimentPrefix,
+                );
+              }
+
+              items.forEach((item) => {
+                processNestedExportColumn(
+                  item,
+                  column,
+                  accumulator,
+                  row.data,
+                  experimentPrefix,
+                );
+              });
             });
           } else {
             const item = row.experiment_items?.[0];
@@ -177,19 +219,21 @@ const CompareExperimentsActionsPanel: React.FC<
         {},
       );
     });
-  }, [getDataForExport, columnsToExport, experiments]);
+  }, [getDataForExport, columnsToExport, experiments, experimentsIds]);
 
   const generateFileName = useCallback(
     (extension = "csv") => {
+      const experimentsCount =
+        experimentsIds.length || experiments?.length || 0;
       const fileName =
-        experiments?.length === 1
+        experimentsCount === 1 && experiments?.[0]?.name
           ? experiments[0].name
-          : `compare ${experiments?.length}`;
+          : `compare ${experimentsCount}`;
       return `${slugify(fileName, {
         lower: true,
       })}.${extension}`;
     },
-    [experiments],
+    [experiments, experimentsIds],
   );
 
   return (

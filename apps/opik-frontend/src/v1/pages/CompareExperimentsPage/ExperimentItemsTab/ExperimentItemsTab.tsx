@@ -14,6 +14,7 @@ import {
   COLUMN_DURATION_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
+  COLUMN_PASSED_ID,
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
   COLUMN_USAGE_ID,
@@ -82,7 +83,6 @@ const calculateVerticalAlignment = (count: number) =>
 const columnHelper = createColumnHelper<ExperimentsCompare>();
 
 const COLUMN_EXPERIMENT_NAME_ID = "experiment_name";
-const COLUMN_PASSED_ID = "passed";
 const STORAGE_PREFIX = "compare-experiments";
 const DYNAMIC_COLUMNS_KEY = "compare-experiments-dynamic-columns";
 
@@ -117,11 +117,6 @@ function getFilterColumns(
     },
   ];
 }
-
-const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_SELECT_ID],
-  right: [],
-};
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_DURATION_ID,
@@ -223,10 +218,13 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
 
   const columnPinning = useMemo<ColumnPinningState>(
     () => ({
-      left: [COLUMN_SELECT_ID],
+      left:
+        experimentsCount > 1
+          ? [COLUMN_SELECT_ID, COLUMN_EXPERIMENT_NAME_ID]
+          : [COLUMN_SELECT_ID],
       right: isTestSuite ? [COLUMN_PASSED_ID] : [],
     }),
-    [isTestSuite],
+    [experimentsCount, isTestSuite],
   );
 
   const filtersConfig = useMemo(
@@ -529,13 +527,18 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         return acc.concat(subColumns ? subColumns : [c]);
       }, [])
       .map((c) => get(c, "accessorKey", ""))
-      .filter((c) =>
-        c === COLUMN_SELECT_ID
-          ? false
-          : selectedColumns.includes(c) ||
-            (DEFAULT_COLUMN_PINNING.left || []).includes(c),
-      );
-  }, [columns, selectedColumns]);
+      .filter((c) => {
+        if (c === COLUMN_SELECT_ID || c === COLUMN_EXPERIMENT_NAME_ID) {
+          return false;
+        }
+
+        return (
+          selectedColumns.includes(c) ||
+          (columnPinning.left || []).includes(c) ||
+          (columnPinning.right || []).includes(c)
+        );
+      });
+  }, [columns, selectedColumns, columnPinning]);
 
   const filterColumns = useMemo(() => {
     return [
@@ -679,6 +682,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
             selectedRows={selectedRows}
             columnsToExport={columnsToExport}
             experiments={experiments}
+            experimentsIds={experimentsIds}
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
           <DataTableRowHeightSelector
@@ -713,10 +717,11 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         getRowId={getRowId}
         rowHeight={height as ROW_HEIGHT}
         getRowHeightStyle={getRowHeightStyle}
-        columnPinning={columnPinning}
+        columnPinningState={columnPinning}
         noData={<DataTableNoData title={noDataText} />}
         TableWrapper={PageBodyStickyTableWrapper}
         TableBody={DataTableVirtualBody}
+        autoWidth
         stickyHeader
         meta={meta}
         showLoadingOverlay={isPlaceholderData && isFetching}

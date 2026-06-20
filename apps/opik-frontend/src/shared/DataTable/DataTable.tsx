@@ -235,23 +235,17 @@ const DataTable = <TData, TValue>({
   const { lastLeftPinnedColumnId, lastRightPinnedColumnId } =
     computePinnedColumnIds(table);
   const columnSizing = table.getState().columnSizing;
-  const headers = table.getFlatHeaders();
+  const headerGroups = table.getHeaderGroups();
+  const leafHeaders = headerGroups[headerGroups.length - 1]?.headers ?? [];
 
   const cols = useMemo(() => {
-    const retVal: { id: string; size: number }[] = [];
-    headers.forEach((header) => {
-      const index = header.column.getIndex();
-      if (index !== -1) {
-        retVal[index] = {
-          id: header.column.id,
-          size: header.column.getSize(),
-        };
-      }
-    });
-    return retVal;
+    return leafHeaders.map((header) => ({
+      id: header.column.id,
+      size: header.column.getSize(),
+    }));
     // we need columnSizing here to rebuild the cols array
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [headers, columnSizing]);
+  }, [leafHeaders, columnSizing]);
 
   const [tableHeight, setTableHeight] = useState(0);
   const [hasHorizontalScroll, setHasHorizontalScroll] = useState(false);
@@ -412,9 +406,11 @@ const DataTable = <TData, TValue>({
         <DataTableTooltipContext>
           <Table
             ref={tableRef}
-            className="comet-cell-borders"
+            className={cn("comet-cell-borders", autoWidth && "w-auto")}
             style={{
-              ...(!autoWidth && { minWidth: table.getTotalSize() }),
+              ...(autoWidth
+                ? { width: table.getTotalSize() }
+                : { minWidth: table.getTotalSize() }),
               ...(tableHeight && { "--data-table-height": `${tableHeight}px` }),
             }}
           >
@@ -429,7 +425,7 @@ const DataTable = <TData, TValue>({
                 ...{ [STICKY_ATTRIBUTE_VERTICAL]: STICKY_DIRECTION.vertical },
               })}
             >
-              {table.getHeaderGroups().map((headerGroup, index, groups) => {
+              {headerGroups.map((headerGroup, index, groups) => {
                 const isLastRow = index === groups.length - 1;
 
                 return (
