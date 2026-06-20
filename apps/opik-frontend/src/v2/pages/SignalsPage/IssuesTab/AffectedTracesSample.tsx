@@ -1,7 +1,9 @@
 import React from "react";
+import { Link, useParams } from "@tanstack/react-router";
 import { Coins, Hash, ListTree, Timer } from "lucide-react";
 import useTracesList from "@/api/traces/useTracesList";
 import { Skeleton } from "@/ui/skeleton";
+import { LOGS_TYPE } from "@/constants/traces";
 import { formatDate, formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
 
@@ -18,6 +20,10 @@ type AffectedTracesSampleProps = {
 const AffectedTracesSample: React.FC<AffectedTracesSampleProps> = ({
   projectId,
 }) => {
+  const { workspaceName } = useParams({ strict: false }) as {
+    workspaceName: string;
+  };
+
   const { data, isPending } = useTracesList({
     projectId,
     page: 1,
@@ -47,9 +53,12 @@ const AffectedTracesSample: React.FC<AffectedTracesSampleProps> = ({
   return (
     <div className="flex flex-col gap-1.5">
       {traces.map((trace) => (
-        <div
+        <Link
           key={trace.id}
-          className="comet-body-xs flex items-center gap-4 rounded-md border border-border px-3 py-2"
+          to="/$workspaceName/projects/$projectId/logs"
+          params={{ workspaceName, projectId }}
+          search={{ logsType: LOGS_TYPE.traces, trace: trace.id }}
+          className="comet-body-xs flex items-center gap-4 rounded-md border border-border px-3 py-2 transition-colors hover:border-primary hover:bg-muted/50"
         >
           <span className="flex items-center gap-1.5 font-mono text-foreground">
             <ListTree className="size-3.5 text-[var(--color-primary)]" />
@@ -70,7 +79,7 @@ const AffectedTracesSample: React.FC<AffectedTracesSampleProps> = ({
           <span className="ml-auto whitespace-nowrap text-light-slate">
             {formatDate(trace.last_updated_at)}
           </span>
-        </div>
+        </Link>
       ))}
     </div>
   );

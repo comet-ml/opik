@@ -1,12 +1,12 @@
 import React from "react";
 import {
   ArrowUpRight,
-  Ban,
   BugPlay,
   CircleCheck,
   Eye,
   EyeOff,
   Hash,
+  RotateCcw,
   Users,
 } from "lucide-react";
 import OllieOwl from "@/icons/ollie-owl.svg?react";
@@ -33,6 +33,25 @@ type IssueDetailProps = {
   issue: AgentInsightsIssue;
   projectId: string;
 };
+
+// Status transitions offered in the header — only those that change the
+// current status are rendered, so a resolved issue shows Reopen.
+const STATUS_ACTIONS: {
+  status: AGENT_INSIGHTS_ISSUE_STATUS;
+  label: string;
+  icon: React.ElementType;
+}[] = [
+  {
+    status: AGENT_INSIGHTS_ISSUE_STATUS.resolved,
+    label: "Resolve",
+    icon: CircleCheck,
+  },
+  {
+    status: AGENT_INSIGHTS_ISSUE_STATUS.open,
+    label: "Reopen",
+    icon: RotateCcw,
+  },
+];
 
 const MetaItem: React.FC<{
   icon: React.ElementType;
@@ -105,31 +124,24 @@ const IssueDetail: React.FC<IssueDetailProps> = ({ issue, projectId }) => {
           </Tag>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <Button
-            variant="ghost"
-            size="2xs"
-            disabled={
-              updateMutation.isPending ||
-              issue.status === AGENT_INSIGHTS_ISSUE_STATUS.resolved
-            }
-            onClick={() => setStatus(AGENT_INSIGHTS_ISSUE_STATUS.resolved)}
-          >
-            <CircleCheck className="mr-1.5 size-3" />
-            Resolve
-          </Button>
-          <Separator orientation="vertical" className="h-4" />
-          <Button
-            variant="ghost"
-            size="2xs"
-            disabled={
-              updateMutation.isPending ||
-              issue.status === AGENT_INSIGHTS_ISSUE_STATUS.closed
-            }
-            onClick={() => setStatus(AGENT_INSIGHTS_ISSUE_STATUS.closed)}
-          >
-            <Ban className="mr-1.5 size-3" />
-            Close
-          </Button>
+          {STATUS_ACTIONS.filter(
+            (action) => action.status !== issue.status,
+          ).map(({ status, label, icon: Icon }, index) => (
+            <React.Fragment key={status}>
+              {index > 0 && (
+                <Separator orientation="vertical" className="h-4" />
+              )}
+              <Button
+                variant="ghost"
+                size="2xs"
+                disabled={updateMutation.isPending}
+                onClick={() => setStatus(status)}
+              >
+                <Icon className="mr-1.5 size-3" />
+                {label}
+              </Button>
+            </React.Fragment>
+          ))}
         </div>
       </div>
 
