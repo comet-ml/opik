@@ -56,8 +56,18 @@ jobs:
           git config --local user.name "github-actions"
 
           if [ "${REUSE_EXISTING_TAG}" = "true" ]; then
-            if git ls-remote --exit-code --tags origin "${RELEASE_VERSION}" >/dev/null 2>&1; then
-              echo "::warning title=create-git-tag::reuse_existing_tag=true and origin already has tag ${RELEASE_VERSION}; skipping create+push."
+            # Resolve the SHA the remote tag points to and surface it in the
+            # warning. `reuse_existing_tag=true` is an operator trust statement
+            # ("I trust this tag"). Printing the SHA lets the operator sanity-
+            # check from the Actions log that the tag points to the commit they
+            # expect — and cancel the run if it doesn't — without us having to
+            # take a stance on what 'correct' means here (e.g., an ancestor
+            # check would falsely reject legitimate replays after a main
+            # rebase). See PR #7124 review thread for the threat-model
+            # discussion.
+            TAG_SHA=$(git ls-remote --tags origin "${RELEASE_VERSION}" | awk '{print $1}')
+            if [ -n "${TAG_SHA}" ]; then
+              echo "::warning title=create-git-tag::reuse_existing_tag=true and origin already has tag ${RELEASE_VERSION} (commit ${TAG_SHA}); skipping create+push. Build will pin to this commit — verify it's the source you intend to release."
               exit 0
             fi
             echo "::error title=create-git-tag::reuse_existing_tag=true but origin does not have tag ${RELEASE_VERSION}. Refusing to silently create a new one."
