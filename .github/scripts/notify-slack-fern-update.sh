@@ -1,29 +1,64 @@
 #!/usr/bin/env bash
 #
-# Build and send the FERN update PR Slack notification.
+# Post the FERN update PR notification to #code-review as a single daily thread.
+#
+# The first FERN PR of a (UTC) day posts a parent message; every later PR that
+# day replies in that thread, so the channel sees one top-level message per day.
+# The thread anchor (date + Slack ts) is carried between workflow runs in the
+# `slack-thread-state` artifact — there is no GitHub state to mutate.
 #
 # Required env vars:
-#   SLACK_WEBHOOK_URL    — Slack incoming webhook URL
-#   PR_URL               — URL of the FERN PR
-#   PR_NUMBER            — PR number
-#   AUTHOR_DISPLAY       — GitHub username of the author
-#   GITHUB_SHA           — commit SHA (set by GitHub Actions)
-#   GITHUB_REPOSITORY    — owner/repo (set by GitHub Actions)
+#   SLACK_BOT_TOKEN_CODE_REVIEW    — bot token with chat:write + chat:write.customize
+#   SLACK_CODE_REVIEW_CHANNEL_ID   — channel ID of #code-review
+#   GH_TOKEN                       — token with actions:read (download prior artifact)
+#   GITHUB_REPOSITORY              — owner/repo (set by GitHub Actions)
+#   GITHUB_SHA                     — commit SHA (set by GitHub Actions)
+#   WORKFLOW_FILE                  — this workflow's filename (to find prior runs)
+#   STATE_ARTIFACT_NAME            — artifact name holding the thread state
+#   STATE_FILE                     — JSON filename inside the artifact / to write back
+#   PR_URL                         — URL of the FERN PR
+#   PR_NUMBER                      — FERN PR number
+#   AUTHOR_DISPLAY                 — GitHub username of the triggering author
 #
 # Optional env vars:
-#   ORIGINATING_PR       — URL of the BE PR that triggered FERN generation
-#   MENTION              — pre-resolved Slack mention (e.g. "<@U123>"), may be empty
+#   ORIGINATING_PR                 — URL of the BE PR that triggered FERN generation
+#   MENTION                        — pre-resolved Slack mention (e.g. "<@U123>"), may be empty
 #
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+BOT_NAME="Fern Bot"
+BOT_ICON=":herb:"
+TODAY="$(date -u +%Y-%m-%d)"
 
+MISSING=""
+[ -z "${SLACK_BOT_TOKEN:-}" ] && MISSING="SLACK_BOT_TOKEN_CODE_REVIEW"
+[ -z "${SLACK_CODE_REVIEW_CHANNEL_ID:-}" ] && MISSING="${MISSING:+$MISSING, }SLACK_CODE_REVIEW_CHANNEL_ID"
+if [ -n "$MISSING" ]; then
+  echo "::warning title=Slack notification skipped::Missing repo secret(s): ${MISSING}. The FERN PR was still created. To enable the #code-review thread, set these (bot needs chat:write + chat:write.customize, invited to #code-review)."
+  exit 0
+fi
+
+# Resolve the day's thread ts from the previous run's artifact (absent = first post of the day).
+THREAD_TS=""
+PREV_RUN_ID="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WORKFLOW_FILE" \
+  --status success --limit 1 --json databaseId --jq '.[0].databaseId' 2>/dev/null || echo "")"
+if [ -n "$PREV_RUN_ID" ]; then
+  if gh run download "$PREV_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+      --name "$STATE_ARTIFACT_NAME" --dir /tmp/fern-state 2>/dev/null; then
+    PREV_DATE="$(jq -r '.date // ""' "/tmp/fern-state/$STATE_FILE" 2>/dev/null || echo "")"
+    if [ "$PREV_DATE" = "$TODAY" ]; then
+      THREAD_TS="$(jq -r '.ts // ""' "/tmp/fern-state/$STATE_FILE" 2>/dev/null || echo "")"
+    fi
+  fi
+fi
+
+# Build the message body. TRIGGER_BODY holds the part after the "Triggered by:"
+# label; jq joins them with a real newline (bash double quotes don't expand \n).
 SHORT_SHA="${GITHUB_SHA:0:7}"
-
 if [ -n "${ORIGINATING_PR:-}" ]; then
-  TRIGGER_TEXT="*Triggered by:*\n<${ORIGINATING_PR}|BE PR> by ${AUTHOR_DISPLAY}"
+  TRIGGER_BODY="<${ORIGINATING_PR}|BE PR> by ${AUTHOR_DISPLAY}"
 else
-  TRIGGER_TEXT="*Triggered by:*\nCommit <https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}|\`${SHORT_SHA}\`> by ${AUTHOR_DISPLAY}"
+  TRIGGER_BODY="Commit <https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}|\`${SHORT_SHA}\`> by ${AUTHOR_DISPLAY}"
 fi
 
 MENTION_TEXT=""
@@ -31,22 +66,29 @@ if [ -n "${MENTION:-}" ]; then
   MENTION_TEXT="${MENTION} Your BE merge triggered FERN changes. Please review."
 fi
 
-jq -n \
+PAYLOAD="$(jq -n \
+  --arg channel "$SLACK_CODE_REVIEW_CHANNEL_ID" \
+  --arg username "$BOT_NAME" \
+  --arg icon "$BOT_ICON" \
+  --arg thread_ts "$THREAD_TS" \
   --arg pr_url "$PR_URL" \
   --arg pr_num "$PR_NUMBER" \
-  --arg trigger "$TRIGGER_TEXT" \
+  --arg trigger_body "$TRIGGER_BODY" \
   --arg mention "$MENTION_TEXT" \
   '
   {
-    "attachments": [{
-      "color": "#36a64f",
-      "blocks": (
+    channel: $channel,
+    username: $username,
+    icon_emoji: $icon,
+    text: ("FERN Update PR #" + $pr_num + " — review needed"),
+    attachments: [{
+      color: "#36a64f",
+      blocks: (
         [
-          {"type": "header", "text": {"type": "plain_text", "text": "FERN Update PR \u2014 Review Needed", "emoji": true}},
           {"type": "section", "text": {"type": "mrkdwn", "text": "A BE merge to main changed the OpenAPI spec. FERN SDK code has been regenerated."}},
           {"type": "section", "fields": [
             {"type": "mrkdwn", "text": ("*FERN PR:*\n<" + $pr_url + "|#" + $pr_num + ">")},
-            {"type": "mrkdwn", "text": $trigger}
+            {"type": "mrkdwn", "text": ("*Triggered by:*\n" + $trigger_body)}
           ]}
         ]
         + (if $mention != "" then [{"type": "section", "text": {"type": "mrkdwn", "text": $mention}}] else [] end)
@@ -61,6 +103,21 @@ jq -n \
       )
     }]
   }
-  ' > /tmp/slack-payload.json
+  + (if $thread_ts != "" then {thread_ts: $thread_ts} else {} end)
+  ')"
 
-exec "$SCRIPT_DIR/send-slack-message.sh" /tmp/slack-payload.json
+RESPONSE="$(curl -sS -X POST https://slack.com/api/chat.postMessage \
+  -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
+  -H 'Content-type: application/json; charset=utf-8' \
+  --data "$PAYLOAD")"
+
+if [ "$(jq -r '.ok' <<<"$RESPONSE")" != "true" ]; then
+  echo "::error::Slack chat.postMessage failed: $(jq -r '.error // "unknown"' <<<"$RESPONSE")"
+  exit 1
+fi
+echo "Slack message posted ($([ -n "$THREAD_TS" ] && echo "threaded reply" || echo "new daily parent"))"
+
+# Persist the day's anchor for the next run. The parent ts is the thread root;
+# on a reply we keep the existing root, so the thread stays one-per-day.
+ROOT_TS="${THREAD_TS:-$(jq -r '.ts' <<<"$RESPONSE")}"
+jq -n --arg date "$TODAY" --arg ts "$ROOT_TS" '{date: $date, ts: $ts}' > "$STATE_FILE"

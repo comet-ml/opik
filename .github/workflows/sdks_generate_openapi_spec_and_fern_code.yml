@@ -50,6 +50,7 @@ jobs:
     outputs:
       pr_url: ${{ steps.create-pr.outputs.pull-request-url }}
       pr_number: ${{ steps.create-pr.outputs.pull-request-number }}
+      pr_operation: ${{ steps.create-pr.outputs.pull-request-operation }}
 
     steps:
       - name: Checkout Repository
@@ -80,7 +81,7 @@ jobs:
 
       - name: Set branch name
         run: |
-          echo "BRANCH_NAME=github-actions/NA-automatically-update-openapi-spec-and-fern-code-$(date +%Y-%m-%d-%H-%M-%S)" >> "$GITHUB_ENV"
+          echo "BRANCH_NAME=github-actions/NA-automatically-update-openapi-spec-and-fern-code" >> "$GITHUB_ENV"
 
       - name: Run Generate OpenAPI spec and Fern code
         env:
@@ -139,6 +140,7 @@ jobs:
         with:
           token: ${{ secrets.COMET_ACTION_CREATE_PR }}
           branch: ${{ env.BRANCH_NAME }}
+          reviewers: ${{ needs.resolve-trigger-context.outputs.trigger_author }}
           title: "[NA] [SDK] [DOCS] Update automatically OpenAPI spec and Fern code"
           body: |
             ## Details
@@ -163,12 +165,13 @@ jobs:
   notify-slack:
     name: Notify #code-review
     runs-on: ubuntu-latest
-    permissions: {}
+    permissions:
+      actions: read # download the previous run's slack-thread-state artifact
     needs: [update-open-api-spec-and-fern-code, resolve-trigger-context]
     if: >-
       !failure() &&
       github.event_name == 'push' &&
-      needs.update-open-api-spec-and-fern-code.outputs.pr_url != ''
+      needs.update-open-api-spec-and-fern-code.outputs.pr_operation == 'created'
 
     steps:
       - name: Checkout
@@ -193,12 +196,27 @@ jobs:
           echo "mention=$AUTHOR_MENTION" >> "$GITHUB_OUTPUT"
           echo "author_display=$AUTHOR" >> "$GITHUB_OUTPUT"
 
-      - name: Send Slack notification
+      - name: Post to #code-review (daily thread)
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL_CODE_REVIEW }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN_CODE_REVIEW }}
+          SLACK_CODE_REVIEW_CHANNEL_ID: ${{ secrets.SLACK_CODE_REVIEW_CHANNEL_ID }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          WORKFLOW_FILE: sdks_generate_openapi_spec_and_fern_code.yml
+          STATE_ARTIFACT_NAME: slack-thread-state
+          STATE_FILE: slack_code_review_fern_prs.json
           PR_URL: ${{ needs.update-open-api-spec-and-fern-code.outputs.pr_url }}
           PR_NUMBER: ${{ needs.update-open-api-spec-and-fern-code.outputs.pr_number }}
           ORIGINATING_PR: ${{ needs.resolve-trigger-context.outputs.originating_pr_url }}
           AUTHOR_DISPLAY: ${{ steps.resolve-mention.outputs.author_display }}
           MENTION: ${{ steps.resolve-mention.outputs.mention }}
         run: .github/scripts/notify-slack-fern-update.sh
+
+      - name: Upload thread state
+        uses: actions/upload-artifact@v7
+        with:
+          name: slack-thread-state
+          path: slack_code_review_fern_prs.json
+          if-no-files-found: ignore
+          overwrite: true
+          retention-days: 7
