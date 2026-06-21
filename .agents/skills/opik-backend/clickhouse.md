@@ -140,6 +140,28 @@ toDecimal64(
 - Feedback scores: `Decimal64(9)`
 - Cost fields: `Decimal(38, 12)` → use `toDecimal128(..., 12)`
 
+## Sorting / Pagination / Field Exclusion (two-phase + deferred wide columns)
+
+Large `SELECT ... BY project` queries (traces/spans) use a two-phase shape: a light
+`page_ids` CTE paginates on id + sort key only, then `page_wide` re-reads the full rows
+(including wide text columns: `input`/`output`/`metadata`) for just that page. Wide columns
+are deferred (dropped via `EXCEPT`) unless needed.
+
+Invariants to preserve when editing these queries:
+- **The pagination pre-filter (`page_ids`) must carry the sort key.** Render `<sort_fields>`
+  into `page_ids`' `ORDER BY` (and the final `ORDER BY`), or pagination returns the wrong page
+  for custom sorting. `page_wide` is id-bounded + `LIMIT 1 BY id`, so its own order is
+  immaterial — the final `SELECT` re-sorts.
+- **Keep the sort column available.** When sorting by a wide column, `sort_needs_wide` must keep
+  `input`/`output`/`metadata` in the deduped CTE; when excluding a field that is also the sort
+  key, the column must still be selectable for the `ORDER BY`. Excluding the sort field must not
+  drop or break the sort.
+- **Spans and traces share this shape** — change both together.
+
+⚠️ Any change here MUST be covered by full-page-content tests (not id-only) across sortable
+fields, custom/dynamic `sort_fields`, and the sort × field-exclusion combination, for BOTH
+spans and traces. See `testing.md` → "Sorting / Pagination / Field-Exclusion SQL Changes".
+
 ## Performance
 
 - **Prefer subqueries over JOINs** for filtering

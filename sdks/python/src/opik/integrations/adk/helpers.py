@@ -6,6 +6,7 @@ from typing import (
 )
 
 from google.adk.models import LlmResponse
+from opik.api_objects.attachment import base64_normalizer
 import opik.types as opik_types
 import pydantic
 
@@ -14,7 +15,11 @@ LOGGER = logging.getLogger(__name__)
 
 def convert_adk_base_model_to_dict(value: pydantic.BaseModel) -> Dict[str, Any]:
     """Most ADK objects are Pydantic Base Models"""
-    return value.model_dump(mode="json", exclude_unset=True, fallback=str)
+    dumped = value.model_dump(mode="json", exclude_unset=True, fallback=str)
+    # google.genai's pydantic BaseModel emits URL-safe base64 for inline_data
+    # bytes; downstream consumers expect the standard alphabet (OPIK-6387).
+    base64_normalizer.normalize_urlsafe_base64_images_in_place(dumped)
+    return dumped
 
 
 def get_adk_provider() -> opik_types.LLMProvider:

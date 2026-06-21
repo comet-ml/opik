@@ -77,6 +77,7 @@ import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.Trace.TracePage;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.utils.RandomTestUtils.randomIp;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import static com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -98,6 +99,7 @@ class RateLimitE2ETest {
     private static final long LIMIT_DURATION_IN_SECONDS = 1L;
     private static final long SINGLE_TRACING_OPS_LIMIT_VALUE = 3L;
     private static final long SINGLE_TRACING_OPS_DURATION_IN_SECONDS = 1L;
+    private static final String IP_RATED_LIMIT_BUCKET_NAME = "ipRated";
     public static final String TOO_MANY_REQUESTS_MESSAGEE = "Too Many Requests: %s";
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
@@ -112,6 +114,7 @@ class RateLimitE2ETest {
     private LimitConfig customLimit;
     private LimitConfig getSpanIdLimit;
     private LimitConfig singleTracingOpsLimit;
+    private LimitConfig ipRatedLimit;
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
@@ -126,6 +129,20 @@ class RateLimitE2ETest {
             if (time != null) {
                 Mono.delay(Duration.ofSeconds(time)).block();
             }
+            return Response.status(Response.Status.CREATED).build();
+        }
+    }
+
+    // Unauthenticated, per-source-IP throttled endpoint
+    @Path("/v1/public/ip-rated")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Consumes(MediaType.APPLICATION_JSON)
+    public static class ClientIpRatedBean {
+
+        @POST
+        @RateLimited(value = IP_RATED_LIMIT_BUCKET_NAME
+                + ":{clientIp}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
+        public Response test() {
             return Response.status(Response.Status.CREATED).build();
         }
     }
@@ -149,6 +166,9 @@ class RateLimitE2ETest {
                 SINGLE_TRACING_OPS_LIMIT_VALUE, SINGLE_TRACING_OPS_DURATION_IN_SECONDS,
                 "You have exceeded the rate limit for single tracing operations. Please try again later.");
 
+        ipRatedLimit = new LimitConfig("Ip-Rated", IP_RATED_LIMIT_BUCKET_NAME, 1, 60,
+                "You have exceeded the rate limit for ip. Please try again later.");
+
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 AppContextConfig.builder()
                         .jdbcUrl(MYSQL.getJdbcUrl())
@@ -160,7 +180,8 @@ class RateLimitE2ETest {
                         .workspaceLimit(WORKSPACE_LIMIT)
                         .limitDurationInSeconds(LIMIT_DURATION_IN_SECONDS)
                         .customLimits(Map.of(CUSTOM_LIMIT, customLimit, GET_SPAN_ID_LIMIT, getSpanIdLimit,
-                                SINGLE_TRACING_OPS_LIMIT, singleTracingOpsLimit))
+                                SINGLE_TRACING_OPS_LIMIT, singleTracingOpsLimit, ipRatedLimit.userFacingBucketName(),
+                                ipRatedLimit))
                         .build());
     }
 
@@ -674,6 +695,36 @@ class RateLimitE2ETest {
 
             assertLimitHeaders(response, 1, CUSTOM_LIMIT, 1, customLimit);
         }
+    }
+
+    @Test
+    @DisplayName("Rate limit: When throttling per client IP on an unauthenticated endpoint, Then each source IP has its own bucket")
+    void rateLimit__whenThrottlingPerClientIp__thenEachSourceIpHasItsOwnBucket() {
+        String ipA = randomIp();
+        String ipB = randomIp();
+
+        // The first call from each source IP is allowed; the limit is 1 per IP
+        assertIpAllowed(ipA);
+        assertIpAllowed(ipB);
+
+        // A second call exhausts its own bucket and is throttled
+        try (var response = postIpRated(ipA)) {
+            assertLimitExceeded(response, ipRatedLimit);
+        }
+    }
+
+    private void assertIpAllowed(String clientIp) {
+        try (var response = postIpRated(clientIp)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
+        }
+    }
+
+    private Response postIpRated(String clientIp) {
+        return client.target("%s/v1/public/ip-rated".formatted(baseURI))
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(com.google.common.net.HttpHeaders.X_FORWARDED_FOR, clientIp)
+                .post(Entity.json(""));
     }
 
     @Test

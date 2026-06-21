@@ -40,7 +40,6 @@ class ExperimentItemBulkMapper {
 
                         if (span.traceId() == null && finalTrace != null) {
                             builder.traceId(finalTrace.id());
-                            builder.projectName(finalTrace.projectName());
                         }
 
                         return builder.build();

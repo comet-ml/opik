@@ -13,7 +13,6 @@ from ..errors.bad_request_error import BadRequestError
 from ..errors.not_found_error import NotFoundError
 from ..errors.too_many_requests_error import TooManyRequestsError
 from ..errors.unauthorized_error import UnauthorizedError
-from ..types.error_message import ErrorMessage
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -144,9 +143,9 @@ class RawOllieStateClient:
                 raise TooManyRequestsError(
                     headers=dict(_response.headers),
                     body=typing.cast(
-                        ErrorMessage,
+                        typing.Optional[typing.Any],
                         parse_obj_as(
-                            type_=ErrorMessage,  # type: ignore
+                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     ),
@@ -320,9 +319,9 @@ class AsyncRawOllieStateClient:
                 raise TooManyRequestsError(
                     headers=dict(_response.headers),
                     body=typing.cast(
-                        ErrorMessage,
+                        typing.Optional[typing.Any],
                         parse_obj_as(
-                            type_=ErrorMessage,  # type: ignore
+                            type_=typing.Optional[typing.Any],  # type: ignore
                             object_=_response.json(),
                         ),
                     ),

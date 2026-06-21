@@ -719,3 +719,56 @@ class TestIsolatedSubprocessExecutor:
             time_module.sleep(0.5)
         finally:
             Path(temp_file).unlink()
+
+
+# ============================================================================
+# _parse_last_json_line — edge case coverage
+# ============================================================================
+
+class TestParseLastJsonLine:
+    """Edge-case coverage for IsolatedSubprocessExecutor._parse_last_json_line."""
+
+    def test_returns_parsed_dict_for_single_valid_line(self):
+        result, err = IsolatedSubprocessExecutor._parse_last_json_line(
+            '{"status": "ok", "code": 200}'
+        )
+        assert result == {"status": "ok", "code": 200}
+        assert err is None
+
+    def test_picks_last_non_empty_line_when_multiple_lines(self):
+        stdout = 'log line 1\n{"earlier": true}\n{"final": "result"}\n'
+        result, err = IsolatedSubprocessExecutor._parse_last_json_line(stdout)
+        assert result == {"final": "result"}
+        assert err is None
+
+    def test_ignores_trailing_blank_lines(self):
+        stdout = '{"final": "result"}\n\n\n   \n'
+        result, err = IsolatedSubprocessExecutor._parse_last_json_line(stdout)
+        assert result == {"final": "result"}
+        assert err is None
+
+    def test_returns_error_for_empty_string(self):
+        result, err = IsolatedSubprocessExecutor._parse_last_json_line("")
+        assert result is None
+        assert err == "No output produced by subprocess"
+
+    def test_returns_error_for_whitespace_only(self):
+        result, err = IsolatedSubprocessExecutor._parse_last_json_line("   \n  \n")
+        assert result is None
+        assert err == "No output produced by subprocess"
+
+    def test_returns_error_when_last_line_is_invalid_json(self):
+        stdout = '{"valid": "earlier"}\nnot json at all'
+        result, err = IsolatedSubprocessExecutor._parse_last_json_line(stdout)
+        assert result is None
+        assert err is not None
+        assert "Invalid JSON response from subprocess" in err
+
+    def test_returns_non_dict_json_unchanged(self):
+        # Array on last line — parses successfully but callers may want to
+        # check isinstance(result, dict) before using. This documents that
+        # the helper does NOT enforce dict-shape; that's the caller's job.
+        stdout = '[1, 2, 3]'
+        result, err = IsolatedSubprocessExecutor._parse_last_json_line(stdout)
+        assert result == [1, 2, 3]
+        assert err is None

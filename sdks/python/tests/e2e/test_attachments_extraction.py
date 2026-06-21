@@ -483,12 +483,24 @@ def test_extraction__backend_reinjects_extracted_attachments(
     # Verify trace and span returned by backend has extracted attachments injected back into
     #
 
+    # The SDK consumes the `data:<mime>;base64,` prefix as part of the
+    # extraction match (OPIK-6608), so the placeholder replaces the whole data
+    # URI. On reinjection the backend only knows the raw base64 payload —
+    # round-trip strips the data URI prefix by design.
+    expected_trace_input = {
+        "image1": constants.PNG_BASE64,
+        "text": "regular text field",
+    }
+    expected_span_input = {
+        "image": constants.PNG_BASE64,
+    }
+
     # Verify trace
     verifiers.verify_trace(
         opik_client=opik_client,
         trace_id=trace.id,
         name="test-trace-backend_reinjects_extracted_attachments",
-        input=trace_input,
+        input=expected_trace_input,
         project_name=PROJECT_NAME,
     )
 
@@ -499,7 +511,7 @@ def test_extraction__backend_reinjects_extracted_attachments(
         parent_span_id=None,
         trace_id=trace_id,
         name="test-span--backend_reinjects_extracted_attachments",
-        input=span_input,
+        input=expected_span_input,
         project_name=PROJECT_NAME,
     )
 

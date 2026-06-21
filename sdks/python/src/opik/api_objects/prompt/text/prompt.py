@@ -69,8 +69,10 @@ class Prompt(base_prompt.BasePrompt):
         self._change_description = change_description
         self._tags = copy.copy(tags) if tags else []
         self._project_name = project_name
+        self._environments: Optional[List[str]] = None
 
         self._commit: Optional[str] = None
+        self._version: Optional[str] = None
         self.__internal_api__prompt_id__: Optional[str] = None
         self.__internal_api__version_id__: Optional[str] = None
         self._synced: bool = False
@@ -109,12 +111,14 @@ class Prompt(base_prompt.BasePrompt):
             )
 
             self._commit = prompt_version.commit
+            self._version = prompt_version.version_number
             self.__internal_api__prompt_id__ = prompt_version.prompt_id
             self.__internal_api__version_id__ = prompt_version.id
             # Update fields from backend response to ensure consistency
             self._id = prompt_version.id
             self._change_description = prompt_version.change_description
             self._tags = prompt_version.tags
+            self._environments = prompt_version.environments
             self._synced = True
             return True
         except (rest_api_core.ApiError, httpx.ConnectError, httpx.TimeoutException):
@@ -142,8 +146,19 @@ class Prompt(base_prompt.BasePrompt):
     @property
     @override
     def commit(self) -> Optional[str]:
-        """The commit hash of the prompt."""
+        """Legacy commit hash of the prompt version.
+
+        DEPRECATED — use :attr:`version` (e.g. ``"v3"``) instead. ``commit``
+        is no longer surfaced in the Opik UI and is kept only for backwards
+        compatibility with older SDK callers.
+        """
         return self._commit
+
+    @property
+    @override
+    def version(self) -> Optional[str]:
+        """The sequential version selector for the prompt (e.g. ``"v3"``)."""
+        return self._version
 
     @property
     @override
@@ -191,6 +206,12 @@ class Prompt(base_prompt.BasePrompt):
     def project_name(self) -> Optional[str]:
         """The name of the project this prompt belongs to."""
         return self._project_name
+
+    @property
+    @override
+    def environments(self) -> Optional[List[str]]:
+        """The environments that currently own this prompt version, or ``None`` if unowned."""
+        return copy.copy(self._environments) if self._environments is not None else None
 
     @override
     def format(self, **kwargs: Any) -> Union[str, List[Dict[str, Any]]]:
@@ -244,6 +265,9 @@ class Prompt(base_prompt.BasePrompt):
         if self.commit is not None:
             info_dict["version"]["commit"] = self.commit
 
+        if self.version is not None:
+            info_dict["version"]["version_number"] = self.version
+
         if self.__internal_api__version_id__ is not None:
             info_dict["version"]["id"] = self.__internal_api__version_id__
 
@@ -272,6 +296,7 @@ class Prompt(base_prompt.BasePrompt):
             or prompt_types.PromptType.MUSTACHE,
         )
         prompt._commit = prompt_version.commit
+        prompt._version = prompt_version.version_number
         prompt._metadata = prompt_version.metadata
         prompt._type = prompt_version.type
         prompt._id = prompt_version.id
@@ -281,5 +306,6 @@ class Prompt(base_prompt.BasePrompt):
         prompt._change_description = prompt_version.change_description
         prompt._tags = copy.copy(prompt_version.tags) if prompt_version.tags else []
         prompt._project_name = project_name
+        prompt._environments = prompt_version.environments
         prompt._synced = True
         return prompt

@@ -52,6 +52,24 @@ jobs:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
 
+      - name: Resolve published package name
+        if: ${{ env.IS_RELEASE }}
+        id: resolve_pkg_name
+        shell: bash
+        working-directory: sdks/typescript/src/opik/configure
+        run: |
+          # Derive from package.json so the preflight always probes the actual publish
+          # target, even if the package is renamed (e.g., opik-configure -> opik-ts).
+          PKG=$(node -p "require('./package.json').name")
+          echo "name=${PKG}" >> "$GITHUB_OUTPUT"
+
+      - name: NPM token preflight
+        if: ${{ env.IS_RELEASE }}
+        uses: ./.github/actions/npm-token-preflight
+        with:
+          npm_token: ${{ secrets.NPM_TOKEN }}
+          package_name: ${{ steps.resolve_pkg_name.outputs.name }}
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -129,16 +147,17 @@ jobs:
       - name: Workflow summary
         if: always()
         run: |
-          echo "## Workflow Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Version**: ${{ env.VERSION }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Is Release**: ${{ env.IS_RELEASE }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Triggered by**: @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+          exec >> "$GITHUB_STEP_SUMMARY"
+          echo "## Workflow Summary"
+          echo ""
+          echo "- **Version**: ${{ env.VERSION }}"
+          echo "- **Is Release**: ${{ env.IS_RELEASE }}"
+          echo "- **Branch**: ${{ github.ref_name }}"
+          echo "- **Triggered by**: @${{ github.actor }}"
+          echo ""
           if [ "${{ env.IS_RELEASE }}" == "true" ]; then
-            echo "✅ Package published to NPM: [opik-configure@${{ env.VERSION }}](https://www.npmjs.com/package/opik-configure/v/${{ env.VERSION }})" >> $GITHUB_STEP_SUMMARY
-            echo "✅ Git tag created: configure-v${{ env.VERSION }}" >> $GITHUB_STEP_SUMMARY
+            echo "✅ Package published to NPM: [opik-configure@${{ env.VERSION }}](https://www.npmjs.com/package/opik-configure/v/${{ env.VERSION }})"
+            echo "✅ Git tag created: configure-v${{ env.VERSION }}"
           else
-            echo "ℹ️ Dry run completed - no changes published" >> $GITHUB_STEP_SUMMARY
+            echo "ℹ️ Dry run completed - no changes published"
           fi

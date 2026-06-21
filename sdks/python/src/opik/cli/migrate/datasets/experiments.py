@@ -136,6 +136,12 @@ class _InnerProgress:
 
 _EXPERIMENT_PAGE_SIZE = 100
 
+# Cap the per-record ``sample_source_ids`` list so a pathological
+# all-items-missing case doesn't bloat the audit JSON. The count is
+# always recorded in full; the sample is only there to give an operator
+# enough breadcrumbs to investigate a few offending source ids.
+_SKIP_SAMPLE_LIMIT = 20
+
 # Buffer around the experiment's trace start/end times when bulk-fetching
 # spans via ``search_spans(from_time, to_time)``. Late-arriving spans
 # (the streamer is async; a span tied to a trace can land after the trace's
@@ -236,7 +242,6 @@ def cascade_experiments(
           ``{"id", "name", "reason"}`` entries for the audit log.
     """
     result = ExperimentCascadeResult()
-    del audit  # not currently used (umbrella action wraps via execute_plan_loop)
 
     # Default to an empty remap so callers that haven't picked up the
     # new kwarg (older tests, ad-hoc invocations) behave the same as
@@ -278,6 +283,7 @@ def cascade_experiments(
             item_id_remap=item_id_remap,
             optimization_id_remap=optimization_id_remap,
             result=result,
+            audit=audit,
             inner_progress_callback=inner_progress_callback,
         )
 
@@ -298,6 +304,7 @@ def cascade_one_experiment(
     item_id_remap: Dict[str, str],
     optimization_id_remap: Optional[Dict[str, str]] = None,
     result: ExperimentCascadeResult,
+    audit: Optional[AuditLog] = None,
     inner_progress_callback: Optional[InnerProgressCallback] = None,
 ) -> None:
     """Migrate one source experiment: read items -> copy traces + spans ->
@@ -449,16 +456,96 @@ def cascade_one_experiment(
                 "reason": "recreate_experiment returned False",
             }
         )
+        _record_skip(
+            audit,
+            reason="experiment_recreate_returned_false",
+            experiment_id=experiment_id,
+            experiment_name=source_experiment.name,
+            count=1,
+            sample_source_ids=[experiment_id],
+        )
 
     # Tally per-item skips visible after the recreate call. ``recreate_experiment``
     # prints its own skip counts but doesn't return them; we infer the two
     # mapping-miss totals by comparing source items against the remap entries
     # so the cascade-level audit counters stay accurate.
+    #
+    # Per-(experiment, reason) audit records are emitted at the end with
+    # the affected source ids (capped at ``_SKIP_SAMPLE_LIMIT``) so the
+    # CLI can fail loud with a machine-readable breakdown -- see OPIK-6599.
+    # Cap the per-reason sample lists during collection -- ``_record_skip``
+    # would slice them anyway, but trimming early bounds peak memory in
+    # the pathological case (e.g. 10k items all missing the same remap).
+    # ``count`` comes from the always-fully-incremented counters so the
+    # audit record carries the true total even when the sample is capped.
+    missing_trace_count = 0
+    missing_item_count = 0
+    missing_trace_sample: List[str] = []
+    missing_item_sample: List[str] = []
     for item in items:
         if item.trace_id and item.trace_id not in result.trace_id_remap:
             result.items_skipped_missing_trace += 1
+            missing_trace_count += 1
+            if len(missing_trace_sample) < _SKIP_SAMPLE_LIMIT:
+                missing_trace_sample.append(item.trace_id)
         if item.dataset_item_id and item.dataset_item_id not in item_id_remap:
             result.items_skipped_missing_item += 1
+            missing_item_count += 1
+            if len(missing_item_sample) < _SKIP_SAMPLE_LIMIT:
+                missing_item_sample.append(item.dataset_item_id)
+
+    if missing_trace_count:
+        _record_skip(
+            audit,
+            reason="items_missing_trace_remap",
+            experiment_id=experiment_id,
+            experiment_name=source_experiment.name,
+            count=missing_trace_count,
+            sample_source_ids=missing_trace_sample,
+        )
+    if missing_item_count:
+        _record_skip(
+            audit,
+            reason="items_missing_dataset_item_remap",
+            experiment_id=experiment_id,
+            experiment_name=source_experiment.name,
+            count=missing_item_count,
+            sample_source_ids=missing_item_sample,
+        )
+
+
+def _record_skip(
+    audit: Optional[AuditLog],
+    *,
+    reason: str,
+    experiment_id: str,
+    experiment_name: Optional[str],
+    count: int,
+    sample_source_ids: List[str],
+) -> None:
+    """Append a per-(experiment, reason) ``skip`` record to the audit log.
+
+    Sample ids are capped at ``_SKIP_SAMPLE_LIMIT`` so a pathological skip
+    (e.g. 10k items losing their dataset_item_id remap) doesn't balloon
+    the audit JSON. ``count`` is always the full population so a
+    machine-readable consumer can sum across records.
+
+    No-op when ``audit`` is ``None`` — keeps tests and ad-hoc invocations
+    that don't pass an audit log working as before.
+    """
+    if audit is None:
+        return
+    audit.record(
+        type="skip",
+        status="skipped",
+        details={
+            "reason": reason,
+            "experiment_id": experiment_id,
+            "experiment_name": experiment_name,
+            "count": count,
+            "sample_source_ids": sample_source_ids[:_SKIP_SAMPLE_LIMIT],
+        },
+    )
 
 
 def _list_source_experiments(
@@ -778,6 +865,7 @@ def _copy_traces_and_spans(
             thread_id=source_trace.thread_id,
             project_name=target_project_name,
             source=getattr(source_trace, "source", None) or "experiment",
+            environment=source_trace.environment,
         )
         if inner_progress is not None:
             inner_progress.tick(label=f"trace {index}/{total_traces}")
@@ -1429,6 +1517,7 @@ def _emit_spans_for_trace(
             total_cost=span_dict.get("total_estimated_cost"),
             last_updated_at=span_dict.get("last_updated_at"),
             source=span_dict.get("source") or "experiment",
+            environment=span_dict.get("environment"),
         )
         client._streamer.put(msg)
         spans_emitted += 1

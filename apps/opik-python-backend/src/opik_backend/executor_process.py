@@ -14,7 +14,12 @@ from typing import Optional
 
 from opentelemetry import metrics
 
-from opik_backend.executor import CodeExecutorBase
+from opik_backend.executor import (
+    CodeExecutorBase,
+    EXEC_TIMEOUT_ERROR,
+    SATURATED_ERROR,
+    SHUTDOWN_ERROR,
+)
 from opik_backend import process_worker
 
 logger = logging.getLogger(__name__)
@@ -228,6 +233,7 @@ class ProcessExecutor(CodeExecutorBase):
 
             worker = {'id': worker_id, 'process': process, 'connection': parent_conn}
             self.process_pool.put(worker)
+            self._update_pool_size_metric()
             latency = _calculate_latency_ms(start_time)
             process_creation_histogram.record(latency)
             logger.info(f"Created worker {worker_id} (PID: {process.pid}) in {latency:.3f}ms.")
@@ -242,26 +248,73 @@ class ProcessExecutor(CodeExecutorBase):
             if child_conn:
                 child_conn.close()
 
+    def _update_pool_size_metric(self):
+        process_pool_size_gauge.set(self.process_pool.qsize())
+
     def get_worker(self):
+        """Acquire a worker from the pool.
+
+        Single-pass: one queue read and one liveness check. Raises
+        :class:`TimeoutError` on saturation, executor shutdown, or when the
+        retrieved worker is dead. Dead-worker cleanup is dispatched
+        asynchronously so the request thread isn't held on the
+        SIGTERM/SIGKILL handshake; the caller retries via the same 503
+        path as saturation. ``run_scoring`` translates this into HTTP 503.
+        """
         if self.stop_event.is_set():
-            raise RuntimeError("Executor is shutting down")
+            raise TimeoutError(SHUTDOWN_ERROR)
+        self._update_pool_size_metric()
         try:
-            worker = self.process_pool.get(timeout=self.exec_timeout)
-            if not worker['process'].is_alive():
-                logger.warning(f"Got a dead worker {worker['id']} from pool. Terminating and retrying.")
-                terminate_worker(worker)
-                return self.get_worker()  # Retry
-            return worker
-        except Empty:
-            logger.error("Timeout getting a worker from the pool.")
-            raise RuntimeError("No available workers in the pool.")
+            worker = self.process_pool.get(timeout=self.pool_acquire_timeout)
+        except Empty as e:
+            # Detailed diagnostic stays in the log; the exception uses
+            # the wire-facing constant so internal config doesn't leak
+            # to downstream `str(exc)` consumers.
+            logger.warning(
+                f"Process pool exhausted: no worker available within "
+                f"{self.pool_acquire_timeout:.3f}s (max_parallel={self.max_parallel})"
+            )
+            # Refresh the gauge so the saturation event reports the
+            # zero-available state, not the pre-call value.
+            self._update_pool_size_metric()
+            raise TimeoutError(SATURATED_ERROR) from e
+        self._update_pool_size_metric()
+        if not worker['process'].is_alive():
+            logger.warning(
+                f"Dead worker {worker['id']} retrieved from pool; "
+                f"terminating asynchronously and surfacing as saturation"
+            )
+            self._async_terminate(worker)
+            raise TimeoutError(SATURATED_ERROR)
+        return worker
+
+    def _async_terminate(self, worker):
+        """Schedule worker termination off the request thread.
+
+        Falls back to inline termination when the releaser pool isn't up —
+        ``start_services`` hasn't run, e.g. in test fixtures or pre-init —
+        where the request thread isn't on the line and inline is fine.
+        """
+        if self.releaser_executor is not None:
+            self.releaser_executor.submit(terminate_worker, worker)
+        else:
+            terminate_worker(worker)
 
     def run_scoring(self, code: str, data: dict, payload_type: Optional[str] = None) -> dict:
         if self.stop_event.is_set():
-            return {"code": 503, "error": "Service is shutting down"}
-        worker = None
+            return {"code": 503, "error": SHUTDOWN_ERROR}
         try:
             worker = self.get_worker()
+        except TimeoutError:
+            # Re-check stop_event: a SIGTERM/SIGINT during the bounded
+            # Queue.get races into the TimeoutError branch, in which case
+            # the failure is really shutdown, not pool saturation. Report
+            # it as the former so monitoring doesn't false-positive on
+            # saturation.
+            if self.stop_event.is_set():
+                return {"code": 503, "error": SHUTDOWN_ERROR}
+            return {"code": 503, "error": SATURATED_ERROR}
+        try:
             worker_id = worker.get('id', 'unknown')
             connection = worker.get('connection')
             if not connection:
@@ -275,17 +328,22 @@ class ProcessExecutor(CodeExecutorBase):
                 result = connection.recv()
             else:
                 logger.error(f"Timeout waiting for result from worker {worker_id}")
-                # Terminate the worker as it's unresponsive
-                terminate_worker(worker)
-                return {"code": 500, "error": "Execution timed out"}
+                # Dispatch termination off the request thread so the
+                # SIGTERM/SIGKILL handshake doesn't block the caller.
+                self._async_terminate(worker)
+                # 504 (not 500) so Java BE's retry policy treats per-execution
+                # timeouts uniformly with the Docker executor.
+                return {"code": 504, "error": EXEC_TIMEOUT_ERROR}
 
             latency = _calculate_latency_ms(start_exec_time)
             process_execution_histogram.record(latency)
 
             self.process_pool.put(worker)  # Return worker to pool
+            self._update_pool_size_metric()
             return result
         except Exception as e:
-            logger.error(f"Error in run_scoring with worker {worker.get('id') if worker else 'N/A'}: {e}")
-            if worker:
-                terminate_worker(worker)  # Terminate failed worker
+            logger.error(f"Error in run_scoring with worker {worker.get('id', 'unknown')}: {e}")
+            # Dispatch termination off the request thread so the
+            # SIGTERM/SIGKILL handshake doesn't block the caller.
+            self._async_terminate(worker)
             return {"code": 500, "error": f"Failed to execute code: {e}"}

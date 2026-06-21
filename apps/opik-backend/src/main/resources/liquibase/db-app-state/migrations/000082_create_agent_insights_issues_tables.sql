@@ -1,0 +1,52 @@
+--liquibase formatted sql
+--changeset petrot:000082_create_agent_insights_issues_tables
+--comment: Agent Insights report results. One row per detected issue plus one row per issue x report_day with the daily metrics. Issues are upserted on their id so daily re-runs stay idempotent; status is owned by the user and never touched by the reporting agent.
+
+CREATE TABLE agent_insights_issues
+(
+    id              CHAR(36)                           NOT NULL,
+    workspace_id    VARCHAR(150)                       NOT NULL,
+    project_id      CHAR(36)                           NOT NULL,
+    status          ENUM ('open','resolved','closed')  NOT NULL DEFAULT 'open',
+    name            VARCHAR(255)                       NOT NULL,
+    description     TEXT                               NULL,
+    cause           TEXT                               NULL,
+    suggested_fix   TEXT                               NULL,
+    traces_query    TEXT                               NULL,
+    created_by      VARCHAR(255)                       NOT NULL DEFAULT 'admin',
+    created_at      TIMESTAMP(6)                       NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    last_updated_by VARCHAR(255)                       NOT NULL DEFAULT 'admin',
+    last_updated_at TIMESTAMP(6)                       NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+
+    PRIMARY KEY (id),
+    INDEX agent_insights_issues_workspace_project_idx (workspace_id, project_id)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4;
+
+CREATE TABLE agent_insights_issues_details
+(
+    id              CHAR(36)     NOT NULL,
+    issue_id        CHAR(36)     NOT NULL,
+    workspace_id    VARCHAR(150) NOT NULL,
+    project_id      CHAR(36)     NOT NULL,
+    count           BIGINT       NOT NULL DEFAULT 0,
+    total_count     BIGINT       NOT NULL DEFAULT 0,
+    users_impacted  BIGINT       NOT NULL DEFAULT 0,
+    total_users     BIGINT       NOT NULL DEFAULT 0,
+    metadata        TEXT         NULL,
+    report_day      DATE         NOT NULL,
+    created_by      VARCHAR(255) NOT NULL DEFAULT 'admin',
+    created_at      TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    last_updated_by VARCHAR(255) NOT NULL DEFAULT 'admin',
+    last_updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+
+    PRIMARY KEY (id),
+    -- "One record per issue per report_day"; the upsert target for daily report runs. report_day precedes issue_id so
+    -- this key also serves the time-window list query's report_day range scan, no separate index needed.
+    UNIQUE KEY agent_insights_issues_details_uk (workspace_id, project_id, report_day, issue_id)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4;
+
+--rollback DROP TABLE agent_insights_issues_details;
+--rollback DROP TABLE agent_insights_issues;
+

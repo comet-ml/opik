@@ -15,10 +15,8 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLException;
 import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 
-import static com.comet.opik.infrastructure.auth.RequestContext.SYSTEM_USER;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
@@ -41,19 +39,6 @@ public interface WorkspacesService {
      * created the trace).
      */
     boolean markFirstTraceReported(String workspaceId, String userName);
-
-    /**
-     * Idempotent: subsequent calls do not overwrite the original timestamp/reason. Audit columns
-     * are stamped with the system user — this is the migration job's call site, never a direct
-     * user action.
-     *
-     * @return {@code true} when this caller flipped the flag; {@code false} when it was already set
-     */
-    boolean markMigrationSkipped(String workspaceId, String reason);
-
-    List<String> findMigrationSkippedWorkspaceIds();
-
-    long countMigrationSkipped();
 
     /**
      * Returns whether the workspace has data in the legacy {@code feedback_scores} ClickHouse
@@ -106,7 +91,7 @@ class WorkspacesServiceImpl implements WorkspacesService {
      * <p>A duplicate-key on the INSERT does <b>not</b> mean another writer flipped
      * {@code first_trace_reported_at} — it just means the row exists. It might have been inserted
      * by an unrelated writer (version determination, migration job) that didn't touch the column.
-     * Retrying the UPDATE-if-null disambiguates: if the column is still NULL we flip it.</p>
+     * Retrying the UPDATE-if-null disambiguate: if the column is still NULL we flip it.</p>
      */
     @Override
     public boolean markFirstTraceReported(@NonNull String workspaceId, @NonNull String userName) {
@@ -127,44 +112,6 @@ class WorkspacesServiceImpl implements WorkspacesService {
                 throw exception;
             }
         });
-    }
-
-    /**
-     * Same UPDATE-then-INSERT-then-retry-UPDATE flow as {@link #markFirstTraceReported}, applied
-     * to the {@code migration_skipped_at} flag. Idempotent: returns {@code false} when this caller
-     * loses the race or the workspace was already trapped.
-     */
-    @Override
-    public boolean markMigrationSkipped(@NonNull String workspaceId, @NonNull String reason) {
-        return transactionTemplate.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(WorkspacesDAO.class);
-            var now = Instant.now();
-            if (dao.updateMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER) > 0) {
-                return true;
-            }
-            try {
-                dao.insertMigrationSkipped(workspaceId, now, reason, SYSTEM_USER);
-                return true;
-            } catch (UnableToExecuteStatementException exception) {
-                if (exception.getCause() instanceof SQLException sql
-                        && SQL_STATE_INTEGRITY_CONSTRAINT_VIOLATION.equals(sql.getSQLState())) {
-                    return dao.updateMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER) > 0;
-                }
-                throw exception;
-            }
-        });
-    }
-
-    @Override
-    public List<String> findMigrationSkippedWorkspaceIds() {
-        return transactionTemplate.inTransaction(READ_ONLY,
-                handle -> handle.attach(WorkspacesDAO.class).findMigrationSkippedWorkspaceIds());
-    }
-
-    @Override
-    public long countMigrationSkipped() {
-        return transactionTemplate.inTransaction(READ_ONLY,
-                handle -> handle.attach(WorkspacesDAO.class).countMigrationSkipped());
     }
 
     @Override

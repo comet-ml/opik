@@ -9,6 +9,7 @@ type UseCreateThreadCommentMutationParams = {
   threadId: string;
   projectId: string;
   text: string;
+  sourceQueueId?: string;
 };
 
 const useCreateThreadCommentMutation = () => {
@@ -19,10 +20,11 @@ const useCreateThreadCommentMutation = () => {
     mutationFn: async ({
       text,
       threadId,
+      sourceQueueId,
     }: UseCreateThreadCommentMutationParams) => {
       const { data } = await api.post(
         `${TRACES_REST_ENDPOINT}threads/${threadId}/comments`,
-        { text },
+        { text, source_queue_id: sourceQueueId },
       );
 
       return data;

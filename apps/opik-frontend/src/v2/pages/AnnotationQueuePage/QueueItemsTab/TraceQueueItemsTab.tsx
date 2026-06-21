@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   JsonParam,
   NumberParam,
@@ -74,7 +74,7 @@ import useTracesList from "@/api/traces/useTracesList";
 import { formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
-import { generateTracesURL } from "@/lib/annotation-queues";
+import useTraceThreadPanelsState from "@/v2/pages-shared/traces/useTraceThreadPanelsState";
 import useTracesStatistic from "@/api/traces/useTracesStatistic";
 import useAppStore from "@/store/AppStore";
 import { generateAnnotationQueueIdFilter } from "@/lib/filters";
@@ -384,6 +384,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
       search: search as string,
       truncate: truncationEnabled,
       stripAttachments: true,
+      annotationQueueId: annotationQueue.id,
     },
     {
       placeholderData: keepPreviousData,
@@ -482,36 +483,16 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
     return rows.filter((row) => rowSelection[row.id]);
   }, [rowSelection, rows]);
 
-  // TODO: Temporary workaround to open in new tab until sidebars are integrated in the page
-  const handleRowClick = useCallback(
-    (row: Trace) => {
-      if (!row) return;
-
-      const url = generateTracesURL(
-        workspaceName,
-        annotationQueue.project_id,
-        "traces",
-        row.id,
-      );
-      window.open(url, "_blank");
-    },
-    [workspaceName, annotationQueue.project_id],
-  );
-
-  const handleThreadIdClick = useCallback(
-    (row: Trace) => {
-      if (!row || !row.thread_id) return;
-
-      const url = generateTracesURL(
-        workspaceName,
-        annotationQueue.project_id,
-        "threads",
-        row.thread_id,
-      );
-      window.open(url, "_blank");
-    },
-    [workspaceName, annotationQueue.project_id],
-  );
+  const { traceId, handleRowClick, handleThreadIdClick, panels } =
+    useTraceThreadPanelsState<Trace>({
+      rows,
+      type: "trace",
+      traceDetailsPanelProps: { projectId: annotationQueue.project_id },
+      threadDetailsPanelProps: {
+        projectId: annotationQueue.project_id,
+        projectName: annotationQueue.project_name,
+      },
+    });
 
   const columns = useMemo(() => {
     const convertedColumns = convertColumnDataToColumn<Trace, Trace>(
@@ -631,6 +612,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
         columnsStatistic={columnsStatistic}
         data={rows}
         onRowClick={handleRowClick}
+        activeRowId={traceId}
         sortConfig={sortConfig}
         resizeConfig={resizeConfig}
         selectionConfig={{
@@ -681,6 +663,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
           truncationEnabled={truncationEnabled}
         />
       </PageBodyStickyContainer>
+      {panels}
     </>
   );
 };

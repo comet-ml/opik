@@ -1,5 +1,6 @@
 import React from "react";
 import { create } from "zustand";
+import { type AnyRoute } from "@tanstack/react-router";
 
 import WorkspacePreloader from "@/shared/WorkspacePreloader/WorkspacePreloader";
 import { GoogleColabCardCoreProps } from "@/types/shared";
@@ -7,6 +8,11 @@ import { InviteDevButtonProps } from "@/plugins/comet/InviteDevButton";
 import { SidebarInviteDevButtonProps } from "@/plugins/comet/SidebarInviteDevButton";
 import { CollaboratorsTabTriggerProps } from "@/plugins/comet/CollaboratorsTabTrigger";
 import { BridgeSurface } from "@/types/assistant-sidebar";
+import {
+  type PluginManifest,
+  type PluginRouteParents,
+  type PluginSidebarSection,
+} from "@/lib/plugins";
 
 type PluginStore = {
   UserMenu: React.ComponentType | null;
@@ -16,6 +22,7 @@ type PluginStore = {
   PermissionsProvider: React.ComponentType<{
     children: React.ReactNode;
   }> | null;
+  LayoutProvider: React.ComponentType<{ children: React.ReactNode }> | null;
   GoogleColabCard: React.ComponentType<GoogleColabCardCoreProps> | null;
   RetentionBanner: React.ComponentType<{
     onChangeHeight: (height: number) => void;
@@ -33,11 +40,14 @@ type PluginStore = {
   AssistantPrewarmer: React.ComponentType | null;
   AssistantDebugInfo: React.ComponentType | null;
   UpgradeButton: React.ComponentType | null;
+  BillingLink: React.ComponentType | null;
   init: unknown;
-  setupPlugins: (folderName: string) => Promise<void>;
+  collectRoutes: (parents: PluginRouteParents) => AnyRoute[];
+  sidebarSections: PluginSidebarSection[];
+  hasPlugin: (name: string) => boolean;
+  setupPlugins: () => Promise<void>;
 };
 
-const VALID_PLUGIN_FOLDER_NAMES = ["comet", "development"];
 const PLUGIN_NAMES = [
   "UserMenu",
   "InviteUsersForm",
@@ -45,6 +55,7 @@ const PLUGIN_NAMES = [
   "GoogleColabCard",
   "WorkspacePreloader",
   "PermissionsProvider",
+  "LayoutProvider",
   "RetentionBanner",
   "InviteDevButton",
   "SidebarInviteDevButton",
@@ -56,8 +67,31 @@ const PLUGIN_NAMES = [
   "AssistantPrewarmer",
   "AssistantDebugInfo",
   "UpgradeButton",
+  "BillingLink",
   "init",
 ];
+
+const ACTIVE_PLUGINS = (() => {
+  const configured = import.meta.env.VITE_FE_PLUGINS as string | undefined;
+  if (configured) {
+    return configured
+      .split(",")
+      .map((name) => name.trim())
+      .filter(Boolean);
+  }
+  return [import.meta.env.MODE];
+})();
+
+const manifestModules = import.meta.glob("../plugins/*/manifest.ts", {
+  eager: true,
+});
+
+const ACTIVE_MANIFESTS: PluginManifest[] = Object.values(manifestModules)
+  .map((mod) => (mod as { default?: PluginManifest }).default)
+  .filter(
+    (manifest): manifest is PluginManifest =>
+      Boolean(manifest) && ACTIVE_PLUGINS.includes(manifest!.name),
+  );
 
 const usePluginsStore = create<PluginStore>((set) => ({
   UserMenu: null,
@@ -66,6 +100,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   GoogleColabCard: null,
   WorkspacePreloader: null,
   PermissionsProvider: null,
+  LayoutProvider: null,
   RetentionBanner: null,
   InviteDevButton: null,
   SidebarInviteDevButton: null,
@@ -77,28 +112,38 @@ const usePluginsStore = create<PluginStore>((set) => ({
   AssistantPrewarmer: null,
   AssistantDebugInfo: null,
   UpgradeButton: null,
+  BillingLink: null,
   init: null,
-  setupPlugins: async (folderName: string) => {
-    if (!VALID_PLUGIN_FOLDER_NAMES.includes(folderName)) {
+  collectRoutes: (parents) =>
+    ACTIVE_MANIFESTS.flatMap((manifest) => manifest.routes?.(parents) ?? []),
+  sidebarSections: ACTIVE_MANIFESTS.map((manifest) => manifest.sidebar).filter(
+    (sidebar): sidebar is PluginSidebarSection => Boolean(sidebar),
+  ),
+  hasPlugin: (name) =>
+    ACTIVE_MANIFESTS.some((manifest) => manifest.name === name),
+  setupPlugins: async () => {
+    if (ACTIVE_PLUGINS.length === 0) {
       return set({ WorkspacePreloader });
     }
 
-    await Promise.all(
-      PLUGIN_NAMES.map(async (pluginName) => {
-        try {
-          // dynamic import does not support alias
-          const plugin = await import(
-            `../plugins/${folderName}/${pluginName}.tsx`
-          );
+    for (const folderName of ACTIVE_PLUGINS) {
+      await Promise.all(
+        PLUGIN_NAMES.map(async (pluginName) => {
+          try {
+            // dynamic import does not support alias
+            const plugin = await import(
+              `../plugins/${folderName}/${pluginName}.tsx`
+            );
 
-          if (plugin.default) {
-            set({ [pluginName]: plugin.default });
+            if (plugin.default) {
+              set({ [pluginName]: plugin.default });
+            }
+          } catch {
+            // plugin file is optional — swallow and continue
           }
-        } catch {
-          // plugin file is optional — swallow and continue
-        }
-      }),
-    );
+        }),
+      );
+    }
 
     // Ensure WorkspacePreloader is always set (fallback to default)
     if (!usePluginsStore.getState().WorkspacePreloader) {

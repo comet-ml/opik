@@ -11,6 +11,7 @@ export interface ServiceTogglesConfig {
     welcomeWizardEnabled: boolean;
     exportEnabled: boolean;
     optimizationStudioEnabled: boolean;
+    costIntelligenceEnabled: boolean;
     datasetVersioningEnabled: boolean;
     datasetExportEnabled: boolean;
     demoDataEnabled: boolean;
@@ -23,7 +24,9 @@ export interface ServiceTogglesConfig {
     customllmProviderEnabled: boolean;
     ollamaProviderEnabled: boolean;
     ollieEnabled: boolean;
-    agenticToolsEnabled?: boolean;
+    projectHomepageEnabled: boolean;
+    agenticToolsEnabled: boolean;
+    agentInsightsEnabled: boolean;
     v2WorkspaceAllowlistIds: string[];
     v1WorkspaceAllowlistIds: string[];
     forceWorkspaceVersion: string;

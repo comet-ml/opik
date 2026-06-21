@@ -12,10 +12,14 @@ import dev.langchain4j.model.openai.internal.shared.Usage;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mockito;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -103,6 +107,28 @@ public class AnthropicMappersTest {
                     .toCreateMessageRequest(request);
 
             assertThat(actual.maxTokens).isEqualTo(123);
+        }
+
+        @ParameterizedTest
+        @MethodSource("streamValues")
+        void toCreateMessage_mapsStreamWithNullDefaultingToFalse(Boolean input, boolean expected) {
+            var request = ChatCompletionRequest.builder()
+                    .model("claude-sonnet-4-6")
+                    .stream(input)
+                    .addUserMessage("hi")
+                    .build();
+
+            AnthropicCreateMessageRequest actual = LlmProviderAnthropicMapper.INSTANCE
+                    .toCreateMessageRequest(request);
+
+            assertThat(actual.stream).isEqualTo(expected);
+        }
+
+        static Stream<Arguments> streamValues() {
+            return Stream.of(
+                    Arguments.of(Boolean.TRUE, true),
+                    Arguments.of(Boolean.FALSE, false),
+                    Arguments.of(null, false));
         }
     }
 

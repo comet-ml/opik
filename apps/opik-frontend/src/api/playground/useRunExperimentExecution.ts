@@ -3,6 +3,7 @@ import get from "lodash/get";
 import api, { EXPERIMENT_EXECUTION_REST_ENDPOINT } from "@/api/api";
 import { sanitizeConfigForRequest } from "@/lib/modelUtils";
 import { snakeCaseObj } from "@/lib/utils";
+import { collectPromptVersionRefs } from "@/api/playground/promptLinkage";
 import { PlaygroundPromptType } from "@/types/playground";
 import { useToast } from "@/ui/use-toast";
 import { AxiosError } from "axios";
@@ -35,6 +36,11 @@ const runExperimentExecution = async ({
   projectName,
 }: UseRunExperimentExecutionParams): Promise<ExperimentExecutionResponse> => {
   const promptVariants = prompts.map((prompt) => {
+    const versionRefs = collectPromptVersionRefs(prompt);
+    const promptVersions = versionRefs.length
+      ? versionRefs.map((ref) => ({ id: ref.id, prompt_id: ref.promptId }))
+      : undefined;
+
     return {
       model: prompt.model,
       messages: prompt.messages.map((msg) => snakeCaseObj(msg)),
@@ -42,9 +48,7 @@ const runExperimentExecution = async ({
         prompt.model,
         prompt.configs as Record<string, unknown>,
       ),
-      prompt_versions: prompt.loadedChatPromptId
-        ? [{ id: prompt.loadedChatPromptId }]
-        : undefined,
+      prompt_versions: promptVersions,
     };
   });
 

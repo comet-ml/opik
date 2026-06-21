@@ -19,14 +19,17 @@ import com.comet.opik.api.filter.SpanField;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceThreadField;
 import com.comet.opik.api.sorting.SortingField;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import io.r2dbc.spi.Statement;
 import lombok.NonNull;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.stringtemplate.v4.ST;
+import ru.yandex.clickhouse.ClickHouseUtil;
 
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -35,6 +38,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
+import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.filter.Operator.NO_VALUE_OPERATORS;
@@ -118,6 +122,7 @@ public class FilterQueryBuilder {
     private static final String COMMIT_DB = "commit";
     private static final String TEMPLATE_DB = "template";
     private static final String CHANGE_DESCRIPTION_DB = "change_description";
+    private static final String VERSION_NUMBER_DB = "version_number";
 
     /**
      * Set of all feedback score fields across different entity types (Trace, Span, TraceThread, Experiment, etc.).
@@ -302,9 +307,11 @@ public class FilterQueryBuilder {
                             FieldType.ENUM,
                             "notEmpty(%1$s)")))
                     .put(Operator.IN, new EnumMap<>(Map.of(
-                            FieldType.ENUM, "%1$s IN :filter%2$d")))
+                            FieldType.ENUM, "%1$s IN :filter%2$d",
+                            FieldType.STRING_LIST, "%1$s IN :filter%2$d")))
                     .put(Operator.NOT_IN, new EnumMap<>(Map.of(
-                            FieldType.ENUM, "%1$s NOT IN :filter%2$d")))
+                            FieldType.ENUM, "%1$s NOT IN :filter%2$d",
+                            FieldType.STRING_LIST, "%1$s NOT IN :filter%2$d")))
                     .build());
 
     private static final Map<TraceField, String> TRACE_FIELDS_MAP = new EnumMap<>(
@@ -335,6 +342,7 @@ public class FilterQueryBuilder {
                     .put(TraceField.ERROR_TYPE, ERROR_TYPE_DB)
                     .put(TraceField.ANNOTATION_QUEUE_IDS, ANNOTATION_QUEUE_IDS_ANALYTICS_DB)
                     .put(TraceField.EXPERIMENT_ID, EXPERIMENT_ID_DB)
+                    .put(TraceField.EXPERIMENT_IDS, EXPERIMENT_ID_DB)
                     .put(TraceField.CREATED_AT, CREATED_AT_DB)
                     .put(TraceField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
                     .put(TraceField.SOURCE, SOURCE_DB)
@@ -366,6 +374,8 @@ public class FilterQueryBuilder {
                     .put(SpanField.NAME, NAME_DB)
                     .put(SpanField.START_TIME, START_TIME_ANALYTICS_DB)
                     .put(SpanField.END_TIME, END_TIME_ANALYTICS_DB)
+                    .put(SpanField.CREATED_AT, CREATED_AT_DB)
+                    .put(SpanField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
                     .put(SpanField.INPUT, INPUT_ANALYTICS_DB)
                     .put(SpanField.OUTPUT, OUTPUT_ANALYTICS_DB)
                     .put(SpanField.INPUT_JSON, INPUT_ANALYTICS_DB)
@@ -424,6 +434,7 @@ public class FilterQueryBuilder {
     private static final Map<PromptVersionField, String> PROMPT_VERSION_FIELDS_MAP = Map.ofEntries(
             Map.entry(PromptVersionField.ID, ID_DB),
             Map.entry(PromptVersionField.COMMIT, COMMIT_DB),
+            Map.entry(PromptVersionField.VERSION_NUMBER, VERSION_NUMBER_DB),
             Map.entry(PromptVersionField.TEMPLATE, TEMPLATE_DB),
             Map.entry(PromptVersionField.CHANGE_DESCRIPTION, CHANGE_DESCRIPTION_DB),
             Map.entry(PromptVersionField.METADATA, METADATA_ANALYTICS_DB),
@@ -550,6 +561,8 @@ public class FilterQueryBuilder {
                 TraceField.NAME,
                 TraceField.START_TIME,
                 TraceField.END_TIME,
+                TraceField.CREATED_AT,
+                TraceField.LAST_UPDATED_AT,
                 TraceField.INPUT,
                 TraceField.OUTPUT,
                 TraceField.INPUT_JSON,
@@ -569,7 +582,8 @@ public class FilterQueryBuilder {
                 TraceThreadField.ENVIRONMENT));
 
         map.put(FilterStrategy.EXPERIMENT_AGGREGATION, Set.of(
-                TraceField.EXPERIMENT_ID));
+                TraceField.EXPERIMENT_ID,
+                TraceField.EXPERIMENT_IDS));
 
         map.put(FilterStrategy.TRACE_AGGREGATION, Set.of(
                 TraceField.USAGE_COMPLETION_TOKENS,
@@ -587,6 +601,8 @@ public class FilterQueryBuilder {
                 SpanField.NAME,
                 SpanField.START_TIME,
                 SpanField.END_TIME,
+                SpanField.CREATED_AT,
+                SpanField.LAST_UPDATED_AT,
                 SpanField.INPUT,
                 SpanField.OUTPUT,
                 SpanField.INPUT_JSON,
@@ -652,6 +668,7 @@ public class FilterQueryBuilder {
         map.put(FilterStrategy.PROMPT_VERSION, Set.of(
                 PromptVersionField.ID,
                 PromptVersionField.COMMIT,
+                PromptVersionField.VERSION_NUMBER,
                 PromptVersionField.TEMPLATE,
                 PromptVersionField.CHANGE_DESCRIPTION,
                 PromptVersionField.TYPE,
@@ -857,6 +874,17 @@ public class FilterQueryBuilder {
                 : Optional.of("(%s)".formatted(analyticsDbFilters));
     }
 
+    /**
+     * V2-client entry point that mirrors {@link #toAnalyticsDbFilters} but emits placeholders
+     * in the v2 ClickHouse client's {@code {name:Type}} form instead of the r2dbc {@code :name}
+     * form. Pair with {@link #populateV2ClientParams} for the matching parameter binding.
+     */
+    public static Optional<String> toAnalyticsDbFiltersV2Client(
+            @NonNull List<? extends Filter> filters, @NonNull FilterStrategy filterStrategy) {
+        return toAnalyticsDbFilters(filters, filterStrategy)
+                .map(sql -> rewritePlaceholdersForV2Client(sql, filters));
+    }
+
     private static Optional<Set<? extends Field>> getFieldsByStrategy(FilterStrategy filterStrategy, Filter filter) {
         // we want to apply the is empty filter only in the case below
         if (filter.operator() == Operator.IS_EMPTY && filterStrategy == FilterStrategy.FEEDBACK_SCORES_IS_EMPTY) {
@@ -1030,6 +1058,44 @@ public class FilterQueryBuilder {
             @NonNull Statement statement,
             @NonNull List<? extends Filter> filters,
             @NonNull FilterStrategy filterStrategy) {
+        bindUsing(statement::bind, filters, filterStrategy);
+        return statement;
+    }
+
+    /**
+     * V2-client entry point: produces the same filter parameters as
+     * {@link #bind(Statement, List, FilterStrategy)} but populates a {@code Map<String, Object>}
+     * for the v2 ClickHouse client's {@code query(sql, params, settings)} API instead of binding
+     * to a {@link Statement}.
+     *
+     * <p>Multi-value operator values are pre-rendered as a ClickHouse array literal string
+     * (e.g. {@code ['a','b']}) because the v2 client serialises Map values via
+     * {@code String.valueOf}, which would otherwise emit an unquoted Java array {@code [a, b]}.
+     *
+     * <p>Pair with {@link #toAnalyticsDbFiltersV2Client} for the matching SQL fragment.
+     */
+    public static void populateV2ClientParams(
+            @NonNull Map<String, Object> params,
+            @NonNull List<? extends Filter> filters,
+            @NonNull FilterStrategy filterStrategy) {
+        bindUsing((name, value) -> {
+            if (value instanceof String[] arr) {
+                params.put(name, formatStringArrayLiteral(Arrays.asList(arr)));
+            } else {
+                params.put(name, value);
+            }
+        }, filters, filterStrategy);
+    }
+
+    /**
+     * Core binding logic shared by the r2dbc {@link Statement} and the v2-client
+     * {@code Map<String, Object>} entry points above. Iterates filters and emits param
+     * (name, value) pairs through the supplied {@code binder}.
+     */
+    private static void bindUsing(
+            @NonNull BiConsumer<String, Object> binder,
+            @NonNull List<? extends Filter> filters,
+            @NonNull FilterStrategy filterStrategy) {
         for (var i = 0; i < filters.size(); i++) {
             var filter = filters.get(i);
             if (getFieldsByStrategy(filterStrategy, filter).orElse(Set.of()).contains(filter.field())
@@ -1045,46 +1111,97 @@ public class FilterQueryBuilder {
                         String jsonKey = fieldName.substring(firstDot + 1);
                         String jsonPath = JSONPATH_ROOT + "." + jsonKey;
 
-                        statement = statement.bind("dynamicJsonPath%d".formatted(i), jsonPath);
+                        binder.accept("dynamicJsonPath%d".formatted(i), jsonPath);
                     } else if (filterStrategy == FilterStrategy.DATASET_ITEM && fieldName.contains(".")) {
                         // For DATASET_ITEM, fields like "data.expected_answer" map to data['expected_answer']
                         // Extract the key name (the part after the first dot) and bind it
                         int firstDot = fieldName.indexOf('.');
                         String keyName = fieldName.substring(firstDot + 1);
 
-                        statement = statement.bind("dynamicField%d".formatted(i), keyName);
+                        binder.accept("dynamicField%d".formatted(i), keyName);
                     } else if (filterStrategy == FilterStrategy.PROMPT_VERSION && fieldName.contains(".")) {
                         var jsonPath = getStateSQLJsonPath(fieldName);
-                        statement = statement.bind("dynamicJsonPath%d".formatted(i), jsonPath);
+                        binder.accept("dynamicJsonPath%d".formatted(i), jsonPath);
                     } else {
                         // Default dynamic field binding for other strategies
-                        statement = statement.bind("dynamicField%d".formatted(i), fieldName);
+                        binder.accept("dynamicField%d".formatted(i), fieldName);
                     }
                 }
 
                 if (!NO_VALUE_OPERATORS.contains(filter.operator())) {
                     if (Operator.MULTI_VALUE_OPERATORS.contains(filter.operator())) {
-                        // Comma-separated values for ENUM IN/NOT_IN; bind as String[].
+                        // Comma-separated values for IN/NOT_IN (ENUM, STRING_LIST); bind as String[].
                         // Trim and drop empty tokens defensively against stray whitespace
                         // or trailing commas in client input.
-                        statement.bind("filter%d".formatted(i),
+                        binder.accept("filter%d".formatted(i),
                                 Arrays.stream(filter.value().split(","))
                                         .map(String::trim)
                                         .filter(StringUtils::isNotEmpty)
                                         .toArray(String[]::new));
                     } else {
-                        statement.bind("filter%d".formatted(i), filter.value());
+                        binder.accept("filter%d".formatted(i), filter.value());
                     }
                 }
 
                 if (StringUtils.isNotBlank(filter.key())
                         && KEY_SUPPORTED_FIELDS_SET.contains(filter.field().getType())) {
                     var key = getKey(filter);
-                    statement = statement.bind("filterKey%d".formatted(i), key);
+                    binder.accept("filterKey%d".formatted(i), key);
                 }
             }
         }
-        return statement;
+    }
+
+    /**
+     * Rewrites the r2dbc-style {@code :name} placeholders emitted by
+     * {@link #toAnalyticsDbFilters} into the v2 ClickHouse client's {@code {name:Type}}
+     * form. Multi-value operators ({@code IN}, {@code NOT_IN}) are typed as
+     * {@code Array(String)}; everything else as {@code String}.
+     *
+     * <p>Iteration order goes from the highest filter index to the lowest so that
+     * substring overlaps like {@code :filter1} inside {@code :filter12} resolve to the
+     * longer name first.
+     *
+     * <p>{@link #toAnalyticsDbFiltersV2Client} is the public entry point that bundles this
+     * rewrite with the SQL generation; this method is exposed only for direct unit testing.
+     *
+     * @param sql     SQL fragment containing {@code :name} placeholders
+     * @param filters filters that were used to build {@code sql}; their order determines
+     *                the param indices ({@code :filter0}, {@code :filter1}, …)
+     */
+    @VisibleForTesting
+    static String rewritePlaceholdersForV2Client(@NonNull String sql, @NonNull List<? extends Filter> filters) {
+        String out = sql;
+        for (int i = filters.size() - 1; i >= 0; i--) {
+            Filter filter = filters.get(i);
+            String filterType = Operator.MULTI_VALUE_OPERATORS.contains(filter.operator())
+                    ? "Array(String)"
+                    : "String";
+            out = out.replace(":dynamicJsonPath" + i, "{dynamicJsonPath" + i + ":String}");
+            out = out.replace(":dynamicField" + i, "{dynamicField" + i + ":String}");
+            out = out.replace(":filterKey" + i, "{filterKey" + i + ":String}");
+            out = out.replace(":filter" + i, "{filter" + i + ":" + filterType + "}");
+        }
+        return out;
+    }
+
+    /**
+     * Renders a collection of strings as a ClickHouse array literal, e.g. {@code ['a','b']}.
+     * Use when binding an {@code Array(String)} parameter to the v2 ClickHouse client, which
+     * serialises Map values via {@code String.valueOf} and would otherwise emit an unquoted
+     * Java array {@code [a, b]} that the server rejects.
+     *
+     * <p>Per-element escaping delegates to {@link ClickHouseUtil#escape(String)}, the upstream
+     * ClickHouse JDBC helper that handles the full C-style escape set the server accepts
+     * (backslash, single-quote, backtick, newline, tab, etc.). This closes injection vectors
+     * like {@code x';DROP TABLE...} and {@code x\';...} by emitting {@code \'} and {@code \\}.
+     *
+     * @throws NullPointerException if {@code values} is null
+     */
+    public static String formatStringArrayLiteral(@NonNull Collection<@NonNull String> values) {
+        return values.stream()
+                .map(value -> "'" + ClickHouseUtil.escape(value) + "'")
+                .collect(Collectors.joining(",", "[", "]"));
     }
 
     /**

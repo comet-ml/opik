@@ -8,6 +8,11 @@ export enum PROMPT_TYPE {
   JINJA2 = "jinja2",
 }
 
+export enum PROMPT_VERSION_TYPE {
+  PROMPT_VERSION = "prompt_version",
+  MASK = "mask",
+}
+
 export enum PROMPT_VERSION_ACTION {
   NO_ACTION = "no_action",
   UPDATE_BLUEPRINT = "update_blueprint",
@@ -34,11 +39,14 @@ export interface PromptVersion {
   template: string;
   metadata: object;
   commit: string;
+  version_number?: string;
   change_description?: string;
   prompt_id: string;
   created_at: string;
   tags?: string[];
   type?: PROMPT_TYPE;
+  version_type?: PROMPT_VERSION_TYPE;
+  environments?: string[] | null;
 }
 
 export interface PromptCommitInfo {

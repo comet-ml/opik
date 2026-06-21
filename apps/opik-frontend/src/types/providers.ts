@@ -96,12 +96,14 @@ export enum PROVIDER_MODEL_TYPE {
 
   //  <----- anthropic
   CLAUDE_SONNET_3_7 = "claude-3-7-sonnet-20250219",
+  CLAUDE_FABLE_5 = "claude-fable-5",
   CLAUDE_HAIKU_4_5 = "claude-haiku-4-5-20251001",
   CLAUDE_OPUS_4_1 = "claude-opus-4-1-20250805",
   CLAUDE_OPUS_4 = "claude-opus-4-20250514",
   CLAUDE_OPUS_4_5 = "claude-opus-4-5-20251101",
   CLAUDE_OPUS_4_6 = "claude-opus-4-6",
   CLAUDE_OPUS_4_7 = "claude-opus-4-7",
+  CLAUDE_OPUS_4_8 = "claude-opus-4-8",
   CLAUDE_SONNET_4 = "claude-sonnet-4-20250514",
   CLAUDE_SONNET_4_5 = "claude-sonnet-4-5",
   CLAUDE_SONNET_4_5_20250929 = "claude-sonnet-4-5-20250929",
@@ -136,6 +138,7 @@ export enum PROVIDER_MODEL_TYPE {
   ANTHROPIC_CLAUDE_3_5_SONNET = "anthropic/claude-3.5-sonnet",
   ANTHROPIC_CLAUDE_3_7_SONNET = "anthropic/claude-3.7-sonnet",
   ANTHROPIC_CLAUDE_3_7_SONNET_THINKING = "anthropic/claude-3.7-sonnet:thinking",
+  ANTHROPIC_CLAUDE_FABLE_5 = "anthropic/claude-fable-5",
   ANTHROPIC_CLAUDE_HAIKU_4_5 = "anthropic/claude-haiku-4.5",
   ANTHROPIC_CLAUDE_OPUS_4 = "anthropic/claude-opus-4",
   ANTHROPIC_CLAUDE_OPUS_4_1 = "anthropic/claude-opus-4.1",
@@ -144,6 +147,8 @@ export enum PROVIDER_MODEL_TYPE {
   ANTHROPIC_CLAUDE_OPUS_4_6_FAST = "anthropic/claude-opus-4.6-fast",
   ANTHROPIC_CLAUDE_OPUS_4_7 = "anthropic/claude-opus-4.7",
   ANTHROPIC_CLAUDE_OPUS_4_7_FAST = "anthropic/claude-opus-4.7-fast",
+  ANTHROPIC_CLAUDE_OPUS_4_8 = "anthropic/claude-opus-4.8",
+  ANTHROPIC_CLAUDE_OPUS_4_8_FAST = "anthropic/claude-opus-4.8-fast",
   ANTHROPIC_CLAUDE_SONNET_4 = "anthropic/claude-sonnet-4",
   ANTHROPIC_CLAUDE_SONNET_4_5 = "anthropic/claude-sonnet-4.5",
   ANTHROPIC_CLAUDE_SONNET_4_6 = "anthropic/claude-sonnet-4.6",
@@ -178,6 +183,7 @@ export enum PROVIDER_MODEL_TYPE {
   COHERE_COMMAND_R_08_2024 = "cohere/command-r-08-2024",
   COHERE_COMMAND_R_PLUS_08_2024 = "cohere/command-r-plus-08-2024",
   COHERE_COMMAND_R7B_12_2024 = "cohere/command-r7b-12-2024",
+  COHERE_NORTH_MINI_CODE_FREE = "cohere/north-mini-code:free",
   DEEPCOGITO_COGITO_V2_PREVIEW_DEEPSEEK_671B = "deepcogito/cogito-v2-preview-deepseek-671b",
   DEEPCOGITO_COGITO_V2_PREVIEW_LLAMA_109B_MOE = "deepcogito/cogito-v2-preview-llama-109b-moe",
   DEEPCOGITO_COGITO_V2_PREVIEW_LLAMA_405B = "deepcogito/cogito-v2-preview-llama-405b",
@@ -221,13 +227,16 @@ export enum PROVIDER_MODEL_TYPE {
   GOOGLE_GEMINI_2_5_PRO_PREVIEW = "google/gemini-2.5-pro-preview",
   GOOGLE_GEMINI_2_5_PRO_PREVIEW_05_06 = "google/gemini-2.5-pro-preview-05-06",
   GOOGLE_GEMINI_3_FLASH_PREVIEW = "google/gemini-3-flash-preview",
+  GOOGLE_GEMINI_3_PRO_IMAGE = "google/gemini-3-pro-image",
   GOOGLE_GEMINI_3_PRO_IMAGE_PREVIEW = "google/gemini-3-pro-image-preview",
   GOOGLE_GEMINI_3_PRO_PREVIEW = "google/gemini-3-pro-preview",
+  GOOGLE_GEMINI_3_1_FLASH_IMAGE = "google/gemini-3.1-flash-image",
   GOOGLE_GEMINI_3_1_FLASH_IMAGE_PREVIEW = "google/gemini-3.1-flash-image-preview",
   GOOGLE_GEMINI_3_1_FLASH_LITE = "google/gemini-3.1-flash-lite",
   GOOGLE_GEMINI_3_1_FLASH_LITE_PREVIEW = "google/gemini-3.1-flash-lite-preview",
   GOOGLE_GEMINI_3_1_PRO_PREVIEW = "google/gemini-3.1-pro-preview",
   GOOGLE_GEMINI_3_1_PRO_PREVIEW_CUSTOMTOOLS = "google/gemini-3.1-pro-preview-customtools",
+  GOOGLE_GEMINI_3_5_FLASH = "google/gemini-3.5-flash",
   GOOGLE_GEMMA_2_27B_IT = "google/gemma-2-27b-it",
   GOOGLE_GEMMA_2_9B_IT = "google/gemma-2-9b-it",
   GOOGLE_GEMMA_3_12B_IT = "google/gemma-3-12b-it",
@@ -307,6 +316,7 @@ export enum PROVIDER_MODEL_TYPE {
   MINIMAX_MINIMAX_M2_5 = "minimax/minimax-m2.5",
   MINIMAX_MINIMAX_M2_5_FREE = "minimax/minimax-m2.5:free",
   MINIMAX_MINIMAX_M2_7 = "minimax/minimax-m2.7",
+  MINIMAX_MINIMAX_M3 = "minimax/minimax-m3",
   MISTRALAI_CODESTRAL_2501 = "mistralai/codestral-2501",
   MISTRALAI_CODESTRAL_2508 = "mistralai/codestral-2508",
   MISTRALAI_DEVSTRAL_2512 = "mistralai/devstral-2512",
@@ -358,6 +368,8 @@ export enum PROVIDER_MODEL_TYPE {
   MOONSHOTAI_KIMI_K2_THINKING = "moonshotai/kimi-k2-thinking",
   MOONSHOTAI_KIMI_K2_5 = "moonshotai/kimi-k2.5",
   MOONSHOTAI_KIMI_K2_6 = "moonshotai/kimi-k2.6",
+  MOONSHOTAI_KIMI_K2_6_FREE = "moonshotai/kimi-k2.6:free",
+  MOONSHOTAI_KIMI_K2_7_CODE = "moonshotai/kimi-k2.7-code",
   MOONSHOTAI_KIMI_K2_FREE = "moonshotai/kimi-k2:free",
   MOONSHOTAI_KIMI_LINEAR_48B_A3B_INSTRUCT = "moonshotai/kimi-linear-48b-a3b-instruct",
   MORPH_MORPH_V3_FAST = "morph/morph-v3-fast",
@@ -365,6 +377,7 @@ export enum PROVIDER_MODEL_TYPE {
   NEVERSLEEP_LLAMA_3_1_LUMIMAID_8B = "neversleep/llama-3.1-lumimaid-8b",
   NEVERSLEEP_NOROMAID_20B = "neversleep/noromaid-20b",
   NEX_AGI_DEEPSEEK_V3_1_NEX_N1 = "nex-agi/deepseek-v3.1-nex-n1",
+  NEX_AGI_NEX_N2_PRO_FREE = "nex-agi/nex-n2-pro:free",
   NOUSRESEARCH_DEEPHERMES_3_MISTRAL_24B_PREVIEW = "nousresearch/deephermes-3-mistral-24b-preview",
   NOUSRESEARCH_HERMES_2_PRO_LLAMA_3_8B = "nousresearch/hermes-2-pro-llama-3-8b",
   NOUSRESEARCH_HERMES_3_LLAMA_3_1_405B = "nousresearch/hermes-3-llama-3.1-405b",
@@ -380,6 +393,9 @@ export enum PROVIDER_MODEL_TYPE {
   NVIDIA_NEMOTRON_3_NANO_OMNI_30B_A3B_REASONING_FREE = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
   NVIDIA_NEMOTRON_3_SUPER_120B_A12B = "nvidia/nemotron-3-super-120b-a12b",
   NVIDIA_NEMOTRON_3_SUPER_120B_A12B_FREE = "nvidia/nemotron-3-super-120b-a12b:free",
+  NVIDIA_NEMOTRON_3_ULTRA_550B_A55B = "nvidia/nemotron-3-ultra-550b-a55b",
+  NVIDIA_NEMOTRON_3_ULTRA_550B_A55B_FREE = "nvidia/nemotron-3-ultra-550b-a55b:free",
+  NVIDIA_NEMOTRON_3_5_CONTENT_SAFETY_FREE = "nvidia/nemotron-3.5-content-safety:free",
   NVIDIA_NEMOTRON_NANO_12B_V2_VL = "nvidia/nemotron-nano-12b-v2-vl",
   NVIDIA_NEMOTRON_NANO_12B_V2_VL_FREE = "nvidia/nemotron-nano-12b-v2-vl:free",
   NVIDIA_NEMOTRON_NANO_9B_V2 = "nvidia/nemotron-nano-9b-v2",
@@ -459,6 +475,7 @@ export enum PROVIDER_MODEL_TYPE {
   OPENROUTER_BODYBUILDER = "openrouter/bodybuilder",
   OPENROUTER_ELEPHANT_ALPHA = "openrouter/elephant-alpha",
   OPENROUTER_FREE = "openrouter/free",
+  OPENROUTER_FUSION = "openrouter/fusion",
   OPENROUTER_HEALER_ALPHA = "openrouter/healer-alpha",
   OPENROUTER_HUNTER_ALPHA = "openrouter/hunter-alpha",
   OPENROUTER_OWL_ALPHA = "openrouter/owl-alpha",
@@ -470,7 +487,9 @@ export enum PROVIDER_MODEL_TYPE {
   PERPLEXITY_SONAR_PRO_SEARCH = "perplexity/sonar-pro-search",
   PERPLEXITY_SONAR_REASONING = "perplexity/sonar-reasoning",
   PERPLEXITY_SONAR_REASONING_PRO = "perplexity/sonar-reasoning-pro",
+  POOLSIDE_LAGUNA_M_1 = "poolside/laguna-m.1",
   POOLSIDE_LAGUNA_M_1_FREE = "poolside/laguna-m.1:free",
+  POOLSIDE_LAGUNA_XS_2 = "poolside/laguna-xs.2",
   POOLSIDE_LAGUNA_XS_2_FREE = "poolside/laguna-xs.2:free",
   PRIME_INTELLECT_INTELLECT_3 = "prime-intellect/intellect-3",
   QWEN_QWEN_2_5_72B_INSTRUCT = "qwen/qwen-2.5-72b-instruct",
@@ -537,6 +556,8 @@ export enum PROVIDER_MODEL_TYPE {
   QWEN_QWEN3_6_PLUS = "qwen/qwen3.6-plus",
   QWEN_QWEN3_6_PLUS_PREVIEW_FREE = "qwen/qwen3.6-plus-preview:free",
   QWEN_QWEN3_6_PLUS_FREE = "qwen/qwen3.6-plus:free",
+  QWEN_QWEN3_7_MAX = "qwen/qwen3.7-max",
+  QWEN_QWEN3_7_PLUS = "qwen/qwen3.7-plus",
   QWEN_QWQ_32B = "qwen/qwq-32b",
   RAIFLE_SORCERERLM_8X22B = "raifle/sorcererlm-8x22b",
   REKA_REKA_EDGE = "reka/reka-edge",
@@ -552,6 +573,7 @@ export enum PROVIDER_MODEL_TYPE {
   STEPFUN_AI_STEP3 = "stepfun-ai/step3",
   STEPFUN_STEP_3_5_FLASH = "stepfun/step-3.5-flash",
   STEPFUN_STEP_3_5_FLASH_FREE = "stepfun/step-3.5-flash:free",
+  STEPFUN_STEP_3_7_FLASH = "stepfun/step-3.7-flash",
   SWITCHPOINT_ROUTER = "switchpoint/router",
   TENCENT_HUNYUAN_A13B_INSTRUCT = "tencent/hunyuan-a13b-instruct",
   TENCENT_HY3_PREVIEW = "tencent/hy3-preview",
@@ -582,6 +604,7 @@ export enum PROVIDER_MODEL_TYPE {
   X_AI_GROK_4_20_MULTI_AGENT = "x-ai/grok-4.20-multi-agent",
   X_AI_GROK_4_20_MULTI_AGENT_BETA = "x-ai/grok-4.20-multi-agent-beta",
   X_AI_GROK_4_3 = "x-ai/grok-4.3",
+  X_AI_GROK_BUILD_0_1 = "x-ai/grok-build-0.1",
   X_AI_GROK_CODE_FAST_1 = "x-ai/grok-code-fast-1",
   XIAOMI_MIMO_V2_FLASH = "xiaomi/mimo-v2-flash",
   XIAOMI_MIMO_V2_OMNI = "xiaomi/mimo-v2-omni",
@@ -601,7 +624,9 @@ export enum PROVIDER_MODEL_TYPE {
   Z_AI_GLM_5 = "z-ai/glm-5",
   Z_AI_GLM_5_TURBO = "z-ai/glm-5-turbo",
   Z_AI_GLM_5_1 = "z-ai/glm-5.1",
+  Z_AI_GLM_5_2 = "z-ai/glm-5.2",
   Z_AI_GLM_5V_TURBO = "z-ai/glm-5v-turbo",
+  ANTHROPIC_CLAUDE_FABLE_LATEST = "~anthropic/claude-fable-latest",
   ANTHROPIC_CLAUDE_HAIKU_LATEST = "~anthropic/claude-haiku-latest",
   ANTHROPIC_CLAUDE_OPUS_LATEST = "~anthropic/claude-opus-latest",
   ANTHROPIC_CLAUDE_SONNET_LATEST = "~anthropic/claude-sonnet-latest",
@@ -623,20 +648,23 @@ export enum PROVIDER_MODEL_TYPE {
   GEMINI_2_5_FLASH_LITE = "gemini-2.5-flash-lite",
   GEMINI_2_5_PRO = "gemini-2.5-pro",
   GEMINI_3_FLASH = "gemini-3-flash-preview",
+  GEMINI_3_PRO_IMAGE = "gemini-3-pro-image",
   GEMINI_3_PRO_IMAGE_PREVIEW = "gemini-3-pro-image-preview",
   GEMINI_3_PRO = "gemini-3-pro-preview",
+  GEMINI_3_1_FLASH_IMAGE = "gemini-3.1-flash-image",
   GEMINI_3_1_FLASH_IMAGE_PREVIEW = "gemini-3.1-flash-image-preview",
   GEMINI_3_1_FLASH_LITE = "gemini-3.1-flash-lite",
   GEMINI_3_1_FLASH_LITE_PREVIEW = "gemini-3.1-flash-lite-preview",
   GEMINI_3_1_FLASH_TTS_PREVIEW = "gemini-3.1-flash-tts-preview",
   GEMINI_3_1_PRO = "gemini-3.1-pro-preview",
+  GEMINI_3_5_FLASH = "gemini-3.5-flash",
   GEMINI_PRO_VISION = "gemini-pro-vision",
+  GEMMA_4_26B_A4B_IT = "gemma-4-26b-a4b-it",
+  GEMMA_4_31B_IT = "gemma-4-31b-it",
   LYRIA_3_CLIP_PREVIEW = "lyria-3-clip-preview",
   LYRIA_3_PRO_PREVIEW = "lyria-3-pro-preview",
   NANO_BANANA_PRO_PREVIEW = "nano-banana-pro-preview",
   TEXT_EMBEDDING = "text-embedding-004",
-  GEMMA_4_26B_A4B_IT = "gemma-4-26b-a4b-it",
-  GEMMA_4_31B_IT = "gemma-4-31b-it",
 
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",
@@ -651,6 +679,7 @@ export enum PROVIDER_MODEL_TYPE {
   VERTEX_AI_GEMINI_3_FLASH_PREVIEW = "vertex_ai/gemini-3-flash-preview",
   VERTEX_AI_GEMINI_3_PRO = "vertex_ai/gemini-3-pro-preview",
   VERTEX_AI_GEMINI_3_1_PRO = "vertex_ai/gemini-3.1-pro-preview",
+  VERTEX_AI_GEMINI_3_5_FLASH = "vertex_ai/gemini-3.5-flash",
 }
 
 export interface ProviderModelsMap {
@@ -664,6 +693,16 @@ export type PROVIDER_MODELS_TYPE = {
   }[];
 };
 
+/** OpenAI (OPIK-6833): canonical set of pipeline-mode values. Lives in this lower-layer types/
+ * module, so the persisted-config type, the form schema's Zod enum, and the runtime normaliser all
+ * derive from the same source — adding a third mode requires editing only this tuple. */
+export const OPENAI_PIPELINE_MODE_VALUES = [
+  "chat_completions_api",
+  "responses_api",
+] as const;
+
+export type OpenAiPipelineMode = (typeof OPENAI_PIPELINE_MODE_VALUES)[number];
+
 export interface ProviderKeyConfiguration {
   location?: string;
   models?: string;
@@ -675,6 +714,9 @@ export interface ProviderKeyConfiguration {
   auth_header_name?: string;
   /** Custom LLM (OPIK-4551): "true" to drop the default Authorization: Bearer header */
   suppress_default_auth?: string;
+  /** OpenAI (OPIK-6833): which OpenAI pipeline to route through. Backend parses case-insensitively
+   * and falls back to chat_completions_api on unknown values. */
+  openai_pipeline_mode?: OpenAiPipelineMode;
 }
 
 export interface BaseProviderKey {

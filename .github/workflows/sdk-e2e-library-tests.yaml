@@ -17,6 +17,7 @@ on:
             - adk
             - litellm
             - opentelemetry
+            - pydantic_ai
     schedule:
       - cron: "0 0 */2 * *"
     pull_request:
@@ -50,7 +51,7 @@ jobs:
       - name: Print has secrets into output
         id: init
         run: |
-          echo "has_secrets=${{ secrets.OPENAI_API_KEY != '' }}" >> $GITHUB_OUTPUT
+          echo "has_secrets=${{ secrets.OPENAI_API_KEY != '' }}" >> "$GITHUB_OUTPUT"
 
   missed_api_key_warning:
     name: Missed OpenAI API Key Warning
@@ -93,10 +94,10 @@ jobs:
         env:
           TAG: ${{ needs.build-opik.outputs.image_tag }}
         run: |
-          docker pull ghcr.io/comet-ml/opik/opik-backend:$TAG
-          docker pull ghcr.io/comet-ml/opik/opik-python-backend:$TAG
-          docker tag ghcr.io/comet-ml/opik/opik-backend:$TAG ghcr.io/comet-ml/opik/opik-backend:latest
-          docker tag ghcr.io/comet-ml/opik/opik-python-backend:$TAG ghcr.io/comet-ml/opik/opik-python-backend:latest
+          docker pull "ghcr.io/comet-ml/opik/opik-backend:$TAG"
+          docker pull "ghcr.io/comet-ml/opik/opik-python-backend:$TAG"
+          docker tag "ghcr.io/comet-ml/opik/opik-backend:$TAG" ghcr.io/comet-ml/opik/opik-backend:latest
+          docker tag "ghcr.io/comet-ml/opik/opik-python-backend:$TAG" ghcr.io/comet-ml/opik/opik-python-backend:latest
 
       - name: Install uv and set the Python version ${{ matrix.python_version }}
         uses: astral-sh/setup-uv@v5
@@ -106,11 +107,12 @@ jobs:
       - name: Make LIBS variable global (workaround for cron)
         id: init
         run: |
-          echo "LIBS=${{ env.LIBS }}" >> $GITHUB_OUTPUT
+          echo "LIBS=${{ env.LIBS }}" >> "$GITHUB_OUTPUT"
 
       - name: Run latest Opik server
         env:
           OPIK_USAGE_REPORT_ENABLED: false
+          # Avoid Buildx Bake concurrent image export collisions in CI.
           COMPOSE_BAKE: false
           OPIK_BACKEND_PULL_POLICY: never
           PYTHON_BACKEND_PULL_POLICY: never
@@ -167,6 +169,13 @@ jobs:
         with:
           python_version: ${{ matrix.python_version }}
           library_name: opentelemetry
+
+      - name: PydanticAI Tests Python ${{ matrix.python_version }}
+        if: contains(fromJSON('["pydantic_ai", "all"]'), env.LIBS)
+        uses: ./.github/actions/install_opik_and_run_e2e_lib_integration_tests
+        with:
+          python_version: ${{ matrix.python_version }}
+          library_name: pydantic_ai
 
       - name: Stop opik server
         run: |

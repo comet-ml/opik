@@ -4,7 +4,9 @@ import {
   Bot,
   ChartLine,
   Database,
+  FileTerminal,
   FlaskConical,
+  House,
   LayoutDashboard,
   ListChecks,
   Rows3,
@@ -13,14 +15,12 @@ import {
   UserPen,
   Brain,
   GitBranch,
-  Workflow,
 } from "lucide-react";
 import OllieOwl from "@/icons/ollie-owl.svg?react";
 import {
   MENU_ITEM_TYPE,
   MenuItemGroup,
 } from "@/v2/layout/SideBar/MenuItem/SidebarMenuItem";
-
 const getMenuItems = ({
   projectId,
   canViewExperiments,
@@ -28,6 +28,7 @@ const getMenuItems = ({
   canViewDashboards,
   canUsePlayground,
   canViewOptimizationRuns,
+  showHomePage,
   showOlliePage,
 }: {
   projectId: string | null;
@@ -36,6 +37,7 @@ const getMenuItems = ({
   canViewDashboards: boolean;
   canUsePlayground: boolean;
   canViewOptimizationRuns: boolean;
+  showHomePage: boolean;
   showOlliePage: boolean;
 }): MenuItemGroup[] => {
   const projectPrefix = projectId
@@ -46,24 +48,35 @@ const getMenuItems = ({
     projectPrefix ? `${projectPrefix}${suffix}` : undefined;
 
   return [
-    // TODO: OPIK-6260 - Restore Home page item and separate Ollie route once home page redesign is complete
-    ...(showOlliePage
-      ? [
-          {
-            id: "home_group",
-            items: [
+    {
+      id: "home_group",
+      items: [
+        ...(showHomePage
+          ? [
+              {
+                id: "home",
+                path: projectPath("/home"),
+                type: MENU_ITEM_TYPE.router as const,
+                icon: House,
+                label: "Home",
+                disabled: !projectPrefix,
+              },
+            ]
+          : []),
+        ...(showOlliePage
+          ? [
               {
                 id: "ollie",
-                path: projectPath("/home"),
+                path: projectPath("/ollie"),
                 type: MENU_ITEM_TYPE.router as const,
                 icon: OllieOwl,
                 label: "Opik Connect",
                 disabled: !projectPrefix,
               },
-            ],
-          },
-        ]
-      : []),
+            ]
+          : []),
+      ],
+    },
     {
       id: "observability",
       label: "Observability",
@@ -95,6 +108,14 @@ const getMenuItems = ({
       label: "Development",
       items: [
         {
+          id: "prompts",
+          path: projectPath("/prompts"),
+          type: MENU_ITEM_TYPE.router,
+          icon: FileTerminal,
+          label: "Prompt library",
+          disabled: !projectPrefix,
+        },
+        {
           id: "agent_runner",
           path: projectPath("/agent-playground"),
           type: MENU_ITEM_TYPE.router,
@@ -114,14 +135,6 @@ const getMenuItems = ({
               },
             ]
           : []),
-        {
-          id: "agent_configuration",
-          path: projectPath("/agent-configuration"),
-          type: MENU_ITEM_TYPE.router,
-          icon: Workflow,
-          label: "Agent configuration",
-          disabled: !projectPrefix,
-        },
         ...(canViewOptimizationRuns
           ? [
               {
@@ -204,7 +217,7 @@ const getMenuItems = ({
         },
       ],
     },
-  ];
+  ].filter((group) => group.items.length > 0);
 };
 
 export const getWorkspaceMenuItems = (): MenuItemGroup[] => {

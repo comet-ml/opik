@@ -3,16 +3,29 @@ import { ArrowUp, ArrowDown, LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PercentageTrendType } from "@/shared/PercentageTrend/PercentageTrend";
 
-const computePercentageChange = (
+export type DeltaUnit = "%" | "pp";
+
+const computeDelta = (
   current: number | null,
   previous: number | null,
+  unit: DeltaUnit,
 ): number | undefined => {
   if (current === null && previous === null) return undefined;
+  if (unit === "pp") {
+    if (current === null || previous === null) return undefined;
+    return current - previous;
+  }
   const c = current ?? 0;
   const p = previous ?? 0;
   if (p === 0) return c === 0 ? 0 : c > 0 ? Infinity : -Infinity;
   if (c === 0) return -100;
   return ((c - p) / p) * 100;
+};
+
+const formatDeltaMagnitude = (value: number): string => {
+  const abs = Math.abs(value);
+  const precision = abs < 1 ? 2 : 1;
+  return parseFloat(abs.toFixed(precision)).toString();
 };
 
 export type MetricCardProps = {
@@ -28,6 +41,8 @@ export type MetricCardProps = {
   hideDelta?: boolean;
   hideLabel?: boolean;
   hideValue?: boolean;
+  testId?: string;
+  deltaUnit?: DeltaUnit;
 };
 
 const MetricCard: React.FC<MetricCardProps> = ({
@@ -43,19 +58,22 @@ const MetricCard: React.FC<MetricCardProps> = ({
   hideDelta = false,
   hideLabel = false,
   hideValue = false,
+  testId,
+  deltaUnit = "%",
 }) => {
-  const percentage = computePercentageChange(
+  const delta = computeDelta(
     currentRaw ?? null,
     previousRaw ?? null,
+    deltaUnit,
   );
 
   const renderChange = () => {
-    if (percentage === undefined || !isFinite(percentage)) return null;
-    if (percentage === 0) {
+    if (delta === undefined || !isFinite(delta)) return null;
+    if (delta === 0) {
       return <span className="text-xs text-light-slate">No changes</span>;
     }
 
-    const isUp = percentage > 0;
+    const isUp = delta > 0;
     const isBetter = trend === "direct" ? isUp : !isUp;
     const ChangeIcon = isUp ? ArrowUp : ArrowDown;
     const colorClass = selected
@@ -71,7 +89,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
         )}
       >
         <ChangeIcon className="size-3" />
-        {`${Math.abs(percentage).toFixed(1)}%`}
+        {`${formatDeltaMagnitude(delta)}${deltaUnit}`}
       </span>
     );
   };
@@ -87,6 +105,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
         className,
       )}
       onClick={onClick}
+      data-testid={testId}
     >
       <div
         className={cn(
@@ -114,6 +133,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
                   selected ? "text-foreground" : "text-muted-slate",
                   value === "N/A" && "comet-body-xs text-light-slate",
                 )}
+                data-testid={testId ? `${testId}-value` : undefined}
               >
                 {value}
               </span>

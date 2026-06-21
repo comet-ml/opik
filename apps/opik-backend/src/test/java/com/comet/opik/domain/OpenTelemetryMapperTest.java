@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Span;
+import com.comet.opik.podam.PodamFactoryUtils;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.google.protobuf.ByteString;
@@ -9,15 +10,22 @@ import io.opentelemetry.proto.common.v1.KeyValue;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
+import uk.co.jemos.podam.api.PodamFactory;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class OpenTelemetryMapperTest {
+
+    private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
     @Test
     void testThreadIdMappingRule() {
@@ -214,6 +222,73 @@ class OpenTelemetryMapperTest {
         assertThat(span.metadata().has("gen_ai.cost.input_cost")).isTrue();
         assertThat(span.metadata().has("gen_ai.cost.output_cost")).isTrue();
         assertThat(span.input()).isNull();
+    }
+
+    @ParameterizedTest(name = "gen_ai.usage.cost as {0} -> {2}")
+    @MethodSource("genAiUsageCostCases")
+    void genAiUsageCostExtractedIntoTotalEstimatedCost(String label, AnyValue costValue, BigDecimal expected) {
+        // Pre-computed cost from gen_ai.usage.cost lands on the span's totalEstimatedCost for every
+        // supported value shape. Malformed values (non-finite doubles, unparseable strings) are
+        // skipped so they never abort span enrichment. Sibling token attributes still populate the
+        // integer-only usage map without a 'cost' key — guarding against the original bug where the
+        // double cost was routed there and silently dropped.
+        var attributes = List.of(
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.usage.cost")
+                        .setValue(costValue)
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.usage.prompt_tokens")
+                        .setValue(AnyValue.newBuilder().setIntValue(100))
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.usage.completion_tokens")
+                        .setValue(AnyValue.newBuilder().setIntValue(50))
+                        .build());
+
+        var spanBuilder = newSpanBuilder();
+
+        OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+
+        var span = spanBuilder.build();
+
+        if (expected == null) {
+            assertThat(span.totalEstimatedCost()).isNull();
+        } else {
+            assertThat(span.totalEstimatedCost()).isEqualByComparingTo(expected);
+        }
+        assertThat(span.usage()).doesNotContainKey("cost");
+        assertThat(span.usage().get("prompt_tokens")).isEqualTo(100);
+        assertThat(span.usage().get("completion_tokens")).isEqualTo(50);
+    }
+
+    static Stream<Arguments> genAiUsageCostCases() {
+        return Stream.of(
+                Arguments.of("double", AnyValue.newBuilder().setDoubleValue(0.001234).build(),
+                        new BigDecimal("0.001234")),
+                Arguments.of("int", AnyValue.newBuilder().setIntValue(1).build(),
+                        new BigDecimal("1")),
+                Arguments.of("numeric string", AnyValue.newBuilder().setStringValue("0.005").build(),
+                        new BigDecimal("0.005")),
+                Arguments.of("numeric string with whitespace",
+                        AnyValue.newBuilder().setStringValue("  0.005  ").build(),
+                        new BigDecimal("0.005")),
+                Arguments.of("non-numeric string",
+                        AnyValue.newBuilder().setStringValue("not a number").build(), null),
+                Arguments.of("NaN", AnyValue.newBuilder().setDoubleValue(Double.NaN).build(), null),
+                Arguments.of("positive infinity",
+                        AnyValue.newBuilder().setDoubleValue(Double.POSITIVE_INFINITY).build(), null),
+                Arguments.of("negative infinity",
+                        AnyValue.newBuilder().setDoubleValue(Double.NEGATIVE_INFINITY).build(), null));
+    }
+
+    private Span.SpanBuilder newSpanBuilder() {
+        // PODAM fills in id / traceId / projectId / startTime and every other field with random
+        // values; null out totalEstimatedCost because enrich only sets it on successful extraction,
+        // so the malformed/non-finite cost cases would otherwise inherit PODAM's random BigDecimal.
+        return podamFactory.manufacturePojo(Span.class)
+                .toBuilder()
+                .totalEstimatedCost(null);
     }
 
     @Test
@@ -1015,6 +1090,130 @@ class OpenTelemetryMapperTest {
             if (opikSpan.metadata() != null) {
                 assertThat(opikSpan.metadata().has("opik.span_id")).isFalse();
             }
+        }
+    }
+
+    /**
+     * Verifies the Elastic Inference Service integration: when an OTel span emits
+     * {@code gen_ai.system = "elastic"} and a routed model ID, the mapper rewrites
+     * model/provider to the underlying provider so cost lookup and provider-based
+     * filtering downstream see the real upstream. Original values are kept in metadata.
+     */
+    @Nested
+    class ElasticInferenceService {
+
+        private Span mapEis(String modelId) {
+            var attributes = List.of(
+                    KeyValue.newBuilder()
+                            .setKey("gen_ai.system")
+                            .setValue(AnyValue.newBuilder().setStringValue("elastic"))
+                            .build(),
+                    KeyValue.newBuilder()
+                            .setKey("gen_ai.request.model")
+                            .setValue(AnyValue.newBuilder().setStringValue(modelId))
+                            .build(),
+                    KeyValue.newBuilder()
+                            .setKey("gen_ai.usage.input_tokens")
+                            .setValue(AnyValue.newBuilder().setIntValue(100))
+                            .build(),
+                    KeyValue.newBuilder()
+                            .setKey("gen_ai.usage.output_tokens")
+                            .setValue(AnyValue.newBuilder().setIntValue(50))
+                            .build());
+
+            var spanBuilder = Span.builder()
+                    .id(UUID.randomUUID())
+                    .traceId(UUID.randomUUID())
+                    .projectId(UUID.randomUUID())
+                    .startTime(Instant.now());
+
+            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+
+            return spanBuilder.build();
+        }
+
+        // Jina row keeps the "jina-" prefix in the model key, so the resolver must not strip it.
+        @ParameterizedTest(name = "EIS prefix ''{0}'' -> provider=''{1}'', model=''{2}''")
+        @CsvSource({
+                "anthropic-claude-4.5-sonnet, anthropic,  claude-4.5-sonnet",
+                "openai-gpt-oss-120b,         openai,     gpt-oss-120b",
+                "jina-embeddings-v3,          jina_ai,    jina-embeddings-v3",
+                "google-gemini-3-flash,       google_ai,  gemini-3-flash",
+                "microsoft-multilingual-e5-large, azure,  multilingual-e5-large",
+        })
+        void prefixStripsAndRewritesProvider(String modelId, String expectedProvider, String expectedModel) {
+            var span = mapEis(modelId);
+
+            assertThat(span.provider()).isEqualTo(expectedProvider);
+            assertThat(span.model()).isEqualTo(expectedModel);
+        }
+
+        @Test
+        void elasticOwnModelWithoutDashIsLeftUnchanged() {
+            var span = mapEis("elser_model_2");
+
+            // No '-' in the model ID → resolver no-op; span retains the original gen_ai.system attribution.
+            // Metadata may be null when nothing else added attributes — that's also fine.
+            assertThat(span.provider()).isEqualTo("elastic");
+            assertThat(span.model()).isEqualTo("elser_model_2");
+            assertThat(span.metadata() == null || !span.metadata().has("eis_original_system")).isTrue();
+            assertThat(span.metadata() == null || !span.metadata().has("eis_original_model")).isTrue();
+        }
+
+        @Test
+        void rewriteRecordsOriginalsInMetadata() {
+            var span = mapEis("anthropic-claude-4.5-sonnet");
+
+            assertThat(span.metadata().get("eis_original_system").asText()).isEqualTo("elastic");
+            assertThat(span.metadata().get("eis_original_model").asText()).isEqualTo("anthropic-claude-4.5-sonnet");
+        }
+
+        @Test
+        void nonElasticProviderIsNotRewritten() {
+            // gen_ai.system other than "elastic" must leave the resolver inert, even for hyphenated IDs
+            var attributes = List.of(
+                    KeyValue.newBuilder()
+                            .setKey("gen_ai.system")
+                            .setValue(AnyValue.newBuilder().setStringValue("openai"))
+                            .build(),
+                    KeyValue.newBuilder()
+                            .setKey("gen_ai.request.model")
+                            .setValue(AnyValue.newBuilder().setStringValue("anthropic-claude-4.5-sonnet"))
+                            .build());
+
+            var spanBuilder = Span.builder()
+                    .id(UUID.randomUUID())
+                    .traceId(UUID.randomUUID())
+                    .projectId(UUID.randomUUID())
+                    .startTime(Instant.now());
+
+            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+            var span = spanBuilder.build();
+
+            assertThat(span.provider()).isEqualTo("openai");
+            assertThat(span.model()).isEqualTo("anthropic-claude-4.5-sonnet");
+            assertThat(span.metadata() == null || !span.metadata().has("eis_original_system")).isTrue();
+        }
+
+        @Test
+        void elasticSystemWithoutModelIsNoop() {
+            var attributes = List.of(
+                    KeyValue.newBuilder()
+                            .setKey("gen_ai.system")
+                            .setValue(AnyValue.newBuilder().setStringValue("elastic"))
+                            .build());
+
+            var spanBuilder = Span.builder()
+                    .id(UUID.randomUUID())
+                    .traceId(UUID.randomUUID())
+                    .projectId(UUID.randomUUID())
+                    .startTime(Instant.now());
+
+            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+            var span = spanBuilder.build();
+
+            assertThat(span.provider()).isEqualTo("elastic");
+            assertThat(span.model()).isNull();
         }
     }
 }

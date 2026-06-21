@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { OpikClient } from "@/client/Client";
+import { isTracingActive } from "@/config/TracingRuntimeConfig";
 import { logger } from "@/utils/logger";
 import { SpanType } from "@/rest_api/api/types/SpanType";
 import { Span } from "@/tracer/Span";
@@ -213,6 +214,10 @@ function executeTrack<T extends (...args: any[]) => any>(
   originalFn: T
 ): T {
   const wrappedFn = function (this: any, ...args: any[]): ReturnType<T> {
+    if (!isTracingActive()) {
+      return originalFn.apply(this, args);
+    }
+
     const context = trackStorage.getStore();
     const { span, trace } = logSpan({
       name: name ?? (originalFn.name || DEFAULT_TRACK_NAME),

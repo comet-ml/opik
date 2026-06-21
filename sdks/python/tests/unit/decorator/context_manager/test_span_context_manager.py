@@ -2,6 +2,7 @@ import pytest
 
 import opik
 import opik.opik_context
+from opik import context_storage
 from opik.api_objects import attachment
 from opik.types import FeedbackScoreDict, ErrorInfoDict
 
@@ -518,3 +519,43 @@ def test_start_as_current_span__context_cleanup__with_parent_trace__only_span_re
 
     # Verify parent trace is removed after parent context exits
     assert opik.opik_context.get_current_trace_data() is None
+
+
+def test_start_as_current_span__context_cleanup__project_name_released_after_exit(
+    fake_backend,
+):
+    """Regression: span context manager must release context project name on exit.
+
+    ``_try_acquire_project_name`` (called via ``add_start_candidates`` on
+    enter) sets the context project name with the span/trace id as owner.
+    Without a matching release in the ``finally`` block, the project name
+    leaks across context boundaries and the next ``@track`` call lands in
+    the wrong project.
+    """
+    assert context_storage.get_context_project_name() is None
+
+    with opik.start_as_current_span("test-span", project_name="ctx-project"):
+        assert context_storage.get_context_project_name() == "ctx-project"
+
+    assert context_storage.get_context_project_name() is None
+
+
+def test_start_as_current_span__context_cleanup__project_name_released_in_loop(
+    fake_backend,
+):
+    """Regression: repeated span context managers in a loop must each release.
+
+    Reproduces the load-test pattern: a single outer trace with many
+    nested span context managers. The first span acquires the project
+    name as owner; subsequent ones see it already owned and return
+    False without re-acquiring. If the first span's exit doesn't
+    release, the project name stays owned forever.
+    """
+    assert context_storage.get_context_project_name() is None
+
+    with opik.start_as_current_trace("parent-trace", project_name="ctx-project"):
+        for _ in range(5):
+            with opik.start_as_current_span("child-span"):
+                assert context_storage.get_context_project_name() == "ctx-project"
+
+    assert context_storage.get_context_project_name() is None

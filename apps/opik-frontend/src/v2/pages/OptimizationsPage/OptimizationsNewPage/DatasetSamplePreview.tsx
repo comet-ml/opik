@@ -1,9 +1,8 @@
 import React, { useMemo, useState } from "react";
 import { UnfoldVertical, FoldVertical } from "lucide-react";
 import { Button } from "@/ui/button";
-import CodeHighlighter, {
-  SUPPORTED_LANGUAGE,
-} from "@/shared/CodeHighlighter/CodeHighlighter";
+import CodeHighlighter from "@/shared/CodeHighlighter/CodeHighlighter";
+import { SUPPORTED_LANGUAGE } from "@/constants/codeLanguage";
 
 interface DatasetSamplePreviewProps {
   datasetSample: object;

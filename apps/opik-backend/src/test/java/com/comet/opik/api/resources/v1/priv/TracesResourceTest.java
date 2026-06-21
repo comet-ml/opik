@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.BatchDeleteByProject;
 import com.comet.opik.api.Comment;
+import com.comet.opik.api.CreateCommentResponse;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.DeleteTraceThreads;
 import com.comet.opik.api.Environment;
@@ -797,6 +798,44 @@ class TracesResourceTest {
 
         @ParameterizedTest
         @MethodSource("publicCredentials")
+        void getTraceThreadByProjectName__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey,
+                Visibility visibility, int expectedCode) {
+
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(okApikey, workspaceName, workspaceId);
+            mockGetWorkspaceIdByName(workspaceName, workspaceId);
+
+            Project project = factory.manufacturePojo(Project.class).toBuilder().name(DEFAULT_PROJECT)
+                    .visibility(visibility).build();
+            projectResourceClient.createProject(project, okApikey, workspaceName);
+
+            var threadId = UUID.randomUUID().toString();
+            var trace = createTrace()
+                    .toBuilder()
+                    .projectId(null)
+                    .threadId(threadId)
+                    .projectName(DEFAULT_PROJECT)
+                    .build();
+            create(trace, okApikey, workspaceName);
+
+            // Resolving the thread by project name must enforce visibility just like resolving by project id,
+            // otherwise unauthenticated public requests could read threads from non-public projects.
+            try (var actualResponse = traceResourceClient.callRetrieveThreadResponse(
+                    TraceThreadIdentifier.builder().projectName(DEFAULT_PROJECT).threadId(threadId).build(),
+                    apiKey, workspaceName)) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
+                if (expectedCode == 404) {
+                    assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
+                            .isEqualTo(PROJECT_NAME_NOT_FOUND_MESSAGE.formatted(DEFAULT_PROJECT));
+                }
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("publicCredentials")
         void get__whenApiKeyIsPresent__thenReturnSearchTrace(String apiKey,
                 Visibility visibility, int expectedCode) {
 
@@ -1195,6 +1234,40 @@ class TracesResourceTest {
                 if (expectedCode == 404) {
                     assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
                             .isEqualTo(PROJECT_NOT_FOUND_MESSAGE.formatted(projectId));
+                }
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("publicCredentials")
+        void getTraceThreadByProjectName__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken,
+                Visibility visibility,
+                String workspaceName, int expectedCode) {
+
+            mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
+            mockGetWorkspaceIdByName(workspaceName, WORKSPACE_ID);
+
+            Project project = factory.manufacturePojo(Project.class).toBuilder().visibility(visibility).build();
+            projectResourceClient.createProject(project, API_KEY, workspaceName);
+
+            var threadId = UUID.randomUUID().toString();
+            var trace = createTrace()
+                    .toBuilder()
+                    .projectId(null)
+                    .threadId(threadId)
+                    .projectName(project.name())
+                    .build();
+            create(trace, API_KEY, workspaceName);
+
+            // Resolving the thread by project name must enforce visibility just like resolving by project id.
+            try (var actualResponse = traceResourceClient.callRetrieveThreadResponseWithCookie(
+                    TraceThreadIdentifier.builder().projectName(project.name()).threadId(threadId).build(),
+                    sessionToken, workspaceName)) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedCode);
+                if (expectedCode == 404) {
+                    assertThat(actualResponse.readEntity(NotFoundException.class).getMessage())
+                            .isEqualTo(PROJECT_NAME_NOT_FOUND_MESSAGE.formatted(project.name()));
                 }
             }
         }
@@ -4432,6 +4505,30 @@ class TracesResourceTest {
     class TraceComment {
 
         @Test
+        void createCommentReturnsIdInResponseBody() {
+            UUID traceId = traceResourceClient.createTrace(createTrace(), API_KEY, TEST_WORKSPACE);
+            Comment comment = Comment.builder().text("test comment").build();
+
+            try (var response = client.target("%s/v1/private/traces".formatted(baseURI))
+                    .path(traceId.toString())
+                    .path("comments")
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(comment))) {
+
+                assertThat(response.getStatus()).isEqualTo(201);
+
+                var body = response.readEntity(CreateCommentResponse.class);
+                assertThat(body.id()).isNotNull();
+
+                var fetched = traceResourceClient.getCommentById(body.id(), traceId, API_KEY, TEST_WORKSPACE, 200);
+                assertThat(fetched.id()).isEqualTo(body.id());
+            }
+        }
+
+        @Test
         void createCommentForNonExistingTraceFail() {
             traceResourceClient.generateAndCreateComment(generator.generate(), API_KEY, TEST_WORKSPACE, 404);
         }
@@ -6337,12 +6434,110 @@ class TracesResourceTest {
 
             TraceAssertions.assertThreads(expectedClosedThreads, closedThreadPage.content());
         }
+
+        @Test
+        @DisplayName("open thread: when projectId belongs to another workspace, then return not found")
+        void openTraceThread__whenProjectBelongsToAnotherWorkspace__thenReturnNotFound() {
+            // Workspace A owns the project
+            var workspaceNameA = RandomStringUtils.secure().nextAlphanumeric(10);
+            var apiKeyA = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKeyA, workspaceNameA, UUID.randomUUID().toString());
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            UUID projectId = projectResourceClient.createProject(projectName, apiKeyA, workspaceNameA);
+
+            // Workspace B does not own it
+            var workspaceNameB = RandomStringUtils.secure().nextAlphanumeric(10);
+            var apiKeyB = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKeyB, workspaceNameB, UUID.randomUUID().toString());
+
+            traceResourceClient.openTraceThread(randomUUID().toString(), projectId, projectName, apiKeyB,
+                    workspaceNameB, HttpStatus.SC_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("close threads: when projectId belongs to another workspace, then return not found")
+        void closeTraceThreads__whenProjectBelongsToAnotherWorkspace__thenReturnNotFound() {
+            // Workspace A owns the project
+            var workspaceNameA = RandomStringUtils.secure().nextAlphanumeric(10);
+            var apiKeyA = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKeyA, workspaceNameA, UUID.randomUUID().toString());
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            UUID projectId = projectResourceClient.createProject(projectName, apiKeyA, workspaceNameA);
+
+            // Workspace B does not own it
+            var workspaceNameB = RandomStringUtils.secure().nextAlphanumeric(10);
+            var apiKeyB = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKeyB, workspaceNameB, UUID.randomUUID().toString());
+
+            traceResourceClient.closeTraceThreads(Set.of(randomUUID().toString()), projectId, projectName, apiKeyB,
+                    workspaceNameB, HttpStatus.SC_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("close threads: when thread belongs to a different project in the same workspace, then return not found")
+        void closeTraceThreads__whenThreadBelongsToAnotherProject__thenReturnNotFound() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            // Project A owns the thread
+            var projectNameA = RandomStringUtils.secure().nextAlphanumeric(10);
+            UUID projectIdA = projectResourceClient.createProject(projectNameA, apiKey, workspaceName);
+            var threadId = randomUUID().toString();
+
+            Trace trace = createTrace().toBuilder()
+                    .threadId(threadId)
+                    .projectId(projectIdA)
+                    .projectName(projectNameA)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                var page = traceResourceClient.getTraceThreads(projectIdA, projectNameA, apiKey, workspaceName,
+                        List.of(), List.of(), Map.of());
+                assertThat(page.content()).hasSize(1);
+            });
+
+            // Project B (same workspace) does not contain the thread
+            var projectNameB = RandomStringUtils.secure().nextAlphanumeric(10);
+            UUID projectIdB = projectResourceClient.createProject(projectNameB, apiKey, workspaceName);
+
+            traceResourceClient.closeTraceThreads(Set.of(threadId), projectIdB, projectNameB, apiKey, workspaceName,
+                    HttpStatus.SC_NOT_FOUND);
+        }
     }
 
     @Nested
     @DisplayName("Thread Comment:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class ThreadComment {
+
+        @Test
+        void createCommentReturnsIdInResponseBody() {
+            var thread = createThread();
+            Comment comment = Comment.builder().text("test comment").build();
+
+            try (var response = client.target("%s/v1/private/traces/threads".formatted(baseURI))
+                    .path(thread.threadModelId().toString())
+                    .path("comments")
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(comment))) {
+
+                assertThat(response.getStatus()).isEqualTo(201);
+
+                var body = response.readEntity(CreateCommentResponse.class);
+                assertThat(body.id()).isNotNull();
+
+                var fetched = threadCommentResourceClient.getCommentById(body.id(), thread.threadModelId(), API_KEY,
+                        TEST_WORKSPACE, 200);
+                assertThat(fetched.id()).isEqualTo(body.id());
+            }
+        }
 
         @Test
         void createCommentForNonExistingThreadFail() {
@@ -7682,6 +7877,94 @@ class TracesResourceTest {
                     filters, List.of(), 10, Map.of());
 
             TraceAssertions.assertTraces(page.content(), List.of(custom), List.of(dev, staging, prod), USER);
+        }
+    }
+
+    @Nested
+    @DisplayName("Filter traces by created_at / last_updated_at")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class FilterTracesByTimestamp {
+
+        private List<Trace> createPersistedTraces(String projectName, int count) {
+            List<Trace> persisted = new ArrayList<>();
+            for (int i = 0; i < count; i++) {
+                var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                        .projectName(projectName)
+                        .usage(null)
+                        .feedbackScores(null)
+                        .build();
+                UUID id = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+                persisted.add(traceResourceClient.getById(id, TEST_WORKSPACE, API_KEY));
+            }
+            return persisted;
+        }
+
+        private Instant timestamp(Trace trace, TraceField field) {
+            return field == TraceField.CREATED_AT ? trace.createdAt() : trace.lastUpdatedAt();
+        }
+
+        Stream<Arguments> timestampFilterCases() {
+            return Stream.of(TraceField.CREATED_AT, TraceField.LAST_UPDATED_AT)
+                    .flatMap(field -> Stream.of(
+                            arguments(field, Operator.GREATER_THAN_EQUAL, List.of(2, 1)),
+                            arguments(field, Operator.GREATER_THAN, List.of(2)),
+                            arguments(field, Operator.LESS_THAN, List.of(0)),
+                            arguments(field, Operator.LESS_THAN_EQUAL, List.of(1, 0)),
+                            arguments(field, Operator.EQUAL, List.of(1)),
+                            arguments(field, Operator.NOT_EQUAL, List.of(2, 0))));
+        }
+
+        @ParameterizedTest
+        @MethodSource("timestampFilterCases")
+        @DisplayName("honors all comparison operators against the persisted timestamp")
+        void filterByTimestampField(TraceField field, Operator operator, List<Integer> expectedIndexes) {
+            var projectName = "timestamp-filter-%s-%s-%s".formatted(field.name(), operator.name(), UUID.randomUUID());
+
+            var traces = createPersistedTraces(projectName, 3);
+            var boundary = timestamp(traces.get(1), field);
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(field)
+                    .operator(operator)
+                    .value(boundary.toString())
+                    .build());
+
+            var page = traceResourceClient.getTraces(projectName, null, API_KEY, TEST_WORKSPACE,
+                    filters, List.of(), 10, Map.of());
+
+            var expected = expectedIndexes.stream().map(traces::get).toList();
+            var unexpected = IntStream.range(0, traces.size())
+                    .filter(i -> !expectedIndexes.contains(i))
+                    .mapToObj(traces::get)
+                    .toList();
+
+            TraceAssertions.assertTraces(page.content(), expected, unexpected, USER);
+        }
+
+        @Test
+        @DisplayName("supports a last_updated_at window combining lower and upper bounds")
+        void filterByLastUpdatedAtWindow() {
+            var projectName = "last-updated-window-" + UUID.randomUUID();
+
+            var traces = createPersistedTraces(projectName, 3);
+
+            var filters = List.of(
+                    TraceFilter.builder()
+                            .field(TraceField.LAST_UPDATED_AT)
+                            .operator(Operator.GREATER_THAN_EQUAL)
+                            .value(traces.get(1).lastUpdatedAt().toString())
+                            .build(),
+                    TraceFilter.builder()
+                            .field(TraceField.LAST_UPDATED_AT)
+                            .operator(Operator.LESS_THAN)
+                            .value(traces.get(2).lastUpdatedAt().toString())
+                            .build());
+
+            var page = traceResourceClient.getTraces(projectName, null, API_KEY, TEST_WORKSPACE,
+                    filters, List.of(), 10, Map.of());
+
+            TraceAssertions.assertTraces(page.content(), List.of(traces.get(1)),
+                    List.of(traces.get(0), traces.get(2)), USER);
         }
     }
 

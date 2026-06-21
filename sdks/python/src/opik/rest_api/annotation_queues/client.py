@@ -8,6 +8,8 @@ from ..types.annotation_queue_page_public import AnnotationQueuePagePublic
 from ..types.annotation_queue_public import AnnotationQueuePublic
 from ..types.annotation_queue_write import AnnotationQueueWrite
 from ..types.annotation_queue_write_scope import AnnotationQueueWriteScope
+from ..types.lock_response import LockResponse
+from ..types.locks_response import LocksResponse
 from .raw_client import AsyncRawAnnotationQueuesClient, RawAnnotationQueuesClient
 
 # this is used as the default value for optional parameters
@@ -112,6 +114,8 @@ class AnnotationQueuesClient:
         instructions: typing.Optional[str] = OMIT,
         comments_enabled: typing.Optional[bool] = OMIT,
         feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
+        annotators_per_item: typing.Optional[int] = OMIT,
+        lock_timeout_seconds: typing.Optional[int] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -135,6 +139,10 @@ class AnnotationQueuesClient:
 
         feedback_definition_names : typing.Optional[typing.Sequence[str]]
 
+        annotators_per_item : typing.Optional[int]
+
+        lock_timeout_seconds : typing.Optional[int]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -157,6 +165,8 @@ class AnnotationQueuesClient:
             instructions=instructions,
             comments_enabled=comments_enabled,
             feedback_definition_names=feedback_definition_names,
+            annotators_per_item=annotators_per_item,
+            lock_timeout_seconds=lock_timeout_seconds,
             request_options=request_options,
         )
         return _response.data
@@ -256,6 +266,8 @@ class AnnotationQueuesClient:
         instructions: typing.Optional[str] = OMIT,
         comments_enabled: typing.Optional[bool] = OMIT,
         feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
+        annotators_per_item: typing.Optional[int] = OMIT,
+        lock_timeout_seconds: typing.Optional[int] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -274,6 +286,10 @@ class AnnotationQueuesClient:
         comments_enabled : typing.Optional[bool]
 
         feedback_definition_names : typing.Optional[typing.Sequence[str]]
+
+        annotators_per_item : typing.Optional[int]
+
+        lock_timeout_seconds : typing.Optional[int]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -295,8 +311,66 @@ class AnnotationQueuesClient:
             instructions=instructions,
             comments_enabled=comments_enabled,
             feedback_definition_names=feedback_definition_names,
+            annotators_per_item=annotators_per_item,
+            lock_timeout_seconds=lock_timeout_seconds,
             request_options=request_options,
         )
+        return _response.data
+
+    def get_annotation_queue_locks(
+        self, queue_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> LocksResponse:
+        """
+        Returns lock status for all actively locked items in the queue
+
+        Parameters
+        ----------
+        queue_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        LocksResponse
+            Queue locks
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.annotation_queues.get_annotation_queue_locks(queue_id='queueId', )
+        """
+        _response = self._raw_client.get_annotation_queue_locks(queue_id, request_options=request_options)
+        return _response.data
+
+    def lock_annotation_queue_item(
+        self, queue_id: str, item_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> LockResponse:
+        """
+        Claim an annotation queue item for the current user, or extend an existing lock
+
+        Parameters
+        ----------
+        queue_id : str
+
+        item_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        LockResponse
+            Lock result
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.annotation_queues.lock_annotation_queue_item(queue_id='queueId', item_id='itemId', )
+        """
+        _response = self._raw_client.lock_annotation_queue_item(queue_id, item_id, request_options=request_options)
         return _response.data
 
     def remove_items_from_annotation_queue(
@@ -432,6 +506,8 @@ class AsyncAnnotationQueuesClient:
         instructions: typing.Optional[str] = OMIT,
         comments_enabled: typing.Optional[bool] = OMIT,
         feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
+        annotators_per_item: typing.Optional[int] = OMIT,
+        lock_timeout_seconds: typing.Optional[int] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -454,6 +530,10 @@ class AsyncAnnotationQueuesClient:
         comments_enabled : typing.Optional[bool]
 
         feedback_definition_names : typing.Optional[typing.Sequence[str]]
+
+        annotators_per_item : typing.Optional[int]
+
+        lock_timeout_seconds : typing.Optional[int]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -480,6 +560,8 @@ class AsyncAnnotationQueuesClient:
             instructions=instructions,
             comments_enabled=comments_enabled,
             feedback_definition_names=feedback_definition_names,
+            annotators_per_item=annotators_per_item,
+            lock_timeout_seconds=lock_timeout_seconds,
             request_options=request_options,
         )
         return _response.data
@@ -588,6 +670,8 @@ class AsyncAnnotationQueuesClient:
         instructions: typing.Optional[str] = OMIT,
         comments_enabled: typing.Optional[bool] = OMIT,
         feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
+        annotators_per_item: typing.Optional[int] = OMIT,
+        lock_timeout_seconds: typing.Optional[int] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -606,6 +690,10 @@ class AsyncAnnotationQueuesClient:
         comments_enabled : typing.Optional[bool]
 
         feedback_definition_names : typing.Optional[typing.Sequence[str]]
+
+        annotators_per_item : typing.Optional[int]
+
+        lock_timeout_seconds : typing.Optional[int]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -630,7 +718,73 @@ class AsyncAnnotationQueuesClient:
             instructions=instructions,
             comments_enabled=comments_enabled,
             feedback_definition_names=feedback_definition_names,
+            annotators_per_item=annotators_per_item,
+            lock_timeout_seconds=lock_timeout_seconds,
             request_options=request_options,
+        )
+        return _response.data
+
+    async def get_annotation_queue_locks(
+        self, queue_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> LocksResponse:
+        """
+        Returns lock status for all actively locked items in the queue
+
+        Parameters
+        ----------
+        queue_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        LocksResponse
+            Queue locks
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.annotation_queues.get_annotation_queue_locks(queue_id='queueId', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.get_annotation_queue_locks(queue_id, request_options=request_options)
+        return _response.data
+
+    async def lock_annotation_queue_item(
+        self, queue_id: str, item_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> LockResponse:
+        """
+        Claim an annotation queue item for the current user, or extend an existing lock
+
+        Parameters
+        ----------
+        queue_id : str
+
+        item_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        LockResponse
+            Lock result
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.annotation_queues.lock_annotation_queue_item(queue_id='queueId', item_id='itemId', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.lock_annotation_queue_item(
+            queue_id, item_id, request_options=request_options
         )
         return _response.data
 

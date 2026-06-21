@@ -117,6 +117,23 @@ runs:
         npm pack --dry-run
         echo "Package can be installed successfully"
 
+    - name: Resolve npm package name from package.json
+      id: npm_name
+      if: ${{ inputs.is_release == 'true' }}
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        NPM_PACKAGE_NAME=$(node -p "require('./package.json').name")
+        echo "name=${NPM_PACKAGE_NAME}" >> "$GITHUB_OUTPUT"
+        echo "Resolved npm package name: ${NPM_PACKAGE_NAME}"
+
+    - name: NPM token preflight
+      if: ${{ inputs.is_release == 'true' }}
+      uses: ./.github/actions/npm-token-preflight
+      with:
+        npm_token: ${{ inputs.npm_token }}
+        package_name: ${{ steps.npm_name.outputs.name }}
+
     - name: Publish to NPM (with retry)
       id: npm_publish
       if: ${{ inputs.is_release == 'true' }}
@@ -139,30 +156,47 @@ runs:
           PUBLISH_CMD="npm publish --access ${{ inputs.npm_access }}"
         fi
 
+        ALREADY_PUBLISHED=false
+        PUBLISH_LOG=$(mktemp)
+        trap 'rm -f "$PUBLISH_LOG"' EXIT
+
         while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
           echo "Publish attempt $ATTEMPT of $MAX_ATTEMPTS (timeout: ${TIMEOUT_SECONDS}s)..."
-          
-          # Use timeout command to prevent hanging indefinitely
-          if timeout $TIMEOUT_SECONDS $PUBLISH_CMD; then
+
+          # Run the publish, streaming output live AND capturing it for inspection.
+          # Capture timeout/npm's exit code via PIPESTATUS[0] directly — don't rely on
+          # the pipeline's overall exit status, since `tee` masks failures when pipefail
+          # is off, and we don't want to depend on the shell's default flags.
+          timeout $TIMEOUT_SECONDS $PUBLISH_CMD 2>&1 | tee "$PUBLISH_LOG"
+          EXIT_CODE=${PIPESTATUS[0]}
+
+          if [ "$EXIT_CODE" -eq 0 ]; then
             SUCCESS=true
             break
-          else
-            EXIT_CODE=$?
-            if [ $EXIT_CODE -eq 124 ]; then
-              echo "Attempt $ATTEMPT timed out after ${TIMEOUT_SECONDS}s"
-            else
-              echo "Attempt $ATTEMPT failed with exit code $EXIT_CODE"
-            fi
-            
-            if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
-              echo "Retrying in 10 seconds..."
-              sleep 10
-            fi
-            ATTEMPT=$((ATTEMPT + 1))
           fi
+
+          if [ "$EXIT_CODE" -eq 124 ]; then
+            echo "Attempt $ATTEMPT timed out after ${TIMEOUT_SECONDS}s"
+          else
+            echo "Attempt $ATTEMPT failed with exit code $EXIT_CODE"
+          fi
+
+          # Non-retryable: version already published. The desired end state is achieved;
+          # treat as a skip-with-warning so concurrent / replay dispatches don't fail CI.
+          if grep -q "E403" "$PUBLISH_LOG" && grep -qi "cannot publish over" "$PUBLISH_LOG"; then
+            ALREADY_PUBLISHED=true
+            echo "::warning title=NPM publish skipped::${PACKAGE_NAME}@${NEW_VERSION} is already published; treating as success."
+            break
+          fi
+
+          if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+            echo "Retrying in 10 seconds..."
+            sleep 10
+          fi
+          ATTEMPT=$((ATTEMPT + 1))
         done
 
-        if [ "$SUCCESS" = false ]; then
+        if [ "$SUCCESS" = false ] && [ "$ALREADY_PUBLISHED" = false ]; then
           echo "Failed to publish after $MAX_ATTEMPTS attempts"
           exit 1
         fi

@@ -3,7 +3,6 @@ package com.comet.opik.domain.workspaces;
 import com.comet.opik.api.OpikVersion;
 import com.comet.opik.api.WorkspaceVersion;
 import com.comet.opik.domain.AlertDAO;
-import com.comet.opik.domain.DashboardDAO;
 import com.comet.opik.domain.DatasetDAO;
 import com.comet.opik.domain.DemoData;
 import com.comet.opik.domain.ExperimentDAO;
@@ -30,7 +29,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-import static com.comet.opik.infrastructure.ServiceTogglesConfig.FORCE_WORKSPACE_VERSION_DISABLED;
+import static com.comet.opik.api.OpikVersion.DISABLED;
 import static com.comet.opik.infrastructure.auth.RequestContext.SYSTEM_USER;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 
@@ -45,9 +44,12 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  * <ol>
  *   <li><b>V2 workspace allowlist</b> ({@code TOGGLE_V2_WORKSPACE_ALLOWLIST}) — comma-separated workspace IDs
  *       that always receive {@code version_2}. Highest priority, all deployment modes.</li>
+ *   <li><b>V1 workspace allowlist</b> ({@code TOGGLE_V1_WORKSPACE_ALLOWLIST}) — comma-separated workspace IDs
+ *       that always receive {@code version_1}. Overridden by the V2 allowlist; overrides the force flag and
+ *       all subsequent steps. Defensive rollback layer for customers pinned to legacy navigation.</li>
  *   <li><b>Feature flag override</b> ({@code TOGGLE_FORCE_WORKSPACE_VERSION}) — if set to a valid
  *       {@link OpikVersion} value ({@code "version_1"} or {@code "version_2"}), that version is returned
- *       unconditionally. Value {@code "disabled"} means no override.</li>
+ *       unconditionally. Value {@code "disabled"} means no override. Defaults to {@code "version_2"}.</li>
  *   <li><b>Auth one-way V2 gate</b> (authenticated mode only) — if auth metadata indicates the workspace
  *       was created post-launch ({@code version_2}), always return {@code version_2}.
  *       Prevents V2 to V1 demotion. Defensive: gracefully degrades when auth service doesn't
@@ -62,7 +64,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  *
  * <h3>Entity Types Checked:</h3>
  * <ul>
- *   <li>State database (cheapest-first): dashboards, automation_rules (multi-project check), prompts, datasets (excl. demo) etc.</li>
+ *   <li>State database (cheapest-first): automation_rules (multi-project check), prompts, datasets (excl. demo) etc.</li>
  *   <li>Analytics database (cheapest-first): optimizations, experiments (excl. demo) etc.</li>
  *   <li>Not yet checked: alerts (no project_id column yet)</li>
  * </ul>
@@ -230,7 +232,7 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
         if (storedHasLegacyScores) {
             try {
                 boolean hasLegacyScores = Boolean.TRUE.equals(feedbackScoreDAO.hasLegacyScores(workspaceId).block());
-                if (existingWorkspace.isEmpty() || hasLegacyScores != storedHasLegacyScores) {
+                if (existingWorkspace.isEmpty() || !hasLegacyScores) {
                     workspacesService.upsertHasLegacyScores(workspaceId, hasLegacyScores, userName);
                 }
             } catch (RuntimeException exception) {
@@ -241,8 +243,8 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
         var versionChanged = previousVersion.map(prev -> prev != newVersion).orElse(true);
         analyticsService.trackEvent("workspace_version_determined", Map.of(
                 "workspace_id", workspaceId,
-                "previous_version", previousVersion.map(OpikVersion::getValue).orElse("unknown"),
-                "new_version", newVersion.getValue(),
+                "previous_version", previousVersion.map(OpikVersion::getValue).orElse(OpikVersion.UNKNOWN),
+                "new_version", Optional.ofNullable(newVersion).map(OpikVersion::getValue).orElse(OpikVersion.UNKNOWN),
                 "version_changed", String.valueOf(versionChanged),
                 "date", Instant.now().toString()));
     }
@@ -282,12 +284,13 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
 
     private Optional<OpikVersion> getForcedVersion() {
         var forced = serviceTogglesConfig.getForceWorkspaceVersion();
-        if (StringUtils.isBlank(forced) || FORCE_WORKSPACE_VERSION_DISABLED.equalsIgnoreCase(forced)) {
+        if (DISABLED.equalsIgnoreCase(forced)) {
             return Optional.empty();
         }
         var version = OpikVersion.findByValue(forced);
         if (version.isEmpty()) {
-            log.warn("Invalid forceWorkspaceVersion config value: '{}', ignoring", forced);
+            log.warn("Invalid forceWorkspaceVersion config value: '{}', defaulting to version_2", forced);
+            return Optional.of(OpikVersion.VERSION_2);
         }
         return version;
     }
@@ -301,10 +304,6 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
      */
     private boolean hasStateDbVersion1Entities(String workspaceId) {
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
-            if (handle.attach(DashboardDAO.class).hasVersion1Dashboards(workspaceId)) {
-                log.info("Found version_1 dashboards in workspace '{}'", workspaceId);
-                return true;
-            }
             if (handle.attach(AutomationRuleDAO.class).hasVersion1AutomationRules(workspaceId)) {
                 log.info("Found multi-project automation rules in workspace '{}'", workspaceId);
                 return true;

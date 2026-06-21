@@ -29,6 +29,7 @@ from ..types.project_stats_public import ProjectStatsPublic
 from ..types.span_enrichment_options import SpanEnrichmentOptions
 from ..types.trace_enrichment_options import TraceEnrichmentOptions
 from .raw_client import AsyncRawDatasetsClient, RawDatasetsClient
+from .types.create_dataset_items_from_json_request_format import CreateDatasetItemsFromJsonRequestFormat
 from .types.dataset_update_visibility import DatasetUpdateVisibility
 from .types.dataset_write_type import DatasetWriteType
 from .types.dataset_write_visibility import DatasetWriteVisibility
@@ -69,6 +70,11 @@ class DatasetsClient:
         - Returns 409 Conflict if baseVersion is stale and override is not set
 
         Use `override=true` query parameter to force version creation even with stale baseVersion.
+
+        Set 'copy_from_dataset_id' and 'copy_from_version_id' together on the request body to read
+        carry-forward rows from the supplied (dataset, version) pair instead of the destination's
+        prior version. When the fields are null, carry-forward rows are read from the destination's
+        prior version.
 
         Parameters
         ----------
@@ -286,12 +292,18 @@ class DatasetsClient:
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
         batch_group_id: typing.Optional[str] = OMIT,
+        copy_from_dataset_id: typing.Optional[str] = OMIT,
+        copy_from_version_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Create/update dataset items based on dataset item id.
         Each item's 'id' field is the stable identifier and upsert key.
         Provide it to update an existing item, or omit it to create a new one.
+
+        Set 'copy_from_dataset_id' and 'copy_from_version_id' together to read carry-forward rows
+        from the supplied (dataset, version) pair instead of the destination's prior version. When
+        the fields are null, carry-forward rows are read from the destination's prior version.
 
         Parameters
         ----------
@@ -311,6 +323,12 @@ class DatasetsClient:
 
         batch_group_id : typing.Optional[str]
             Optional batch group ID to group multiple batches into a single dataset version. If null, mutates the latest version instead of creating a new one.
+
+        copy_from_dataset_id : typing.Optional[str]
+            Optional. Dataset to read carry-forward rows from when materializing the new version. Required together with copy_from_version_id. When null, carry-forward rows are read from the destination dataset's prior version.
+
+        copy_from_version_id : typing.Optional[str]
+            Optional. Version within copy_from_dataset_id to read carry-forward rows from. Required together with copy_from_dataset_id.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -334,6 +352,8 @@ class DatasetsClient:
             project_name=project_name,
             project_id=project_id,
             batch_group_id=batch_group_id,
+            copy_from_dataset_id=copy_from_dataset_id,
+            copy_from_version_id=copy_from_version_id,
             request_options=request_options,
         )
         return _response.data
@@ -370,6 +390,49 @@ class DatasetsClient:
         """
         _response = self._raw_client.create_dataset_items_from_csv(
             file=file, dataset_id=dataset_id, request_options=request_options
+        )
+        return _response.data
+
+    def create_dataset_items_from_json(
+        self,
+        *,
+        file: typing.Dict[str, typing.Optional[typing.Any]],
+        dataset_id: str,
+        format: CreateDatasetItemsFromJsonRequestFormat,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Create dataset items from an uploaded JSON or JSONL file. JSON files must contain a top-level array of objects.
+        JSONL files contain one JSON object per non-blank line; multi-line JSON objects are not supported.
+        Reserved keys (id, source, description, tags, evaluators, execution_policy) are extracted into the
+        corresponding DatasetItem fields; all remaining keys form the item's data map and preserve their JSON types.
+        To link dataset items to specific traces or spans use the dedicated /items/from-traces or /items/from-spans endpoints.
+        Processing happens asynchronously in batches. With dataset versioning enabled, a supplied id acts as an upsert key.
+
+        Parameters
+        ----------
+        file : typing.Dict[str, typing.Optional[typing.Any]]
+
+        dataset_id : str
+
+        format : CreateDatasetItemsFromJsonRequestFormat
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.datasets.create_dataset_items_from_json(file={'key': 'value'
+        }, dataset_id='dataset_id', format="json", )
+        """
+        _response = self._raw_client.create_dataset_items_from_json(
+            file=file, dataset_id=dataset_id, format=format, request_options=request_options
         )
         return _response.data
 
@@ -1511,6 +1574,11 @@ class AsyncDatasetsClient:
 
         Use `override=true` query parameter to force version creation even with stale baseVersion.
 
+        Set 'copy_from_dataset_id' and 'copy_from_version_id' together on the request body to read
+        carry-forward rows from the supplied (dataset, version) pair instead of the destination's
+        prior version. When the fields are null, carry-forward rows are read from the destination's
+        prior version.
+
         Parameters
         ----------
         id : str
@@ -1739,12 +1807,18 @@ class AsyncDatasetsClient:
         project_name: typing.Optional[str] = OMIT,
         project_id: typing.Optional[str] = OMIT,
         batch_group_id: typing.Optional[str] = OMIT,
+        copy_from_dataset_id: typing.Optional[str] = OMIT,
+        copy_from_version_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Create/update dataset items based on dataset item id.
         Each item's 'id' field is the stable identifier and upsert key.
         Provide it to update an existing item, or omit it to create a new one.
+
+        Set 'copy_from_dataset_id' and 'copy_from_version_id' together to read carry-forward rows
+        from the supplied (dataset, version) pair instead of the destination's prior version. When
+        the fields are null, carry-forward rows are read from the destination's prior version.
 
         Parameters
         ----------
@@ -1764,6 +1838,12 @@ class AsyncDatasetsClient:
 
         batch_group_id : typing.Optional[str]
             Optional batch group ID to group multiple batches into a single dataset version. If null, mutates the latest version instead of creating a new one.
+
+        copy_from_dataset_id : typing.Optional[str]
+            Optional. Dataset to read carry-forward rows from when materializing the new version. Required together with copy_from_version_id. When null, carry-forward rows are read from the destination dataset's prior version.
+
+        copy_from_version_id : typing.Optional[str]
+            Optional. Version within copy_from_dataset_id to read carry-forward rows from. Required together with copy_from_dataset_id.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1790,6 +1870,8 @@ class AsyncDatasetsClient:
             project_name=project_name,
             project_id=project_id,
             batch_group_id=batch_group_id,
+            copy_from_dataset_id=copy_from_dataset_id,
+            copy_from_version_id=copy_from_version_id,
             request_options=request_options,
         )
         return _response.data
@@ -1829,6 +1911,52 @@ class AsyncDatasetsClient:
         """
         _response = await self._raw_client.create_dataset_items_from_csv(
             file=file, dataset_id=dataset_id, request_options=request_options
+        )
+        return _response.data
+
+    async def create_dataset_items_from_json(
+        self,
+        *,
+        file: typing.Dict[str, typing.Optional[typing.Any]],
+        dataset_id: str,
+        format: CreateDatasetItemsFromJsonRequestFormat,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Create dataset items from an uploaded JSON or JSONL file. JSON files must contain a top-level array of objects.
+        JSONL files contain one JSON object per non-blank line; multi-line JSON objects are not supported.
+        Reserved keys (id, source, description, tags, evaluators, execution_policy) are extracted into the
+        corresponding DatasetItem fields; all remaining keys form the item's data map and preserve their JSON types.
+        To link dataset items to specific traces or spans use the dedicated /items/from-traces or /items/from-spans endpoints.
+        Processing happens asynchronously in batches. With dataset versioning enabled, a supplied id acts as an upsert key.
+
+        Parameters
+        ----------
+        file : typing.Dict[str, typing.Optional[typing.Any]]
+
+        dataset_id : str
+
+        format : CreateDatasetItemsFromJsonRequestFormat
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.datasets.create_dataset_items_from_json(file={'key': 'value'
+            }, dataset_id='dataset_id', format="json", )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.create_dataset_items_from_json(
+            file=file, dataset_id=dataset_id, format=format, request_options=request_options
         )
         return _response.data
 

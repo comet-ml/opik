@@ -622,6 +622,7 @@ function DatasetItemsTab({
                 variant="default"
                 size={isCompactToolbar ? "icon-sm" : "sm"}
                 onClick={handleNewDatasetItemClick}
+                data-testid="dataset-items-add-button"
               >
                 {isCompactToolbar ? <Plus /> : "Add item"}
               </Button>

@@ -35,14 +35,18 @@ _ENTRYPOINT_PATTERNS = [
     re.compile(r"entrypoint:\s*true"),
 ]
 
-_CONFIGURATION_PATTERNS = [
-    re.compile(r"get_or_create_config\("),
-    re.compile(r"create_config\("),
-    re.compile(r"getOrCreateConfig\("),
-    re.compile(r"createConfig\("),
+_PROMPT_PATTERNS = [
+    re.compile(r"\.get_prompt\("),
+    re.compile(r"\.create_prompt\("),
+    re.compile(r"\.get_chat_prompt\("),
+    re.compile(r"\.create_chat_prompt\("),
+    re.compile(r"\.getPrompt\("),
+    re.compile(r"\.createPrompt\("),
+    re.compile(r"\.getChatPrompt\("),
+    re.compile(r"\.createChatPrompt\("),
 ]
 
-_ALL_PATTERNS = _TRACING_PATTERNS + _ENTRYPOINT_PATTERNS + _CONFIGURATION_PATTERNS
+_ALL_PATTERNS = _TRACING_PATTERNS + _ENTRYPOINT_PATTERNS + _PROMPT_PATTERNS
 
 
 def _git_files(repo_root: Path) -> Optional[Set[str]]:
@@ -79,9 +83,7 @@ def build_checklist(
             "entrypoint": any(
                 _matches_any(line, _ENTRYPOINT_PATTERNS) for line in matches
             ),
-            "configuration": any(
-                _matches_any(line, _CONFIGURATION_PATTERNS) for line in matches
-            ),
+            "prompts": any(_matches_any(line, _PROMPT_PATTERNS) for line in matches),
         },
         "instrumentation_matches": matches,
     }

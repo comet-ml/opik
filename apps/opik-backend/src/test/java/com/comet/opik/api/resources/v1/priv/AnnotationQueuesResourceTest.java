@@ -122,6 +122,22 @@ class AnnotationQueuesResourceTest {
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
+
+    private AnnotationQueue newAnnotationQueue() {
+        return factory.manufacturePojo(AnnotationQueue.class)
+                .toBuilder()
+                .annotatorsPerItem(1)
+                .lockTimeoutSeconds(300)
+                .build();
+    }
+
+    private AnnotationQueueUpdate newAnnotationQueueUpdate() {
+        return factory.manufacturePojo(AnnotationQueueUpdate.class)
+                .toBuilder()
+                .annotatorsPerItem(2)
+                .lockTimeoutSeconds(600)
+                .build();
+    }
     private String baseURI;
     private ProjectResourceClient projectResourceClient;
     private AnnotationQueuesResourceClient annotationQueuesResourceClient;
@@ -166,7 +182,7 @@ class AnnotationQueuesResourceTest {
             var project = factory.manufacturePojo(Project.class);
             var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
 
-            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+            var annotationQueue = newAnnotationQueue()
                     .toBuilder()
                     .id(null)
                     .projectId(projectId)
@@ -196,7 +212,7 @@ class AnnotationQueuesResourceTest {
             var project = factory.manufacturePojo(Project.class);
             var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
 
-            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+            var annotationQueue = newAnnotationQueue()
                     .toBuilder()
                     .id(null)
                     .projectId(projectId)
@@ -226,7 +242,7 @@ class AnnotationQueuesResourceTest {
             var project = factory.manufacturePojo(Project.class);
             var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
 
-            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+            var annotationQueue = newAnnotationQueue()
                     .toBuilder()
                     .id(null)
                     .projectId(projectId)
@@ -300,7 +316,7 @@ class AnnotationQueuesResourceTest {
                     WorkspaceUserPermission.ANNOTATION_QUEUE_CREATE.getValue());
 
             try (var response = annotationQueuesResourceClient.callCreateAnnotationQueue(
-                    factory.manufacturePojo(AnnotationQueue.class), apiKey, workspaceName)) {
+                    newAnnotationQueue(), apiKey, workspaceName)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
             }
         }
@@ -315,7 +331,7 @@ class AnnotationQueuesResourceTest {
                     WorkspaceUserPermission.ANNOTATION_QUEUE_CREATE.getValue());
 
             try (var response = annotationQueuesResourceClient.callCreateAnnotationQueueBatch(
-                    new LinkedHashSet<>(List.of(factory.manufacturePojo(AnnotationQueue.class))),
+                    new LinkedHashSet<>(List.of(newAnnotationQueue())),
                     apiKey, workspaceName)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
             }
@@ -332,7 +348,7 @@ class AnnotationQueuesResourceTest {
             var project = factory.manufacturePojo(Project.class);
             var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
 
-            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+            var annotationQueue = newAnnotationQueue()
                     .toBuilder()
                     .id(null)
                     .projectId(projectId)
@@ -343,7 +359,7 @@ class AnnotationQueuesResourceTest {
 
             wireMock.server().resetRequests();
             annotationQueuesResourceClient.callUpdateAnnotationQueue(queueId,
-                    factory.manufacturePojo(AnnotationQueueUpdate.class), apiKey, workspaceName).close();
+                    newAnnotationQueueUpdate(), apiKey, workspaceName).close();
 
             wireMock.server().verify(
                     postRequestedFor(urlPathEqualTo("/opik/auth"))
@@ -361,7 +377,7 @@ class AnnotationQueuesResourceTest {
                     WorkspaceUserPermission.ANNOTATION_QUEUE_EDIT.getValue());
 
             try (var response = annotationQueuesResourceClient.callUpdateAnnotationQueue(UUID.randomUUID(),
-                    factory.manufacturePojo(AnnotationQueueUpdate.class), apiKey, workspaceName)) {
+                    newAnnotationQueueUpdate(), apiKey, workspaceName)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
             }
         }
@@ -379,7 +395,7 @@ class AnnotationQueuesResourceTest {
             var project = factory.manufacturePojo(Project.class);
             var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
 
-            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+            var annotationQueue = newAnnotationQueue()
                     .toBuilder()
                     .id(null) // Will be generated
                     .projectId(projectId)
@@ -393,7 +409,7 @@ class AnnotationQueuesResourceTest {
         @DisplayName("should reject request when project_id is null")
         void createAnnotationQueueBatchWhenProjectIdNullShouldReject() {
             // Given
-            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+            var annotationQueue = newAnnotationQueue()
                     .toBuilder()
                     .projectId(null) // Invalid
                     .build();
@@ -416,7 +432,7 @@ class AnnotationQueuesResourceTest {
             var project = factory.manufacturePojo(Project.class);
             var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
 
-            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+            var annotationQueue = newAnnotationQueue()
                     .toBuilder()
                     .id(null) // Will be generated
                     .projectId(projectId)
@@ -429,10 +445,79 @@ class AnnotationQueuesResourceTest {
         }
 
         @Test
+        @DisplayName("should create annotation queue with explicit annotatorsPerItem and return it on get")
+        void createAnnotationQueueWithAnnotatorsPerItem() {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var annotationQueue = newAnnotationQueue()
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .annotatorsPerItem(3)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var retrieved = annotationQueuesResourceClient.getAnnotationQueueById(
+                    annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(retrieved.annotatorsPerItem()).isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("should default annotatorsPerItem to 1 when omitted")
+        void createAnnotationQueueWithoutAnnotatorsPerItem() {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var annotationQueue = newAnnotationQueue()
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .annotatorsPerItem(null)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var retrieved = annotationQueuesResourceClient.getAnnotationQueueById(
+                    annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(retrieved.annotatorsPerItem()).isEqualTo(1);
+        }
+
+        private Stream<Arguments> invalidAnnotatorsPerItemValues() {
+            return Stream.of(
+                    arguments(0, "zero"),
+                    arguments(-1, "negative"),
+                    arguments(1001, "exceeds max"));
+        }
+
+        @ParameterizedTest
+        @MethodSource("invalidAnnotatorsPerItemValues")
+        @DisplayName("should reject annotation queue when annotatorsPerItem is invalid:")
+        void createAnnotationQueueWithInvalidAnnotatorsPerItemShouldReject(int value, String label) {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var annotationQueue = newAnnotationQueue()
+                    .toBuilder()
+                    .id(null)
+                    .projectId(projectId)
+                    .annotatorsPerItem(value)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueue(annotationQueue,
+                    API_KEY, TEST_WORKSPACE, SC_UNPROCESSABLE_ENTITY);
+        }
+
+        @Test
         @DisplayName("should reject request when project_id is null")
         void createAnnotationQueueWhenProjectIdNullShouldReject() {
             // Given
-            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+            var annotationQueue = newAnnotationQueue()
                     .toBuilder()
                     .projectId(null) // Invalid
                     .build();
@@ -455,7 +540,7 @@ class AnnotationQueuesResourceTest {
             var project = factory.manufacturePojo(Project.class);
             var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
 
-            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+            var annotationQueue = newAnnotationQueue()
                     .toBuilder()
                     .projectId(projectId)
                     .build();
@@ -483,7 +568,7 @@ class AnnotationQueuesResourceTest {
             var project = factory.manufacturePojo(Project.class);
             var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
 
-            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+            var annotationQueue = newAnnotationQueue()
                     .toBuilder()
                     .projectId(projectId)
                     .build();
@@ -539,7 +624,7 @@ class AnnotationQueuesResourceTest {
             var project = factory.manufacturePojo(Project.class);
             var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
 
-            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+            var annotationQueue = newAnnotationQueue()
                     .toBuilder()
                     .projectId(projectId)
                     .build();
@@ -561,7 +646,7 @@ class AnnotationQueuesResourceTest {
             var project = factory.manufacturePojo(Project.class);
             var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
 
-            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+            var annotationQueue = newAnnotationQueue()
                     .toBuilder()
                     .projectId(projectId)
                     .build();
@@ -591,7 +676,7 @@ class AnnotationQueuesResourceTest {
             var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
 
             // Create annotation queue for traces
-            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+            var annotationQueue = newAnnotationQueue()
                     .toBuilder()
                     .projectId(projectId)
                     .projectName(project.name())
@@ -611,11 +696,11 @@ class AnnotationQueuesResourceTest {
             annotationQueuesResourceClient.addItemsToAnnotationQueue(
                     annotationQueue.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
-            // Create feedback scores - some for traces in the queue, some for traces not in the queue
-            createFeedbackScoreForTrace(trace1, "quality", 0.8, project.name());
-            createFeedbackScoreForTrace(trace1, "relevance", 0.9, project.name());
-            createFeedbackScoreForTrace(trace2, "quality", 0.7, project.name());
-            createFeedbackScoreForTrace(trace2, "relevance", 0.85, project.name());
+            // Create feedback scores for traces in the queue, tagged with this queue's source_queue_id
+            createFeedbackScoreForTrace(trace1, "quality", 0.8, project.name(), annotationQueue.id());
+            createFeedbackScoreForTrace(trace1, "relevance", 0.9, project.name(), annotationQueue.id());
+            createFeedbackScoreForTrace(trace2, "quality", 0.7, project.name(), annotationQueue.id());
+            createFeedbackScoreForTrace(trace2, "relevance", 0.85, project.name(), annotationQueue.id());
 
             // Feedback scores for trace3 (NOT in the queue) - should not be aggregated
             createFeedbackScoreForTrace(trace3, "quality", 0.5, project.name());
@@ -656,6 +741,79 @@ class AnnotationQueuesResourceTest {
         }
 
         @Test
+        @DisplayName("should scope feedback scores and comments by source_queue_id when two queues share the same items")
+        void getAnnotationQueueScopedBySourceQueueId() {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var queueA = newAnnotationQueue()
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .scope(AnnotationQueue.AnnotationScope.TRACE)
+                    .feedbackDefinitionNames(List.of("quality", "relevance"))
+                    .commentsEnabled(true)
+                    .build();
+
+            var queueB = newAnnotationQueue()
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .scope(AnnotationQueue.AnnotationScope.TRACE)
+                    .feedbackDefinitionNames(List.of("quality", "relevance"))
+                    .commentsEnabled(true)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(queueA, queueB)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var trace1 = createTrace(project.name());
+            var trace2 = createTrace(project.name());
+            var itemIds = Set.of(trace1, trace2);
+
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    queueA.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+            annotationQueuesResourceClient.addItemsToAnnotationQueue(
+                    queueB.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // Scores: queue A gets 3 scores across 2 traces, queue B gets 1 score on trace1
+            createFeedbackScoreForTrace(trace1, "quality", 0.9, project.name(), queueA.id());
+            createFeedbackScoreForTrace(trace2, "quality", 0.7, project.name(), queueA.id());
+            createFeedbackScoreForTrace(trace1, "relevance", 0.8, project.name(), queueA.id());
+            createFeedbackScoreForTrace(trace1, "quality", 0.3, project.name(), queueB.id());
+
+            // Comments: queue A gets comments on both traces, queue B gets none
+            traceResourceClient.generateAndCreateComment(trace1, queueA.id(), API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_CREATED);
+            traceResourceClient.generateAndCreateComment(trace2, queueA.id(), API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_CREATED);
+
+            // Queue A: avg quality = (0.9+0.7)/2 = 0.8, avg relevance = 0.8, reviewer scored 2 items + commented 2
+            var retrievedA = annotationQueuesResourceClient.getAnnotationQueueById(
+                    queueA.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(retrievedA.feedbackScores())
+                    .usingRecursiveComparison()
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .ignoringCollectionOrder()
+                    .isEqualTo(List.of(
+                            FeedbackScoreAverage.builder().name("quality").value(new BigDecimal("0.8")).build(),
+                            FeedbackScoreAverage.builder().name("relevance").value(new BigDecimal("0.8")).build()));
+            verifyReviewers(retrievedA, 2L);
+
+            // Queue B: avg quality = 0.3, no relevance, no comments — reviewer scored 1 item only
+            var retrievedB = annotationQueuesResourceClient.getAnnotationQueueById(
+                    queueB.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(retrievedB.feedbackScores())
+                    .usingRecursiveComparison()
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .isEqualTo(List.of(
+                            FeedbackScoreAverage.builder().name("quality").value(new BigDecimal("0.3")).build()));
+            verifyReviewers(retrievedB, 1L);
+        }
+
+        @Test
         @DisplayName("should get annotation queue for threads when valid id with aggregated feedback scores")
         void getAnnotationQueueForThreadsWithFeedbackScores() {
             // Given - Create a project first
@@ -663,7 +821,7 @@ class AnnotationQueuesResourceTest {
             var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
 
             // Create annotation queue for threads
-            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+            var annotationQueue = newAnnotationQueue()
                     .toBuilder()
                     .projectId(projectId)
                     .projectName(project.name())
@@ -702,11 +860,11 @@ class AnnotationQueuesResourceTest {
             annotationQueuesResourceClient.addItemsToAnnotationQueue(
                     annotationQueue.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
-            // Create thread feedback scores - some for threads in the queue, some for threads not in the queue
-            createFeedbackScoreForThread(threadId1, "coherence", 0.9, project.name());
-            createFeedbackScoreForThread(threadId1, "completeness", 0.8, project.name());
-            createFeedbackScoreForThread(threadId2, "coherence", 0.85, project.name());
-            createFeedbackScoreForThread(threadId2, "completeness", 0.75, project.name());
+            // Create thread feedback scores for threads in the queue, tagged with this queue's source_queue_id
+            createFeedbackScoreForThread(threadId1, "coherence", 0.9, project.name(), annotationQueue.id());
+            createFeedbackScoreForThread(threadId1, "completeness", 0.8, project.name(), annotationQueue.id());
+            createFeedbackScoreForThread(threadId2, "coherence", 0.85, project.name(), annotationQueue.id());
+            createFeedbackScoreForThread(threadId2, "completeness", 0.75, project.name(), annotationQueue.id());
 
             // Feedback scores for threadId3 (NOT in the queue) - should not be aggregated
             createFeedbackScoreForThread(threadId3, "coherence", 0.4, project.name());
@@ -767,7 +925,7 @@ class AnnotationQueuesResourceTest {
             var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
 
             // Create annotation queue for traces
-            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+            var annotationQueue = newAnnotationQueue()
                     .toBuilder()
                     .projectId(projectId)
                     .projectName(project.name())
@@ -807,7 +965,7 @@ class AnnotationQueuesResourceTest {
             var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
 
             // Create annotation queue for traces with NO feedback definitions (comment-only workflow)
-            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+            var annotationQueue = newAnnotationQueue()
                     .toBuilder()
                     .projectId(projectId)
                     .projectName(project.name())
@@ -827,8 +985,10 @@ class AnnotationQueuesResourceTest {
                     annotationQueue.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
             // Add comments to traces (without any feedback scores)
-            traceResourceClient.generateAndCreateComment(trace1, API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
-            traceResourceClient.generateAndCreateComment(trace2, API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+            traceResourceClient.generateAndCreateComment(trace1, annotationQueue.id(), API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_CREATED);
+            traceResourceClient.generateAndCreateComment(trace2, annotationQueue.id(), API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_CREATED);
 
             // When
             var retrievedQueue = annotationQueuesResourceClient.getAnnotationQueueById(
@@ -856,7 +1016,7 @@ class AnnotationQueuesResourceTest {
             var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
 
             // Create annotation queue with feedback definitions
-            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+            var annotationQueue = newAnnotationQueue()
                     .toBuilder()
                     .projectId(projectId)
                     .projectName(project.name())
@@ -877,14 +1037,16 @@ class AnnotationQueuesResourceTest {
                     annotationQueue.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
             // Add feedback score to trace1
-            createFeedbackScoreForTrace(trace1, "quality", 0.8, project.name());
+            createFeedbackScoreForTrace(trace1, "quality", 0.8, project.name(), annotationQueue.id());
 
             // Add comment to trace2 (no feedback)
-            traceResourceClient.generateAndCreateComment(trace2, API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+            traceResourceClient.generateAndCreateComment(trace2, annotationQueue.id(), API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_CREATED);
 
             // Add both feedback and comment to trace3
-            createFeedbackScoreForTrace(trace3, "quality", 0.9, project.name());
-            traceResourceClient.generateAndCreateComment(trace3, API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+            createFeedbackScoreForTrace(trace3, "quality", 0.9, project.name(), annotationQueue.id());
+            traceResourceClient.generateAndCreateComment(trace3, annotationQueue.id(), API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_CREATED);
 
             // When
             var retrievedQueue = annotationQueuesResourceClient.getAnnotationQueueById(
@@ -916,7 +1078,7 @@ class AnnotationQueuesResourceTest {
             var project = factory.manufacturePojo(Project.class);
             var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
 
-            var queue = factory.manufacturePojo(AnnotationQueue.class)
+            var queue = newAnnotationQueue()
                     .toBuilder()
                     .projectId(projectId)
                     .projectName(project.name())
@@ -947,7 +1109,7 @@ class AnnotationQueuesResourceTest {
             var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
 
             // Create annotation queue
-            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+            var annotationQueue = newAnnotationQueue()
                     .toBuilder()
                     .projectId(projectId)
                     .projectName(project.name())
@@ -957,7 +1119,7 @@ class AnnotationQueuesResourceTest {
                     new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
             // Create update request
-            var updateRequest = factory.manufacturePojo(AnnotationQueueUpdate.class);
+            var updateRequest = newAnnotationQueueUpdate();
 
             // When
             annotationQueuesResourceClient.updateAnnotationQueue(
@@ -984,7 +1146,7 @@ class AnnotationQueuesResourceTest {
             var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
 
             // Create annotation queue with initial values
-            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+            var annotationQueue = newAnnotationQueue()
                     .toBuilder()
                     .projectId(projectId)
                     .projectName(project.name())
@@ -1026,7 +1188,7 @@ class AnnotationQueuesResourceTest {
             var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
 
             // Create annotation queue with initial values
-            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+            var annotationQueue = newAnnotationQueue()
                     .toBuilder()
                     .projectId(projectId)
                     .projectName(project.name())
@@ -1036,7 +1198,7 @@ class AnnotationQueuesResourceTest {
                     new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
             // Create partial update request (only updating name and comments_enabled)
-            var updateRequest = factory.manufacturePojo(AnnotationQueueUpdate.class)
+            var updateRequest = newAnnotationQueueUpdate()
                     .toBuilder()
                     .name("")
                     .build();
@@ -1044,6 +1206,157 @@ class AnnotationQueuesResourceTest {
             // When
             annotationQueuesResourceClient.updateAnnotationQueue(
                     annotationQueue.id(), updateRequest, API_KEY, TEST_WORKSPACE, HttpStatus.SC_UNPROCESSABLE_ENTITY);
+        }
+
+        @Test
+        @DisplayName("should update annotatorsPerItem when explicitly changed")
+        void updateAnnotatorsPerItem() {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var annotationQueue = newAnnotationQueue()
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .annotatorsPerItem(1)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var updateRequest = AnnotationQueueUpdate.builder()
+                    .annotatorsPerItem(5)
+                    .build();
+
+            annotationQueuesResourceClient.updateAnnotationQueue(
+                    annotationQueue.id(), updateRequest, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var updatedQueue = annotationQueuesResourceClient.getAnnotationQueueById(
+                    annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(updatedQueue.annotatorsPerItem()).isEqualTo(5);
+        }
+
+        @Test
+        @DisplayName("should preserve annotatorsPerItem when not included in update")
+        void updateShouldPreserveAnnotatorsPerItemWhenNotIncluded() {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var annotationQueue = newAnnotationQueue()
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .annotatorsPerItem(7)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var updateRequest = AnnotationQueueUpdate.builder()
+                    .description("Updated description")
+                    .build();
+
+            annotationQueuesResourceClient.updateAnnotationQueue(
+                    annotationQueue.id(), updateRequest, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var updatedQueue = annotationQueuesResourceClient.getAnnotationQueueById(
+                    annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(updatedQueue.annotatorsPerItem()).isEqualTo(7);
+        }
+
+        @Test
+        @DisplayName("should create annotation queue with explicit lockTimeoutSeconds and return it on get")
+        void createAnnotationQueueWithLockTimeoutSeconds() {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var annotationQueue = newAnnotationQueue()
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .lockTimeoutSeconds(180)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var retrieved = annotationQueuesResourceClient.getAnnotationQueueById(
+                    annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(retrieved)
+                    .usingRecursiveComparison()
+                    .ignoringFields(QUEUE_IGNORED_FIELDS)
+                    .isEqualTo(annotationQueue);
+        }
+
+        @Test
+        @DisplayName("should default lockTimeoutSeconds to 300 when omitted")
+        void createAnnotationQueueWithoutLockTimeoutSeconds() {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var annotationQueue = newAnnotationQueue()
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .lockTimeoutSeconds(null)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var retrieved = annotationQueuesResourceClient.getAnnotationQueueById(
+                    annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            var expected = annotationQueue.toBuilder()
+                    .lockTimeoutSeconds(300)
+                    .build();
+
+            assertThat(retrieved)
+                    .usingRecursiveComparison()
+                    .ignoringFields(QUEUE_IGNORED_FIELDS)
+                    .isEqualTo(expected);
+        }
+
+        private Stream<Arguments> updateLockTimeoutScenarios() {
+            return Stream.of(
+                    arguments(300, AnnotationQueueUpdate.builder().lockTimeoutSeconds(1800).build(),
+                            "explicit change"),
+                    arguments(120, AnnotationQueueUpdate.builder().description("Updated description").build(),
+                            "preserve when not included"));
+        }
+
+        @ParameterizedTest
+        @MethodSource("updateLockTimeoutScenarios")
+        @DisplayName("should handle lockTimeoutSeconds on update:")
+        void updateLockTimeoutSeconds(int initialTimeout, AnnotationQueueUpdate updateRequest, String scenario) {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            var annotationQueue = newAnnotationQueue()
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .lockTimeoutSeconds(initialTimeout)
+                    .build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(annotationQueue)), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            annotationQueuesResourceClient.updateAnnotationQueue(
+                    annotationQueue.id(), updateRequest, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var updatedQueue = annotationQueuesResourceClient.getAnnotationQueueById(
+                    annotationQueue.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            var expected = applyUpdate(updateRequest, annotationQueue);
+
+            assertThat(updatedQueue)
+                    .usingRecursiveComparison()
+                    .ignoringFields(QUEUE_IGNORED_FIELDS)
+                    .isEqualTo(expected);
         }
     }
 
@@ -1067,7 +1380,7 @@ class AnnotationQueuesResourceTest {
 
             // Create multiple annotation queues
             var annotationQueues = IntStream.range(0, 5)
-                    .mapToObj(i -> factory.manufacturePojo(AnnotationQueue.class)
+                    .mapToObj(i -> newAnnotationQueue()
                             .toBuilder()
                             .projectId(projectId)
                             .projectName(project.name())
@@ -1154,7 +1467,7 @@ class AnnotationQueuesResourceTest {
             var project = factory.manufacturePojo(Project.class);
             var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
 
-            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+            var annotationQueue = newAnnotationQueue()
                     .toBuilder()
                     .projectId(projectId)
                     .projectName(project.name())
@@ -1202,7 +1515,7 @@ class AnnotationQueuesResourceTest {
 
             var queues = IntStream.range(0, queueCount)
                     .mapToObj(i -> {
-                        var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+                        var annotationQueue = newAnnotationQueue()
                                 .toBuilder()
                                 .projectId(projectId)
                                 .projectName(project.name())
@@ -1237,11 +1550,15 @@ class AnnotationQueuesResourceTest {
                         annotationQueuesResourceClient.addItemsToAnnotationQueue(
                                 annotationQueue.id(), itemIds, apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
 
-                        // Create feedback scores - some for traces in the queue, some for traces not in the queue
-                        createFeedbackScoreForTrace(trace1, "quality", 0.8, project.name(), apiKey, workspaceName);
-                        createFeedbackScoreForTrace(trace1, "relevance", 0.9, project.name(), apiKey, workspaceName);
-                        createFeedbackScoreForTrace(trace2, "quality", 0.7, project.name(), apiKey, workspaceName);
-                        createFeedbackScoreForTrace(trace2, "relevance", 0.85, project.name(), apiKey, workspaceName);
+                        // Create feedback scores for traces in the queue, tagged with this queue's source_queue_id
+                        createFeedbackScoreForTrace(trace1, "quality", 0.8, project.name(), annotationQueue.id(),
+                                apiKey, workspaceName);
+                        createFeedbackScoreForTrace(trace1, "relevance", 0.9, project.name(), annotationQueue.id(),
+                                apiKey, workspaceName);
+                        createFeedbackScoreForTrace(trace2, "quality", 0.7, project.name(), annotationQueue.id(),
+                                apiKey, workspaceName);
+                        createFeedbackScoreForTrace(trace2, "relevance", 0.85, project.name(), annotationQueue.id(),
+                                apiKey, workspaceName);
 
                         // Feedback scores for trace3 (NOT in the queue) - should not be aggregated
                         createFeedbackScoreForTrace(trace3, "quality", 0.5, project.name(), apiKey, workspaceName);
@@ -1336,7 +1653,7 @@ class AnnotationQueuesResourceTest {
             var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
 
             // Create annotation queue
-            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+            var annotationQueue = newAnnotationQueue()
                     .toBuilder()
                     .projectId(projectId)
                     .projectName(project.name())
@@ -1659,27 +1976,45 @@ class AnnotationQueuesResourceTest {
 
     private void createFeedbackScoreForTrace(UUID traceId, String scoreName, double scoreValue,
             String projectName) {
-        createFeedbackScoreForTrace(traceId, scoreName, scoreValue, projectName, API_KEY, TEST_WORKSPACE);
+        createFeedbackScoreForTrace(traceId, scoreName, scoreValue, projectName, null, API_KEY, TEST_WORKSPACE);
+    }
+
+    private void createFeedbackScoreForTrace(UUID traceId, String scoreName, double scoreValue,
+            String projectName, UUID sourceQueueId) {
+        createFeedbackScoreForTrace(traceId, scoreName, scoreValue, projectName, sourceQueueId, API_KEY,
+                TEST_WORKSPACE);
     }
 
     private void createFeedbackScoreForTrace(UUID traceId, String scoreName, double scoreValue,
             String projectName, String apiKey, String workspaceName) {
+        createFeedbackScoreForTrace(traceId, scoreName, scoreValue, projectName, null, apiKey, workspaceName);
+    }
+
+    private void createFeedbackScoreForTrace(UUID traceId, String scoreName, double scoreValue,
+            String projectName, UUID sourceQueueId, String apiKey, String workspaceName) {
         var feedbackScore = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                 .id(traceId)
                 .name(scoreName)
                 .value(BigDecimal.valueOf(scoreValue))
                 .projectName(projectName)
+                .sourceQueueId(sourceQueueId)
                 .build();
         traceResourceClient.feedbackScores(List.of(feedbackScore), apiKey, workspaceName);
     }
 
     private void createFeedbackScoreForThread(UUID threadId, String scoreName, double scoreValue,
             String projectName) {
+        createFeedbackScoreForThread(threadId, scoreName, scoreValue, projectName, null);
+    }
+
+    private void createFeedbackScoreForThread(UUID threadId, String scoreName, double scoreValue,
+            String projectName, UUID sourceQueueId) {
         var feedbackScore = factory.manufacturePojo(FeedbackScoreBatchItemThread.class).toBuilder()
                 .threadId(threadId.toString())
                 .name(scoreName)
                 .value(BigDecimal.valueOf(scoreValue))
                 .projectName(projectName)
+                .sourceQueueId(sourceQueueId)
                 .build();
         traceResourceClient.threadFeedbackScores(List.of(feedbackScore), API_KEY, TEST_WORKSPACE);
     }
@@ -1695,7 +2030,7 @@ class AnnotationQueuesResourceTest {
     }
 
     private AnnotationQueue prepareAnnotationQueue(String projectName, UUID projectId) {
-        return factory.manufacturePojo(AnnotationQueue.class)
+        return newAnnotationQueue()
                 .toBuilder()
                 .projectId(projectId)
                 .projectName(projectName)
@@ -1763,6 +2098,12 @@ class AnnotationQueuesResourceTest {
                 .feedbackDefinitionNames(updateRequest.feedbackDefinitionNames() != null
                         ? updateRequest.feedbackDefinitionNames()
                         : existingQueue.feedbackDefinitionNames())
+                .annotatorsPerItem(updateRequest.annotatorsPerItem() != null
+                        ? updateRequest.annotatorsPerItem()
+                        : existingQueue.annotatorsPerItem())
+                .lockTimeoutSeconds(updateRequest.lockTimeoutSeconds() != null
+                        ? updateRequest.lockTimeoutSeconds()
+                        : existingQueue.lockTimeoutSeconds())
                 .build();
     }
 

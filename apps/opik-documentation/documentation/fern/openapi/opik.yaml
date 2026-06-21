@@ -34,10 +34,20 @@ servers:
 - url: https://www.comet.com/opik/api
   description: Opik Cloud
 tags:
+- name: MCP OAuth
+  description: MCP OAuth 2.1 Authorization Server resources
+- name: System analytics queries
+  description: Internal endpoint to run Agent Insights free-form SQL
 - name: System usage
   description: System usage related resource
 - name: Agent Configs
   description: Agent configuration management
+- name: Agent Insights Jobs
+  description: "Per-(workspace, project) Agent Insights report configuration"
+- name: Agent Insights
+  description: Agent Insights report results
+- name: AI Spend
+  description: Coding-agent spend analytics
 - name: Alerts
   description: Alert resources
 - name: Annotation Queues
@@ -89,6 +99,8 @@ tags:
   description: Project related resources
 - name: Prompts
   description: Prompt resources
+- name: Reports
+  description: Ollie daily report management
 - name: Retention Rules
   description: Data retention rule management
 - name: Service Toggles
@@ -106,6 +118,259 @@ tags:
 - name: Redirect
   description: Redirects for SDK generated links
 paths:
+  /oauth/authorize:
+    get:
+      tags:
+      - MCP OAuth
+      summary: OAuth Authorization Endpoint
+      description: "OAuth 2.1 authorization endpoint (RFC 6749 §3.1). Validates the\
+        \ client and PKCE parameters, then redirects to the login or consent page"
+      operationId: authorize
+      parameters:
+      - name: client_id
+        in: query
+        required: true
+        schema:
+          minLength: 1
+          type: string
+      - name: redirect_uri
+        in: query
+        required: true
+        schema:
+          minLength: 1
+          type: string
+      - name: response_type
+        in: query
+        schema:
+          type: string
+      - name: code_challenge
+        in: query
+        schema:
+          type: string
+      - name: code_challenge_method
+        in: query
+        schema:
+          type: string
+      - name: resource
+        in: query
+        schema:
+          type: string
+      - name: state
+        in: query
+        schema:
+          type: string
+      responses:
+        "302":
+          description: "Redirect to login, consent, or client redirect_uri with an\
+            \ error"
+    post:
+      tags:
+      - MCP OAuth
+      summary: Submit Authorization Consent
+      description: "Submit the user's consent, issue an authorization code, and return\
+        \ the client redirect target"
+      operationId: consent
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConsentRequest"
+        required: true
+      responses:
+        "200":
+          description: Consent response with the client redirect target
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConsentResponse"
+  /oauth/authorize/context:
+    get:
+      tags:
+      - MCP OAuth
+      summary: Get Authorization Consent Context
+      description: "Get the client details, eligible workspaces, and a CSRF token\
+        \ used to render the consent screen"
+      operationId: getAuthorizeContext
+      parameters:
+      - name: client_id
+        in: query
+        required: true
+        schema:
+          minLength: 1
+          type: string
+      - name: redirect_uri
+        in: query
+        required: true
+        schema:
+          minLength: 1
+          type: string
+      responses:
+        "200":
+          description: Authorization consent context
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthorizeContext"
+  /.well-known/oauth-authorization-server:
+    get:
+      tags:
+      - MCP OAuth
+      summary: Get OAuth Authorization Server Metadata
+      description: Get OAuth 2.1 Authorization Server Metadata (RFC 8414)
+      operationId: getOAuthAuthorizationServerMetadata
+      responses:
+        "200":
+          description: Authorization Server Metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthorizationServerMetadata"
+  /oauth/register:
+    post:
+      tags:
+      - MCP OAuth
+      summary: OAuth Dynamic Client Registration Endpoint
+      description: OAuth 2.0 Dynamic Client Registration (RFC 7591). Registers a public
+        client for the MCP OAuth flow; throttled per source IP
+      operationId: registerOAuthClient
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientRegistrationRequest"
+        required: true
+      responses:
+        "201":
+          description: Registered client metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientRegistrationResponse"
+        "429":
+          description: Registration rate limit exceeded
+  /oauth/revoke:
+    post:
+      tags:
+      - MCP OAuth
+      summary: OAuth Token Revocation Endpoint
+      description: "OAuth 2.0 token revocation endpoint (RFC 7009). Always returns\
+        \ 200, whether the token was revoked, never existed, or was invalid"
+      operationId: revoke
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                token:
+                  type: string
+                client_id:
+                  type: string
+      responses:
+        "200":
+          description: Revocation acknowledged
+  /oauth/token:
+    post:
+      tags:
+      - MCP OAuth
+      summary: OAuth Token Endpoint
+      description: "OAuth 2.1 token endpoint (RFC 6749 §4.1.3, §6). Exchanges an authorization\
+        \ code with PKCE or a refresh token for an access/refresh token pair"
+      operationId: token
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                grant_type:
+                  type: string
+                code:
+                  type: string
+                redirect_uri:
+                  type: string
+                client_id:
+                  type: string
+                code_verifier:
+                  type: string
+                refresh_token:
+                  type: string
+      responses:
+        "200":
+          description: Token response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
+          description: OAuth error (RFC 6749 §5.2)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthError"
+  /opik/auth-oauth:
+    post:
+      tags:
+      - MCP OAuth
+      summary: Validate OAuth Access Token
+      description: Introspects a bearer access token and returns the identity it resolves
+        to
+      operationId: validateOAuthToken
+      parameters:
+      - name: Authorization
+        in: header
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Validated token identity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidatedToken"
+        "401":
+          description: "Missing, malformed, or unknown access token"
+  /v1/internal/analytics-queries/projects/{projectId}:
+    post:
+      tags:
+      - System analytics queries
+      summary: Execute Agent Insights free-form SQL
+      description: Runs Ollie-generated read-only SQL bounded to the caller's workspace
+        and the requested project. Returns 501 when the Agent Insights toggle is off.
+      operationId: executeAnalyticsQuery
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnalyticsQueryRequest"
+      responses:
+        "200":
+          description: Query results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsQueryResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "501":
+          description: Agent Insights queries are not enabled
   /v1/internal/usage/bi-datasets:
     get:
       tags:
@@ -673,6 +938,466 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/agent-insights/jobs/{projectId}:
+    get:
+      tags:
+      - Agent Insights Jobs
+      summary: Get Agent Insights job
+      description: "Returns the Agent Insights job for the (workspace, project), or\
+        \ 404 if none exists."
+      operationId: getAgentInsightsJob
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentInsightsJob"
+        "404":
+          description: Job not found
+    post:
+      tags:
+      - Agent Insights Jobs
+      summary: Create Agent Insights job
+      description: Creates the Agent Insights job for a project. 409 if one already
+        exists.
+      operationId: createAgentInsightsJob
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "201":
+          description: Job created
+          headers:
+            Location:
+              description: URI of the created job
+              style: simple
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentInsightsJob"
+        "404":
+          description: Project not found
+        "409":
+          description: Job already exists
+    patch:
+      tags:
+      - Agent Insights Jobs
+      summary: Update Agent Insights job
+      description: "Partially updates the Agent Insights job for a project (e.g. status;\
+        \ never deletes). Returns the updated job, or 404 if none exists."
+      operationId: updateAgentInsightsJob
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentInsightsJobUpdate"
+        required: true
+      responses:
+        "200":
+          description: Job updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentInsightsJob"
+        "404":
+          description: Job not found
+  /v1/private/agent-insights/jobs/{projectId}/trigger:
+    post:
+      tags:
+      - Agent Insights Jobs
+      summary: Trigger Agent Insights job
+      description: Triggers an immediate report run for an existing job (over the
+        last 24h). Fire-and-forget; returns 202. 404 if none exists.
+      operationId: triggerAgentInsightsJob
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "202":
+          description: Run accepted
+        "404":
+          description: Job not found
+  /v1/private/agent-insights/issues:
+    get:
+      tags:
+      - Agent Insights
+      summary: Find agent insights issues
+      description: "Returns a paginated list of issues that have at least one detail\
+        \ row within the requested time window, with metrics aggregated over the window"
+      operationId: findAgentInsightsIssues
+      parameters:
+      - name: project_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: from_date
+        in: query
+        schema:
+          type: string
+          format: date
+      - name: to_date
+        in: query
+        schema:
+          type: string
+          format: date
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - open
+          - resolved
+          - closed
+      - name: sorting
+        in: query
+        schema:
+          type: string
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      responses:
+        "200":
+          description: Issues page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentInsightsIssuePage"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    post:
+      tags:
+      - Agent Insights
+      summary: Store agent insights report results
+      description: Upserts the detected issues and their per-day metrics for the given
+        report day in a single transaction. Issue status is never modified by this
+        endpoint.
+      operationId: reportAgentInsightsIssues
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentInsightsReport"
+      responses:
+        "204":
+          description: Report stored
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/agent-insights/issues/{issue_id}:
+    get:
+      tags:
+      - Agent Insights
+      summary: Get agent insights issue by id
+      description: Returns the issue together with its per-day breakdown within the
+        requested time window
+      operationId: getAgentInsightsIssueById
+      parameters:
+      - name: issue_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: project_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: from_date
+        in: query
+        schema:
+          type: string
+          format: date
+      - name: to_date
+        in: query
+        schema:
+          type: string
+          format: date
+      responses:
+        "200":
+          description: Issue with details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentInsightsIssueWithDetails"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    patch:
+      tags:
+      - Agent Insights
+      summary: Update agent insights issue status
+      description: "Moves an issue through its lifecycle: open, resolved or closed"
+      operationId: updateAgentInsightsIssue
+      parameters:
+      - name: issue_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentInsightsIssueUpdate"
+      responses:
+        "204":
+          description: Issue updated
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/ai-spend/composition:
+    post:
+      tags:
+      - AI Spend
+      summary: Get spend composition
+      description: Get coding-agent token-flow composition (Sankey)
+      operationId: getSpendComposition
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpendMetricRequest"
+      responses:
+        "200":
+          description: Spend composition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpendCompositionResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/ai-spend/composition/{laneKey}/breakdown:
+    post:
+      tags:
+      - AI Spend
+      summary: Get spend lane breakdown
+      description: Get the per-item breakdown for a composition lane
+      operationId: getSpendLaneBreakdown
+      parameters:
+      - name: laneKey
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpendMetricRequest"
+      responses:
+        "200":
+          description: Lane breakdown
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpendBreakdownResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/ai-spend/recommendations:
+    post:
+      tags:
+      - AI Spend
+      summary: Get spend recommendations
+      description: Get coding-agent cost-saving recommendations
+      operationId: getSpendRecommendations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpendMetricRequest"
+      responses:
+        "200":
+          description: Recommendations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpendRecommendationsResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/ai-spend/summary:
+    post:
+      tags:
+      - AI Spend
+      summary: Get spend summary
+      description: Get coding-agent spend KPI summary
+      operationId: getSpendSummary
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpendMetricRequest"
+      responses:
+        "200":
+          description: Spend summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpendSummaryResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/ai-spend/users:
+    post:
+      tags:
+      - AI Spend
+      summary: Get spend user leaderboard
+      description: Get coding-agent spend per user
+      operationId: getSpendUsers
+      parameters:
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          maximum: 1000
+          minimum: 1
+          type: integer
+          format: int32
+          default: 25
+      - name: sorting
+        in: query
+        schema:
+          type: string
+      - name: name
+        in: query
+        schema:
+          type: string
+          description: "Filter users by name or email (partial match, case insensitive)"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpendMetricRequest"
+      responses:
+        "200":
+          description: User leaderboard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpendUserPage"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/alerts:
     get:
       tags:
@@ -1096,6 +1821,55 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/annotation-queues/{queueId}/locks:
+    get:
+      tags:
+      - Annotation Queues
+      summary: Get all active locks for an annotation queue
+      description: Returns lock status for all actively locked items in the queue
+      operationId: getAnnotationQueueLocks
+      parameters:
+      - name: queueId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Queue locks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocksResponse"
+  /v1/private/annotation-queues/{queueId}/items/{itemId}/lock:
+    put:
+      tags:
+      - Annotation Queues
+      summary: Create or extend annotation queue item lock
+      description: "Claim an annotation queue item for the current user, or extend\
+        \ an existing lock"
+      operationId: lockAnnotationQueueItem
+      parameters:
+      - name: queueId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: itemId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Lock result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LockResponse"
   /v1/private/annotation-queues/{id}/items/delete:
     post:
       tags:
@@ -1833,6 +2607,11 @@ paths:
         - Returns 409 Conflict if baseVersion is stale and override is not set
 
         Use `override=true` query parameter to force version creation even with stale baseVersion.
+
+        Set 'copy_from_dataset_id' and 'copy_from_version_id' together on the request body to read
+        carry-forward rows from the supplied (dataset, version) pair instead of the destination's
+        prior version. When the fields are null, carry-forward rows are read from the destination's
+        prior version.
       operationId: applyDatasetItemChanges
       parameters:
       - name: id
@@ -1987,6 +2766,10 @@ paths:
         Create/update dataset items based on dataset item id.
         Each item's 'id' field is the stable identifier and upsert key.
         Provide it to update an existing item, or omit it to create a new one.
+
+        Set 'copy_from_dataset_id' and 'copy_from_version_id' together to read carry-forward rows
+        from the supplied (dataset, version) pair instead of the destination's prior version. When
+        the fields are null, carry-forward rows are read from the destination's prior version.
       operationId: createOrUpdateDatasetItems
       requestBody:
         content:
@@ -2021,6 +2804,48 @@ paths:
       responses:
         "202":
           description: Accepted - CSV processing started
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/datasets/items/from-json:
+    post:
+      tags:
+      - Datasets
+      summary: Create dataset items from JSON file
+      description: |-
+        Create dataset items from an uploaded JSON or JSONL file. JSON files must contain a top-level array of objects.
+        JSONL files contain one JSON object per non-blank line; multi-line JSON objects are not supported.
+        Reserved keys (id, source, description, tags, evaluators, execution_policy) are extracted into the
+        corresponding DatasetItem fields; all remaining keys form the item's data map and preserve their JSON types.
+        To link dataset items to specific traces or spans use the dedicated /items/from-traces or /items/from-spans endpoints.
+        Processing happens asynchronously in batches. With dataset versioning enabled, a supplied id acts as an upsert key.
+      operationId: createDatasetItemsFromJson
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              required:
+              - dataset_id
+              - file
+              - format
+              type: object
+              properties:
+                file:
+                  type: object
+                dataset_id:
+                  type: string
+                  format: uuid
+                format:
+                  type: string
+                  enum:
+                  - json
+                  - jsonl
+      responses:
+        "202":
+          description: Accepted - JSON processing started
         "400":
           description: Bad Request
           content:
@@ -3180,7 +4005,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
         "409":
-          description: Experiment dataset mismatch
+          description: Conflict
           content:
             application/json:
               schema:
@@ -6178,6 +7003,48 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Detail"
+  /v1/private/prompts/{promptId}/versions/by-number/{versionNumber}:
+    get:
+      tags:
+      - Prompts
+      summary: Get prompt version by sequential number
+      description: Get a prompt version by its sequential v<N> number for the given
+        prompt.
+      operationId: getPromptVersionByNumber
+      parameters:
+      - name: promptId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: versionNumber
+        in: path
+        required: true
+        schema:
+          maxLength: 10
+          minLength: 0
+          pattern: v\d+
+          type: string
+      responses:
+        "200":
+          description: Prompt version resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromptVersion_Detail"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
   /v1/private/prompts/{id}/versions:
     get:
       tags:
@@ -6440,6 +7307,145 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/projects/{projectId}/reports/{reportId}/complete:
+    post:
+      tags:
+      - Reports
+      summary: Complete report generation
+      description: Callback from Ollie to update report status and content after generation.
+      operationId: completeReport
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: reportId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportCompleteRequest"
+      responses:
+        "204":
+          description: Report updated
+        "404":
+          description: Report not found
+  /v1/private/projects/{projectId}/reports/generate:
+    post:
+      tags:
+      - Reports
+      summary: Trigger report generation
+      description: Creates a pending report and triggers asynchronous generation via
+        the orchestrator.
+      operationId: generateReport
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "202":
+          description: Report generation triggered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateReportResponse"
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+  /v1/private/projects/{projectId}/reports/preferences:
+    get:
+      tags:
+      - Reports
+      summary: Get report preferences
+      description: "Returns report preferences for a project, or null if none have\
+        \ been set."
+      operationId: getReportPreference
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Report preferences or null
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportPreference"
+    put:
+      tags:
+      - Reports
+      summary: Update report preferences
+      description: Enable or disable daily report generation for a project.
+      operationId: updateReportPreference
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportPreference"
+      responses:
+        "200":
+          description: Updated preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportPreference"
+  /v1/private/projects/{projectId}/reports:
+    get:
+      tags:
+      - Reports
+      summary: Get reports for a project
+      description: "Returns a paginated list of reports, newest first."
+      operationId: getReports
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      responses:
+        "200":
+          description: Reports page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OllieReportPage"
   /v1/private/retention/rules:
     get:
       tags:
@@ -8409,6 +9415,206 @@ paths:
             application/json: {}
 components:
   schemas:
+    ConsentResponse:
+      type: object
+      properties:
+        redirect_to:
+          type: string
+    ConsentRequest:
+      required:
+      - client_id
+      - code_challenge
+      - code_challenge_method
+      - redirect_uri
+      - resource
+      type: object
+      properties:
+        client_id:
+          minLength: 1
+          type: string
+        redirect_uri:
+          minLength: 1
+          type: string
+        code_challenge:
+          minLength: 1
+          type: string
+        code_challenge_method:
+          minLength: 1
+          pattern: S256
+          type: string
+        resource:
+          minLength: 1
+          type: string
+        state:
+          type: string
+        workspace_id:
+          type: string
+        workspace_name:
+          type: string
+        csrf:
+          type: string
+    AuthorizeContext:
+      type: object
+      properties:
+        client_name:
+          type: string
+        client_logo_uri:
+          type: string
+        workspaces:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkspaceInfo"
+        csrf_token:
+          type: string
+    WorkspaceInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+    AuthorizationServerMetadata:
+      type: object
+      properties:
+        issuer:
+          type: string
+        authorization_endpoint:
+          type: string
+        token_endpoint:
+          type: string
+        revocation_endpoint:
+          type: string
+        registration_endpoint:
+          type: string
+        response_types_supported:
+          type: array
+          items:
+            type: string
+        grant_types_supported:
+          type: array
+          items:
+            type: string
+        code_challenge_methods_supported:
+          type: array
+          items:
+            type: string
+        token_endpoint_auth_methods_supported:
+          type: array
+          items:
+            type: string
+    ClientRegistrationResponse:
+      type: object
+      properties:
+        client_id:
+          type: string
+        client_id_issued_at:
+          type: integer
+          format: int64
+        client_name:
+          type: string
+        logo_uri:
+          type: string
+        redirect_uris:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+        token_endpoint_auth_method:
+          type: string
+        grant_types:
+          type: array
+          items:
+            type: string
+        response_types:
+          type: array
+          items:
+            type: string
+    ClientRegistrationRequest:
+      required:
+      - client_name
+      - redirect_uris
+      type: object
+      properties:
+        client_name:
+          maxLength: 255
+          minLength: 0
+          type: string
+        redirect_uris:
+          maxItems: 10
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 2048
+            minLength: 0
+            type: string
+        logo_uri:
+          maxLength: 2048
+          minLength: 0
+          type: string
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+        expires_in:
+          type: integer
+          format: int64
+        workspace_id:
+          type: string
+        workspace_name:
+          type: string
+    OAuthError:
+      type: object
+      properties:
+        error:
+          type: string
+        error_description:
+          type: string
+    ValidatedToken:
+      type: object
+      properties:
+        user_name:
+          type: string
+        workspace_id:
+          type: string
+        workspace_name:
+          type: string
+        resource:
+          type: string
+    AnalyticsQueryResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/JsonNode"
+    JsonNode:
+      type: object
+    ErrorMessage:
+      type: object
+      properties:
+        code:
+          type: integer
+          format: int32
+        message:
+          type: string
+        details:
+          type: string
+    AnalyticsQueryRequest:
+      required:
+      - query
+      type: object
+      properties:
+        query:
+          minLength: 1
+          type: string
+          description: Read-only ClickHouse SQL. Must return exactly one column named
+            `result` produced via toJSONString(...)
     BiInformation:
       type: object
       properties:
@@ -8528,16 +9734,6 @@ components:
           - prompt
           - prompt_commit
         description:
-          type: string
-    ErrorMessage:
-      type: object
-      properties:
-        code:
-          type: integer
-          format: int32
-        message:
-          type: string
-        details:
           type: string
     AgentConfigEnv:
       required:
@@ -8787,6 +9983,481 @@ components:
       properties:
         blueprint_name:
           type: string
+    AgentInsightsJob:
+      required:
+      - project_id
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        project_id:
+          type: string
+          format: uuid
+          readOnly: true
+        status:
+          type: string
+          readOnly: true
+          enum:
+          - enabled
+          - disabled
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+    AgentInsightsJobUpdate:
+      required:
+      - status
+      type: object
+      properties:
+        status:
+          type: string
+          description: New status for the job
+          enum:
+          - enabled
+          - disabled
+    AgentInsightsIssue:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        cause:
+          type: string
+        suggested_fix:
+          type: string
+        status:
+          type: string
+          enum:
+          - open
+          - resolved
+          - closed
+        traces_query:
+          type: string
+        total_occurrences:
+          type: integer
+          description: SUM(count) over the requested window
+          format: int64
+        total:
+          type: integer
+          description: SUM(total_count) over the requested window
+          format: int64
+        users_impacted:
+          type: integer
+          description: SUM(users_impacted) over the requested window
+          format: int64
+        total_users:
+          type: integer
+          description: SUM(total_users) over the requested window
+          format: int64
+        first_seen:
+          type: string
+          description: MIN(report_day) in the requested window
+          format: date
+        last_seen:
+          type: string
+          description: MAX(report_day) in the requested window
+          format: date
+        days_reported:
+          type: integer
+          description: COUNT(DISTINCT report_day) in the requested window
+          format: int64
+        created_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        last_updated_by:
+          type: string
+        last_updated_at:
+          type: string
+          format: date-time
+    AgentInsightsIssuePage:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentInsightsIssue"
+    AgentInsightsIssueDetail:
+      type: object
+      properties:
+        report_day:
+          type: string
+          format: date
+        count:
+          type: integer
+          format: int64
+        total_count:
+          type: integer
+          format: int64
+        users_impacted:
+          type: integer
+          format: int64
+        total_users:
+          type: integer
+          format: int64
+        metadata:
+          $ref: "#/components/schemas/JsonNode"
+      description: "Per-day breakdown within the requested window, ordered by report_day\
+        \ ascending"
+    AgentInsightsIssueWithDetails:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        cause:
+          type: string
+        suggested_fix:
+          type: string
+        status:
+          type: string
+          enum:
+          - open
+          - resolved
+          - closed
+        traces_query:
+          type: string
+        created_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        last_updated_by:
+          type: string
+        last_updated_at:
+          type: string
+          format: date-time
+        details:
+          type: array
+          description: "Per-day breakdown within the requested window, ordered by\
+            \ report_day ascending"
+          items:
+            $ref: "#/components/schemas/AgentInsightsIssueDetail"
+    AgentInsightsReport:
+      required:
+      - issues
+      - project_id
+      - report_day
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        report_day:
+          type: string
+          format: date
+        issues:
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/ReportedIssue"
+    ReportedIssue:
+      required:
+      - count
+      - name
+      - total_count
+      - total_users
+      - users_impacted
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          maxLength: 255
+          minLength: 0
+          type: string
+        description:
+          type: string
+        cause:
+          type: string
+        suggested_fix:
+          type: string
+        traces_query:
+          type: string
+        count:
+          type: integer
+          format: int64
+        total_count:
+          type: integer
+          format: int64
+        users_impacted:
+          type: integer
+          format: int64
+        total_users:
+          type: integer
+          format: int64
+        metadata:
+          $ref: "#/components/schemas/JsonNode"
+    AgentInsightsIssueUpdate:
+      required:
+      - project_id
+      - status
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - open
+          - resolved
+          - closed
+    HarnessEntry:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+    Lane:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        total_tokens:
+          type: integer
+          format: int64
+        by_model:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModelTiers"
+        has_breakdown:
+          type: boolean
+    ModelTiers:
+      type: object
+      properties:
+        model:
+          type: string
+        input_tokens:
+          type: integer
+          format: int64
+        cache_read_tokens:
+          type: integer
+          format: int64
+        cache_creation_tokens:
+          type: integer
+          format: int64
+        output_tokens:
+          type: integer
+          format: int64
+    Side:
+      type: object
+      properties:
+        total_tokens:
+          type: integer
+          format: int64
+        lanes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Lane"
+    SpendCompositionResponse:
+      type: object
+      properties:
+        input:
+          $ref: "#/components/schemas/Side"
+        harness:
+          type: array
+          items:
+            $ref: "#/components/schemas/HarnessEntry"
+        output:
+          $ref: "#/components/schemas/Side"
+    SpendMetricRequest:
+      required:
+      - interval_end
+      - interval_start
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        project_name:
+          type: string
+        interval_start:
+          type: string
+          format: date-time
+        interval_end:
+          type: string
+          format: date-time
+        user_id:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        start_before_end:
+          type: boolean
+        project_provided:
+          type: boolean
+    Item:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        body:
+          type: string
+        impact:
+          type: string
+          enum:
+          - high
+          - medium
+          - low
+        estimated_savings_tokens:
+          type: integer
+          format: int64
+        docs_url:
+          type: string
+        related_lane_key:
+          type: string
+    SpendBreakdownResponse:
+      type: object
+      properties:
+        lane_key:
+          type: string
+        title:
+          type: string
+        subtitle:
+          type: string
+        total_tokens:
+          type: integer
+          format: int64
+        by_model:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModelTiers"
+        item_count:
+          type: integer
+          format: int32
+        item_unit:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Item"
+    SpendRecommendationsResponse:
+      type: object
+      properties:
+        total_savings_tokens:
+          type: integer
+          format: int64
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Item"
+    Result:
+      type: object
+      properties:
+        name:
+          type: string
+        current:
+          type: number
+          format: double
+        previous:
+          type: number
+          format: double
+    SpendSummaryResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Result"
+        spend_current:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModelTiers"
+        spend_previous:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModelTiers"
+    SpendUserPage:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/SpendUserRow"
+        sortable_by:
+          type: array
+          items:
+            type: string
+    SpendUserRow:
+      type: object
+      properties:
+        user_uuid:
+          type: string
+        user_email:
+          type: string
+        user_display_name:
+          type: string
+        by_model:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModelTiers"
+        total_tokens:
+          type: integer
+          format: int64
+        requests:
+          type: integer
+          format: int64
+        skills:
+          type: integer
+          format: int64
+        mcps:
+          type: integer
+          format: int64
+        mcp_calls:
+          type: integer
+          format: int64
+        repositories:
+          type: array
+          items:
+            type: string
+        flags:
+          type: array
+          items:
+            type: string
     Alert:
       required:
       - webhook
@@ -8899,6 +10570,13 @@ components:
           type: object
           additionalProperties:
             type: string
+        group_index:
+          type: integer
+          description: "Groups configs within a trigger: same group_index means AND\
+            \ between configs, different group_index means OR between groups. Null\
+            \ means a legacy/singleton group of one config. Always null for scope:project\
+            \ configs."
+          format: int32
         created_at:
           type: string
           format: date-time
@@ -8968,6 +10646,13 @@ components:
           type: object
           additionalProperties:
             type: string
+        group_index:
+          type: integer
+          description: "Groups configs within a trigger: same group_index means AND\
+            \ between configs, different group_index means OR between groups. Null\
+            \ means a legacy/singleton group of one config. Always null for scope:project\
+            \ configs."
+          format: int32
     AlertTrigger_Write:
       required:
       - event_type
@@ -9109,6 +10794,13 @@ components:
           type: object
           additionalProperties:
             type: string
+        group_index:
+          type: integer
+          description: "Groups configs within a trigger: same group_index means AND\
+            \ between configs, different group_index means OR between groups. Null\
+            \ means a legacy/singleton group of one config. Always null for scope:project\
+            \ configs."
+          format: int32
         created_at:
           type: string
           format: date-time
@@ -9315,6 +11007,16 @@ components:
           type: array
           items:
             type: string
+        annotators_per_item:
+          maximum: 1000
+          minimum: 1
+          type: integer
+          format: int32
+        lock_timeout_seconds:
+          maximum: 3600
+          minimum: 1
+          type: integer
+          format: int32
         reviewers:
           type: array
           readOnly: true
@@ -9395,6 +11097,16 @@ components:
           type: array
           items:
             type: string
+        annotators_per_item:
+          maximum: 1000
+          minimum: 1
+          type: integer
+          format: int32
+        lock_timeout_seconds:
+          maximum: 3600
+          minimum: 1
+          type: integer
+          format: int32
       description: List of annotation queues to create
     AnnotationQueueBatch:
       required:
@@ -9487,6 +11199,16 @@ components:
           type: array
           items:
             type: string
+        annotators_per_item:
+          maximum: 1000
+          minimum: 1
+          type: integer
+          format: int32
+        lock_timeout_seconds:
+          maximum: 3600
+          minimum: 1
+          type: integer
+          format: int32
         reviewers:
           type: array
           readOnly: true
@@ -9527,6 +11249,36 @@ components:
         value:
           type: number
       readOnly: true
+    ItemLockInfo:
+      type: object
+      properties:
+        active_locks:
+          type: integer
+          format: int32
+        locked_by:
+          type: array
+          items:
+            type: string
+    LocksResponse:
+      type: object
+      properties:
+        locks:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/ItemLockInfo"
+    LockResponse:
+      type: object
+      properties:
+        acquired:
+          type: boolean
+        item_id:
+          type: string
+          format: uuid
+        locked_by:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
     AnnotationQueueUpdate:
       type: object
       properties:
@@ -9544,6 +11296,16 @@ components:
           items:
             minLength: 1
             type: string
+        annotators_per_item:
+          maximum: 1000
+          minimum: 1
+          type: integer
+          format: int32
+        lock_timeout_seconds:
+          maximum: 3600
+          minimum: 1
+          type: integer
+          format: int32
     AssertionResultBatch:
       required:
       - assertion_results
@@ -9964,8 +11726,6 @@ components:
           type: string
         detail:
           type: string
-    JsonNode:
-      type: object
     LlmAsJudgeCode:
       required:
       - messages
@@ -12382,6 +14142,17 @@ components:
             \ dataset version. If null, mutates the latest version instead of creating\
             \ a new one."
           format: uuid
+        copy_from_dataset_id:
+          type: string
+          description: "Optional. Dataset to read carry-forward rows from when materializing\
+            \ the new version. Required together with copy_from_version_id. When null,\
+            \ carry-forward rows are read from the destination dataset's prior version."
+          format: uuid
+        copy_from_version_id:
+          type: string
+          description: Optional. Version within copy_from_dataset_id to read carry-forward
+            rows from. Required together with copy_from_dataset_id.
+          format: uuid
     ExperimentItem:
       required:
       - dataset_item_id
@@ -12411,6 +14182,8 @@ components:
         input:
           $ref: "#/components/schemas/JsonListString"
         output:
+          $ref: "#/components/schemas/JsonListString"
+        trace_metadata:
           $ref: "#/components/schemas/JsonListString"
         feedback_scores:
           type: array
@@ -12597,6 +14370,17 @@ components:
           description: "Optional batch group ID to group multiple batches into a single\
             \ dataset version. If null, mutates the latest version instead of creating\
             \ a new one."
+          format: uuid
+        copy_from_dataset_id:
+          type: string
+          description: "Optional. Dataset to read carry-forward rows from when materializing\
+            \ the new version. Required together with copy_from_version_id. When null,\
+            \ carry-forward rows are read from the destination dataset's prior version."
+          format: uuid
+        copy_from_version_id:
+          type: string
+          description: Optional. Version within copy_from_dataset_id to read carry-forward
+            rows from. Required together with copy_from_dataset_id.
           format: uuid
     DatasetItem_Write:
       required:
@@ -13122,6 +14906,8 @@ components:
         input:
           $ref: "#/components/schemas/JsonListString_Compare"
         output:
+          $ref: "#/components/schemas/JsonListString_Compare"
+        trace_metadata:
           $ref: "#/components/schemas/JsonListString_Compare"
         feedback_scores:
           type: array
@@ -14306,6 +16092,10 @@ components:
         commit:
           type: string
           readOnly: true
+        version_number:
+          type: string
+          description: sequential version number in the format v<N>; null for masks
+          readOnly: true
         prompt_id:
           type: string
           format: uuid
@@ -14591,6 +16381,13 @@ components:
             \ or experiment with that ID doesn't exist, a new experiment will be created\
             \ with the given experimentName"
           format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "Project for traces auto-created from items that provide evaluate_task_result\
+            \ (i.e. without an explicit trace). If null, the default project is used;\
+            \ relying on this fallback is deprecated, please provide project_name\
+            \ explicitly."
         items:
           maxItems: 1000
           minItems: 1
@@ -14935,6 +16732,13 @@ components:
             \ or experiment with that ID doesn't exist, a new experiment will be created\
             \ with the given experimentName"
           format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "Project for traces auto-created from items that provide evaluate_task_result\
+            \ (i.e. without an explicit trace). If null, the default project is used;\
+            \ relying on this fallback is deprecated, please provide project_name\
+            \ explicitly."
         items:
           maxItems: 1000
           minItems: 1
@@ -17782,9 +19586,14 @@ components:
           - total_cost
         current_value:
           type: number
+          description: "Metric value for the current period. Unit depends on `type`:\
+            \ `count` is an integer count; `errors` is a percentage in [0, 100]; `avg_duration`\
+            \ is milliseconds; `total_cost` is in USD."
           format: double
         previous_value:
           type: number
+          description: Metric value for the immediately preceding period of equal
+            length. Same unit as `current_value`.
           format: double
     KpiCardRequest:
       required:
@@ -18212,6 +20021,10 @@ components:
           type: string
           description: "version short unique identifier, generated if absent. it must\
             \ be 8 characters long"
+        version_number:
+          type: string
+          description: sequential version number in the format v<N>; null for masks
+          readOnly: true
         template:
           minLength: 1
           type: string
@@ -18234,6 +20047,18 @@ components:
           minLength: 0
           pattern: "^[A-Za-z0-9_-]+$"
           type: string
+          description: "Deprecated: use 'environments' instead"
+          deprecated: true
+        environments:
+          maxItems: 100
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 150
+            minLength: 0
+            pattern: "^[A-Za-z0-9_-]+$"
+            type: string
         change_description:
           type: string
         tags:
@@ -18337,6 +20162,10 @@ components:
           type: string
           description: "version short unique identifier, generated if absent. it must\
             \ be 8 characters long"
+        version_number:
+          type: string
+          description: sequential version number in the format v<N>; null for masks
+          readOnly: true
         template:
           minLength: 1
           type: string
@@ -18359,6 +20188,18 @@ components:
           minLength: 0
           pattern: "^[A-Za-z0-9_-]+$"
           type: string
+          description: "Deprecated: use 'environments' instead"
+          deprecated: true
+        environments:
+          maxItems: 100
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 150
+            minLength: 0
+            pattern: "^[A-Za-z0-9_-]+$"
+            type: string
         change_description:
           type: string
         tags:
@@ -18520,6 +20361,10 @@ components:
           type: string
           description: "version short unique identifier, generated if absent. it must\
             \ be 8 characters long"
+        version_number:
+          type: string
+          description: sequential version number in the format v<N>; null for masks
+          readOnly: true
         template:
           minLength: 1
           type: string
@@ -18542,6 +20387,18 @@ components:
           minLength: 0
           pattern: "^[A-Za-z0-9_-]+$"
           type: string
+          description: "Deprecated: use 'environments' instead"
+          deprecated: true
+        environments:
+          maxItems: 100
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 150
+            minLength: 0
+            pattern: "^[A-Za-z0-9_-]+$"
+            type: string
         change_description:
           type: string
         tags:
@@ -18591,7 +20448,14 @@ components:
           pattern: "^[A-Za-z0-9_-]+$"
           type: string
           description: "If provided, resolves to the version mapped to this environment\
-            \ for the prompt; mutually exclusive with commit"
+            \ for the prompt; mutually exclusive with commit and version_number"
+        version_number:
+          maxLength: 10
+          minLength: 0
+          pattern: v\d+
+          type: string
+          description: "If provided, resolves to the version with this sequential\
+            \ number (e.g. v3); mutually exclusive with commit and environment"
         project_name:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
@@ -18609,18 +20473,26 @@ components:
             type: string
             format: uuid
     PromptVersionEnvironmentUpdate:
+      required:
+      - environments
       type: object
       properties:
-        environment:
-          maxLength: 150
-          minLength: 0
-          pattern: "^[A-Za-z0-9_-]+$"
-          type: string
+        environments:
+          maxItems: 100
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 150
+            minLength: 0
+            pattern: "^[A-Za-z0-9_-]+$"
+            type: string
       description: |
-        Set or clear the environment owned by a prompt version.
-        - non-null name: maps the environment to this version; if another version of the same prompt currently owns the environment, ownership is moved atomically.
-        - null: clears the environment from this version.
-        The environment must already exist in the workspace registry; unknown names return 404.
+        Replace the full set of environments assigned to a prompt version.
+        The provided set becomes the new complete set of environments for this version.
+        - Non-empty set: assigns each environment to this version; if another version of the same prompt currently owns any of those environments, ownership is moved atomically.
+        - Empty set: clears all environments from this version.
+        All environments must already exist in the workspace registry; unknown names return 404.
     Prompt_Updatable:
       required:
       - name
@@ -18702,12 +20574,13 @@ components:
         type:
           type: string
           enum:
+          - trace_daily
           - experiment
           - dataset_version
           - test_suite_version
           - alert_event
           - optimization
-          - agent_config_version
+          - prompt_version
         id:
           type: string
           format: uuid
@@ -18737,6 +20610,98 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/RecentActivityItem_Public"
+    ReportCompleteRequest:
+      required:
+      - status
+      type: object
+      properties:
+        content:
+          type: string
+        status:
+          type: string
+          enum:
+          - pending
+          - completed
+          - failed
+        session_id:
+          type: string
+        recommended_actions:
+          $ref: "#/components/schemas/JsonNode"
+    GenerateReportResponse:
+      type: object
+      properties:
+        reportId:
+          type: string
+          format: uuid
+      description: Response for report generation trigger
+    ReportPreference:
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        enabled:
+          type: boolean
+        schedule_time:
+          pattern: "\\d{2}:\\d{2}:\\d{2}"
+          type: string
+        custom_prompt:
+          maxLength: 5000
+          minLength: 0
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    OllieReport:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+        content:
+          type: string
+        recommended_actions:
+          $ref: "#/components/schemas/JsonNode"
+        status:
+          type: string
+          enum:
+          - pending
+          - completed
+          - failed
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    OllieReportPage:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/OllieReport"
     RetentionRule_Public:
       required:
       - retention
@@ -18834,9 +20799,12 @@ components:
           format: int64
     ServiceTogglesConfig:
       required:
+      - agentInsightsEnabled
+      - agenticToolsEnabled
       - alertsEnabled
       - anthropicProviderEnabled
       - bedrockProviderEnabled
+      - costIntelligenceEnabled
       - customllmProviderEnabled
       - datasetExportEnabled
       - datasetVersioningEnabled
@@ -18851,6 +20819,7 @@ components:
       - openrouterProviderEnabled
       - opikAIEnabled
       - optimizationStudioEnabled
+      - projectHomepageEnabled
       - pythonEvaluatorEnabled
       - spanLlmAsJudgeEnabled
       - spanUserDefinedMetricPythonEnabled
@@ -18881,6 +20850,8 @@ components:
           type: boolean
         optimizationStudioEnabled:
           type: boolean
+        costIntelligenceEnabled:
+          type: boolean
         datasetVersioningEnabled:
           type: boolean
         datasetExportEnabled:
@@ -18905,7 +20876,11 @@ components:
           type: boolean
         ollieEnabled:
           type: boolean
+        projectHomepageEnabled:
+          type: boolean
         agenticToolsEnabled:
+          type: boolean
+        agentInsightsEnabled:
           type: boolean
         v2WorkspaceAllowlistIds:
           uniqueItems: true
@@ -20335,17 +22310,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Permission"
-    Result:
-      type: object
-      properties:
-        name:
-          type: string
-        current:
-          type: number
-          format: double
-        previous:
-          type: number
-          format: double
     WorkspaceMetricsSummaryRequest:
       required:
       - interval_end

@@ -61,10 +61,28 @@ export interface CreatePromptOptions extends CommonPromptOptions {
 }
 
 /**
- * Options for retrieving a specific prompt version
- * Re-exported from REST API PromptVersionRetrieveDetail
+ * Options for retrieving a specific prompt version.
+ *
+ * `commit` and `version` are mutually exclusive. If neither is provided,
+ * the latest version is returned.
  */
-export type GetPromptOptions = OpikApi.PromptVersionRetrieveDetail;
+export interface GetPromptOptions {
+  /** Name of the prompt to retrieve. */
+  name: string;
+  /** @deprecated Use `version` instead. */
+  commit?: string;
+  /**
+   * Sequential version identifier, e.g. `"v3"`. Mutually exclusive with `commit`.
+   */
+  version?: string;
+  /** Optional project name to scope the lookup. */
+  projectName?: string;
+  /**
+   * Optional environment name. Resolves to the version currently owned by that
+   * workspace environment. Mutually exclusive with `commit`.
+   */
+  environment?: string;
+}
 
 /**
  * Variables to be substituted into prompt template.
@@ -78,6 +96,7 @@ export interface PromptVersionData {
   name: string;
   prompt: string;
   commit: string;
+  version?: string;
   promptId: string;
   versionId: string;
   type: PromptType;

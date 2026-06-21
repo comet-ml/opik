@@ -185,6 +185,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
         open={generatedSamplesDialogOpen}
         setOpen={setGeneratedSamplesDialogOpen}
         onAddItems={handleAddGeneratedItems}
+        entityName={entityName}
       />
 
       <AddTagDialog

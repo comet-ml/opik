@@ -4,6 +4,7 @@ from typing import (
     Any,
     Callable,
     Dict,
+    Iterator,
     List,
     Optional,
     Tuple,
@@ -31,10 +32,16 @@ from . import (
     rest_operations,
     samplers,
 )
-from .metrics import base_metric, score_result
+from . import resume as resume_module
+from .resume import integration as resume_integration
+from .resume import merge as resume_merge
+from .metrics import base_metric
+from .suite_evaluators.llm_judge import (
+    metric as suite_evaluators_llm_judge_metric,
+    strategy_selector as suite_evaluators_strategy,
+)
 from .models import ModelCapabilities, base_model, models_factory
 from .scorers import scorer_function, scorer_wrapper_metric
-from . import test_result
 from .types import ExperimentScoreFunction, LLMTask, ScoringKeyMappingType
 from .. import url_helpers, exceptions
 from ..api_objects.dataset.test_suite import suite_result_constructor
@@ -61,31 +68,42 @@ def _try_notifying_about_experiment_completion(
         )
 
 
-def _compute_experiment_scores(
-    experiment_scoring_functions: List[ExperimentScoreFunction],
-    test_results: List[test_result.TestResult],
-) -> List[score_result.ScoreResult]:
-    """Compute experiment-level scores from test results."""
-    if not experiment_scoring_functions or not test_results:
-        return []
+def _materialize_for_checkpoint(
+    *,
+    items_iter: Iterator[dataset_item.DatasetItem],
+    total_items: Optional[int],
+    dataset_item_ids: Optional[List[str]],
+    dataset_sampler: Optional[samplers.BaseDatasetSampler],
+) -> Tuple[Iterator[dataset_item.DatasetItem], Optional[int], Optional[List[str]]]:
+    """
+    Resolve the (iterator, total, resolved_ids) tuple for the engine + the
+    resume checkpoint, without breaking lazy streaming when streaming is
+    possible.
 
-    all_scores: List[score_result.ScoreResult] = []
-    for score_function in experiment_scoring_functions:
-        try:
-            scores = score_function(test_results)
-            # Handle Union[ScoreResult, List[ScoreResult]]
-            if isinstance(scores, list):
-                all_scores.extend(scores)
-            else:
-                all_scores.append(scores)
-        except Exception as e:
-            LOGGER.warning(
-                "Failed to compute experiment score: %s",
-                e,
-                exc_info=True,
-            )
-
-    return all_scores
+    Three cases:
+      * Sampler (with or without explicit ids) → the iterator was already
+        built from a materialized list inside ``resolve_dataset_items``;
+        we drain it once to surface the post-sampler ids for the
+        checkpoint, then hand a fresh iterator over the same list to the
+        engine. Sampler precedence ensures the checkpoint reflects what
+        the engine actually iterated, not the raw input ids — otherwise a
+        resume would replay a different item set than the original eval.
+      * Explicit ``dataset_item_ids`` only → ids are known up front; the
+        checkpoint gets them directly and the iterator is left untouched
+        so the engine can still consume it lazily.
+      * Neither → streaming. No checkpoint needed; the iterator is passed
+        straight to the engine.
+    """
+    if dataset_sampler is not None:
+        materialized = list(items_iter)
+        return (
+            iter(materialized),
+            len(materialized),
+            [item.id for item in materialized],
+        )
+    if dataset_item_ids is not None:
+        return items_iter, total_items, list(dataset_item_ids)
+    return items_iter, total_items, None
 
 
 def evaluate(
@@ -232,6 +250,16 @@ def evaluate(
         caller_name="evaluate",
     )
 
+    experiment_config = resume_integration.resume_state_for_evaluate(
+        experiment_config=experiment_config,
+        dataset_=dataset,
+        trial_count=trial_count,
+        dataset_filter_string=dataset_filter_string,
+        nb_samples=nb_samples,
+        dataset_sampler=dataset_sampler,
+        dataset_item_ids=dataset_item_ids,
+    )
+
     experiment = client.create_experiment(
         name=experiment_name,
         dataset_name=dataset.name,
@@ -240,6 +268,24 @@ def evaluate(
         tags=experiment_tags,
         dataset_version_id=getattr(dataset.get_version_info(), "id", None),
         project_name=project_name,
+    )
+
+    items_iter, total_items = helpers.resolve_dataset_items(
+        dataset_=dataset,
+        nb_samples=nb_samples,
+        dataset_item_ids=dataset_item_ids,
+        dataset_sampler=dataset_sampler,
+        dataset_filter_string=dataset_filter_string,
+    )
+    items_iter, total_items, resolved_ids = _materialize_for_checkpoint(
+        items_iter=items_iter,
+        total_items=total_items,
+        dataset_item_ids=dataset_item_ids,
+        dataset_sampler=dataset_sampler,
+    )
+    resume_integration.write_checkpoint_if_needed(
+        experiment_id=experiment.id,
+        resolved_ids=resolved_ids,
     )
 
     # wrap scoring functions if any
@@ -253,18 +299,16 @@ def evaluate(
         client=client,
         experiment=experiment,
         dataset=dataset,
+        items_iter=items_iter,
+        total_items=total_items,
         task=task,
         scoring_metrics=scoring_metrics,
         project_name=project_name,
         verbose=verbose,
-        nb_samples=nb_samples,
         task_threads=task_threads,
         scoring_key_mapping=scoring_key_mapping,
-        dataset_item_ids=dataset_item_ids,
-        dataset_sampler=dataset_sampler,
         trial_count=trial_count,
         experiment_scoring_functions=experiment_scoring_functions,
-        dataset_filter_string=dataset_filter_string,
         source="experiment",
     )
 
@@ -290,6 +334,9 @@ def __internal_api__run_test_suite__(
     generate_report: bool = True,
     report_output_path: Optional[str] = None,
     blueprint_id: Optional[str] = None,
+    scoring_tool_strategy: Optional[
+        suite_evaluators_strategy.ScoringToolStrategyMode
+    ] = None,
 ) -> "suite_types.TestSuiteResult":
     """
     Internal function that runs the full test suite evaluation pipeline:
@@ -325,6 +372,11 @@ def __internal_api__run_test_suite__(
         experiment_name_prefix=experiment_name_prefix,
     )
 
+    # NOTE: test-suite experiments do not currently support evaluate_resume,
+    # so we deliberately do not embed resume state on them. The persistence
+    # primitives in opik.evaluation.resume.state are designed so a test-suite
+    # entrypoint can be added later without changing the schema.
+
     create_experiment_kwargs: Dict[str, Any] = dict(
         name=experiment_name,
         dataset_name=suite_dataset.name,
@@ -344,6 +396,14 @@ def __internal_api__run_test_suite__(
 
     experiment_ = client.create_experiment(**create_experiment_kwargs)
 
+    items_iter, total_items = helpers.resolve_dataset_items(
+        dataset_=suite_dataset,
+        nb_samples=None,
+        dataset_item_ids=dataset_item_ids,
+        dataset_sampler=None,
+        dataset_filter_string=dataset_filter_string,
+    )
+
     if verbose >= 1:
         experiment_url = url_helpers.get_experiment_url_by_id(
             experiment_id=experiment_.id,
@@ -356,14 +416,15 @@ def __internal_api__run_test_suite__(
         client=client,
         experiment=experiment_,
         dataset=suite_dataset,
+        items_iter=items_iter,
+        total_items=total_items,
         task=_validated_task,
         project_name=project_name,
         verbose=verbose,
         task_threads=task_threads,
         evaluator_model=evaluator_model,
-        dataset_item_ids=dataset_item_ids,
-        dataset_filter_string=dataset_filter_string,
         source=source,  # type: ignore[arg-type]
+        scoring_tool_strategy=scoring_tool_strategy,
     )
 
     suite_result = suite_result_constructor.build_suite_result(
@@ -410,6 +471,9 @@ def run_tests(
     generate_report: bool = True,
     report_output_path: Optional[str] = None,
     blueprint_id: Optional[str] = None,
+    scoring_tool_strategy: Optional[
+        suite_evaluators_strategy.ScoringToolStrategyMode
+    ] = None,
 ) -> "suite_types.TestSuiteResult":
     """
     Run a test suite against a task function.
@@ -435,6 +499,11 @@ def run_tests(
         model: Optional model name for checking assertions.
         generate_report: Whether to generate a JSON report file.
         report_output_path: Optional file path for the report.
+        scoring_tool_strategy: Optional override applied to every LLMJudge
+            evaluator in the suite. One of ``"auto"`` (size+capability
+            heuristic), ``"always"`` (force agentic tool loop) or
+            ``"never"`` (force one-shot). When ``None``, each judge's own
+            configured strategy is used.
 
     Returns:
         TestSuiteResult with pass/fail status based on execution policy.
@@ -471,6 +540,7 @@ def run_tests(
         generate_report=generate_report,
         report_output_path=report_output_path,
         blueprint_id=blueprint_id,
+        scoring_tool_strategy=scoring_tool_strategy,
     )
 
 
@@ -479,30 +549,21 @@ def _evaluate_task(
     client: opik_client.Opik,
     experiment: experiment.Experiment,
     dataset: Union[dataset.Dataset, dataset.DatasetVersion],
+    items_iter: Iterator[dataset_item.DatasetItem],
+    total_items: Optional[int],
     task: LLMTask,
     scoring_metrics: List[base_metric.BaseMetric],
     project_name: Optional[str],
     verbose: int,
-    nb_samples: Optional[int],
     task_threads: int,
     scoring_key_mapping: Optional[ScoringKeyMappingType],
-    dataset_item_ids: Optional[List[str]],
-    dataset_sampler: Optional[samplers.BaseDatasetSampler],
     trial_count: int,
     experiment_scoring_functions: List[ExperimentScoreFunction],
-    dataset_filter_string: Optional[str],
     source: TraceSource,
 ) -> evaluation_result.EvaluationResult:
     start_time = time.time()
 
     with asyncio_support.async_http_connections_expire_immediately():
-        items_iter, total = helpers.resolve_dataset_items_generator(
-            dataset_=dataset,
-            nb_samples=nb_samples,
-            dataset_item_ids=dataset_item_ids,
-            dataset_sampler=dataset_sampler,
-            dataset_filter_string=dataset_filter_string,
-        )
         policy = dataset_execution_policy.ExecutionPolicy(
             runs_per_item=trial_count,
             pass_threshold=trial_count,
@@ -523,13 +584,13 @@ def _evaluate_task(
             evaluator_model=None,
             experiment_=experiment,
             default_execution_policy=policy,
-            total_items=total,
+            total_items=total_items,
         )
 
     total_time = time.time() - start_time
 
     # Compute experiment scores
-    computed_experiment_scores = _compute_experiment_scores(
+    computed_experiment_scores = evaluation_result.compute_experiment_scores(
         experiment_scoring_functions=experiment_scoring_functions,
         test_results=test_results,
     )
@@ -574,51 +635,97 @@ def _evaluate_task(
     return evaluation_result_
 
 
+def _apply_scoring_tool_strategy_override(
+    scoring_metrics: List[base_metric.BaseMetric],
+    scoring_tool_strategy: suite_evaluators_strategy.ScoringToolStrategyMode,
+) -> None:
+    """Replace each LLMJudge's strategy selector with the suite-level override.
+
+    Walks the resolved evaluator list once; non-LLMJudge metrics are left
+    alone. Done after `dataset.get_evaluators(...)` returns so users keep
+    the precedence: explicit `run_tests(scoring_tool_strategy=...)` wins over
+    each judge's per-instance configuration.
+    """
+    for metric in scoring_metrics:
+        if isinstance(metric, suite_evaluators_llm_judge_metric.LLMJudge):
+            metric.set_scoring_tool_strategy(scoring_tool_strategy)
+
+
 def _evaluate_test_suite_task(
     *,
     client: opik_client.Opik,
     experiment: experiment.Experiment,
     dataset: Union[dataset.Dataset, dataset.DatasetVersion],
+    items_iter: Iterator[dataset_item.DatasetItem],
+    total_items: Optional[int],
     task: LLMTask,
     project_name: Optional[str],
     verbose: int,
     task_threads: int,
     source: TraceSource,
     evaluator_model: Optional[str],
-    dataset_item_ids: Optional[List[str]] = None,
-    dataset_filter_string: Optional[str] = None,
+    scoring_tool_strategy: Optional[
+        suite_evaluators_strategy.ScoringToolStrategyMode
+    ] = None,
 ) -> Tuple[evaluation_result.EvaluationResult, float]:
+    from opik.message_processing.processors import message_processors_chain
+
     start_time = time.time()
 
-    with asyncio_support.async_http_connections_expire_immediately():
-        scoring_metrics = dataset.get_evaluators(evaluator_model)
-        execution_policy = dataset.get_execution_policy()
-        items_iter = dataset.__internal_api__stream_items_as_dataclasses__(
-            nb_samples=None,
-            dataset_item_ids=dataset_item_ids,
-            batch_size=helpers.EVALUATION_STREAM_DATASET_BATCH_SIZE,
-            filter_string=dataset_filter_string,
-        )
-        total = dataset.dataset_items_count
+    # Activate the local emulator so suite-level LLMJudge assertions get
+    # access to the full trace tree via the agentic tool loop. The
+    # emulator caches every trace/span logged in-process; it stays
+    # inactive at idle. We toggle for the duration of the suite run and
+    # restore prior state in `finally` so concurrent (foreign) uses of
+    # the emulator aren't disturbed.
+    # `getattr` with a default keeps this MagicMock-friendly:
+    # MagicMock auto-rejects attribute names that look like dunders
+    # (start and end with `__`), so plain attribute access raises
+    # AttributeError on mocked clients used by unit tests. Production
+    # clients always have this attribute, so the default never fires.
+    chain = getattr(client, "__internal_api__message_processor__", None)
+    emulator_was_active = False
+    if chain is not None:
+        emulator = message_processors_chain.get_local_emulator_message_processor(chain)
+        if emulator is not None:
+            emulator_was_active = emulator.is_active()
+            if not emulator_was_active:
+                message_processors_chain.toggle_local_emulator_message_processor(
+                    active=True, chain=chain, reset=True
+                )
 
-        evaluation_engine = engine.EvaluationEngine(
-            client=client,
-            project_name=project_name,
-            workers=task_threads,
-            verbose=verbose,
-            source=source,
-        )
-        test_results = evaluation_engine.run_and_score(
-            dataset_items=items_iter,
-            task=task,
-            scoring_metrics=scoring_metrics,
-            scoring_key_mapping=None,
-            evaluator_model=evaluator_model,
-            experiment_=experiment,
-            default_execution_policy=execution_policy,
-            total_items=total,
-            show_scores_in_progress_bar=False,
-        )
+    try:
+        with asyncio_support.async_http_connections_expire_immediately():
+            scoring_metrics = dataset.get_evaluators(evaluator_model)
+            if scoring_tool_strategy is not None:
+                _apply_scoring_tool_strategy_override(
+                    scoring_metrics, scoring_tool_strategy
+                )
+            execution_policy = dataset.get_execution_policy()
+
+            evaluation_engine = engine.EvaluationEngine(
+                client=client,
+                project_name=project_name,
+                workers=task_threads,
+                verbose=verbose,
+                source=source,
+            )
+            test_results = evaluation_engine.run_and_score(
+                dataset_items=items_iter,
+                task=task,
+                scoring_metrics=scoring_metrics,
+                scoring_key_mapping=None,
+                evaluator_model=evaluator_model,
+                experiment_=experiment,
+                default_execution_policy=execution_policy,
+                total_items=total_items,
+                show_scores_in_progress_bar=False,
+            )
+    finally:
+        if chain is not None and not emulator_was_active:
+            message_processors_chain.toggle_local_emulator_message_processor(
+                active=False, chain=chain, reset=True
+            )
 
     total_time = time.time() - start_time
 
@@ -754,7 +861,7 @@ def evaluate_experiment(
     client.flush()
 
     # Compute experiment scores
-    computed_experiment_scores = _compute_experiment_scores(
+    computed_experiment_scores = evaluation_result.compute_experiment_scores(
         experiment_scoring_functions=experiment_scoring_functions,
         test_results=test_results,
     )
@@ -987,6 +1094,16 @@ def evaluate_prompt(
         caller_name="evaluate_prompt",
     )
 
+    experiment_config = resume_integration.resume_state_for_evaluate(
+        experiment_config=experiment_config,
+        dataset_=dataset,
+        trial_count=trial_count,
+        dataset_filter_string=dataset_filter_string,
+        nb_samples=nb_samples,
+        dataset_sampler=dataset_sampler,
+        dataset_item_ids=dataset_item_ids,
+    )
+
     experiment = client.create_experiment(
         name=experiment_name,
         dataset_name=dataset.name,
@@ -995,6 +1112,24 @@ def evaluate_prompt(
         tags=experiment_tags,
         dataset_version_id=getattr(dataset.get_version_info(), "id", None),
         project_name=project_name,
+    )
+
+    items_iter, total_items = helpers.resolve_dataset_items(
+        dataset_=dataset,
+        nb_samples=nb_samples,
+        dataset_item_ids=dataset_item_ids,
+        dataset_sampler=dataset_sampler,
+        dataset_filter_string=dataset_filter_string,
+    )
+    items_iter, total_items, resolved_ids = _materialize_for_checkpoint(
+        items_iter=items_iter,
+        total_items=total_items,
+        dataset_item_ids=dataset_item_ids,
+        dataset_sampler=dataset_sampler,
+    )
+    resume_integration.write_checkpoint_if_needed(
+        experiment_id=experiment.id,
+        resolved_ids=resolved_ids,
     )
 
     # wrap scoring functions if any
@@ -1007,13 +1142,6 @@ def evaluate_prompt(
     start_time = time.time()
 
     with asyncio_support.async_http_connections_expire_immediately():
-        items_iter, total = helpers.resolve_dataset_items_generator(
-            dataset_=dataset,
-            nb_samples=nb_samples,
-            dataset_item_ids=dataset_item_ids,
-            dataset_sampler=dataset_sampler,
-            dataset_filter_string=dataset_filter_string,
-        )
         policy = dataset_execution_policy.ExecutionPolicy(
             runs_per_item=trial_count,
             pass_threshold=trial_count,
@@ -1034,13 +1162,13 @@ def evaluate_prompt(
             evaluator_model=None,
             experiment_=experiment,
             default_execution_policy=policy,
-            total_items=total,
+            total_items=total_items,
         )
 
     total_time = time.time() - start_time
 
     # Compute experiment scores
-    computed_experiment_scores = _compute_experiment_scores(
+    computed_experiment_scores = evaluation_result.compute_experiment_scores(
         experiment_scoring_functions=experiment_scoring_functions,
         test_results=test_results,
     )
@@ -1231,6 +1359,16 @@ def evaluate_optimization_trial(
         experiment_name_prefix=experiment_name_prefix,
     )
 
+    experiment_config = resume_integration.resume_state_for_evaluate(
+        experiment_config=experiment_config,
+        dataset_=dataset,
+        trial_count=trial_count,
+        dataset_filter_string=dataset_filter_string,
+        nb_samples=nb_samples,
+        dataset_sampler=dataset_sampler,
+        dataset_item_ids=dataset_item_ids,
+    )
+
     experiment = client.create_experiment(
         name=experiment_name,
         dataset_name=dataset.name,
@@ -1243,24 +1381,208 @@ def evaluate_optimization_trial(
         project_name=project_name,
     )
 
+    items_iter, total_items = helpers.resolve_dataset_items(
+        dataset_=dataset,
+        nb_samples=nb_samples,
+        dataset_item_ids=dataset_item_ids,
+        dataset_sampler=dataset_sampler,
+        dataset_filter_string=dataset_filter_string,
+    )
+    items_iter, total_items, resolved_ids = _materialize_for_checkpoint(
+        items_iter=items_iter,
+        total_items=total_items,
+        dataset_item_ids=dataset_item_ids,
+        dataset_sampler=dataset_sampler,
+    )
+    resume_integration.write_checkpoint_if_needed(
+        experiment_id=experiment.id,
+        resolved_ids=resolved_ids,
+    )
+
     return _evaluate_task(
         client=client,
         experiment=experiment,
         dataset=dataset,
+        items_iter=items_iter,
+        total_items=total_items,
         task=task,
         scoring_metrics=scoring_metrics,
         project_name=project_name,
         verbose=verbose,
-        nb_samples=nb_samples,
         task_threads=task_threads,
         scoring_key_mapping=scoring_key_mapping,
-        dataset_item_ids=dataset_item_ids,
-        dataset_sampler=dataset_sampler,
         trial_count=trial_count,
         experiment_scoring_functions=experiment_scoring_functions,
-        dataset_filter_string=dataset_filter_string,
         source="optimization",
     )
+
+
+def evaluate_resume(
+    experiment_id: str,
+    task: LLMTask,
+    scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
+    scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
+    scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
+    experiment_scoring_functions: Optional[List[ExperimentScoreFunction]] = None,
+    *,
+    verbose: int = 1,
+    task_threads: int = 16,
+) -> evaluation_result.EvaluationResult:
+    """
+    Resume an interrupted ``evaluate()`` run.
+
+    Reads the resume state embedded in the existing experiment (dataset
+    version, default trial count, dataset filter string, nb_samples) and the
+    local checkpoint of resolved item ids when one was written (sampler or
+    explicit ``dataset_item_ids`` cases). Items that already have the expected
+    number of completed runs are skipped; items with fewer than expected get
+    the remaining trials executed.
+
+    The ``task`` and all scoring callables/mappings must be re-supplied —
+    Python callables cannot be persisted on the backend, and the
+    ``scoring_key_mapping`` is metric-aware (it names the keys specific
+    metrics expect), so it travels with those metrics.
+
+    The returned ``EvaluationResult`` describes the **full experiment**, not
+    just this call's slice: ``test_results`` is the union of the freshly
+    executed runs and reconstructed TestResults for items completed by
+    prior runs (using the feedback scores they already had stored).
+    ``experiment_scoring_functions`` run over that union, so aggregate
+    scores match what a fresh full ``evaluate()`` would have produced.
+
+    Args:
+        experiment_id: The id of the experiment to resume.
+        task: The callable to run for each pending dataset item. Must match
+            the one used in the original run; the framework does not enforce
+            consistency.
+        scoring_metrics: Per-item scoring metrics. Applied to runs executed
+            by this resume call. Previously-completed items keep their
+            original stored scores (no re-scoring).
+        scoring_functions: Per-item scoring functions, wrapped into metrics
+            internally. Same semantics as ``scoring_metrics``.
+        scoring_key_mapping: Dict renaming dataset/task-output keys so they
+            match the keys ``scoring_metrics`` expect. Must be consistent
+            with the metrics passed; the framework does not enforce
+            consistency with the original run.
+        experiment_scoring_functions: Aggregate scoring callables that take
+            the list of ``TestResult`` objects and return ``ScoreResult``\\ s.
+            Computed over the merged set (previously-completed + freshly
+            executed), so aggregate scores reflect the full experiment.
+        verbose: Verbosity level (0 silent, 1 default, 2 detailed stats).
+        task_threads: Number of worker threads for task execution.
+
+    Returns:
+        ``EvaluationResult`` representing the full experiment after this
+        resume call. ``test_results`` spans both reconstructed prior items
+        and items executed by this call.
+
+    Raises:
+        opik.exceptions.ExperimentNotFound: when the experiment does not exist.
+        ExperimentNotResumable: when the experiment was created with a
+            configuration that prevents safe resume (e.g. an older SDK
+            version that did not embed resume state).
+        LocalCheckpointMissing: when the experiment requires a local
+            checkpoint of resolved ids and the checkpoint file is not on this
+            machine. Resume from the original machine that wrote the
+            checkpoint, or re-supply the original ``dataset_item_ids`` via a
+            fresh ``evaluate()`` call.
+    """
+    experiment_scoring_functions = experiment_scoring_functions or []
+
+    client = opik_client.get_global_client()
+    context = resume_module.prepare_resume_context(client, experiment_id)
+
+    items = _resolve_resume_items(context)
+    pending = list(resume_module.build_pending_items_iterator(iter(items), context))
+
+    if not pending:
+        LOGGER.info(
+            "Experiment %s is already fully evaluated; nothing to do.",
+            experiment_id,
+        )
+
+    project_name = context.experiment.project_name
+    scoring_metrics = _wrap_scoring_functions(
+        scoring_functions=scoring_functions,
+        scoring_metrics=scoring_metrics,
+        project_name=project_name,
+    )
+
+    # Snapshot already-completed runs **before** ``_evaluate_task`` starts
+    # writing new experiment items, otherwise the resume call's own fresh
+    # trials would be double-counted in the merged result.
+    previous_test_results = resume_merge.reconstruct_previous_test_results(
+        experiment=context.experiment,
+        dataset_=context.dataset,
+    )
+
+    new_result = _evaluate_task(
+        client=client,
+        experiment=context.experiment,
+        dataset=context.dataset,
+        items_iter=iter(pending),
+        total_items=len(pending),
+        task=task,
+        scoring_metrics=scoring_metrics,
+        project_name=project_name,
+        verbose=verbose,
+        task_threads=task_threads,
+        scoring_key_mapping=scoring_key_mapping,
+        trial_count=context.default_runs_per_item,
+        experiment_scoring_functions=experiment_scoring_functions,
+        source="experiment",
+    )
+
+    merged = evaluation_result.merge_resume_results(
+        new_result=new_result,
+        previous_test_results=previous_test_results,
+    )
+
+    # ``_evaluate_task`` already logged ``experiment_scoring_functions``
+    # over the freshly-replayed slice. Recompute over the merged set and
+    # overwrite — the final write reflects the whole experiment, which
+    # is what the user (and downstream readers) actually want. We're OK
+    # with a brief slice-only window on the backend between the two
+    # writes; rate-limit / concurrent-read risk is negligible here.
+    merged_scores = evaluation_result.compute_experiment_scores(
+        experiment_scoring_functions=experiment_scoring_functions,
+        test_results=merged.test_results,
+    )
+    if merged_scores:
+        context.experiment.log_experiment_scores(score_results=merged_scores)
+    merged.experiment_scores = merged_scores
+
+    return merged
+
+
+def _resolve_resume_items(
+    context: "resume_module.ResumeContext",
+) -> List[dataset_item.DatasetItem]:
+    """
+    Resolve the candidate item set for a resume run.
+
+    When a local checkpoint pinned the resolved ids, use it as-is (the
+    sampler/explicit-ids decision was locked in by the original call).
+    Otherwise iterate via the original ``dataset_filter_string`` and
+    ``nb_samples``, against the version-pinned dataset.
+    """
+    if context.candidate_dataset_item_ids is not None:
+        items_iter, _ = helpers.resolve_dataset_items(
+            dataset_=context.dataset,
+            nb_samples=None,
+            dataset_item_ids=context.candidate_dataset_item_ids,
+            dataset_sampler=None,
+            dataset_filter_string=None,
+        )
+        return list(items_iter)
+    items_iter, _ = helpers.resolve_dataset_items(
+        dataset_=context.dataset,
+        nb_samples=context.nb_samples,
+        dataset_item_ids=None,
+        dataset_sampler=None,
+        dataset_filter_string=context.dataset_filter_string,
+    )
+    return list(items_iter)
 
 
 def evaluate_on_dict_items(

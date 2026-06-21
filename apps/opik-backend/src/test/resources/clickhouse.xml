@@ -1,4 +1,9 @@
 <clickhouse>
+    <!-- Permits SQL_-prefixed custom settings (SQL_workspace_id / SQL_project_id) used by the Agent Insights
+         read-only user's settings profile. Mirrors deployment/docker-compose/clickhouse_config/additional_config.xml.
+         Inert unless a test provisions that profile. -->
+    <custom_settings_prefixes>SQL_</custom_settings_prefixes>
+
     <macros>
         <shard>01</shard>
         <replica>clickhouse</replica>

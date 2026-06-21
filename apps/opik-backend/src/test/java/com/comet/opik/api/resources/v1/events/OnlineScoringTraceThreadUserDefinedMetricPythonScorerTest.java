@@ -58,6 +58,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -83,6 +84,8 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
     private ProjectService projectService;
     @Mock
     private AutomationRuleEvaluatorService automationRuleEvaluatorService;
+    @Mock
+    private com.comet.opik.domain.SpanService spanService;
 
     private OnlineScoringTraceThreadUserDefinedMetricPythonScorer scorer;
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
@@ -127,7 +130,8 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
                 traceService,
                 traceThreadService,
                 projectService,
-                automationRuleEvaluatorService);
+                automationRuleEvaluatorService,
+                spanService);
 
         projectId = UUID.randomUUID();
         ruleId = UUID.randomUUID();
@@ -191,17 +195,98 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
             when(pythonEvaluatorService.evaluateThread(eq(message.code().metric()), any()))
                     .thenReturn(Mono.just(List.of(pythonScore)));
             when(feedbackScoreService.scoreBatchOfThreads(any())).thenReturn(Mono.empty());
-            when(traceThreadService.setScoredAt(eq(projectId), eq(List.of(threadId)), any()))
-                    .thenReturn(Mono.empty());
 
             scorer.score(message).block();
 
             var captor = ArgumentCaptor.forClass(List.class);
             verify(feedbackScoreService).scoreBatchOfThreads(captor.capture());
-            verify(traceThreadService).setScoredAt(eq(projectId), eq(List.of(threadId)), any());
 
             assertThat(captor.getValue()).usingRecursiveComparison().isEqualTo(List.of(
                     threadScore("test_score", BigDecimal.valueOf(0.95), "test reason", project)));
+        }
+
+        @Test
+        void skipsSpanFetchWhenAgenticToolsDisabled() {
+            // Locks the toggle gate for the Python thread path: when isAgenticToolsEnabled
+            // is false, the scorer must NOT call spanService.getByTraceIds — preserves
+            // today's [{role, content}, ...] wire shape to the Python runner exactly.
+            var message = sampleMessage();
+            var trace = sampleTrace();
+            var project = Project.builder().id(projectId).name("test-project").build();
+            var pythonScore = PythonScoreResult.builder()
+                    .name("test_score")
+                    .value(BigDecimal.valueOf(0.95))
+                    .reason("ok")
+                    .build();
+
+            when(traceService.search(anyInt(), any(TraceSearchCriteria.class)))
+                    .thenReturn(Flux.just(trace), Flux.empty());
+            when(traceThreadService.getThreadModelId(projectId, threadId)).thenReturn(Mono.just(threadModelId));
+            when(automationRuleEvaluatorService.findById(ruleId, Set.of(projectId), workspaceId))
+                    .thenReturn(ruleFor(ruleName));
+            when(projectService.get(projectId, workspaceId)).thenReturn(project);
+            when(pythonEvaluatorService.evaluateThread(eq(message.code().metric()), any()))
+                    .thenReturn(Mono.just(List.of(pythonScore)));
+            when(feedbackScoreService.scoreBatchOfThreads(any())).thenReturn(Mono.empty());
+            // Toggle off — the scorer should not even ask the SpanService.
+            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(false);
+
+            scorer.score(message).block();
+
+            verifyNoInteractions(spanService);
+        }
+
+        @Test
+        void fetchesSpansAndEnrichesConversationWhenAgenticToolsEnabled() {
+            // Toggle on: scorer fetches every span across the thread and the captured
+            // ChatMessage list sent to the Python evaluator carries the spans nested under
+            // the assistant entry. Locks in the end-to-end enrichment contract — a future
+            // refactor that quietly drops the SpanService fetch or routes through
+            // fromTraceToThread (legacy) would break this test loudly.
+            var message = sampleMessage();
+            var trace = sampleTrace();
+            var project = Project.builder().id(projectId).name("test-project").build();
+            var pythonScore = PythonScoreResult.builder()
+                    .name("tool_use_score")
+                    .value(BigDecimal.valueOf(0.9))
+                    .reason("ok")
+                    .build();
+            var toolSpan = com.comet.opik.api.Span.builder()
+                    .id(UUID.randomUUID())
+                    .name("fetch_weather")
+                    .type(com.comet.opik.domain.SpanType.tool)
+                    .startTime(java.time.Instant.now())
+                    .traceId(trace.id())
+                    .projectId(projectId)
+                    .build();
+
+            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
+            when(traceService.search(anyInt(), any(TraceSearchCriteria.class)))
+                    .thenReturn(Flux.just(trace), Flux.empty());
+            when(spanService.getByTraceIds(Set.of(trace.id()))).thenReturn(Flux.just(toolSpan));
+            when(traceThreadService.getThreadModelId(projectId, threadId)).thenReturn(Mono.just(threadModelId));
+            when(automationRuleEvaluatorService.findById(ruleId, Set.of(projectId), workspaceId))
+                    .thenReturn(ruleFor(ruleName));
+            when(projectService.get(projectId, workspaceId)).thenReturn(project);
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest.ChatMessage>> contextCaptor = ArgumentCaptor
+                    .forClass(List.class);
+            when(pythonEvaluatorService.evaluateThread(eq(message.code().metric()), contextCaptor.capture()))
+                    .thenReturn(Mono.just(List.of(pythonScore)));
+            when(feedbackScoreService.scoreBatchOfThreads(any())).thenReturn(Mono.empty());
+
+            scorer.score(message).block();
+
+            verify(spanService).getByTraceIds(Set.of(trace.id()));
+            var captured = contextCaptor.getValue();
+            // Conversation contains user + assistant per trace (one trace here).
+            assertThat(captured).hasSize(2);
+            assertThat(captured.get(0).role()).isEqualTo("user");
+            assertThat(captured.get(0).spans()).isNull(); // user entry never carries spans
+            assertThat(captured.get(1).role()).isEqualTo("assistant");
+            assertThat(captured.get(1).spans()).isNotNull();
+            assertThat(captured.get(1).spans()).extracting(com.comet.opik.api.SpanForLlm::name)
+                    .containsExactly("fetch_weather");
         }
 
         @Test
@@ -209,8 +294,6 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
             var message = sampleMessage();
 
             when(traceService.search(anyInt(), any(TraceSearchCriteria.class))).thenReturn(Flux.empty());
-            when(traceThreadService.setScoredAt(eq(projectId), eq(List.of(threadId)), any()))
-                    .thenReturn(Mono.empty());
 
             scorer.score(message).block();
 
@@ -228,8 +311,6 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
             when(traceService.search(anyInt(), any(TraceSearchCriteria.class)))
                     .thenReturn(Flux.just(sampleTrace()), Flux.empty());
             when(traceThreadService.getThreadModelId(projectId, threadId)).thenReturn(Mono.empty());
-            when(traceThreadService.setScoredAt(eq(projectId), eq(List.of(threadId)), any()))
-                    .thenReturn(Mono.empty());
 
             scorer.score(message).block();
 
@@ -248,8 +329,6 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
             when(traceThreadService.getThreadModelId(projectId, threadId)).thenReturn(Mono.just(threadModelId));
             when(automationRuleEvaluatorService.findById(ruleId, Set.of(projectId), workspaceId))
                     .thenThrow(new NotFoundException("rule not found"));
-            when(traceThreadService.setScoredAt(eq(projectId), eq(List.of(threadId)), any()))
-                    .thenReturn(Mono.empty());
 
             scorer.score(message).block();
 

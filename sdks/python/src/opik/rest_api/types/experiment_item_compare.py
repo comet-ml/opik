@@ -22,6 +22,7 @@ class ExperimentItemCompare(UniversalBaseModel):
     project_id: typing.Optional[str] = None
     input: typing.Optional[JsonListStringCompare] = None
     output: typing.Optional[JsonListStringCompare] = None
+    trace_metadata: typing.Optional[JsonListStringCompare] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScoreCompare]] = None
     comments: typing.Optional[typing.List[CommentCompare]] = None
     total_estimated_cost: typing.Optional[float] = None

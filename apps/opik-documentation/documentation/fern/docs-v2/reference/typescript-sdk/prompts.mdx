@@ -50,7 +50,7 @@ const prompt = await client.createPrompt({
   projectName: "my-project",
 });
 
-console.log(`Created prompt with commit: ${prompt.commit}`);
+console.log(`Created prompt with version: ${prompt.version}`);
 ```
 
 ### Retrieving Prompts
@@ -63,13 +63,13 @@ const prompt = await client.getPrompt({ name: "greeting-prompt" });
 
 if (prompt) {
   console.log(`Template: ${prompt.prompt}`);
-  console.log(`Commit: ${prompt.commit}`);
+  console.log(`Version: ${prompt.version}`);
 }
 
-// Get specific version
+// Get specific version by its sequential version identifier ("v<N>")
 const oldVersion = await client.getPrompt({
   name: "greeting-prompt",
-  commit: "abc123de",
+  version: "v1",
 });
 ```
 
@@ -154,7 +154,7 @@ const prompt2 = await client.createPrompt({
   tags: ["updated-tags"], // Different tags don't trigger new version
   projectName: "my-project",
 });
-console.log(prompt2.commit === prompt1.commit); // true
+console.log(prompt2.version === prompt1.version); // true
 
 // Changed template - creates new version 2
 const prompt3 = await client.createPrompt({
@@ -280,7 +280,7 @@ const latest = versions[0];
 
 // Version properties
 console.log(`ID: ${latest.id}`);
-console.log(`Commit: ${latest.commit}`);
+console.log(`Version: ${latest.version}`);
 console.log(`Template: ${latest.prompt}`);
 console.log(`Created: ${latest.createdAt}`);
 console.log(`Creator: ${latest.createdBy}`);
@@ -317,23 +317,32 @@ versions.forEach((version) => {
 #### Getting Specific Versions
 
 ```typescript
-const prompt = await client.getPrompt({ name: "greeting-prompt" });
-
-// Option 1: Get version as Prompt instance (recommended for formatting)
-const oldVersion = await prompt.getVersion("abc123de");
+// Option 1: Fetch a specific version straight from the client
+const oldVersion = await client.getPrompt({
+  name: "greeting-prompt",
+  version: "v1",
+});
 
 if (oldVersion) {
   const text = oldVersion.format({ name: "Bob", score: 88 });
-  console.log(`Old version output: ${text}`);
+  console.log(`Version ${oldVersion.version} output: ${text}`);
 }
 
-// Option 2: Use format directly on PromptVersion objects
-const versions = await prompt.getVersions();
-const secondVersion = versions[1];
+// Option 2: From an existing prompt instance, pin to a specific version
+const prompt = await client.getPrompt({ name: "greeting-prompt" });
+const v1 = await prompt.getVersion("v1");
 
-// PromptVersion also has format() method
-const formattedText = secondVersion.format({ name: "Charlie", score: 92 });
-console.log(`Version ${secondVersion.commit}: ${formattedText}`);
+if (v1) {
+  console.log(v1.format({ name: "Alice", score: 95 }));
+}
+
+// Option 3: Iterate version history and use format() directly on PromptVersion objects
+const versions = await prompt.getVersions();
+const previousVersion = versions[1];
+
+// PromptVersion also has a format() method
+const formattedText = previousVersion.format({ name: "Charlie", score: 92 });
+console.log(formattedText);
 ```
 
 #### Comparing Versions
@@ -342,15 +351,16 @@ console.log(`Version ${secondVersion.commit}: ${formattedText}`);
 const versions = await prompt.getVersions();
 
 if (versions.length >= 2) {
-  const current = versions[0];
-  const previous = versions[1];
+  const current = versions[0]; // e.g. "v3"
+  const previous = versions[1]; // e.g. "v2"
 
-  // Compare versions (logs diff and returns it)
+  // Compare versions (logs diff and returns it). Diff labels show the
+  // sequential version identifiers (e.g. "[v3]" / "[v2]").
   const diff = current.compareTo(previous);
   console.log(diff);
   /* Output:
-   * - Current version [abc123de]
-   * + Other version [def456gh]
+   * - Other version [v2]
+   * + Current version [v3]
    * @@ -1,2 +1,2 @@
    * - Hello {{name}}, welcome!
    * + Hello {{name}}, your score is {{score}}
@@ -364,14 +374,14 @@ if (versions.length >= 2) {
 const prompt = await client.getPrompt({ name: "greeting-prompt" });
 const versions = await prompt.getVersions();
 
-// Find specific version to restore
-const targetVersion = versions.find((v) => v.commit === "abc123de");
+// Pick the version you want to restore — for example, the previous one
+const [, previousVersion] = versions;
 
-if (targetVersion) {
+if (previousVersion) {
   // Restore creates a new version with the old content
-  const restoredPrompt = await prompt.useVersion(targetVersion);
+  const restoredPrompt = await prompt.useVersion(previousVersion);
 
-  console.log(`Restored to commit: ${restoredPrompt.commit}`);
+  console.log(`Restored to version: ${restoredPrompt.version}`);
   console.log(`Template: ${restoredPrompt.prompt}`);
 }
 ```
@@ -495,7 +505,7 @@ const chatPrompt = await client.createChatPrompt({
   projectName: "my-project",
 });
 
-console.log(`Created chat prompt with commit: ${chatPrompt.commit}`);
+console.log(`Created chat prompt with version: ${chatPrompt.version}`);
 ```
 
 ### Formatting Chat Prompts
@@ -706,13 +716,13 @@ const chatPrompt = await client.getChatPrompt({
 
 if (chatPrompt) {
   console.log(`Messages: ${JSON.stringify(chatPrompt.messages)}`);
-  console.log(`Commit: ${chatPrompt.commit}`);
+  console.log(`Version: ${chatPrompt.version}`);
 }
 
-// Get specific version
+// Get specific version by its sequential version identifier ("v<N>")
 const oldVersion = await client.getChatPrompt({
   name: "educational-assistant",
-  commit: "abc123de",
+  version: "v1",
 });
 ```
 
@@ -829,7 +839,7 @@ const chatPrompt = await client.createChatPrompt({
   projectName: "my-project",
 });
 
-console.log(`Version 1 commit: ${chatPrompt.commit}`);
+console.log(`Created ${chatPrompt.version}`);
 
 // Update with new messages - creates new version
 const messagesV2 = [
@@ -844,7 +854,7 @@ const chatPromptV2 = await client.createChatPrompt({
   projectName: "my-project",
 });
 
-console.log(`Version 2 commit: ${chatPromptV2.commit}`);
+console.log(`Created ${chatPromptV2.version}`);
 
 // Get version history
 const versions = await chatPrompt.getVersions();
@@ -863,8 +873,11 @@ const chatPrompt = await client.getChatPrompt({
 // Get all versions
 const versions = await chatPrompt.getVersions();
 
-// Get specific version
-const oldVersion = await chatPrompt.getVersion("abc123de");
+// Get a specific version by its sequential identifier ("v<N>")
+const oldVersion = await client.getChatPrompt({
+  name: "greeting-prompt",
+  version: "v1",
+});
 
 // Compare versions
 if (versions.length >= 2) {
@@ -874,11 +887,11 @@ if (versions.length >= 2) {
   console.log(diff);
 }
 
-// Restore previous version
-const targetVersion = versions.find((v) => v.commit === "abc123de");
-if (targetVersion) {
-  const restoredPrompt = await chatPrompt.useVersion(targetVersion);
-  console.log(`Restored to commit: ${restoredPrompt.commit}`);
+// Restore the previous version
+const [, previousVersion] = versions;
+if (previousVersion) {
+  const restoredPrompt = await chatPrompt.useVersion(previousVersion);
+  console.log(`Restored to version: ${restoredPrompt.version}`);
 }
 ```
 
@@ -931,12 +944,12 @@ Creates a new prompt or returns existing version if content unchanged.
 
 #### `getPrompt(options)`
 
-Retrieves a prompt by name and optional version.
+Retrieves a prompt by name, optionally targeting a specific version.
 
 **Arguments:**
 
 - `options.name: string` - Prompt name (required)
-- `options.commit?: string` - Optional commit ID for specific version
+- `options.version?: string` - Sequential version identifier (e.g. `"v3"`). If omitted, the latest version is returned.
 
 **Returns:** `Promise<Prompt | null>` - Prompt instance or null if not found
 
@@ -1037,12 +1050,12 @@ interface ContentPart {
 
 #### `getChatPrompt(options)`
 
-Retrieves a chat prompt by name and optional version.
+Retrieves a chat prompt by name, optionally targeting a specific version.
 
 **Arguments:**
 
 - `options.name: string` - Chat prompt name (required)
-- `options.commit?: string` - Optional commit ID for specific version
+- `options.version?: string` - Sequential version identifier (e.g. `"v3"`). If omitted, the latest version is returned.
 
 **Returns:** `Promise<ChatPrompt | null>` - ChatPrompt instance or null if not found
 
@@ -1077,7 +1090,6 @@ Retrieves all version history for this prompt, with optional filtering, sorting,
 | Field | Type | Operators |
 |-------|------|-----------|
 | `id` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
-| `commit` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
 | `template` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
 | `change_description` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
 | `created_by` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
@@ -1145,15 +1157,23 @@ const results = await prompt.getVersions({
 });
 ```
 
-##### `getVersion(commit)`
+##### `getVersion(version)`
 
-Gets a specific version as a Prompt instance.
+Returns a `Prompt` instance pinned to a specific version of this prompt. Accepts either the sequential version identifier (e.g. `"v3"`) — preferred — or a commit hash (deprecated; retained for backwards compatibility). Inputs matching `/^v\d+$/` are treated as version numbers; anything else is treated as a commit.
 
 **Arguments:**
 
-- `commit: string` - Commit hash (8-char or full)
+- `version: string` - Sequential version (`"v<N>"`) or commit hash (deprecated)
 
-**Returns:** `Promise<Prompt | null>` - Prompt instance or null if not found
+**Returns:** `Promise<Prompt | null>` - Prompt instance pinned to that version, or `null` if not found
+
+```typescript
+// Preferred: fetch by sequential version identifier
+const v3 = await prompt.getVersion("v3");
+
+// Deprecated: fetch by commit hash
+const byCommit = await prompt.getVersion("abc123de");
+```
 
 ##### `useVersion(version)`
 
@@ -1188,7 +1208,7 @@ Deletes this prompt and all its versions.
 - `id: string` - Unique prompt identifier
 - `name: string` - Prompt name
 - `prompt: string` - Current template content
-- `commit?: string` - Current version commit ID
+- `version?: string` - Sequential version identifier (e.g. `"v3"`)
 - `type: PromptType` - Template engine type
 - `description?: string` - Prompt description
 - `tags?: readonly string[]` - Prompt tags
@@ -1211,9 +1231,9 @@ Formats this version's template with provided variables.
 
 ##### `getVersionInfo()`
 
-Gets formatted version information string.
+Gets a formatted version-info string suitable for display. Includes the version identifier (e.g. `"v3"`), creation date, creator, and change description.
 
-**Returns:** `string` - Format: `[commit] YYYY-MM-DD by user@email.com - Change description`
+**Returns:** `string` — Format: `"[v3] YYYY-MM-DD by user@email.com - Change description"`
 
 ##### `getVersionAge()`
 
@@ -1223,7 +1243,7 @@ Gets human-readable version age.
 
 ##### `compareTo(other)`
 
-Compares this version's template with another version.
+Compares this version's template with another version. The diff is logged to the terminal and returned. Labels in the diff use the sequential version identifier (e.g. `"[v3]"`).
 
 **Arguments:**
 
@@ -1236,7 +1256,7 @@ Compares this version's template with another version.
 - `id: string` - Version unique identifier
 - `name: string` - Associated prompt name
 - `prompt: string` - Template content for this version
-- `commit: string` - Version commit ID
+- `version?: string` - Sequential version identifier (e.g. `"v3"`)
 - `type: PromptType` - Template engine type
 - `tags?: string[]` - Tags associated with this version
 - `metadata?: JsonNode` - Version metadata
@@ -1293,15 +1313,23 @@ Retrieves all version history for this chat prompt, with optional filtering, sor
 
 **Returns:** `Promise<PromptVersion[]>` - Array of all matching versions (newest first)
 
-##### `getVersion(commit)`
+##### `getVersion(version)`
 
-Gets a specific version as a ChatPrompt instance.
+Returns a `ChatPrompt` instance pinned to a specific version of this chat prompt. Accepts either the sequential version identifier (e.g. `"v3"`) — preferred — or a commit hash (deprecated; retained for backwards compatibility). Inputs matching `/^v\d+$/` are treated as version numbers; anything else is treated as a commit.
 
 **Arguments:**
 
-- `commit: string` - Commit hash (8-char or full)
+- `version: string` - Sequential version (`"v<N>"`) or commit hash (deprecated)
 
-**Returns:** `Promise<ChatPrompt | null>` - ChatPrompt instance or null if not found
+**Returns:** `Promise<ChatPrompt | null>` - ChatPrompt instance pinned to that version, or `null` if not found
+
+```typescript
+// Preferred: fetch by sequential version identifier
+const v3 = await chatPrompt.getVersion("v3");
+
+// Deprecated: fetch by commit hash
+const byCommit = await chatPrompt.getVersion("abc123de");
+```
 
 ##### `useVersion(version)`
 
@@ -1336,7 +1364,7 @@ Deletes this chat prompt and all its versions.
 - `id: string` - Unique chat prompt identifier
 - `name: string` - Chat prompt name
 - `messages: ChatMessage[]` - Array of chat messages with roles and content
-- `commit?: string` - Current version commit ID
+- `version?: string` - Sequential version identifier (e.g. `"v3"`)
 - `type: PromptType` - Template engine type
 - `description?: string` - Chat prompt description
 - `tags?: readonly string[]` - Chat prompt tags

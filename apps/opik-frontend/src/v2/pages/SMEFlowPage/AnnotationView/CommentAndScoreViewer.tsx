@@ -1,14 +1,20 @@
 import React, { useRef } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
+import { CircleCheck, Eye } from "lucide-react";
 import FeedbackScoresEditor from "@/v2/pages-shared/traces/FeedbackScoresEditor/FeedbackScoresEditor";
 import UserCommentForm from "@/shared/UserComment/UserCommentForm";
 import { HotkeyDisplay } from "@/ui/hotkey-display";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
-import { useSMEFlow } from "@/v2/pages/SMEFlowPage/SMEFlowContext";
+import { useSMEFlow, ITEM_STATE } from "@/v2/pages/SMEFlowPage/SMEFlowContext";
 import { SME_ACTION, SME_HOTKEYS } from "@/v2/pages/SMEFlowPage/hotkeys";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import {
+  getAnnotationQueueItemId,
+  isItemProcessedByUser,
+} from "@/lib/annotation-queues";
+import { useLoggedInUserNameOrOpenSourceDefaultUser } from "@/store/AppStore";
 
 const isFromEditableElement = (keyboardEvent: KeyboardEvent): boolean => {
   const target = keyboardEvent.target as HTMLElement;
@@ -27,6 +33,8 @@ const CommentAndScoreViewer: React.FC = () => {
     currentItem,
     currentAnnotationState,
     annotationQueue,
+    itemStates,
+    currentItemLockDenied,
     updateComment,
     updateFeedbackScore,
     deleteFeedbackScore,
@@ -36,10 +44,31 @@ const CommentAndScoreViewer: React.FC = () => {
     permissions: { canAnnotateTraceSpanThread },
   } = usePermissions();
 
+  const currentUserName = useLoggedInUserNameOrOpenSourceDefaultUser();
+
+  const isCompleted = currentItem
+    ? itemStates[getAnnotationQueueItemId(currentItem)] === ITEM_STATE.COMPLETED
+    : false;
+
+  const userHasAnnotated = currentItem
+    ? isItemProcessedByUser(
+        currentItem,
+        annotationQueue?.feedback_definition_names ?? [],
+        currentUserName,
+      )
+    : false;
+
+  const isInReview = currentItem
+    ? itemStates[getAnnotationQueueItemId(currentItem)] === ITEM_STATE.IN_REVIEW
+    : false;
+
+  const completedByOthers = isCompleted && !userHasAnnotated;
+  const cannotAnnotate =
+    completedByOthers || isInReview || currentItemLockDenied;
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const feedbackScoresRef = useRef<HTMLDivElement>(null);
 
-  // Check if feedback definitions exist
   const hasFeedbackDefinitions =
     annotationQueue?.feedback_definition_names &&
     annotationQueue.feedback_definition_names.length > 0;
@@ -47,11 +76,13 @@ const CommentAndScoreViewer: React.FC = () => {
   useHotkeys(
     SME_HOTKEYS[SME_ACTION.FOCUS_COMMENT].key,
     (keyboardEvent: KeyboardEvent) => {
+      if (cannotAnnotate) return;
       if (isFromEditableElement(keyboardEvent)) return;
       keyboardEvent.preventDefault();
       textareaRef.current?.focus();
     },
     { enableOnFormTags: true },
+    [cannotAnnotate],
   );
 
   useHotkeys(
@@ -63,11 +94,10 @@ const CommentAndScoreViewer: React.FC = () => {
     { enableOnFormTags: true },
   );
 
-  // Only register feedback scores hotkey if there are feedback definitions
   useHotkeys(
     SME_HOTKEYS[SME_ACTION.FOCUS_FEEDBACK_SCORES].key,
     (keyboardEvent: KeyboardEvent) => {
-      if (!hasFeedbackDefinitions) return;
+      if (!hasFeedbackDefinitions || cannotAnnotate) return;
       if (isFromEditableElement(keyboardEvent)) return;
       keyboardEvent.preventDefault();
       const firstInput = feedbackScoresRef.current?.querySelector(
@@ -76,15 +106,37 @@ const CommentAndScoreViewer: React.FC = () => {
       firstInput?.focus();
     },
     { enableOnFormTags: true },
-    [hasFeedbackDefinitions],
+    [hasFeedbackDefinitions, cannotAnnotate],
   );
 
+  if (completedByOthers) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-12 text-center text-muted-slate">
+        <CircleCheck className="size-5 text-success" />
+        <p className="comet-body-xs max-w-[250px]">
+          This item has already been scored by the required number of annotators
+        </p>
+      </div>
+    );
+  }
+
+  if (isInReview || currentItemLockDenied) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-12 text-center text-muted-slate">
+        <Eye className="size-5 text-orange-400" />
+        <p className="comet-body-xs max-w-[250px]">
+          This item is currently being reviewed by another annotator
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="pl-4">
+    <div>
       {canAnnotateTraceSpanThread && (
         <>
           <div className="flex items-center justify-between gap-1 pb-2">
-            <span className="comet-body-s-accented truncate">Comment</span>
+            <span className="comet-body-s-accented truncate">Comments</span>
             <TooltipWrapper
               content={SME_HOTKEYS[SME_ACTION.FOCUS_COMMENT].description}
               hotkeys={[SME_HOTKEYS[SME_ACTION.FOCUS_COMMENT].display]}
@@ -92,8 +144,7 @@ const CommentAndScoreViewer: React.FC = () => {
               <HotkeyDisplay
                 hotkey={SME_HOTKEYS[SME_ACTION.FOCUS_COMMENT].display}
                 variant="outline"
-                size="sm"
-                className="size-6 border border-gray-300 bg-white p-0 font-mono text-xs shadow-sm"
+                size="xs"
               />
             </TooltipWrapper>
           </div>
@@ -106,14 +157,14 @@ const CommentAndScoreViewer: React.FC = () => {
         </>
       )}
       {hasFeedbackDefinitions && (
-        <div ref={feedbackScoresRef} className="relative mt-6">
+        <div ref={feedbackScoresRef} className="relative mt-4 pt-4">
           <FeedbackScoresEditor
             key={currentItem?.id}
             feedbackScores={currentAnnotationState.scores}
             onUpdateFeedbackScore={updateFeedbackScore}
             onDeleteFeedbackScore={deleteFeedbackScore}
             feedbackDefinitionNames={annotationQueue?.feedback_definition_names}
-            className="mt-4 px-0"
+            className="px-0"
             header={
               <div className="flex items-center gap-1 pb-2">
                 <span className="comet-body-s-accented truncate">
@@ -136,8 +187,7 @@ const CommentAndScoreViewer: React.FC = () => {
                       SME_HOTKEYS[SME_ACTION.FOCUS_FEEDBACK_SCORES].display
                     }
                     variant="outline"
-                    size="sm"
-                    className="size-6 border border-gray-300 bg-white p-0 font-mono text-xs shadow-sm"
+                    size="xs"
                   />
                 </TooltipWrapper>
               </div>

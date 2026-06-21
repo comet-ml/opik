@@ -7,13 +7,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
-import { Button } from "@/ui/button";
+import { Button, ButtonProps } from "@/ui/button";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 
 type DataTableRowHeightSelectorProps = {
   type: string;
   setType: (type: ROW_HEIGHT) => void;
   layout?: "icon" | "labeled";
+  size?: ButtonProps["size"];
 };
 
 const OPTIONS: DropdownOption<ROW_HEIGHT>[] = [
@@ -24,7 +25,7 @@ const OPTIONS: DropdownOption<ROW_HEIGHT>[] = [
 
 const DataTableRowHeightSelector: React.FunctionComponent<
   DataTableRowHeightSelectorProps
-> = ({ type, setType, layout = "icon" }) => {
+> = ({ type, setType, layout = "icon", size = "icon-sm" }) => {
   const handleSelect = useCallback(
     (value: ROW_HEIGHT) => {
       setType(value);
@@ -34,16 +35,20 @@ const DataTableRowHeightSelector: React.FunctionComponent<
 
   return (
     <DropdownMenu>
-      <TooltipWrapper content="Rows">
+      <TooltipWrapper content="Row size">
         <DropdownMenuTrigger asChild>
           {layout === "labeled" ? (
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size={size}>
               <UnfoldVertical className="mr-1.5 size-3.5" />
               Row size
             </Button>
           ) : (
-            <Button variant="outline" size="icon-sm">
-              <Rows3 className="size-3.5" />
+            <Button
+              variant="outline"
+              size={size}
+              className="focus-visible:border-primary focus-visible:ring-0"
+            >
+              <Rows3 />
             </Button>
           )}
         </DropdownMenuTrigger>

@@ -18,6 +18,7 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     welcomeWizardEnabled: core.serialization.boolean(),
     exportEnabled: core.serialization.boolean(),
     optimizationStudioEnabled: core.serialization.boolean(),
+    costIntelligenceEnabled: core.serialization.boolean(),
     datasetVersioningEnabled: core.serialization.boolean(),
     datasetExportEnabled: core.serialization.boolean(),
     demoDataEnabled: core.serialization.boolean(),
@@ -30,7 +31,9 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     customllmProviderEnabled: core.serialization.boolean(),
     ollamaProviderEnabled: core.serialization.boolean(),
     ollieEnabled: core.serialization.boolean(),
-    agenticToolsEnabled: core.serialization.boolean().optional(),
+    projectHomepageEnabled: core.serialization.boolean(),
+    agenticToolsEnabled: core.serialization.boolean(),
+    agentInsightsEnabled: core.serialization.boolean(),
     v2WorkspaceAllowlistIds: core.serialization.list(core.serialization.string()),
     v1WorkspaceAllowlistIds: core.serialization.list(core.serialization.string()),
     forceWorkspaceVersion: core.serialization.string(),
@@ -51,6 +54,7 @@ export declare namespace ServiceTogglesConfig {
         welcomeWizardEnabled: boolean;
         exportEnabled: boolean;
         optimizationStudioEnabled: boolean;
+        costIntelligenceEnabled: boolean;
         datasetVersioningEnabled: boolean;
         datasetExportEnabled: boolean;
         demoDataEnabled: boolean;
@@ -63,7 +67,9 @@ export declare namespace ServiceTogglesConfig {
         customllmProviderEnabled: boolean;
         ollamaProviderEnabled: boolean;
         ollieEnabled: boolean;
-        agenticToolsEnabled?: boolean | null;
+        projectHomepageEnabled: boolean;
+        agenticToolsEnabled: boolean;
+        agentInsightsEnabled: boolean;
         v2WorkspaceAllowlistIds: string[];
         v1WorkspaceAllowlistIds: string[];
         forceWorkspaceVersion: string;

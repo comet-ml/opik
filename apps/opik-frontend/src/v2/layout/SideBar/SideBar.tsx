@@ -1,13 +1,14 @@
 import React from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { PanelLeft } from "lucide-react";
-import { useActiveWorkspaceName } from "@/store/AppStore";
+import { useOpikWorkspaceName } from "@/store/AppStore";
 import { Button } from "@/ui/button";
 import Logo from "@/shared/Logo/Logo";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { useActiveProjectInitializer } from "@/hooks/useActiveProjectInitializer";
 import ProjectSidebarContent from "@/v2/layout/SideBar/ProjectSidebarContent";
 import WorkspaceSidebarContent from "@/v2/layout/SideBar/WorkspaceSidebarContent";
+import usePluginsStore from "@/store/PluginsStore";
 
 const HOME_PATH = "/$workspaceName/home";
 
@@ -23,12 +24,21 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   onToggle,
 }) => {
   useActiveProjectInitializer();
-  const workspaceName = useActiveWorkspaceName();
 
   const isProjectRoute = useRouterState({
     select: (state) =>
       state.matches.some((match) => "projectId" in match.params),
   });
+
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
+  const sidebarSections = usePluginsStore((state) => state.sidebarSections);
+  const PluginSidebarContent = sidebarSections.find((section) =>
+    section.matches(pathname),
+  )?.Content;
+
+  const opikWorkspaceName = useOpikWorkspaceName();
 
   const logo = <Logo expanded={expanded} />;
 
@@ -38,7 +48,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         <Link
           to={HOME_PATH}
           className="absolute left-[15px] top-1/2 block -translate-y-1/2"
-          params={{ workspaceName }}
+          params={{ workspaceName: opikWorkspaceName }}
         >
           {logo}
           {canToggle && !expanded && (
@@ -75,7 +85,9 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
       </div>
       <div className="relative flex h-[calc(100%-var(--header-height))]">
         <div className="flex min-h-0 grow flex-col justify-between overflow-auto p-3">
-          {isProjectRoute ? (
+          {PluginSidebarContent ? (
+            <PluginSidebarContent expanded={expanded} />
+          ) : isProjectRoute ? (
             <ProjectSidebarContent expanded={expanded} />
           ) : (
             <WorkspaceSidebarContent expanded={expanded} />

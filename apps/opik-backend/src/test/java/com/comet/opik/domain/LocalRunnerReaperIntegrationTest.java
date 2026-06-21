@@ -56,6 +56,7 @@ class LocalRunnerReaperIntegrationTest {
     private ProjectService projectService;
     private RunnerServiceImpl runnerService;
     private EndpointJobServiceImpl endpointJobService;
+    private AnalyticsService analyticsService;
 
     private int uuidCounter = 0;
 
@@ -92,8 +93,10 @@ class LocalRunnerReaperIntegrationTest {
                 .workspaceId(WORKSPACE_ID)
                 .userName(USER_NAME)
                 .build();
+        analyticsService = Mockito.mock(AnalyticsService.class);
         runnerService = new RunnerServiceImpl(stringRedis, idGenerator, projectService, runnerConfig,
-                () -> endpointJobService, () -> connectBridgeService, () -> requestContext);
+                () -> endpointJobService, () -> connectBridgeService, () -> requestContext,
+                analyticsService);
         endpointJobService = new EndpointJobServiceImpl(stringRedis, redisClient.reactive(), idGenerator,
                 runnerService, runnerConfig, Mockito.mock(AnalyticsService.class));
     }
@@ -102,6 +105,7 @@ class LocalRunnerReaperIntegrationTest {
     void clearDatabase() {
         redisClient.getKeys().flushdb();
         uuidCounter = 0;
+        Mockito.reset(analyticsService);
     }
 
     @AfterAll
@@ -265,6 +269,7 @@ class LocalRunnerReaperIntegrationTest {
                 runnerConfig.setDeadRunnerPurgeTime(originalPurgeTime);
             }
         }
+
     }
 
     @Nested

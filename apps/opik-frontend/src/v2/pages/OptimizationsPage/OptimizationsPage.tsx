@@ -333,7 +333,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
       {isEmpty ? (
         isOptimizationStudioEnabled && canUseOptimizationStudio ? (
           <OptimizationsEmptyState
-            onOptimizeClick={handleNewOptimizationClick}
+            onOptimizeViaSdkClick={handleNewOptimizationClick}
           />
         ) : (
           <PageEmptyState

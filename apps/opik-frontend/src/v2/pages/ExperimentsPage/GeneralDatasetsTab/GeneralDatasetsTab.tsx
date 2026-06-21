@@ -81,11 +81,11 @@ import DataTableVirtualBody from "@/shared/DataTable/DataTableVirtualBody";
 import { ChartData } from "@/v2/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartContent";
 import GroupsButton from "@/shared/GroupsButton/GroupsButton";
 import TextCell from "@/shared/DataTableCells/TextCell";
-import DatasetVersionCell from "@/shared/DataTableCells/DatasetVersionCell";
 import ItemSourceCell, {
   ITEM_SOURCE_LABEL,
 } from "@/v2/pages-shared/experiments/ItemSourceCell";
 import { EXPERIMENT_STATUS } from "@/types/datasets";
+import { formatPromptVersionLabel } from "@/lib/experiments";
 import { Skeleton } from "@/ui/skeleton";
 
 const PASS_RATE_LABEL = "Pass rate";
@@ -128,7 +128,6 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   COLUMN_ID_ID,
   COLUMN_NAME_ID,
   COLUMN_DATASET_ID,
-  "dataset_version",
   "pass_rate",
   "trace_count",
   "duration.p50",
@@ -215,15 +214,6 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
         },
       },
       {
-        id: "dataset_version",
-        label: "Test suite version",
-        type: COLUMN_TYPE.string,
-        iconType: "version" as const,
-        accessorFn: (row: GroupedExperiment) =>
-          row.dataset_version_summary?.version_name || "",
-        cell: DatasetVersionCell as never,
-      },
-      {
         id: "created_at",
         label: "Created",
         type: COLUMN_TYPE.time,
@@ -269,12 +259,19 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
       },
       {
         id: "prompt",
-        label: "Prompt commit",
+        label: "Prompt",
         type: COLUMN_TYPE.list,
-        accessorFn: (row) => get(row, ["prompt_versions"], []),
+        // Show the prompt name plus its version (OPIK-6838). Unlike the Prompt
+        // Library experiments tab, where the prompt is implied by the page
+        // context, this global table needs the name too.
+        accessorFn: (row) =>
+          (row.prompt_versions ?? []).map((v) => ({
+            ...v,
+            version_label: formatPromptVersionLabel(v),
+          })),
         cell: MultiResourceCell as never,
         customMeta: {
-          nameKey: "commit",
+          nameKey: "version_label",
           idKey: "prompt_id",
           resource: RESOURCE_TYPE.prompt,
           getSearch: (data: GroupedExperiment) => ({

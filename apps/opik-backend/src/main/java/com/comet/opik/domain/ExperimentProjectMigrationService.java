@@ -3,7 +3,6 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Project;
 import com.comet.opik.domain.experiments.aggregations.ExperimentAggregationPublisher;
 import com.comet.opik.domain.workspaces.WorkspaceVersionService;
-import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
 import com.comet.opik.infrastructure.ExperimentProjectMigrationConfig;
 import com.comet.opik.infrastructure.MigrationConfig;
@@ -44,31 +43,36 @@ public class ExperimentProjectMigrationService implements Managed {
     public static final String METRIC_NAMESPACE = "opik.migration.experiment_project";
 
     public static final AttributeKey<String> RESULT_KEY = stringKey("result");
+    public static final AttributeKey<String> REASON_KEY = stringKey("reason");
 
     public static final Attributes RESULT_ERROR = Attributes.of(RESULT_KEY, "error");
 
     private static final Attributes RESULT_MIGRATED = Attributes.of(RESULT_KEY, "migrated");
     private static final Attributes RESULT_NO_CERTAIN = Attributes.of(RESULT_KEY, "no_certain_experiments");
-    private static final Attributes RESULT_ALL_SKIPPED = Attributes.of(RESULT_KEY, "all_skipped_deleted_project");
-    private static final Attributes SKIP_REASON_DELETED_PROJECT = Attributes.of(stringKey("reason"), "deleted_project");
 
-    private static final String TRAPPED_REASON_DELETED_PROJECT = "deleted_project";
+    private static final Attributes REASON_NO_INFERENCE = Attributes.of(REASON_KEY, "no_inference");
+    private static final Attributes REASON_DELETED_PROJECT = Attributes.of(REASON_KEY, "deleted_project");
+
+    /** Tags {@code experiments.assigned_to_dominant_project} by the source distinct project count. */
+    private static final AttributeKey<String> DISTINCT_PROJECT_COUNT_KEY = stringKey("distinct_project_count");
+
+    /** Cap on the {@link #DISTINCT_PROJECT_COUNT_KEY} label value to bound metric cardinality. */
+    private static final int DISTINCT_PROJECT_COUNT_MAX = 50;
 
     private final @NonNull ExperimentDAO experimentDAO;
     private final @NonNull ExperimentItemService experimentItemService;
     private final @NonNull ProjectService projectService;
     private final @NonNull ExperimentAggregationPublisher experimentAggregationPublisher;
     private final @NonNull WorkspaceVersionService workspaceVersionService;
-    private final @NonNull WorkspacesService workspacesService;
     private final @NonNull ExperimentProjectMigrationConfig config;
     private final @NonNull MigrationConfig migrationConfig;
     private final @NonNull ExperimentDenormalizationConfig denormalizationConfig;
 
     private final LongHistogram cycleEligibleWorkspaces;
-    private final LongGauge cycleTrappedWorkspaces;
     private final LongGauge cycleEnvExcludedWorkspaces;
     private final LongHistogram workspaceDuration;
-    private final LongCounter experimentsSkipped;
+    private final LongCounter experimentsAssignedToDefault;
+    private final LongCounter experimentsAssignedToDominantProject;
     private final LongHistogram batchSize;
 
     /**
@@ -86,7 +90,6 @@ public class ExperimentProjectMigrationService implements Managed {
             @NonNull ProjectService projectService,
             @NonNull ExperimentAggregationPublisher experimentAggregationPublisher,
             @NonNull WorkspaceVersionService workspaceVersionService,
-            @NonNull WorkspacesService workspacesService,
             @NonNull @Config("experimentProjectMigration") ExperimentProjectMigrationConfig config,
             @NonNull @Config("migration") MigrationConfig migrationConfig,
             @NonNull @Config("experimentDenormalization") ExperimentDenormalizationConfig denormalizationConfig) {
@@ -95,7 +98,6 @@ public class ExperimentProjectMigrationService implements Managed {
         this.projectService = projectService;
         this.experimentAggregationPublisher = experimentAggregationPublisher;
         this.workspaceVersionService = workspaceVersionService;
-        this.workspacesService = workspacesService;
         this.config = config;
         this.migrationConfig = migrationConfig;
         this.denormalizationConfig = denormalizationConfig;
@@ -106,27 +108,27 @@ public class ExperimentProjectMigrationService implements Managed {
                 .setDescription("Number of workspaces with eligible experiments found per cycle")
                 .ofLongs()
                 .build();
-        this.cycleTrappedWorkspaces = meter
-                .gaugeBuilder("%s.cycle.trapped_workspaces".formatted(METRIC_NAMESPACE))
-                .setDescription(
-                        "Number of workspaces locally skipped because all their certain experiments point to deleted projects")
-                .ofLongs()
-                .build();
         this.cycleEnvExcludedWorkspaces = meter
                 .gaugeBuilder("%s.cycle.env_excluded_workspaces".formatted(METRIC_NAMESPACE))
                 .setDescription(
-                        "Number of workspaces excluded from migration via the MIGRATION_EXCLUDED_WORKSPACE_IDS env var. Mirrors trapped_workspaces so the dashboard can show both exclusion paths side by side.")
+                        "Number of workspaces excluded from migration via the MIGRATION_EXCLUDED_WORKSPACE_IDS env var.")
                 .ofLongs()
                 .build();
         this.workspaceDuration = meter
                 .histogramBuilder("%s.workspace.duration".formatted(METRIC_NAMESPACE))
-                .setDescription("Duration of a single workspace migration, tagged by result")
+                .setDescription(
+                        "Duration of a single workspace migration, tagged by result (migrated / no_certain_experiments / error)")
                 .setUnit("ms")
                 .ofLongs()
                 .build();
-        this.experimentsSkipped = meter
-                .counterBuilder("%s.experiments.skipped".formatted(METRIC_NAMESPACE))
-                .setDescription("Total number of experiments skipped during migration, tagged by reason")
+        this.experimentsAssignedToDefault = meter
+                .counterBuilder("%s.experiments.assigned_to_default".formatted(METRIC_NAMESPACE))
+                .setDescription("Total number of experiments assigned to the Default Project")
+                .build();
+        this.experimentsAssignedToDominantProject = meter
+                .counterBuilder("%s.experiments.assigned_to_dominant_project".formatted(METRIC_NAMESPACE))
+                .setDescription(
+                        "Total number of orphan experiments that referenced multiple projects and were assigned to the dominant one (most referencing traces). Tagged by distinct_project_count for the multi-project distribution.")
                 .build();
         this.batchSize = meter
                 .histogramBuilder("%s.batch.size".formatted(METRIC_NAMESPACE))
@@ -160,18 +162,12 @@ public class ExperimentProjectMigrationService implements Managed {
 
     public Mono<Void> runMigrationCycle() {
         return Mono.fromCallable(() -> {
-            var skippedWorkspaceIds = workspacesService.findMigrationSkippedWorkspaceIds();
             var envExcludedWorkspaceIds = migrationConfig.getExcludedWorkspaceIds();
-            cycleTrappedWorkspaces.set(skippedWorkspaceIds.size());
             cycleEnvExcludedWorkspaces.set(envExcludedWorkspaceIds.size());
             log.info(
-                    "Starting experiment project migration cycle, workspacesPerRun='{}', batchSize='{}', trappedWorkspaces='{}', envExcludedWorkspaces='{}'",
-                    config.workspacesPerRun(), config.experimentBatchSize(), skippedWorkspaceIds.size(),
-                    envExcludedWorkspaceIds.size());
-            return Stream.concat(
-                    envExcludedWorkspaceIds.stream(),
-                    skippedWorkspaceIds.stream())
-                    .collect(Collectors.toUnmodifiableSet());
+                    "Starting experiment project migration cycle, workspacesPerRun='{}', batchSize='{}', envExcludedWorkspaces='{}'",
+                    config.workspacesPerRun(), config.experimentBatchSize(), envExcludedWorkspaceIds.size());
+            return envExcludedWorkspaceIds;
         })
                 .subscribeOn(migrationScheduler)
                 .flatMapMany(excludedWorkspaceIds -> experimentDAO
@@ -234,7 +230,14 @@ public class ExperimentProjectMigrationService implements Managed {
 
     private Mono<Boolean> migrateValidatedMappings(
             String workspaceId, List<ExperimentProjectMapping> mappings, int batchSize, long workspaceStartMillis) {
-        var inferredProjectIds = mappings.stream()
+        var noInference = mappings.stream()
+                .filter(mapping -> mapping.distinctProjectCount() == 0)
+                .toList();
+        var withInferred = mappings.stream()
+                .filter(mapping -> mapping.distinctProjectCount() >= 1 && mapping.projectId() != null)
+                .toList();
+
+        var inferredProjectIds = withInferred.stream()
                 .map(ExperimentProjectMapping::projectId)
                 .collect(Collectors.toUnmodifiableSet());
         return Mono.fromCallable(() -> projectService.findByIds(workspaceId, inferredProjectIds))
@@ -243,26 +246,24 @@ public class ExperimentProjectMigrationService implements Managed {
                     var validProjectIds = existingProjects.stream()
                             .map(Project::id)
                             .collect(Collectors.toUnmodifiableSet());
-                    var validated = mappings.stream()
+                    var certain = withInferred.stream()
                             .filter(mapping -> validProjectIds.contains(mapping.projectId()))
                             .toList();
-                    var skippedDeleted = mappings.size() - validated.size();
-                    if (skippedDeleted > 0) {
-                        log.info("Skipping experiments with deleted project, workspaceId='{}', count='{}'",
-                                workspaceId, skippedDeleted);
-                        experimentsSkipped.add(skippedDeleted, SKIP_REASON_DELETED_PROJECT);
-                    }
+                    var certainDeleted = withInferred.stream()
+                            .filter(mapping -> !validProjectIds.contains(mapping.projectId()))
+                            .toList();
+
+                    recordDominantAssignments(workspaceId, certain);
+                    logAndEmitDefaultProjectMetrics(workspaceId, certainDeleted, noInference);
+
+                    var defaultAssigned = getDefaultAssigned(workspaceId, certainDeleted, noInference);
+                    var validated = Stream.concat(certain.stream(), defaultAssigned).toList();
                     if (CollectionUtils.isEmpty(validated)) {
-                        log.info(
-                                "All certain experiments point to deleted projects, marking workspace as trapped, workspaceId='{}'",
-                                workspaceId);
-                        return Mono
-                                .fromRunnable(() -> workspacesService.markMigrationSkipped(
-                                        workspaceId, TRAPPED_REASON_DELETED_PROJECT))
-                                .subscribeOn(migrationScheduler)
-                                .doFinally(signalType -> recordWorkspaceDuration(
-                                        RESULT_ALL_SKIPPED, workspaceStartMillis))
-                                .then(Mono.empty());
+                        var duration = Duration.ofMillis(System.currentTimeMillis() - workspaceStartMillis);
+                        log.info("No experiments to migrate after classification, workspaceId='{}', duration='{}'",
+                                workspaceId, duration);
+                        recordWorkspaceDuration(RESULT_NO_CERTAIN, workspaceStartMillis);
+                        return Mono.just(false);
                     }
                     var byProject = validated.stream()
                             .collect(Collectors.groupingBy(ExperimentProjectMapping::projectId));
@@ -277,19 +278,77 @@ public class ExperimentProjectMigrationService implements Managed {
                                     workspaceId, byProject.size()))
                             .then(triggerReaggregation(workspaceId, validated))
                             .then(evictWorkspaceVersionCache(workspaceId))
-                            .doOnSuccess(__ -> {
+                            .then(Mono.fromCallable(() -> {
                                 var duration = Duration
                                         .ofMillis(System.currentTimeMillis() - workspaceStartMillis);
                                 log.info(
-                                        "Workspace migration completed, workspaceId='{}', migrated='{}', skippedDeletedProject='{}', duration='{}'",
-                                        workspaceId, validated.size(), skippedDeleted, duration);
+                                        "Workspace migration completed, workspaceId='{}', migrated='{}', certainDeleted='{}', noInference='{}', duration='{}'",
+                                        workspaceId, validated.size(), certainDeleted.size(), noInference.size(),
+                                        duration);
                                 recordWorkspaceDuration(RESULT_MIGRATED, workspaceStartMillis);
-                            });
+                                return true;
+                            }));
                 });
     }
 
     private void recordWorkspaceDuration(Attributes resultAttributes, long startMillis) {
         workspaceDuration.record(System.currentTimeMillis() - startMillis, resultAttributes);
+    }
+
+    /**
+     * Bumps {@code experiments.assigned_to_dominant_project} and logs the chosen project plus its
+     * per-project trace breakdown for each validated multi-project experiment. Single-project rows
+     * are skipped — they're the unambiguous case where no dominant decision was made.
+     */
+    private void recordDominantAssignments(String workspaceId, List<ExperimentProjectMapping> certain) {
+        for (var mapping : certain) {
+            if (mapping.distinctProjectCount() <= 1) {
+                continue;
+            }
+            long boundedCount = Math.min(mapping.distinctProjectCount(), DISTINCT_PROJECT_COUNT_MAX);
+            experimentsAssignedToDominantProject.add(1,
+                    Attributes.of(DISTINCT_PROJECT_COUNT_KEY, Long.toString(boundedCount)));
+            log.info(
+                    "Assigning dominant project to experiment, workspaceId='{}', experimentId='{}', chosenProjectId='{}', distinctProjectCount='{}', projectBreakdown='{}'",
+                    workspaceId, mapping.experimentId(), mapping.projectId(), mapping.distinctProjectCount(),
+                    mapping.projectBreakdown());
+        }
+    }
+
+    private void logAndEmitDefaultProjectMetrics(
+            String workspaceId,
+            List<ExperimentProjectMapping> certainDeleted,
+            List<ExperimentProjectMapping> noInference) {
+        if (!certainDeleted.isEmpty()) {
+            log.info("Assigning certain but deleted experiments to Default Project, workspaceId='{}', count='{}'",
+                    workspaceId, certainDeleted.size());
+            experimentsAssignedToDefault.add(certainDeleted.size(), REASON_DELETED_PROJECT);
+        }
+        if (!noInference.isEmpty()) {
+            log.info("Assigning no-inference experiments to Default Project, workspaceId='{}', count='{}'",
+                    workspaceId, noInference.size());
+            experimentsAssignedToDefault.add(noInference.size(), REASON_NO_INFERENCE);
+        }
+    }
+
+    /**
+     * Re-targets the certain-deleted and no-inference mappings to the workspace's Default
+     * Project. {@link ProjectService#getOrCreate} is the same path trace ingestion takes, so a
+     * missing Default Project is provisioned in-line rather than trapping the workspace. The
+     * lookup is skipped entirely when neither bucket has rows.
+     */
+    private Stream<ExperimentProjectMapping> getDefaultAssigned(
+            String workspaceId, List<ExperimentProjectMapping> certainDeleted,
+            List<ExperimentProjectMapping> noInference) {
+        var defaultProjectId = certainDeleted.size() + noInference.size() > 0
+                ? projectService.getOrCreate(workspaceId, ProjectService.DEFAULT_PROJECT, SYSTEM_USER).id()
+                : null;
+        return defaultProjectId == null
+                ? Stream.empty()
+                : Stream.concat(certainDeleted.stream(), noInference.stream())
+                        .map(mapping -> mapping.toBuilder()
+                                .projectId(defaultProjectId)
+                                .build());
     }
 
     private Mono<Long> batchUpdateProjectId(

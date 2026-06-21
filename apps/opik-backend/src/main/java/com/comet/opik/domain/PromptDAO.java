@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersionLink;
+import com.comet.opik.api.RecentActivity;
 import com.comet.opik.infrastructure.db.PromptVersionColumnMapper;
 import com.comet.opik.infrastructure.db.PromptVersionLinkRowMapper;
 import com.comet.opik.infrastructure.db.SetFlatArgumentFactory;
@@ -55,68 +56,81 @@ public interface PromptDAO {
     void save(@Bind("workspace_id") String workspaceId, @BindMethods("bean") Prompt prompt);
 
     @SqlQuery("""
+            WITH pv_for_prompt AS (
+                SELECT pv.*
+                FROM prompt_versions pv
+                WHERE pv.prompt_id = :id AND pv.workspace_id = :workspace_id
+            ), active_envs AS (
+                SELECT pve.version_id, pve.environment
+                FROM prompt_version_envs pve
+                INNER JOIN pv_for_prompt pfp ON pfp.id = pve.version_id
+                WHERE pve.workspace_id = :workspace_id AND pve.ended_at IS NULL
+            ), ver_envs AS (
+                SELECT version_id, JSON_ARRAYAGG(environment) AS environments
+                FROM active_envs
+                GROUP BY version_id
+            )
             SELECT
-                *,
+                p.*,
                 (
-                    SELECT COUNT(pv.id)
-                    FROM prompt_versions pv
-                    WHERE pv.prompt_id = p.id
-                    AND pv.workspace_id = p.workspace_id
-                    AND pv.version_type = 'prompt_version'
+                    SELECT COUNT(pfp.id)
+                    FROM pv_for_prompt pfp
+                    WHERE pfp.version_type = 'prompt_version'
                 ) AS version_count,
                 (
                     SELECT JSON_OBJECT(
-                        'id', pv.id,
-                        'prompt_id', pv.prompt_id,
-                        'commit', pv.commit,
-                        'template', pv.template,
-                        'metadata', pv.metadata,
-                        'change_description', pv.change_description,
-                        'type', pv.type,
-                        'version_type', pv.version_type,
-                        'environment', pv.environment,
-                        'tags', pv.tags,
-                        'created_at', pv.created_at,
-                        'created_by', pv.created_by,
-                        'last_updated_at', pv.last_updated_at,
-                        'last_updated_by', pv.last_updated_by
+                        'id', pfp.id,
+                        'prompt_id', pfp.prompt_id,
+                        'commit', pfp.commit,
+                        'version_number', pfp.version_number,
+                        'template', pfp.template,
+                        'metadata', pfp.metadata,
+                        'change_description', pfp.change_description,
+                        'type', pfp.type,
+                        'version_type', pfp.version_type,
+                        'environments', ve.environments,
+                        'tags', pfp.tags,
+                        'created_at', pfp.created_at,
+                        'created_by', pfp.created_by,
+                        'last_updated_at', pfp.last_updated_at,
+                        'last_updated_by', pfp.last_updated_by
                     )
-                    FROM prompt_versions pv
-                    WHERE pv.prompt_id = p.id
-                    AND pv.workspace_id = p.workspace_id
-                    AND pv.version_type = 'prompt_version'
-                    ORDER BY pv.id DESC
+                    FROM pv_for_prompt pfp
+                    LEFT JOIN ver_envs ve ON ve.version_id = pfp.id
+                    WHERE pfp.version_type = 'prompt_version'
+                    ORDER BY pfp.id DESC
                     LIMIT 1
                 ) AS latest_version
                 <if(mask_id || environment)>
                 ,
                 (
                     SELECT JSON_OBJECT(
-                        'id', pv.id,
-                        'prompt_id', pv.prompt_id,
-                        'commit', pv.commit,
-                        'template', pv.template,
-                        'metadata', pv.metadata,
-                        'change_description', pv.change_description,
-                        'type', pv.type,
-                        'version_type', pv.version_type,
-                        'environment', pv.environment,
-                        'tags', pv.tags,
-                        'created_at', pv.created_at,
-                        'created_by', pv.created_by,
-                        'last_updated_at', pv.last_updated_at,
-                        'last_updated_by', pv.last_updated_by
+                        'id', pfp.id,
+                        'prompt_id', pfp.prompt_id,
+                        'commit', pfp.commit,
+                        'version_number', pfp.version_number,
+                        'template', pfp.template,
+                        'metadata', pfp.metadata,
+                        'change_description', pfp.change_description,
+                        'type', pfp.type,
+                        'version_type', pfp.version_type,
+                        'environments', ve.environments,
+                        'tags', pfp.tags,
+                        'created_at', pfp.created_at,
+                        'created_by', pfp.created_by,
+                        'last_updated_at', pfp.last_updated_at,
+                        'last_updated_by', pfp.last_updated_by
                     )
-                    FROM prompt_versions pv
-                    WHERE pv.prompt_id = p.id
-                    AND pv.workspace_id = p.workspace_id
-                    <if(mask_id)> AND pv.id = :mask_id AND pv.version_type = 'mask' <endif>
-                    <if(environment)> AND pv.environment = :environment AND pv.version_type = 'prompt_version' <endif>
+                    FROM pv_for_prompt pfp
+                    LEFT JOIN ver_envs ve ON ve.version_id = pfp.id
+                    WHERE 1=1
+                    <if(mask_id)> AND pfp.id = :mask_id AND pfp.version_type = 'mask' <endif>
+                    <if(environment)> AND pfp.id IN (SELECT version_id FROM active_envs WHERE environment = :environment) AND pfp.version_type = 'prompt_version' <endif>
                 ) AS requested_version
                 <endif>
             FROM prompts p
-            WHERE id = :id
-            AND workspace_id = :workspace_id
+            WHERE p.id = :id
+            AND p.workspace_id = :workspace_id
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
@@ -177,38 +191,44 @@ public interface PromptDAO {
             	FROM prompts AS p
             	WHERE workspace_id = :workspace_id
             	<if(ids)> AND id IN (<ids>) <endif>
+            ), pv_ranked AS (
+                SELECT pv.*,
+                    ROW_NUMBER() OVER (PARTITION BY pv.prompt_id ORDER BY pv.id DESC) AS rn
+                FROM prompt_versions pv
+                WHERE pv.workspace_id = :workspace_id AND pv.version_type = 'prompt_version'
+                <if(ids)> AND pv.prompt_id IN (<ids>) <endif>
+            ), active_envs AS (
+                SELECT pve.version_id, pve.environment
+                FROM prompt_version_envs pve
+                INNER JOIN pv_ranked pvr ON pvr.id = pve.version_id AND pvr.rn = 1
+                WHERE pve.workspace_id = :workspace_id AND pve.ended_at IS NULL
+            ), ver_envs AS (
+                SELECT version_id, JSON_ARRAYAGG(environment) AS environments
+                FROM active_envs
+                GROUP BY version_id
             ), latest_versions AS (
             	SELECT
               JSON_OBJECT(
-                'id', id,
-                'prompt_id', prompt_id,
-                'commit', commit,
-                'template', template,
-                'metadata', metadata,
-                'change_description', change_description,
-                'type', type,
-                'version_type', version_type,
-                'environment', environment,
-                'tags', tags,
-                'created_at', created_at,
-                'created_by', created_by,
-                'last_updated_at', last_updated_at,
-                'last_updated_by', last_updated_by
+                'id', pvr.id,
+                'prompt_id', pvr.prompt_id,
+                'commit', pvr.commit,
+                'version_number', pvr.version_number,
+                'template', pvr.template,
+                'metadata', pvr.metadata,
+                'change_description', pvr.change_description,
+                'type', pvr.type,
+                'version_type', pvr.version_type,
+                'environments', ve.environments,
+                'tags', pvr.tags,
+                'created_at', pvr.created_at,
+                'created_by', pvr.created_by,
+                'last_updated_at', pvr.last_updated_at,
+                'last_updated_by', pvr.last_updated_by
               ) AS latest_version,
-              prompt_id
-              FROM (
-                SELECT
-                  pv.*,
-                  ROW_NUMBER() OVER (
-                    PARTITION BY pv.prompt_id
-                    ORDER BY pv.id DESC
-                  ) AS rn
-                FROM prompt_versions pv
-                WHERE pv.workspace_id = :workspace_id
-                  AND pv.version_type = 'prompt_version'
-                  <if(ids)> AND pv.prompt_id IN (<ids>) <endif>
-              ) ranked
-              WHERE ranked.rn = 1
+              pvr.prompt_id
+              FROM pv_ranked pvr
+              LEFT JOIN ver_envs ve ON ve.version_id = pvr.id
+              WHERE pvr.rn = 1
             )
             SELECT sp.*, lv.latest_version
             FROM selected_prompts sp
@@ -273,6 +293,20 @@ public interface PromptDAO {
             @Bind("lastUpdatedBy") String lastUpdatedBy);
 
     @SqlQuery("""
+            WITH pv_for_commit AS (
+                SELECT pv.*
+                FROM prompt_versions pv
+                WHERE pv.commit = :commit AND pv.workspace_id = :workspace_id AND pv.version_type = 'prompt_version'
+            ), active_envs AS (
+                SELECT pve.version_id, pve.environment
+                FROM prompt_version_envs pve
+                INNER JOIN pv_for_commit pvc ON pvc.id = pve.version_id
+                WHERE pve.workspace_id = :workspace_id AND pve.ended_at IS NULL
+            ), ver_envs AS (
+                SELECT version_id, JSON_ARRAYAGG(environment) AS environments
+                FROM active_envs
+                GROUP BY version_id
+            )
             SELECT
                 p.*,
                 (
@@ -283,28 +317,44 @@ public interface PromptDAO {
                     AND pv2.version_type = 'prompt_version'
                 ) AS version_count,
                 JSON_OBJECT(
-                    'id', pv.id,
-                    'prompt_id', pv.prompt_id,
-                    'commit', pv.commit,
-                    'template', pv.template,
-                    'metadata', pv.metadata,
-                    'change_description', pv.change_description,
-                    'type', pv.type,
-                    'version_type', pv.version_type,
-                    'environment', pv.environment,
-                    'tags', pv.tags,
-                    'created_at', pv.created_at,
-                    'created_by', pv.created_by,
-                    'last_updated_at', pv.last_updated_at,
-                    'last_updated_by', pv.last_updated_by
+                    'id', pvc.id,
+                    'prompt_id', pvc.prompt_id,
+                    'commit', pvc.commit,
+                    'version_number', pvc.version_number,
+                    'template', pvc.template,
+                    'metadata', pvc.metadata,
+                    'change_description', pvc.change_description,
+                    'type', pvc.type,
+                    'version_type', pvc.version_type,
+                    'environments', ve.environments,
+                    'tags', pvc.tags,
+                    'created_at', pvc.created_at,
+                    'created_by', pvc.created_by,
+                    'last_updated_at', pvc.last_updated_at,
+                    'last_updated_by', pvc.last_updated_by
                 ) AS requested_version
-            FROM prompt_versions pv
-            INNER JOIN prompts p ON pv.prompt_id = p.id AND p.workspace_id = pv.workspace_id
-            WHERE pv.commit = :commit
-            AND pv.workspace_id = :workspace_id
-            AND pv.version_type = 'prompt_version'
+            FROM pv_for_commit pvc
+            INNER JOIN prompts p ON pvc.prompt_id = p.id AND p.workspace_id = pvc.workspace_id
+            LEFT JOIN ver_envs ve ON ve.version_id = pvc.id
             """)
     List<Prompt> findByCommit(@Bind("commit") String commit, @Bind("workspace_id") String workspaceId);
+
+    @SqlQuery("""
+            SELECT p.id AS prompt_id, p.name AS prompt_name,
+                   pv.version_number, pv.created_at, pv.created_by
+            FROM prompt_versions pv
+            INNER JOIN prompts p ON pv.prompt_id = p.id AND p.workspace_id = pv.workspace_id
+            WHERE pv.workspace_id = :workspace_id
+              AND p.project_id = :project_id
+              AND pv.version_type = 'prompt_version'
+            ORDER BY pv.id DESC
+            LIMIT :limit
+            """)
+    @RegisterConstructorMapper(value = RecentActivity.RecentPromptVersion.class)
+    List<RecentActivity.RecentPromptVersion> findRecentPromptVersionsByProjectId(
+            @Bind("workspace_id") String workspaceId,
+            @Bind("project_id") UUID projectId,
+            @Bind("limit") int limit);
 
     @SqlQuery("""
             SELECT
@@ -324,4 +374,76 @@ public interface PromptDAO {
     List<PromptVersionLink> findPromptsByCommits(
             @Define("commits") @BindList("commits") Collection<String> commits,
             @Bind("workspace_id") String workspaceId);
+
+    /**
+     * Per-workspace orphan-prompt counts for the prompt project migration eligibility scan.
+     * Returns workspaces with at least one non-demo prompt whose {@code project_id IS NULL},
+     * smallest-first so a single cycle can drain low-volume workspaces. Demo prompts are
+     * excluded via {@link DemoData#PROMPTS} (utf8mb4_unicode_ci is case-insensitive so a single
+     * canonical entry covers all casings). The optional {@code excluded_workspace_ids} bind
+     * folds the migration's env-var exclusion list and the persisted trap list into one query.
+     */
+    @SqlQuery("""
+            SELECT
+                workspace_id,
+                COUNT(*) AS prompts_count
+            FROM prompts
+            WHERE project_id IS NULL
+                AND name NOT IN (<demo_prompt_names>)
+                <if(excluded_workspace_ids)> AND workspace_id NOT IN (<excluded_workspace_ids>) <endif>
+            GROUP BY workspace_id
+            ORDER BY prompts_count ASC
+            LIMIT :limit
+            """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    @RegisterConstructorMapper(EligiblePromptWorkspace.class)
+    List<EligiblePromptWorkspace> findEligiblePromptWorkspaces(
+            @Bind("limit") int limit,
+            @Define("demo_prompt_names") @BindList("demo_prompt_names") List<String> demoPromptNames,
+            @Define("excluded_workspace_ids") @BindList(value = "excluded_workspace_ids", onEmpty = BindList.EmptyHandling.NULL_VALUE) Set<String> excludedWorkspaceIds);
+
+    /**
+     * Returns up to {@code :limit} orphan, non-demo prompt IDs for a single workspace. The cap
+     * bounds the per-workspace-per-cycle memory and the size of the ClickHouse {@code IN} list
+     * in the downstream classification query. Workspaces with more orphans than the cap are
+     * drained over subsequent cycles — the eligibility scan finds them again until none remain.
+     */
+    @SqlQuery("""
+            SELECT id
+            FROM prompts
+            WHERE workspace_id = :workspace_id
+                AND project_id IS NULL
+                AND name NOT IN (<demo_prompt_names>)
+            LIMIT :limit
+            """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    List<UUID> findOrphanPromptIds(
+            @Bind("workspace_id") String workspaceId,
+            @Define("demo_prompt_names") @BindList("demo_prompt_names") List<String> demoPromptNames,
+            @Bind("limit") int limit);
+
+    /**
+     * Idempotent batch assignment. The {@code project_id IS NULL} predicate is the concurrency
+     * guard — a concurrent user write that has already set the column to a different value is
+     * preserved, and re-runs of the migration are no-ops on already-assigned rows. The schema's
+     * {@code ON UPDATE CURRENT_TIMESTAMP(6)} on {@code last_updated_at} stamps the row time.
+     */
+    @SqlUpdate("""
+            UPDATE prompts
+            SET project_id = :project_id,
+                last_updated_by = :user_name
+            WHERE workspace_id = :workspace_id
+                AND id IN (<prompt_ids>)
+                AND project_id IS NULL
+            """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    int batchSetProjectId(
+            @Bind("workspace_id") String workspaceId,
+            @Define("prompt_ids") @BindList("prompt_ids") Set<UUID> promptIds,
+            @Bind("project_id") UUID projectId,
+            @Bind("user_name") String userName);
+
 }

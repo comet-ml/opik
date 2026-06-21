@@ -25,17 +25,24 @@ const WorkspaceGuard = ({
   const AssistantPrewarmer = usePluginStore(
     (state) => state.AssistantPrewarmer,
   );
+  const LayoutProvider = usePluginStore((state) => state.LayoutProvider);
 
   if (!WorkspacePreloader) {
     return <Loader />;
   }
 
-  const layout = (
+  const baseLayout = (
     <FeatureTogglesProvider>
       <ServerSyncProvider>
         <Layout />
       </ServerSyncProvider>
     </FeatureTogglesProvider>
+  );
+
+  const layout = LayoutProvider ? (
+    <LayoutProvider>{baseLayout}</LayoutProvider>
+  ) : (
+    baseLayout
   );
 
   return (

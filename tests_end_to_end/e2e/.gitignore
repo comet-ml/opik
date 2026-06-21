@@ -8,6 +8,10 @@ core/backend/generated/
 .runners/
 .e2e-run-id
 
+# Local credentials (templates checked in, real values gitignored)
+.env.local
+.env.cloud
+
 # Reports
 allure-results/
 playwright-report/

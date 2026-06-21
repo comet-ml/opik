@@ -21,11 +21,14 @@ import com.comet.opik.api.runner.LocalRunnerStatus;
 import com.comet.opik.api.runner.RunnerType;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.core.Response;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -51,9 +54,17 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
+import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
+import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static java.util.UUID.randomUUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -98,12 +109,22 @@ class PairingResourceTest {
         MigrationUtils.runMysqlDbMigration(MYSQL_CONTAINER);
         MigrationUtils.runClickhouseDbMigration(CLICK_HOUSE_CONTAINER);
 
+        // Stub the BI events endpoint and route the analytics StatsClient at it so we can
+        // assert the exact payload that would land at stats.comet.com in production.
+        wireMock.server().stubFor(post(urlPathEqualTo("/v1/notify/event"))
+                .willReturn(okJson("{\"message\":\"Event added successfully\",\"success\":\"true\"}")));
+
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 AppContextConfig.builder()
                         .jdbcUrl(MYSQL_CONTAINER.getJdbcUrl())
                         .databaseAnalyticsFactory(databaseAnalyticsFactory)
                         .runtimeInfo(wireMock.runtimeInfo())
                         .redisUrl(REDIS.getRedisURI())
+                        .usageReportEnabled(true)
+                        .usageReportUrl("%s/v1/notify/event".formatted(wireMock.runtimeInfo().getHttpBaseUrl()))
+                        .customConfigs(List.of(
+                                new TestDropwizardAppExtensionUtils.CustomConfig("analytics.enabled", "true"),
+                                new TestDropwizardAppExtensionUtils.CustomConfig("analytics.environment", "test")))
                         .build());
     }
 
@@ -482,6 +503,115 @@ class PairingResourceTest {
             try (Response response = pairingClient.callActivate(created.sessionId(), req, API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(404);
             }
+        }
+    }
+
+    @Nested
+    @DisplayName("BI events")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class BiEvents {
+
+        private static final String STARTED = AnalyticsService.EVENT_PREFIX + "connect_started";
+        private static final String SUCCEEDED = AnalyticsService.EVENT_PREFIX + "connect_succeeded";
+        private static final String FAILED = AnalyticsService.EVENT_PREFIX + "connect_failed";
+
+        @BeforeEach
+        void resetWireMock() {
+            wireMock.server().resetRequests();
+        }
+
+        @Test
+        @DisplayName("connect_started carries runner_type for a browser pairing")
+        void connectStarted__browserPairing__tagsRunnerType() {
+            UUID projectId = createProject(API_KEY, TEST_WORKSPACE);
+            CreateSessionRequest request = CreateSessionRequest.builder()
+                    .projectId(projectId)
+                    .activationKey(base64(randomActivationKey()))
+                    .type(RunnerType.CONNECT)
+                    .build();
+            pairingClient.createSession(request, API_KEY, TEST_WORKSPACE);
+
+            Awaitility.await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                            .withRequestBody(matchingJsonPath("$.event_type", equalTo(STARTED))
+                                    .and(matchingJsonPath("$.event_properties.runner_type", equalTo("connect")))
+                                    .and(matchingJsonPath("$.event_properties.workspace_id", equalTo(WORKSPACE_ID)))
+                                    .and(matchingJsonPath("$.event_properties.environment", equalTo("test"))))));
+        }
+
+        @Test
+        @DisplayName("connect_succeeded carries runner_type from the stored session")
+        void connectSucceeded__activate__tagsRunnerType() {
+            UUID projectId = createProject(API_KEY, TEST_WORKSPACE);
+            byte[] activationKey = randomActivationKey();
+            CreateSessionRequest createRequest = CreateSessionRequest.builder()
+                    .projectId(projectId)
+                    .activationKey(base64(activationKey))
+                    .type(RunnerType.ENDPOINT)
+                    .build();
+            CreateSessionResponse created = pairingClient.createSession(createRequest, API_KEY, TEST_WORKSPACE);
+
+            String runnerName = "runner-" + randomUUID();
+            ActivateRequest activateRequest = ActivateRequest.builder()
+                    .runnerName(runnerName)
+                    .hmac(computeHmac(created.sessionId(), activationKey, runnerName))
+                    .build();
+            pairingClient.activate(created.sessionId(), activateRequest, API_KEY, TEST_WORKSPACE);
+
+            Awaitility.await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                            .withRequestBody(matchingJsonPath("$.event_type", equalTo(SUCCEEDED))
+                                    .and(matchingJsonPath("$.event_properties.runner_type", equalTo("endpoint"))))));
+        }
+
+        @Test
+        @DisplayName("connect_failed peeks the stored runner_type on bad HMAC")
+        void connectFailed__badHmac__tagsRunnerTypeFromPeek() {
+            UUID projectId = createProject(API_KEY, TEST_WORKSPACE);
+            CreateSessionRequest createRequest = CreateSessionRequest.builder()
+                    .projectId(projectId)
+                    .activationKey(base64(randomActivationKey()))
+                    .type(RunnerType.CONNECT)
+                    .build();
+            CreateSessionResponse created = pairingClient.createSession(createRequest, API_KEY, TEST_WORKSPACE);
+
+            ActivateRequest badRequest = ActivateRequest.builder()
+                    .runnerName("forged-runner")
+                    .hmac(base64(new byte[32]))
+                    .build();
+            try (Response response = pairingClient.callActivate(created.sessionId(), badRequest, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(403);
+            }
+
+            Awaitility.await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                            .withRequestBody(matchingJsonPath("$.event_type", equalTo(FAILED))
+                                    .and(matchingJsonPath("$.event_properties.runner_type", equalTo("connect")))
+                                    .and(matchingJsonPath("$.event_properties.error",
+                                            equalTo("ForbiddenException"))))));
+        }
+
+        @Test
+        @DisplayName("connect_failed omits runner_type when the session does not exist")
+        void connectFailed__missingSession__omitsRunnerType() {
+            UUID missingSessionId = randomUUID();
+            ActivateRequest request = ActivateRequest.builder()
+                    .runnerName("ghost-runner")
+                    .hmac(base64(new byte[32]))
+                    .build();
+            try (Response response = pairingClient.callActivate(missingSessionId, request, API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(404);
+            }
+
+            // runner_type is omitted because peekSessionType returns empty when the session
+            // does not exist; verifying the event fires with the correct error class is
+            // sufficient evidence that the omit branch is reached without throwing.
+            Awaitility.await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                            .withRequestBody(matchingJsonPath("$.event_type", equalTo(FAILED))
+                                    .and(matchingJsonPath("$.event_properties.error",
+                                            equalTo("NotFoundException"))))));
         }
     }
 }

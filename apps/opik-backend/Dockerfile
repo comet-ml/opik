@@ -1,4 +1,4 @@
-FROM maven:3.9.11-amazoncorretto-21-al2023 AS build
+FROM maven:3.9.16-amazoncorretto-25-al2023 AS build
 
 WORKDIR /opt/opik-backend
 
@@ -16,7 +16,7 @@ RUN mvn versions:set -DnewVersion=${OPIK_VERSION} && \
     mvn clean package -DskipTests
 
 ###############################
-FROM amazoncorretto:21.0.10-al2023
+FROM amazoncorretto:25.0.3-al2023
 
 # Add metadata labels
 LABEL org.opencontainers.image.title="Opik Backend"
@@ -29,8 +29,11 @@ LABEL org.opencontainers.image.vendor="Comet ML"
 ARG RDS_CERT_SHA256=e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3
 ARG STORE_PASSWORD=changeit
 COPY install_rds_cert.sh /tmp/install_rds_cert.sh
+# perl is intentionally not installed: it pulls in perl-Archive-Tar, which is
+# affected by CVE-2026-9538 (ALAS2023-2026-1805) and has no patched AL2023 RPM.
+# install_rds_cert.sh uses sed/openssl instead of perl to extract the cert CN.
 RUN yum update -y && \
-    yum install -y --allowerasing shadow ca-certificates openssl perl dos2unix curl && \
+    yum install -y --allowerasing shadow ca-certificates openssl dos2unix curl && \
     yum clean all && \
     rm -rf /var/cache/yum && \
     mkdir -p /tmp/certs && \
@@ -46,7 +49,7 @@ RUN yum update -y && \
 WORKDIR /opt/opik
 
 # Copy application files
-COPY --chown=1001:1001 config.yml lombok.config entrypoint.sh run_db_migrations.sh opik-otel-views.yaml ./
+COPY --chown=1001:1001 config.yml lombok.config entrypoint.sh run_db_migrations.sh provision_agent_insights_readonly_user.sh opik-otel-views.yaml ./
 COPY --chown=1001:1001 redoc/ redoc/
 
 # Prepare shell scripts

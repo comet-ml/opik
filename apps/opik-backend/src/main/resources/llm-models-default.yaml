@@ -130,6 +130,9 @@ openai:
     structuredOutput: true
     reasoning: true
 anthropic:
+  - id: "claude-opus-4-8"
+    label: "Claude Opus 4.8"
+    structuredOutput: true
   - id: "claude-opus-4-7"
     label: "Claude Opus 4.7"
     structuredOutput: true
@@ -150,14 +153,17 @@ anthropic:
   - id: "claude-opus-4-1-20250805"
     label: "Claude Opus 4.1"
     structuredOutput: true
+  - id: "claude-fable-5"
+    label: "Claude Fable 5"
+    structuredOutput: true
   - id: "claude-3-7-sonnet-20250219"
   - id: "claude-opus-4-20250514"
-    structuredOutput: true
   - id: "claude-sonnet-4-20250514"
-    structuredOutput: true
   - id: "claude-sonnet-4-5-20250929"
     structuredOutput: true
 gemini:
+  - id: "gemini-3.5-flash"
+    label: "Gemini 3.5 Flash"
   - id: "gemini-3.1-pro-preview"
     label: "Gemini 3.1 Pro Preview"
     structuredOutput: true
@@ -178,12 +184,6 @@ gemini:
   - id: "gemini-2.5-flash-lite"
     label: "Gemini 2.5 Flash-Lite"
     structuredOutput: true
-  - id: "gemini-2.0-flash"
-    label: "Gemini 2.0 Flash"
-    structuredOutput: true
-  - id: "gemini-2.0-flash-lite"
-    label: "Gemini 2.0 Flash-Lite"
-    structuredOutput: true
   - id: "gemma-4-26b-a4b-it"
     label: "Gemma 4 26B A4B IT"
   - id: "gemma-4-31b-it"
@@ -198,12 +198,18 @@ gemini:
     structuredOutput: true
   - id: "gemini-1.5-pro-latest"
     structuredOutput: true
+  - id: "gemini-2.0-flash"
+    structuredOutput: true
+  - id: "gemini-2.0-flash-lite"
+    structuredOutput: true
   - id: "gemini-2.5-flash-image"
     structuredOutput: true
+  - id: "gemini-3-pro-image"
   - id: "gemini-3-pro-image-preview"
     structuredOutput: true
   - id: "gemini-3-pro-preview"
     structuredOutput: true
+  - id: "gemini-3.1-flash-image"
   - id: "gemini-3.1-flash-image-preview"
     structuredOutput: true
   - id: "gemini-3.1-flash-tts-preview"
@@ -211,6 +217,10 @@ gemini:
   - id: "nano-banana-pro-preview"
   - id: "text-embedding-004"
 vertex-ai:
+  - id: "gemini-3.5-flash"
+    qualifiedName: "vertex_ai/gemini-3.5-flash"
+    label: "Gemini 3.5 Flash"
+    structuredOutput: true
   - id: "gemini-3.1-pro-preview"
     qualifiedName: "vertex_ai/gemini-3.1-pro-preview"
     label: "Gemini 3.1 Pro Preview"
@@ -311,6 +321,8 @@ openrouter:
   - id: "anthropic/claude-3.7-sonnet:thinking"
     label: "anthropic/claude-3.7-sonnet:thinking"
     reasoning: true
+  - id: "anthropic/claude-fable-5"
+    label: "anthropic/claude-fable-5"
   - id: "anthropic/claude-haiku-4.5"
     label: "anthropic/claude-haiku-4.5"
   - id: "anthropic/claude-opus-4"
@@ -328,6 +340,10 @@ openrouter:
     structuredOutput: true
   - id: "anthropic/claude-opus-4.7-fast"
     label: "anthropic/claude-opus-4.7-fast"
+  - id: "anthropic/claude-opus-4.8"
+    label: "anthropic/claude-opus-4.8"
+  - id: "anthropic/claude-opus-4.8-fast"
+    label: "anthropic/claude-opus-4.8-fast"
   - id: "anthropic/claude-sonnet-4"
     label: "anthropic/claude-sonnet-4"
   - id: "anthropic/claude-sonnet-4.5"
@@ -403,6 +419,8 @@ openrouter:
   - id: "cohere/command-r7b-12-2024"
     label: "cohere/command-r7b-12-2024"
     structuredOutput: true
+  - id: "cohere/north-mini-code:free"
+    label: "cohere/north-mini-code:free"
   - id: "deepcogito/cogito-v2-preview-deepseek-671b"
     label: "deepcogito/cogito-v2-preview-deepseek-671b"
   - id: "deepcogito/cogito-v2-preview-llama-109b-moe"
@@ -475,9 +493,6 @@ openrouter:
     label: "eleutherai/llemma_7b"
   - id: "essentialai/rnj-1-instruct"
     label: "essentialai/rnj-1-instruct"
-  - id: "google/gemini-2.0-flash-001"
-    label: "google/gemini-2.0-flash-001"
-    structuredOutput: true
   - id: "google/gemini-2.0-flash-exp:free"
     label: "google/gemini-2.0-flash-exp:free"
     structuredOutput: true
@@ -506,15 +521,20 @@ openrouter:
   - id: "google/gemini-3-flash-preview"
     label: "google/gemini-3-flash-preview"
     structuredOutput: true
+  - id: "google/gemini-3-pro-image"
+    label: "google/gemini-3-pro-image"
   - id: "google/gemini-3-pro-image-preview"
     label: "google/gemini-3-pro-image-preview"
   - id: "google/gemini-3-pro-preview"
     label: "google/gemini-3-pro-preview"
     structuredOutput: true
+  - id: "google/gemini-3.1-flash-image"
+    label: "google/gemini-3.1-flash-image"
   - id: "google/gemini-3.1-flash-image-preview"
     label: "google/gemini-3.1-flash-image-preview"
   - id: "google/gemini-3.1-flash-lite"
     label: "google/gemini-3.1-flash-lite"
+    structuredOutput: true
   - id: "google/gemini-3.1-flash-lite-preview"
     label: "google/gemini-3.1-flash-lite-preview"
     structuredOutput: true
@@ -523,6 +543,8 @@ openrouter:
     structuredOutput: true
   - id: "google/gemini-3.1-pro-preview-customtools"
     label: "google/gemini-3.1-pro-preview-customtools"
+  - id: "google/gemini-3.5-flash"
+    label: "google/gemini-3.5-flash"
   - id: "google/gemma-2-27b-it"
     label: "google/gemma-2-27b-it"
   - id: "google/gemma-2-9b-it"
@@ -568,6 +590,7 @@ openrouter:
     label: "inception/mercury"
   - id: "inception/mercury-2"
     label: "inception/mercury-2"
+    structuredOutput: true
   - id: "inception/mercury-coder"
     label: "inception/mercury-coder"
   - id: "inclusionai/ling-2.6-1t"
@@ -692,6 +715,8 @@ openrouter:
     label: "minimax/minimax-m2.5:free"
   - id: "minimax/minimax-m2.7"
     label: "minimax/minimax-m2.7"
+  - id: "minimax/minimax-m3"
+    label: "minimax/minimax-m3"
   - id: "mistralai/codestral-2501"
     label: "mistralai/codestral-2501"
     structuredOutput: true
@@ -811,6 +836,10 @@ openrouter:
     label: "moonshotai/kimi-k2.5"
   - id: "moonshotai/kimi-k2.6"
     label: "moonshotai/kimi-k2.6"
+  - id: "moonshotai/kimi-k2.6:free"
+    label: "moonshotai/kimi-k2.6:free"
+  - id: "moonshotai/kimi-k2.7-code"
+    label: "moonshotai/kimi-k2.7-code"
   - id: "moonshotai/kimi-k2:free"
     label: "moonshotai/kimi-k2:free"
   - id: "moonshotai/kimi-linear-48b-a3b-instruct"
@@ -825,6 +854,8 @@ openrouter:
     label: "neversleep/noromaid-20b"
   - id: "nex-agi/deepseek-v3.1-nex-n1"
     label: "nex-agi/deepseek-v3.1-nex-n1"
+  - id: "nex-agi/nex-n2-pro:free"
+    label: "nex-agi/nex-n2-pro:free"
   - id: "nousresearch/deephermes-3-mistral-24b-preview"
     label: "nousresearch/deephermes-3-mistral-24b-preview"
   - id: "nousresearch/hermes-2-pro-llama-3-8b"
@@ -855,6 +886,12 @@ openrouter:
     label: "nvidia/nemotron-3-super-120b-a12b"
   - id: "nvidia/nemotron-3-super-120b-a12b:free"
     label: "nvidia/nemotron-3-super-120b-a12b:free"
+  - id: "nvidia/nemotron-3-ultra-550b-a55b"
+    label: "nvidia/nemotron-3-ultra-550b-a55b"
+  - id: "nvidia/nemotron-3-ultra-550b-a55b:free"
+    label: "nvidia/nemotron-3-ultra-550b-a55b:free"
+  - id: "nvidia/nemotron-3.5-content-safety:free"
+    label: "nvidia/nemotron-3.5-content-safety:free"
   - id: "nvidia/nemotron-nano-12b-v2-vl"
     label: "nvidia/nemotron-nano-12b-v2-vl"
   - id: "nvidia/nemotron-nano-12b-v2-vl:free"
@@ -1042,6 +1079,8 @@ openrouter:
   - id: "openrouter/free"
     label: "openrouter/free"
     structuredOutput: true
+  - id: "openrouter/fusion"
+    label: "openrouter/fusion"
   - id: "openrouter/healer-alpha"
     label: "openrouter/healer-alpha"
   - id: "openrouter/hunter-alpha"
@@ -1064,8 +1103,12 @@ openrouter:
     label: "perplexity/sonar-reasoning"
   - id: "perplexity/sonar-reasoning-pro"
     label: "perplexity/sonar-reasoning-pro"
+  - id: "poolside/laguna-m.1"
+    label: "poolside/laguna-m.1"
   - id: "poolside/laguna-m.1:free"
     label: "poolside/laguna-m.1:free"
+  - id: "poolside/laguna-xs.2"
+    label: "poolside/laguna-xs.2"
   - id: "poolside/laguna-xs.2:free"
     label: "poolside/laguna-xs.2:free"
   - id: "prime-intellect/intellect-3"
@@ -1206,6 +1249,10 @@ openrouter:
     label: "qwen/qwen3.6-plus-preview:free"
   - id: "qwen/qwen3.6-plus:free"
     label: "qwen/qwen3.6-plus:free"
+  - id: "qwen/qwen3.7-max"
+    label: "qwen/qwen3.7-max"
+  - id: "qwen/qwen3.7-plus"
+    label: "qwen/qwen3.7-plus"
   - id: "qwen/qwq-32b"
     label: "qwen/qwq-32b"
     structuredOutput: true
@@ -1238,6 +1285,8 @@ openrouter:
     label: "stepfun/step-3.5-flash"
   - id: "stepfun/step-3.5-flash:free"
     label: "stepfun/step-3.5-flash:free"
+  - id: "stepfun/step-3.7-flash"
+    label: "stepfun/step-3.7-flash"
   - id: "switchpoint/router"
     label: "switchpoint/router"
   - id: "tencent/hunyuan-a13b-instruct"
@@ -1303,6 +1352,8 @@ openrouter:
     label: "x-ai/grok-4.20-multi-agent-beta"
   - id: "x-ai/grok-4.3"
     label: "x-ai/grok-4.3"
+  - id: "x-ai/grok-build-0.1"
+    label: "x-ai/grok-build-0.1"
   - id: "x-ai/grok-code-fast-1"
     label: "x-ai/grok-code-fast-1"
   - id: "xiaomi/mimo-v2-flash"
@@ -1313,8 +1364,10 @@ openrouter:
     label: "xiaomi/mimo-v2-pro"
   - id: "xiaomi/mimo-v2.5"
     label: "xiaomi/mimo-v2.5"
+    structuredOutput: true
   - id: "xiaomi/mimo-v2.5-pro"
     label: "xiaomi/mimo-v2.5-pro"
+    structuredOutput: true
   - id: "z-ai/glm-4-32b"
     label: "z-ai/glm-4-32b"
   - id: "z-ai/glm-4.5"
@@ -1341,8 +1394,12 @@ openrouter:
     label: "z-ai/glm-5-turbo"
   - id: "z-ai/glm-5.1"
     label: "z-ai/glm-5.1"
+  - id: "z-ai/glm-5.2"
+    label: "z-ai/glm-5.2"
   - id: "z-ai/glm-5v-turbo"
     label: "z-ai/glm-5v-turbo"
+  - id: "~anthropic/claude-fable-latest"
+    label: "~anthropic/claude-fable-latest"
   - id: "~anthropic/claude-haiku-latest"
     label: "~anthropic/claude-haiku-latest"
   - id: "~anthropic/claude-opus-latest"
@@ -1359,3 +1416,5 @@ openrouter:
     label: "~openai/gpt-latest"
   - id: "~openai/gpt-mini-latest"
     label: "~openai/gpt-mini-latest"
+  - id: "google/gemini-2.0-flash-001"
+    structuredOutput: true

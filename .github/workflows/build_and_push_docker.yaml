@@ -35,8 +35,15 @@ on:
         required: false
         description: If this is an adhoc build (will skip comet variant)
         default: false
+      build_arm64:
+        type: boolean
+        required: false
+        description: Build multiarch images
+        default: true
     secrets:
       OPIK_FE_SENTRY_DSN:
+        required: false
+      OPIK_PLUGIN_AI_SPEND_TOKEN:
         required: false
 
 env:
@@ -63,18 +70,20 @@ jobs:
             MERGE_MATRIX=$(echo "$MERGE_MATRIX" | jq '.exclude += [{"image_type":"comet"}]')
           fi
           
-          # Exclude arm64 if not a release build or if guardrails backend
-          if [[ "${{ inputs.is_release }}" != "true" ]] || [[ "${{ inputs.image }}" == "opik-guardrails-backend" ]]; then
+          # Exclude arm64 when the caller opts out, or for guardrails backend
+          if [[ "${{ inputs.build_arm64 }}" != "true" ]] || [[ "${{ inputs.image }}" == "opik-guardrails-backend" ]]; then
             BUILD_MATRIX=$(echo "$BUILD_MATRIX" | jq '.exclude += [{"platform":"arm64"}]')
           fi
           
-          echo "build_matrix<<EOF" >> $GITHUB_OUTPUT
-          echo "$BUILD_MATRIX" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-          
-          echo "merge_matrix<<EOF" >> $GITHUB_OUTPUT
-          echo "$MERGE_MATRIX" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          {
+            echo "build_matrix<<EOF"
+            echo "$BUILD_MATRIX"
+            echo "EOF"
+
+            echo "merge_matrix<<EOF"
+            echo "$MERGE_MATRIX"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
   build:
     needs: generate-matrix
@@ -100,7 +109,7 @@ jobs:
           else
             IMAGE_NAME="${{ inputs.image }}"
           fi
-          echo "image_name=$IMAGE_NAME" >> $GITHUB_OUTPUT
+          echo "image_name=$IMAGE_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Checkout
         uses: actions/checkout@v6
@@ -116,8 +125,24 @@ jobs:
           else
             TAG="${{inputs.version}}"
           fi
-          docker pull ${{env.DOCKER_REGISTRY}}/opik-sandbox-executor-python:$TAG
-          docker save ${{env.DOCKER_REGISTRY}}/opik-sandbox-executor-python:$TAG | gzip > apps/opik-python-backend/opik-sandbox-executor-python.tar.gz
+          docker pull "${{env.DOCKER_REGISTRY}}/opik-sandbox-executor-python:$TAG"
+          docker save "${{env.DOCKER_REGISTRY}}/opik-sandbox-executor-python:$TAG" | gzip > apps/opik-python-backend/opik-sandbox-executor-python.tar.gz
+
+      - name: Checkout ai-spend plugin (private)
+        if: inputs.image == 'opik-frontend' && matrix.image_type == 'comet'
+        uses: actions/checkout@v6
+        with:
+          repository: comet-ml/opik-plugin-ai-spend
+          ref: main
+          token: ${{ secrets.OPIK_PLUGIN_AI_SPEND_TOKEN }}
+          path: .ai-spend-plugin
+
+      - name: Stage ai-spend plugin into frontend src
+        if: inputs.image == 'opik-frontend' && matrix.image_type == 'comet'
+        run: |
+          mkdir -p apps/opik-frontend/src/plugins/ai-spend
+          cp -R .ai-spend-plugin/src/. apps/opik-frontend/src/plugins/ai-spend/
+          rm -rf .ai-spend-plugin
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -153,6 +178,7 @@ jobs:
           build-args: |
             OPIK_VERSION=${{ inputs.version }}
             ${{ matrix.image_type == 'comet' && inputs.comet_build_args }}
+            ${{ inputs.image == 'opik-frontend' && matrix.image_type == 'comet' && 'BUILD_PLUGINS=comet,ai-spend' }}
             ${{ matrix.image_type == 'comet' && 'SENTRY_ENABLED=true' }}
             ${{ matrix.image_type == 'comet' && format('SENTRY_DSN={0}', secrets.OPIK_FE_SENTRY_DSN) }}
           secrets: |
@@ -192,7 +218,7 @@ jobs:
           else
             IMAGE_NAME="${{ inputs.image }}"
           fi
-          echo "image_name=$IMAGE_NAME" >> $GITHUB_OUTPUT
+          echo "image_name=$IMAGE_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Download digests
         uses: actions/download-artifact@v4
@@ -258,18 +284,22 @@ jobs:
             exit 1
           fi
           
+          # $TAG_ARGS and $DIGESTS are intentionally unquoted: each holds a
+          # space-separated argument list (`-t tag1 -t tag2 ...` and a list of
+          # digest refs) that must word-split into individual argv entries.
+          # Quoting would collapse each into a single argument and break the
+          # docker invocation.
+          # shellcheck disable=SC2086
           docker buildx imagetools create $TAG_ARGS $DIGESTS
 
       - name: Write Build Summary
         run: |
-          echo "### Docker images pushed: ${{ steps.set_vars.outputs.image_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
-          if [[ "${{ inputs.image }}" == "opik-guardrails-backend" ]]; then
-            echo "Built for platforms: linux/amd64" >> $GITHUB_STEP_SUMMARY
-          elif [[ "${{ inputs.is_release }}" == "true" ]]; then
-            echo "Built for platforms: linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
+          echo "### Docker images pushed: ${{ steps.set_vars.outputs.image_name }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.meta.outputs.tags }}" >> "$GITHUB_STEP_SUMMARY"
+          if [[ "${{ inputs.image }}" == "opik-guardrails-backend" ]] || [[ "${{ inputs.build_arm64 }}" != "true" ]]; then
+            echo "Built for platforms: linux/amd64" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "Built for platforms: linux/amd64" >> $GITHUB_STEP_SUMMARY
+            echo "Built for platforms: linux/amd64, linux/arm64" >> "$GITHUB_STEP_SUMMARY"
           fi
-          echo "- [View on GitHub Container Registry](https://github.com/${{ github.repository }}/pkgs/container/opik%2F${{ steps.set_vars.outputs.image_name }})" >> $GITHUB_STEP_SUMMARY
+          echo "- [View on GitHub Container Registry](https://github.com/${{ github.repository }}/pkgs/container/opik%2F${{ steps.set_vars.outputs.image_name }})" >> "$GITHUB_STEP_SUMMARY"
 

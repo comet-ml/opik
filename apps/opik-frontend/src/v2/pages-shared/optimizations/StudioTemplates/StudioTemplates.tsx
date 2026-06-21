@@ -1,8 +1,7 @@
 import React from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { SquareDashedMousePointer, MessageSquare } from "lucide-react";
-import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { OPTIMIZATION_DEMO_TEMPLATES } from "@/constants/optimizations";
+import useNavigateToOptimizationStudio from "@/v2/pages-shared/optimizations/useNavigateToOptimizationStudio";
 import OptimizationTemplateCard from "./OptimizationTemplateCard";
 
 const TEMPLATE_ICONS: Record<
@@ -16,17 +15,7 @@ const TEMPLATE_ICONS: Record<
 };
 
 const StudioTemplates: React.FC = () => {
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const activeProjectId = useActiveProjectId();
-  const navigate = useNavigate();
-
-  const handleTemplateClick = (templateId?: string) => {
-    navigate({
-      to: "/$workspaceName/projects/$projectId/optimizations/new",
-      params: { workspaceName, projectId: activeProjectId! },
-      search: templateId ? { template: templateId } : undefined,
-    });
-  };
+  const handleTemplateClick = useNavigateToOptimizationStudio();
 
   return (
     <div className="pt-4">

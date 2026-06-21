@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { ChevronDown, SlidersHorizontal } from "lucide-react";
+import { ChevronDown, Settings2 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
 import {
@@ -35,7 +35,7 @@ const EnvironmentFilterSelect: React.FC<EnvironmentFilterSelectProps> = ({
   const { data } = useEnvironmentsList();
 
   const environments = useMemo<Environment[]>(
-    () => (data?.content ?? []).slice().sort((a, b) => a.position - b.position),
+    () => data?.content ?? [],
     [data?.content],
   );
 
@@ -52,12 +52,15 @@ const EnvironmentFilterSelect: React.FC<EnvironmentFilterSelectProps> = ({
       <DropdownMenuTrigger asChild>
         <Button
           variant="outline"
-          size="sm"
+          size="xs"
           className="min-w-40 justify-between gap-2 font-normal focus-visible:border-primary focus-visible:ring-0"
         >
           <span className="flex min-w-0 items-center gap-1.5 truncate">
             {selectedEnvironment && (
-              <EnvironmentSquare color={selectedEnvironment.color} />
+              <EnvironmentSquare
+                name={selectedEnvironment.name}
+                color={selectedEnvironment.color}
+              />
             )}
             {triggerLabel}
           </span>
@@ -69,12 +72,14 @@ const EnvironmentFilterSelect: React.FC<EnvironmentFilterSelectProps> = ({
         className="min-w-[var(--radix-dropdown-menu-trigger-width)]"
       >
         <DropdownMenuItem
+          size="sm"
           selected={value === ALL_ENVIRONMENTS_VALUE}
           onSelect={() => onChange(ALL_ENVIRONMENTS_VALUE)}
         >
           {ALL_ENVIRONMENTS_LABEL}
         </DropdownMenuItem>
         <DropdownMenuItem
+          size="sm"
           selected={value === ENVIRONMENT_UNTAGGED_VALUE}
           onSelect={() => onChange(ENVIRONMENT_UNTAGGED_VALUE)}
         >
@@ -85,24 +90,25 @@ const EnvironmentFilterSelect: React.FC<EnvironmentFilterSelectProps> = ({
           {environments.map((env) => (
             <DropdownMenuItem
               key={env.id}
+              size="sm"
               selected={value === env.name}
               onSelect={() => onChange(env.name)}
             >
               <div className="flex min-w-0 items-center gap-2">
-                <EnvironmentSquare color={env.color} />
+                <EnvironmentSquare name={env.name} color={env.color} />
                 <span className="truncate">{env.name}</span>
               </div>
             </DropdownMenuItem>
           ))}
         </div>
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
+        <DropdownMenuItem size="sm" asChild>
           <Link
             to="/$workspaceName/configuration"
             params={{ workspaceName }}
             search={{ tab: CONFIGURATION_TABS.ENVIRONMENTS }}
           >
-            <SlidersHorizontal className="mr-2 size-3.5 shrink-0 text-muted-slate" />
+            <Settings2 className="mr-2 size-3.5 shrink-0 text-muted-slate" />
             Manage environments
           </Link>
         </DropdownMenuItem>

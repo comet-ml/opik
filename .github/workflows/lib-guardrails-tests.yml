@@ -53,7 +53,7 @@ jobs:
 
       - name: Install checks from guardrails hub
         run: |
-          guardrails configure --token $GUARDRAILS_API_KEY --disable-metrics --enable-remote-inferencing;
+          guardrails configure --token "$GUARDRAILS_API_KEY" --disable-metrics --enable-remote-inferencing;
           guardrails hub install hub://guardrails/politeness_check
 
       - name: Run tests

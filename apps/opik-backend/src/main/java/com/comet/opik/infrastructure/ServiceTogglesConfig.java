@@ -18,8 +18,6 @@ import java.util.stream.Collectors;
 @Data
 public class ServiceTogglesConfig {
 
-    public static final String FORCE_WORKSPACE_VERSION_DISABLED = "disabled";
-
     @Valid @JsonProperty
     @NotNull boolean pythonEvaluatorEnabled;
     @JsonProperty
@@ -40,6 +38,8 @@ public class ServiceTogglesConfig {
     @NotNull boolean exportEnabled;
     @JsonProperty
     @NotNull boolean optimizationStudioEnabled;
+    @JsonProperty
+    @NotNull boolean costIntelligenceEnabled;
     @JsonProperty
     @NotNull boolean datasetVersioningEnabled;
     @JsonProperty
@@ -66,7 +66,11 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean ollieEnabled;
     @JsonProperty
-    boolean agenticToolsEnabled;
+    @NotNull boolean projectHomepageEnabled;
+    @JsonProperty
+    @NotNull boolean agenticToolsEnabled;
+    @JsonProperty
+    @NotNull boolean agentInsightsEnabled;
 
     @NotNull Set<@NotBlank String> v2WorkspaceAllowlistIds = Set.of();
 
@@ -92,7 +96,7 @@ public class ServiceTogglesConfig {
                 .orElse(Set.of());
     }
 
-    @NotBlank String forceWorkspaceVersion = FORCE_WORKSPACE_VERSION_DISABLED;
+    @NotBlank String forceWorkspaceVersion;
 
     @JsonProperty
     @Min(5) @Max(100) int defaultPageSize;

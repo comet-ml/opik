@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ScoreSource;
+import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
@@ -11,6 +12,7 @@ import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
 import com.comet.opik.api.resources.v1.events.tools.TraceToolContext;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.evaluators.UserLog;
@@ -39,7 +41,6 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -48,6 +49,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.Constants;
@@ -68,6 +70,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
     private final ToolRegistry toolRegistry;
     private final OnlineScoringConfig onlineScoringConfig;
     private final ServiceTogglesConfig serviceTogglesConfig;
+    private final SpanService spanService;
 
     @Inject
     public OnlineScoringTraceThreadLlmAsJudgeScorer(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
@@ -80,7 +83,8 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
             @NonNull TraceThreadService traceThreadService,
             @NonNull ProjectService projectService,
             @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService,
-            @NonNull ToolRegistry toolRegistry) {
+            @NonNull ToolRegistry toolRegistry,
+            @NonNull SpanService spanService) {
         super(config, redisson, feedbackScoreService, traceService, TRACE_THREAD_LLM_AS_JUDGE,
                 Constants.TRACE_THREAD_LLM_AS_JUDGE);
         this.aiProxyService = aiProxyService;
@@ -91,6 +95,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
         this.toolRegistry = toolRegistry;
         this.onlineScoringConfig = config;
         this.serviceTogglesConfig = serviceTogglesConfig;
+        this.spanService = spanService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringTraceThreadLlmAsJudgeScorer.class);
     }
 
@@ -108,8 +113,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
 
         return Flux.fromIterable(message.threadIds())
                 .flatMap(threadId -> processThreadScores(message, threadId))
-                .then(Mono.defer(
-                        () -> traceThreadService.setScoredAt(message.projectId(), message.threadIds(), Instant.now())))
+                .then()
                 .contextWrite(context -> context.put(RequestContext.WORKSPACE_ID, message.workspaceId())
                         .put(RequestContext.USER_NAME, message.userName())
                         .put(RequestContext.VISIBILITY, Visibility.PRIVATE))
@@ -202,7 +206,28 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
      */
     private Mono<Void> scoreThread(TraceThreadToScoreLlmAsJudge message, List<Trace> traces, UUID threadModelId,
             String threadId, AutomationRuleEvaluator<?, ?> rule, Map<String, String> mdc) {
-        return evaluate(message, traces, threadModelId, threadId, rule, mdc)
+        // When the feature flag is on, fetch every span across every trace in the thread
+        // up front. We fetch BEFORE the inline-vs-tools path decision in prepareEvaluation
+        // (rather than only when the inline path wins) so estimateThreadContextTokens can
+        // serialize the enriched shape and route honestly — otherwise a thread with small
+        // trace bodies but huge spans would inline-render an oversized prompt. The cost is
+        // wasted I/O when the tools path ultimately wins: the prepared spans go unused on
+        // that path (which renders only the compact skeleton; the model uses ReadTool to
+        // re-fetch per-trace on demand). Acceptable trade-off — route correctness over a
+        // narrow over-fetch.
+        //
+        // When the flag is off, an empty list is passed through; the enriched serializer
+        // omits the `spans` field via @JsonInclude(NON_NULL), so the rendered JSON is
+        // byte-identical to today's [{role, content}, ...] shape.
+        Mono<List<Span>> spansMono = serviceTogglesConfig.isAgenticToolsEnabled()
+                ? spanService.getByTraceIds(traces.stream().map(Trace::id).collect(Collectors.toSet()))
+                        .collectList()
+                        .contextWrite(ctx -> ctx
+                                .put(RequestContext.WORKSPACE_ID, message.workspaceId())
+                                .put(RequestContext.USER_NAME, message.userName()))
+                : Mono.just(List.of());
+        return spansMono
+                .flatMap(spans -> evaluate(message, traces, spans, threadModelId, threadId, rule, mdc))
                 .flatMap(scores -> storeThreadScores(scores, threadId, message.userName(), message.workspaceId()))
                 .doOnNext(withMdc(mdc, loggedScores -> userFacingLogger
                         .info("Scores for threadId '{}' stored successfully:\n\n{}", threadId, loggedScores)))
@@ -221,9 +246,9 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
      * toggle is on. Otherwise the inline path runs unchanged — same shape as today.
      */
     private Mono<List<FeedbackScoreBatchItemThread>> evaluate(TraceThreadToScoreLlmAsJudge message,
-            List<Trace> traces, UUID threadModelId, String threadId, AutomationRuleEvaluator<?, ?> rule,
-            Map<String, String> mdc) {
-        return Mono.fromCallable(() -> prepareEvaluation(message, traces, threadId, rule, mdc))
+            List<Trace> traces, List<Span> spans, UUID threadModelId, String threadId,
+            AutomationRuleEvaluator<?, ?> rule, Map<String, String> mdc) {
+        return Mono.fromCallable(() -> prepareEvaluation(message, traces, spans, threadId, rule, mdc))
                 .subscribeOn(Schedulers.parallel())
                 .flatMap(prepared -> scoreTraceReactive(prepared.scoreRequest(), message)
                         .doOnNext(withMdc(mdc, chatResponse -> {
@@ -262,16 +287,19 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
      * rendering); no blocking I/O happens here.
      */
     private PreparedEvaluation prepareEvaluation(TraceThreadToScoreLlmAsJudge message, List<Trace> traces,
-            String threadId, AutomationRuleEvaluator<?, ?> rule, Map<String, String> mdc) {
+            List<Span> spans, String threadId, AutomationRuleEvaluator<?, ?> rule, Map<String, String> mdc) {
         try (var logContext = wrapWithMdc(mdc)) {
             userFacingLogger.info("Evaluating threadId '{}' sampled by rule '{}'", threadId, rule.getName());
 
             String modelName = message.code().model().name();
             // Skip the JSON serialization that drives the token estimate when the toggle is off —
             // we'd just throw the number away. shouldUseAgenticTools re-checks the toggle, so the
-            // estimate is only consulted on the agentic-tools path.
+            // estimate is only consulted on the agentic-tools path. When the toggle is on, `spans`
+            // is the pre-fetched per-thread span list (empty when toggle off) and is factored in so
+            // an enriched-context payload routes to tools when it's actually big — not when the
+            // trace bodies alone happen to be small.
             int estimatedContextTokens = serviceTogglesConfig.isAgenticToolsEnabled()
-                    ? OnlineScoringEngine.estimateThreadContextTokens(traces,
+                    ? OnlineScoringEngine.estimateThreadContextTokens(traces, spans,
                             onlineScoringConfig.getAgenticToolsCharsPerToken())
                     : 0;
             boolean useTools = shouldUseAgenticTools(estimatedContextTokens, modelName, threadId,
@@ -293,7 +321,11 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                     // wrap-up requests share a shape (modulo tool specs).
                     structuredRequest = scoreRequest;
                 } else {
-                    scoreRequest = OnlineScoringEngine.prepareThreadLlmRequest(message.code(), traces, strategy);
+                    // Inline path: render {{context}} with the enriched per-assistant `spans`
+                    // shape. When the toggle is off, `spans` is an empty list and the JSON is
+                    // wire-identical to today's [{role, content}, ...].
+                    scoreRequest = OnlineScoringEngine.prepareThreadLlmRequest(message.code(), traces, strategy,
+                            spans);
                     structuredRequest = scoreRequest;
                 }
             } catch (Exception exception) {

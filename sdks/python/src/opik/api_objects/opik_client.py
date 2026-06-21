@@ -1,5 +1,6 @@
 import atexit
 import contextvars
+import copy
 import datetime
 import functools
 import json
@@ -20,6 +21,7 @@ import httpx
 
 from . import (
     constants,
+    dashboard,
     dataset,
     experiment,
     optimization,
@@ -30,6 +32,9 @@ from . import (
     span as span_module,
     trace as trace_module,
 )
+from .dashboard import rest_operations as dashboard_rest_operations
+from .dashboard import types as dashboard_types
+from .dashboard import validation as dashboard_validation
 from .annotation_queue import (
     TracesAnnotationQueue,
     ThreadsAnnotationQueue,
@@ -46,6 +51,7 @@ from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
 from . import prompt as prompt_module
 from .prompt import client as prompt_client
+from .prompt import prompt_cache
 from .prompt.text import prompt as text_prompt_module
 from .prompt.chat import chat_prompt as chat_prompt_module
 from ..validation.chat_prompt_messages import ChatPromptMessagesValidator
@@ -1137,6 +1143,8 @@ class Opik:
         page = self._rest_client.environments.find_environments()
         return list(page.content or [])
 
+    _BUILTIN_ENVIRONMENT_NAMES = frozenset({"production", "staging", "development"})
+
     def update_environment(
         self,
         name: str,
@@ -1147,6 +1155,11 @@ class Opik:
 
         Returns the updated environment.
         """
+        if color is not None and name in self._BUILTIN_ENVIRONMENT_NAMES:
+            raise exceptions.EnvironmentConfigurationError(
+                f"Cannot change the colour of the built-in environment {name!r}. "
+                "Colour updates are not allowed for 'production', 'staging', or 'development'."
+            )
         existing = self._find_environment_by_name(name)
         if existing is None:
             raise exceptions.OpikException(f"No environment found with name {name!r}.")
@@ -1335,6 +1348,136 @@ class Opik:
                     name, description=description, project_name=project_name
                 )
             raise
+
+    def create_dashboard(
+        self,
+        name: str,
+        type: Optional[Union[dashboard_types.DashboardType, str]] = None,
+        description: Optional[str] = None,
+        project_name: Optional[str] = None,
+        project_id: Optional[str] = None,
+        sections: Optional[
+            List[Union[dashboard_types.DashboardSection, Dict[str, Any]]]
+        ] = None,
+    ) -> dashboard.Dashboard:
+        """
+        Create a new dashboard.
+
+        Args:
+            name: The name of the dashboard.
+            type: The dashboard type, either ``"multi_project"`` or ``"experiments"``.
+                Determines which widget types are allowed.
+            description: An optional description of the dashboard.
+            project_name: For a project-scoped dashboard, the project name. If it does
+                not exist it will be created. Ignored when ``project_id`` is provided.
+            project_id: For a project-scoped dashboard, the project id. Takes precedence
+                over ``project_name``. If neither is provided, a workspace-level
+                dashboard is created.
+            sections: Optional initial sections (``DashboardSection`` objects or dicts).
+                If omitted, the dashboard starts with a single empty "Overview" section.
+
+        Returns:
+            dashboard.Dashboard: The created dashboard object.
+        """
+        if sections is None:
+            section_dicts: List[Dict[str, Any]] = [
+                dashboard_types.DashboardSection(title="Overview").to_jsonable()
+            ]
+        else:
+            section_dicts = copy.deepcopy(
+                dashboard_validation.as_section_dicts(sections)
+            )
+
+        dashboard_type = getattr(type, "value", type)
+        for section in section_dicts:
+            for widget in section.get("widgets", []):
+                dashboard_validation.validate_widget_for_dashboard(
+                    widget, dashboard_type
+                )
+                if project_id is not None:
+                    dashboard_validation.inject_project_id(widget, project_id)
+                elif project_name is None:
+                    # No project at all — delegate the error to inject_project_id
+                    dashboard_validation.inject_project_id(widget, None)
+
+        config = {
+            "version": dashboard_types.DASHBOARD_VERSION,
+            "sections": section_dicts,
+            "lastModified": dashboard_types.now_ms(),
+        }
+        dashboard_validation.validate_structure(config)
+
+        response = self._rest_client.dashboards.create_dashboard(
+            name=name,
+            config=config,
+            type=dashboard_type,
+            description=description,
+            project_id=project_id,
+            project_name=project_name,
+        )
+
+        return dashboard.Dashboard.from_public(
+            dashboard_public=response,
+            rest_client=self._rest_client,
+            client=self,
+        )
+
+    def get_dashboard(self, dashboard_id: str) -> dashboard.Dashboard:
+        """
+        Get a dashboard by id.
+
+        Args:
+            dashboard_id: The id of the dashboard.
+
+        Returns:
+            dashboard.Dashboard: The dashboard object.
+        """
+        response = self._rest_client.dashboards.get_dashboard_by_id(dashboard_id)
+        return dashboard.Dashboard.from_public(
+            dashboard_public=response,
+            rest_client=self._rest_client,
+            client=self,
+        )
+
+    def get_dashboards(
+        self,
+        name: Optional[str] = None,
+        project_id: Optional[str] = None,
+        max_results: int = 100,
+        sorting: Optional[str] = None,
+        filters: Optional[str] = None,
+    ) -> List[dashboard.Dashboard]:
+        """
+        Get dashboards in the workspace.
+
+        Args:
+            name: Optional name to filter dashboards by.
+            project_id: Optional project id to filter dashboards by.
+            max_results: The maximum number of dashboards to return.
+            sorting: Optional serialized sorting specification.
+            filters: Optional serialized filter specification.
+
+        Returns:
+            List[dashboard.Dashboard]: The matching dashboards.
+        """
+        return dashboard_rest_operations.find_dashboards(
+            rest_client=self._rest_client,
+            client=self,
+            name=name,
+            project_id=project_id,
+            max_results=max_results,
+            sorting=sorting,
+            filters=filters,
+        )
+
+    def delete_dashboard(self, dashboard_id: str) -> None:
+        """
+        Delete a dashboard by id.
+
+        Args:
+            dashboard_id: The id of the dashboard.
+        """
+        self._rest_client.dashboards.delete_dashboard(dashboard_id)
 
     def create_test_suite(
         self,
@@ -1819,6 +1962,21 @@ class Opik:
         timeout = timeout if timeout is not None else self._flush_timeout
         return self._streamer.flush(timeout)
 
+    def __internal_api__drain_to_processors__(
+        self, timeout: Optional[float] = None
+    ) -> bool:
+        """Drain pending messages so in-process chained processors
+        (notably the local emulator) have applied every message
+        submitted so far.
+
+        Lighter than `flush(...)`: skips file-upload and replay flushes
+        because the caller only cares about local processor state, not
+        backend delivery. Used by the evaluation engine before invoking
+        the agentic LLM judge — see
+        `EvaluationEngine._build_trace_tool_context` for the rationale.
+        """
+        return self._streamer.drain_to_processors(timeout)
+
     def __internal_api__failed_uploads__(self, timeout: Optional[float] = None) -> int:
         """Returns the number of failed file uploads after flush. Blocking - waits for all uploads to complete."""
         return self._streamer.__internal_api__failed_uploads__(timeout=timeout)
@@ -2271,26 +2429,33 @@ class Opik:
         commit: Optional[str] = None,
         project_name: Optional[str] = None,
         no_cache: bool = False,
+        version: Optional[str] = None,
+        environment: Optional[str] = None,
     ) -> Optional[prompt_module.Prompt]:
         """
-        Retrieve a text prompt by name and optional commit version.
+        Retrieve a text prompt by name, optionally targeting a specific ``version``.
 
         This method only returns text prompts. Results are cached client-side
         (TTL configurable via OPIK_PROMPT_CACHE_TTL_SECONDS, default 300 s).
-        Pinned commits are cached indefinitely. When called inside an @track
-        context the prompt reference is injected into the active trace/span metadata.
+        When called inside an @track context the prompt reference is injected
+        into the active trace/span metadata.
 
         Parameters:
             name: The name of the prompt.
-            commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
+            commit: DEPRECATED in favour of ``version``. Mutually exclusive with ``version``.
             project_name: The name of the project to retrieve the prompt from. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             no_cache: If True, skip the local cache and fetch directly from the backend, guaranteeing a fresh value.
+            version: Optional sequential version selector in the wire format
+                ``"v<N>"`` (e.g. ``"v3"``). If not provided, the latest version is retrieved.
+            environment: Optional environment name. When provided, returns the version that the given environment
+                currently points to. Mutually exclusive with ``version``.
 
         Returns:
             Prompt: The details of the specified text prompt, or None if not found.
 
         Raises:
             PromptTemplateStructureMismatch: If the prompt exists but is a chat prompt (template structure mismatch).
+            ValueError: If both ``version`` and ``environment`` are provided.
         """
         return prompt_client.PromptClient(self._rest_client).get_prompt_with_cache(
             name=name,
@@ -2299,6 +2464,8 @@ class Opik:
             template_structure="text",
             prompt_cls=text_prompt_module.Prompt,
             no_cache=no_cache,
+            version=version,
+            environment=environment,
         )
 
     def get_chat_prompt(
@@ -2307,26 +2474,33 @@ class Opik:
         commit: Optional[str] = None,
         project_name: Optional[str] = None,
         no_cache: bool = False,
+        version: Optional[str] = None,
+        environment: Optional[str] = None,
     ) -> Optional[prompt_module.ChatPrompt]:
         """
-        Retrieve a chat prompt by name and optional commit version.
+        Retrieve a chat prompt by name, optionally targeting a specific ``version``.
 
         This method only returns chat prompts. Results are cached client-side
         (TTL configurable via OPIK_PROMPT_CACHE_TTL_SECONDS, default 300 s).
-        Pinned commits are cached indefinitely. When called inside an @track
-        context the prompt reference is injected into the active trace/span metadata.
+        When called inside an @track context the prompt reference is injected
+        into the active trace/span metadata.
 
         Parameters:
             name: The name of the prompt.
-            commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
+            commit: DEPRECATED in favour of ``version``. Mutually exclusive with ``version``.
             project_name: The name of the project to retrieve the prompt from. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             no_cache: If True, skip the local cache and fetch directly from the backend, guaranteeing a fresh value.
+            version: Optional sequential version selector in the wire format
+                ``"v<N>"`` (e.g. ``"v3"``). If not provided, the latest version is retrieved.
+            environment: Optional environment name. When provided, returns the version that the given environment
+                currently points to. Mutually exclusive with ``version``.
 
         Returns:
             ChatPrompt: The details of the specified chat prompt, or None if not found.
 
         Raises:
             PromptTemplateStructureMismatch: If the prompt exists but is a text prompt (template structure mismatch).
+            ValueError: If both ``version`` and ``environment`` are provided.
         """
         return prompt_client.PromptClient(self._rest_client).get_prompt_with_cache(
             name=name,
@@ -2335,6 +2509,77 @@ class Opik:
             template_structure="chat",
             prompt_cls=chat_prompt_module.ChatPrompt,
             no_cache=no_cache,
+            version=version,
+            environment=environment,
+        )
+
+    def set_prompt_environments(
+        self,
+        prompt_name: str,
+        environments: List[str],
+        *,
+        version: Optional[str] = None,
+        project_name: Optional[str] = None,
+    ) -> None:
+        """Replace the full set of environments owned by a prompt version.
+
+        The provided list becomes the resolved version's complete set of environments.
+        Pass an empty list to clear all environments from the version. Ownership of any
+        environment in the list moves to this version: any other version of the same
+        prompt that previously owned one of them is cleared. Existing ``Prompt`` objects
+        already in memory are not mutated — re-fetch with ``client.get_prompt(...)`` to
+        see the change.
+
+        Parameters:
+            prompt_name: The name of the prompt.
+            environments: Environments to assign. Each must already be registered in the
+                workspace. Pass ``[]`` to clear.
+            version: Optional sequential version selector in the wire format
+                ``"v<N>"`` (e.g. ``"v3"``). Defaults to the latest version.
+            project_name: Project the prompt belongs to. Defaults to the active project
+                context, then to the client's default.
+
+        Raises:
+            PromptNotFoundError: The prompt name (or the supplied ``version``) does not exist
+                in the resolved project.
+            EnvironmentNotFoundError: One of ``environments`` is not registered in the
+                workspace.
+        """
+        resolved_project_name = self._resolve_project_name(project_name)
+        try:
+            resolved_version = self._rest_client.prompts.retrieve_prompt_version(
+                name=prompt_name,
+                version_number=version,
+                project_name=resolved_project_name,
+            )
+        except ApiError as e:
+            if e.status_code == 404:
+                if version is not None:
+                    raise exceptions.PromptNotFoundError(
+                        f"No version {version!r} found for prompt {prompt_name!r}."
+                    ) from e
+                raise exceptions.PromptNotFoundError(
+                    f"No prompt found with name {prompt_name!r}."
+                ) from e
+            raise
+
+        target = list(dict.fromkeys(environments))
+        try:
+            self._rest_client.prompts.set_prompt_version_environment(
+                version_id=resolved_version.id,
+                environments=target,
+            )
+        except ApiError as e:
+            # The backend reports unknown environments as 404 (not found) or 409
+            # (conflict, when the name collides with the workspace registry check).
+            if e.status_code in (404, 409):
+                raise exceptions.EnvironmentNotFoundError(
+                    f"One or more environments in {target!r} are not registered in this workspace."
+                ) from e
+            raise
+
+        prompt_cache.invalidate_for_prompt(
+            name=prompt_name, project_name=resolved_project_name
         )
 
     def get_prompt_history(

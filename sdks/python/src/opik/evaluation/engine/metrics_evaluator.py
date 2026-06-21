@@ -23,6 +23,7 @@ from . import exception_analyzer
 LOGGER = logging.getLogger(__name__)
 
 EVALUATION_SPAN_PARAMETER_NAME = "task_span"
+TRACE_TOOL_CONTEXT_PARAMETER_NAME = "trace_tool_context"
 
 
 def _has_evaluation_span_parameter(func: Callable) -> bool:
@@ -32,6 +33,23 @@ def _has_evaluation_span_parameter(func: Callable) -> bool:
         return EVALUATION_SPAN_PARAMETER_NAME in sig.parameters
     except (ValueError, TypeError):
         return False
+
+
+def _accepts_trace_tool_context(func: Callable) -> bool:
+    """Check if a scoring function accepts the trace_tool_context kwarg.
+
+    Returns True when the signature names the parameter explicitly OR
+    accepts ``**kwargs`` (which absorbs unknown kwargs). LLMJudge falls
+    into the second case.
+    """
+    try:
+        sig = inspect.signature(func)
+    except (ValueError, TypeError):
+        return False
+    params = sig.parameters
+    if TRACE_TOOL_CONTEXT_PARAMETER_NAME in params:
+        return True
+    return any(param.kind == inspect.Parameter.VAR_KEYWORD for param in params.values())
 
 
 def split_into_regular_and_task_span_metrics(
@@ -134,6 +152,7 @@ def _compute_metric_scores(
     scoring_key_mapping: ScoringKeyMappingType,
     dataset_item_content: Dict[str, Any],
     task_output: Dict[str, Any],
+    trace_tool_context: Any,
 ) -> List[score_result.ScoreResult]:
     """
     Compute scores using given metrics.
@@ -177,7 +196,19 @@ def _compute_metric_scores(
                     kwargs=mapped_scoring_inputs,
                     scoring_key_mapping=scoring_key_mapping,
                 )
-                result = metric.score(**mapped_scoring_inputs)
+                # Only inject trace_tool_context into metrics whose
+                # signature can absorb it; otherwise the call would fail
+                # with "unexpected keyword argument" for narrow metrics.
+                if trace_tool_context is not None and _accepts_trace_tool_context(
+                    metric.score
+                ):
+                    score_kwargs = {
+                        **mapped_scoring_inputs,
+                        TRACE_TOOL_CONTEXT_PARAMETER_NAME: trace_tool_context,
+                    }
+                else:
+                    score_kwargs = mapped_scoring_inputs
+                result = metric.score(**score_kwargs)
 
             LOGGER.debug("Metric %s score ended", metric.name)
 
@@ -271,6 +302,7 @@ class MetricsEvaluator:
         self,
         dataset_item_content: Dict[str, Any],
         task_output: Dict[str, Any],
+        trace_tool_context: Any = None,
     ) -> Tuple[List[score_result.ScoreResult], Dict[str, Any]]:
         """
         Compute scores using regular metrics.
@@ -278,6 +310,9 @@ class MetricsEvaluator:
         Args:
             dataset_item_content: Dataset item content
             task_output: Task output
+            trace_tool_context: Optional agentic-judge context built from the
+                local emulator. Threaded only to metrics whose score
+                signature can accept it (LLMJudge in particular).
 
         Returns:
             Tuple of (score results, mapped scoring inputs used for scoring regular non-wrapper metrics)
@@ -294,6 +329,7 @@ class MetricsEvaluator:
             scoring_key_mapping=self._scoring_key_mapping,
             dataset_item_content=dataset_item_content,
             task_output=task_output,
+            trace_tool_context=trace_tool_context,
         )
 
         return score_results, mapped_scoring_inputs
@@ -332,6 +368,7 @@ class MetricsEvaluator:
             scoring_key_mapping=self._scoring_key_mapping,
             dataset_item_content=dataset_item_content,
             task_output=task_output,
+            trace_tool_context=None,
         )
 
         return score_results, mapped_scoring_inputs_with_span

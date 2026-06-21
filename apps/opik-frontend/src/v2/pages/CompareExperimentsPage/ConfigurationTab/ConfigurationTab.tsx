@@ -6,7 +6,6 @@ import isObject from "lodash/isObject";
 import uniq from "lodash/uniq";
 import toLower from "lodash/toLower";
 import find from "lodash/find";
-import omit from "lodash/omit";
 import { flattie } from "flattie";
 
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
@@ -17,20 +16,20 @@ import CompareExperimentsActionsPanel from "@/v2/pages/CompareExperimentsPage/Co
 import CompareExperimentsConfigCell, {
   CompareConfig,
   CompareFiledValue,
-  AgentConfigLinkData,
 } from "@/v2/pages-shared/experiments/CompareExperimentsConfigCell/CompareExperimentsConfigCell";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import ExplainerCallout from "@/shared/ExplainerCallout/ExplainerCallout";
 import { convertColumnDataToColumn } from "@/lib/table";
 import SearchInput from "@/shared/SearchInput/SearchInput";
+import NavigationTag from "@/shared/NavigationTag";
+import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import { Experiment } from "@/types/datasets";
+import { formatPromptVersionLabel } from "@/lib/experiments";
 import { Switch } from "@/ui/switch";
 import { Label } from "@/ui/label";
 import { Separator } from "@/ui/separator";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
-import { AGENT_CONFIGURATION_METADATA_KEY } from "@/utils/agent-configurations";
-import { isAgentConfigurationMetadata } from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AgentConfigurationTab";
 
 const COLUMNS_WIDTH_KEY = "compare-experiments-config-columns-width";
 
@@ -68,26 +67,15 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
 
   const isCompare = experimentsIds.length > 1;
 
+  // Prompt-version links only make sense for a single experiment; in compare
+  // mode we don't show them. An empty array simply renders nothing.
+  const promptVersions = isCompare ? [] : experiments[0]?.prompt_versions ?? [];
+
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
   >(COLUMNS_WIDTH_KEY, {
     defaultValue: {},
   });
-
-  const agentConfigLinkData = useMemo(() => {
-    const result: Record<string, AgentConfigLinkData> = {};
-    for (const exp of experiments) {
-      const meta = exp.metadata as Record<string, unknown> | undefined;
-      const config = meta?.[AGENT_CONFIGURATION_METADATA_KEY];
-      if (isAgentConfigurationMetadata(config) && exp.project_id) {
-        result[exp.id] = {
-          projectId: exp.project_id,
-          blueprintId: config._blueprint_id,
-        };
-      }
-    }
-    return result;
-  }, [experiments]);
 
   const columns = useMemo(() => {
     const retVal = convertColumnDataToColumn<CompareConfig, CompareConfig>(
@@ -104,7 +92,6 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
           custom: {
             onlyDiff,
             experiment: find(experiments, (e) => e.id === id),
-            agentConfigLinkData,
           },
         },
         size: 400,
@@ -113,30 +100,16 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
     });
 
     return retVal;
-  }, [experimentsIds, onlyDiff, experiments, agentConfigLinkData]);
+  }, [experimentsIds, onlyDiff, experiments]);
 
   const flattenExperimentMetadataMap = useMemo(() => {
     return experiments.reduce<
       Record<string, Record<string, CompareFiledValue>>
     >((acc, experiment) => {
-      const rawMetadata = experiment.metadata as
-        | Record<string, unknown>
-        | undefined;
-
-      const agentConfig = rawMetadata?.[AGENT_CONFIGURATION_METADATA_KEY];
-      const metadata = isObject(rawMetadata)
-        ? omit(rawMetadata, AGENT_CONFIGURATION_METADATA_KEY)
-        : {};
-
+      const metadata = experiment.metadata;
       acc[experiment.id] = isObject(metadata)
         ? flattie(metadata, ".", true)
         : {};
-
-      if (isAgentConfigurationMetadata(agentConfig)) {
-        acc[experiment.id]["agent_configuration"] =
-          agentConfig.blueprint_version ?? agentConfig._blueprint_id;
-      }
-
       return acc;
     }, {});
   }, [experiments]);
@@ -208,7 +181,7 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
         direction="bidirectional"
         limitWidth
       >
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <SearchInput
             searchText={search as string}
             setSearchText={setSearch}
@@ -216,6 +189,15 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
             className="w-[320px]"
             dimension="sm"
           ></SearchInput>
+          {promptVersions.map((pv) => (
+            <NavigationTag
+              key={pv.id}
+              id={pv.prompt_id}
+              name={formatPromptVersionLabel(pv)}
+              resource={RESOURCE_TYPE.prompt}
+              search={{ activeVersionId: pv.id }}
+            />
+          ))}
         </div>
         <div className="flex items-center gap-2">
           <CompareExperimentsActionsPanel />

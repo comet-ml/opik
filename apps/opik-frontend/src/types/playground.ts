@@ -15,6 +15,7 @@ export interface PromptLibraryMetadata {
   name: string;
   id: string;
   template_structure?: PROMPT_TEMPLATE_STRUCTURE;
+  modified?: boolean;
   version: {
     template: unknown;
     commit?: string;
@@ -22,9 +23,6 @@ export interface PromptLibraryMetadata {
     metadata?: object;
   };
 }
-
-import type { BlueprintPromptRef } from "@/types/agent-configs";
-export type { BlueprintPromptRef } from "@/types/agent-configs";
 
 export interface PlaygroundPromptType {
   name: string;
@@ -34,7 +32,7 @@ export interface PlaygroundPromptType {
   provider: COMPOSED_PROVIDER_TYPE | "";
   configs: LLMPromptConfigsType;
   loadedChatPromptId?: string;
-  loadedBlueprintRef?: BlueprintPromptRef;
+  loadedChatPromptVersionId?: string;
   skipInitialPromptLoad?: boolean;
 }
 

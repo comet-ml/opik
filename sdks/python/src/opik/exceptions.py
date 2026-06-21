@@ -108,7 +108,31 @@ class EmptyExperiment(OpikException):
     pass
 
 
+class ExperimentNotResumable(OpikException):
+    """Raised when an experiment cannot be safely resumed via ``evaluate_resume``."""
+
+
+class LocalCheckpointMissing(ExperimentNotResumable):
+    """
+    Raised when an experiment was created with a non-deterministic iteration
+    config (custom sampler or explicit ``dataset_item_ids``) and the local
+    checkpoint file with the resolved item ids cannot be found.
+
+    The checkpoint is written next to the calling machine's opik state
+    (``~/.opik/resume/<experiment_id>.json``) at evaluation time, so resume
+    is a same-machine operation by default. Users hitting this from a
+    different machine should re-supply the original ``dataset_item_ids``
+    explicitly.
+    """
+
+
 class DatasetNotFound(OpikException):
+    pass
+
+
+class DashboardValidationError(OpikException):
+    """Raised when a dashboard configuration violates a structural or semantic invariant."""
+
     pass
 
 
@@ -195,6 +219,24 @@ class ConfigMismatch(OpikException):
 
 class EnvironmentAlreadyExists(OpikException):
     """Raised when creating an environment whose name is already taken in the workspace."""
+
+    pass
+
+
+class EnvironmentConfigurationError(OpikException):
+    """Raised when an environment configuration operation is not permitted."""
+
+    pass
+
+
+class PromptNotFoundError(OpikException):
+    """Raised when no prompt with the given name (or commit) exists in the project."""
+
+    pass
+
+
+class EnvironmentNotFoundError(OpikException):
+    """Raised when referencing an environment that is not registered in the workspace."""
 
     pass
 

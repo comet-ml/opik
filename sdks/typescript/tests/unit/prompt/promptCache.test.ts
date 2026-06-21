@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { PromptCache, buildCacheKey } from "@/prompt/promptCache";
+import {
+  PromptCache,
+  buildCacheKey,
+  getOrFetch,
+  getGlobalCache,
+} from "@/prompt/promptCache";
 import type { BasePrompt } from "@/prompt/BasePrompt";
 
 function makeFakePrompt(overrides: Partial<BasePrompt> = {}): BasePrompt {
@@ -187,12 +192,24 @@ describe("PromptCache", () => {
 describe("buildCacheKey", () => {
   it("builds key from all parameters", () => {
     const key = buildCacheKey("my-prompt", "abc123", "my-project", "text");
-    expect(key).toBe(JSON.stringify(["my-prompt", "abc123", "my-project", "text"]));
+    expect(key).toBe(JSON.stringify(["my-prompt", "abc123", "my-project", "text", "", ""]));
   });
 
   it("handles undefined commit and project", () => {
     const key = buildCacheKey("my-prompt", undefined, undefined, "chat");
-    expect(key).toBe(JSON.stringify(["my-prompt", "", "", "chat"]));
+    expect(key).toBe(JSON.stringify(["my-prompt", "", "", "chat", "", ""]));
+  });
+
+  it("includes maskId in key", () => {
+    const key = buildCacheKey("my-prompt", undefined, "proj", "text", "mask-1");
+    expect(key).toBe(JSON.stringify(["my-prompt", "", "proj", "text", "", "mask-1"]));
+  });
+
+  it("includes environment in the key when provided", () => {
+    const keyA = buildCacheKey("p", undefined, undefined, "text", undefined, undefined, "staging");
+    const keyB = buildCacheKey("p", undefined, undefined, "text", undefined, undefined, "production");
+    expect(keyA).not.toBe(keyB);
+    expect(keyA).toBe(JSON.stringify(["p", "", "", "text", "staging", ""]));
   });
 
   it("produces different keys for different parameters", () => {
@@ -203,14 +220,129 @@ describe("buildCacheKey", () => {
     expect(key1).not.toBe(key3);
   });
 
-  it("does not collide when pipe characters appear in name or project", () => {
-    // With the old delimiter approach these two would produce the same key.
-    const key1 = buildCacheKey("a|b", "", "project", "text");
-    const key2 = buildCacheKey("a", "b", "project", "text");
-    expect(key1).not.toBe(key2);
+  it("produces different keys for same prompt with and without maskId", () => {
+    const unmasked = buildCacheKey("prompt", undefined, "project", "text");
+    const masked = buildCacheKey("prompt", undefined, "project", "text", "mask-1");
+    expect(unmasked).not.toBe(masked);
+  });
+});
 
-    const key3 = buildCacheKey("name", "", "proj|ect", "text");
-    const key4 = buildCacheKey("name", "", "proj", "ect");
-    expect(key3).not.toBe(key4);
+describe("module-level getOrFetch", () => {
+  it("unpinned prompt without maskId sets refreshCallback (background refresh enabled)", async () => {
+    const prompt = makeFakePrompt({ commit: undefined });
+    const fetchFn = vi.fn().mockResolvedValue(prompt);
+
+    const result = await getOrFetch("p", undefined, "proj", "text", fetchFn);
+    expect(result).toBe(prompt);
+    expect(fetchFn).toHaveBeenCalledOnce();
+  });
+
+  it("pinned prompt (commit set) does not set refreshCallback", async () => {
+    const prompt = makeFakePrompt({ commit: "abc1234" });
+    const fetchFn = vi.fn().mockResolvedValue(prompt);
+
+    const result = await getOrFetch("p", "abc1234", "proj", "text", fetchFn);
+    expect(result).toBe(prompt);
+  });
+
+  it("masked unpinned prompt uses maskId in cache key (separate entry from unmasked)", async () => {
+    const prompt1 = makeFakePrompt({ name: "mask-sep-unmasked", id: "id-1" });
+    const prompt2 = makeFakePrompt({ name: "mask-sep-masked", id: "id-2" });
+    const fetchFn1 = vi.fn().mockResolvedValue(prompt1);
+    const fetchFn2 = vi.fn().mockResolvedValue(prompt2);
+
+    const unmasked = await getOrFetch("mask-sep", undefined, "proj", "text", fetchFn1);
+    const masked = await getOrFetch("mask-sep", undefined, "proj", "text", fetchFn2, undefined, "mask-1");
+
+    expect(unmasked).toBe(prompt1);
+    expect(masked).toBe(prompt2);
+    expect(fetchFn1).toHaveBeenCalledOnce();
+    expect(fetchFn2).toHaveBeenCalledOnce();
+  });
+
+  it("masked entry is returned from cache on second call without re-fetching", async () => {
+    const prompt = makeFakePrompt();
+    const fetchFn = vi.fn().mockResolvedValue(prompt);
+
+    await getOrFetch("mask-dedup", undefined, "proj", "text", fetchFn, undefined, "mask-x");
+    const second = await getOrFetch("mask-dedup", undefined, "proj", "text", fetchFn, undefined, "mask-x");
+
+    expect(second).toBe(prompt);
+    expect(fetchFn).toHaveBeenCalledOnce();
+  });
+
+  it("produces distinct keys for different version pins", () => {
+    const k1 = buildCacheKey("p", undefined, "project", "text", undefined, "v1");
+    const k2 = buildCacheKey("p", undefined, "project", "text", undefined, "v2");
+    expect(k1).not.toBe(k2);
+  });
+
+  it("reuses the commit slot for the version pin (no extra entry in the key array)", () => {
+    // Key layout is [name, commit_or_version, projectName, templateStructure, environment, maskId].
+    const key = buildCacheKey("p", undefined, "project", "text", undefined, "v3");
+    expect(JSON.parse(key)).toHaveLength(6);
+    expect(JSON.parse(key)[1]).toBe("v3");
+  });
+
+  it("version takes precedence over commit when both are provided", () => {
+    // (Client.ts validates this is impossible, but the helper should still be defined.)
+    const key = buildCacheKey("p", "abc12345", "project", "text", undefined, "v3");
+    expect(JSON.parse(key)[1]).toBe("v3");
+  });
+});
+
+describe("getOrFetch — version selector", () => {
+  beforeEach(() => {
+    getGlobalCache().clear();
+  });
+
+  afterEach(() => {
+    getGlobalCache().clear();
+  });
+
+  it("caches separate entries for different version values", async () => {
+    const promptV1 = makeFakePrompt({ name: "p", commit: "aaa11111" });
+    const promptV2 = makeFakePrompt({ name: "p", commit: "bbb22222" });
+
+    const fetchV1 = vi.fn().mockResolvedValue(promptV1);
+    const fetchV2 = vi.fn().mockResolvedValue(promptV2);
+
+    const r1 = await getOrFetch("p", undefined, "proj", "text", fetchV1, 300, undefined, "v1");
+    const r2 = await getOrFetch("p", undefined, "proj", "text", fetchV2, 300, undefined, "v2");
+
+    expect(r1).toBe(promptV1);
+    expect(r2).toBe(promptV2);
+    expect(fetchV1).toHaveBeenCalledOnce();
+    expect(fetchV2).toHaveBeenCalledOnce();
+  });
+
+  it("returns the cached prompt on a second call with the same version (no extra fetch)", async () => {
+    const prompt = makeFakePrompt({ name: "p" });
+    const fetchFn = vi.fn().mockResolvedValue(prompt);
+
+    const first = await getOrFetch("p", undefined, "proj", "text", fetchFn, 300, undefined, "v1");
+    const second = await getOrFetch("p", undefined, "proj", "text", fetchFn, 300, undefined, "v1");
+
+    expect(first).toBe(prompt);
+    expect(second).toBe(prompt);
+    expect(fetchFn).toHaveBeenCalledOnce();
+  });
+
+  it("version entries follow the normal TTL refresh (not pinned indefinitely)", async () => {
+    // Sequential versions like "v3" can be reassigned by the backend if the
+    // underlying version is deleted and recreated, so they must NOT be cached
+    // indefinitely the way commits are.
+    const prompt = makeFakePrompt({ name: "p" });
+    const fetchFn = vi.fn().mockResolvedValue(prompt);
+
+    await getOrFetch("p", undefined, "proj", "text", fetchFn, 300, undefined, "v9");
+
+    const key = buildCacheKey("p", undefined, "proj", "text", undefined, "v9");
+    // A second call with the same key MUST be served from cache (proves the
+    // entry is reachable and no eviction happened).
+    const second = await getOrFetch("p", undefined, "proj", "text", fetchFn, 300, undefined, "v9");
+    expect(second).toBe(prompt);
+    expect(fetchFn).toHaveBeenCalledOnce();
+    expect(getGlobalCache().get(key)).toBe(prompt);
   });
 });

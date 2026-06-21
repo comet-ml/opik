@@ -228,8 +228,6 @@ def test_migrate_dataset__cross_project_experiment__all_traces_land_in_target(
         [
             "dataset",
             dataset_name,
-            "--from-project",
-            source_project_name,
             "--to-project",
             target_project_name,
         ],

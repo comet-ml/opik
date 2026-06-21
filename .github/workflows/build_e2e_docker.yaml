@@ -8,11 +8,6 @@ on:
         required: false
         default: false
         type: boolean
-      include_frontend:
-        description: "Build and include opik-frontend image"
-        required: false
-        default: false
-        type: boolean
     outputs:
       image_tag:
         description: "The GHCR image tag used for this build"
@@ -35,12 +30,15 @@ jobs:
       - name: Set image tag
         id: tag
         run: |
+          SHA="${{ github.sha }}"
+          SHORT_SHA="${SHA:0:7}"
+          SUFFIX="${{ inputs.include_guardrails == true && '-guardrails' || '' }}"
           if [ -n "${{ github.event.pull_request.number }}" ]; then
-            TAG="ci-e2e-${{ github.event.pull_request.number }}${{ inputs.include_guardrails == true && '-guardrails' || '' }}"
+            TAG="ci-e2e-pr${{ github.event.pull_request.number }}-${SHORT_SHA}${SUFFIX}"
           else
-            TAG="ci-e2e-${{ github.sha }}${{ inputs.include_guardrails == true && '-guardrails' || '' }}"
+            TAG="ci-e2e-${SHORT_SHA}${SUFFIX}"
           fi
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Checkout
         uses: actions/checkout@v6
@@ -60,9 +58,7 @@ jobs:
           if [ "${{ inputs.include_guardrails }}" = "true" ]; then
             SERVICES="$SERVICES guardrails-backend"
           fi
-          if [ "${{ inputs.include_frontend }}" = "true" ]; then
-            SERVICES="$SERVICES frontend"
-          fi
+          # shellcheck disable=SC2086
           docker compose -f deployment/docker-compose/docker-compose.yaml \
             build $SERVICES
 
@@ -73,9 +69,6 @@ jobs:
           IMAGES="opik-backend opik-python-backend"
           if [ "${{ inputs.include_guardrails }}" = "true" ]; then
             IMAGES="${IMAGES} opik-guardrails-backend"
-          fi
-          if [ "${{ inputs.include_frontend }}" = "true" ]; then
-            IMAGES="${IMAGES} opik-frontend"
           fi
 
           # Tag all images first (cheap, sequential)

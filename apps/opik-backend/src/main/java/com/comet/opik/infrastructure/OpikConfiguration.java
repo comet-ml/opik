@@ -24,7 +24,13 @@ public class OpikConfiguration extends JobConfiguration {
     private DatabaseAnalyticsFactory databaseAnalytics = new DatabaseAnalyticsFactory();
 
     @Valid @NotNull @JsonProperty
+    private DatabaseAnalyticsReadOnlyFreeFormSqlConfig databaseAnalyticsReadOnlyFreeFormSql = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
+
+    @Valid @NotNull @JsonProperty
     private AuthenticationConfig authentication = new AuthenticationConfig();
+
+    @Valid @NotNull @JsonProperty
+    private McpOAuthConfig mcpOAuth = new McpOAuthConfig();
 
     @Valid @NotNull @JsonProperty
     private RedisConfig redis = new RedisConfig();
@@ -124,11 +130,35 @@ public class OpikConfiguration extends JobConfiguration {
     private DatasetVersioningMigrationConfig datasetVersioningMigration = new DatasetVersioningMigrationConfig();
 
     @Valid @NotNull @JsonProperty
+    private DatasetVersioningConfig datasetVersioning = DatasetVersioningConfig.builder().build();
+
+    @Valid @NotNull @JsonProperty
     private MigrationConfig migration = new MigrationConfig();
 
     @Valid @NotNull @JsonProperty
     private ExperimentProjectMigrationConfig experimentProjectMigration = ExperimentProjectMigrationConfig.builder()
             .build();
+
+    @Valid @NotNull @JsonProperty
+    private DatasetProjectMigrationConfig datasetProjectMigration = DatasetProjectMigrationConfig.builder()
+            .build();
+
+    @Valid @NotNull @JsonProperty
+    private OptimizationProjectMigrationConfig optimizationProjectMigration = OptimizationProjectMigrationConfig
+            .builder()
+            .build();
+
+    @Valid @NotNull @JsonProperty
+    private PromptProjectMigrationConfig promptProjectMigration = PromptProjectMigrationConfig.builder()
+            .build();
+
+    @Valid @NotNull @JsonProperty
+    private AutomationRuleProjectMigrationConfig automationRuleProjectMigration = AutomationRuleProjectMigrationConfig
+            .builder()
+            .build();
+
+    @Valid @NotNull @JsonProperty
+    private AlertProjectMigrationConfig alertProjectMigration = AlertProjectMigrationConfig.builder().build();
 
     @Valid @NotNull @JsonProperty
     private LocalRunnerConfig localRunner = new LocalRunnerConfig();
@@ -156,4 +186,7 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private EnvironmentConfig environment = new EnvironmentConfig();
+
+    @Valid @NotNull @JsonProperty
+    private ReportGenerationConfig reportGeneration = new ReportGenerationConfig();
 }

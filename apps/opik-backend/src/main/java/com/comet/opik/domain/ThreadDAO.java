@@ -60,6 +60,7 @@ public interface ThreadDAO {
 @Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
+// TODO: after v1 drop, remove annotation_queue_filters conditions and keep only annotation_queue_id
 class ThreadDAOImpl implements ThreadDAO {
 
     private static final String THREAD_SEARCH_CLAUSE = """
@@ -229,6 +230,7 @@ class ThreadDAOImpl implements ThreadDAO {
                        AND workspace_id = :workspace_id
                        AND project_id IN :project_id
                        AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+                       <if(annotation_queue_id)>AND source_queue_id = :annotation_queue_id<endif>
                 )
                 ORDER BY last_updated_at DESC
                 LIMIT 1 BY workspace_id, project_id, entity_id, name, author
@@ -300,6 +302,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+                <if(annotation_queue_id)>AND source_queue_id = :annotation_queue_id<endif>
                 ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
               )
@@ -393,7 +396,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 AND t.id = tt.thread_id
             LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
             LEFT JOIN comments_final c ON c.entity_id = tt.thread_model_id
-            <if(annotation_queue_filters)>
+            <if(annotation_queue_filters || annotation_queue_id)>
             LEFT JOIN thread_annotation_queue_ids as ttaqi ON ttaqi.thread_id = tt.thread_model_id
             <endif>
             WHERE workspace_id = :workspace_id
@@ -420,6 +423,7 @@ class ThreadDAOImpl implements ThreadDAO {
             <endif>
             <if(trace_thread_filters)>AND<trace_thread_filters><endif>
             <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
+            <if(annotation_queue_id)> AND has(ttaqi.annotation_queue_ids, :annotation_queue_id) <endif>
             <if(last_retrieved_id)> AND thread_model_id > :last_retrieved_id<endif>
             <if(stream)>
             ORDER BY workspace_id, project_id, thread_model_id DESC
@@ -552,6 +556,7 @@ class ThreadDAOImpl implements ThreadDAO {
                        AND workspace_id = :workspace_id
                        AND project_id = :project_id
                        AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+                       <if(annotation_queue_id)>AND source_queue_id = :annotation_queue_id<endif>
                 )
                 ORDER BY last_updated_at DESC
                 LIMIT 1 BY workspace_id, project_id, entity_id, name, author
@@ -686,6 +691,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 <endif>
                 <if(trace_thread_filters)>AND<trace_thread_filters><endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
+            <if(annotation_queue_id)> AND has(ttaqi.annotation_queue_ids, :annotation_queue_id) <endif>
             ) AS t
             SETTINGS log_comment = '<log_comment>'
             """;
@@ -1120,6 +1126,7 @@ class ThreadDAOImpl implements ThreadDAO {
                            AND workspace_id = :workspace_id
                            AND project_id IN :project_id
                            AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+                           <if(annotation_queue_id)>AND source_queue_id = :annotation_queue_id<endif>
                     )
                     ORDER BY last_updated_at DESC
                     LIMIT 1 BY workspace_id, project_id, entity_id, name, author
@@ -1263,6 +1270,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 <endif>
                 <if(trace_thread_filters)>AND<trace_thread_filters><endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
+                <if(annotation_queue_id)> AND has(ttaqi.annotation_queue_ids, :annotation_queue_id) <endif>
             ) AS threads
             GROUP BY threads.workspace_id, threads.project_id
             SETTINGS log_comment = '<log_comment>'

@@ -4,6 +4,7 @@ import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.AnnotationQueueBatch;
 import com.comet.opik.api.AnnotationQueueSearchCriteria;
 import com.comet.opik.api.AnnotationQueueUpdate;
+import com.comet.opik.api.LockResponse;
 import com.comet.opik.api.Project;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
@@ -41,6 +42,8 @@ public interface AnnotationQueueService {
     Mono<Long> removeItems(UUID queueId, Set<UUID> itemIds);
 
     Mono<Long> deleteBatch(Set<UUID> ids);
+
+    Mono<LockResponse> tryLockItem(UUID queueId, UUID itemId);
 }
 
 @Singleton
@@ -49,6 +52,7 @@ public interface AnnotationQueueService {
 class AnnotationQueueServiceImpl implements AnnotationQueueService {
 
     private final @NonNull AnnotationQueueDAO annotationQueueDAO;
+    private final @NonNull AnnotationQueueItemLockService lockService;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull ProjectService projectService;
 
@@ -93,7 +97,20 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
 
         return IdGenerator
                 .validateVersionAsync(id, "AnnotationQueue")
-                .then(annotationQueueDAO.update(id, updateRequest));
+                .then(Mono.deferContextual(ctx -> {
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    return annotationQueueDAO.findQueueInfoById(id)
+                            .switchIfEmpty(Mono.error(createNotFoundError(id)))
+                            .flatMap(queueInfo -> {
+                                Mono<Void> updateMono = annotationQueueDAO.update(id, updateRequest);
+                                if (updateRequest.annotatorsPerItem() == null) {
+                                    return updateMono;
+                                }
+                                int delta = updateRequest.annotatorsPerItem() - queueInfo.annotatorsPerItem();
+                                return updateMono
+                                        .then(lockService.updateCapacity(workspaceId, id, delta));
+                            });
+                }));
     }
 
     @Override
@@ -156,6 +173,29 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                 .subscribeOn(Schedulers.boundedElastic())
                 .doOnSuccess(deletedCount -> log.debug("Successfully deleted '{}' annotation queues", deletedCount))
                 .doOnError(error -> log.info("Failed to delete annotation queue batch", error));
+    }
+
+    @Override
+    @WithSpan
+    public Mono<LockResponse> tryLockItem(@NonNull UUID queueId, @NonNull UUID itemId) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            return annotationQueueDAO.findById(queueId)
+                    .switchIfEmpty(Mono.error(createNotFoundError(queueId)))
+                    .flatMap(queue -> annotationQueueDAO.getDistinctAnnotatorCount(
+                            itemId, queue.projectId(),
+                            queue.scope().getValue(),
+                            queueId,
+                            queue.feedbackDefinitionNames())
+                            .map(scoredCount -> Map.entry(queue, scoredCount)))
+                    .flatMap(entry -> lockService.tryLock(
+                            workspaceId, queueId, itemId, userName,
+                            entry.getKey().annotatorsPerItem(),
+                            entry.getValue(),
+                            entry.getKey().lockTimeoutSeconds()));
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
     private Mono<AnnotationQueue> enhanceWithProjectName(AnnotationQueue annotationQueue) {

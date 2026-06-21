@@ -16,6 +16,23 @@ public enum OpikVersion {
     VERSION_1("version_1"),
     VERSION_2("version_2");
 
+    /**
+     * Intentionally declared as a {@code String} constant rather than an enum constant so it
+     * cannot be serialized or deserialized as JSON, enum value etc., and is never a valid JSON value
+     * on the public API. {@code OpikVersion} responses must always be {@code version_1} or {@code version_2};
+     * {@code unknown} only exists as an internal "absence" marker in downstream sinks (DB value. analytics events).
+     */
+    public static final String UNKNOWN = "unknown";
+
+    /**
+     * Sentinel value for the {@code TOGGLE_FORCE_WORKSPACE_VERSION} feature flag meaning "no global force";
+     * version determination falls through to the auth gate and the entity check. (Workspace allowlists are
+     * evaluated before this flag and are unaffected by it.) Declared here as a {@code String} (not an enum
+     * constant) because it is a toggle-config marker, not a workspace version, and must never serialize on
+     * the {@code OpikVersion} public API.
+     */
+    public static final String DISABLED = "disabled";
+
     @JsonValue
     private final String value;
 

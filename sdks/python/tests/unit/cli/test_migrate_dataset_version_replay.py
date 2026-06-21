@@ -488,161 +488,19 @@ class TestVersionReplayUnit:
         assert sent_by_input["manual"].span_id is None
         assert sent_by_input["manual"].source == "manual"
 
-    def test_replay__adds_only_v2__second_apply_carries_only_new_items(self) -> None:
-        # v1 = [a, b]; v2 = [a, b, c]. Delta on v2 = [c] add, no mods, no dels.
-        from opik.cli.migrate.datasets.version_replay import replay_all_versions
-
-        rest_client, audit = self._setup(
-            source_versions=[
-                _SourceVersion(id="src-v1", version_hash="hv1"),
-                _SourceVersion(id="src-v2", version_hash="hv2"),
-            ],
-            items_per_version={
-                "hv1": [_ds_item("a", input="A"), _ds_item("b", input="B")],
-                "hv2": [
-                    _ds_item("a", input="A"),
-                    _ds_item("b", input="B"),
-                    _ds_item("c", input="C"),
-                ],
-                "tgt-h1": [_ds_item("tgt-a", input="A"), _ds_item("tgt-b", input="B")],
-                "tgt-h2": [
-                    _ds_item("tgt-a", input="A"),
-                    _ds_item("tgt-b", input="B"),
-                    _ds_item("tgt-c", input="C"),
-                ],
-            },
-            applied_versions=[
-                _AppliedVersion(id="tgt-v1", version_hash="tgt-h1"),
-                _AppliedVersion(id="tgt-v2", version_hash="tgt-h2"),
-            ],
-        )
-
-        result = replay_all_versions(
-            rest_client,
-            source_dataset_id="src-id",
-            source_name_after_rename="MyDataset_v1",
-            source_project_name=None,
-            dest_dataset_id="tgt-dataset-id",
-            dest_name="MyDataset",
-            dest_project_name="B",
-            audit=audit,
-        )
-
-        assert result.versions_replayed == 2
-        assert result.version_remap == {"src-v1": "tgt-v1", "src-v2": "tgt-v2"}
-
-        # Two apply calls total.
-        # v1 written via create_or_update_dataset_items; v2 via apply.
-        rest_client.datasets.create_or_update_dataset_items.assert_called_once()
-        v1_items = rest_client.datasets.create_or_update_dataset_items.call_args.kwargs[
-            "items"
-        ]
-        assert len(v1_items) == 2
-        assert rest_client.datasets.apply_dataset_item_changes.call_count == 1
-        v2_request = rest_client.datasets.apply_dataset_item_changes.call_args.kwargs[
-            "request"
-        ]
-        # v2: only the new item ("c") as an add; base = tgt-v1 (the v1 we
-        # just minted via create_or_update_dataset_items).
-        assert len(v2_request["added_items"]) == 1
-        assert v2_request["added_items"][0]["data"] == {"input": "C"}
-        assert "edited_items" not in v2_request
-        assert "deleted_ids" not in v2_request
-        assert v2_request["base_version"] == "tgt-v1"
-
-    def test_replay__modifications_only__edits_carry_stable_ids(self) -> None:
-        # v1 = [a={x:1}, b={y:2}]; v2 = [a={x:99}, b={y:2}]. Item a is modified.
-        from opik.cli.migrate.datasets.version_replay import replay_all_versions
-
-        rest_client, audit = self._setup(
-            source_versions=[
-                _SourceVersion(id="src-v1", version_hash="hv1"),
-                _SourceVersion(id="src-v2", version_hash="hv2"),
-            ],
-            items_per_version={
-                "hv1": [_ds_item("a", x=1), _ds_item("b", y=2)],
-                "hv2": [_ds_item("a", x=99), _ds_item("b", y=2)],
-                "tgt-h1": [_ds_item("tgt-a", x=1), _ds_item("tgt-b", y=2)],
-                "tgt-h2": [_ds_item("tgt-a", x=99), _ds_item("tgt-b", y=2)],
-            },
-            applied_versions=[
-                _AppliedVersion(id="tgt-v1", version_hash="tgt-h1"),
-                _AppliedVersion(id="tgt-v2", version_hash="tgt-h2"),
-            ],
-        )
-
-        replay_all_versions(
-            rest_client,
-            source_dataset_id="src-id",
-            source_name_after_rename="MyDataset_v1",
-            source_project_name=None,
-            dest_dataset_id="tgt-dataset-id",
-            dest_name="MyDataset",
-            dest_project_name="B",
-            audit=audit,
-        )
-
-        # v2 is the FIRST apply call (v1 went through create_or_update).
-        v2_request = rest_client.datasets.apply_dataset_item_changes.call_args.kwargs[
-            "request"
-        ]
-        # Only modifications; no adds, no deletions.
-        assert "added_items" not in v2_request
-        assert "deleted_ids" not in v2_request
-        assert len(v2_request["edited_items"]) == 1
-        edit = v2_request["edited_items"][0]
-        # Edit is keyed by the *target's* id (BE matches edits by id, so the
-        # source id from item_id_remap[source_id]==target_id is the right
-        # value to send). v1's add gave source 'a' the target id 'tgt-a',
-        # which is what the v2 edit must now carry.
-        assert edit["id"] == "tgt-a"
-        assert edit["data"] == {"x": 99}
-
-    def test_replay__deletions_only__deleted_ids_carry_previous_ids(self) -> None:
-        # v1 = [a, b]; v2 = [a]. Item b deleted.
-        from opik.cli.migrate.datasets.version_replay import replay_all_versions
-
-        rest_client, audit = self._setup(
-            source_versions=[
-                _SourceVersion(id="src-v1", version_hash="hv1"),
-                _SourceVersion(id="src-v2", version_hash="hv2"),
-            ],
-            items_per_version={
-                "hv1": [_ds_item("a", input="A"), _ds_item("b", input="B")],
-                "hv2": [_ds_item("a", input="A")],
-                "tgt-h1": [_ds_item("tgt-a", input="A"), _ds_item("tgt-b", input="B")],
-                "tgt-h2": [_ds_item("tgt-a", input="A")],
-            },
-            applied_versions=[
-                _AppliedVersion(id="tgt-v1", version_hash="tgt-h1"),
-                _AppliedVersion(id="tgt-v2", version_hash="tgt-h2"),
-            ],
-        )
-
-        replay_all_versions(
-            rest_client,
-            source_dataset_id="src-id",
-            source_name_after_rename="MyDataset_v1",
-            source_project_name=None,
-            dest_dataset_id="tgt-dataset-id",
-            dest_name="MyDataset",
-            dest_project_name="B",
-            audit=audit,
-        )
-
-        # v2 is the FIRST apply call (v1 went through create_or_update).
-        v2_request = rest_client.datasets.apply_dataset_item_changes.call_args.kwargs[
-            "request"
-        ]
-        assert "added_items" not in v2_request
-        assert "edited_items" not in v2_request
-        # Deletions reference the *target's* id for item 'b' (added in v1
-        # as 'tgt-b'), not the source id, since BE matches by target id.
-        assert v2_request["deleted_ids"] == ["tgt-b"]
-
-    def test_replay__mixed_delta__separates_adds_mods_and_dels(self) -> None:
-        # v1 = [a={x:1}, b={y:2}, c={z:3}]
-        # v2 = [a={x:99}, c={z:3}, d={w:4}] — modify a, delete b, add d.
+    def test_replay__post_v1_apply_omits_item_level_payload__copy_from_carries_the_delta(
+        self,
+    ) -> None:
+        # Mixed delta — adds + modifies + deletes — across a v1→v2 replay.
+        # Under OPIK-6696/6697 the v2 apply MUST send NO item-level payload:
+        # added_items/edited_items/deleted_ids are all omitted because the
+        # BE's COPY of source v2 already contains the delta (added items
+        # exist in source v2 with source ids; deleted items are absent;
+        # edited items carry their new content). Sending them in addition
+        # would double-insert added items (the OPIK-6697 first-CI-pass bug:
+        # destination v2 row set was ``['Q4', 'Q4', 'Q3', 'Q2', 'Q1']``).
+        # The audit counters and item_id_remap still reflect the delta —
+        # the SDK just doesn't ship it as payload.
         from opik.cli.migrate.datasets.version_replay import replay_all_versions
 
         rest_client, audit = self._setup(
@@ -666,11 +524,6 @@ class TestVersionReplayUnit:
                     _ds_item("tgt-b", y=2),
                     _ds_item("tgt-c", z=3),
                 ],
-                "tgt-h2": [
-                    _ds_item("tgt-a", x=99),
-                    _ds_item("tgt-c", z=3),
-                    _ds_item("tgt-d", w=4),
-                ],
             },
             applied_versions=[
                 _AppliedVersion(id="tgt-v1", version_hash="tgt-h1"),
@@ -693,26 +546,43 @@ class TestVersionReplayUnit:
         v2_request = rest_client.datasets.apply_dataset_item_changes.call_args.kwargs[
             "request"
         ]
-        assert len(v2_request["added_items"]) == 1
-        assert v2_request["added_items"][0]["data"] == {"w": 4}
-        assert len(v2_request["edited_items"]) == 1
-        # Edit / delete payloads reference target ids (remapped from source
-        # ids via the previously-built item_id_remap).
-        assert v2_request["edited_items"][0]["id"] == "tgt-a"
-        assert v2_request["edited_items"][0]["data"] == {"x": 99}
-        assert v2_request["deleted_ids"] == ["tgt-b"]
+        assert "added_items" not in v2_request, (
+            "OPIK-6697: added_items in payload + COPY of source v2 would "
+            "double-insert (BE's prepareAddedItems regenerates stable ids "
+            "for added_items unconditionally)"
+        )
+        assert "edited_items" not in v2_request, (
+            "OPIK-6697: edited content rides along with the BE's COPY of "
+            "source v2 (which has the new content) — payload edits would "
+            "re-write what's already correct"
+        )
+        assert "deleted_ids" not in v2_request, (
+            "OPIK-6697: deleted items are absent from source v2, so the "
+            "BE's COPY of source v2 naturally excludes them"
+        )
+        # base_version still chains the destination version graph.
+        assert v2_request["base_version"] == "tgt-v1"
+        # copy_from coords are the source of truth.
+        assert v2_request["copy_from_dataset_id"] == "src-id"
+        assert v2_request["copy_from_version_id"] == "src-v2"
 
-        # version_remap captures both versions; item_id_remap captures
-        # adds across both versions but NOT modifications (mods keep their
-        # stable id and don't need remapping).
+        # Identity remap for v2-added items: dest v2 has source's stable
+        # ids (copied from source v2), so source 'd' → dest 'd'. v1 adds
+        # (a, b, c) keep their BE-assigned ids from the v1 read-back.
         assert result.version_remap == {"src-v1": "tgt-v1", "src-v2": "tgt-v2"}
-        # v1 adds: a, b, c → tgt-a, tgt-b, tgt-c. v2 adds: d → tgt-d.
         assert result.item_id_remap == {
             "a": "tgt-a",
             "b": "tgt-b",
             "c": "tgt-c",
-            "d": "tgt-d",
+            "d": "d",
         }
+
+        # Audit counters still reflect the delta — the SDK computes it for
+        # tracking, just doesn't ship it as payload.
+        v2_audit = audit.actions[-1]
+        assert v2_audit["items_added"] == 1
+        assert v2_audit["items_modified"] == 1
+        assert v2_audit["items_deleted"] == 1
 
     def test_replay__zero_versions_source__no_op(self) -> None:
         # Source dataset has no committed versions — replay walks an empty
@@ -741,55 +611,42 @@ class TestVersionReplayUnit:
         assert result.item_id_remap == {}
         rest_client.datasets.apply_dataset_item_changes.assert_not_called()
 
-    def test_replay__send_order_is_reversed_to_match_source_display_order(
+    def test_replay__v1_send_order_is_reversed_to_match_source_display_order(
         self,
     ) -> None:
-        # Pin the bug found by the slice 2 e2e: source streams items in
-        # newest-first display order (ClickHouse ORDER BY id DESC over UUIDv7),
-        # and the BE assigns row UUIDs to each apply payload in list order
-        # with later list entries getting larger UUIDs. To preserve the
-        # source's display order on the target, ``added_items`` and
-        # ``edited_items`` must be sent REVERSED — newest-display-first item
-        # last in the list so it gets the largest UUID and lands on top.
+        # Source streams items in newest-first display order (ClickHouse
+        # ORDER BY id DESC over UUIDv7), and the BE assigns row UUIDs to
+        # each create_or_update_dataset_items payload in list order with
+        # later list entries getting larger UUIDs. To preserve the source's
+        # display order on the target, v1's items must be sent REVERSED so
+        # the newest-display-first source item lands at the top of the
+        # target's display.
+        #
+        # Note: post-v1 apply calls no longer send item-level payload under
+        # OPIK-6696/6697 — the BE COPIES source v_i verbatim via copy_from
+        # and the display order is preserved by the BE's COPY, not by SDK
+        # reversal.
         from opik.cli.migrate.datasets.version_replay import replay_all_versions
 
         rest_client, audit = self._setup(
             source_versions=[
                 _SourceVersion(id="src-v1", version_hash="hv1"),
-                _SourceVersion(id="src-v2", version_hash="hv2"),
             ],
             items_per_version={
-                # Source v1 streams [Q3, Q2, Q1] in newest-first order. v2
-                # adds Q5 (newest), Q4, and edits Q1 and Q3 — items_per_version
-                # is what the source's per-version stream returns.
+                # Source v1 streams [Q3, Q2, Q1] in newest-first order.
                 "hv1": [
                     _ds_item("Q3-id", q="Q3"),
                     _ds_item("Q2-id", q="Q2"),
                     _ds_item("Q1-id", q="Q1"),
-                ],
-                "hv2": [
-                    _ds_item("Q5-id", q="Q5"),
-                    _ds_item("Q4-id", q="Q4"),
-                    _ds_item("Q3-id", q="Q3-EDITED"),
-                    _ds_item("Q2-id", q="Q2"),
-                    _ds_item("Q1-id", q="Q1-EDITED"),
                 ],
                 "tgt-h1": [
                     _ds_item("tgt-Q3", q="Q3"),
                     _ds_item("tgt-Q2", q="Q2"),
                     _ds_item("tgt-Q1", q="Q1"),
                 ],
-                "tgt-h2": [
-                    _ds_item("tgt-Q5", q="Q5"),
-                    _ds_item("tgt-Q4", q="Q4"),
-                    _ds_item("tgt-Q3", q="Q3-EDITED"),
-                    _ds_item("tgt-Q2", q="Q2"),
-                    _ds_item("tgt-Q1", q="Q1-EDITED"),
-                ],
             },
             applied_versions=[
                 _AppliedVersion(id="tgt-v1", version_hash="tgt-h1"),
-                _AppliedVersion(id="tgt-v2", version_hash="tgt-h2"),
             ],
         )
 
@@ -812,69 +669,6 @@ class TestVersionReplayUnit:
             "items"
         ]
         assert [it.data["q"] for it in v1_items] == ["Q1", "Q2", "Q3"]
-
-        # v2 adds [Q5, Q4] in source order (newest first), edits [Q3, Q1]
-        # in source order. After reversal in the apply payload:
-        # added=[Q4, Q5], edited=[Q1, Q3].
-        v2_request = rest_client.datasets.apply_dataset_item_changes.call_args.kwargs[
-            "request"
-        ]
-        assert [a["data"]["q"] for a in v2_request["added_items"]] == [
-            "Q4",
-            "Q5",
-        ]
-        assert [e["data"]["q"] for e in v2_request["edited_items"]] == [
-            "Q1-EDITED",
-            "Q3-EDITED",
-        ]
-
-    def test_replay__edits_and_deletes_use_target_ids_not_source_ids(self) -> None:
-        # Pin the bug found by the slice 2 e2e: edits/deletes in v_n+1 must
-        # reference the target-side item id (assigned by the BE on add in
-        # v_n), NOT the source's stable id. The BE matches edit/delete
-        # payloads by id against the *target* dataset, so forwarding source
-        # ids would silently no-op and the target version would diverge from
-        # the source version's content.
-        from opik.cli.migrate.datasets.version_replay import replay_all_versions
-
-        rest_client, audit = self._setup(
-            source_versions=[
-                _SourceVersion(id="src-v1", version_hash="hv1"),
-                _SourceVersion(id="src-v2", version_hash="hv2"),
-            ],
-            items_per_version={
-                "hv1": [_ds_item("src-a", x=1), _ds_item("src-b", y=2)],
-                # v2 modifies src-a, deletes src-b.
-                "hv2": [_ds_item("src-a", x=99)],
-                # Target side: BE assigned new ids on the v1 adds.
-                "tgt-h1": [_ds_item("TGT-A", x=1), _ds_item("TGT-B", y=2)],
-                "tgt-h2": [_ds_item("TGT-A", x=99)],
-            },
-            applied_versions=[
-                _AppliedVersion(id="tgt-v1", version_hash="tgt-h1"),
-                _AppliedVersion(id="tgt-v2", version_hash="tgt-h2"),
-            ],
-        )
-
-        replay_all_versions(
-            rest_client,
-            source_dataset_id="src-id",
-            source_name_after_rename="MyDataset_v1",
-            source_project_name=None,
-            dest_dataset_id="tgt-dataset-id",
-            dest_name="MyDataset",
-            dest_project_name="B",
-            audit=audit,
-        )
-
-        # v2 is the FIRST apply call (v1 went through create_or_update).
-        v2_request = rest_client.datasets.apply_dataset_item_changes.call_args.kwargs[
-            "request"
-        ]
-        # Edit ID is the target id (TGT-A), not the source id (src-a).
-        assert v2_request["edited_items"][0]["id"] == "TGT-A"
-        # Delete ID is the target id (TGT-B), not the source id (src-b).
-        assert v2_request["deleted_ids"] == ["TGT-B"]
 
     def test_replay__clears_version_level_execution_policy_when_dropped(
         self,
@@ -1146,173 +940,13 @@ class TestVersionReplayUnit:
             "pass_threshold": 3,
         }
 
-    def test_replay__forwards_per_item_tags_on_add_and_edit(self) -> None:
-        # Per-item tags are version-scoped on the BE — they can change across
-        # versions. Verify they round-trip on both write paths.
-        from opik.cli.migrate.datasets.version_replay import replay_all_versions
-
-        rest_client, audit = self._setup(
-            source_versions=[
-                _SourceVersion(id="src-v1", version_hash="hv1"),
-                _SourceVersion(id="src-v2", version_hash="hv2"),
-            ],
-            items_per_version={
-                "hv1": [_ds_item("a", tags=["regression"], x=1)],
-                # v2: tag list expanded.
-                "hv2": [_ds_item("a", tags=["regression", "baseline"], x=1)],
-                "tgt-h1": [_ds_item("tgt-a", tags=["regression"], x=1)],
-                "tgt-h2": [_ds_item("tgt-a", tags=["regression", "baseline"], x=1)],
-            },
-            applied_versions=[
-                _AppliedVersion(id="tgt-v1", version_hash="tgt-h1"),
-                _AppliedVersion(id="tgt-v2", version_hash="tgt-h2"),
-            ],
-        )
-
-        replay_all_versions(
-            rest_client,
-            source_dataset_id="src-id",
-            source_name_after_rename="MyDataset_v1",
-            source_project_name=None,
-            dest_dataset_id="tgt-dataset-id",
-            dest_name="MyDataset",
-            dest_project_name="B",
-            audit=audit,
-        )
-
-        # v1 went through create_or_update; its payload carries tags.
-        v1_items = rest_client.datasets.create_or_update_dataset_items.call_args.kwargs[
-            "items"
-        ]
-        assert v1_items[0].tags == ["regression"]
-
-        # v2 went through apply; its edit payload carries the new tag list.
-        v2_request = rest_client.datasets.apply_dataset_item_changes.call_args.kwargs[
-            "request"
-        ]
-        assert v2_request["edited_items"][0]["tags"] == ["regression", "baseline"]
-
-    def test_replay__clears_per_item_tags_when_removed(self) -> None:
-        # Source v1 has an item with tags; v2's same item has no tags. The
-        # BE inherits on omission, so we must explicitly send tags=[] to
-        # overwrite the stale set on the target.
-        from opik.cli.migrate.datasets.version_replay import replay_all_versions
-
-        rest_client, audit = self._setup(
-            source_versions=[
-                _SourceVersion(id="src-v1", version_hash="hv1"),
-                _SourceVersion(id="src-v2", version_hash="hv2"),
-            ],
-            items_per_version={
-                "hv1": [_ds_item("a", tags=["regression"], x=1)],
-                "hv2": [
-                    _ds_item("a", tags=None, x=2)
-                ],  # tags cleared, data also changed
-                "tgt-h1": [_ds_item("tgt-a", tags=["regression"], x=1)],
-                "tgt-h2": [_ds_item("tgt-a", tags=None, x=2)],
-            },
-            applied_versions=[
-                _AppliedVersion(id="tgt-v1", version_hash="tgt-h1"),
-                _AppliedVersion(id="tgt-v2", version_hash="tgt-h2"),
-            ],
-        )
-
-        replay_all_versions(
-            rest_client,
-            source_dataset_id="src-id",
-            source_name_after_rename="MyDataset_v1",
-            source_project_name=None,
-            dest_dataset_id="tgt-dataset-id",
-            dest_name="MyDataset",
-            dest_project_name="B",
-            audit=audit,
-        )
-
-        v2_request = rest_client.datasets.apply_dataset_item_changes.call_args.kwargs[
-            "request"
-        ]
-        assert v2_request["edited_items"][0]["tags"] == []
-
-    def test_replay__clears_per_item_evaluators_when_removed(self) -> None:
-        # Source v1's item has per-item evaluators; v2's same item drops
-        # them. Forward evaluators=[] on the edit to override.
-        from opik.cli.migrate.datasets.version_replay import replay_all_versions
-
-        eval_v1 = {"name": "j1", "type": "llm_judge", "config": {"model": "haiku"}}
-        rest_client, audit = self._setup(
-            source_versions=[
-                _SourceVersion(id="src-v1", version_hash="hv1"),
-                _SourceVersion(id="src-v2", version_hash="hv2"),
-            ],
-            items_per_version={
-                "hv1": [_ds_item("a", evaluators=[eval_v1], x=1)],
-                "hv2": [_ds_item("a", evaluators=None, x=2)],
-                "tgt-h1": [_ds_item("tgt-a", evaluators=[eval_v1], x=1)],
-                "tgt-h2": [_ds_item("tgt-a", evaluators=None, x=2)],
-            },
-            applied_versions=[
-                _AppliedVersion(id="tgt-v1", version_hash="tgt-h1"),
-                _AppliedVersion(id="tgt-v2", version_hash="tgt-h2"),
-            ],
-        )
-
-        replay_all_versions(
-            rest_client,
-            source_dataset_id="src-id",
-            source_name_after_rename="MyDataset_v1",
-            source_project_name=None,
-            dest_dataset_id="tgt-dataset-id",
-            dest_name="MyDataset",
-            dest_project_name="B",
-            audit=audit,
-        )
-
-        v2_request = rest_client.datasets.apply_dataset_item_changes.call_args.kwargs[
-            "request"
-        ]
-        assert v2_request["edited_items"][0]["evaluators"] == []
-
-    def test_replay__clears_per_item_execution_policy_when_removed(self) -> None:
-        # Source v1's item has a per-item execution_policy override; v2's
-        # same item drops it. Send clear_execution_policy=true (not just
-        # omit the field, which would inherit the stale override).
-        from opik.cli.migrate.datasets.version_replay import replay_all_versions
-
-        pol_v1 = {"runs_per_item": 5, "pass_threshold": 3}
-        rest_client, audit = self._setup(
-            source_versions=[
-                _SourceVersion(id="src-v1", version_hash="hv1"),
-                _SourceVersion(id="src-v2", version_hash="hv2"),
-            ],
-            items_per_version={
-                "hv1": [_ds_item("a", execution_policy=pol_v1, x=1)],
-                "hv2": [_ds_item("a", execution_policy=None, x=2)],
-                "tgt-h1": [_ds_item("tgt-a", execution_policy=pol_v1, x=1)],
-                "tgt-h2": [_ds_item("tgt-a", execution_policy=None, x=2)],
-            },
-            applied_versions=[
-                _AppliedVersion(id="tgt-v1", version_hash="tgt-h1"),
-                _AppliedVersion(id="tgt-v2", version_hash="tgt-h2"),
-            ],
-        )
-
-        replay_all_versions(
-            rest_client,
-            source_dataset_id="src-id",
-            source_name_after_rename="MyDataset_v1",
-            source_project_name=None,
-            dest_dataset_id="tgt-dataset-id",
-            dest_name="MyDataset",
-            dest_project_name="B",
-            audit=audit,
-        )
-
-        v2_request = rest_client.datasets.apply_dataset_item_changes.call_args.kwargs[
-            "request"
-        ]
-        edited = v2_request["edited_items"][0]
-        assert "execution_policy" not in edited
-        assert edited["clear_execution_policy"] is True
+    # Per-item edit/clear tests (tags, evaluators, execution_policy) were
+    # removed under OPIK-6696/6697: post-v1 apply calls no longer carry
+    # item-level payload, so per-item changes round-trip through the BE's
+    # COPY of source v_i instead of the SDK's edited_items payload. Those
+    # tests were pinning SDK-side payload-building behavior that no longer
+    # exists; the end-to-end per-item round-trip is covered by migrate's
+    # E2E suite against the live BE.
 
     def test_replay__forwards_version_metadata_and_filters_latest_tag(self) -> None:
         # Version-level metadata is per-version Map<str,str>; round-trip it.
@@ -1485,6 +1119,125 @@ class TestVersionReplayUnit:
             for call in rest_client.datasets.apply_dataset_item_changes.call_args_list
         ]
         assert bases == ["tgt-v1", "tgt-v2"]
+
+    def test_replay__post_v1_apply_raises_when_source_version_id_is_missing(
+        self,
+    ) -> None:
+        # OPIK-6697 (and the baz-reviewer inline comment on id optionality):
+        # ``DatasetVersionPublic.id`` is ``Optional`` in the Fern wire type,
+        # so a list response without ``id`` could in principle reach the
+        # chained apply. Silently degrading (skipping copy_from coords and
+        # falling back to the destination-side read) would defeat the whole
+        # point of OPIK-6697 — the chained call is the read-after-write
+        # surface OPIK-6674 hits. Raise explicitly so the cascade fails
+        # loudly instead of silently regressing into the data-loss window.
+        import pytest
+
+        from opik.cli.migrate.datasets.version_replay import replay_all_versions
+        from opik.cli.migrate.errors import ReplayError
+
+        rest_client, audit = self._setup(
+            source_versions=[
+                _SourceVersion(id="src-v1", version_hash="hv1"),
+                # Source v2 came back from the BE without an id — should
+                # raise rather than degrade to a lag-exposed apply call.
+                _SourceVersion(id=None, version_hash="hv2"),
+            ],
+            items_per_version={
+                "hv1": [_ds_item("a", x=1)],
+                "hv2": [_ds_item("a", x=1), _ds_item("b", y=2)],
+                "tgt-h1": [_ds_item("tgt-a", x=1)],
+            },
+            applied_versions=[_AppliedVersion(id="tgt-v1", version_hash="tgt-h1")],
+        )
+
+        with pytest.raises(ReplayError, match="copy_from"):
+            replay_all_versions(
+                rest_client,
+                source_dataset_id="src-id",
+                source_name_after_rename="MyDataset_v1",
+                source_project_name=None,
+                dest_dataset_id="tgt-dataset-id",
+                dest_name="MyDataset",
+                dest_project_name="B",
+                audit=audit,
+            )
+
+    def test_replay__forwards_copy_from_coords_pointing_at_source_versions(
+        self,
+    ) -> None:
+        # OPIK-6696/6697: each post-v1 apply must carry copy_from_dataset_id +
+        # copy_from_version_id pointing at the corresponding source version.
+        # That's what redirects the BE's carry-forward COPY away from the
+        # destination's just-minted prior version (multi-replica lag exposed)
+        # onto the stable, fully-replicated source v_i. Pin per-call coords so
+        # a regression on the chaining (e.g. always sending source v1, or
+        # mixing dest/source ids) trips here.
+        from opik.cli.migrate.datasets.version_replay import replay_all_versions
+
+        rest_client, audit = self._setup(
+            source_versions=[
+                _SourceVersion(id="src-v1", version_hash="hv1"),
+                _SourceVersion(id="src-v2", version_hash="hv2"),
+                _SourceVersion(id="src-v3", version_hash="hv3"),
+            ],
+            items_per_version={
+                "hv1": [_ds_item("a", x=1)],
+                "hv2": [_ds_item("a", x=1), _ds_item("b", y=2)],
+                "hv3": [_ds_item("a", x=1), _ds_item("b", y=2), _ds_item("c", z=3)],
+                "tgt-h1": [_ds_item("tgt-a", x=1)],
+                "tgt-h2": [_ds_item("tgt-a", x=1), _ds_item("tgt-b", y=2)],
+                "tgt-h3": [
+                    _ds_item("tgt-a", x=1),
+                    _ds_item("tgt-b", y=2),
+                    _ds_item("tgt-c", z=3),
+                ],
+            },
+            applied_versions=[
+                _AppliedVersion(id="tgt-v1", version_hash="tgt-h1"),
+                _AppliedVersion(id="tgt-v2", version_hash="tgt-h2"),
+                _AppliedVersion(id="tgt-v3", version_hash="tgt-h3"),
+            ],
+        )
+
+        replay_all_versions(
+            rest_client,
+            source_dataset_id="src-id",
+            source_name_after_rename="MyDataset_v1",
+            source_project_name=None,
+            dest_dataset_id="tgt-dataset-id",
+            dest_name="MyDataset",
+            dest_project_name="B",
+            audit=audit,
+        )
+
+        # v1's create_or_update_dataset_items does NOT (and cannot, in the
+        # current BE shape) carry copy_from coords — v1 routes through
+        # createFirstVersion which is INSERT-only with no destination
+        # read-after-write surface.
+        v1_create_kwargs = (
+            rest_client.datasets.create_or_update_dataset_items.call_args.kwargs
+        )
+        assert "copy_from_dataset_id" not in v1_create_kwargs
+        assert "copy_from_version_id" not in v1_create_kwargs
+
+        # Each apply_dataset_item_changes call (v2, v3) must point copy_from
+        # at THIS version's source coords, not v1's. The pair is set together
+        # (BE rejects partial pairs with 400) and both must point to the
+        # source dataset.
+        apply_calls = rest_client.datasets.apply_dataset_item_changes.call_args_list
+        assert len(apply_calls) == 2
+        copy_from_pairs = [
+            (
+                call.kwargs["request"]["copy_from_dataset_id"],
+                call.kwargs["request"]["copy_from_version_id"],
+            )
+            for call in apply_calls
+        ]
+        assert copy_from_pairs == [
+            ("src-id", "src-v2"),
+            ("src-id", "src-v3"),
+        ]
 
 
 class TestVersionReplayE2ECli:

@@ -747,7 +747,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         List<UUID> uuids = generateUuidPool(idGenerator, sourceItemCount);
 
         return datasetItemVersionDAO
-                .copyVersionItems(datasetId, context.sourceVersionId, newVersionId, null, uuids)
+                .copyVersionItems(datasetId, context.sourceVersionId, datasetId, newVersionId, null, uuids)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.USER_NAME, context.userName)
                         .put(RequestContext.WORKSPACE_ID, context.workspaceId));

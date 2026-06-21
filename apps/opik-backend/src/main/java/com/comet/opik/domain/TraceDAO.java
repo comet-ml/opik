@@ -71,6 +71,7 @@ import static com.comet.opik.api.TraceCountResponse.WorkspaceTraceCount;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspace;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.domain.stats.StatsMapper.mapProjectScoresStats;
+import static com.comet.opik.infrastructure.FilterUtils.addSortNeedsWideFlag;
 import static com.comet.opik.infrastructure.FilterUtils.bindTraceThreadSearchCriteria;
 import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
@@ -179,6 +180,7 @@ public interface TraceDAO {
 @Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
+// TODO: after v1 drop, remove annotation_queue_filters conditions and keep only annotation_queue_id
 class TraceDAOImpl implements TraceDAO {
 
     private static final String TRACE_SEARCH_CLAUSE = """
@@ -816,6 +818,17 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
+    /**
+     * Two-phase, wide-column-deferred trace page query.
+     * <p>
+     * Phase 1 ({@code page_ids}) paginates on the light, deduped id + sort-key set only — wide text columns
+     * (input/output/metadata) are dropped from the scanned {@code traces_deduped} CTE unless the sort targets them
+     * ({@code sort_needs_wide}). Phase 2 ({@code page_wide}) re-reads the full rows, including wide columns, for just
+     * the page ids. The custom {@code sort_fields} are rendered into both the {@code page_ids} ORDER BY (so pagination
+     * picks the right page) and the final ORDER BY (so the page is returned in order); {@code page_wide}'s own order is
+     * immaterial since it is id-bounded and {@code LIMIT 1 BY id}. Field exclusion ({@code exclude_fields}) and
+     * truncation are layered on top without dropping the sort key.
+     */
     private static final String SELECT_BY_PROJECT_ID = """
             WITH <if(trace_id_prefilter)>trace_id_prefilter AS (
                 SELECT DISTINCT id
@@ -882,6 +895,7 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
+                      <if(annotation_queue_id)>AND source_queue_id = :annotation_queue_id<endif>
                       <if(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
                       <else>
                       <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
@@ -1141,6 +1155,7 @@ class TraceDAOImpl implements TraceDAO {
                     FROM comments
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
+                    <if(annotation_queue_id)>AND source_queue_id = :annotation_queue_id<endif>
                     <if(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
                     <else>
                     <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
@@ -1225,9 +1240,7 @@ class TraceDAOImpl implements TraceDAO {
             <endif>
             , traces_deduped AS (
                 SELECT
-                    t.* <if(exclude_fields)>EXCEPT (<exclude_fields>) <endif>,
-                    truncated_input,
-                    truncated_output,
+                    t.* EXCEPT (input_slim, output_slim<if(!sort_needs_wide)><if(!exclude_input)>, input<endif><if(!exclude_output)>, output<endif><if(!exclude_metadata)>, metadata<endif><endif>) <if(exclude_fields)>EXCEPT (<exclude_fields>) <endif>,
                     input_length,
                     output_length,
                     duration
@@ -1241,7 +1254,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(span_feedback_scores_empty_filters)>
                 LEFT JOIN sfsc ON sfsc.trace_id = t.id
                 <endif>
-                <if(annotation_queue_filters)>
+                <if(annotation_queue_filters || annotation_queue_id)>
                 LEFT JOIN trace_annotation_queue_ids as taqi ON taqi.trace_id = t.id
                 <endif>
                 WHERE workspace_id = :workspace_id
@@ -1252,6 +1265,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
+                <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id) <endif>
                 <if(feedback_scores_filters)>
                  AND id IN (
                     SELECT entity_id
@@ -1304,8 +1318,8 @@ class TraceDAOImpl implements TraceDAO {
                  <endif>
                  ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                  LIMIT 1 BY id
-            ), traces_final AS (
-                SELECT td.*
+            ), page_ids AS (
+                SELECT td.id
                 FROM traces_deduped td
                 <if(sort_has_feedback_scores)>
                 LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = td.id
@@ -1318,12 +1332,25 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 ORDER BY <if(sort_fields)> <sort_fields>, <endif>(workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT :limit <if(offset)>OFFSET :offset <endif>
+            ), page_wide AS (
+                SELECT
+                    t.* EXCEPT (input_slim, output_slim)<if(exclude_fields)> EXCEPT (<exclude_fields>)<endif>,
+                    <if(truncate)><if(!exclude_input)>truncated_input,<endif><if(!exclude_output)>truncated_output,<endif><endif>
+                    input_length,
+                    output_length,
+                    duration
+                FROM traces t
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND id IN (SELECT id FROM page_ids)
+                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
             )
             SELECT
-                  t.* <if(exclude_fields)>EXCEPT (<exclude_fields>, input, output, metadata) <else> EXCEPT (input, output, metadata)<endif>
-                  <if(!exclude_input)>, <if(truncate)> replaceRegexpAll(truncated_input, '<truncate>', '"[image]"') as input <else> input as input <endif><endif>
-                  <if(!exclude_output)>, <if(truncate)> replaceRegexpAll(truncated_output, '<truncate>', '"[image]"') as output <else> output as output <endif><endif>
-                  <if(!exclude_metadata)>, <if(truncate)> replaceRegexpAll(metadata, '<truncate>', '"[image]"') as metadata <else> metadata <endif><endif>
+                  t.* <if(exclude_fields)>EXCEPT (<exclude_fields><if(!exclude_input)>, input<endif><if(!exclude_output)>, output<endif><if(!exclude_metadata)>, metadata<endif><if(truncate)><if(!exclude_input)>, truncated_input<endif><if(!exclude_output)>, truncated_output<endif><endif>) <else> EXCEPT (input, output, metadata<if(truncate)>, truncated_input, truncated_output<endif>)<endif>
+                  <if(!exclude_input)>, <if(truncate)> replaceRegexpAll(t.truncated_input, '<truncate>', '"[image]"') as input <else> t.input as input <endif><endif>
+                  <if(!exclude_output)>, <if(truncate)> replaceRegexpAll(t.truncated_output, '<truncate>', '"[image]"') as output <else> t.output as output <endif><endif>
+                  <if(!exclude_metadata)>, <if(truncate)> replaceRegexpAll(t.metadata, '<truncate>', '"[image]"') as metadata <else> t.metadata as metadata <endif><endif>
                   <if(truncate)>, input_length >= truncation_threshold as input_truncated<endif>
                   <if(truncate)>, output_length >= truncation_threshold as output_truncated<endif>
                   <if(!exclude_feedback_scores)>
@@ -1340,7 +1367,7 @@ class TraceDAOImpl implements TraceDAO {
                   <if(!exclude_has_tool_spans)>, s.has_tool_spans AS has_tool_spans<endif>
                   , s.providers AS providers
                   <if(!exclude_experiment)>, eaag.experiment_id, eaag.experiment_name, eaag.experiment_dataset_id, eaag.experiment_dataset_item_id<endif>
-             FROM traces_final t
+             FROM page_wide t
              <if(!exclude_feedback_scores)>
              LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
              LEFT JOIN span_feedback_scores_agg sfsagg ON sfsagg.trace_id = t.id
@@ -1417,6 +1444,7 @@ class TraceDAOImpl implements TraceDAO {
                      WHERE entity_type = 'trace'
                        AND workspace_id = :workspace_id
                        AND project_id = :project_id
+                       <if(annotation_queue_id)>AND source_queue_id = :annotation_queue_id<endif>
                        <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                        <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
                 )
@@ -1624,7 +1652,7 @@ class TraceDAOImpl implements TraceDAO {
                     <if(span_feedback_scores_empty_filters)>
                     LEFT JOIN sfsc ON sfsc.trace_id = traces.id
                     <endif>
-                    <if(annotation_queue_filters)>
+                    <if(annotation_queue_filters || annotation_queue_id)>
                     LEFT JOIN trace_annotation_queue_ids as taqi ON taqi.trace_id = traces.id
                     <endif>
                     WHERE project_id = :project_id
@@ -1634,6 +1662,7 @@ class TraceDAOImpl implements TraceDAO {
                     <if(filters)> AND <filters> <endif>
                     <if(search_text)> AND <search_text> <endif>
                     <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
+                    <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id) <endif>
                     <if(feedback_scores_filters)>
                     AND id IN (
                         SELECT entity_id
@@ -2030,6 +2059,7 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'trace'
                        AND workspace_id = :workspace_id
                        AND project_id IN :project_ids
+                       <if(annotation_queue_id)>AND source_queue_id = :annotation_queue_id<endif>
                        <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                        <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
                 )
@@ -2276,7 +2306,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(span_feedback_scores_empty_filters)>
                 LEFT JOIN sfsc ON sfsc.trace_id = traces.id
                 <endif>
-                <if(annotation_queue_filters)>
+                <if(annotation_queue_filters || annotation_queue_id)>
                 LEFT JOIN trace_annotation_queue_ids as taqi ON taqi.trace_id = traces.id
                 <endif>
                 WHERE workspace_id = :workspace_id
@@ -2286,6 +2316,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
+                <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id) <endif>
                 <if(feedback_scores_filters)>
                 AND id IN (
                     SELECT entity_id
@@ -2457,6 +2488,7 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'trace'
                        AND workspace_id = :workspace_id
                        AND project_id IN :project_ids
+                       <if(annotation_queue_id)>AND source_queue_id = :annotation_queue_id<endif>
                        <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                        <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
                 )
@@ -2617,7 +2649,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(span_feedback_scores_empty_filters)>
                 LEFT JOIN sfsc ON sfsc.trace_id = traces.id
                 <endif>
-                <if(annotation_queue_filters)>
+                <if(annotation_queue_filters || annotation_queue_id)>
                 LEFT JOIN trace_annotation_queue_ids as taqi ON taqi.trace_id = traces.id
                 <endif>
                 WHERE workspace_id = :workspace_id
@@ -2627,6 +2659,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
+                <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id) <endif>
                 <if(feedback_scores_filters)>
                 AND id IN (
                     SELECT entity_id
@@ -2810,7 +2843,13 @@ class TraceDAOImpl implements TraceDAO {
                 ) inner_t
                 GROUP BY inner_t.workspace_id, inner_t.project_id, inner_t.thread_id
             ) t
-            LEFT JOIN trace_threads tt ON t.workspace_id = tt.workspace_id
+            LEFT JOIN (
+                SELECT workspace_id, project_id, thread_id, id, status
+                FROM trace_threads
+                WHERE workspace_id = :workspace_id
+                  AND project_id = :project_id
+                  AND thread_id IN :thread_ids
+            ) tt ON t.workspace_id = tt.workspace_id
               AND t.project_id = tt.project_id
               AND t.id = tt.thread_id
             SETTINGS log_comment = '<log_comment>'
@@ -3497,6 +3536,8 @@ class TraceDAOImpl implements TraceDAO {
             template.add("offset", offset);
             template.add("log_comment", logComment);
 
+            addSortNeedsWideFlag(template, traceSearchCriteria.sortingFields());
+
             var orderBySql = sortingQueryBuilder.toOrderBySql(traceSearchCriteria.sortingFields(),
                     TraceSortingFactory.EXPERIMENT_FIELD_MAPPING);
             boolean sortHasFeedbackScores = Optional.ofNullable(orderBySql)
@@ -3914,6 +3955,7 @@ class TraceDAOImpl implements TraceDAO {
         return template.getAttribute("filters") != null
                 || template.getAttribute("search_text") != null
                 || template.getAttribute("annotation_queue_filters") != null
+                || template.getAttribute("annotation_queue_id") != null
                 || template.getAttribute("feedback_scores_filters") != null
                 || template.getAttribute("span_feedback_scores_filters") != null
                 || template.getAttribute("trace_aggregation_filters") != null
@@ -4221,6 +4263,8 @@ class TraceDAOImpl implements TraceDAO {
             if (shouldUseTraceIdPrefilter(criteria, template)) {
                 template.add("trace_id_prefilter", true);
             }
+
+            addSortNeedsWideFlag(template, criteria.sortingFields());
 
             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
 

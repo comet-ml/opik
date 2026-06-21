@@ -15,6 +15,8 @@ export interface AnnotationQueue {
     scope: OpikApi.AnnotationQueueScope;
     commentsEnabled?: boolean;
     feedbackDefinitionNames?: string[];
+    annotatorsPerItem?: number;
+    lockTimeoutSeconds?: number;
     reviewers?: OpikApi.AnnotationQueueReviewer[];
     feedbackScores?: OpikApi.FeedbackScoreAverage[];
     itemsCount?: number;

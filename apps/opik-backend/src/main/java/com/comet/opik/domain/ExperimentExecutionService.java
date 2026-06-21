@@ -9,12 +9,17 @@ import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.ExperimentExecutionResponse;
 import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.ExperimentUpdate;
+import com.comet.opik.api.OpikPromptEntry;
+import com.comet.opik.api.PromptVersion;
+import com.comet.opik.api.TemplateStructure;
 import com.comet.opik.api.events.ExperimentItemToProcess;
 import com.comet.opik.api.resources.v1.events.TestSuiteEvaluatorMapper;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.NotFoundException;
@@ -28,9 +33,12 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 @Singleton
@@ -44,6 +52,7 @@ public class ExperimentExecutionService {
     private final IdGenerator idGenerator;
     private final TestSuiteEvaluatorMapper testSuiteEvaluatorMapper;
     private final ExperimentExecutionConfig experimentExecutionConfig;
+    private final PromptService promptService;
 
     @Inject
     public ExperimentExecutionService(
@@ -53,7 +62,8 @@ public class ExperimentExecutionService {
             @NonNull ExperimentItemPublisher itemPublisher,
             @NonNull IdGenerator idGenerator,
             @NonNull TestSuiteEvaluatorMapper testSuiteEvaluatorMapper,
-            @NonNull @Config("experimentExecution") ExperimentExecutionConfig experimentExecutionConfig) {
+            @NonNull @Config("experimentExecution") ExperimentExecutionConfig experimentExecutionConfig,
+            @NonNull PromptService promptService) {
         this.experimentService = experimentService;
         this.datasetItemService = datasetItemService;
         this.datasetVersionService = datasetVersionService;
@@ -61,6 +71,7 @@ public class ExperimentExecutionService {
         this.idGenerator = idGenerator;
         this.testSuiteEvaluatorMapper = testSuiteEvaluatorMapper;
         this.experimentExecutionConfig = experimentExecutionConfig;
+        this.promptService = promptService;
     }
 
     /**
@@ -74,6 +85,7 @@ public class ExperimentExecutionService {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
+            String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, null);
 
             String projectName = request.projectName() != null
                     ? request.projectName()
@@ -84,47 +96,49 @@ public class ExperimentExecutionService {
                         ExecutionPolicy datasetExecutionPolicy = optPolicy.orElse(null);
                         return createExperiments(request, projectName)
                                 .collectSortedList(Comparator.comparingInt(e -> e.info().promptIndex()))
-                                .flatMap(experimentEntries -> {
-                                    List<UUID> experimentIds = experimentEntries.stream()
-                                            .map(ExperimentEntry::experimentId).toList();
-                                    List<ExperimentExecutionResponse.ExperimentInfo> experimentInfos = experimentEntries
-                                            .stream()
-                                            .map(ExperimentEntry::info).toList();
+                                .flatMap(experimentEntries -> resolveOpikPromptsByVariant(request)
+                                        .flatMap(opikPromptsByVariant -> {
+                                            List<UUID> experimentIds = experimentEntries.stream()
+                                                    .map(ExperimentEntry::experimentId).toList();
+                                            List<ExperimentExecutionResponse.ExperimentInfo> experimentInfos = experimentEntries
+                                                    .stream()
+                                                    .map(ExperimentEntry::info).toList();
 
-                                    UUID batchId = idGenerator.generateId();
+                                            UUID batchId = idGenerator.generateId();
 
-                                    return streamDatasetItems(request)
-                                            .flatMapIterable(item -> buildMessages(
-                                                    item, request, experimentIds, datasetExecutionPolicy,
-                                                    projectName, workspaceId, userName, batchId))
-                                            .collectList()
-                                            .flatMap(messages -> {
-                                                if (messages.isEmpty()) {
-                                                    log.warn(
-                                                            "No dataset items found for dataset '{}', workspaceId '{}'",
-                                                            request.datasetName(), workspaceId);
-                                                    return markExperimentsCompleted(experimentIds)
-                                                            .thenReturn(ExperimentExecutionResponse.builder()
-                                                                    .experiments(experimentInfos)
-                                                                    .totalItems(0)
-                                                                    .build());
-                                                }
+                                            return streamDatasetItems(request)
+                                                    .flatMapIterable(item -> buildMessages(
+                                                            item, request, experimentIds, datasetExecutionPolicy,
+                                                            projectName, workspaceId, workspaceName, userName, batchId,
+                                                            opikPromptsByVariant))
+                                                    .collectList()
+                                                    .flatMap(messages -> {
+                                                        if (messages.isEmpty()) {
+                                                            log.warn(
+                                                                    "No dataset items found for dataset '{}', workspaceId '{}'",
+                                                                    request.datasetName(), workspaceId);
+                                                            return markExperimentsCompleted(experimentIds)
+                                                                    .thenReturn(ExperimentExecutionResponse.builder()
+                                                                            .experiments(experimentInfos)
+                                                                            .totalItems(0)
+                                                                            .build());
+                                                        }
 
-                                                return itemPublisher.publish(batchId, messages)
-                                                        .then(Mono.fromCallable(() -> {
-                                                            log.info(
-                                                                    "Created '{}' experiments with '{}' total items for dataset '{}', workspaceId '{}'",
-                                                                    experimentIds.size(), messages.size(),
-                                                                    request.datasetName(),
-                                                                    workspaceId);
+                                                        return itemPublisher.publish(batchId, messages)
+                                                                .then(Mono.fromCallable(() -> {
+                                                                    log.info(
+                                                                            "Created '{}' experiments with '{}' total items for dataset '{}', workspaceId '{}'",
+                                                                            experimentIds.size(), messages.size(),
+                                                                            request.datasetName(),
+                                                                            workspaceId);
 
-                                                            return ExperimentExecutionResponse.builder()
-                                                                    .experiments(experimentInfos)
-                                                                    .totalItems(messages.size())
-                                                                    .build();
-                                                        }));
-                                            });
-                                });
+                                                                    return ExperimentExecutionResponse.builder()
+                                                                            .experiments(experimentInfos)
+                                                                            .totalItems(messages.size())
+                                                                            .build();
+                                                                }));
+                                                    });
+                                        }));
                     });
         });
     }
@@ -227,8 +241,10 @@ public class ExperimentExecutionService {
             ExecutionPolicy datasetExecutionPolicy,
             String projectName,
             String workspaceId,
+            String workspaceName,
             String userName,
-            UUID batchId) {
+            UUID batchId,
+            List<List<OpikPromptEntry>> opikPromptsByVariant) {
 
         int runsPerItem = getEffectiveRunsPerItem(item.executionPolicy(), datasetExecutionPolicy);
         var messages = new ArrayList<ExperimentItemToProcess>();
@@ -237,6 +253,7 @@ public class ExperimentExecutionService {
             for (int promptIdx = 0; promptIdx < request.prompts().size(); promptIdx++) {
                 var prompt = request.prompts().get(promptIdx);
                 UUID experimentId = experimentIds.get(promptIdx);
+                List<OpikPromptEntry> opikPrompts = opikPromptsByVariant.get(promptIdx);
 
                 messages.add(ExperimentItemToProcess.builder()
                         .batchId(batchId)
@@ -247,12 +264,111 @@ public class ExperimentExecutionService {
                         .versionHash(request.versionHash())
                         .projectName(projectName)
                         .workspaceId(workspaceId)
+                        .workspaceName(workspaceName)
                         .userName(userName)
                         .allExperimentIds(experimentIds)
+                        .opikPrompts(opikPrompts)
                         .build());
             }
         }
 
         return messages;
+    }
+
+    /**
+     * Resolves the prompt versions linked to each variant via a single bulk lookup against
+     * the prompt store, and returns one prebuilt {@code opik_prompts} list per variant (in
+     * the order of {@code request.prompts()}). This avoids re-doing the lookup for every
+     * dataset item — large experiments would otherwise hit the prompt store thousands of
+     * times for the same set of version ids.
+     */
+    private Mono<List<List<OpikPromptEntry>>> resolveOpikPromptsByVariant(ExperimentExecutionRequest request) {
+        List<List<Experiment.PromptVersionLink>> linksByVariant = request.prompts().stream()
+                .map(variant -> variant.promptVersions() != null
+                        ? variant.promptVersions()
+                        : request.promptVersions())
+                .map(links -> links == null ? List.<Experiment.PromptVersionLink>of() : links)
+                .toList();
+
+        Set<UUID> uniqueVersionIds = linksByVariant.stream()
+                .flatMap(List::stream)
+                .map(Experiment.PromptVersionLink::id)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        if (uniqueVersionIds.isEmpty()) {
+            return Mono.just(linksByVariant.stream()
+                    .map(unused -> List.<OpikPromptEntry>of())
+                    .toList());
+        }
+
+        // A name-lookup failure should not wipe out the version-based entries — entries with
+        // null name are still useful for trace linkage. Degrade locally to an empty info map.
+        Mono<Map<UUID, PromptVersionInfo>> infoLookup = promptService.getVersionsInfoByVersionsIds(uniqueVersionIds)
+                .onErrorResume(error -> {
+                    log.warn(
+                            "Failed to resolve prompt names for opik_prompts metadata; entries will be populated without names for dataset '{}' (id '{}', versionHash '{}')",
+                            request.datasetName(), request.datasetId(), request.versionHash(), error);
+                    return Mono.just(Map.of());
+                });
+
+        return Mono.zip(promptService.findVersionByIds(uniqueVersionIds), infoLookup)
+                .map(tuple -> {
+                    Map<UUID, PromptVersion> versionsById = tuple.getT1();
+                    Map<UUID, PromptVersionInfo> infoById = tuple.getT2();
+                    return linksByVariant.stream()
+                            .map(links -> buildOpikPromptEntries(links, versionsById, infoById))
+                            .toList();
+                })
+                .onErrorResume(error -> {
+                    log.warn(
+                            "Failed to resolve prompt versions for opik_prompts metadata; traces will not be linked to their prompt(s) for dataset '{}' (id '{}', versionHash '{}')",
+                            request.datasetName(), request.datasetId(), request.versionHash(), error);
+                    return Mono.just(linksByVariant.stream()
+                            .map(unused -> List.<OpikPromptEntry>of())
+                            .toList());
+                });
+    }
+
+    private static List<OpikPromptEntry> buildOpikPromptEntries(List<Experiment.PromptVersionLink> links,
+            Map<UUID, PromptVersion> versionsById, Map<UUID, PromptVersionInfo> infoById) {
+        if (links == null || links.isEmpty()) {
+            return List.of();
+        }
+        return links.stream()
+                .map(link -> toOpikPromptEntry(link, versionsById.get(link.id()), infoById.get(link.id())))
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    private static OpikPromptEntry toOpikPromptEntry(Experiment.PromptVersionLink link, PromptVersion version,
+            PromptVersionInfo info) {
+        if (version == null) {
+            return null;
+        }
+        UUID promptId = version.promptId() != null ? version.promptId() : link.promptId();
+        String name = link.promptName() != null ? link.promptName() : (info != null ? info.promptName() : null);
+        return OpikPromptEntry.builder()
+                .id(promptId)
+                .name(name)
+                .templateStructure(version.templateStructure())
+                .version(OpikPromptEntry.Version.builder()
+                        .id(version.id())
+                        .template(toTemplateNode(version.template(), version.templateStructure()))
+                        .commit(version.commit())
+                        .versionNumber(version.versionNumber())
+                        .metadata(version.metadata())
+                        .build())
+                .build();
+    }
+
+    private static JsonNode toTemplateNode(String template, TemplateStructure structure) {
+        if (template == null) {
+            return null;
+        }
+        if (structure == TemplateStructure.CHAT) {
+            return JsonUtils.getJsonNodeFromStringWithFallback(template);
+        }
+        return TextNode.valueOf(template);
     }
 }

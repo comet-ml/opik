@@ -4,6 +4,7 @@ import com.comet.opik.api.Comment;
 import com.comet.opik.api.CreateDatasetItemsFromTracesRequest;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItemSource;
+import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.EvaluatorItem;
 import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
@@ -191,6 +192,7 @@ class DatasetsResourceCreateFromTracesTest {
                 null,
                 null,
                 null,
+                null,
                 null);
 
         traceResourceClient.createComment(comment, trace1.id(), apiKey, workspaceName, 201);
@@ -285,7 +287,10 @@ class DatasetsResourceCreateFromTracesTest {
     }
 
     private Dataset buildDataset() {
-        return DatasetResourceClient.buildDataset(factory);
+        // Force DATASET (not TEST_SUITE) so DatasetItemService.filterDataForDatasetType keeps the
+        // enriched data wrapped under "input"/"expected_output" — the assertions in this class
+        // assume that shape. PODAM otherwise picks the type at random, which flakes this suite.
+        return DatasetResourceClient.buildDataset(factory).toBuilder().type(DatasetType.DATASET).build();
     }
 
     @Test

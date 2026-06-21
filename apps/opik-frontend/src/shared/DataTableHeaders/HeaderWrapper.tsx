@@ -53,7 +53,7 @@ const HeaderWrapper = <TData,>({
     return (
       <div
         className={cn(
-          "flex flex-col justify-center px-3",
+          "flex flex-col justify-center px-3 text-muted-slate",
           isSmall ? "h-11" : "h-12",
           className,
         )}
@@ -91,7 +91,7 @@ const HeaderWrapper = <TData,>({
   return (
     <div
       className={cn(
-        "flex size-full items-center gap-1 px-3",
+        "flex size-full items-center gap-1 px-3 text-muted-slate",
         nameClass,
         isSmall ? "h-8" : "h-11",
         horizontalAlignClass,

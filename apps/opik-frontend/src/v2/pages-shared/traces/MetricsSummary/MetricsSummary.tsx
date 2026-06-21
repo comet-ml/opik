@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
-import MetricCard from "./MetricCard";
+import MetricCard, { DeltaUnit } from "./MetricCard";
 import useProjectKpiCards, {
   KpiEntityType,
   KpiMetric,
@@ -41,6 +41,7 @@ type MetricCardDef = {
   label: string;
   formatter: (value: number) => string;
   trend: PercentageTrendType;
+  deltaUnit?: DeltaUnit;
 };
 
 const METRIC_CARDS: MetricCardDef[] = [
@@ -55,8 +56,10 @@ const METRIC_CARDS: MetricCardDef[] = [
     type: "errors",
     icon: AlertTriangle,
     label: "Error rate",
-    formatter: (v) => `${v.toFixed(1)}%`,
+    formatter: (v: number) =>
+      `${parseFloat(v < 1 ? v.toFixed(2) : v.toFixed(1))}%`,
     trend: "inverted",
+    deltaUnit: "pp",
   },
   {
     type: "avg_duration",
@@ -84,7 +87,7 @@ type ChartMetricConfig = {
   labelsMap?: Record<string, string>;
 };
 
-const CHART_GREEN = "var(--chart-green)";
+const CHART_VIOLET = "var(--chart-violet)";
 const CHART_RED = "var(--chart-red)";
 const CHART_BLUE = "var(--chart-blue)";
 const CHART_TEAL = "var(--chart-teal)";
@@ -127,7 +130,7 @@ const getChartConfig = (
       return {
         metricName: COUNT_METRIC_MAP[entityType],
         chartType: CHART_TYPE.bar,
-        colorMap: { [entityType]: CHART_GREEN },
+        colorMap: { [entityType]: CHART_VIOLET },
       };
     case "errors":
       return {
@@ -196,6 +199,17 @@ const getCardMode = (perCardWidth: number): CardMode => {
   if (perCardWidth >= PER_CARD_WIDTH_NO_DELTA) return "no-delta";
   if (perCardWidth >= PER_CARD_WIDTH_NO_LABEL) return "no-label";
   return "icon-only";
+};
+
+// Raw current/previous values feed the period-over-period delta in MetricCard.
+// While there's no data, return undefined so the delta is hidden instead of
+// being computed against empty values.
+const getDeltaValue = (
+  showData: boolean,
+  value: number | null | undefined,
+): number | null | undefined => {
+  if (!showData) return undefined;
+  return value ?? null;
 };
 
 export type MetricsSummaryProps = {
@@ -327,7 +341,6 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
         {filteredCards.map((card, index) => {
           const metric = metricsMap.get(card.type);
           const currentValue = metric?.current_value ?? 0;
-          const previousValue = metric?.previous_value ?? 0;
           const label = card.type === "count" ? countLabel : card.label;
           const isFirst = index === 0;
           const isLast = index === filteredCards.length - 1;
@@ -338,8 +351,8 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
               icon={card.icon}
               label={label}
               value={showData ? card.formatter(currentValue) : "N/A"}
-              currentRaw={showData ? currentValue : undefined}
-              previousRaw={showData ? previousValue : undefined}
+              currentRaw={getDeltaValue(showData, metric?.current_value)}
+              previousRaw={getDeltaValue(showData, metric?.previous_value)}
               trend={card.trend}
               selected={showData && selectedMetric === card.type}
               onClick={() => handleSelectMetric(card.type)}
@@ -348,8 +361,10 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
                 isLast && "rounded-tr-md",
               )}
               hideDelta={cardMode !== "full"}
+              deltaUnit={card.deltaUnit}
               hideLabel={cardMode === "no-label" || cardMode === "icon-only"}
               hideValue={cardMode === "icon-only"}
+              testId={`metrics-card-${card.type}`}
             />
           );
         })}

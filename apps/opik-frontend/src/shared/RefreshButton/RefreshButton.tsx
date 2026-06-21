@@ -31,7 +31,10 @@ const RefreshButton: React.FC<RefreshButtonProps> = ({
       <Button
         variant={variant}
         size={size}
-        className={cn("shrink-0", className)}
+        className={cn(
+          "shrink-0 focus-visible:border-primary focus-visible:ring-0",
+          className,
+        )}
         onClick={() => {
           setSpin(true);
           onRefresh();

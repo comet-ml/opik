@@ -184,7 +184,7 @@ class KpiCardsResourceTest {
         assertMetric(response, KpiMetricType.TOTAL_COST, expectedCurrTotalCost, expectedPrevTotalCost);
 
         if (entityType != EntityType.THREADS) {
-            assertMetric(response, KpiMetricType.ERRORS, 1.0, 1.0);
+            assertMetric(response, KpiMetricType.ERRORS, 50.0, 50.0);
         } else {
             assertNoMetric(response, KpiMetricType.ERRORS);
         }
@@ -219,7 +219,7 @@ class KpiCardsResourceTest {
         assertMetric(response, KpiMetricType.TOTAL_COST, expectedTotalCost, 0.0);
 
         if (entityType != EntityType.THREADS) {
-            assertMetric(response, KpiMetricType.ERRORS, 1.0, 0.0);
+            assertMetric(response, KpiMetricType.ERRORS, 50.0, 0.0);
         } else {
             assertNoMetric(response, KpiMetricType.ERRORS);
         }
@@ -252,7 +252,7 @@ class KpiCardsResourceTest {
         assertMetric(response, KpiMetricType.TOTAL_COST, expectedTotalCost, 0.0);
 
         if (entityType != EntityType.THREADS) {
-            assertMetric(response, KpiMetricType.ERRORS, 1.0, 0.0);
+            assertMetric(response, KpiMetricType.ERRORS, 50.0, 0.0);
         } else {
             assertNoMetric(response, KpiMetricType.ERRORS);
         }
@@ -286,7 +286,7 @@ class KpiCardsResourceTest {
         assertMetric(response, KpiMetricType.TOTAL_COST, 0.0, expectedTotalCost);
 
         if (entityType != EntityType.THREADS) {
-            assertMetric(response, KpiMetricType.ERRORS, 0.0, 1.0);
+            assertMetric(response, KpiMetricType.ERRORS, 0.0, 50.0);
         } else {
             assertNoMetric(response, KpiMetricType.ERRORS);
         }
@@ -1019,7 +1019,9 @@ class KpiCardsResourceTest {
         assertMetric(response, KpiMetricType.COUNT, (double) currentCount, (double) previousCount);
 
         if (entityType != EntityType.THREADS) {
-            assertMetric(response, KpiMetricType.ERRORS, (double) currentErrors, (double) previousErrors);
+            double expectedCurrentRate = currentCount > 0 ? (currentErrors * 100.0 / currentCount) : 0.0;
+            double expectedPreviousRate = previousCount > 0 ? (previousErrors * 100.0 / previousCount) : 0.0;
+            assertMetric(response, KpiMetricType.ERRORS, expectedCurrentRate, expectedPreviousRate);
         }
 
         assertMetric(response, KpiMetricType.AVG_DURATION,

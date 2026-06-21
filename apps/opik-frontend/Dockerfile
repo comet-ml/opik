@@ -19,6 +19,8 @@ ENV VITE_SENTRY_DSN=${SENTRY_DSN}
 ENV NODE_OPTIONS="--max-old-space-size=8192"
 
 ARG BUILD_MODE=production
+ARG BUILD_PLUGINS
+ENV VITE_FE_PLUGINS=${BUILD_PLUGINS}
 RUN npm run build -- --mode $BUILD_MODE
 
 # Create version.json for checking version
@@ -26,7 +28,7 @@ RUN printf '{"version": "%s"}\n' "$VITE_APP_VERSION" > dist/version.json
 
 # Production stage
 # Using nginx alpine image with OpenTelemetry support
-FROM nginx:1.29.8-alpine-otel AS nginx
+FROM nginx:1.30.1-alpine-otel AS nginx
 
 # Add label for later inspection
 ARG BUILD_MODE=production

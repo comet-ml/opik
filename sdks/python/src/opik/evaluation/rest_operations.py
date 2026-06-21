@@ -61,8 +61,14 @@ def get_experiment_test_cases(
             continue
 
         if item.evaluation_task_output is None:
-            LOGGER.error(
-                f"Unexpected error: Evaluation task output is None for experiment item {item.id}, skipping experiment item"
+            # Trial did not finish its happy path (task failed or
+            # scoring crashed). Stored output was stripped — nothing to
+            # re-score against. ``evaluate_resume`` would re-run such
+            # trials end-to-end; ``evaluate_experiment`` skips them.
+            LOGGER.debug(
+                "Skipping experiment item %s during re-scoring: trial did "
+                "not complete (no task output stored).",
+                item.id,
             )
             continue
 

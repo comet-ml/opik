@@ -259,10 +259,12 @@ class DatasetsCsvUploadResourceTest {
         UUID createdDatasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
 
         // Prepare CSV with special characters
-        String csvContent = "input,output\n" +
-                "\"What's the weather?\",\"It's sunny!\"\n" +
-                "\"Quote: \"\"Hello\"\"\",\"Response: \"\"Hi\"\"\"\n" +
-                "\"Comma, test\",\"Value, with, commas\"\n";
+        String csvContent = """
+                input,output
+                "What's the weather?","It's sunny!"
+                "Quote: ""Hello""\","Response: ""Hi""\"
+                "Comma, test","Value, with, commas"
+                """;
 
         // When: Upload CSV file
         try (var response = uploadCsvFile(createdDatasetId, csvContent)) {
@@ -317,9 +319,11 @@ class DatasetsCsvUploadResourceTest {
         // Prepare CSV content WITH UTF-8 BOM (0xEF 0xBB 0xBF)
         // Simulating customer's issue where CSV has BOM in first column name
         byte[] bomBytes = new byte[]{(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
-        String csvContentWithoutBom = "Standard Question,Standard Answer,Other Field\n" +
-                "\"如何强制触发4G/5G后台搜索？\",\"测试答案\",\"测试值\"\n" +
-                "\"Second question\",\"Second answer\",\"Value2\"\n";
+        String csvContentWithoutBom = """
+                Standard Question,Standard Answer,Other Field
+                "如何强制触发4G/5G后台搜索？","测试答案","测试值"
+                "Second question","Second answer","Value2"
+                """;
 
         byte[] csvBytesWithBom = new byte[bomBytes.length
                 + csvContentWithoutBom.getBytes(StandardCharsets.UTF_8).length];
@@ -369,6 +373,17 @@ class DatasetsCsvUploadResourceTest {
                             TEST_WORKSPACE);
                     assertThat(datasetAfterProcessing.status()).isEqualTo(DatasetStatus.COMPLETED);
                 });
+    }
+
+    @Test
+    @DisplayName("Upload CSV to nonexistent dataset - should return 404 Not Found")
+    void uploadCsvFile__nonexistentDataset__notFound() {
+        UUID datasetId = UUID.randomUUID();
+        String csvContent = "input,expected_output\nq1,a1\n";
+
+        try (var response = uploadCsvFile(datasetId, csvContent)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+        }
     }
 
     @ParameterizedTest

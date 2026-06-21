@@ -58,7 +58,8 @@ export class PromptCache {
   async getOrFetch(
     key: string,
     fetchFn: RefreshCallback,
-    ttlSeconds: number | null
+    ttlSeconds: number | null,
+    refreshCallback?: RefreshCallback
   ): Promise<BasePrompt | null> {
     const existing = this.entries.get(key);
     if (existing) {
@@ -70,7 +71,7 @@ export class PromptCache {
     const pending = this.inflight.get(key);
     if (pending) return pending;
 
-    const promise = this.fetchAndCache(key, fetchFn, ttlSeconds);
+    const promise = this.fetchAndCache(key, fetchFn, ttlSeconds, refreshCallback);
     this.inflight.set(key, promise);
     try {
       return await promise;
@@ -82,7 +83,8 @@ export class PromptCache {
   private async fetchAndCache(
     key: string,
     fetchFn: RefreshCallback,
-    ttlSeconds: number | null
+    ttlSeconds: number | null,
+    refreshCallback?: RefreshCallback
   ): Promise<BasePrompt | null> {
     const prompt = await fetchFn();
     if (prompt === null) return null;
@@ -92,7 +94,7 @@ export class PromptCache {
       makeCachedPrompt(
         prompt,
         ttlSeconds,
-        ttlSeconds === null ? undefined : fetchFn,
+        refreshCallback,
       ),
     );
     this.evict();
@@ -108,6 +110,24 @@ export class PromptCache {
     const idSet = new Set(ids);
     for (const [key, entry] of this.entries) {
       if (entry.prompt.id && idSet.has(entry.prompt.id)) {
+        this.entries.delete(key);
+      }
+    }
+  }
+
+  /**
+   * Drop every cached entry for the given prompt name + project scope.
+   *
+   * Used after operations that change the environment-to-version mapping (such
+   * as `setPromptEnvironments` or assigning environments during `createPrompt`)
+   * so that subsequent `getPrompt({ name, environment })` calls cannot return a
+   * stale version.
+   */
+  invalidateForPrompt(name: string, projectName: string | undefined): void {
+    const scope = projectName ?? "";
+    for (const key of this.entries.keys()) {
+      const [keyName, , keyProject] = JSON.parse(key) as string[];
+      if (keyName === name && keyProject === scope) {
         this.entries.delete(key);
       }
     }
@@ -201,9 +221,15 @@ export function buildCacheKey(
   name: string,
   commit: string | undefined,
   projectName: string | undefined,
-  templateStructure: string
+  templateStructure: string,
+  maskId?: string | null,
+  version?: string,
+  environment?: string,
 ): string {
-  return JSON.stringify([name, commit ?? "", projectName ?? "", templateStructure]);
+  // version and commit can never collide (commits are 8 hex chars, versions are "v<N>")
+  // so we reuse the same slot in the key.
+  const pin = version ?? commit ?? "";
+  return JSON.stringify([name, pin, projectName ?? "", templateStructure, environment ?? "", maskId ?? ""]);
 }
 
 export async function getOrFetch<T extends BasePrompt>(
@@ -212,9 +238,17 @@ export async function getOrFetch<T extends BasePrompt>(
   projectName: string | undefined,
   templateStructure: string,
   fetchFn: () => Promise<T | null>,
-  ttlSeconds: number = DEFAULT_TTL_SECONDS
+  ttlSeconds?: number,
+  maskId?: string | null,
+  version?: string,
+  environment?: string,
 ): Promise<T | null> {
-  const key = buildCacheKey(name, commit, projectName, templateStructure);
-  const result = await globalCache.getOrFetch(key, fetchFn, commit != null ? null : ttlSeconds);
+  // Only commit pins indefinitely. A sequential version like "v3" can be
+  // reassigned by the backend if the underlying version is deleted and
+  // recreated, so it follows the normal TTL refresh.
+  const resolvedTtl = commit != null ? null : (ttlSeconds ?? DEFAULT_TTL_SECONDS);
+  const refreshCallback = resolvedTtl !== null && !maskId ? fetchFn : undefined;
+  const key = buildCacheKey(name, commit, projectName, templateStructure, maskId, version, environment);
+  const result = await globalCache.getOrFetch(key, fetchFn, resolvedTtl, refreshCallback);
   return result as T | null;
 }

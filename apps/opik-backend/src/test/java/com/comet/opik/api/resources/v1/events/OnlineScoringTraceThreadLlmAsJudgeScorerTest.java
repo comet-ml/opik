@@ -60,6 +60,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -89,6 +90,8 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
     private AutomationRuleEvaluatorService automationRuleEvaluatorService;
     @Mock
     private com.comet.opik.api.resources.v1.events.tools.ToolRegistry toolRegistry;
+    @Mock
+    private com.comet.opik.domain.SpanService spanService;
 
     private OnlineScoringTraceThreadLlmAsJudgeScorer scorer;
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
@@ -140,7 +143,8 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
                 traceThreadService,
                 projectService,
                 automationRuleEvaluatorService,
-                toolRegistry);
+                toolRegistry,
+                spanService);
 
         projectId = UUID.randomUUID();
         ruleId = UUID.randomUUID();
@@ -514,14 +518,11 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
             when(aiProxyService.scoreTrace(any(ChatRequest.class), eq(code.model()), eq(workspaceId)))
                     .thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage(LLM_RESPONSE)).build());
             when(feedbackScoreService.scoreBatchOfThreads(any())).thenReturn(Mono.empty());
-            when(traceThreadService.setScoredAt(eq(projectId), eq(List.of(threadId)), any()))
-                    .thenReturn(Mono.empty());
 
             scorer.score(message).block();
 
             var captor = ArgumentCaptor.forClass(List.class);
             verify(feedbackScoreService).scoreBatchOfThreads(captor.capture());
-            verify(traceThreadService).setScoredAt(eq(projectId), eq(List.of(threadId)), any());
 
             assertThat(captor.getValue()).usingRecursiveComparison().isEqualTo(List.of(
                     threadScore("Relevance", BigDecimal.valueOf(4), "on-topic", project),
@@ -529,12 +530,45 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
         }
 
         @Test
+        void skipsSpanFetchWhenAgenticToolsDisabled() {
+            // Locks in the toggle gate: when isAgenticToolsEnabled=false, the scorer must NOT
+            // call spanService.getByTraceIds — that's how thread-scope evaluations preserve
+            // today's wire shape exactly (the enriched serializer omits the `spans` field on
+            // an empty list, falling back to [{role, content}, ...]).
+            var code = JsonUtils.readValue(EVALUATOR_JSON, TraceThreadLlmAsJudgeCode.class);
+            var message = sampleMessage().toBuilder().code(code).build();
+            var trace = sampleTrace();
+            var project = Project.builder().id(projectId).name("test-project").build();
+            var rule = AutomationRuleEvaluatorTraceThreadLlmAsJudge.builder()
+                    .name(ruleName)
+                    .code(code)
+                    .build();
+
+            when(traceService.search(anyInt(), any(TraceSearchCriteria.class)))
+                    .thenReturn(Flux.just(trace), Flux.empty());
+            when(traceThreadService.getThreadModelId(projectId, threadId))
+                    .thenReturn(Mono.just(threadModelId));
+            when(automationRuleEvaluatorService.findById(ruleId, Set.of(projectId), workspaceId))
+                    .thenReturn(rule);
+            when(projectService.get(projectId, workspaceId)).thenReturn(project);
+            when(llmProviderFactory.getStructuredOutputStrategy("gpt-4o"))
+                    .thenReturn(new ToolCallingStrategy());
+            when(aiProxyService.scoreTrace(any(ChatRequest.class), eq(code.model()), eq(workspaceId)))
+                    .thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage(LLM_RESPONSE)).build());
+            when(feedbackScoreService.scoreBatchOfThreads(any())).thenReturn(Mono.empty());
+            // Toggle off — the scorer should not even ask the SpanService.
+            org.mockito.Mockito.when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(false);
+
+            scorer.score(message).block();
+
+            verifyNoInteractions(spanService);
+        }
+
+        @Test
         void skipsScoringWhenThreadHasNoTraces() {
             var message = sampleMessage();
 
             when(traceService.search(anyInt(), any(TraceSearchCriteria.class))).thenReturn(Flux.empty());
-            when(traceThreadService.setScoredAt(eq(projectId), eq(List.of(threadId)), any()))
-                    .thenReturn(Mono.empty());
 
             scorer.score(message).block();
 
@@ -552,8 +586,6 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
             when(traceService.search(anyInt(), any(TraceSearchCriteria.class)))
                     .thenReturn(Flux.just(sampleTrace()), Flux.empty());
             when(traceThreadService.getThreadModelId(projectId, threadId)).thenReturn(Mono.empty());
-            when(traceThreadService.setScoredAt(eq(projectId), eq(List.of(threadId)), any()))
-                    .thenReturn(Mono.empty());
 
             scorer.score(message).block();
 
@@ -572,8 +604,6 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
             when(traceThreadService.getThreadModelId(projectId, threadId)).thenReturn(Mono.just(threadModelId));
             when(automationRuleEvaluatorService.findById(ruleId, Set.of(projectId), workspaceId))
                     .thenThrow(new NotFoundException("rule not found"));
-            when(traceThreadService.setScoredAt(eq(projectId), eq(List.of(threadId)), any()))
-                    .thenReturn(Mono.empty());
 
             scorer.score(message).block();
 

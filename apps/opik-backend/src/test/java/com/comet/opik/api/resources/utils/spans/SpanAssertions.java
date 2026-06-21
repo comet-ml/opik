@@ -59,7 +59,7 @@ public class SpanAssertions {
             "totalEstimatedCostVersion", "comments"};
 
     public static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
-            "valueByAuthor"};
+            "valueByAuthor", "sourceQueueId"};
 
     /**
      * Prepares a span for assertion by injecting provider into metadata if provider is set.

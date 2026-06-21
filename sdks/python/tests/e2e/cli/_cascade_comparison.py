@@ -24,7 +24,7 @@ to the source/dest dataset_item_id pairing the cascade builds):
 
 Traces (paired via cascade's trace_id_remap):
   - name, input, output, metadata, tags, start_time, end_time,
-    thread_id, error_info, ttft
+    thread_id, error_info, ttft, environment
   - feedback_scores compared as a set keyed by (name, value, reason, source)
 
 Spans (tree-aware):
@@ -33,7 +33,7 @@ Spans (tree-aware):
     walking in lockstep
   - per-span: name, type, input, output, metadata, model, provider,
     tags, usage, start_time, end_time, error_info, ttft,
-    total_estimated_cost
+    total_estimated_cost, environment
   - feedback_scores on spans compared as a set
 
 What's NOT compared (intentional)
@@ -223,6 +223,7 @@ _TRACE_DIRECT_FIELDS: Tuple[str, ...] = (
     "tags",
     "thread_id",
     "ttft",
+    "environment",
 )
 
 
@@ -284,6 +285,7 @@ _SPAN_DIRECT_FIELDS: Tuple[str, ...] = (
     "usage",
     "total_estimated_cost",
     "ttft",
+    "environment",
 )
 
 

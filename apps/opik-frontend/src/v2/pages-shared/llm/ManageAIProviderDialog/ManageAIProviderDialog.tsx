@@ -28,6 +28,8 @@ import useProviderKeysCreateMutation from "@/api/provider-keys/useProviderKeysCr
 import {
   createAIProviderFormSchema,
   AIProviderFormType,
+  DEFAULT_OPENAI_PIPELINE_MODE,
+  normalizeOpenAiPipelineMode,
 } from "@/v2/pages-shared/llm/ManageAIProviderDialog/schema";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
@@ -134,6 +136,9 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       authHeaderName: providerKey?.configuration?.auth_header_name ?? "",
       suppressDefaultAuth:
         providerKey?.configuration?.suppress_default_auth === "true",
+      openaiPipelineMode: normalizeOpenAiPipelineMode(
+        providerKey?.configuration?.openai_pipeline_mode,
+      ),
     } as AIProviderFormType,
   });
 
@@ -182,6 +187,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       queryParams: [],
       authHeaderName: "",
       suppressDefaultAuth: false,
+      openaiPipelineMode: DEFAULT_OPENAI_PIPELINE_MODE,
     });
     setStep("select");
   }, [form]);
@@ -235,6 +241,12 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
         "suppressDefaultAuth",
         providerData?.configuration?.suppress_default_auth === "true",
       );
+      form.setValue(
+        "openaiPipelineMode",
+        normalizeOpenAiPipelineMode(
+          providerData?.configuration?.openai_pipeline_mode,
+        ),
+      );
 
       form.setValue("provider", providerType);
       form.setValue("composedProviderType", composedProviderType);
@@ -269,6 +281,7 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     const isCustom = provider === PROVIDER_TYPE.CUSTOM;
     const isBedrock = provider === PROVIDER_TYPE.BEDROCK;
     const isOllama = provider === PROVIDER_TYPE.OLLAMA;
+    const isOpenAi = provider === PROVIDER_TYPE.OPEN_AI;
     const isCustomLike = isCustom || isBedrock || isOllama;
 
     const queryParamsArray = form.getValues("queryParams");
@@ -284,14 +297,23 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     const suppressDefaultAuthValue =
       isCustomLike && suppressDefaultAuth === true ? "true" : undefined;
 
+    // Always send the explicit openai_pipeline_mode on OpenAI keys, so switching back to
+    // chat_completions_api persists (otherwise an omitted key could leave a previously stored
+    // responses_api value untouched). The field is always seeded for the OpenAI branch by
+    // defaultValues/resetSelectionState/handleProviderSelect, so the assertion is safe.
+    const openaiPipelineModeValue = isOpenAi
+      ? form.getValues("openaiPipelineMode")!
+      : undefined;
+
     const configuration =
-      isVertex || isCustomLike
+      isVertex || isCustomLike || isOpenAi
         ? {
             location: isVertex ? location : undefined,
             models: isCustomLike ? models : undefined,
             url_query_params: urlQueryParamsString,
             auth_header_name: authHeaderNameValue,
             suppress_default_auth: suppressDefaultAuthValue,
+            openai_pipeline_mode: openaiPipelineModeValue,
           }
         : undefined;
 
@@ -381,7 +403,10 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-lg sm:max-w-[720px]">
+      <DialogContent
+        data-testid="add-provider-dialog"
+        className="max-w-lg sm:max-w-[720px]"
+      >
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
