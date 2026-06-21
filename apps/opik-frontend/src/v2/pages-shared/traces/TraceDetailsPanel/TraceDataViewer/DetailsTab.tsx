@@ -40,6 +40,7 @@ const DetailsTab: React.FunctionComponent<DetailsTabProps> = ({
             preserveKey="syntax-highlighter-trace-sidebar-input"
             search={search}
             withSearch
+            quickFilterSection="input"
           />
         )}
         {isLoading ? (
@@ -54,6 +55,7 @@ const DetailsTab: React.FunctionComponent<DetailsTabProps> = ({
             preserveKey="syntax-highlighter-trace-sidebar-output"
             search={search}
             withSearch
+            quickFilterSection="output"
           />
         )}
         <EventsList data={data} isLoading={isLoading} search={search} />
@@ -63,6 +65,7 @@ const DetailsTab: React.FunctionComponent<DetailsTabProps> = ({
             withSearch
             data={data.metadata}
             search={search}
+            quickFilterSection="metadata"
           />
         )}
         {hasTokenUsage && (
