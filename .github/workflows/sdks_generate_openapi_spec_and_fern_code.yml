@@ -171,7 +171,7 @@ jobs:
     if: >-
       !failure() &&
       github.event_name == 'push' &&
-      needs.update-open-api-spec-and-fern-code.outputs.pr_operation == 'created'
+      contains(fromJSON('["created", "updated"]'), needs.update-open-api-spec-and-fern-code.outputs.pr_operation)
 
     steps:
       - name: Checkout
@@ -202,7 +202,6 @@ jobs:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN_CODE_REVIEW }}
           SLACK_CODE_REVIEW_CHANNEL_ID: ${{ secrets.SLACK_CODE_REVIEW_CHANNEL_ID }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          WORKFLOW_FILE: sdks_generate_openapi_spec_and_fern_code.yml
           STATE_ARTIFACT_NAME: slack-thread-state
           STATE_FILE: slack_code_review_fern_prs.json
           PR_URL: ${{ needs.update-open-api-spec-and-fern-code.outputs.pr_url }}

@@ -13,7 +13,6 @@
 #   GH_TOKEN                       — token with actions:read (download prior artifact)
 #   GITHUB_REPOSITORY              — owner/repo (set by GitHub Actions)
 #   GITHUB_SHA                     — commit SHA (set by GitHub Actions)
-#   WORKFLOW_FILE                  — this workflow's filename (to find prior runs)
 #   STATE_ARTIFACT_NAME            — artifact name holding the thread state
 #   STATE_FILE                     — JSON filename inside the artifact / to write back
 #   PR_URL                         — URL of the FERN PR
@@ -38,13 +37,16 @@ if [ -n "$MISSING" ]; then
   exit 0
 fi
 
-# Resolve the day's thread ts from the previous run's artifact (absent = first post of the day).
+# Resolve the day's thread ts from the most recent state artifact. Each run uploads its
+# own artifact, so we ask for the latest one by name (the API returns artifacts newest
+# first) rather than the latest run, which may have uploaded nothing. None / expired ->
+# first post of the day / fresh thread.
 THREAD_TS=""
-PREV_RUN_ID="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WORKFLOW_FILE" \
-  --status success --limit 1 --json databaseId --jq '.[0].databaseId' 2>/dev/null || echo "")"
-if [ -n "$PREV_RUN_ID" ]; then
-  if gh run download "$PREV_RUN_ID" --repo "$GITHUB_REPOSITORY" \
-      --name "$STATE_ARTIFACT_NAME" --dir /tmp/fern-state 2>/dev/null; then
+ARTIFACT_ID="$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$STATE_ARTIFACT_NAME&per_page=1" \
+  --jq '.artifacts[0] | select(.expired == false) | .id' 2>/dev/null || echo "")"
+if [ -n "$ARTIFACT_ID" ] && [ "$ARTIFACT_ID" != "null" ]; then
+  if gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" > /tmp/fern-state.zip 2>/dev/null \
+      && unzip -o -q /tmp/fern-state.zip -d /tmp/fern-state 2>/dev/null; then
     PREV_DATE="$(jq -r '.date // ""' "/tmp/fern-state/$STATE_FILE" 2>/dev/null || echo "")"
     if [ "$PREV_DATE" = "$TODAY" ]; then
       THREAD_TS="$(jq -r '.ts // ""' "/tmp/fern-state/$STATE_FILE" 2>/dev/null || echo "")"
