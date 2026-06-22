@@ -4,7 +4,7 @@ import {
   AGENT_INSIGHTS_ISSUE_STATUS,
   AgentInsightsIssue,
 } from "@/types/signals";
-import { Boxes, Radar } from "lucide-react";
+import { Boxes, Radar, Sparkles } from "lucide-react";
 import { Sorting } from "@/types/sorting";
 import useAgentInsightsIssuesList from "@/api/signals/useAgentInsightsIssuesList";
 import Loader from "@/shared/Loader/Loader";
@@ -52,18 +52,37 @@ const RunningBar: React.FC = () => (
   </div>
 );
 
+const DETAIL_SUBTITLE =
+  "You'll see a summary, affected traces, and Ollie's suggested fix.";
+
+// Empty detail pane shown alongside the running / all-clear list states.
+const DetailPlaceholder: React.FC = () => (
+  <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-3 rounded-md border bg-background p-6 text-center">
+    <Boxes className="size-12 text-light-slate" strokeWidth={1.25} />
+    <div className="flex flex-col gap-1">
+      <span className="comet-body-s-accented text-foreground">
+        Your issue details will appear here
+      </span>
+      <span className="comet-body-xs text-muted-slate">{DETAIL_SUBTITLE}</span>
+    </div>
+  </div>
+);
+
 type IssuesTabProps = {
   projectId: string;
   showResolved?: boolean;
   // A diagnostic is in flight — shown as the first-run progress state when no
   // issues exist yet.
   isRunning?: boolean;
+  // Trigger a new run (used by the "All clear" state's link).
+  onRunDiagnostic?: () => void;
 };
 
 const IssuesTab: React.FC<IssuesTabProps> = ({
   projectId,
   showResolved = false,
   isRunning = false,
+  onRunDiagnostic,
 }) => {
   const status = showResolved
     ? AGENT_INSIGHTS_ISSUE_STATUS.resolved
@@ -116,8 +135,7 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
   }
 
   if (!issues.length) {
-    // First run with nothing reported yet: show progress in the list column and
-    // the empty detail placeholder, instead of the generic no-data state.
+    // A diagnostic is in flight and nothing is reported yet → first-run progress.
     if (isRunning) {
       return (
         <div className="flex min-h-[500px] gap-2">
@@ -138,33 +156,55 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
               <RunningBar />
             </div>
           </div>
-
-          <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-3 rounded-md border bg-background p-6 text-center">
-            <Boxes className="size-12 text-light-slate" strokeWidth={1.25} />
-            <div className="flex flex-col gap-1">
-              <span className="comet-body-s-accented text-foreground">
-                Select an issue to see details
-              </span>
-              <span className="comet-body-xs text-muted-slate">
-                You&apos;ll see a summary, affected traces, and Ollie&apos;s
-                suggested fix.
-              </span>
-            </div>
-          </div>
+          <DetailPlaceholder />
         </div>
       );
     }
 
+    // Resolved tab with nothing resolved yet.
+    if (showResolved) {
+      return (
+        <NoData
+          title="No resolved issues"
+          message="Issues you resolve will show up here."
+          className="h-[400px]"
+        />
+      );
+    }
+
+    // Diagnostics ran but found no open issues → all clear.
     return (
-      <NoData
-        title={showResolved ? "No resolved issues" : "No open issues"}
-        message={
-          showResolved
-            ? "Issues you resolve will show up here."
-            : "Once we scan your traces, detected issues will show up here."
-        }
-        className="h-[400px]"
-      />
+      <div className="flex min-h-[500px] gap-2">
+        <div className="flex w-[360px] shrink-0 flex-col overflow-hidden rounded-md border bg-background">
+          <div className="flex h-10 items-center border-b border-border bg-[#F8FAFC] px-4">
+            <span className="comet-body-xs-accented">Issues</span>
+          </div>
+          <div className="flex flex-1 flex-col justify-center gap-3 p-5">
+            <div className="flex size-8 items-center justify-center rounded-lg bg-sky-100">
+              <Sparkles className="size-4 text-sky-500" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="comet-body-s-accented text-foreground">
+                All clear
+              </span>
+              <span className="comet-body-xs text-muted-slate">
+                Run a new diagnostic to check for anything new.
+              </span>
+            </div>
+            {onRunDiagnostic && (
+              <button
+                type="button"
+                onClick={onRunDiagnostic}
+                className="comet-body-xs-accented flex items-center gap-1.5 text-[var(--color-primary)] hover:underline"
+              >
+                <Radar className="size-3.5" />
+                Run diagnostic
+              </button>
+            )}
+          </div>
+        </div>
+        <DetailPlaceholder />
+      </div>
     );
   }
 

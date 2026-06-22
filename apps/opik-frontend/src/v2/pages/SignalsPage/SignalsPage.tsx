@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Navigate, useParams } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { BookCheck, Loader2, Radar } from "lucide-react";
+import { BookCheck, Radar } from "lucide-react";
 import { useActiveProjectId } from "@/store/AppStore";
 import usePluginsStore from "@/store/PluginsStore";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
@@ -142,48 +142,43 @@ const SignalsPage: React.FC = () => {
 
     return (
       <div className="flex flex-col gap-4 px-6 pb-6">
-        <SignalsStatsCards
-          tracesAffected={stats.tracesAffected}
-          openIssues={stats.openIssues}
-          resolved={stats.resolved}
-          isPending={isStatsPending}
-          hasData={hasData}
-        />
+        {/* Stats are only meaningful once a run has produced issues. */}
+        {hasData && (
+          <SignalsStatsCards
+            tracesAffected={stats.tracesAffected}
+            openIssues={stats.openIssues}
+            resolved={stats.resolved}
+            isPending={isStatsPending}
+            hasData={hasData}
+          />
+        )}
 
-        <div className="flex items-center justify-between gap-2">
-          <span className="comet-body-xs text-light-slate">
-            {hasData ? "" : "No runs yet"}
-          </span>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="xs"
-              disabled={isRunning || triggerMutation.isPending}
-              onClick={handleRunDiagnostic}
-            >
-              {isRunning ? (
-                <Loader2 className="mr-1.5 size-3.5 animate-spin" />
-              ) : (
-                <Radar className="mr-1.5 size-3.5" />
-              )}
-              {isRunning ? "Running…" : "Run diagnostic"}
-            </Button>
-            <Separator orientation="vertical" className="h-5" />
-            <Button
-              variant={showResolved ? "secondary" : "outline"}
-              size="xs"
-              onClick={() => setShowResolved((v) => !v)}
-            >
-              <BookCheck className="mr-1.5 size-3.5" />
-              Resolved issues
-            </Button>
-          </div>
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            variant="outline"
+            size="xs"
+            disabled={isRunning || triggerMutation.isPending}
+            onClick={handleRunDiagnostic}
+          >
+            <Radar className="mr-1.5 size-3.5" />
+            Run diagnostic
+          </Button>
+          <Separator orientation="vertical" className="h-5" />
+          <Button
+            variant={showResolved ? "secondary" : "outline"}
+            size="xs"
+            onClick={() => setShowResolved((v) => !v)}
+          >
+            <BookCheck className="mr-1.5 size-3.5" />
+            Resolved issues
+          </Button>
         </div>
 
         <IssuesTab
           projectId={projectId}
           showResolved={showResolved}
           isRunning={isRunning}
+          onRunDiagnostic={handleRunDiagnostic}
         />
       </div>
     );
