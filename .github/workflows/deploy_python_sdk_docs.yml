@@ -26,16 +26,6 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: ${{ vars.AWS_REGION }}
         run: |
-          echo $AWS_ACCESS_KEY_ID  $AWS_SECRET_ACCESS_KEY | base64
-          aws sts get-caller-identity
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v6
-        with:
-          role-to-assume: ${{ vars.AWS_OPIK_CDN_ROLE }}
-          aws-region: ${{ vars.AWS_REGION}}
-
-      - name: Verify AWS credentials
-        run: |
           aws sts get-caller-identity
           aws s3 ls s3://site.comet.com/${{ inputs.environment }}/docs-opik/python-sdk-reference/
 
@@ -55,11 +45,8 @@ jobs:
             source .venv/bin/activate
             make build
 
-      
-
-
       - name: Upload sdk docs to site.comet.com (${{ inputs.environment }})
         run: |
           aws s3 sync apps/opik-documentation/python-sdk-docs/build/html \
             s3://site.comet.com/${{ inputs.environment }}/docs-opik/python-sdk-reference \
-            --follow-symlinks --delete --exclude '.git*'
+            --follow-symlinks --no-progress --delete --exclude '.git*'
