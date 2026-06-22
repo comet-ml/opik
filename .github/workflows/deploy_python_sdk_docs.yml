@@ -35,7 +35,11 @@ jobs:
             uv pip install ../../../sdks/python
             source .venv/bin/activate
             make build
-      
+
+      - name: Verify AWS credentials
+        run: |
+          aws sts get-caller-identity
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
         with:
