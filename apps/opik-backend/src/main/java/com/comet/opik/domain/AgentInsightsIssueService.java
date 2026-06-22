@@ -73,18 +73,14 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
 
         projectService.get(report.projectId(), workspaceId);
 
-        // An "all clear" report (no issues detected) is a valid outcome: validate
-        // the project, then return without touching the DB. Skipping the batch
-        // writes also avoids empty-batch failures in the DAO.
-        if (report.issues().isEmpty()) {
-            log.info(
-                    "No agent insights issues to store for project '{}' on report day '{}' in workspace '{}' (all clear)",
-                    report.projectId(), report.reportDay(), workspaceId);
-            return;
-        }
+        // An "all clear" report (no issues detected) is a valid outcome: skip the
+        // issue writes (also avoids empty-batch failures in the DAO) but still
+        // stamp the scan time below so the UI shows when the run last completed.
+        boolean allClear = report.issues().isEmpty();
 
-        log.info("Storing '{}' agent insights issues for project '{}' on report day '{}' in workspace '{}'",
-                report.issues().size(), report.projectId(), report.reportDay(), workspaceId);
+        log.info("{} agent insights issues for project '{}' on report day '{}' in workspace '{}'",
+                allClear ? "No (all clear)" : report.issues().size(), report.projectId(), report.reportDay(),
+                workspaceId);
 
         List<UUID> issueIds = report.issues().stream()
                 .map(issue -> issue.id() != null ? issue.id() : idGenerator.generateId())
@@ -99,9 +95,14 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
         transactionTemplate.inTransaction(WRITE, handle -> {
             AgentInsightsIssueDAO dao = handle.attach(AgentInsightsIssueDAO.class);
 
-            dao.upsertIssues(workspaceId, report.projectId(), userName, issueIds, report.issues());
-            dao.upsertDetails(workspaceId, report.projectId(), report.reportDay(), userName,
-                    detailIds, issueIds, report.issues(), metadata);
+            if (!allClear) {
+                dao.upsertIssues(workspaceId, report.projectId(), userName, issueIds, report.issues());
+                dao.upsertDetails(workspaceId, report.projectId(), report.reportDay(), userName,
+                        detailIds, issueIds, report.issues(), metadata);
+            }
+
+            // Record when this project was last scanned (no-op if it has no job row).
+            handle.attach(AgentInsightsJobDAO.class).markScanned(workspaceId, report.projectId());
 
             return null;
         });
