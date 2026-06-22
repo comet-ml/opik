@@ -113,11 +113,13 @@ export const getLastCommentByUser = (
 export const getCommentsByUser = (
   comments: CommentItems | undefined,
   userName: string | undefined,
+  sourceQueueId?: string,
 ): string[] => {
   if (!comments || !userName) return [];
 
   return comments
     .filter((comment) => comment.created_by === userName)
+    .filter((comment) => !sourceQueueId || comment.source_queue_id === sourceQueueId)
     .map((comment) => comment.text);
 };
 

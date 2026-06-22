@@ -741,6 +741,7 @@ class TraceDAOImpl implements TraceDAO {
                             last_updated_at,
                             created_by,
                             last_updated_by,
+                            source_queue_id,
                             entity_id
                         FROM comments
                         WHERE workspace_id = :workspace_id
@@ -1158,7 +1159,7 @@ class TraceDAOImpl implements TraceDAO {
             ), comments_agg AS (
                 SELECT
                     entity_id,
-                    groupArray(tuple(id, text, created_at, last_updated_at, created_by, last_updated_by)) AS comments_array
+                    groupArray(tuple(id, text, created_at, last_updated_at, created_by, last_updated_by, source_queue_id)) AS comments_array
                 FROM (
                     SELECT
                         id,
@@ -1167,6 +1168,7 @@ class TraceDAOImpl implements TraceDAO {
                         last_updated_at,
                         created_by,
                         last_updated_by,
+                        source_queue_id,
                         entity_id,
                         workspace_id,
                         project_id
