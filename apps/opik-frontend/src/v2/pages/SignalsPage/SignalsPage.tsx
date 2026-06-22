@@ -138,51 +138,53 @@ const SignalsPage: React.FC = () => {
       );
     }
 
+    const hasData = (issuesData?.content?.length ?? 0) > 0;
+
     return (
       <div className="flex flex-col gap-4 px-6 pb-6">
-        {isRunning && (
-          <div className="flex items-center gap-2 rounded-md border border-border bg-muted/50 px-4 py-3">
-            <Loader2 className="size-4 shrink-0 animate-spin text-[var(--color-primary)]" />
-            <span className="comet-body-s text-muted-slate">
-              Running diagnostic — analysing the last 24h of traces. New issues
-              will appear here when it&apos;s done.
-            </span>
-          </div>
-        )}
-
         <SignalsStatsCards
           tracesAffected={stats.tracesAffected}
           openIssues={stats.openIssues}
           resolved={stats.resolved}
           isPending={isStatsPending}
+          hasData={hasData}
         />
 
-        <div className="flex items-center justify-end gap-2">
-          <Button
-            variant="outline"
-            size="xs"
-            disabled={isRunning || triggerMutation.isPending}
-            onClick={handleRunDiagnostic}
-          >
-            {isRunning ? (
-              <Loader2 className="mr-1.5 size-3.5 animate-spin" />
-            ) : (
-              <Radar className="mr-1.5 size-3.5" />
-            )}
-            {isRunning ? "Running…" : "Run diagnostic"}
-          </Button>
-          <Separator orientation="vertical" className="h-5" />
-          <Button
-            variant={showResolved ? "secondary" : "outline"}
-            size="xs"
-            onClick={() => setShowResolved((v) => !v)}
-          >
-            <BookCheck className="mr-1.5 size-3.5" />
-            Resolved issues
-          </Button>
+        <div className="flex items-center justify-between gap-2">
+          <span className="comet-body-xs text-light-slate">
+            {hasData ? "" : "No runs yet"}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="xs"
+              disabled={isRunning || triggerMutation.isPending}
+              onClick={handleRunDiagnostic}
+            >
+              {isRunning ? (
+                <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+              ) : (
+                <Radar className="mr-1.5 size-3.5" />
+              )}
+              {isRunning ? "Running…" : "Run diagnostic"}
+            </Button>
+            <Separator orientation="vertical" className="h-5" />
+            <Button
+              variant={showResolved ? "secondary" : "outline"}
+              size="xs"
+              onClick={() => setShowResolved((v) => !v)}
+            >
+              <BookCheck className="mr-1.5 size-3.5" />
+              Resolved issues
+            </Button>
+          </div>
         </div>
 
-        <IssuesTab projectId={projectId} showResolved={showResolved} />
+        <IssuesTab
+          projectId={projectId}
+          showResolved={showResolved}
+          isRunning={isRunning}
+        />
       </div>
     );
   };
@@ -194,6 +196,12 @@ const SignalsPage: React.FC = () => {
         direction="horizontal"
       >
         <h1 className="comet-title-l truncate break-words">Diagnostics</h1>
+        {(isJobEnabled || isRunning) && (
+          <span className="comet-body-xs flex items-center gap-1.5 text-muted-slate">
+            <span className="size-1.5 rounded-full bg-emerald-400" />
+            Active
+          </span>
+        )}
       </PageBodyStickyContainer>
       {renderBody()}
     </PageBodyScrollContainer>

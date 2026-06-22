@@ -6,7 +6,7 @@ import { Skeleton } from "@/ui/skeleton";
 type StatCardProps = {
   icon: React.ElementType;
   label: string;
-  value: number;
+  value: string | number;
 };
 
 const StatCard: React.FC<StatCardProps> = ({ icon: Icon, label, value }) => (
@@ -15,7 +15,9 @@ const StatCard: React.FC<StatCardProps> = ({ icon: Icon, label, value }) => (
       <Icon className="size-3.5" />
       <span className="comet-body-xs">{label}</span>
     </div>
-    <div className="comet-body-accented">{value.toLocaleString()}</div>
+    <div className="comet-body-accented">
+      {typeof value === "number" ? value.toLocaleString() : value}
+    </div>
   </Card>
 );
 
@@ -24,6 +26,8 @@ type SignalsStatsCardsProps = {
   openIssues: number;
   resolved: number;
   isPending: boolean;
+  // No completed diagnostic yet → show a placeholder dash instead of zeros.
+  hasData: boolean;
 };
 
 const SignalsStatsCards: React.FC<SignalsStatsCardsProps> = ({
@@ -31,6 +35,7 @@ const SignalsStatsCards: React.FC<SignalsStatsCardsProps> = ({
   openIssues,
   resolved,
   isPending,
+  hasData,
 }) => {
   if (isPending) {
     return (
@@ -42,11 +47,25 @@ const SignalsStatsCards: React.FC<SignalsStatsCardsProps> = ({
     );
   }
 
+  const dash = "-";
+
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-      <StatCard icon={Hash} label="Traces affected" value={tracesAffected} />
-      <StatCard icon={BugPlay} label="Open issues" value={openIssues} />
-      <StatCard icon={Hammer} label="Resolved" value={resolved} />
+      <StatCard
+        icon={Hash}
+        label="Affected traces"
+        value={hasData ? tracesAffected : dash}
+      />
+      <StatCard
+        icon={BugPlay}
+        label="Open issues"
+        value={hasData ? openIssues : dash}
+      />
+      <StatCard
+        icon={Hammer}
+        label="Resolved this week"
+        value={hasData ? resolved : dash}
+      />
     </div>
   );
 };
