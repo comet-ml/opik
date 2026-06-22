@@ -88,6 +88,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
     private WorkspaceNameService workspaceNameService;
     @Mock
     private OpikConfiguration opikConfiguration;
+    @Mock
+    private com.comet.opik.domain.attachment.AttachmentService attachmentService;
 
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
     private OnlineScoringLlmAsJudgeScorer scorer;
@@ -136,7 +138,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 toolRegistry,
                 traceCompressor,
                 workspaceNameService,
-                opikConfiguration);
+                opikConfiguration,
+                attachmentService);
     }
 
     @AfterEach
@@ -243,30 +246,37 @@ class OnlineScoringLlmAsJudgeScorerTest {
         // AND the provider supports tool-calling. Without the provider check, a non-tool-calling
         // model selected via test_suite_model metadata would crash inside the chat call when the
         // request carries tool specs (Logical bug surfaced by review of the experimentId path).
-        @ParameterizedTest(name = "expId={0}, toggle={1}, tokens={2}, threshold={3}, provider={4} → expected useTools={5}")
+        @ParameterizedTest(name = "expId={0}, toggle={1}, tokens={2}, threshold={3}, provider={4}, attachments={5} → expected useTools={6}")
         @CsvSource({
                 // experimentId path → tools when provider supports them
-                "true,  false, 0,     50000, OPEN_AI, true",
-                "true,  true,  60000, 50000, OPEN_AI, true",
+                "true,  false, 0,     50000, OPEN_AI, false, true",
+                "true,  true,  60000, 50000, OPEN_AI, false, true",
                 // experimentId set BUT provider doesn't support tools → fall back to inline with a warn
                 // (assertions that depend on tool-driven span inspection won't be reliable for this model;
                 // we surface the misconfig loudly rather than crash inside the chat call).
-                "true,  true,  60000, 50000, OLLAMA,  false",
+                "true,  true,  60000, 50000, OLLAMA,  false, false",
                 // size-based path — all three preconditions must hold
-                "false, true,  60000, 50000, OPEN_AI, true",
-                "false, true,  50000, 50000, OPEN_AI, true",
+                "false, true,  60000, 50000, OPEN_AI, false, true",
+                "false, true,  50000, 50000, OPEN_AI, false, true",
                 // below threshold → inline
-                "false, true,  49999, 50000, OPEN_AI, false",
+                "false, true,  49999, 50000, OPEN_AI, false, false",
                 // toggle off → inline even on huge contexts
-                "false, false, 60000, 50000, OPEN_AI, false",
+                "false, false, 60000, 50000, OPEN_AI, false, false",
                 // provider doesn't support tool calling → inline (operator must pick a different model)
-                "false, true,  60000, 50000, OLLAMA,  false",
+                "false, true,  60000, 50000, OLLAMA,  false, false",
                 // no preconditions met
-                "false, false, 0,     50000, OPEN_AI, false",
+                "false, false, 0,     50000, OPEN_AI, false, false",
+                // attachment-driven path (OPIK-6555): toggle on + provider supports tools + below size
+                // threshold → tools fire so the judge can call get_attachment
+                "false, true,  0,     50000, OPEN_AI, true,  true",
+                // attachments but toggle off → inline (whole agentic feature is gated by the toggle)
+                "false, false, 0,     50000, OPEN_AI, true,  false",
+                // attachments but provider can't do tools → inline (internal warn, attachments unusable)
+                "false, true,  0,     50000, OLLAMA,  true,  false",
         })
         void gateMatchesTruthTable(
                 boolean hasExperimentId, boolean toggleEnabled, int estimatedTokens,
-                int thresholdTokens, LlmProvider provider, boolean expectedUseTools) {
+                int thresholdTokens, LlmProvider provider, boolean hasAttachments, boolean expectedUseTools) {
             String modelName = "gpt-test";
             TraceToScoreLlmAsJudge message = hasExperimentId
                     ? newMessage(UUID.randomUUID())
@@ -275,7 +285,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
             lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(thresholdTokens);
             lenient().when(llmProviderFactory.getLlmProvider(modelName)).thenReturn(provider);
 
-            boolean useTools = scorer.shouldUseAgenticTools(message, estimatedTokens, modelName);
+            boolean useTools = scorer.shouldUseAgenticTools(message, estimatedTokens, modelName, hasAttachments);
 
             assertThat(useTools).isEqualTo(expectedUseTools);
         }

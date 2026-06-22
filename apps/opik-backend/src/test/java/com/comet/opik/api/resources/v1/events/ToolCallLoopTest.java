@@ -1,6 +1,8 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.resources.v1.events.tools.MediaCategory;
+import com.comet.opik.api.resources.v1.events.tools.MediaPayload;
 import com.comet.opik.api.resources.v1.events.tools.ToolExecutor;
 import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
 import com.comet.opik.api.resources.v1.events.tools.TraceToolContext;
@@ -8,6 +10,7 @@ import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.ChatRequest;
@@ -15,6 +18,7 @@ import dev.langchain4j.model.chat.request.ChatRequestParameters;
 import dev.langchain4j.model.chat.request.ToolChoice;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 
@@ -242,6 +246,77 @@ class ToolCallLoopTest {
         assertThat(resultNames).containsExactly("a", "b", "c");
     }
 
+    @Test
+    void stagedMediaIsAppendedAsUserMessageAfterToolResults() {
+        // A tool (get_attachment) that stages media must result in ONE multimodal UserMessage
+        // appended AFTER the round's ToolExecutionResultMessage(s) — the assistant(tool_calls)
+        // → tool results → user(media) ordering both providers require. The text receipt the
+        // tool returns is the tool-result message; the media rides in the trailing UserMessage.
+        ToolExecutionRequest toolReq = ToolExecutionRequest.builder()
+                .id("t").name(TOOL_NAME).arguments("{}").build();
+        ChatResponse round0 = ChatResponse.builder()
+                .aiMessage(AiMessage.from(List.of(toolReq))).build();
+        ChatResponse done = ChatResponse.builder()
+                .aiMessage(AiMessage.from("ok")).build();
+
+        ToolExecutor mediaTool = new ToolExecutor() {
+            @Override
+            public String name() {
+                return TOOL_NAME;
+            }
+
+            @Override
+            public ToolSpecification spec() {
+                return stubSpec(TOOL_NAME);
+            }
+
+            @Override
+            public Mono<String> execute(String arguments, TraceToolContext c) {
+                String fileName = "img-" + RandomStringUtils.secure().nextAlphanumeric(8) + ".png";
+                String base64 = RandomStringUtils.secure().nextAlphanumeric(16);
+                c.stageMedia(MediaPayload.ofBase64(fileName, "image/png", MediaCategory.IMAGE, base64));
+                return Mono.just("{\"loaded\":true}");
+            }
+        };
+
+        var messages = new ArrayList<ChatMessage>(List.of(UserMessage.from("score")));
+        var budget = new ToolCallLoop.Budget();
+
+        ToolCallLoop.run(round0, baseRequest(), followUpParams(), registry(mediaTool),
+                req -> Mono.just(done), messages, ctx(), budget, "trace-id", Map.of()).block();
+
+        // Order: UserMessage(score), AiMessage(tool calls), ToolResult, UserMessage(media),
+        // terminal AiMessage(done) = 5.
+        assertThat(messages).hasSize(5);
+        assertThat(messages.get(2)).isInstanceOf(ToolExecutionResultMessage.class);
+        assertThat(messages.get(3)).isInstanceOf(UserMessage.class);
+        UserMessage mediaMessage = (UserMessage) messages.get(3);
+        assertThat(mediaMessage.contents()).anyMatch(content -> content instanceof ImageContent);
+    }
+
+    @Test
+    void noMediaMessageAppendedWhenToolsStageNothing() {
+        // Tools that stage no media must not introduce a trailing UserMessage — the drain is a
+        // no-op when nothing was staged.
+        ToolExecutionRequest toolReq = ToolExecutionRequest.builder()
+                .id("t").name(TOOL_NAME).arguments("{}").build();
+        ChatResponse round0 = ChatResponse.builder()
+                .aiMessage(AiMessage.from(List.of(toolReq))).build();
+        ChatResponse done = ChatResponse.builder()
+                .aiMessage(AiMessage.from("ok")).build();
+
+        var messages = new ArrayList<ChatMessage>(List.of(UserMessage.from("score")));
+        var budget = new ToolCallLoop.Budget();
+
+        ToolCallLoop.run(round0, baseRequest(), followUpParams(), registry(stubTool(TOOL_NAME, "res")),
+                req -> Mono.just(done), messages, ctx(), budget, "trace-id", Map.of()).block();
+
+        // UserMessage(score), AiMessage(tool calls), ToolResult, terminal AiMessage(done) = 4.
+        // No extra UserMessage between the tool result and the terminal AiMessage.
+        assertThat(messages).hasSize(4);
+        assertThat(messages.stream().filter(m -> m instanceof UserMessage)).hasSize(1);
+    }
+
     // --- helpers ---
 
     private static ChatRequest baseRequest() {
@@ -262,11 +337,13 @@ class ToolCallLoopTest {
     private static TraceToolContext ctx() {
         Trace trace = Trace.builder()
                 .id(UUID.randomUUID())
-                .projectName("p")
-                .name("trace")
+                .projectName("p-" + RandomStringUtils.secure().nextAlphanumeric(8))
+                .name("trace-" + RandomStringUtils.secure().nextAlphanumeric(8))
                 .startTime(Instant.now())
                 .build();
-        return TraceToolContext.forActiveTrace(trace, List.of(), "ws", "user");
+        return TraceToolContext.forActiveTrace(trace, List.of(),
+                "ws-" + RandomStringUtils.secure().nextAlphanumeric(8),
+                "user-" + RandomStringUtils.secure().nextAlphanumeric(8));
     }
 
     private static ToolSpecification stubSpec(String name) {

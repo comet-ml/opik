@@ -72,6 +72,13 @@ public interface AttachmentService {
     Mono<List<AttachmentInfo>> getAttachmentInfoByEntity(UUID entityId, EntityType entityType, UUID containerId);
 
     /**
+     * Presigned (S3) download URL for a single attachment, reachable by an external
+     * caller (e.g. an LLM provider fetching media during online evaluation). Uses the
+     * same object-key layout as upload/download so it resolves the stored object.
+     */
+    String presignDownloadUrl(AttachmentInfo attachmentInfo, String workspaceId);
+
+    /**
      * Delete specific attachments by their filenames for a given entity.
      * This method handles errors gracefully and continues processing other deletions.
      */
@@ -317,6 +324,11 @@ class AttachmentServiceImpl implements AttachmentService {
         return preSignerService.presignDownloadUrl(key);
     }
 
+    @Override
+    public String presignDownloadUrl(@NonNull AttachmentInfo attachmentInfo, @NonNull String workspaceId) {
+        return prepareDownloadPresignUrl(attachmentInfo, workspaceId);
+    }
+
     private String prepareMinIODownloadUrl(AttachmentInfo attachmentInfo, String baseUrl, String workspaceName) {
         var uri = UriBuilder.fromUri(baseUrl)
                 .path("v1/private/attachment/download")
@@ -352,7 +364,12 @@ class AttachmentServiceImpl implements AttachmentService {
                 .containerId(containerId)
                 .build();
 
-        return list(1, Integer.MAX_VALUE, criteria, "")
+        // Query the DAO directly rather than list(): callers only need metadata
+        // (fileName / mimeType), and list()'s download-URL enhancement reads
+        // RequestContext.WORKSPACE_NAME from the reactive context — which is not
+        // always present (e.g. the online-scoring thread path). The URL it builds is
+        // discarded here anyway, so skipping it removes a latent context dependency.
+        return attachmentDAO.list(1, Integer.MAX_VALUE, criteria)
                 .map(attachmentPage -> attachmentPage.content().stream()
                         .map(attachment -> AttachmentInfo.builder()
                                 .fileName(attachment.fileName())

@@ -92,6 +92,8 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
     private com.comet.opik.api.resources.v1.events.tools.ToolRegistry toolRegistry;
     @Mock
     private com.comet.opik.domain.SpanService spanService;
+    @Mock
+    private com.comet.opik.domain.attachment.AttachmentService attachmentService;
 
     private OnlineScoringTraceThreadLlmAsJudgeScorer scorer;
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
@@ -144,7 +146,8 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
                 projectService,
                 automationRuleEvaluatorService,
                 toolRegistry,
-                spanService);
+                spanService,
+                attachmentService);
 
         projectId = UUID.randomUUID();
         ruleId = UUID.randomUUID();
@@ -191,7 +194,7 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
                     .thenReturn(thresholdTokens);
             org.mockito.Mockito.lenient().when(llmProviderFactory.getLlmProvider(modelName)).thenReturn(provider);
 
-            boolean useTools = scorer.shouldUseAgenticTools(estimatedTokens, modelName, "thread-x",
+            boolean useTools = scorer.shouldUseAgenticTools(estimatedTokens, false, modelName, "thread-x",
                     java.util.List.of(stringContentMessage()));
 
             org.assertj.core.api.Assertions.assertThat(useTools).isEqualTo(expectedUseTools);
@@ -210,7 +213,7 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
             org.mockito.Mockito.lenient().when(llmProviderFactory.getLlmProvider(modelName))
                     .thenReturn(com.comet.opik.api.LlmProvider.OPEN_AI);
 
-            boolean useTools = scorer.shouldUseAgenticTools(60_000, modelName, "thread-x",
+            boolean useTools = scorer.shouldUseAgenticTools(60_000, false, modelName, "thread-x",
                     java.util.List.of(multimodalContentMessage()));
 
             org.assertj.core.api.Assertions.assertThat(useTools).isFalse();
@@ -251,6 +254,8 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
             org.mockito.Mockito.lenient().when(msg.workspaceId()).thenReturn("ws-1");
             org.mockito.Mockito.lenient().when(msg.userName()).thenReturn("user-1");
             org.mockito.Mockito.lenient().when(msg.ruleId()).thenReturn(UUID.randomUUID());
+            // Required by TraceToolContext.forThread, which handleToolCalls builds before the loop.
+            org.mockito.Mockito.lenient().when(msg.projectId()).thenReturn(UUID.randomUUID());
             return msg;
         }
 

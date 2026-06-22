@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import lombok.Getter;
 import lombok.NonNull;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -13,21 +14,34 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Mutable per-evaluation cache shared across all tool calls within a single
  * judge invocation. One instance per {@code handleToolCalls} loop; the loop
  * runs sequentially on a single thread, so a plain {@link HashMap} is safe.
  *
+ * <p>Both single-trace and thread LLM-as-judge evaluations now run the agentic
+ * tool loop — the judge investigates via {@code read} / {@code jq} / {@code search}
+ * and pulls media via {@code get_attachment} — so this context backs both. A
+ * single-trace eval enters the agentic path when the test-suite-assertion or
+ * large-context branch fires, or (OPIK-6555) when the trace has attachments the
+ * judge must load to score; thread evals always go agentic.
+ *
  * <p>Trace-scoped evaluations (LLM-as-judge on a single trace) carry the active
  * {@link Trace} + its spans, which are also pre-seeded into {@link #fetched} so
  * {@code jq} / {@code search} can target them without an explicit {@code read}.
+ * Build these with {@link #forActiveTrace}.
  *
  * <p>Thread-scoped evaluations don't have a single active trace — the model
  * drills into individual traces via {@code read(type=trace, id=X)} on
  * thread-skeleton ids. Build those contexts with {@link #forThread} and check
  * {@link #hasActiveTrace()} from any tool that requires the per-trace shortcut
  * (only {@code GetTraceSpansTool} does today).
+ *
+ * <p>The media side-channel ({@link #stageMedia} / {@link #drainPendingMedia} and
+ * the injection caps below) serves both scopes: any agentic eval whose judge calls
+ * {@code get_attachment} stages bytes here for {@link ToolCallLoop} to inject.
  */
 @Getter
 public final class TraceToolContext {
@@ -36,6 +50,12 @@ public final class TraceToolContext {
     private final List<Span> spans;
     private final String workspaceId;
     private final String userName;
+    /**
+     * The project the evaluation runs within. Constant for the whole session, so tools that
+     * need a container/project id (e.g. {@code get_attachment} looking up attachments) read it
+     * from here instead of re-fetching the entity just to learn its project.
+     */
+    private final UUID projectId;
     private final Map<EntityRef, JsonNode> fetched = new HashMap<>();
     /**
      * Refs whose cached form has already been capped at least once (10 MB cache
@@ -48,6 +68,33 @@ public final class TraceToolContext {
     private final Set<EntityRef> truncated = new HashSet<>();
 
     /**
+     * Hard cap on the number of attachments that may be injected as multimodal
+     * content across a single judge invocation. Bounds prompt growth: every
+     * injected attachment is re-sent on every subsequent follow-up round and on
+     * the final structured re-issue, so the cost is multiplicative in rounds.
+     */
+    static final int MAX_INJECTED_ATTACHMENTS = 8;
+
+    /**
+     * Media fetched by {@code get_attachment} this round, awaiting injection.
+     * {@link ToolCallLoop} drains this after each round's tool-result messages
+     * and appends a single multimodal {@code UserMessage}. Mutated sequentially
+     * on the loop thread (same single-thread guarantee as {@link #fetched}).
+     */
+    private final List<MediaPayload> pendingMedia = new ArrayList<>();
+
+    /**
+     * Descriptors of every attachment injected during this evaluation, kept for
+     * the whole run so the scorer can attribute a provider failure (e.g. a model
+     * that rejects the media type) to specific attachments in a user-facing log.
+     */
+    private final List<InjectedAttachment> injectedAttachments = new ArrayList<>();
+
+    /** Identifies an injected attachment for user-facing error attribution. */
+    public record InjectedAttachment(String fileName, MediaCategory category) {
+    }
+
+    /**
      * Single constructor with nullable {@code trace} / {@code spans} (final fields,
      * so they're assigned exactly once here regardless of branch). Callers go through
      * {@link #forActiveTrace} or {@link #forThread} rather than constructing directly;
@@ -55,31 +102,35 @@ public final class TraceToolContext {
      * an active trace is the point.
      */
     private TraceToolContext(Trace trace, List<Span> spans,
-            @NonNull String workspaceId, @NonNull String userName) {
+            @NonNull String workspaceId, @NonNull String userName, UUID projectId) {
         this.trace = trace;
         this.spans = spans != null ? List.copyOf(spans) : null;
         this.workspaceId = workspaceId;
         this.userName = userName;
+        this.projectId = projectId;
     }
 
     /**
      * Build a context for a trace-scoped evaluation — the model has a single active
      * trace whose spans are already in memory. {@link GetTraceSpansTool} hits this
      * shortcut; other tools fall through to {@code read(type=trace, id=X)} as usual.
+     * The session's {@code projectId} is taken from the active trace.
      */
     public static TraceToolContext forActiveTrace(@NonNull Trace trace, @NonNull List<Span> spans,
             @NonNull String workspaceId, @NonNull String userName) {
-        return new TraceToolContext(trace, spans, workspaceId, userName);
+        return new TraceToolContext(trace, spans, workspaceId, userName, trace.projectId());
     }
 
     /**
      * Build a context for a thread-scoped evaluation — no single "active" trace,
-     * just workspace/user. The model accesses individual traces via
+     * just workspace/user and the session {@code projectId} (every trace in the thread
+     * belongs to it). The model accesses individual traces via
      * {@code read(type=trace, id=X)} on the thread skeleton's trace ids; those
      * reads land in {@link #fetched} on demand.
      */
-    public static TraceToolContext forThread(@NonNull String workspaceId, @NonNull String userName) {
-        return new TraceToolContext(null, null, workspaceId, userName);
+    public static TraceToolContext forThread(@NonNull String workspaceId, @NonNull String userName,
+            @NonNull UUID projectId) {
+        return new TraceToolContext(null, null, workspaceId, userName, projectId);
     }
 
     /**
@@ -110,5 +161,45 @@ public final class TraceToolContext {
 
     public Map<EntityRef, JsonNode> snapshot() {
         return Collections.unmodifiableMap(fetched);
+    }
+
+    // ---------------- Media side-channel (OPIK-6555) ----------------
+
+    /**
+     * Whether one more attachment can still be injected without breaching the
+     * per-evaluation count cap. The cap applies identically to the MinIO byte path
+     * and the S3 presigned-URL path — it is the only bound on injected media.
+     */
+    public boolean canInjectMedia() {
+        return injectedAttachments.size() < MAX_INJECTED_ATTACHMENTS;
+    }
+
+    /**
+     * Stages {@code media} for injection by {@link ToolCallLoop} and records it on
+     * the error-attribution list.
+     */
+    public void stageMedia(@NonNull MediaPayload media) {
+        pendingMedia.add(media);
+        injectedAttachments.add(new InjectedAttachment(media.fileName(), media.category()));
+    }
+
+    public boolean hasPendingMedia() {
+        return !pendingMedia.isEmpty();
+    }
+
+    /** Returns and clears the media staged since the last drain. */
+    public List<MediaPayload> drainPendingMedia() {
+        var drained = List.copyOf(pendingMedia);
+        pendingMedia.clear();
+        return drained;
+    }
+
+    /** True if any attachment was injected during this evaluation. */
+    public boolean hasInjectedMedia() {
+        return !injectedAttachments.isEmpty();
+    }
+
+    public List<InjectedAttachment> getInjectedAttachments() {
+        return List.copyOf(injectedAttachments);
     }
 }
