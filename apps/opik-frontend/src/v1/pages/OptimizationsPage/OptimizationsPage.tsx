@@ -46,8 +46,6 @@ import {
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import StudioTemplates from "@/v1/pages-shared/optimizations/StudioTemplates";
-import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { useOptimizationsView } from "@/hooks/useOptimizationsView";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
@@ -164,9 +162,6 @@ const OptimizationsPage: React.FunctionComponent = () => {
   const navigate = useNavigate();
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
-  const isOptimizationStudioEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED,
-  );
 
   const {
     permissions: {
@@ -328,9 +323,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
       <ExplainerDescription
         {...EXPLAINERS_MAP[EXPLAINER_ID.whats_an_optimization_run]}
       />
-      {isOptimizationStudioEnabled && canUseOptimizationStudio && (
-        <StudioTemplates />
-      )}
+      {canUseOptimizationStudio && <StudioTemplates />}
       <div className="pt-6">
         <h2 className="comet-title-s sticky top-0 z-10 truncate break-words bg-soft-background pb-3 pt-2">
           Optimization runs

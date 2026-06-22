@@ -281,6 +281,9 @@ component:
       # ============================================================
       # Optimization Studio Configuration (optional)
       # ============================================================
+      # The Optimization Studio RQ worker runs in this service by default
+      # (RQ_WORKER_ENABLED defaults to true). Set RQ_WORKER_ENABLED: "false"
+      # to run an executor-only python-backend without the worker.
       # Maximum number of concurrent optimization jobs (default: 5)
       # Each job runs in a separate worker thread with isolated subprocess
       # OPTSTUDIO_MAX_CONCURRENT_JOBS: "5"

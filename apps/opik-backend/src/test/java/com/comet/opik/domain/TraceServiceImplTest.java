@@ -1,14 +1,12 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Trace;
-import com.comet.opik.api.error.InvalidUUIDVersionException;
+import com.comet.opik.api.error.InvalidUUIDException;
 import com.comet.opik.api.sorting.TraceSortingFactory;
-import com.comet.opik.api.sorting.TraceThreadSortingFactory;
 import com.comet.opik.domain.attachment.AttachmentReinjectorService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.infrastructure.db.IdGeneratorImpl;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.ErrorUtils;
@@ -70,7 +68,6 @@ class TraceServiceImplTest {
     private AttachmentReinjectorService attachmentReinjectorService;
 
     private final PodamFactory factory = new PodamFactoryImpl();
-    private final TraceThreadSortingFactory traceThreadSortingFactory = new TraceThreadSortingFactory();
     private final TraceSortingFactory traceSortingFactory = new TraceSortingFactory();
 
     @BeforeEach
@@ -83,7 +80,7 @@ class TraceServiceImplTest {
                 traceDao,
                 template,
                 projectService,
-                new IdGeneratorImpl(),
+                TestIdGeneratorFactory.create(),
                 DUMMY_LOCK_SERVICE,
                 eventBus,
                 traceSortingFactory,
@@ -98,14 +95,14 @@ class TraceServiceImplTest {
 
         @Test
         @DisplayName("when creating traces with uuid version not 7, then return invalid uuid version exception")
-        void create__whenCreatingTracesWithUUIDVersionNot7__thenReturnInvalidUUIDVersionException() {
+        void create__whenCreatingTracesWithUUIDVersionNot7__thenThrowException() {
 
             // given
             var projectName = "projectName";
             var traceId = UUID.randomUUID();
 
             // then
-            assertThrows(InvalidUUIDVersionException.class, () -> traceService.create(Trace.builder()
+            assertThrows(InvalidUUIDException.class, () -> traceService.create(Trace.builder()
                     .id(traceId)
                     .projectName(projectName)
                     .startTime(Instant.now())
