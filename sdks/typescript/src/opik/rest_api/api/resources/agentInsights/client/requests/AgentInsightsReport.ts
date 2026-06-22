@@ -9,6 +9,7 @@ import type * as OpikApi from "../../../../index.js";
  *         reportDay: "2023-01-15",
  *         issues: [{
  *                 name: "name",
+ *                 severity: "critical",
  *                 count: 1000000,
  *                 totalCount: 1000000,
  *                 usersImpacted: 1000000,

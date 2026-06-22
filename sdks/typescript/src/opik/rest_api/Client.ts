@@ -2,6 +2,7 @@
 
 import { AgentConfigsClient } from "./api/resources/agentConfigs/client/Client.js";
 import { AgentInsightsClient } from "./api/resources/agentInsights/client/Client.js";
+import { AgentInsightsJobsClient } from "./api/resources/agentInsightsJobs/client/Client.js";
 import { AiSpendClient } from "./api/resources/aiSpend/client/Client.js";
 import { AlertsClient } from "./api/resources/alerts/client/Client.js";
 import { AnnotationQueuesClient } from "./api/resources/annotationQueues/client/Client.js";
@@ -60,6 +61,7 @@ export class OpikApiClient {
     protected _systemAnalyticsQueries: SystemAnalyticsQueriesClient | undefined;
     protected _systemUsage: SystemUsageClient | undefined;
     protected _agentConfigs: AgentConfigsClient | undefined;
+    protected _agentInsightsJobs: AgentInsightsJobsClient | undefined;
     protected _agentInsights: AgentInsightsClient | undefined;
     protected _aiSpend: AiSpendClient | undefined;
     protected _alerts: AlertsClient | undefined;
@@ -115,6 +117,10 @@ export class OpikApiClient {
 
     public get agentConfigs(): AgentConfigsClient {
         return (this._agentConfigs ??= new AgentConfigsClient(this._options));
+    }
+
+    public get agentInsightsJobs(): AgentInsightsJobsClient {
+        return (this._agentInsightsJobs ??= new AgentInsightsJobsClient(this._options));
     }
 
     public get agentInsights(): AgentInsightsClient {

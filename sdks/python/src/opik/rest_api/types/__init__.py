@@ -20,9 +20,13 @@ from .agent_config_value_write_type import AgentConfigValueWriteType
 from .agent_insights_issue import AgentInsightsIssue
 from .agent_insights_issue_detail import AgentInsightsIssueDetail
 from .agent_insights_issue_page import AgentInsightsIssuePage
+from .agent_insights_issue_severity import AgentInsightsIssueSeverity
 from .agent_insights_issue_status import AgentInsightsIssueStatus
 from .agent_insights_issue_with_details import AgentInsightsIssueWithDetails
+from .agent_insights_issue_with_details_severity import AgentInsightsIssueWithDetailsSeverity
 from .agent_insights_issue_with_details_status import AgentInsightsIssueWithDetailsStatus
+from .agent_insights_job import AgentInsightsJob
+from .agent_insights_job_status import AgentInsightsJobStatus
 from .aggregation_data import AggregationData
 from .alert import Alert
 from .alert_alert_type import AlertAlertType
@@ -568,6 +572,7 @@ from .recent_activity_item_public_type import RecentActivityItemPublicType
 from .recent_activity_page_public import RecentActivityPagePublic
 from .report_preference import ReportPreference
 from .reported_issue import ReportedIssue
+from .reported_issue_severity import ReportedIssueSeverity
 from .response_format import ResponseFormat
 from .response_format_type import ResponseFormatType
 from .result import Result
@@ -738,9 +743,13 @@ __all__ = [
     "AgentInsightsIssue",
     "AgentInsightsIssueDetail",
     "AgentInsightsIssuePage",
+    "AgentInsightsIssueSeverity",
     "AgentInsightsIssueStatus",
     "AgentInsightsIssueWithDetails",
+    "AgentInsightsIssueWithDetailsSeverity",
     "AgentInsightsIssueWithDetailsStatus",
+    "AgentInsightsJob",
+    "AgentInsightsJobStatus",
     "AggregationData",
     "Alert",
     "AlertAlertType",
@@ -1241,6 +1250,7 @@ __all__ = [
     "RecentActivityPagePublic",
     "ReportPreference",
     "ReportedIssue",
+    "ReportedIssueSeverity",
     "ResponseFormat",
     "ResponseFormatType",
     "Result",

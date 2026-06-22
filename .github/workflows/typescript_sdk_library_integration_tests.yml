@@ -1,0 +1,69 @@
+# Real library integration tests for the TypeScript SDK.
+#
+# Mirrors the Python `lib-integration-tests-runner.yml`: runs the integration
+# packages' test suites on TypeScript SDK PRs, with provider API keys supplied
+# from secrets so the gated live-LLM tests execute. Deterministic tests in the
+# same packages run regardless; the live tests skip themselves when their key
+# is absent (e.g. fork PRs), so the job stays green either way.
+name: TypeScript SDK Library Integration Tests
+run-name: "TypeScript SDK Library Integration Tests ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
+on:
+  pull_request:
+    paths:
+      - "sdks/typescript/**"
+  push:
+    branches:
+      - "main"
+    paths:
+      - "sdks/typescript/**"
+  workflow_dispatch:
+  schedule:
+    # Daily at midnight UTC, Monday-Saturday.
+    - cron: "0 0 * * 1-6"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+jobs:
+  check_secrets:
+    name: Check Secrets
+    runs-on: ubuntu-latest
+    outputs:
+      has_anthropic_key: ${{ steps.check.outputs.has_anthropic_key }}
+    steps:
+      - name: Detect available provider keys
+        id: check
+        run: echo "has_anthropic_key=${{ secrets.ANTHROPIC_API_KEY != '' }}" >> "$GITHUB_OUTPUT"
+
+  vercel:
+    name: opik-vercel (Vercel AI SDK / eve)
+    needs: [check_secrets]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: sdks/typescript/src/opik/integrations/opik-vercel
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4.2.0
+        with:
+          node-version: "22"
+
+      - name: Warn when ANTHROPIC_API_KEY is absent
+        if: ${{ needs.check_secrets.outputs.has_anthropic_key == 'false' }}
+        run: echo "::warning::ANTHROPIC_API_KEY is not set - live LLM tests will be skipped (deterministic tests still run)."
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test

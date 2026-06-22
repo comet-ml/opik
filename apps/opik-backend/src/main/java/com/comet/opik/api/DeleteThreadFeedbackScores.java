@@ -9,10 +9,11 @@ import jakarta.validation.constraints.Size;
 import lombok.Builder;
 
 import java.util.Set;
+import java.util.UUID;
 
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record DeleteThreadFeedbackScores(@NotBlank String projectName, @NotBlank String threadId,
-        @NotNull @Size(min = 1, max = 1000) Set<@NotBlank String> names, String author) {
+        @NotNull @Size(min = 1, max = 1000) Set<@NotBlank String> names, String author, UUID sourceQueueId) {
 }

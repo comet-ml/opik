@@ -12,7 +12,7 @@ Logs from the subprocess are captured and streamed to Redis for S3 sync.
 
 import logging
 import os
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, cast
 
 from opentelemetry import trace
 
@@ -24,6 +24,11 @@ from opik_backend.studio import (
     OPTIMIZATION_TIMEOUT_SECS,
     CancellationHandle,
     JobMessageParseError,
+)
+from opik_backend.studio.types import (
+    OptimizationCancelledResult,
+    OptimizationJobResult,
+    OptimizationRunResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -59,7 +64,7 @@ def _parse_job_message(args: Tuple[Any, ...], kwargs: Dict[str, Any]) -> Dict[st
     raise JobMessageParseError("No job message found in args or kwargs")
 
 
-def process_optimizer_job(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+def process_optimizer_job(*args: Any, **kwargs: Any) -> OptimizationJobResult:
     """Process an optimizer job from the Java backend.
     
     This is the main entry point for Optimization Studio jobs. It:
@@ -174,15 +179,32 @@ def process_optimizer_job(*args: Any, **kwargs: Any) -> Dict[str, Any]:
                     logger.info(f"Optimization was cancelled: {context.optimization_id}")
                     # Write cancellation message to optimization logs (visible in UI)
                     log_collector.emit({"message": "Execution cancelled by the user."})
-                    return {"status": "cancelled", "optimization_id": str(context.optimization_id)}
+                    cancelled: OptimizationCancelledResult = {
+                        "status": "cancelled",
+                        "optimization_id": str(context.optimization_id),
+                    }
+                    return cancelled
                 
                 # Check for errors (only if not cancelled)
                 if "error" in result:
                     logger.error(f"Optimization failed: {result.get('error')}")
-                    raise Exception(result.get("error", "Unknown error"))
+                    # Surface the subprocess traceback (when present) so callers
+                    # and CI see what failed inside the isolated process.
+                    error_message = result.get("error", "Unknown error")
+                    subprocess_traceback = result.get("traceback")
+                    if subprocess_traceback:
+                        logger.error(
+                            "Optimization subprocess traceback:\n%s",
+                            subprocess_traceback,
+                        )
+                        error_message = (
+                            f"{error_message}\n\n"
+                            f"Subprocess traceback:\n{subprocess_traceback}"
+                        )
+                    raise Exception(error_message)
                 
                 logger.info(f"Optimization completed successfully: {context.optimization_id}")
-                return result
+                return cast(OptimizationRunResult, result)
             
             finally:
                 # Ensure log collector is closed (flushes remaining logs)

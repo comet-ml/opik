@@ -31,6 +31,7 @@ import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.GuardrailsGenerator;
@@ -173,8 +174,17 @@ class ProjectMetricsResourceTest {
         MigrationUtils.runMysqlDbMigration(mysql);
         MigrationUtils.runClickhouseDbMigration(clickHouseContainer);
 
-        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
-                mysql.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), redisContainer.getRedisURI());
+        var contextConfig = TestDropwizardAppExtensionUtils.AppContextConfig.builder()
+                .jdbcUrl(mysql.getJdbcUrl())
+                .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                .runtimeInfo(wireMock.runtimeInfo())
+                .redisUrl(redisContainer.getRedisURI())
+                // Seeds traces/spans with backdated ids for time-bucketed metrics; disable ingestion-window
+                // validation so the historical data can be created.
+                .customConfigs(List.of(
+                        new CustomConfig("uuidValidation.enabled", "false")))
+                .build();
+        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(contextConfig);
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();

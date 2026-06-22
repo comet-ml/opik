@@ -9,6 +9,7 @@ export interface ReportedIssue {
     cause?: string;
     suggestedFix?: string;
     tracesQuery?: string;
+    severity: OpikApi.ReportedIssueSeverity;
     count: number;
     totalCount: number;
     usersImpacted: number;

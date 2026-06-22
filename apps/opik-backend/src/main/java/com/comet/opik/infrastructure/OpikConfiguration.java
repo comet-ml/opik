@@ -27,6 +27,9 @@ public class OpikConfiguration extends JobConfiguration {
     private DatabaseAnalyticsReadOnlyFreeFormSqlConfig databaseAnalyticsReadOnlyFreeFormSql = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
 
     @Valid @NotNull @JsonProperty
+    private UuidValidationConfig uuidValidation = UuidValidationConfig.builder().build();
+
+    @Valid @NotNull @JsonProperty
     private AuthenticationConfig authentication = new AuthenticationConfig();
 
     @Valid @NotNull @JsonProperty
@@ -165,6 +168,9 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private LocalRunnerConfig localRunner = new LocalRunnerConfig();
+
+    @Valid @NotNull @JsonProperty
+    private StreamConsumerReaperConfig streamConsumerReaper = StreamConsumerReaperConfig.builder().build();
 
     @Valid @NotNull @JsonProperty
     private ExperimentAggregatesConfig experimentAggregates = new ExperimentAggregatesConfig();

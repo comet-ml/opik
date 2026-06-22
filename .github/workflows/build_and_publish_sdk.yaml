@@ -54,6 +54,13 @@ jobs:
           with:
                 python-version: "3.10"
 
+        - name: PyPI token preflight
+          if: inputs.is_release
+          uses: ./.github/actions/pypi-token-preflight
+          with:
+            pypi_token: ${{ secrets.PYPI_API_TOKEN }}
+            package_name: opik
+
         - name: Build pip package
           run: |
                 cd sdks/python

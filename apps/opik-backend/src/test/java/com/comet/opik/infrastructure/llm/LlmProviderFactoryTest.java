@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm;
 
+import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.domain.LlmProviderApiKeyService;
@@ -27,13 +28,6 @@ import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModule;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIClientGenerator;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModelName;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModule;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import io.dropwizard.configuration.ConfigurationException;
-import io.dropwizard.configuration.FileConfigurationSourceProvider;
-import io.dropwizard.configuration.YamlConfigurationFactory;
-import io.dropwizard.jackson.Jackson;
-import io.dropwizard.jersey.validation.Validators;
-import jakarta.validation.Validator;
 import jakarta.ws.rs.BadRequestException;
 import org.apache.commons.lang3.EnumUtils;
 import org.junit.jupiter.api.BeforeAll;
@@ -62,15 +56,9 @@ class LlmProviderFactoryTest {
     private LlmProviderClientConfig llmProviderClientConfig;
     private LlmModelRegistryService registryService;
 
-    private static final ObjectMapper objectMapper = Jackson.newObjectMapper();
-    private static final Validator validator = Validators.newValidator();
-    private static final YamlConfigurationFactory<OpikConfiguration> factory = new YamlConfigurationFactory<>(
-            OpikConfiguration.class, validator, objectMapper, "dw");
-
     @BeforeAll
-    void setUpAll() throws ConfigurationException, IOException {
-        final OpikConfiguration config = factory.build(new FileConfigurationSourceProvider(),
-                "src/test/resources/config-test.yml");
+    void setUpAll() {
+        final OpikConfiguration config = TestConfigUtils.loadConfigTest();
         EncryptionUtils.setConfig(config);
         llmProviderClientConfig = config.getLlmProviderClient();
         // Use a curated test registry so tests are not coupled to the

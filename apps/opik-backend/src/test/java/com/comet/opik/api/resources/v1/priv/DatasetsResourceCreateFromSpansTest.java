@@ -208,6 +208,7 @@ class DatasetsResourceCreateFromSpansTest {
                 null,
                 null,
                 null,
+                null,
                 null);
 
         spanResourceClient.createComment(comment, span1.id(), apiKey, workspaceName, 201);
@@ -324,6 +325,7 @@ class DatasetsResourceCreateFromSpansTest {
         var comment = new Comment(
                 null,
                 "Test comment",
+                null,
                 null,
                 null,
                 null,

@@ -30,11 +30,11 @@ public class TraceAssertions {
             "providers", "experiment"};
 
     public static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
-            "valueByAuthor"};
+            "valueByAuthor", "sourceQueueId"};
 
     private static final String[] IGNORED_FIELDS_THREADS = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
             "threadModelId", "feedbackScores.createdAt", "feedbackScores.lastUpdatedAt",
-            "feedbackScores.valueByAuthor"};
+            "feedbackScores.valueByAuthor", "feedbackScores.sourceQueueId"};
 
     /**
      * Prepares a trace for assertion by injecting providers into metadata if providers are set.

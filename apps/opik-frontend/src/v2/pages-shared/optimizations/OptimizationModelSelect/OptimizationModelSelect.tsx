@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "@/ui/select";
 import { ListAction } from "@/ui/list-action";
+import { Button } from "@/ui/button";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Input } from "@/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
@@ -99,6 +100,11 @@ const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
     inputRef.current?.focus();
   };
 
+  const handleManageProviders = useCallback(() => {
+    resetDialogKeyRef.current += 1;
+    setOpenConfigDialog(true);
+  }, []);
+
   const hasNoProviders =
     !freeModelOption && configuredProvidersList.length === 0;
   const hasNoResults =
@@ -107,8 +113,20 @@ const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
   const renderOptions = () => {
     if (hasNoProviders) {
       return (
-        <div className="comet-body-s flex h-20 items-center justify-center text-muted-slate">
-          No configured providers
+        <div className="comet-body-s flex h-20 flex-col items-center justify-center gap-1 px-4 text-center text-muted-slate">
+          <span>No AI providers configured yet.</span>
+          {canUpdateAIProviders ? (
+            <Button
+              variant="link"
+              size="sm"
+              className="h-auto p-0"
+              onClick={handleManageProviders}
+            >
+              Configure a provider
+            </Button>
+          ) : (
+            <span>Ask a workspace admin to add one to choose a model.</span>
+          )}
         </div>
       );
     }
@@ -270,12 +288,7 @@ const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
             {canUpdateAIProviders && (
               <>
                 <SelectSeparator />
-                <ListAction
-                  onClick={() => {
-                    resetDialogKeyRef.current += 1;
-                    setOpenConfigDialog(true);
-                  }}
-                >
+                <ListAction onClick={handleManageProviders}>
                   <Settings2 className="size-3.5 shrink-0" />
                   Manage AI providers
                 </ListAction>

@@ -324,8 +324,18 @@ public class TraceResourceClient extends BaseCommentResourceClient {
             String author,
             String apiKey,
             String workspaceName) {
+        deleteThreadFeedbackScores(projectName, threadId, scoreNames, author, null, apiKey, workspaceName);
+    }
+
+    public void deleteThreadFeedbackScores(String projectName,
+            String threadId,
+            Set<String> scoreNames,
+            String author,
+            UUID sourceQueueId,
+            String apiKey,
+            String workspaceName) {
         try (var response = callDeleteThreadFeedbackScores(
-                projectName, threadId, scoreNames, author, apiKey, workspaceName)) {
+                projectName, threadId, scoreNames, author, sourceQueueId, apiKey, workspaceName)) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
     }
@@ -334,6 +344,16 @@ public class TraceResourceClient extends BaseCommentResourceClient {
             String threadId,
             Set<String> scoreNames,
             String author,
+            String apiKey,
+            String workspaceName) {
+        return callDeleteThreadFeedbackScores(projectName, threadId, scoreNames, author, null, apiKey, workspaceName);
+    }
+
+    public Response callDeleteThreadFeedbackScores(String projectName,
+            String threadId,
+            Set<String> scoreNames,
+            String author,
+            UUID sourceQueueId,
             String apiKey,
             String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
@@ -348,6 +368,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                         .threadId(threadId)
                         .names(scoreNames)
                         .author(author)
+                        .sourceQueueId(sourceQueueId)
                         .build()));
     }
 

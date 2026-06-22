@@ -94,7 +94,10 @@ class RetentionPolicyServiceTest {
                         new TestDropwizardAppExtensionUtils.CustomConfig("retention.catchUp.smallBatchSize", "200"),
                         new TestDropwizardAppExtensionUtils.CustomConfig("retention.catchUp.mediumBatchSize", "10"),
                         new TestDropwizardAppExtensionUtils.CustomConfig("retention.catchUp.mediumChunkDays", "7"),
-                        new TestDropwizardAppExtensionUtils.CustomConfig("retention.catchUp.largeChunkDays", "1")))
+                        new TestDropwizardAppExtensionUtils.CustomConfig("retention.catchUp.largeChunkDays", "1"),
+                        // Seeds traces with backdated ids (retention scenarios); ingestion-window validation
+                        // would reject them, so disable it for this suite.
+                        new TestDropwizardAppExtensionUtils.CustomConfig("uuidValidation.enabled", "false")))
                 .build();
 
         APP = newTestDropwizardAppExtension(contextConfig);

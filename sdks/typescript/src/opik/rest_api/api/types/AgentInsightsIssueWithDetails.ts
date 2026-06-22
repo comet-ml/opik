@@ -9,6 +9,7 @@ export interface AgentInsightsIssueWithDetails {
     cause?: string;
     suggestedFix?: string;
     status?: OpikApi.AgentInsightsIssueWithDetailsStatus;
+    severity?: OpikApi.AgentInsightsIssueWithDetailsSeverity;
     tracesQuery?: string;
     createdBy?: string;
     createdAt?: Date;
