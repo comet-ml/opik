@@ -1,10 +1,12 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Navigate, useParams } from "@tanstack/react-router";
-import { BookCheck, Radar } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { BookCheck, Loader2, Radar } from "lucide-react";
 import { useActiveProjectId } from "@/store/AppStore";
 import usePluginsStore from "@/store/PluginsStore";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { AGENT_INSIGHTS_ISSUES_KEY } from "@/api/api";
 import PageBodyScrollContainer from "@/v2/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import { Button } from "@/ui/button";
@@ -12,20 +14,33 @@ import { Separator } from "@/ui/separator";
 import {
   AGENT_INSIGHTS_ISSUE_STATUS,
   AGENT_INSIGHTS_JOB_STATUS,
+  AgentInsightsIssue,
 } from "@/types/signals";
 import useAgentInsightsIssuesList from "@/api/signals/useAgentInsightsIssuesList";
 import useAgentInsightsJob from "@/api/signals/useAgentInsightsJob";
 import useTriggerAgentInsightsJobMutation from "@/api/signals/useTriggerAgentInsightsJobMutation";
+import useDiagnosticsRunState from "@/v2/pages/SignalsPage/useDiagnosticsRunState";
 import SignalsStatsCards from "@/v2/pages/SignalsPage/SignalsStatsCards";
 import IssuesTab from "@/v2/pages/SignalsPage/IssuesTab/IssuesTab";
 import DiagnosticsEmptyState from "@/v2/pages/SignalsPage/DiagnosticsEmptyState";
 import Loader from "@/shared/Loader/Loader";
+
+// While a run is in flight we poll the issues queries on this cadence.
+const RUN_POLL_INTERVAL_MS = 8000;
+
+// Newest issue update time (server epoch ms) across the list; 0 when empty.
+const maxUpdatedAt = (issues: AgentInsightsIssue[]): number =>
+  issues.reduce((max, issue) => {
+    const t = issue.last_updated_at ? Date.parse(issue.last_updated_at) : 0;
+    return Number.isFinite(t) && t > max ? t : max;
+  }, 0);
 
 const SignalsPage: React.FC = () => {
   const projectId = useActiveProjectId()!;
   const { workspaceName } = useParams({ strict: false }) as {
     workspaceName: string;
   };
+  const queryClient = useQueryClient();
 
   // Diagnostics is powered by the Ollie assistant and surfaces Agent Insights,
   // so it requires both the Ollie plugin/toggle and the Agent Insights toggle.
@@ -61,9 +76,30 @@ const SignalsPage: React.FC = () => {
   }, [issuesData]);
 
   const triggerMutation = useTriggerAgentInsightsJobMutation();
+  const { isRunning, baseline, startRun, endRun } =
+    useDiagnosticsRunState(projectId);
 
   // Default view shows open issues; toggling shows resolved ones.
   const [showResolved, setShowResolved] = useState(false);
+
+  // While running, refresh the issues queries (stats here + the IssuesTab list)
+  // so freshly persisted results surface without a manual reload.
+  useEffect(() => {
+    if (!isRunning) return;
+    const id = window.setInterval(() => {
+      queryClient.invalidateQueries({ queryKey: [AGENT_INSIGHTS_ISSUES_KEY] });
+    }, RUN_POLL_INTERVAL_MS);
+    return () => window.clearInterval(id);
+  }, [isRunning, queryClient]);
+
+  // The run reports by upserting issues, which bumps their `last_updated_at`.
+  // Once the newest update passes the baseline captured at trigger, it's done.
+  useEffect(() => {
+    if (!isRunning) return;
+    if (maxUpdatedAt(issuesData?.content ?? []) > baseline) {
+      endRun();
+    }
+  }, [issuesData, isRunning, baseline, endRun]);
 
   if (!AssistantSidebar || !ollieEnabled || !agentInsightsEnabled) {
     return (
@@ -75,18 +111,28 @@ const SignalsPage: React.FC = () => {
     );
   }
 
+  const handleRunDiagnostic = () => {
+    const baselineNow = maxUpdatedAt(issuesData?.content ?? []);
+    triggerMutation.mutate(
+      { projectId },
+      { onSuccess: () => startRun(baselineNow) },
+    );
+  };
+
   const renderBody = () => {
-    if (isJobPending) {
+    // A persisted in-flight run takes precedence so we land straight on the
+    // issues view (with the running banner) instead of flashing the empty state.
+    if (!isRunning && isJobPending) {
       return <Loader />;
     }
 
     // No job yet, or it was turned off → onboarding. "Run first diagnostic"
-    // creates+enables the job and triggers a run; the job query then refetches
-    // and this page swaps to the issues view below.
-    if (!isJobEnabled) {
+    // creates+enables the job and triggers a run; this page then swaps to the
+    // issues view below.
+    if (!isRunning && !isJobEnabled) {
       return (
         <DiagnosticsEmptyState
-          onRun={() => triggerMutation.mutate({ projectId })}
+          onRun={handleRunDiagnostic}
           isPending={triggerMutation.isPending}
         />
       );
@@ -94,6 +140,16 @@ const SignalsPage: React.FC = () => {
 
     return (
       <div className="flex flex-col gap-4 px-6 pb-6">
+        {isRunning && (
+          <div className="flex items-center gap-2 rounded-md border border-border bg-muted/50 px-4 py-3">
+            <Loader2 className="size-4 shrink-0 animate-spin text-[var(--color-primary)]" />
+            <span className="comet-body-s text-muted-slate">
+              Running diagnostic — analysing the last 24h of traces. New issues
+              will appear here when it&apos;s done.
+            </span>
+          </div>
+        )}
+
         <SignalsStatsCards
           tracesAffected={stats.tracesAffected}
           openIssues={stats.openIssues}
@@ -105,11 +161,15 @@ const SignalsPage: React.FC = () => {
           <Button
             variant="outline"
             size="xs"
-            disabled={triggerMutation.isPending}
-            onClick={() => triggerMutation.mutate({ projectId })}
+            disabled={isRunning || triggerMutation.isPending}
+            onClick={handleRunDiagnostic}
           >
-            <Radar className="mr-1.5 size-3.5" />
-            Run diagnostic
+            {isRunning ? (
+              <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+            ) : (
+              <Radar className="mr-1.5 size-3.5" />
+            )}
+            {isRunning ? "Running…" : "Run diagnostic"}
           </Button>
           <Separator orientation="vertical" className="h-5" />
           <Button
