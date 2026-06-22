@@ -8,6 +8,13 @@ export enum AGENT_INSIGHTS_ISSUE_STATUS {
   closed = "closed",
 }
 
+export enum AGENT_INSIGHTS_ISSUE_SEVERITY {
+  critical = "critical",
+  high = "high",
+  medium = "medium",
+  low = "low",
+}
+
 // Per-day breakdown row, used for the occurrence-over-time chart.
 export interface AgentInsightsIssueDetail {
   report_day: string;
@@ -26,6 +33,7 @@ export interface AgentInsightsIssue {
   cause?: string;
   suggested_fix?: string;
   status: AGENT_INSIGHTS_ISSUE_STATUS;
+  severity?: AGENT_INSIGHTS_ISSUE_SEVERITY;
   traces_query?: string;
   total_occurrences: number;
   total: number;
@@ -48,6 +56,7 @@ export interface AgentInsightsIssueWithDetails {
   cause?: string;
   suggested_fix?: string;
   status: AGENT_INSIGHTS_ISSUE_STATUS;
+  severity?: AGENT_INSIGHTS_ISSUE_SEVERITY;
   traces_query?: string;
   created_by?: string;
   created_at?: string;

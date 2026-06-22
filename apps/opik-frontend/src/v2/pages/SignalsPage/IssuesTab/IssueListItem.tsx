@@ -2,11 +2,12 @@ import React from "react";
 import { Hash, ScanEye } from "lucide-react";
 import { AgentInsightsIssue } from "@/types/signals";
 import { Tag } from "@/ui/tag";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/date";
 import {
-  STATUS_LABEL_MAP,
-  STATUS_TAG_VARIANT_MAP,
+  SEVERITY_LABEL_MAP,
+  SEVERITY_TAG_VARIANT_MAP,
 } from "@/v2/pages/SignalsPage/helpers";
 
 type IssueListItemProps = {
@@ -30,14 +31,20 @@ const IssueListItem: React.FC<IssueListItemProps> = ({
       )}
     >
       <div className="flex items-center gap-2">
-        <span className="comet-body-xs-accented truncate">{issue.name}</span>
-        <Tag
-          size="sm"
-          variant={STATUS_TAG_VARIANT_MAP[issue.status]}
-          className="shrink-0"
-        >
-          {STATUS_LABEL_MAP[issue.status]}
-        </Tag>
+        <TooltipWrapper content={issue.name}>
+          <span className="comet-body-xs-accented min-w-0 truncate">
+            {issue.name}
+          </span>
+        </TooltipWrapper>
+        {issue.severity && (
+          <Tag
+            size="sm"
+            variant={SEVERITY_TAG_VARIANT_MAP[issue.severity]}
+            className="shrink-0"
+          >
+            {SEVERITY_LABEL_MAP[issue.severity]}
+          </Tag>
+        )}
       </div>
       {issue.description && (
         <div className="comet-body-xs line-clamp-2 text-muted-slate">

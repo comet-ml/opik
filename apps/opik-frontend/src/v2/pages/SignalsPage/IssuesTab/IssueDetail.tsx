@@ -17,12 +17,13 @@ import {
 import { Button } from "@/ui/button";
 import { Card } from "@/ui/card";
 import { Tag } from "@/ui/tag";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Separator } from "@/ui/separator";
 import { formatDate } from "@/lib/date";
 import { cn } from "@/lib/utils";
 import {
-  STATUS_LABEL_MAP,
-  STATUS_TAG_VARIANT_MAP,
+  SEVERITY_LABEL_MAP,
+  SEVERITY_TAG_VARIANT_MAP,
 } from "@/v2/pages/SignalsPage/helpers";
 import OccurrenceChart from "@/v2/pages/SignalsPage/IssuesTab/OccurrenceChart";
 import AffectedTracesSample from "@/v2/pages/SignalsPage/IssuesTab/AffectedTracesSample";
@@ -114,14 +115,20 @@ const IssueDetail: React.FC<IssueDetailProps> = ({ issue, projectId }) => {
           >
             <BugPlay className="size-2 text-white" />
           </span>
-          <span className="comet-body-xs-accented truncate">{issue.name}</span>
-          <Tag
-            size="sm"
-            variant={STATUS_TAG_VARIANT_MAP[issue.status]}
-            className="shrink-0"
-          >
-            {STATUS_LABEL_MAP[issue.status]}
-          </Tag>
+          <TooltipWrapper content={issue.name}>
+            <span className="comet-body-xs-accented truncate">
+              {issue.name}
+            </span>
+          </TooltipWrapper>
+          {issue.severity && (
+            <Tag
+              size="sm"
+              variant={SEVERITY_TAG_VARIANT_MAP[issue.severity]}
+              className="shrink-0"
+            >
+              {SEVERITY_LABEL_MAP[issue.severity]}
+            </Tag>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {STATUS_ACTIONS.filter(

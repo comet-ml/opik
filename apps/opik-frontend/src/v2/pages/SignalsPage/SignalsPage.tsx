@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Navigate, useParams } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { BookCheck, Radar } from "lucide-react";
+import { BookCheck, Radar, SlidersHorizontal } from "lucide-react";
 import { useActiveProjectId } from "@/store/AppStore";
 import usePluginsStore from "@/store/PluginsStore";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
@@ -19,10 +19,12 @@ import {
 import useAgentInsightsIssuesList from "@/api/signals/useAgentInsightsIssuesList";
 import useAgentInsightsJob from "@/api/signals/useAgentInsightsJob";
 import useTriggerAgentInsightsJobMutation from "@/api/signals/useTriggerAgentInsightsJobMutation";
+import useUpdateAgentInsightsJobMutation from "@/api/signals/useUpdateAgentInsightsJobMutation";
 import useDiagnosticsRunState from "@/v2/pages/SignalsPage/useDiagnosticsRunState";
 import SignalsStatsCards from "@/v2/pages/SignalsPage/SignalsStatsCards";
 import IssuesTab from "@/v2/pages/SignalsPage/IssuesTab/IssuesTab";
 import DiagnosticsEmptyState from "@/v2/pages/SignalsPage/DiagnosticsEmptyState";
+import DiagnosticsSettingsDialog from "@/v2/pages/SignalsPage/DiagnosticsSettingsDialog";
 import Loader from "@/shared/Loader/Loader";
 
 // While a run is in flight we poll the issues queries on this cadence.
@@ -76,11 +78,13 @@ const SignalsPage: React.FC = () => {
   }, [issuesData]);
 
   const triggerMutation = useTriggerAgentInsightsJobMutation();
+  const updateJobMutation = useUpdateAgentInsightsJobMutation();
   const { isRunning, baseline, startRun, endRun } =
     useDiagnosticsRunState(projectId);
 
   // Default view shows open issues; toggling shows resolved ones.
   const [showResolved, setShowResolved] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // While running, refresh the issues queries (stats here + the IssuesTab list)
   // so freshly persisted results surface without a manual reload.
@@ -101,6 +105,11 @@ const SignalsPage: React.FC = () => {
     }
   }, [issuesData, isRunning, baseline, endRun]);
 
+  // hasData = a prior diagnostic has produced issues. isActive = the daily run
+  // is on (or currently running) vs. paused.
+  const hasData = (issuesData?.content?.length ?? 0) > 0;
+  const isActive = isJobEnabled || isRunning;
+
   if (!AssistantSidebar || !ollieEnabled || !agentInsightsEnabled) {
     return (
       <Navigate
@@ -119,17 +128,24 @@ const SignalsPage: React.FC = () => {
     );
   };
 
+  const handleTurnOnAuto = () => {
+    updateJobMutation.mutate({
+      projectId,
+      status: AGENT_INSIGHTS_JOB_STATUS.enabled,
+    });
+  };
+
   const renderBody = () => {
     // A persisted in-flight run takes precedence so we land straight on the
     // issues view (with the running banner) instead of flashing the empty state.
-    if (!isRunning && isJobPending) {
+    if (!isRunning && (isJobPending || (!isJobEnabled && isStatsPending))) {
       return <Loader />;
     }
 
-    // No job yet, or it was turned off → onboarding. "Run first diagnostic"
-    // creates+enables the job and triggers a run; this page then swaps to the
-    // issues view below.
-    if (!isRunning && !isJobEnabled) {
+    // Onboarding shows only when diagnostics is off AND nothing has been
+    // diagnosed yet. A disabled job with prior results keeps the issues view,
+    // so past findings stay browsable while the daily run is paused.
+    if (!isRunning && !isJobEnabled && !hasData) {
       return (
         <DiagnosticsEmptyState
           onRun={handleRunDiagnostic}
@@ -137,8 +153,6 @@ const SignalsPage: React.FC = () => {
         />
       );
     }
-
-    const hasData = (issuesData?.content?.length ?? 0) > 0;
 
     return (
       <div className="flex flex-col gap-4 px-6 pb-6">
@@ -153,32 +167,35 @@ const SignalsPage: React.FC = () => {
           />
         )}
 
-        <div className="flex items-center justify-end gap-2">
-          <Button
-            variant="outline"
-            size="xs"
-            disabled={isRunning || triggerMutation.isPending}
-            onClick={handleRunDiagnostic}
-          >
-            <Radar className="mr-1.5 size-3.5" />
-            Run diagnostic
-          </Button>
-          <Separator orientation="vertical" className="h-5" />
-          <Button
-            variant={showResolved ? "secondary" : "outline"}
-            size="xs"
-            onClick={() => setShowResolved((v) => !v)}
-          >
-            <BookCheck className="mr-1.5 size-3.5" />
-            Resolved issues
-          </Button>
-        </div>
+        {!showResolved && (
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              size="xs"
+              disabled={isRunning || triggerMutation.isPending}
+              onClick={handleRunDiagnostic}
+            >
+              <Radar className="mr-1.5 size-3.5" />
+              Run diagnostic
+            </Button>
+            <Separator orientation="vertical" className="h-5" />
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={() => setShowResolved(true)}
+            >
+              <BookCheck className="mr-1.5 size-3.5" />
+              Resolved issues
+            </Button>
+          </div>
+        )}
 
         <IssuesTab
           projectId={projectId}
           showResolved={showResolved}
           isRunning={isRunning}
           onRunDiagnostic={handleRunDiagnostic}
+          onShowOpenIssues={() => setShowResolved(false)}
         />
       </div>
     );
@@ -190,15 +207,48 @@ const SignalsPage: React.FC = () => {
         className="mb-4 mt-6 flex items-center justify-between"
         direction="horizontal"
       >
-        <h1 className="comet-title-l truncate break-words">Diagnostics</h1>
-        {(isJobEnabled || isRunning) && (
-          <span className="comet-body-xs flex items-center gap-1.5 text-muted-slate">
-            <span className="size-1.5 rounded-full bg-emerald-400" />
-            Active
-          </span>
+        <h1 className="truncate break-words text-base font-medium tracking-normal text-foreground-secondary">
+          Diagnostics
+        </h1>
+        {(isActive || hasData) && (
+          <div className="flex items-center gap-3">
+            <span className="comet-body-xs flex items-center gap-1.5 text-foreground-secondary">
+              <span
+                className={`size-2 rounded-full ${
+                  isActive ? "bg-emerald-400" : "bg-chart-red"
+                }`}
+              />
+              {isActive ? "Auto • Daily" : "Manual"}
+            </span>
+            {isActive ? (
+              <Button
+                variant="ghost"
+                size="icon-2xs"
+                onClick={() => setSettingsOpen(true)}
+                aria-label="Diagnostics settings"
+                className="text-foreground"
+              >
+                <SlidersHorizontal />
+              </Button>
+            ) : (
+              <Button
+                size="xs"
+                onClick={handleTurnOnAuto}
+                disabled={updateJobMutation.isPending}
+              >
+                Turn on auto-diagnostic
+              </Button>
+            )}
+          </div>
         )}
       </PageBodyStickyContainer>
       {renderBody()}
+      <DiagnosticsSettingsDialog
+        open={settingsOpen}
+        setOpen={setSettingsOpen}
+        projectId={projectId}
+        enabled={isJobEnabled}
+      />
     </PageBodyScrollContainer>
   );
 };

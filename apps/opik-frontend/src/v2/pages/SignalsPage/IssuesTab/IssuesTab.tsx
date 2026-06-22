@@ -4,12 +4,11 @@ import {
   AGENT_INSIGHTS_ISSUE_STATUS,
   AgentInsightsIssue,
 } from "@/types/signals";
-import { Radar, Sparkles } from "lucide-react";
+import { ArrowLeft, Inbox, PartyPopper, Radar, Undo2 } from "lucide-react";
 import EmptyIssueDetailsIcon from "@/icons/empty-issue-details.svg?react";
 import { Sorting } from "@/types/sorting";
 import useAgentInsightsIssuesList from "@/api/signals/useAgentInsightsIssuesList";
 import Loader from "@/shared/Loader/Loader";
-import NoData from "@/shared/NoData/NoData";
 import {
   Select,
   SelectContent,
@@ -59,7 +58,7 @@ const DETAIL_SUBTITLE =
 // Empty detail pane shown alongside the running / all-clear list states.
 const DetailPlaceholder: React.FC = () => (
   <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-3 rounded-md border bg-background p-6 text-center">
-    <EmptyIssueDetailsIcon />
+    <EmptyIssueDetailsIcon className="h-[68px] w-[63px]" />
     <div className="flex flex-col gap-1">
       <span className="comet-body-s-accented text-foreground">
         Your issue details will appear here
@@ -77,6 +76,8 @@ type IssuesTabProps = {
   isRunning?: boolean;
   // Trigger a new run (used by the "All clear" state's link).
   onRunDiagnostic?: () => void;
+  // Switch back to the open-issues view (the resolved-view back arrow / link).
+  onShowOpenIssues?: () => void;
 };
 
 const IssuesTab: React.FC<IssuesTabProps> = ({
@@ -84,6 +85,7 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
   showResolved = false,
   isRunning = false,
   onRunDiagnostic,
+  onShowOpenIssues,
 }) => {
   const status = showResolved
     ? AGENT_INSIGHTS_ISSUE_STATUS.resolved
@@ -131,6 +133,40 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
   const handleSelect = (issue: AgentInsightsIssue) =>
     setActiveIssueId(issue.id);
 
+  // Column header title: a back arrow ("← Resolved issues") in the resolved
+  // view, plain "Issues" otherwise.
+  const titleNode = showResolved ? (
+    <button
+      type="button"
+      onClick={onShowOpenIssues}
+      className="comet-body-xs-accented flex items-center gap-1.5 hover:text-primary"
+    >
+      <ArrowLeft className="size-3.5" />
+      Resolved issues
+    </button>
+  ) : (
+    <span className="comet-body-xs-accented">Issues</span>
+  );
+
+  const sortSelect = (
+    <Select value={sortValue} onValueChange={setSortValue}>
+      <SelectTrigger className="h-7 w-auto gap-1 border-none bg-transparent px-2 text-xs shadow-none hover:shadow-none [&>svg]:size-3 [&>svg]:opacity-100">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {SORT_OPTIONS.map((option) => (
+          <SelectItem
+            key={option.value}
+            value={option.value}
+            className="text-xs"
+          >
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+
   if (isPending) {
     return <Loader />;
   }
@@ -144,7 +180,7 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
             <div className="flex h-10 items-center border-b border-border bg-[#F8FAFC] px-4">
               <span className="comet-body-xs-accented">Issues</span>
             </div>
-            <div className="flex flex-1 flex-col justify-center gap-3 p-5">
+            <div className="flex flex-1 flex-col justify-center gap-3 bg-[#C4B5FD1A] p-5">
               <RunningIcon />
               <div className="flex flex-col gap-1">
                 <span className="comet-body-s-accented text-foreground">
@@ -165,11 +201,39 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
     // Resolved tab with nothing resolved yet.
     if (showResolved) {
       return (
-        <NoData
-          title="No resolved issues"
-          message="Issues you resolve will show up here."
-          className="h-[400px]"
-        />
+        <div className="flex min-h-[500px] gap-2">
+          <div className="flex w-[360px] shrink-0 flex-col overflow-hidden rounded-md border bg-background">
+            <div className="flex h-10 items-center justify-between border-b border-border bg-[#F8FAFC] pl-4 pr-2">
+              {titleNode}
+              {sortSelect}
+            </div>
+            <div className="flex flex-1 flex-col justify-center gap-3 p-5">
+              <div className="flex size-7 items-center justify-center rounded-lg bg-[#89DEFF]">
+                <Inbox className="size-3.5 text-black dark:text-white" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="comet-body-s-accented text-foreground">
+                  Nothing resolved yet
+                </span>
+                <span className="comet-body-xs text-muted-slate">
+                  Issues you resolve will show up here. You can reopen them
+                  anytime.
+                </span>
+              </div>
+              {onShowOpenIssues && (
+                <button
+                  type="button"
+                  onClick={onShowOpenIssues}
+                  className="comet-body-s-accented flex items-center gap-1.5 text-[var(--color-primary)] hover:underline"
+                >
+                  <Undo2 className="size-3.5" />
+                  Back to open issues
+                </button>
+              )}
+            </div>
+          </div>
+          <DetailPlaceholder />
+        </div>
       );
     }
 
@@ -177,12 +241,12 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
     return (
       <div className="flex min-h-[500px] gap-2">
         <div className="flex w-[360px] shrink-0 flex-col overflow-hidden rounded-md border bg-background">
-          <div className="flex h-10 items-center border-b border-border bg-[#F8FAFC] px-4">
+          <div className="flex h-10 items-center border-b border-border bg-[#FCFCFD] px-4">
             <span className="comet-body-xs-accented">Issues</span>
           </div>
           <div className="flex flex-1 flex-col justify-center gap-3 p-5">
-            <div className="flex size-8 items-center justify-center rounded-lg bg-sky-100">
-              <Sparkles className="size-4 text-sky-500" />
+            <div className="flex size-7 items-center justify-center rounded-lg bg-[#89DEFF]">
+              <PartyPopper className="size-3.5 text-black dark:text-white" />
             </div>
             <div className="flex flex-col gap-1">
               <span className="comet-body-s-accented text-foreground">
@@ -196,7 +260,7 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
               <button
                 type="button"
                 onClick={onRunDiagnostic}
-                className="comet-body-xs-accented flex items-center gap-1.5 text-[var(--color-primary)] hover:underline"
+                className="comet-body-s-accented flex items-center gap-1.5 text-[var(--color-primary)] hover:underline"
               >
                 <Radar className="size-3.5" />
                 Run diagnostic
@@ -214,23 +278,8 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
       {/* Issue list */}
       <div className="flex w-[360px] shrink-0 flex-col overflow-hidden rounded-md border bg-background">
         <div className="flex h-10 items-center justify-between border-b border-border bg-[#F8FAFC] pl-4 pr-2">
-          <span className="comet-body-xs-accented">Issues</span>
-          <Select value={sortValue} onValueChange={setSortValue}>
-            <SelectTrigger className="h-7 w-auto gap-1 border-none bg-transparent px-2 text-xs shadow-none hover:shadow-none [&>svg]:size-3 [&>svg]:opacity-100">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {SORT_OPTIONS.map((option) => (
-                <SelectItem
-                  key={option.value}
-                  value={option.value}
-                  className="text-xs"
-                >
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {titleNode}
+          {sortSelect}
         </div>
         <div className="flex flex-col overflow-y-auto">
           {isRunning && (
