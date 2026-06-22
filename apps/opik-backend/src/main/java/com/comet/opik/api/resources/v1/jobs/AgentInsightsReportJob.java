@@ -8,7 +8,6 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.google.common.annotations.VisibleForTesting;
 import io.dropwizard.jobs.Job;
-import io.opentelemetry.api.common.Attributes;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -65,10 +64,9 @@ public class AgentInsightsReportJob extends Job {
             return runSweep(periodStart, periodEnd)
                     .doFinally(signalType -> AgentInsightsMetrics.SWEEP_DURATION_MS.record(
                             System.currentTimeMillis() - startMillis,
-                            Attributes.of(AgentInsightsMetrics.OUTCOME,
-                                    signalType == SignalType.ON_COMPLETE
-                                            ? AgentInsightsMetrics.SUCCESS
-                                            : AgentInsightsMetrics.FAILURE)));
+                            signalType == SignalType.ON_COMPLETE
+                                    ? AgentInsightsMetrics.OUTCOME_SUCCESS
+                                    : AgentInsightsMetrics.OUTCOME_FAILURE));
         });
         // holdUntilExpiry: only one replica runs the sweep per day (idempotent across replicas).
         lockService.bestEffortLock(
@@ -105,14 +103,12 @@ public class AgentInsightsReportJob extends Job {
                             .concatMap(job -> reportPublisher
                                     .enqueue(job.projectId(), job.workspaceId(), periodStart, periodEnd)
                                     .doOnNext(__ -> AgentInsightsMetrics.REPORTS_ENQUEUED.add(1,
-                                            Attributes.of(AgentInsightsMetrics.TRIGGER,
-                                                    AgentInsightsMetrics.SCHEDULED)))
+                                            AgentInsightsMetrics.TRIGGER_SCHEDULED))
                                     .then()
                                     .onErrorResume(e -> {
                                         // Per-job isolation: a failed enqueue must not skip the rest.
                                         AgentInsightsMetrics.TRIGGER_ERRORS.add(1,
-                                                Attributes.of(AgentInsightsMetrics.TRIGGER,
-                                                        AgentInsightsMetrics.SCHEDULED));
+                                                AgentInsightsMetrics.TRIGGER_SCHEDULED);
                                         log.error("Failed to enqueue Agent Insights run for project '{}'",
                                                 job.projectId(), e);
                                         return Mono.empty();

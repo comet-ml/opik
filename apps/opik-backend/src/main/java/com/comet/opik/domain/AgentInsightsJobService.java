@@ -5,7 +5,6 @@ import com.comet.opik.api.AgentInsightsJob.EnabledJob;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import io.dropwizard.jersey.errors.ErrorMessage;
-import io.opentelemetry.api.common.Attributes;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
@@ -97,14 +96,12 @@ public class AgentInsightsJobService {
         reportPublisher.enqueue(job.projectId(), workspaceId, periodEnd.minus(TRIGGER_WINDOW), periodEnd)
                 .subscribe(
                         reportId -> {
-                            AgentInsightsMetrics.REPORTS_ENQUEUED.add(1,
-                                    Attributes.of(AgentInsightsMetrics.TRIGGER, AgentInsightsMetrics.MANUAL));
+                            AgentInsightsMetrics.REPORTS_ENQUEUED.add(1, AgentInsightsMetrics.TRIGGER_MANUAL);
                             log.info("Enqueued Agent Insights run reportId='{}' for project '{}'",
                                     reportId, projectId);
                         },
                         error -> {
-                            AgentInsightsMetrics.TRIGGER_ERRORS.add(1,
-                                    Attributes.of(AgentInsightsMetrics.TRIGGER, AgentInsightsMetrics.MANUAL));
+                            AgentInsightsMetrics.TRIGGER_ERRORS.add(1, AgentInsightsMetrics.TRIGGER_MANUAL);
                             log.error("Failed to enqueue Agent Insights run for project '{}'", projectId,
                                     error);
                         });

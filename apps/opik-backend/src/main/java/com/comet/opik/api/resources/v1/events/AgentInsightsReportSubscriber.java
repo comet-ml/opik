@@ -5,7 +5,6 @@ import com.comet.opik.domain.AgentInsightsReportClient;
 import com.comet.opik.domain.AgentInsightsReportMessage;
 import com.comet.opik.infrastructure.AgentInsightsReportConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
-import io.opentelemetry.api.common.Attributes;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -76,14 +75,12 @@ public class AgentInsightsReportSubscriber extends BaseRedisSubscriber<AgentInsi
                     // The base class records every message as success because processEvent swallows failures
                     // (at-most-once drop), so its processing-errors metric never fires for a failed trigger.
                     // This counter restores the success/failure outcome signal for the platform trigger call.
-                    AgentInsightsMetrics.REPORTS_TRIGGERED.add(1,
-                            Attributes.of(AgentInsightsMetrics.OUTCOME, AgentInsightsMetrics.SUCCESS));
+                    AgentInsightsMetrics.REPORTS_TRIGGERED.add(1, AgentInsightsMetrics.OUTCOME_SUCCESS);
                     log.info("Triggered Agent Insights report: reportId='{}', project='{}'",
                             message.reportId(), message.projectId());
                 })
                 .onErrorResume(throwable -> {
-                    AgentInsightsMetrics.REPORTS_TRIGGERED.add(1,
-                            Attributes.of(AgentInsightsMetrics.OUTCOME, AgentInsightsMetrics.FAILURE));
+                    AgentInsightsMetrics.REPORTS_TRIGGERED.add(1, AgentInsightsMetrics.OUTCOME_FAILURE);
                     // At-most-once on purpose: report generation is a non-idempotent side effect (Ollie
                     // compute + a user-facing report), and the trigger isn't deduplicated downstream, so a
                     // redelivery would run the same report twice. We ack on failure (log + complete) rather

@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongHistogram;
 import io.opentelemetry.api.metrics.Meter;
@@ -59,4 +60,11 @@ public class AgentInsightsMetrics {
     public static final String MANUAL = "manual";
     public static final String SUCCESS = "success";
     public static final String FAILURE = "failure";
+
+    // Cached attribute sets for the fixed label combinations emitted on hot paths (sweep/trigger/enqueue),
+    // so the counters/histogram reuse one immutable Attributes instance per outcome instead of allocating.
+    public static final Attributes OUTCOME_SUCCESS = Attributes.of(OUTCOME, SUCCESS);
+    public static final Attributes OUTCOME_FAILURE = Attributes.of(OUTCOME, FAILURE);
+    public static final Attributes TRIGGER_SCHEDULED = Attributes.of(TRIGGER, SCHEDULED);
+    public static final Attributes TRIGGER_MANUAL = Attributes.of(TRIGGER, MANUAL);
 }
