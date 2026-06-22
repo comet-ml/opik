@@ -150,7 +150,10 @@ public class GetAttachmentTool implements ToolExecutor {
 
     private Mono<String> fetchFromMinIO(AttachmentInfo info, String mime, MediaCategory category,
             TraceToolContext ctx) {
-        if (!ctx.canInjectMedia(info.fileSize())) {
+        // Base64 encoding inflates by ~4/3 — pre-check with the inflated estimate to avoid downloading a
+        // file that would overflow the cap anyway. The check uses ceiling arithmetic: (n*4+2)/3.
+        long base64EstimatedSize = (info.fileSize() * 4 + 2) / 3;
+        if (!ctx.canInjectMedia(base64EstimatedSize)) {
             return Mono.just(ToolArgs.errorJson(("Attachment '%s' cannot be loaded: the total size limit for"
                     + " injected attachments in this evaluation has been reached.").formatted(info.fileName())));
         }
@@ -159,7 +162,8 @@ public class GetAttachmentTool implements ToolExecutor {
                 .flatMap(this::readAllBytes)
                 .map(bytes -> {
                     String base64 = Base64.getEncoder().encodeToString(bytes);
-                    ctx.stageMedia(MediaPayload.ofBase64(info.fileName(), mime, category, info.fileSize(), base64));
+                    // Stage with the actual base64 length so the accumulator reflects what is injected.
+                    ctx.stageMedia(MediaPayload.ofBase64(info.fileName(), mime, category, base64.length(), base64));
                     return confirmation(info.fileName(), category);
                 });
     }

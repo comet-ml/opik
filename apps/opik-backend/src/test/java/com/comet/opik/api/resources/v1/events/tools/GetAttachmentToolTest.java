@@ -214,38 +214,41 @@ class GetAttachmentToolTest {
 
     @Test
     void fetchFromMinIORejectSecondAttachmentThatPushesOverCap() {
+        // Use an explicit small cap so two tiny files can exercise accumulation without large allocations.
+        // Cap = 100 bytes. First: fileSize=40 → base64EstimatedSize=(40*4+2)/3=54 ≤ 100 → passes.
+        // After staging actual base64 of 4 raw bytes (= 8 chars) injectedBytes becomes 8.
+        // Second: fileSize=70 → base64EstimatedSize=(70*4+2)/3=94; 8+94=102 > 100 → rejected.
+        long capBytes = 100;
+        ctx = TraceToolContext.forThread(WORKSPACE_ID, USER, projectId, capBytes);
+
         when(s3Config.isMinIO()).thenReturn(true);
 
-        // First attachment consumes most of the budget
-        long firstSize = TraceToolContext.DEFAULT_MAX_INJECTED_BYTES - 1024;
-        byte[] firstBytes = new byte[4]; // actual content doesn't matter for the cap logic
+        byte[] firstRawBytes = new byte[4]; // 4 bytes → base64 is 8 chars
         AttachmentInfo firstInfo = AttachmentInfo.builder()
                 .fileName(IMAGE_FILE_NAME)
                 .entityType(EntityType.TRACE)
                 .entityId(traceId)
                 .containerId(projectId)
                 .mimeType("image/png")
-                .fileSize(firstSize)
+                .fileSize(40L)
                 .build();
         when(attachmentService.getAttachmentInfoByEntity(any(), any(), any()))
                 .thenReturn(Mono.just(List.of(firstInfo)));
         when(attachmentService.downloadAttachment(any(), eq(WORKSPACE_ID)))
-                .thenReturn(new ByteArrayInputStream(firstBytes));
+                .thenReturn(new ByteArrayInputStream(firstRawBytes));
 
         String firstResult = run(
                 "{\"type\":\"trace\",\"id\":\"%s\",\"file_name\":\"%s\"}".formatted(traceId, IMAGE_FILE_NAME));
         assertThat(firstResult).contains("\"loaded\":true");
 
-        // Second attachment pushes total over 20 MB
         String secondFileName = "second-" + IMAGE_FILE_NAME;
-        long secondSize = 2048; // 1024 + 2048 > 1024 remaining
         AttachmentInfo secondInfo = AttachmentInfo.builder()
                 .fileName(secondFileName)
                 .entityType(EntityType.TRACE)
                 .entityId(traceId)
                 .containerId(projectId)
                 .mimeType("image/png")
-                .fileSize(secondSize)
+                .fileSize(70L)
                 .build();
         when(attachmentService.getAttachmentInfoByEntity(any(), any(), any()))
                 .thenReturn(Mono.just(List.of(secondInfo)));

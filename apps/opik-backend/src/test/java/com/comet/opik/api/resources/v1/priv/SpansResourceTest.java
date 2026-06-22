@@ -3295,14 +3295,15 @@ class SpansResourceTest {
             // Step 3: Manually upload a user attachment (simulating SDK behavior)
             String userFileName = "user-uploaded-doc.pdf";
             byte[] userFileData = "This is a PDF document uploaded by the user via SDK".getBytes();
-            var userAttachmentInfo = new AttachmentInfo(
-                    userFileName,
-                    DEFAULT_PROJECT,
-                    EntityType.SPAN,
-                    spanId,
-                    null, // containerId
-                    "application/pdf",
-                    0L);
+            var userAttachmentInfo = AttachmentInfo.builder()
+                    .fileName(userFileName)
+                    .projectName(DEFAULT_PROJECT)
+                    .entityType(EntityType.SPAN)
+                    .entityId(spanId)
+                    .containerId(null)
+                    .mimeType("application/pdf")
+                    .fileSize(0L)
+                    .build();
 
             attachmentResourceClient.uploadAttachment(userAttachmentInfo, userFileData, API_KEY, TEST_WORKSPACE, 204);
 
