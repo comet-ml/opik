@@ -114,7 +114,8 @@ public class GetAttachmentTool implements ToolExecutor {
                 .onErrorResume(Exception.class, e -> {
                     // Don't echo the raw exception to the LLM — surface a correlation id only.
                     String correlationId = UUID.randomUUID().toString();
-                    log.warn("get_attachment tool failed for ref ('{}', '{}'), projectId='{}', workspaceId='{}', correlationId='{}'",
+                    log.warn(
+                            "get_attachment tool failed for ref ('{}', '{}'), projectId='{}', workspaceId='{}', correlationId='{}'",
                             args.type, args.id, projectId, ctx.getWorkspaceId(), correlationId, e);
                     return Mono.just(ToolArgs.errorJson(
                             "Failed to load attachment (ref: " + correlationId + ")"));
