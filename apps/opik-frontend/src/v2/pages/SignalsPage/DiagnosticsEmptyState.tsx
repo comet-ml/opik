@@ -1,55 +1,15 @@
 import React, { useState } from "react";
-import { FileText, Power } from "lucide-react";
-import briefingBulbIcon from "@/icons/briefing-bulb.svg";
-import { buildDocsUrl } from "@/lib/utils";
+import { ExternalLink, Radar } from "lucide-react";
+import { Button } from "@/ui/button";
+import { useTheme } from "@/contexts/theme-provider";
+import { THEME_MODE } from "@/constants/theme";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import TurnOnDiagnosticDialog from "@/v2/pages/SignalsPage/TurnOnDiagnosticDialog";
+import emptyDiagnosticsLightUrl from "/images/empty-prompt-library-light.svg";
+import emptyDiagnosticsDarkUrl from "/images/empty-prompt-library-dark.svg";
 
 // TODO: point at the dedicated Diagnostics docs page once it ships.
 const DIAGNOSTICS_DOCS_URL = buildDocsUrl();
-
-type ActionCardProps = {
-  icon: React.ElementType;
-  iconClassName: string;
-  title: string;
-  description: string;
-};
-
-const ActionCard: React.FC<
-  ActionCardProps &
-    ({ as: "button"; onClick: () => void } | { as: "link"; href: string })
-> = ({ icon: Icon, iconClassName, title, description, ...rest }) => {
-  const content = (
-    <>
-      <Icon className={`mt-0.5 size-4 shrink-0 ${iconClassName}`} />
-      <div className="flex flex-col gap-0.5">
-        <span className="comet-body-s-accented text-foreground">{title}</span>
-        <span className="comet-body-xs text-light-slate">{description}</span>
-      </div>
-    </>
-  );
-
-  const className =
-    "flex w-full items-start gap-3 rounded-lg border border-border p-4 text-left transition-colors hover:border-primary hover:bg-muted/50";
-
-  if (rest.as === "link") {
-    return (
-      <a
-        href={rest.href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={className}
-      >
-        {content}
-      </a>
-    );
-  }
-
-  return (
-    <button type="button" onClick={rest.onClick} className={className}>
-      {content}
-    </button>
-  );
-};
 
 type DiagnosticsEmptyStateProps = {
   onRun: () => void;
@@ -61,6 +21,11 @@ const DiagnosticsEmptyState: React.FC<DiagnosticsEmptyStateProps> = ({
   isPending,
 }) => {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const { themeMode } = useTheme();
+  const emptyImageUrl =
+    themeMode === THEME_MODE.DARK
+      ? emptyDiagnosticsDarkUrl
+      : emptyDiagnosticsLightUrl;
 
   const handleConfirm = () => {
     onRun();
@@ -68,46 +33,51 @@ const DiagnosticsEmptyState: React.FC<DiagnosticsEmptyStateProps> = ({
   };
 
   return (
-    <div className="flex min-h-[60vh] items-center justify-center px-6">
-      <div className="flex w-full max-w-4xl items-center justify-between gap-10">
-        <div className="flex max-w-xl flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <h2 className="comet-title-m text-foreground">
-              Catch issues before your users do
-            </h2>
-            <p className="comet-body-s text-muted-slate">
-              Diagnostics scans your traces daily and surfaces non-error issues
-              — tool loops, hallucinations, slow retrievals.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-3">
-            <ActionCard
-              as="button"
-              onClick={() => setDialogOpen(true)}
-              icon={Power}
-              iconClassName="text-[var(--color-primary)]"
-              title="Turn on diagnostics"
-              description="Best with 100+ traces logged over the last 7 days"
-            />
-            <ActionCard
-              as="link"
-              href={DIAGNOSTICS_DOCS_URL}
-              icon={FileText}
-              iconClassName="text-[var(--color-green)]"
-              title="View docs"
-              description="See how diagnostics works"
-            />
-          </div>
+    <div className="flex flex-1 items-center justify-center gap-12 px-8 py-10">
+      <div className="flex w-full max-w-md flex-col gap-6">
+        <div className="flex flex-col gap-2">
+          <h2 className="comet-title-s text-foreground">
+            Catch issues before your users do
+          </h2>
+          <p className="comet-body-s text-muted-slate">
+            Diagnostics scans your traces daily and surfaces non-error issues —
+            tool loops, hallucinations, slow retrievals.
+          </p>
         </div>
 
-        <img
-          src={briefingBulbIcon}
-          alt=""
-          aria-hidden
-          className="hidden w-64 shrink-0 lg:block"
-        />
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => setDialogOpen(true)}
+            className="group flex w-full flex-col gap-1 rounded-md border border-border bg-background px-4 py-3 text-left transition-colors hover:border-primary"
+          >
+            <span className="flex items-center gap-2">
+              <Radar className="size-4 shrink-0 text-chart-purple" />
+              <span className="comet-body-s-accented text-foreground">
+                Turn on diagnostics
+              </span>
+            </span>
+            <span className="comet-body-xs text-muted-slate">
+              Best with 100+ traces logged over the last 7 days
+            </span>
+          </button>
+        </div>
+
+        <div>
+          <Button variant="outline" size="sm" asChild>
+            <a href={DIAGNOSTICS_DOCS_URL} target="_blank" rel="noreferrer">
+              View docs
+              <ExternalLink className="ml-1.5 size-3.5" />
+            </a>
+          </Button>
+        </div>
       </div>
+
+      <img
+        src={emptyImageUrl}
+        alt="Catch issues before your users do"
+        className="hidden max-w-sm shrink-0 lg:block"
+      />
 
       <TurnOnDiagnosticDialog
         open={dialogOpen}

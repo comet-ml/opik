@@ -7,7 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/ui/dialog";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 
 // Default daily cron time (config.yml `agentInsightsReport.schedule` =
 // `0 5 0 * * ?`). Shown for context; the actual time is set per deployment.
