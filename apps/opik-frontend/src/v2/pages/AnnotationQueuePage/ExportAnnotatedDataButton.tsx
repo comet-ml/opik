@@ -131,7 +131,11 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
         reviewers.forEach((reviewerName) => {
           const reviewerData: ReviewerData = {};
 
-          const comments = getCommentsByUser(trace.comments, reviewerName);
+          const comments = getCommentsByUser(
+            trace.comments,
+            reviewerName,
+            annotationQueue.id,
+          );
           if (comments.length > 0) {
             reviewerData.comment = comments.join("; ");
           }
@@ -140,6 +144,7 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
             trace.feedback_scores ?? [],
             reviewerName,
             feedbackDefinitionNames,
+            annotationQueue.id,
           );
 
           feedbackScores.forEach((score) => {
@@ -177,7 +182,11 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
         reviewers.forEach((reviewerName) => {
           const reviewerData: ReviewerData = {};
 
-          const comments = getCommentsByUser(thread.comments, reviewerName);
+          const comments = getCommentsByUser(
+            thread.comments,
+            reviewerName,
+            annotationQueue.id,
+          );
           if (comments.length > 0) {
             reviewerData.comment = comments.join("; ");
           }
@@ -186,6 +195,7 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
             thread.feedback_scores ?? [],
             reviewerName,
             feedbackDefinitionNames,
+            annotationQueue.id,
           );
 
           feedbackScores.forEach((score) => {

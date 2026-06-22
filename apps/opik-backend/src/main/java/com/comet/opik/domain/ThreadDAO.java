@@ -342,6 +342,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     last_updated_at,
                     created_by,
                     last_updated_by,
+                    source_queue_id,
                     entity_id,
                     workspace_id,
                     project_id
@@ -923,6 +924,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     last_updated_at,
                     created_by,
                     last_updated_by,
+                    source_queue_id,
                     entity_id,
                     workspace_id,
                     project_id

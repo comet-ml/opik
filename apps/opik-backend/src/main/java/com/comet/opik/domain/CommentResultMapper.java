@@ -55,14 +55,23 @@ public class CommentResultMapper {
         var commentItems = Arrays.stream(commentsArrays)
                 .filter(commentItem -> CollectionUtils.isNotEmpty(commentItem) &&
                         !CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(commentItem.get(0).toString()))
-                .map(commentItem -> Comment.builder()
-                        .id(UUID.fromString(commentItem.get(0).toString()))
-                        .text(commentItem.get(1).toString())
-                        .createdAt(Instant.parse(commentItem.get(2).toString()))
-                        .lastUpdatedAt(Instant.parse(commentItem.get(3).toString()))
-                        .createdBy(commentItem.get(4).toString())
-                        .lastUpdatedBy(commentItem.get(5).toString())
-                        .build())
+                .map(commentItem -> {
+                    var builder = Comment.builder()
+                            .id(UUID.fromString(commentItem.get(0).toString()))
+                            .text(commentItem.get(1).toString())
+                            .createdAt(Instant.parse(commentItem.get(2).toString()))
+                            .lastUpdatedAt(Instant.parse(commentItem.get(3).toString()))
+                            .createdBy(commentItem.get(4).toString())
+                            .lastUpdatedBy(commentItem.get(5).toString());
+                    if (commentItem.size() > 6 && commentItem.get(6) != null) {
+                        var sourceQueueId = commentItem.get(6).toString();
+                        if (StringUtils.isNotEmpty(sourceQueueId)
+                                && !CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(sourceQueueId)) {
+                            builder.sourceQueueId(UUID.fromString(sourceQueueId));
+                        }
+                    }
+                    return builder.build();
+                })
                 .sorted(Comparator.comparing(Comment::id))
                 .toList();
 

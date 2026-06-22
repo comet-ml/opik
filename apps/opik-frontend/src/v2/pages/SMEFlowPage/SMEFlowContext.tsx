@@ -457,6 +457,7 @@ export const SMEFlowProvider: React.FunctionComponent<{
       currentItem.feedback_scores || [],
       currentUserName,
       annotationQueue?.feedback_definition_names ?? [],
+      annotationQueue?.id,
     );
 
     const comment = lastComment ? { text: lastComment.text } : undefined;
