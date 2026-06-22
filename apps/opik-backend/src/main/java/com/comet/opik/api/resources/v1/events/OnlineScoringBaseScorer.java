@@ -13,6 +13,10 @@ import com.comet.opik.domain.TraceService;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OnlineScoringStreamConfigurationAdapter;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.LongCounter;
 import jakarta.validation.constraints.NotNull;
 import lombok.NonNull;
 import org.redisson.api.RedissonReactiveClient;
@@ -43,6 +47,7 @@ public abstract class OnlineScoringBaseScorer<M extends WorkspaceScopedMessage> 
 
     public static final int TRACE_PAGE_LIMIT = 2000;
     private static final String ONLINE_SCORING_NAMESPACE = "online_scoring";
+    private static final AttributeKey<String> WORKSPACE_ID_KEY = AttributeKey.stringKey("workspace_id");
 
     /**
      * Logger for the actual subclass, in order to have the correct class name in the logs.
@@ -52,6 +57,13 @@ public abstract class OnlineScoringBaseScorer<M extends WorkspaceScopedMessage> 
     protected final FeedbackScoreService feedbackScoreService;
     protected final TraceService traceService;
     protected final AutomationRuleEvaluatorType type;
+
+    /**
+     * Per-workspace count of messages successfully processed (scored) by this stream. Together with
+     * {@code online_scoring_<scorer>_processing_errors_total} (failures) this gives the consumer-side
+     * processed-vs-failed split per workspace. Exported as {@code online_scoring_<scorer>_processed_total}.
+     */
+    private final LongCounter processedCounter;
 
     protected OnlineScoringBaseScorer(@NonNull @Config OnlineScoringConfig config,
             @NonNull RedissonReactiveClient redisson,
@@ -67,15 +79,22 @@ public abstract class OnlineScoringBaseScorer<M extends WorkspaceScopedMessage> 
         this.feedbackScoreService = feedbackScoreService;
         this.traceService = traceService;
         this.type = type;
+        this.processedCounter = GlobalOpenTelemetry.getMeter(ONLINE_SCORING_NAMESPACE)
+                .counterBuilder("%s_%s_processed".formatted(ONLINE_SCORING_NAMESPACE, metricsBaseName))
+                .setDescription("Messages successfully processed (scored), by workspace")
+                .build();
     }
 
     /**
      * Defers the subscription of {@link #score(Object)} so any synchronous work in implementations
-     * runs at subscription time on the per-stream worker scheduler.
+     * runs at subscription time on the per-stream worker scheduler. On success, records the
+     * per-workspace processed count; failures are attributed via {@link #messageContext(Object)}.
      */
     @Override
     protected Mono<Void> processEvent(M message) {
-        return Mono.defer(() -> score(message));
+        return Mono.defer(() -> score(message))
+                .doOnSuccess(ignored -> processedCounter.add(1,
+                        Attributes.of(WORKSPACE_ID_KEY, message.workspaceId())));
     }
 
     /**
