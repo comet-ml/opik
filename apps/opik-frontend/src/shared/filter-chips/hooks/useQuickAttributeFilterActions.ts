@@ -1,12 +1,10 @@
-import { useCallback, useMemo, useState } from "react";
-import uniqid from "uniqid";
+import { useCallback, useMemo } from "react";
 import { Filter, FilterOperator } from "@/types/filters";
 import { JsonValue } from "@/types/shared";
 import { createFilter } from "@/lib/filters";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import {
-  ChipDefinition,
   ChipValue,
   ChipValueMap,
   QueryBuilderChipValue,
@@ -15,13 +13,15 @@ import {
   QuickAttributeFilterApi,
   QuickFilterSection,
 } from "@/shared/filter-chips/QuickAttributeFilterContext";
-import { QuickFilterDraft } from "@/shared/filter-chips/QuickFilterDialog";
 
 const METADATA_CHIP_ID = "metadata";
 const CUSTOM_CHIP_ID = "custom";
 const PROVIDER_CHIP_ID = "provider";
-const DEFAULT_OPERATOR: FilterOperator = "=";
-const FALLBACK_OPERATORS: FilterOperator[] = ["="];
+
+// Quick-filter is a one-click flow: apply directly with "contains" (the operator
+// used in the large majority of filters and valid for every target chip). The
+// chip is pinned and stays editable, so users can refine the operator afterwards.
+const QUICK_FILTER_OPERATOR: FilterOperator = "contains";
 
 // "providers" (trace) is a read-time aggregate with no stored column; "provider"
 // (span) is enriched into metadata but is filterable via the dedicated provider
@@ -38,18 +38,9 @@ const isProviderRootKey = (path: string): boolean => path === PROVIDER_KEY;
 
 interface UseQuickAttributeFilterActionsArgs {
   type: TRACE_DATA_TYPE;
-  definitions: ChipDefinition[];
   values: ChipValueMap;
   applyValue: (id: string, value: ChipValue) => void;
   pinChip: (id: string) => void;
-}
-
-export interface QuickAttributeFilterActions extends QuickAttributeFilterApi {
-  dialog: {
-    draft: QuickFilterDraft | null;
-    onApply: (operator: FilterOperator, value: string) => void;
-    onClose: () => void;
-  };
 }
 
 const getRows = (value: ChipValue | undefined): Filter[] => {
@@ -89,77 +80,41 @@ export const resolveQuickFilterTarget = (
 
 export const useQuickAttributeFilterActions = ({
   type,
-  definitions,
   values,
   applyValue,
   pinChip,
-}: UseQuickAttributeFilterActionsArgs): QuickAttributeFilterActions => {
-  const [draft, setDraft] = useState<QuickFilterDraft | null>(null);
-
+}: UseQuickAttributeFilterActionsArgs): QuickAttributeFilterApi => {
   const canFilter = useCallback(
     (section: QuickFilterSection, path: string) =>
       Boolean(path) && resolveQuickFilterTarget(section, type, path) !== null,
     [type],
   );
 
-  // Opens the approval dialog seeded from the clicked attribute. The actual
-  // filter is applied only when the user confirms.
+  // One-click apply: add a "contains" row for the clicked attribute and pin the
+  // chip (which stays open for refinement). No confirmation dialog.
   const filter = useCallback(
     (section: QuickFilterSection, path: string, value: JsonValue) => {
       const target = resolveQuickFilterTarget(section, type, path);
       if (!target) return;
 
-      const definition = definitions.find((d) => d.id === target.chipId);
-      const queryBuilder =
-        definition?.kind === "query-builder" ? definition : undefined;
-      const operators = queryBuilder?.operators ?? FALLBACK_OPERATORS;
-      // Mirror how the chip popover picks its initial operator
-      // (`defaultOperator ?? operators[0]`) so quick-filter always matches the
-      // chip's own default — metadata/custom/provider default to "contains" so
-      // a value pulled verbatim from a long input/output string still matches.
-      const defaultOperator =
-        queryBuilder?.defaultOperator ??
-        queryBuilder?.operators[0] ??
-        DEFAULT_OPERATOR;
-      const chipLabel = definition?.label ?? target.chipId;
-
-      setDraft({
-        id: uniqid(),
-        section,
-        chipId: target.chipId,
-        key: target.key,
-        chipLabel,
-        field: target.key ?? chipLabel,
-        operators,
-        defaultOperator,
-        value: stringifyFilterValue(value),
-      });
-    },
-    [type, definitions],
-  );
-
-  const onClose = useCallback(() => setDraft(null), []);
-
-  const onApply = useCallback(
-    (operator: FilterOperator, value: string) => {
-      if (!draft) return;
-      const { chipId, key, section } = draft;
+      const { chipId, key } = target;
+      const stringValue = stringifyFilterValue(value);
 
       const existing = getRows(values[chipId]);
       const alreadyApplied = existing.some(
         (row) =>
           (row.key ?? "") === (key ?? "") &&
-          row.operator === operator &&
-          String(row.value) === value,
+          row.operator === QUICK_FILTER_OPERATOR &&
+          String(row.value) === stringValue,
       );
 
       if (!alreadyApplied) {
         const nextRow = createFilter({
           ...(key !== undefined ? { key } : {}),
-          operator,
-          value,
+          operator: QUICK_FILTER_OPERATOR,
+          value: stringValue,
         });
-        // Drop blank draft rows but keep any real rows the user already added.
+        // Drop blank rows but keep any real rows the user already added.
         const nextRows = existing.filter(
           (row) => (row.key ?? "") !== "" || (row.value ?? "") !== "",
         );
@@ -174,16 +129,11 @@ export const useQuickAttributeFilterActions = ({
         data_type: type,
         source: section,
         filter_name: chipId,
-        operator,
+        operator: QUICK_FILTER_OPERATOR,
       });
-
-      setDraft(null);
     },
-    [draft, values, applyValue, pinChip, type],
+    [type, values, applyValue, pinChip],
   );
 
-  return useMemo(
-    () => ({ canFilter, filter, dialog: { draft, onApply, onClose } }),
-    [canFilter, filter, draft, onApply, onClose],
-  );
+  return useMemo(() => ({ canFilter, filter }), [canFilter, filter]);
 };

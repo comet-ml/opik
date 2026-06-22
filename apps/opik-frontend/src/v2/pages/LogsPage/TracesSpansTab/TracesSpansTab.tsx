@@ -60,7 +60,6 @@ import FilterChipBar from "@/shared/filter-chips/FilterChipBar/FilterChipBar";
 import { useTagsChipActions } from "@/shared/filter-chips/hooks/useTagsChipActions";
 import { useQuickAttributeFilterActions } from "@/shared/filter-chips/hooks/useQuickAttributeFilterActions";
 import { QuickAttributeFilterProvider } from "@/shared/filter-chips/QuickAttributeFilterContext";
-import QuickFilterDialog from "@/shared/filter-chips/QuickFilterDialog";
 import {
   ChipDefinition,
   ChipOptionsResult,
@@ -1079,17 +1078,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     pinChip,
   });
 
-  const {
-    canFilter: quickFilterCanFilter,
-    filter: quickFilterFilter,
-    dialog: quickFilterDialog,
-  } = useQuickAttributeFilterActions({
-    type,
-    definitions: chipDefinitions,
-    values: chipValues,
-    applyValue: applyChipValue,
-    pinChip,
-  });
+  const { canFilter: quickFilterCanFilter, filter: quickFilterFilter } =
+    useQuickAttributeFilterActions({
+      type,
+      values: chipValues,
+      applyValue: applyChipValue,
+      pinChip,
+    });
 
   const quickAttributeFilterApi = useMemo(
     () => ({ canFilter: quickFilterCanFilter, filter: quickFilterFilter }),
@@ -1917,7 +1912,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           onRowChange={handleRowChange}
         />
       </QuickAttributeFilterProvider>
-      <QuickFilterDialog {...quickFilterDialog} />
       <ThreadDetailsPanel
         projectId={projectId}
         projectName={projectName}

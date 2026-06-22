@@ -2,7 +2,13 @@ import { SyntaxNode, Tree } from "@lezer/common";
 
 export type QuickFilterMode = "json" | "yaml";
 
-export type QuickFilterTarget = { pos: number; path: string; value: string };
+export type QuickFilterTarget = {
+  // Icon position (end of the value); value text spans [from, pos].
+  pos: number;
+  from: number;
+  path: string;
+  value: string;
+};
 
 // Scalar value node names per grammar. JSON keys are a distinct node
 // (PropertyName), so plain String/Number/… are always values; YAML keys are
@@ -146,7 +152,12 @@ export const collectQuickFilterTargets = (
       }
       const path = mode === "json" ? jsonPath(node, doc) : yamlPath(node, doc);
       if (path === null) return;
-      targets.push({ pos: node.to, path, value: unquote(raw) });
+      targets.push({
+        pos: node.to,
+        from: node.from,
+        path,
+        value: unquote(raw),
+      });
     },
   });
   return targets;
