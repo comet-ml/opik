@@ -3898,8 +3898,8 @@ class DatasetsResourceTest {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
                 assertThat(actualResponse.hasEntity()).isTrue();
-                assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
-                        .contains("dataset_item id must be a version 7 UUID");
+                assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class).getDetails())
+                        .isEqualTo("dataset_item id must be a version 7 UUID");
             }
         }
 

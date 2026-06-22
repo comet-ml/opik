@@ -27,6 +27,9 @@ public class OpikConfiguration extends JobConfiguration {
     private DatabaseAnalyticsReadOnlyFreeFormSqlConfig databaseAnalyticsReadOnlyFreeFormSql = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
 
     @Valid @NotNull @JsonProperty
+    private UuidValidationConfig uuidValidation = UuidValidationConfig.builder().build();
+
+    @Valid @NotNull @JsonProperty
     private AuthenticationConfig authentication = new AuthenticationConfig();
 
     @Valid @NotNull @JsonProperty
@@ -74,6 +77,9 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private DatasetExportConfig datasetExport = new DatasetExportConfig();
+
+    @Valid @NotNull @JsonProperty
+    private AgentInsightsReportConfig agentInsightsReport = new AgentInsightsReportConfig();
 
     @Valid @NotNull @JsonProperty
     private ClickHouseLogAppenderConfig clickHouseLogAppender = new ClickHouseLogAppenderConfig();
