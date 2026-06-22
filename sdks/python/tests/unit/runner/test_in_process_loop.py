@@ -178,7 +178,7 @@ class TestPollFailureLogging:
         def side_effect(runner_id):
             nonlocal call_count
             call_count += 1
-            if call_count >= in_process_loop._POLL_FAILURE_HINT_THRESHOLD:
+            if call_count >= 2:
                 shutdown_event.set()
             raise ApiError(status_code=429)
 
@@ -202,7 +202,7 @@ class TestPollFailureLogging:
         def side_effect(runner_id):
             nonlocal call_count
             call_count += 1
-            if call_count >= in_process_loop._POLL_FAILURE_HINT_THRESHOLD:
+            if call_count >= 2:
                 shutdown_event.set()
             raise ConnectionError("blocked")
 

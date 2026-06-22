@@ -30,12 +30,6 @@ _POLL_IDLE_INTERVAL_SECONDS = 0.5
 _CANCELLED_JOBS_TTL_SECONDS = 300
 _CANCELLED_JOBS_MAX_SIZE = 10_000
 
-# After this many consecutive poll failures, surface a warning that points at a
-# likely firewall/proxy block instead of staying silent on debug-level logs.
-_POLL_FAILURE_HINT_THRESHOLD = 3
-# Re-emit that warning every N further failures so a sustained block stays visible.
-_POLL_FAILURE_REWARN_INTERVAL = 20
-
 
 def cast_input_value(value: object, type_name: str) -> object:
     """Cast *value* to the native Python type indicated by *type_name*.
@@ -165,7 +159,12 @@ class InProcessRunnerLoop:
                 self._loop.call_soon_threadsafe(self._job_queue.put_nowait, job)
 
     def _log_poll_failure(self, failures: int, status_code: Optional[int]) -> None:
-        """Log a job-poll failure, escalating to an actionable hint when sustained."""
+        """Log every job-poll failure; the backoff already throttles the cadence.
+
+        The first failure is a gentle "retrying" line so a single transient blip
+        does not shout "firewall"; every failure after that includes the
+        actionable hint.
+        """
         detail = f"API {status_code}" if status_code is not None else "connection error"
 
         if failures == 1:
@@ -173,26 +172,19 @@ class InProcessRunnerLoop:
                 "Unable to reach Opik server while polling for jobs (%s). Retrying...",
                 detail,
             )
-        elif (
-            failures == _POLL_FAILURE_HINT_THRESHOLD
-            or failures % _POLL_FAILURE_REWARN_INTERVAL == 0
-        ):
-            rate_limit_note = (
-                " Opik is rate-limiting requests (HTTP 429)."
-                if status_code == 429
-                else ""
-            )
-            LOGGER.warning(
-                "Job polling has failed %d times in a row (%s).%s A firewall or proxy "
-                "may be blocking the sustained connection to Opik. Check your "
-                "network/proxy settings, or increase the poll interval with "
-                "OPIK_RUNNER_POLL_INTERVAL.",
-                failures,
-                detail,
-                rate_limit_note,
-            )
-        else:
-            LOGGER.debug("Poll error (%s), attempt %d", detail, failures, exc_info=True)
+            return
+
+        rate_limit_note = (
+            " Opik is rate-limiting requests (HTTP 429)." if status_code == 429 else ""
+        )
+        LOGGER.warning(
+            "Job polling has failed %d times in a row (%s).%s A firewall or proxy may "
+            "be blocking the sustained connection to Opik. Check your network/proxy "
+            "settings, or increase the poll interval with OPIK_RUNNER_POLL_INTERVAL.",
+            failures,
+            detail,
+            rate_limit_note,
+        )
 
     def _heartbeat_loop(self) -> None:
         while not self._shutdown_event.is_set():
