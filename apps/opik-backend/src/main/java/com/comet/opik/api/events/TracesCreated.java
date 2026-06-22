@@ -15,10 +15,19 @@ import java.util.stream.Collectors;
 @Accessors(fluent = true)
 public class TracesCreated extends BaseEvent {
     private final @NonNull List<Trace> traces;
+    // Resolved from RequestContext.WORKSPACE_NAME at publish time (TraceService). May be null/blank
+    // for callers that don't carry it; consumers fall back to workspaceId.
+    private final String workspaceName;
 
     public TracesCreated(@NonNull List<Trace> traces, @NonNull String workspaceId, @NonNull String userName) {
+        this(traces, workspaceId, userName, null);
+    }
+
+    public TracesCreated(@NonNull List<Trace> traces, @NonNull String workspaceId, @NonNull String userName,
+            String workspaceName) {
         super(workspaceId, userName);
         this.traces = traces;
+        this.workspaceName = workspaceName;
     }
 
     public Set<UUID> projectIds() {

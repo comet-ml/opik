@@ -32,6 +32,7 @@ import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -63,6 +64,7 @@ public class OnlineScoringSampler {
 
     private static final String ONLINE_SCORING_NAMESPACE = "online_scoring";
     private static final AttributeKey<String> WORKSPACE_ID_KEY = AttributeKey.stringKey("workspace_id");
+    private static final AttributeKey<String> WORKSPACE_NAME_KEY = AttributeKey.stringKey("workspace_name");
     private static final AttributeKey<String> EVALUATOR_TYPE_KEY = AttributeKey.stringKey("evaluator_type");
     private static final AttributeKey<String> DECISION_KEY = AttributeKey.stringKey("decision");
     // Sampling decision values (the per-workspace funnel between ingestion and scoring):
@@ -104,10 +106,13 @@ public class OnlineScoringSampler {
                 .build();
     }
 
-    private void recordDecision(String workspaceId, AutomationRuleEvaluator<?, ?> evaluator, String decision,
-            long count) {
+    private void recordDecision(String workspaceId, String workspaceName, AutomationRuleEvaluator<?, ?> evaluator,
+            String decision, long count) {
+        // workspaceName is resolved from RequestContext.WORKSPACE_NAME at trace-event publish time and carried
+        // on the message/event; fall back to the id when absent so the label is always populated.
         samplingDecisions.add(count, Attributes.of(
                 WORKSPACE_ID_KEY, workspaceId,
+                WORKSPACE_NAME_KEY, StringUtils.defaultIfBlank(workspaceName, workspaceId),
                 EVALUATOR_TYPE_KEY, evaluator.getType().name(),
                 DECISION_KEY, decision));
     }
@@ -118,9 +123,9 @@ public class OnlineScoringSampler {
      * is a single call site rather than three. Always returns {@code false} so callers can
      * {@code return skip(...)}.
      */
-    private boolean skip(String workspaceId, AutomationRuleEvaluator<?, ?> evaluator, Trace trace,
+    private boolean skip(String workspaceId, String workspaceName, AutomationRuleEvaluator<?, ?> evaluator, Trace trace,
             String decision, String message, Object... args) {
-        recordDecision(workspaceId, evaluator, decision, 1);
+        recordDecision(workspaceId, workspaceName, evaluator, decision, 1);
         // Important to set the workspaceId for logging purposes
         try (var logContext = createTraceLoggingContext(workspaceId, evaluator, trace)) {
             userFacingLogger.info(message, args);
@@ -146,7 +151,8 @@ public class OnlineScoringSampler {
         log.info("Received TracesCreated, complete '{}', total '{}', workspace '{}'",
                 completeTraces.size(), tracesBatch.traces().size(), tracesBatch.workspaceId());
 
-        sampleAndScore(completeTraces, tracesBatch.workspaceId(), tracesBatch.userName());
+        sampleAndScore(completeTraces, tracesBatch.workspaceId(), tracesBatch.userName(),
+                tracesBatch.workspaceName());
     }
 
     /**
@@ -176,10 +182,10 @@ public class OnlineScoringSampler {
                         .put(RequestContext.USER_NAME, event.userName()))
                 .block();
 
-        sampleAndScore(traces, event.workspaceId(), event.userName());
+        sampleAndScore(traces, event.workspaceId(), event.userName(), event.workspaceName());
     }
 
-    private void sampleAndScore(List<Trace> traces, String workspaceId, String userName) {
+    private void sampleAndScore(List<Trace> traces, String workspaceId, String userName, String workspaceName) {
         if (CollectionUtils.isEmpty(traces)) {
             log.info("No traces to score for workspace '{}'", workspaceId);
             return;
@@ -241,28 +247,29 @@ public class OnlineScoringSampler {
                 // If no selection found, use all evaluators (default behavior for backward compatibility).
                 var samples = scorableTraces.stream()
                         .filter(trace -> isEvaluatorSelectedForTrace(evaluator, trace, selectedRuleIdsByTrace))
-                        .filter(trace -> shouldSampleTrace(evaluator, workspaceId, trace));
+                        .filter(trace -> shouldSampleTrace(evaluator, workspaceId, workspaceName, trace));
                 switch (evaluator.getType()) {
                     case LLM_AS_JUDGE -> {
                         var messages = samples
-                                .map(trace -> toLlmAsJudgeMessage(workspaceId, userName,
+                                .map(trace -> toLlmAsJudgeMessage(workspaceId, userName, workspaceName,
                                         (AutomationRuleEvaluatorLlmAsJudge) evaluator, trace))
                                 .toList();
                         logSampledTrace(evaluator, messages, scorableTraces.size());
                         if (!messages.isEmpty()) {
-                            recordDecision(workspaceId, evaluator, DECISION_SAMPLED, messages.size());
+                            recordDecision(workspaceId, workspaceName, evaluator, DECISION_SAMPLED, messages.size());
                             onlineScorePublisher.enqueueMessage(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE);
                         }
                     }
                     case USER_DEFINED_METRIC_PYTHON -> {
                         if (serviceTogglesConfig.isPythonEvaluatorEnabled()) {
                             var messages = samples
-                                    .map(trace -> toScoreUserDefinedMetricPython(workspaceId, userName,
+                                    .map(trace -> toScoreUserDefinedMetricPython(workspaceId, userName, workspaceName,
                                             (AutomationRuleEvaluatorUserDefinedMetricPython) evaluator, trace))
                                     .toList();
                             logSampledTrace(evaluator, messages, scorableTraces.size());
                             if (!messages.isEmpty()) {
-                                recordDecision(workspaceId, evaluator, DECISION_SAMPLED, messages.size());
+                                recordDecision(workspaceId, workspaceName, evaluator, DECISION_SAMPLED,
+                                        messages.size());
                                 onlineScorePublisher.enqueueMessage(messages,
                                         AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
                             }
@@ -315,23 +322,24 @@ public class OnlineScoringSampler {
                 .toList();
     }
 
-    private boolean shouldSampleTrace(AutomationRuleEvaluator<?, ?> evaluator, String workspaceId, Trace trace) {
+    private boolean shouldSampleTrace(AutomationRuleEvaluator<?, ?> evaluator, String workspaceId,
+            String workspaceName, Trace trace) {
         // Check if rule is enabled first
         if (!evaluator.isEnabled()) {
-            return skip(workspaceId, evaluator, trace, DECISION_SKIPPED_DISABLED,
+            return skip(workspaceId, workspaceName, evaluator, trace, DECISION_SKIPPED_DISABLED,
                     "The traceId '{}' was skipped for rule: '{}' as the rule is disabled",
                     trace.id(), evaluator.getName());
         }
 
         // Check if trace matches all filters
         if (!filterEvaluationService.matchesAllFilters(evaluator.getFilters(), trace)) {
-            return skip(workspaceId, evaluator, trace, DECISION_SKIPPED_FILTER,
+            return skip(workspaceId, workspaceName, evaluator, trace, DECISION_SKIPPED_FILTER,
                     "The traceId '{}' was skipped for rule: '{}' as it does not match the configured filters",
                     trace.id(), evaluator.getName());
         }
 
         if (secureRandom.nextFloat() >= evaluator.getSamplingRate()) {
-            return skip(workspaceId, evaluator, trace, DECISION_SKIPPED_SAMPLING,
+            return skip(workspaceId, workspaceName, evaluator, trace, DECISION_SKIPPED_SAMPLING,
                     "The traceId '{}' was skipped for rule: '{}' and per the sampling rate '{}'",
                     trace.id(), evaluator.getName(), evaluator.getSamplingRate());
         }
@@ -341,7 +349,7 @@ public class OnlineScoringSampler {
         return true;
     }
 
-    private TraceToScoreLlmAsJudge toLlmAsJudgeMessage(String workspaceId, String userName,
+    private TraceToScoreLlmAsJudge toLlmAsJudgeMessage(String workspaceId, String userName, String workspaceName,
             AutomationRuleEvaluatorLlmAsJudge evaluator,
             Trace trace) {
         return TraceToScoreLlmAsJudge.builder()
@@ -351,12 +359,14 @@ public class OnlineScoringSampler {
                 .llmAsJudgeCode(evaluator.getCode())
                 .workspaceId(workspaceId)
                 .userName(userName)
+                .workspaceName(workspaceName)
                 .scoreNameMapping(Map.of())
                 .promptType(PromptType.MUSTACHE)
                 .build();
     }
 
     private TraceToScoreUserDefinedMetricPython toScoreUserDefinedMetricPython(String workspaceId, String userName,
+            String workspaceName,
             AutomationRuleEvaluatorUserDefinedMetricPython evaluator,
             Trace trace) {
         return TraceToScoreUserDefinedMetricPython.builder()
@@ -366,6 +376,7 @@ public class OnlineScoringSampler {
                 .code(evaluator.getCode())
                 .workspaceId(workspaceId)
                 .userName(userName)
+                .workspaceName(workspaceName)
                 .build();
     }
 

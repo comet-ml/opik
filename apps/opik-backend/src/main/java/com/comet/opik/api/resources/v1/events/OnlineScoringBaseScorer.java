@@ -19,6 +19,7 @@ import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.LongCounter;
 import jakarta.validation.constraints.NotNull;
 import lombok.NonNull;
+import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RedissonReactiveClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,6 +49,7 @@ public abstract class OnlineScoringBaseScorer<M extends WorkspaceScopedMessage> 
     public static final int TRACE_PAGE_LIMIT = 2000;
     private static final String ONLINE_SCORING_NAMESPACE = "online_scoring";
     private static final AttributeKey<String> WORKSPACE_ID_KEY = AttributeKey.stringKey("workspace_id");
+    private static final AttributeKey<String> WORKSPACE_NAME_KEY = AttributeKey.stringKey("workspace_name");
 
     /**
      * Logger for the actual subclass, in order to have the correct class name in the logs.
@@ -93,9 +95,17 @@ public abstract class OnlineScoringBaseScorer<M extends WorkspaceScopedMessage> 
      */
     @Override
     protected final Mono<Void> processEvent(M message) {
+        var workspaceName = StringUtils.defaultIfBlank(message.workspaceName(), message.workspaceId());
         return doScore(message)
-                .doOnSuccess(ignored -> processedCounter.add(1,
-                        Attributes.of(WORKSPACE_ID_KEY, message.workspaceId())));
+                .doOnSuccess(ignored -> processedCounter.add(1, Attributes.of(
+                        WORKSPACE_ID_KEY, message.workspaceId(),
+                        WORKSPACE_NAME_KEY, workspaceName)))
+                // Carry both workspace id and name on the reactive context for the whole chain, sourced
+                // from the message (resolved from RequestContext.WORKSPACE_NAME at trace-event publish time).
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, message.workspaceId())
+                        .put(RequestContext.WORKSPACE_NAME, workspaceName)
+                        .put(RequestContext.USER_NAME, message.userName()));
     }
 
     /**
@@ -113,11 +123,14 @@ public abstract class OnlineScoringBaseScorer<M extends WorkspaceScopedMessage> 
      * Attributes processing-error metrics to the workspace/user the message belongs to. Without this
      * override the base class falls back to {@link MessageContext#UNKNOWN}, which is why
      * {@code online_scoring_*_processing_errors_total} historically reported {@code workspace_id="unknown"}.
-     * Workspace name is not carried on scoring messages, so it is left null (rendered as "unknown").
+     * The workspace name is carried on the message (resolved from RequestContext.WORKSPACE_NAME at
+     * trace-event publish time); falls back to the id when absent.
      */
     @Override
     protected MessageContext messageContext(M message) {
-        return new MessageContext(message.workspaceId(), null, message.userName());
+        return new MessageContext(message.workspaceId(),
+                StringUtils.defaultIfBlank(message.workspaceName(), message.workspaceId()),
+                message.userName());
     }
 
     /**

@@ -3,6 +3,7 @@ package com.comet.opik.api.events;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import jakarta.annotation.Nullable;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 
@@ -16,5 +17,6 @@ public record TraceToScoreUserDefinedMetricPython(
         @NotNull String ruleName,
         @NotNull AutomationRuleEvaluatorUserDefinedMetricPython.UserDefinedMetricPythonCode code,
         @NotNull String workspaceId,
-        @NotNull String userName) implements WorkspaceScopedMessage {
+        @NotNull String userName,
+        @Nullable String workspaceName) implements WorkspaceScopedMessage {
 }

@@ -24,5 +24,6 @@ public record TraceToScoreLlmAsJudge(
         String categoryName,
         @NotNull Map<String, String> scoreNameMapping,
         @NotNull PromptType promptType,
-        @Nullable UUID experimentId) implements WorkspaceScopedMessage {
+        @Nullable UUID experimentId,
+        @Nullable String workspaceName) implements WorkspaceScopedMessage {
 }
