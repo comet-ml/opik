@@ -38,6 +38,20 @@ const PAGE_SIZE = 100;
 const RUNNING_DESC =
   "We're analyzing your traces to detect issues. Results will update automatically — you can leave this page.";
 
+// 28px (h-7) loader-purple tile; icon is black on light / white on dark.
+const RunningIcon: React.FC = () => (
+  <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-[#A78BFA]">
+    <Radar className="size-4 text-black dark:text-white" />
+  </div>
+);
+
+// Indeterminate "running" bar — a fixed-width fill sliding across the track.
+const RunningBar: React.FC = () => (
+  <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-muted">
+    <div className="absolute inset-y-0 left-0 w-2/5 animate-progress-indeterminate rounded-full bg-[var(--color-primary)]" />
+  </div>
+);
+
 type IssuesTabProps = {
   projectId: string;
   showResolved?: boolean;
@@ -112,9 +126,7 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
               <span className="comet-body-xs-accented">Issues</span>
             </div>
             <div className="flex flex-1 flex-col justify-center gap-3 p-5">
-              <div className="flex size-8 items-center justify-center rounded-lg bg-primary-100">
-                <Radar className="size-4 text-[var(--color-primary)]" />
-              </div>
+              <RunningIcon />
               <div className="flex flex-col gap-1">
                 <span className="comet-body-s-accented text-foreground">
                   Running your first diagnostic
@@ -123,9 +135,7 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
                   {RUNNING_DESC}
                 </span>
               </div>
-              <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                <div className="h-full w-2/5 animate-pulse rounded-full bg-[var(--color-primary)]" />
-              </div>
+              <RunningBar />
             </div>
           </div>
 
@@ -183,11 +193,9 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
         </div>
         <div className="flex flex-col overflow-y-auto">
           {isRunning && (
-            <div className="flex flex-col gap-2.5 border-b border-border bg-primary-50 px-4 py-3">
+            <div className="flex flex-col justify-center gap-2 border-b border-border bg-primary-50 px-4 py-3">
               <div className="flex items-start gap-3">
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary-100">
-                  <Radar className="size-4 text-[var(--color-primary)]" />
-                </div>
+                <RunningIcon />
                 <div className="flex flex-col gap-0.5">
                   <span className="comet-body-s-accented text-foreground">
                     Running diagnostic
@@ -197,9 +205,7 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
                   </span>
                 </div>
               </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                <div className="h-full w-2/5 animate-pulse rounded-full bg-[var(--color-primary)]" />
-              </div>
+              <RunningBar />
             </div>
           )}
           {issues.map((issue) => (
