@@ -17,11 +17,11 @@ import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.domain.JsonDatasetItemProcessor;
 import com.comet.opik.domain.Streamer;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.bi.AnalyticsService;
-import com.comet.opik.infrastructure.db.IdGeneratorImpl;
 import com.comet.opik.infrastructure.json.JsonNodeMessageBodyWriter;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -76,7 +76,7 @@ class DatasetsResourceIntegrationTest {
                 .addResource(new DatasetsResource(
                         service, itemService, expansionService, versionService, () -> requestContext,
                         new FiltersFactory(new FilterQueryBuilder()),
-                        new IdGeneratorImpl(), new Streamer(), sortingFactory, csvProcessor, jsonProcessor,
+                        TestIdGeneratorFactory.create(), new Streamer(), sortingFactory, csvProcessor, jsonProcessor,
                         featureFlags, csvExportService, analyticsService))
                 .addProvider(JsonNodeMessageBodyWriter.class)
                 .addProvider(MultiPartFeature.class)
