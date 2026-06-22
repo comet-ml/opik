@@ -15,7 +15,10 @@ public class MySQLContainerUtils {
         return new MySQLContainer(DockerImageName.parse("mysql:8.4.2"))
                 .withUrlParam("createDatabaseIfNotExist", "true")
                 .withUrlParam("rewriteBatchedStatements", "true")
-                .withUrlParam("serverTimezone", "UTC")
+                // Keep Instant reads independent of the JVM default timezone (connectionTimeZone replaces the
+                // deprecated serverTimezone alias; forceConnectionTimeZoneToSession pins the session time_zone to UTC).
+                .withUrlParam("connectionTimeZone", "UTC")
+                .withUrlParam("forceConnectionTimeZoneToSession", "true")
                 .withDatabaseName("opik")
                 .withPassword("opik")
                 .withUsername("opik")
