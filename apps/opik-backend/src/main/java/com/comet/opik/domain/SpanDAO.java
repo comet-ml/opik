@@ -22,6 +22,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TruncationUtils;
+import com.comet.opik.utils.UsageUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Preconditions;
@@ -46,7 +47,6 @@ import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -1728,12 +1728,7 @@ public class SpanDAO {
                     statement.bindNull("end_time" + i, String.class);
                 }
 
-                Map<String, Integer> usageMap = span.usage() == null
-                        ? Map.of()
-                        : span.usage().entrySet().stream()
-                                .filter(e -> e.getValue() != null)
-                                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-                statement.bind("usage" + i, usageMap);
+                statement.bind("usage" + i, UsageUtils.sanitizeUsage(span.usage()));
 
                 // Format the timestamp client-side so the SQL contains a plain string literal in the
                 // last_updated_at cell. Fall back to "now" when the client did not provide a value —
@@ -2810,21 +2805,12 @@ public class SpanDAO {
                 spanUpdate.metadata()).compareTo(BigDecimal.ZERO) > 0;
     }
 
-    // Bind the usage map as parallel key/value arrays for the Map(String, Int64) CAST, dropping null
-    // token counts: a null value makes the CAST fail with ClickHouse CANNOT_CONVERT_TYPE (code 70).
-    // Matches the batch insert path, which also drops null usage values. Cost calculation is guarded
-    // separately in CostService.
+    // Bind the usage map as parallel key/value arrays for the Map(String, Int64) CAST. UsageUtils
+    // drops null token counts (a null value would fail the CAST with CANNOT_CONVERT_TYPE, code 70).
     private static void bindUsage(Statement statement, Map<String, Integer> usage) {
-        var usageKeys = new ArrayList<String>();
-        var usageValues = new ArrayList<Integer>();
-        usage.forEach((key, value) -> {
-            if (value != null) {
-                usageKeys.add(key);
-                usageValues.add(value);
-            }
-        });
-        statement.bind("usageKeys", usageKeys.toArray(String[]::new));
-        statement.bind("usageValues", usageValues.toArray(Integer[]::new));
+        var sanitized = UsageUtils.sanitizeUsage(usage);
+        statement.bind("usageKeys", sanitized.keySet().toArray(String[]::new));
+        statement.bind("usageValues", sanitized.values().toArray(Integer[]::new));
     }
 
     private void bindCost(Span span, Statement statement, String index) {

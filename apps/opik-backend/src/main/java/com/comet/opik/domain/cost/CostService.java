@@ -2,6 +2,7 @@ package com.comet.opik.domain.cost;
 
 import com.comet.opik.api.ModelCostData;
 import com.comet.opik.utils.JsonUtils;
+import com.comet.opik.utils.UsageUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
@@ -67,25 +68,12 @@ public class CostService {
             @Nullable Map<String, Integer> usage, @Nullable JsonNode metadata) {
         ModelPrice modelPrice = findModelPrice(modelName, provider);
 
-        BigDecimal estimatedCost = modelPrice.calculator().apply(modelPrice, sanitizeUsage(usage));
+        // Drop null token counts before pricing: calculators read usage via getOrDefault(key, 0),
+        // which returns null (not the default) for a key present with a null value, then NPEs
+        // unboxing it in BigDecimal.valueOf(...).
+        BigDecimal estimatedCost = modelPrice.calculator().apply(modelPrice, UsageUtils.sanitizeUsage(usage));
 
         return estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? estimatedCost : getCostFromMetadata(metadata);
-    }
-
-    // Drop null token counts before pricing. Calculators read usage via getOrDefault(key, 0), which
-    // returns null (not the default) for a key present with a null value, then NPEs unboxing it in
-    // BigDecimal.valueOf(...). A null or absent usage map becomes empty.
-    private static Map<String, Integer> sanitizeUsage(@Nullable Map<String, Integer> usage) {
-        if (usage == null || usage.isEmpty()) {
-            return Map.of();
-        }
-        var sanitized = new HashMap<String, Integer>(usage.size());
-        usage.forEach((key, value) -> {
-            if (value != null) {
-                sanitized.put(key, value);
-            }
-        });
-        return sanitized;
     }
 
     /**
