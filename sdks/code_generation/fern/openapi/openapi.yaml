@@ -20867,6 +20867,7 @@ components:
       - alertsEnabled
       - anthropicProviderEnabled
       - bedrockProviderEnabled
+      - costIntelligenceEnabled
       - customllmProviderEnabled
       - datasetExportEnabled
       - datasetVersioningEnabled
@@ -20880,7 +20881,6 @@ components:
       - openaiProviderEnabled
       - openrouterProviderEnabled
       - opikAIEnabled
-      - optimizationStudioEnabled
       - projectHomepageEnabled
       - pythonEvaluatorEnabled
       - spanLlmAsJudgeEnabled
@@ -20910,7 +20910,7 @@ components:
           type: boolean
         exportEnabled:
           type: boolean
-        optimizationStudioEnabled:
+        costIntelligenceEnabled:
           type: boolean
         datasetVersioningEnabled:
           type: boolean
