@@ -377,6 +377,7 @@ export enum PROVIDER_MODEL_TYPE {
   NEVERSLEEP_LLAMA_3_1_LUMIMAID_8B = "neversleep/llama-3.1-lumimaid-8b",
   NEVERSLEEP_NOROMAID_20B = "neversleep/noromaid-20b",
   NEX_AGI_DEEPSEEK_V3_1_NEX_N1 = "nex-agi/deepseek-v3.1-nex-n1",
+  NEX_AGI_NEX_N2_PRO = "nex-agi/nex-n2-pro",
   NEX_AGI_NEX_N2_PRO_FREE = "nex-agi/nex-n2-pro:free",
   NOUSRESEARCH_DEEPHERMES_3_MISTRAL_24B_PREVIEW = "nousresearch/deephermes-3-mistral-24b-preview",
   NOUSRESEARCH_HERMES_2_PRO_LLAMA_3_8B = "nousresearch/hermes-2-pro-llama-3-8b",
