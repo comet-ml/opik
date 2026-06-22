@@ -1,17 +1,18 @@
 import React, { useState } from "react";
-import { Eye, FileText } from "lucide-react";
-import { useTheme } from "@/contexts/theme-provider";
-import { THEME_MODE } from "@/constants/theme";
+import { FileText, ToggleRight } from "lucide-react";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import TurnOnDiagnosticDialog from "@/v2/pages/SignalsPage/TurnOnDiagnosticDialog";
-import emptyDiagnosticsLightUrl from "/images/empty-diagnostics-light.svg";
-import emptyDiagnosticsDarkUrl from "/images/empty-diagnostics-dark.svg";
+import RobotLamp from "@/icons/robot-lamp.svg?react";
 
 // TODO: point at the dedicated Diagnostics docs page once it ships.
 const DIAGNOSTICS_DOCS_URL = buildDocsUrl();
 
 const CARD_CLASS =
-  "flex w-full items-start gap-3 rounded-lg border border-border bg-background px-4 py-3 text-left transition-colors hover:border-primary";
+  "flex h-[88px] w-full items-center rounded-lg border border-border bg-background px-4 text-left transition-colors hover:border-primary";
+
+// Inner row keeps the icon aligned with the top (title) text line while the
+// outer card centers the whole block vertically.
+const CARD_CONTENT_CLASS = "flex items-start gap-2";
 
 type DiagnosticsEmptyStateProps = {
   onRun: () => void;
@@ -23,11 +24,6 @@ const DiagnosticsEmptyState: React.FC<DiagnosticsEmptyStateProps> = ({
   isPending,
 }) => {
   const [dialogOpen, setDialogOpen] = useState(false);
-  const { themeMode } = useTheme();
-  const emptyImageUrl =
-    themeMode === THEME_MODE.DARK
-      ? emptyDiagnosticsDarkUrl
-      : emptyDiagnosticsLightUrl;
 
   const handleConfirm = () => {
     onRun();
@@ -53,15 +49,17 @@ const DiagnosticsEmptyState: React.FC<DiagnosticsEmptyStateProps> = ({
             onClick={() => setDialogOpen(true)}
             className={CARD_CLASS}
           >
-            <Eye className="mt-0.5 size-4 shrink-0 text-fuchsia-500" />
-            <div className="flex flex-col gap-0.5">
-              <span className="comet-body-s-accented text-foreground">
-                Turn on diagnostics
+            <span className={CARD_CONTENT_CLASS}>
+              <ToggleRight className="mt-1 size-4 shrink-0 text-fuchsia-500" />
+              <span className="flex flex-col gap-0.5">
+                <span className="comet-body-s-accented text-foreground">
+                  Turn on diagnostics
+                </span>
+                <span className="comet-body-xs text-light-slate">
+                  Best with 100+ traces logged over the last 7 days
+                </span>
               </span>
-              <span className="comet-body-xs text-light-slate">
-                Best with 100+ traces logged over the last 7 days
-              </span>
-            </div>
+            </span>
           </button>
 
           <a
@@ -70,24 +68,22 @@ const DiagnosticsEmptyState: React.FC<DiagnosticsEmptyStateProps> = ({
             rel="noopener noreferrer"
             className={CARD_CLASS}
           >
-            <FileText className="mt-0.5 size-4 shrink-0 text-[var(--color-green)]" />
-            <div className="flex flex-col gap-0.5">
-              <span className="comet-body-s-accented text-foreground">
-                View docs
+            <span className={CARD_CONTENT_CLASS}>
+              <FileText className="mt-1 size-4 shrink-0 text-[var(--color-green)]" />
+              <span className="flex flex-col gap-0.5">
+                <span className="comet-body-s-accented text-foreground">
+                  View docs
+                </span>
+                <span className="comet-body-xs text-light-slate">
+                  See how diagnostics works
+                </span>
               </span>
-              <span className="comet-body-xs text-light-slate">
-                See how diagnostics works
-              </span>
-            </div>
+            </span>
           </a>
         </div>
       </div>
 
-      <img
-        src={emptyImageUrl}
-        alt="Catch issues before your users do"
-        className="hidden max-w-xs shrink-0 lg:block"
-      />
+      <RobotLamp className="hidden size-52 shrink-0 lg:block" />
 
       <TurnOnDiagnosticDialog
         open={dialogOpen}

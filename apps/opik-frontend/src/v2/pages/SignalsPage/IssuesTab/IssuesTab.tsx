@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { keepPreviousData } from "@tanstack/react-query";
 import { StringParam, useQueryParam } from "use-query-params";
 import {
   AGENT_INSIGHTS_ISSUE_STATUS,
@@ -9,6 +10,7 @@ import EmptyIssueDetailsIcon from "@/icons/empty-issue-details.svg?react";
 import { Sorting } from "@/types/sorting";
 import useAgentInsightsIssuesList from "@/api/signals/useAgentInsightsIssuesList";
 import Loader from "@/shared/Loader/Loader";
+import { Button } from "@/ui/button";
 import {
   Select,
   SelectContent,
@@ -30,6 +32,13 @@ const SORT_OPTIONS: { value: string; label: string; sorting: Sorting }[] = [
     value: "total_occurrences",
     label: "By occurrences",
     sorting: [{ id: "total_occurrences", desc: true }],
+  },
+  {
+    // Severity is an enum ordered critical→low, so ascending surfaces the most
+    // severe issues first.
+    value: "severity",
+    label: "By severity",
+    sorting: [{ id: "severity", desc: false }],
   },
 ];
 
@@ -105,13 +114,18 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
     [sortValue],
   );
 
-  const { data, isPending } = useAgentInsightsIssuesList({
-    projectId,
-    status,
-    sorting,
-    page: 1,
-    size: PAGE_SIZE,
-  });
+  const { data, isPending } = useAgentInsightsIssuesList(
+    {
+      projectId,
+      status,
+      sorting,
+      page: 1,
+      size: PAGE_SIZE,
+    },
+    // Keep the current list visible while a re-sort/refetch is in flight so the
+    // layout doesn't collapse to the loader and jump.
+    { placeholderData: keepPreviousData },
+  );
 
   const issues = useMemo(() => data?.content ?? [], [data]);
 
@@ -248,7 +262,7 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
             <div className="flex size-7 items-center justify-center rounded-lg bg-[#89DEFF]">
               <PartyPopper className="size-3.5 text-black dark:text-white" />
             </div>
-            <div className="flex flex-col gap-1">
+            <div className="-mt-1.5 flex flex-col gap-1">
               <span className="comet-body-s-accented text-foreground">
                 All clear
               </span>
@@ -257,14 +271,15 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
               </span>
             </div>
             {onRunDiagnostic && (
-              <button
-                type="button"
+              <Button
+                variant="link"
+                size="xs"
                 onClick={onRunDiagnostic}
-                className="comet-body-s-accented flex items-center gap-1.5 text-[var(--color-primary)] hover:underline"
+                className="h-auto select-none gap-1.5 self-start px-0"
               >
                 <Radar className="size-3.5" />
                 Run diagnostic
-              </button>
+              </Button>
             )}
           </div>
         </div>

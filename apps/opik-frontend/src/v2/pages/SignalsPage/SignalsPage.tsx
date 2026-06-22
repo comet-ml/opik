@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Navigate, useParams } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { BookCheck, Radar, SlidersHorizontal } from "lucide-react";
+import { BookCheck, Radar, Settings2 } from "lucide-react";
 import { useActiveProjectId } from "@/store/AppStore";
 import usePluginsStore from "@/store/PluginsStore";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { AGENT_INSIGHTS_ISSUES_KEY } from "@/api/api";
+import { formatRelativeDateTime } from "@/lib/date";
 import PageBodyScrollContainer from "@/v2/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import { Button } from "@/ui/button";
@@ -76,6 +77,10 @@ const SignalsPage: React.FC = () => {
       ).length,
     };
   }, [issuesData]);
+
+  // Last scan = when the diagnostic last produced a report (server-stamped on
+  // every run, incl. all-clear; not bumped by resolving/reopening issues).
+  const lastScan = job?.last_scan_at;
 
   const triggerMutation = useTriggerAgentInsightsJobMutation();
   const updateJobMutation = useUpdateAgentInsightsJobMutation();
@@ -168,25 +173,33 @@ const SignalsPage: React.FC = () => {
         )}
 
         {!showResolved && (
-          <div className="flex items-center justify-end gap-2">
-            <Button
-              variant="outline"
-              size="xs"
-              disabled={isRunning || triggerMutation.isPending}
-              onClick={handleRunDiagnostic}
-            >
-              <Radar className="mr-1.5 size-3.5" />
-              Run diagnostic
-            </Button>
-            <Separator orientation="vertical" className="h-5" />
-            <Button
-              variant="outline"
-              size="xs"
-              onClick={() => setShowResolved(true)}
-            >
-              <BookCheck className="mr-1.5 size-3.5" />
-              Resolved issues
-            </Button>
+          <div className="flex items-center gap-2">
+            {lastScan && (
+              <span className="comet-body-xs text-muted-slate">
+                Last scan: {formatRelativeDateTime(lastScan)}
+              </span>
+            )}
+            <div className="ml-auto flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="xs"
+                disabled={isRunning || triggerMutation.isPending}
+                onClick={handleRunDiagnostic}
+              >
+                <Radar className="mr-1.5 size-3.5" />
+                Run diagnostic
+              </Button>
+              <Separator orientation="vertical" className="h-5" />
+              <Button
+                variant="outline"
+                size="xs"
+                disabled={!hasData}
+                onClick={() => setShowResolved(true)}
+              >
+                <BookCheck className="mr-1.5 size-3.5" />
+                Resolved issues
+              </Button>
+            </div>
           </div>
         )}
 
@@ -211,16 +224,16 @@ const SignalsPage: React.FC = () => {
           Diagnostics
         </h1>
         {(isActive || hasData) && (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
             <span className="comet-body-xs flex items-center gap-1.5 text-foreground-secondary">
               <span
                 className={`size-2 rounded-full ${
-                  isActive ? "bg-emerald-400" : "bg-chart-red"
+                  isJobEnabled ? "bg-emerald-400" : "bg-chart-red"
                 }`}
               />
-              {isActive ? "Auto • Daily" : "Manual"}
+              {isJobEnabled ? "Auto • Daily" : "Manual"}
             </span>
-            {isActive ? (
+            {isJobEnabled ? (
               <Button
                 variant="ghost"
                 size="icon-2xs"
@@ -228,13 +241,14 @@ const SignalsPage: React.FC = () => {
                 aria-label="Diagnostics settings"
                 className="text-foreground"
               >
-                <SlidersHorizontal />
+                <Settings2 className="size-3" />
               </Button>
             ) : (
               <Button
                 size="xs"
                 onClick={handleTurnOnAuto}
                 disabled={updateJobMutation.isPending}
+                className="ml-1.5"
               >
                 Turn on auto-diagnostic
               </Button>

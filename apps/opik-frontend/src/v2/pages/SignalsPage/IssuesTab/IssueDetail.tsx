@@ -6,7 +6,7 @@ import {
   Eye,
   EyeOff,
   Hash,
-  RotateCcw,
+  Undo2,
   Users,
 } from "lucide-react";
 import OllieOwl from "@/icons/ollie-owl.svg?react";
@@ -16,15 +16,10 @@ import {
 } from "@/types/signals";
 import { Button } from "@/ui/button";
 import { Card } from "@/ui/card";
-import { Tag } from "@/ui/tag";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Separator } from "@/ui/separator";
 import { formatDate } from "@/lib/date";
 import { cn } from "@/lib/utils";
-import {
-  SEVERITY_LABEL_MAP,
-  SEVERITY_TAG_VARIANT_MAP,
-} from "@/v2/pages/SignalsPage/helpers";
 import OccurrenceChart from "@/v2/pages/SignalsPage/IssuesTab/OccurrenceChart";
 import AffectedTracesSample from "@/v2/pages/SignalsPage/IssuesTab/AffectedTracesSample";
 import useAgentInsightsIssue from "@/api/signals/useAgentInsightsIssue";
@@ -50,7 +45,7 @@ const STATUS_ACTIONS: {
   {
     status: AGENT_INSIGHTS_ISSUE_STATUS.open,
     label: "Reopen",
-    icon: RotateCcw,
+    icon: Undo2,
   },
 ];
 
@@ -120,15 +115,6 @@ const IssueDetail: React.FC<IssueDetailProps> = ({ issue, projectId }) => {
               {issue.name}
             </span>
           </TooltipWrapper>
-          {issue.severity && (
-            <Tag
-              size="sm"
-              variant={SEVERITY_TAG_VARIANT_MAP[issue.severity]}
-              className="shrink-0"
-            >
-              {SEVERITY_LABEL_MAP[issue.severity]}
-            </Tag>
-          )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {STATUS_ACTIONS.filter(
@@ -144,7 +130,7 @@ const IssueDetail: React.FC<IssueDetailProps> = ({ issue, projectId }) => {
                 disabled={updateMutation.isPending}
                 onClick={() => setStatus(status)}
               >
-                <Icon className="mr-1.5 size-3" />
+                <Icon className="mr-1 size-3" />
                 {label}
               </Button>
             </React.Fragment>

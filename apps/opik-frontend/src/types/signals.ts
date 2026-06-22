@@ -82,6 +82,9 @@ export interface AgentInsightsJob {
   id: string;
   project_id: string;
   status: AGENT_INSIGHTS_JOB_STATUS;
+  // When a diagnostic report was last generated (incl. "all clear"); unaffected
+  // by resolving/reopening issues. Used for the "Last scan" header.
+  last_scan_at?: string;
   created_at?: string;
   created_by?: string;
   last_updated_at?: string;

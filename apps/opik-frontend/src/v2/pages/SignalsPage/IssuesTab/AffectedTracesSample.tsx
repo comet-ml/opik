@@ -1,11 +1,12 @@
 import React from "react";
-import { Link, useParams } from "@tanstack/react-router";
 import { Coins, Hash, ListTree, Timer } from "lucide-react";
 import useTracesList from "@/api/traces/useTracesList";
+import useTraceThreadPanelsState from "@/v2/pages-shared/traces/useTraceThreadPanelsState";
 import { Skeleton } from "@/ui/skeleton";
-import { LOGS_TYPE } from "@/constants/traces";
+import { PROVIDERS } from "@/constants/providers";
 import { formatDate, formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
+import { cn } from "@/lib/utils";
 
 const SAMPLE_SIZE = 8;
 
@@ -20,10 +21,6 @@ type AffectedTracesSampleProps = {
 const AffectedTracesSample: React.FC<AffectedTracesSampleProps> = ({
   projectId,
 }) => {
-  const { workspaceName } = useParams({ strict: false }) as {
-    workspaceName: string;
-  };
-
   const { data, isPending } = useTracesList({
     projectId,
     page: 1,
@@ -33,6 +30,14 @@ const AffectedTracesSample: React.FC<AffectedTracesSampleProps> = ({
   });
 
   const traces = data?.content ?? [];
+
+  // Open the trace in an in-place side panel (deep-linked via ?trace/?span)
+  // instead of navigating away to the Logs page.
+  const { handleRowClick, activeRowId, panels } = useTraceThreadPanelsState({
+    rows: traces,
+    type: "trace",
+    traceDetailsPanelProps: { projectId },
+  });
 
   if (isPending) {
     return (
@@ -51,37 +56,54 @@ const AffectedTracesSample: React.FC<AffectedTracesSampleProps> = ({
   }
 
   return (
-    <div className="flex flex-col gap-1.5">
-      {traces.map((trace) => (
-        <Link
-          key={trace.id}
-          to="/$workspaceName/projects/$projectId/logs"
-          params={{ workspaceName, projectId }}
-          search={{ logsType: LOGS_TYPE.traces, trace: trace.id }}
-          className="comet-body-xs flex items-center gap-4 rounded-md border border-border px-3 py-2 transition-colors hover:border-primary hover:bg-muted/50"
-        >
-          <span className="flex items-center gap-1.5 font-mono text-foreground">
-            <ListTree className="size-3.5 text-[var(--color-primary)]" />
-            {trace.id.slice(0, 4)}...{trace.id.slice(-3)}
-          </span>
-          <span className="flex items-center gap-1 text-muted-slate">
-            <Timer className="size-3.5" />
-            {formatDuration(trace.duration)}
-          </span>
-          <span className="flex items-center gap-1 text-muted-slate">
-            <Hash className="size-3.5" />
-            {(trace.span_count ?? 0).toLocaleString()}
-          </span>
-          <span className="flex items-center gap-1 text-muted-slate">
-            <Coins className="size-3.5" />
-            {formatCost(trace.total_estimated_cost)}
-          </span>
-          <span className="ml-auto whitespace-nowrap text-light-slate">
-            {formatDate(trace.last_updated_at)}
-          </span>
-        </Link>
-      ))}
-    </div>
+    <>
+      <div className="flex flex-col gap-1.5">
+        {traces.map((trace) => {
+          const provider = trace.providers?.[0];
+          const providerConfig = provider ? PROVIDERS[provider] : undefined;
+          const ProviderIcon = providerConfig?.icon;
+
+          return (
+            <button
+              key={trace.id}
+              type="button"
+              onClick={() => handleRowClick(trace)}
+              className={cn(
+                "comet-body-xs flex w-full items-center gap-4 rounded-md border border-border px-3 py-2 text-left transition-colors hover:border-primary hover:bg-muted/50",
+                activeRowId === trace.id && "border-primary bg-primary-100",
+              )}
+            >
+              <span className="flex items-center gap-1.5 font-mono text-foreground">
+                <ListTree className="size-3.5 text-[var(--chart-violet)]" />
+                {trace.id.slice(0, 4)}...{trace.id.slice(-3)}
+              </span>
+              <span className="flex items-center gap-1 text-muted-slate">
+                <Timer className="size-3.5" />
+                {formatDuration(trace.duration)}
+              </span>
+              <span className="flex items-center gap-1 text-muted-slate">
+                <Hash className="size-3.5" />
+                {(trace.span_count ?? 0).toLocaleString()}
+              </span>
+              <span className="flex items-center gap-1 text-muted-slate">
+                <Coins className="size-3.5" />
+                {formatCost(trace.total_estimated_cost)}
+              </span>
+              {providerConfig && ProviderIcon && (
+                <span className="flex items-center gap-1.5 text-muted-slate">
+                  <ProviderIcon className="size-3.5 shrink-0" />
+                  {providerConfig.label}
+                </span>
+              )}
+              <span className="ml-auto whitespace-nowrap text-light-slate">
+                {formatDate(trace.last_updated_at)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {panels}
+    </>
   );
 };
 

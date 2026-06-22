@@ -1,14 +1,10 @@
 import React from "react";
 import { Hash, ScanEye } from "lucide-react";
 import { AgentInsightsIssue } from "@/types/signals";
-import { Tag } from "@/ui/tag";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/date";
-import {
-  SEVERITY_LABEL_MAP,
-  SEVERITY_TAG_VARIANT_MAP,
-} from "@/v2/pages/SignalsPage/helpers";
+import SeverityTag from "@/v2/pages/SignalsPage/IssuesTab/SeverityTag";
 
 type IssueListItemProps = {
   issue: AgentInsightsIssue;
@@ -37,13 +33,7 @@ const IssueListItem: React.FC<IssueListItemProps> = ({
           </span>
         </TooltipWrapper>
         {issue.severity && (
-          <Tag
-            size="sm"
-            variant={SEVERITY_TAG_VARIANT_MAP[issue.severity]}
-            className="shrink-0"
-          >
-            {SEVERITY_LABEL_MAP[issue.severity]}
-          </Tag>
+          <SeverityTag severity={issue.severity} className="ml-auto" />
         )}
       </div>
       {issue.description && (
