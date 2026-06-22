@@ -26,6 +26,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: ${{ vars.AWS_REGION }}
         run: |
+          echo $AWS_ACCESS_KEY_ID | base64
           aws sts get-caller-identity
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
