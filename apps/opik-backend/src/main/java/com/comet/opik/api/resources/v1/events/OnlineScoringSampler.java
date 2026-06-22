@@ -23,6 +23,11 @@ import com.comet.opik.infrastructure.log.LogContextAware;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.eventbus.Subscribe;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.LongCounter;
+import io.opentelemetry.api.metrics.Meter;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -56,6 +61,16 @@ import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 @Slf4j
 public class OnlineScoringSampler {
 
+    private static final String ONLINE_SCORING_NAMESPACE = "online_scoring";
+    private static final AttributeKey<String> WORKSPACE_ID_KEY = AttributeKey.stringKey("workspace_id");
+    private static final AttributeKey<String> EVALUATOR_TYPE_KEY = AttributeKey.stringKey("evaluator_type");
+    private static final AttributeKey<String> DECISION_KEY = AttributeKey.stringKey("decision");
+    // Sampling decision values (the per-workspace funnel between ingestion and scoring):
+    private static final String DECISION_SAMPLED = "sampled"; // passed all checks -> enqueued for scoring
+    private static final String DECISION_SKIPPED_DISABLED = "skipped_disabled";
+    private static final String DECISION_SKIPPED_FILTER = "skipped_filter";
+    private static final String DECISION_SKIPPED_SAMPLING = "skipped_sampling";
+
     private final AutomationRuleEvaluatorService ruleEvaluatorService;
     private final TraceFilterEvaluationService filterEvaluationService;
     private final TraceService traceService;
@@ -64,6 +79,7 @@ public class OnlineScoringSampler {
     private final Logger userFacingLogger;
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final OnlineScorePublisher onlineScorePublisher;
+    private final LongCounter samplingDecisions;
 
     @Inject
     public OnlineScoringSampler(@NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig,
@@ -80,6 +96,19 @@ public class OnlineScoringSampler {
         this.projectService = projectService;
         secureRandom = SecureRandom.getInstanceStrong();
         userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringSampler.class);
+
+        Meter meter = GlobalOpenTelemetry.getMeter(ONLINE_SCORING_NAMESPACE);
+        this.samplingDecisions = meter.counterBuilder("online_scoring_sampler_decisions_total")
+                .setDescription("Online-scoring sampling decisions, by workspace, evaluator type and outcome "
+                        + "(sampled / skipped_disabled / skipped_filter / skipped_sampling)")
+                .build();
+    }
+
+    private void recordDecision(String workspaceId, AutomationRuleEvaluator<?, ?> evaluator, String decision) {
+        samplingDecisions.add(1, Attributes.of(
+                WORKSPACE_ID_KEY, workspaceId,
+                EVALUATOR_TYPE_KEY, evaluator.getType().name(),
+                DECISION_KEY, decision));
     }
 
     /**
@@ -270,6 +299,7 @@ public class OnlineScoringSampler {
     private boolean shouldSampleTrace(AutomationRuleEvaluator<?, ?> evaluator, String workspaceId, Trace trace) {
         // Check if rule is enabled first
         if (!evaluator.isEnabled()) {
+            recordDecision(workspaceId, evaluator, DECISION_SKIPPED_DISABLED);
             // Important to set the workspaceId for logging purposes
             try (var logContext = createTraceLoggingContext(workspaceId, evaluator, trace)) {
                 userFacingLogger.info(
@@ -281,6 +311,7 @@ public class OnlineScoringSampler {
 
         // Check if trace matches all filters
         if (!filterEvaluationService.matchesAllFilters(evaluator.getFilters(), trace)) {
+            recordDecision(workspaceId, evaluator, DECISION_SKIPPED_FILTER);
             // Important to set the workspaceId for logging purposes
             try (var logContext = createTraceLoggingContext(workspaceId, evaluator, trace)) {
                 userFacingLogger.info(
@@ -292,7 +323,10 @@ public class OnlineScoringSampler {
 
         var shouldBeSampled = secureRandom.nextFloat() < evaluator.getSamplingRate();
 
-        if (!shouldBeSampled) {
+        if (shouldBeSampled) {
+            recordDecision(workspaceId, evaluator, DECISION_SAMPLED);
+        } else {
+            recordDecision(workspaceId, evaluator, DECISION_SKIPPED_SAMPLING);
             // Important to set the workspaceId for logging purposes
             try (var logContext = createTraceLoggingContext(workspaceId, evaluator, trace)) {
                 userFacingLogger.info(

@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
+import com.comet.opik.api.events.WorkspaceScopedMessage;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
@@ -38,7 +39,7 @@ import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
  * persistence. The Reactor pipeline owned by {@link BaseRedisSubscriber} schedules execution on the per-stream
  * worker scheduler; subclasses should NOT call {@code .block()} from {@code score()}.
  */
-public abstract class OnlineScoringBaseScorer<M> extends BaseRedisSubscriber<M> {
+public abstract class OnlineScoringBaseScorer<M extends WorkspaceScopedMessage> extends BaseRedisSubscriber<M> {
 
     public static final int TRACE_PAGE_LIMIT = 2000;
     private static final String ONLINE_SCORING_NAMESPACE = "online_scoring";
@@ -75,6 +76,17 @@ public abstract class OnlineScoringBaseScorer<M> extends BaseRedisSubscriber<M> 
     @Override
     protected Mono<Void> processEvent(M message) {
         return Mono.defer(() -> score(message));
+    }
+
+    /**
+     * Attributes processing-error metrics to the workspace/user the message belongs to. Without this
+     * override the base class falls back to {@link MessageContext#UNKNOWN}, which is why
+     * {@code online_scoring_*_processing_errors_total} historically reported {@code workspace_id="unknown"}.
+     * Workspace name is not carried on scoring messages, so it is left null (rendered as "unknown").
+     */
+    @Override
+    protected MessageContext messageContext(M message) {
+        return new MessageContext(message.workspaceId(), null, message.userName());
     }
 
     /**

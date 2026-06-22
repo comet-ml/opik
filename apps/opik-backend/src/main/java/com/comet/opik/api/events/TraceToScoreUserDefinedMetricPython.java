@@ -16,5 +16,5 @@ public record TraceToScoreUserDefinedMetricPython(
         @NotNull String ruleName,
         @NotNull AutomationRuleEvaluatorUserDefinedMetricPython.UserDefinedMetricPythonCode code,
         @NotNull String workspaceId,
-        @NotNull String userName) {
+        @NotNull String userName) implements WorkspaceScopedMessage {
 }
