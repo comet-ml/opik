@@ -10,11 +10,11 @@ import com.comet.opik.api.WorkspaceConfiguration;
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
 import com.comet.opik.api.events.TraceThreadsCreated;
 import com.comet.opik.api.resources.v1.events.TraceThreadBufferConfig;
-import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.TagOperations;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.WorkspaceConfigurationService;
+import com.comet.opik.domain.retention.RetentionUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.google.common.eventbus.EventBus;
@@ -110,7 +110,7 @@ class TraceThreadServiceImpl implements TraceThreadService {
                     ThreadTimestamps timestamps = entry.getValue();
 
                     // Extract timestamp from the earliest trace (first trace in chronological order)
-                    Instant earliestTraceTimestamp = IdGenerator.extractTimestampFromUUIDv7(timestamps.firstTraceId());
+                    var earliestTraceTimestamp = RetentionUtils.extractInstant(timestamps.firstTraceId());
 
                     return traceThreadIdService
                             .getOrCreateTraceThreadId(workspaceId, projectId, threadId, earliestTraceTimestamp)
