@@ -431,6 +431,7 @@ class ReadToolTest {
                         .entityType(com.comet.opik.api.attachment.EntityType.TRACE)
                         .entityId(traceId)
                         .containerId(projectId)
+                        .fileSize(0L)
                         .build())));
 
         var result = JsonUtils.getJsonNodeFromString(

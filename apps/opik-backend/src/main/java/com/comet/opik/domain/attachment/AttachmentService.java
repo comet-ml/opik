@@ -384,6 +384,7 @@ class AttachmentServiceImpl implements AttachmentService {
                                 .entityId(entityId)
                                 .containerId(containerId)
                                 .mimeType(attachment.mimeType())
+                                .fileSize(attachment.fileSize())
                                 .build())
                         .toList());
     }

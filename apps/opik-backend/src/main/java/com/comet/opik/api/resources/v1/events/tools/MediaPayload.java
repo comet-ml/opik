@@ -21,14 +21,17 @@ public record MediaPayload(
         @NonNull String fileName,
         @NonNull String mimeType,
         @NonNull MediaCategory category,
+        long sizeBytes,
         String base64Data,
         String url) {
 
-    public static MediaPayload ofBase64(String fileName, String mimeType, MediaCategory category, String base64Data) {
-        return new MediaPayload(fileName, mimeType, category, base64Data, null);
+    public static MediaPayload ofBase64(String fileName, String mimeType, MediaCategory category, long sizeBytes,
+            String base64Data) {
+        return new MediaPayload(fileName, mimeType, category, sizeBytes, base64Data, null);
     }
 
-    public static MediaPayload ofUrl(String fileName, String mimeType, MediaCategory category, String url) {
-        return new MediaPayload(fileName, mimeType, category, null, url);
+    public static MediaPayload ofUrl(String fileName, String mimeType, MediaCategory category, long sizeBytes,
+            String url) {
+        return new MediaPayload(fileName, mimeType, category, sizeBytes, null, url);
     }
 }

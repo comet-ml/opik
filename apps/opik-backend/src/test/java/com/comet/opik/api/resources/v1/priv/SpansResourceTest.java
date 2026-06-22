@@ -3301,7 +3301,8 @@ class SpansResourceTest {
                     EntityType.SPAN,
                     spanId,
                     null, // containerId
-                    "application/pdf");
+                    "application/pdf",
+                    0L);
 
             attachmentResourceClient.uploadAttachment(userAttachmentInfo, userFileData, API_KEY, TEST_WORKSPACE, 204);
 

@@ -150,29 +150,29 @@ public class GetAttachmentTool implements ToolExecutor {
 
     private Mono<String> fetchFromMinIO(AttachmentInfo info, String mime, MediaCategory category,
             TraceToolContext ctx) {
-        if (!ctx.canInjectMedia()) {
-            return Mono.just(ToolArgs.errorJson(("Attachment '%s' cannot be loaded: the limit on the number of"
-                    + " attachments for this evaluation has been reached.").formatted(info.fileName())));
+        if (!ctx.canInjectMedia(info.fileSize())) {
+            return Mono.just(ToolArgs.errorJson(("Attachment '%s' cannot be loaded: the total size limit for"
+                    + " injected attachments in this evaluation has been reached.").formatted(info.fileName())));
         }
         return Mono.fromCallable(() -> attachmentService.downloadAttachment(info, ctx.getWorkspaceId()))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(this::readAllBytes)
                 .map(bytes -> {
                     String base64 = Base64.getEncoder().encodeToString(bytes);
-                    ctx.stageMedia(MediaPayload.ofBase64(info.fileName(), mime, category, base64));
+                    ctx.stageMedia(MediaPayload.ofBase64(info.fileName(), mime, category, info.fileSize(), base64));
                     return confirmation(info.fileName(), category);
                 });
     }
 
     private Mono<String> fetchFromS3(AttachmentInfo info, String mime, MediaCategory category,
             TraceToolContext ctx) {
-        if (!ctx.canInjectMedia()) {
-            return Mono.just(ToolArgs.errorJson(("Attachment '%s' cannot be loaded: the limit on the number of"
-                    + " attachments for this evaluation has been reached.").formatted(info.fileName())));
+        if (!ctx.canInjectMedia(info.fileSize())) {
+            return Mono.just(ToolArgs.errorJson(("Attachment '%s' cannot be loaded: the total size limit for"
+                    + " injected attachments in this evaluation has been reached.").formatted(info.fileName())));
         }
         return Mono.fromCallable(() -> {
             String url = attachmentService.presignDownloadUrl(info, ctx.getWorkspaceId());
-            ctx.stageMedia(MediaPayload.ofUrl(info.fileName(), mime, category, url));
+            ctx.stageMedia(MediaPayload.ofUrl(info.fileName(), mime, category, info.fileSize(), url));
             return confirmation(info.fileName(), category);
         });
     }

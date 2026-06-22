@@ -68,12 +68,13 @@ public final class TraceToolContext {
     private final Set<EntityRef> truncated = new HashSet<>();
 
     /**
-     * Hard cap on the number of attachments that may be injected as multimodal
-     * content across a single judge invocation. Bounds prompt growth: every
-     * injected attachment is re-sent on every subsequent follow-up round and on
-     * the final structured re-issue, so the cost is multiplicative in rounds.
+     * Hard cap on the total bytes of attachment data that may be injected as
+     * multimodal content across a single judge invocation. Bounds prompt growth:
+     * every injected attachment is re-sent on every subsequent follow-up round and
+     * on the final structured re-issue, so the cost is multiplicative in rounds.
+     * 20 MB accommodates a few high-resolution images without blowing context.
      */
-    static final int MAX_INJECTED_ATTACHMENTS = 8;
+    static final long MAX_INJECTED_BYTES = 20L * 1024 * 1024;
 
     /**
      * Media fetched by {@code get_attachment} this round, awaiting injection.
@@ -82,6 +83,7 @@ public final class TraceToolContext {
      * on the loop thread (same single-thread guarantee as {@link #fetched}).
      */
     private final List<MediaPayload> pendingMedia = new ArrayList<>();
+    private long injectedBytes = 0;
 
     /**
      * Descriptors of every attachment injected during this evaluation, kept for
@@ -166,12 +168,12 @@ public final class TraceToolContext {
     // ---------------- Media side-channel (OPIK-6555) ----------------
 
     /**
-     * Whether one more attachment can still be injected without breaching the
-     * per-evaluation count cap. The cap applies identically to the MinIO byte path
-     * and the S3 presigned-URL path — it is the only bound on injected media.
+     * Whether adding {@code sizeBytes} more bytes would stay within the total
+     * injected-bytes cap. Applies identically to the MinIO base64 path and the
+     * S3 presigned-URL path — it is the only bound on injected media.
      */
-    public boolean canInjectMedia() {
-        return injectedAttachments.size() < MAX_INJECTED_ATTACHMENTS;
+    public boolean canInjectMedia(long sizeBytes) {
+        return injectedBytes + sizeBytes <= MAX_INJECTED_BYTES;
     }
 
     /**
@@ -180,6 +182,7 @@ public final class TraceToolContext {
      */
     public void stageMedia(@NonNull MediaPayload media) {
         pendingMedia.add(media);
+        injectedBytes += media.sizeBytes();
         injectedAttachments.add(new InjectedAttachment(media.fileName(), media.category()));
     }
 

@@ -64,6 +64,7 @@ class GetAttachmentToolTest {
                 .entityId(traceId)
                 .containerId(projectId)
                 .mimeType(mimeType)
+                .fileSize(1024L)
                 .build();
     }
 

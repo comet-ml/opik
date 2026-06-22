@@ -274,7 +274,7 @@ class ToolCallLoopTest {
             public Mono<String> execute(String arguments, TraceToolContext c) {
                 String fileName = "img-" + RandomStringUtils.secure().nextAlphanumeric(8) + ".png";
                 String base64 = RandomStringUtils.secure().nextAlphanumeric(16);
-                c.stageMedia(MediaPayload.ofBase64(fileName, "image/png", MediaCategory.IMAGE, base64));
+                c.stageMedia(MediaPayload.ofBase64(fileName, "image/png", MediaCategory.IMAGE, 0L, base64));
                 return Mono.just("{\"loaded\":true}");
             }
         };

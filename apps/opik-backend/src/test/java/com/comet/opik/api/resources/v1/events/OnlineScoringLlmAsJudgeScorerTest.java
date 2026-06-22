@@ -566,7 +566,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
             TraceToolContext ctx = TraceToolContext.forActiveTrace(
                     trace, List.of(), UUID.randomUUID().toString(), UUID.randomUUID().toString());
             ctx.stageMedia(MediaPayload.ofBase64(
-                    UUID.randomUUID() + ".png", "image/png", MediaCategory.IMAGE, "dGVzdA=="));
+                    UUID.randomUUID() + ".png", "image/png", MediaCategory.IMAGE, 0L, "dGVzdA=="));
             var error = new RuntimeException("model rejected media");
             var logger = mock(Logger.class);
 
