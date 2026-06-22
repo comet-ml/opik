@@ -329,6 +329,55 @@ class MultiValueFeedbackScoresE2ETest {
     }
 
     @Test
+    @DisplayName("same author scores from two queues: both visible with correct average")
+    void testSameAuthorTwoQueuesProducesAverage() {
+        var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .id(null)
+                .projectName(DEFAULT_PROJECT)
+                .usage(null)
+                .feedbackScores(null)
+                .startTime(Instant.now().truncatedTo(ChronoUnit.HOURS))
+                .build();
+        var traceId = traceResourceClient.createTrace(trace, API_KEY1, TEST_WORKSPACE);
+
+        var queueIdA = randomUUID();
+        var queueIdB = randomUUID();
+        var scoreName = randomUUID().toString();
+
+        var scoreFromQueueA = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                .name(scoreName)
+                .value(BigDecimal.valueOf(87))
+                .sourceQueueId(queueIdA)
+                .build();
+        traceResourceClient.feedbackScore(traceId, scoreFromQueueA, TEST_WORKSPACE, API_KEY1);
+
+        var scoreFromQueueB = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                .name(scoreName)
+                .value(BigDecimal.valueOf(33))
+                .sourceQueueId(queueIdB)
+                .build();
+        traceResourceClient.feedbackScore(traceId, scoreFromQueueB, TEST_WORKSPACE, API_KEY1);
+
+        var actualTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY1);
+        assertThat(actualTrace.feedbackScores()).hasSize(1);
+
+        var actualScore = actualTrace.feedbackScores().getFirst();
+        assertThat(actualScore.name()).isEqualTo(scoreName);
+        assertThat(actualScore.value()).usingComparator(StatsUtils::bigDecimalComparator)
+                .isEqualTo(BigDecimal.valueOf(60));
+
+        var queueAKey = USER1 + "_" + queueIdA;
+        var queueBKey = USER1 + "_" + queueIdB;
+        assertThat(actualScore.valueByAuthor())
+                .hasSize(2)
+                .containsOnlyKeys(queueAKey, queueBKey);
+        assertAuthorValue(actualScore.valueByAuthor(), queueAKey, scoreFromQueueA);
+        assertAuthorValue(actualScore.valueByAuthor(), queueBKey, scoreFromQueueB);
+        assertThat(actualScore.valueByAuthor().get(queueAKey).author()).isEqualTo(USER1);
+        assertThat(actualScore.valueByAuthor().get(queueBKey).author()).isEqualTo(USER1);
+    }
+
+    @Test
     @DisplayName("test score span by multiple authors")
     void testScoreSpanByMultipleAuthors() {
         // create spans
