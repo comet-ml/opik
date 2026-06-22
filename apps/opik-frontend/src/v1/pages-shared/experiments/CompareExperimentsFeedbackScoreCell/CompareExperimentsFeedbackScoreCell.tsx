@@ -98,7 +98,6 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
           color={color}
           isUserFeedbackColumn={isUserFeedbackColumn}
           onValueChange={handleValueChange}
-          showTooltip
         />
         {reasons.length > 0 && (
           <FeedbackScoreReasonTooltip reasons={reasons}>

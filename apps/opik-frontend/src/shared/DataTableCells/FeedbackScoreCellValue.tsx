@@ -13,8 +13,6 @@ import {
   getCategoricFeedbackScoreValuesMap,
   getIsCategoricFeedbackScore,
 } from "@/shared/FeedbackScoreTag/utils";
-import { isAggregatedScore, getTrialAvgTooltip } from "@/lib/trials";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import useWorkspaceColorMap from "@/hooks/useWorkspaceColorMap";
 
 const MAX_DISPLAY_CATEGORIES = 2;
@@ -42,14 +40,14 @@ const FeedbackScoreCellValue = ({
   feedbackScore,
   color: customColor,
   onValueChange,
-  showTooltip = false,
+  footer,
   size = "md",
 }: {
   isUserFeedbackColumn?: boolean;
   feedbackScore?: TraceFeedbackScore;
   color?: string;
   onValueChange?: (name: string, value: number) => void;
-  showTooltip?: boolean;
+  footer?: string;
   size?: "sm" | "md";
 }) => {
   const { getColor } = useWorkspaceColorMap();
@@ -86,24 +84,12 @@ const FeedbackScoreCellValue = ({
   const isMultiValue = getIsMultiValueFeedbackScore(valueByAuthor);
   const formattedValue = formatScoreDisplay(value);
 
-  const displayText = isMultiValue && valueByAuthor
-    ? formatMultiValueDisplay(valueByAuthor, category, value)
-    : category
-      ? `${category} (${formattedValue})`
-      : String(formattedValue);
-
-  const tooltipContent = (() => {
-    if (!showTooltip) return undefined;
-    const fullPrecision = category ? `${category} (${value})` : String(value);
-    if (isAggregatedScore(feedbackScore)) {
-      const trialInfo = getTrialAvgTooltip(
-        feedbackScore.trialValues.length,
-        feedbackScore.stdDev,
-      );
-      return `${fullPrecision} | ${trialInfo}`;
-    }
-    return fullPrecision;
-  })();
+  const displayText =
+    isMultiValue && valueByAuthor
+      ? formatMultiValueDisplay(valueByAuthor, category, value)
+      : category
+        ? `${category} (${formattedValue})`
+        : String(formattedValue);
 
   return (
     <div className="flex min-w-0 shrink-0 items-center gap-1 overflow-hidden">
@@ -114,27 +100,20 @@ const FeedbackScoreCellValue = ({
           size={size}
         />
       )}
-      {showTooltip ? (
-        <TooltipWrapper content={tooltipContent}>
-          <div className={size === "sm" ? "truncate" : "break-words"}>
-            {displayText}
-          </div>
-        </TooltipWrapper>
-      ) : (
-        <MultiValueFeedbackScoreHoverCard
-          color={color}
-          valueByAuthor={valueByAuthor}
-          label={label}
-          value={value}
-          category={category}
-          open={openHoverCard}
-          onOpenChange={setOpenHoverCard}
-        >
-          <div className={size === "sm" ? "truncate" : "break-words"}>
-            {displayText}
-          </div>
-        </MultiValueFeedbackScoreHoverCard>
-      )}
+      <MultiValueFeedbackScoreHoverCard
+        color={color}
+        valueByAuthor={valueByAuthor}
+        label={label}
+        value={value}
+        category={category}
+        footer={footer}
+        open={openHoverCard}
+        onOpenChange={setOpenHoverCard}
+      >
+        <div className={size === "sm" ? "truncate" : "break-words"}>
+          {displayText}
+        </div>
+      </MultiValueFeedbackScoreHoverCard>
     </div>
   );
 };

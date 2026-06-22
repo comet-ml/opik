@@ -41,7 +41,7 @@ const AuthorLabel = ({
 
   const authorName = entry.author ?? mapKey;
   const sourceLabel = entry.source_queue_id
-    ? (queue?.name ?? "<deleted queue>")
+    ? queue?.name ?? "<deleted queue>"
     : FEEDBACK_SCORE_SOURCE_MAP[entry.source];
 
   return (
@@ -155,6 +155,7 @@ type MultiValueFeedbackScoreHoverCardProps = {
   label: string;
   value: number | string;
   category?: string;
+  footer?: string;
   children: React.ReactNode;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -168,6 +169,7 @@ const MultiValueFeedbackScoreHoverCard: React.FC<
   label,
   value,
   category = "",
+  footer,
   children,
   open,
   onOpenChange,
@@ -205,6 +207,14 @@ const MultiValueFeedbackScoreHoverCard: React.FC<
             label={label}
             value={value}
           />
+        )}
+        {footer && (
+          <>
+            <Separator />
+            <div className="px-2 py-1">
+              <span className="comet-body-xs text-light-slate">{footer}</span>
+            </div>
+          </>
         )}
       </HoverCardContent>
     </HoverCard>
