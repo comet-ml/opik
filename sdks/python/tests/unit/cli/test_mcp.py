@@ -1,5 +1,6 @@
 """Tests for the ``opik mcp configure`` command."""
 
+import pathlib
 from unittest.mock import patch
 
 from click.testing import CliRunner
@@ -51,7 +52,9 @@ class TestInstallCommand:
     def test_install__reads_config_and_calls_setup(self):
         runner = CliRunner()
         with (
-            patch.object(mcp_cli, "OpikConfig", return_value=_config(api_key="key")),
+            patch.object(
+                mcp_cli.opik_config, "OpikConfig", return_value=_config(api_key="key")
+            ),
             patch.object(
                 mcp_cli.interactive_helpers, "is_interactive", return_value=True
             ),
@@ -63,6 +66,24 @@ class TestInstallCommand:
         setup_spy.assert_called_once()
         assert setup_spy.call_args.kwargs["api_key"] == "key"
         assert setup_spy.call_args.kwargs["workspace"] == "acme-ai"
+        assert setup_spy.call_args.kwargs["force_local_server"] is False
+
+    def test_install__local_server_flag__forces_local(self):
+        runner = CliRunner()
+        with (
+            patch.object(
+                mcp_cli.opik_config, "OpikConfig", return_value=_config(api_key="key")
+            ),
+            patch.object(
+                mcp_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            patch.object(mcp_cli.mcp_installer, "setup_mcp_server") as setup_spy,
+        ):
+            result = runner.invoke(cli, ["mcp", "configure", "--local-server"])
+
+        assert result.exit_code == 0
+        setup_spy.assert_called_once()
+        assert setup_spy.call_args.kwargs["force_local_server"] is True
 
     def test_install__non_interactive__errors(self):
         runner = CliRunner()
@@ -81,11 +102,15 @@ class TestInstallCommand:
     def test_install__no_config_user_declines__errors(self):
         runner = CliRunner()
         with (
-            patch.object(mcp_cli, "OpikConfig", return_value=_config(api_key=None)),
+            patch.object(
+                mcp_cli.opik_config, "OpikConfig", return_value=_config(api_key=None)
+            ),
             patch.object(
                 mcp_cli.interactive_helpers, "is_interactive", return_value=True
             ),
-            patch.object(mcp_cli, "run_interactive_configure") as configure_spy,
+            patch.object(
+                mcp_cli.configure_cli, "run_interactive_configure"
+            ) as configure_spy,
             patch.object(mcp_cli.mcp_installer, "setup_mcp_server") as setup_spy,
         ):
             result = runner.invoke(cli, ["mcp", "configure"], input="n\n")
@@ -99,11 +124,15 @@ class TestInstallCommand:
         runner = CliRunner()
         configs = iter([_config(api_key=None), _config(api_key="new-key")])
         with (
-            patch.object(mcp_cli, "OpikConfig", side_effect=lambda: next(configs)),
+            patch.object(
+                mcp_cli.opik_config, "OpikConfig", side_effect=lambda: next(configs)
+            ),
             patch.object(
                 mcp_cli.interactive_helpers, "is_interactive", return_value=True
             ),
-            patch.object(mcp_cli, "run_interactive_configure") as configure_spy,
+            patch.object(
+                mcp_cli.configure_cli, "run_interactive_configure"
+            ) as configure_spy,
             patch.object(mcp_cli.mcp_installer, "setup_mcp_server") as setup_spy,
         ):
             result = runner.invoke(cli, ["mcp", "configure"], input="y\n")
@@ -113,11 +142,55 @@ class TestInstallCommand:
         setup_spy.assert_called_once()
         assert setup_spy.call_args.kwargs["api_key"] == "new-key"
 
+    def test_status__lists_sdk_env_and_host_drift(self):
+        runner = CliRunner()
+        host = mcp_cli.mcp_status.HostStatus(
+            display_name="Claude Code",
+            config_path=pathlib.Path("/home/u/.claude.json"),
+            detected=True,
+            registered=True,
+            transport=mcp_cli.mcp_status.TRANSPORT_LOCAL,
+            points_to="http://localhost:5173/api/",
+            workspace="default",
+            in_sync=False,
+        )
+        with (
+            patch.object(
+                mcp_cli.opik_config, "OpikConfig", return_value=_config(api_key="key")
+            ),
+            patch.object(
+                mcp_cli.mcp_status, "collect_host_statuses", return_value=[host]
+            ),
+        ):
+            result = runner.invoke(cli, ["mcp", "status"])
+
+        assert result.exit_code == 0
+        assert "Your Opik configuration" in result.output
+        assert "configured for 1 AI assistant" in result.output
+        assert "Claude Code" in result.output
+        assert "OUT OF SYNC with your Opik configuration" in result.output
+        assert "http://localhost:5173/api/" in result.output
+        assert "default" in result.output
+
+    def test_status__none_configured__suggests_configure(self):
+        runner = CliRunner()
+        with (
+            patch.object(
+                mcp_cli.opik_config, "OpikConfig", return_value=_config(api_key="key")
+            ),
+            patch.object(mcp_cli.mcp_status, "collect_host_statuses", return_value=[]),
+        ):
+            result = runner.invoke(cli, ["mcp", "status"])
+
+        assert result.exit_code == 0
+        assert "not configured for any AI assistant" in result.output
+        assert "opik mcp configure" in result.output
+
     def test_install__local_without_api_key__proceeds(self):
         runner = CliRunner()
         with (
             patch.object(
-                mcp_cli,
+                mcp_cli.opik_config,
                 "OpikConfig",
                 return_value=_config(
                     api_key=None, url_override="http://localhost:5173/api/"

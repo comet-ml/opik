@@ -5,6 +5,7 @@ import subprocess
 from typing import List, Optional, Tuple
 
 from opik.configurator import interactive_helpers
+from opik.configurator.mcp import detection as mcp_detection
 from opik.configurator.mcp import env as mcp_env
 from opik.configurator.mcp import spec as mcp_spec
 from opik.configurator.mcp import targets as mcp_targets
@@ -22,22 +23,38 @@ def setup_mcp_server(
     api_url: str,
     use_local: bool,
     self_hosted_comet: bool,
+    check_tls_certificate: bool,
+    force_local_server: bool,
 ) -> None:
     """Register the Opik MCP server with the user's detected AI host(s).
 
     The decision of *whether* to run this lives in the configurator; by the time
     this is called the user has opted in and the session is interactive.
+
+    ``force_local_server`` skips the hosted-server probe and always installs the
+    local ``uvx`` server, even when the deployment offers a hosted one.
     """
-    available_modes = _available_connection_modes(
-        use_local=use_local, self_hosted_comet=self_hosted_comet
-    )
-    # Only one mode exists today. Once the Opik Cloud-hosted server ships,
-    # `available_modes` may contain more than one entry for cloud users, and the
-    # user would be asked to choose here.
-    connection_mode = available_modes[0]
+    # Prefer the Opik-hosted MCP server when the deployment runs one; otherwise
+    # fall back to the local `uvx opik-mcp` server. The probe — not the
+    # deployment type — drives the choice, so a deployment that gains the hosted
+    # server later is picked up with no code change.
+    if force_local_server:
+        hosted_mcp_url = None
+    else:
+        hosted_mcp_url = mcp_detection.detect_hosted_mcp_server(
+            base_url=base_url,
+            api_url=api_url,
+            check_tls_certificate=check_tls_certificate,
+        )
+    if hosted_mcp_url is not None:
+        LOGGER.info("Found a hosted Opik MCP server; configuring AI host(s) to use it.")
+        connection_mode = mcp_spec.McpConnectionMode.REMOTE
+    else:
+        connection_mode = mcp_spec.McpConnectionMode.LOCAL_STDIO
 
     server_spec, unavailable_reason = _create_server_spec(
         connection_mode=connection_mode,
+        hosted_mcp_url=hosted_mcp_url,
         api_key=api_key,
         workspace=workspace,
         base_url=base_url,
@@ -123,22 +140,9 @@ def _prefetch_opik_mcp() -> None:
         )
 
 
-def _available_connection_modes(
-    use_local: bool,
-    self_hosted_comet: bool,
-) -> List[mcp_spec.McpConnectionMode]:
-    """Connection modes valid for the configured deployment.
-
-    Localhost and self-hosted deployments always run the MCP server locally, so
-    only ``LOCAL_STDIO`` applies. The Opik Cloud-hosted (browser-OAuth) server is
-    relevant to Opik Cloud only: when it ships, ``McpConnectionMode.REMOTE`` would
-    be added here for the cloud case (``not use_local and not self_hosted_comet``).
-    """
-    return [mcp_spec.McpConnectionMode.LOCAL_STDIO]
-
-
 def _create_server_spec(
     connection_mode: mcp_spec.McpConnectionMode,
+    hosted_mcp_url: Optional[str],
     api_key: Optional[str],
     workspace: Optional[str],
     base_url: str,
@@ -149,9 +153,13 @@ def _create_server_spec(
     """Build the spec for the chosen connection mode.
 
     Returns ``(spec, None)`` on success, or ``(None, reason)`` when prerequisites
-    for that mode are missing. A future remote/OAuth mode would add a branch here
-    and would not depend on ``uvx``.
+    for that mode are missing. The remote (hosted/OAuth) mode has no local
+    prerequisites; the local stdio mode requires ``uvx`` on the PATH.
     """
+    if connection_mode is mcp_spec.McpConnectionMode.REMOTE:
+        assert hosted_mcp_url is not None  # guaranteed by the caller's probe
+        return mcp_spec.RemoteServerSpec(url=hosted_mcp_url), None
+
     if connection_mode is mcp_spec.McpConnectionMode.LOCAL_STDIO:
         uvx_executable = shutil.which("uvx")
         if uvx_executable is None:

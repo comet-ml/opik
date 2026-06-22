@@ -5,11 +5,13 @@ from typing import Optional, TypedDict
 
 import click
 
+import opik.config as opik_config
 import opik.url_helpers as url_helpers
-from opik.cli.configure import run_interactive_configure
-from opik.config import OpikConfig
+from opik.cli import configure as configure_cli
+from opik.cli import status_view
 from opik.configurator import interactive_helpers
 from opik.configurator import mcp as mcp_installer
+from opik.configurator.mcp import status as mcp_status
 
 LOGGER = logging.getLogger(__name__)
 
@@ -23,6 +25,7 @@ class McpSetupParams(TypedDict):
     api_url: str
     use_local: bool
     self_hosted_comet: bool
+    check_tls_certificate: bool
 
 
 def _needs_opik_configuration(params: McpSetupParams) -> bool:
@@ -34,7 +37,7 @@ def _needs_opik_configuration(params: McpSetupParams) -> bool:
     return not params["use_local"] and params["api_key"] is None
 
 
-def _resolve_setup_params(config: OpikConfig) -> McpSetupParams:
+def _resolve_setup_params(config: opik_config.OpikConfig) -> McpSetupParams:
     """Map a loaded ``OpikConfig`` to ``setup_mcp_server`` keyword arguments.
 
     ``url_override`` is the full Opik REST base (``…/opik/api/`` for the Comet
@@ -57,6 +60,7 @@ def _resolve_setup_params(config: OpikConfig) -> McpSetupParams:
         "api_url": api_url,
         "use_local": use_local,
         "self_hosted_comet": self_hosted_comet,
+        "check_tls_certificate": config.check_tls_certificate,
     }
 
 
@@ -66,18 +70,29 @@ def mcp() -> None:
 
 
 @mcp.command(name="configure")
-def configure() -> None:
+@click.option(
+    "--local-server",
+    is_flag=True,
+    default=False,
+    help="Install the local MCP server (run via uvx) instead of the Comet-hosted "
+    "one, even when your deployment offers a hosted server.",
+)
+def configure(local_server: bool) -> None:
     """Register the Opik MCP server with your AI assistant(s).
 
     Reuses your existing Opik configuration (~/.opik.config), so run
     `opik configure` first if you have not configured Opik yet.
+
+    By default this uses the Comet-hosted MCP server when your deployment offers
+    one, falling back to a local server otherwise. Pass `--local-server` to force
+    the local server.
     """
     if not interactive_helpers.is_interactive():
         raise click.ClickException(
             "`opik mcp configure` needs an interactive terminal to pick your AI host."
         )
 
-    params = _resolve_setup_params(OpikConfig())
+    params = _resolve_setup_params(opik_config.OpikConfig())
 
     if _needs_opik_configuration(params):
         if not click.confirm(
@@ -87,12 +102,26 @@ def configure() -> None:
                 "Run `opik configure` first, then `opik mcp configure`."
             )
         # Skip configure's own MCP prompt — we install right after.
-        run_interactive_configure(install_mcp=False)
-        params = _resolve_setup_params(OpikConfig())
+        configure_cli.run_interactive_configure(install_mcp=False)
+        params = _resolve_setup_params(opik_config.OpikConfig())
 
         if _needs_opik_configuration(params):
             raise click.ClickException(
                 "Opik configuration is still incomplete; aborting MCP install."
             )
 
-    mcp_installer.setup_mcp_server(**params)
+    mcp_installer.setup_mcp_server(**params, force_local_server=local_server)
+
+
+@mcp.command(name="status")
+def status() -> None:
+    """Show which AI assistants the Opik MCP server is configured for.
+
+    Each AI assistant keeps its own MCP config, written at install time and not
+    kept in sync with ~/.opik.config afterwards. This lists every assistant that
+    has the Opik MCP server set up, what it points at, and whether that still
+    matches your Opik configuration.
+    """
+    config = opik_config.OpikConfig()
+    host_statuses = mcp_status.collect_host_statuses(config)
+    status_view.render_mcp_status(config, host_statuses)
