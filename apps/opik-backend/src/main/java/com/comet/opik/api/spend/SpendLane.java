@@ -7,13 +7,12 @@ import java.util.Arrays;
 import java.util.Optional;
 
 /**
- * Input lanes of the AI Spend composition, backed by the plugin's
- * {@code metadata.cc.billing} block (OPIK-6873). Every number under
- * {@code cc.billing} is a per-LLM-call billing event, so plain SUM across
- * traces is exact against API usage: lane totals come from the fixed path
- * {@code cc.billing.lanes.<key>.total}, and per-entity breakdowns from the
- * {@code cc.billing.lanes.<key>.items} array ({name, kind, count, total,
- * cache_read, cache_creation, input, output}).
+ * Input lanes of the AI Spend composition. Each lane aggregates one or more
+ * {@code metadata.cipx.blocks[]} {@code category} values shipped by cipx on
+ * each LLM-call span; the projection lives in {@code AiSpendCategoryMap}.
+ * Per-call tokens are attributed to blocks by chars-share within each
+ * {@code (side, cache_status)} tier from the structured
+ * {@code metadata.cipx.call.usage} counters.
  */
 @Getter
 @RequiredArgsConstructor
@@ -38,7 +37,7 @@ public enum SpendLane {
     STATIC_OVERHEAD("static_overhead", "Static overhead", null,
             "Tokens billed for Claude Code itself: system prompt + built-in tool schemas."),
     UNATTRIBUTED("unattributed", "Unattributed", null,
-            "Billed tokens not yet attributable to a lane (system reminders, request envelope, estimation drift).");
+            "Tokens cipx couldn't pin to a lane: input usage without a labeled cache tier, plus blocks under categories the FE doesn't surface yet.");
 
     private final String key;
     private final String label;

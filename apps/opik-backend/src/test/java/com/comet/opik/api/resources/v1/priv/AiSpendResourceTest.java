@@ -18,16 +18,15 @@ import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortingField;
-import com.comet.opik.api.spend.Impact;
 import com.comet.opik.api.spend.ModelTiers;
 import com.comet.opik.api.spend.SpendBreakdownResponse;
 import com.comet.opik.api.spend.SpendCompositionResponse;
 import com.comet.opik.api.spend.SpendLane;
 import com.comet.opik.api.spend.SpendMetricRequest;
-import com.comet.opik.api.spend.SpendRecommendationsResponse;
 import com.comet.opik.api.spend.SpendUserPage;
 import com.comet.opik.api.spend.SpendUserRow;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.SpanType;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -72,9 +71,19 @@ class AiSpendResourceTest {
 
     private static final String USER = UUID.randomUUID().toString();
 
-    // Per-trace cc.billing fixture numbers (see buildCcMetadata):
-    // input-side lanes sum to 2800, output lane to 280; tier totals are
-    // input=50, cache_read=2710, cache_creation=40, output=280.
+    // Per-trace numbers shipped by the canonical cipx fixture (see
+    // buildCipxLlmSpanMetadata): every input block carries cache_status=read
+    // except user_prompts (fresh); the call has 40 cache_creation tokens that
+    // no block can absorb, which become the unattributed residual.
+    //
+    //   tier columns: input=50, cache_read=2710, cache_creation=40, output=280
+    //   input lanes (sum 2800): user_prompts 50, file_attachments 40,
+    //     built_in_tools 200, prior_assistant 1000, skills 900,
+    //     custom_agents 30, mcp_servers 380, memory 60, static_overhead 100,
+    //     unattributed 40
+    //   output lanes (sum 280): thinking 150, assistant_text 70,
+    //     built_in_tool_calls 30, mcp_tool_calls 20, skill_invocations 10
+    private static final String MODEL = "claude-opus-4-8";
     private static final long TRACE_INPUT_SIDE = 2800L;
     private static final long TRACE_OUTPUT_SIDE = 280L;
     private static final long TRACE_TOTAL_TOKENS = 50L + 2710L + 40L + 280L;
@@ -150,8 +159,8 @@ class AiSpendResourceTest {
         var userB = UUID.randomUUID().toString();
         var userC = UUID.randomUUID().toString();
 
-        createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(userA, userA, userB));
-        createCcTraces(projectName, apiKey, workspaceName, previousTime, List.of(userC));
+        createCipxTracesWithLlmSpan(projectName, apiKey, workspaceName, currentTime, List.of(userA, userA, userB));
+        createCipxTracesWithLlmSpan(projectName, apiKey, workspaceName, previousTime, List.of(userC));
 
         var summary = aiSpendResourceClient.getSummary(SpendMetricRequest.builder()
                 .projectName(projectName)
@@ -165,7 +174,7 @@ class AiSpendResourceTest {
         // Spend tiers ship per model so the FE prices each at its own rate.
         assertThat(summary.spendCurrent()).hasSize(1);
         ModelTiers current = summary.spendCurrent().getFirst();
-        assertThat(current.model()).isEqualTo("claude-opus-4-8");
+        assertThat(current.model()).isEqualTo(MODEL);
         assertThat(current.inputTokens()).isEqualTo(150L);
         assertThat(current.cacheReadTokens()).isEqualTo(8130L);
         assertThat(current.cacheCreationTokens()).isEqualTo(120L);
@@ -173,7 +182,7 @@ class AiSpendResourceTest {
 
         assertThat(summary.spendPrevious()).hasSize(1);
         ModelTiers previous = summary.spendPrevious().getFirst();
-        assertThat(previous.model()).isEqualTo("claude-opus-4-8");
+        assertThat(previous.model()).isEqualTo(MODEL);
         assertThat(previous.inputTokens()).isEqualTo(50L);
         assertThat(previous.cacheReadTokens()).isEqualTo(2710L);
         assertThat(previous.outputTokens()).isEqualTo(280L);
@@ -185,7 +194,7 @@ class AiSpendResourceTest {
     }
 
     @Test
-    @DisplayName("composition: sums cc.billing lane tier tokens from traces and output lanes from output items")
+    @DisplayName("composition: rolls up cipx.blocks[] tokens per lane and per model")
     void composition_happyPath() {
         var workspaceName = UUID.randomUUID().toString();
         var workspaceId = UUID.randomUUID().toString();
@@ -200,7 +209,7 @@ class AiSpendResourceTest {
         Instant currentTime = intervalStart.plus(Duration.ofMinutes(5));
 
         var user = UUID.randomUUID().toString();
-        createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(user, user, user));
+        createCipxTracesWithLlmSpan(projectName, apiKey, workspaceName, currentTime, List.of(user, user, user));
 
         var composition = aiSpendResourceClient.getComposition(SpendMetricRequest.builder()
                 .projectName(projectName)
@@ -227,7 +236,7 @@ class AiSpendResourceTest {
 
         // Per-model tier columns ride along so the FE can price each lane.
         assertThat(inputLanes.get("user_prompts").byModel()).hasSize(1);
-        assertThat(inputLanes.get("user_prompts").byModel().getFirst().model()).isEqualTo("claude-opus-4-8");
+        assertThat(inputLanes.get("user_prompts").byModel().getFirst().model()).isEqualTo(MODEL);
         assertThat(inputLanes.get("user_prompts").byModel().getFirst().inputTokens()).isEqualTo(150L);
         assertThat(inputLanes.get("user_prompts").byModel().getFirst().cacheReadTokens()).isEqualTo(0L);
         assertThat(inputLanes.get("prior_assistant").byModel().getFirst().cacheReadTokens()).isEqualTo(3000L);
@@ -264,7 +273,7 @@ class AiSpendResourceTest {
 
         var userA = UUID.randomUUID().toString();
         var userB = UUID.randomUUID().toString();
-        createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(userA, userA, userB));
+        createCipxTracesWithLlmSpan(projectName, apiKey, workspaceName, currentTime, List.of(userA, userA, userB));
 
         var composition = aiSpendResourceClient.getComposition(SpendMetricRequest.builder()
                 .projectName(projectName)
@@ -395,7 +404,7 @@ class AiSpendResourceTest {
     }
 
     @Test
-    @DisplayName("breakdown: aggregates a lane's items per entity, split into definition vs usage")
+    @DisplayName("breakdown: skills lane aggregates skills_menu and skills_loaded blocks per skill name")
     void breakdown_happyPath() {
         var workspaceName = UUID.randomUUID().toString();
         var workspaceId = UUID.randomUUID().toString();
@@ -410,7 +419,7 @@ class AiSpendResourceTest {
         Instant currentTime = intervalStart.plus(Duration.ofMinutes(5));
 
         var user = UUID.randomUUID().toString();
-        createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(user, user, user));
+        createCipxTracesWithLlmSpan(projectName, apiKey, workspaceName, currentTime, List.of(user, user, user));
 
         var breakdown = aiSpendResourceClient.getBreakdown("skills", SpendMetricRequest.builder()
                 .projectName(projectName)
@@ -422,14 +431,13 @@ class AiSpendResourceTest {
         assertThat(breakdown.title()).isEqualTo("Skills");
         assertThat(breakdown.subtitle()).isEqualTo(SpendLane.SKILLS.getDescription());
         assertThat(breakdown.itemUnit()).isEqualTo("load");
-        // itemCount is the total occurrence count: opik-frontend (1 usage) +
-        // find-skills (1 usage), across 3 traces = 6 calls.
+        // Two skills_loaded blocks per trace (opik-frontend, find-skills) × 3 traces = 6 usage events.
         assertThat(breakdown.itemCount()).isEqualTo(6);
         assertThat(breakdown.totalTokens()).isEqualTo(2700L);
 
         // Per-model tier sums ride along so the FE can price the lane total.
         assertThat(breakdown.byModel()).hasSize(1);
-        assertThat(breakdown.byModel().getFirst().model()).isEqualTo("claude-opus-4-8");
+        assertThat(breakdown.byModel().getFirst().model()).isEqualTo(MODEL);
         assertThat(breakdown.byModel().getFirst().cacheReadTokens()).isEqualTo(2700L);
         assertThat(breakdown.byModel().getFirst().inputTokens()).isEqualTo(0L);
         assertThat(breakdown.byModel().getFirst().outputTokens()).isEqualTo(0L);
@@ -440,7 +448,6 @@ class AiSpendResourceTest {
         assertThat(byLabel.get("opik-frontend").definitionTokens()).isEqualTo(300L);
         assertThat(byLabel.get("opik-frontend").usageTokens()).isEqualTo(1500L);
         assertThat(byLabel.get("opik-frontend").count()).isEqualTo(3L);
-        // Per-item, per-model tier sums ride along so the FE can price each row.
         assertThat(byLabel.get("opik-frontend").byModel().getFirst().cacheReadTokens()).isEqualTo(1800L);
         assertThat(byLabel.get("opik-frontend").byModel().getFirst().inputTokens()).isEqualTo(0L);
         assertThat(byLabel.get("find-skills").totalTokens()).isEqualTo(900L);
@@ -449,7 +456,7 @@ class AiSpendResourceTest {
     }
 
     @Test
-    @DisplayName("breakdown: mcp_servers folds definition and tool usage rows of a server into one entity")
+    @DisplayName("breakdown: mcp_servers folds tool schema (definition) and tool_io (usage) per server")
     void breakdown_mcpServers() {
         var workspaceName = UUID.randomUUID().toString();
         var workspaceId = UUID.randomUUID().toString();
@@ -464,13 +471,13 @@ class AiSpendResourceTest {
         Instant currentTime = intervalStart.plus(Duration.ofMinutes(5));
 
         var user = UUID.randomUUID().toString();
-        createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(user, user, user));
+        createCipxTracesWithLlmSpan(projectName, apiKey, workspaceName, currentTime, List.of(user, user, user));
 
         var breakdown = getBreakdown(projectName, apiKey, workspaceName, intervalStart, intervalEnd, "mcp_servers");
 
         assertThat(breakdown.laneKey()).isEqualTo("mcp_servers");
         assertThat(breakdown.totalTokens()).isEqualTo(1140L);
-        // chrome-devtools: 1 usage call per trace, across 3 traces = 3 calls.
+        // chrome-devtools tool_io block per trace × 3 = 3 calls.
         assertThat(breakdown.itemCount()).isEqualTo(3);
 
         var server = breakdown.items().getFirst();
@@ -482,7 +489,7 @@ class AiSpendResourceTest {
     }
 
     @Test
-    @DisplayName("breakdown: output tool-call lanes group output items by tool/server/skill")
+    @DisplayName("breakdown: output tool-call lanes group output blocks by tool/server/skill")
     void breakdown_outputToolCalls() {
         var workspaceName = UUID.randomUUID().toString();
         var workspaceId = UUID.randomUUID().toString();
@@ -497,7 +504,7 @@ class AiSpendResourceTest {
         Instant currentTime = intervalStart.plus(Duration.ofMinutes(5));
 
         var user = UUID.randomUUID().toString();
-        createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(user, user, user));
+        createCipxTracesWithLlmSpan(projectName, apiKey, workspaceName, currentTime, List.of(user, user, user));
 
         var builtIn = getBreakdown(projectName, apiKey, workspaceName, intervalStart, intervalEnd,
                 "built_in_tool_calls");
@@ -505,7 +512,7 @@ class AiSpendResourceTest {
         // Output lanes have no description, so no subtitle.
         assertThat(builtIn.subtitle()).isNull();
         assertThat(builtIn.itemUnit()).isEqualTo("call");
-        // Bash tool call: 1 per trace, across 3 traces = 3 calls.
+        // Bash tool call: 1 block per trace × 3 traces = 3 calls.
         assertThat(builtIn.itemCount()).isEqualTo(3);
         assertThat(builtIn.items().getFirst().label()).isEqualTo("Bash");
         assertThat(builtIn.items().getFirst().totalTokens()).isEqualTo(90L);
@@ -536,13 +543,13 @@ class AiSpendResourceTest {
         Instant currentTime = intervalStart.plus(Duration.ofMinutes(5));
 
         var user = UUID.randomUUID().toString();
-        createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(user, user, user));
+        createCipxTracesWithLlmSpan(projectName, apiKey, workspaceName, currentTime, List.of(user, user, user));
 
         var thinking = getBreakdown(projectName, apiKey, workspaceName, intervalStart, intervalEnd, "thinking");
         assertThat(thinking.totalTokens()).isEqualTo(450L);
         assertThat(thinking.itemUnit()).isEqualTo("block");
-        // The fixture's thinking items carry no event count, so 0 blocks.
-        assertThat(thinking.itemCount()).isEqualTo(0);
+        // 1 thinking block per trace × 3 = 3 emitted blocks.
+        assertThat(thinking.itemCount()).isEqualTo(3);
         assertThat(thinking.items().getFirst().label()).isEqualTo("thinking");
         assertThat(thinking.items().getFirst().totalTokens()).isEqualTo(450L);
 
@@ -566,7 +573,7 @@ class AiSpendResourceTest {
         Instant intervalEnd = Instant.now();
         Instant currentTime = intervalStart.plus(Duration.ofMinutes(5));
 
-        createBuiltInToolItemsTrace(projectName, apiKey, workspaceName, currentTime, 201);
+        createManyToolsTrace(projectName, apiKey, workspaceName, currentTime, 201);
 
         var breakdown = getBreakdown(projectName, apiKey, workspaceName, intervalStart, intervalEnd,
                 "built_in_tools");
@@ -597,7 +604,7 @@ class AiSpendResourceTest {
         Instant intervalEnd = Instant.now();
         Instant currentTime = intervalStart.plus(Duration.ofMinutes(5));
 
-        createBuiltInToolItemsTrace(projectName, apiKey, workspaceName, currentTime, 200);
+        createManyToolsTrace(projectName, apiKey, workspaceName, currentTime, 200);
 
         var breakdown = getBreakdown(projectName, apiKey, workspaceName, intervalStart, intervalEnd,
                 "built_in_tools");
@@ -611,7 +618,7 @@ class AiSpendResourceTest {
     }
 
     @Test
-    @DisplayName("users: ranks users by billed tokens, joins span activity, flags high spenders")
+    @DisplayName("users: ranks users by billed tokens, joins block activity, flags high spenders")
     void users_happyPath() {
         var workspaceName = UUID.randomUUID().toString();
         var workspaceId = UUID.randomUUID().toString();
@@ -628,9 +635,10 @@ class AiSpendResourceTest {
         var userA = UUID.randomUUID().toString();
         var userB = UUID.randomUUID().toString();
 
-        var userATraces = createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(userA, userA));
-        userATraces.forEach(traceId -> createMcpSpan(projectName, apiKey, workspaceName, traceId, currentTime));
-        createIdentityTraces(projectName, apiKey, workspaceName, currentTime, List.of(userB));
+        createCipxTracesWithLlmSpan(projectName, apiKey, workspaceName, currentTime, List.of(userA, userA));
+        // userB owns a session-only trace (no LLM-call span). They appear in
+        // the leaderboard with zero tokens.
+        createIdentityOnlyTraces(projectName, apiKey, workspaceName, currentTime, List.of(userB));
 
         SpendUserPage page = aiSpendResourceClient.getUsers(SpendMetricRequest.builder()
                 .projectName(projectName)
@@ -647,15 +655,18 @@ class AiSpendResourceTest {
         assertThat(top.totalTokens()).isEqualTo(2 * TRACE_TOTAL_TOKENS);
         assertThat(top.byModel()).hasSize(1);
         ModelTiers topModel = top.byModel().getFirst();
-        assertThat(topModel.model()).isEqualTo("claude-opus-4-8");
+        assertThat(topModel.model()).isEqualTo(MODEL);
         assertThat(topModel.inputTokens()).isEqualTo(100L);
         assertThat(topModel.cacheReadTokens()).isEqualTo(5420L);
         assertThat(topModel.cacheCreationTokens()).isEqualTo(80L);
         assertThat(topModel.outputTokens()).isEqualTo(560L);
         assertThat(top.flags()).contains("high_spend");
         assertThat(top.repositories()).containsExactly("repo-a");
+        // 2 skills_loaded blocks per LLM-call span × 2 calls = 4.
         assertThat(top.skills()).isEqualTo(4L);
+        // chrome-devtools is the only mcp_tools_active server.
         assertThat(top.mcps()).isEqualTo(1L);
+        // 1 mcp_tool_calls output block per LLM-call span × 2 calls = 2.
         assertThat(top.mcpCalls()).isEqualTo(2L);
 
         SpendUserRow second = page.content().get(1);
@@ -682,7 +693,7 @@ class AiSpendResourceTest {
 
         var userA = UUID.randomUUID().toString();
         var userB = UUID.randomUUID().toString();
-        createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(userA, userB));
+        createCipxTracesWithLlmSpan(projectName, apiKey, workspaceName, currentTime, List.of(userA, userB));
 
         var request = SpendMetricRequest.builder()
                 .projectName(projectName)
@@ -717,8 +728,9 @@ class AiSpendResourceTest {
         var userA = UUID.randomUUID().toString();
         var userB = UUID.randomUUID().toString();
 
-        createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(userA, userA));
-        createIdentityTraces(projectName, apiKey, workspaceName, currentTime, List.of(userB, userB, userB));
+        // userA has 2 LLM-call spans, userB has 3 — userB ranks higher by request count.
+        createCipxTracesWithLlmSpan(projectName, apiKey, workspaceName, currentTime, List.of(userA, userA));
+        createCipxTracesWithLlmSpan(projectName, apiKey, workspaceName, currentTime, List.of(userB, userB, userB));
 
         var request = SpendMetricRequest.builder()
                 .projectName(projectName)
@@ -729,7 +741,7 @@ class AiSpendResourceTest {
         SpendUserPage byTokens = aiSpendResourceClient.getUsers(request, 1, 25, apiKey, workspaceName);
         assertThat(byTokens.sortableBy())
                 .containsExactly("total_tokens", "requests", "skills", "mcps", "mcp_calls");
-        assertThat(byTokens.content()).extracting(SpendUserRow::userUuid).containsExactly(userA, userB);
+        assertThat(byTokens.content()).extracting(SpendUserRow::userUuid).containsExactly(userB, userA);
 
         var byRequestsDesc = List.of(SortingField.builder().field("requests").direction(Direction.DESC).build());
         SpendUserPage byRequests = aiSpendResourceClient.getUsers(request, 1, 25, byRequestsDesc, apiKey,
@@ -746,59 +758,41 @@ class AiSpendResourceTest {
         assertThat(secondPage.content()).extracting(SpendUserRow::userUuid).containsExactly(userA);
     }
 
-    @Test
-    @DisplayName("recommendations: returns judgment-based items with token-denominated savings")
-    void recommendations_happyPath() {
-        var workspaceName = UUID.randomUUID().toString();
-        var workspaceId = UUID.randomUUID().toString();
-        var apiKey = UUID.randomUUID().toString();
-        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
+    private List<UUID> createCipxTracesWithLlmSpan(String projectName, String apiKey, String workspaceName,
+            Instant time, List<String> userUuids) {
+        List<UUID> ids = new ArrayList<>();
+        for (String userUuid : userUuids) {
+            UUID traceId = idGenerator.getTimeOrderedEpoch(time.toEpochMilli());
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .id(traceId)
+                    .projectName(projectName)
+                    .startTime(time)
+                    .metadata(buildCipxSessionMetadata(userUuid))
+                    .feedbackScores(null)
+                    .build();
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
 
-        var projectName = RandomStringUtils.randomAlphabetic(10);
-        projectResourceClient.createProject(projectName, apiKey, workspaceName);
+            Span llmCallSpan = factory.manufacturePojo(Span.class).toBuilder()
+                    .id(idGenerator.getTimeOrderedEpoch(time.toEpochMilli()))
+                    .traceId(traceId)
+                    .startTime(time)
+                    .name("user_turn")
+                    .type(SpanType.llm)
+                    .model(MODEL)
+                    .projectId(null)
+                    .projectName(projectName)
+                    .feedbackScores(null)
+                    .metadata(buildCipxLlmSpanMetadata())
+                    .build();
+            spanResourceClient.batchCreateSpans(List.of(llmCallSpan), apiKey, workspaceName);
 
-        Instant intervalStart = Instant.now().minus(Duration.ofMinutes(10));
-        Instant intervalEnd = Instant.now();
-        Instant currentTime = intervalStart.plus(Duration.ofMinutes(5));
-
-        var user = UUID.randomUUID().toString();
-        createCcTraces(projectName, apiKey, workspaceName, currentTime, List.of(user, user, user));
-
-        var recommendations = aiSpendResourceClient.getRecommendations(SpendMetricRequest.builder()
-                .projectName(projectName)
-                .intervalStart(intervalStart)
-                .intervalEnd(intervalEnd)
-                .build(), apiKey, workspaceName);
-
-        List<String> ids = recommendations.items().stream()
-                .map(SpendRecommendationsResponse.Item::id)
-                .toList();
-        // thinking is 450/840 > 0.5 of output; prior_assistant is 3000/8400 < 0.4 of input.
-        assertThat(ids).contains("thinking_effort", "fewer_tools");
-        assertThat(ids).doesNotContain("compact_threshold");
-        assertThat(recommendations.items()).hasSizeLessThanOrEqualTo(3);
-        // round(450 * 0.3) + round(1140 * 0.5) = 135 + 570
-        assertThat(recommendations.totalSavingsTokens()).isEqualTo(705L);
-
-        Map<String, Impact> impacts = recommendations.items().stream()
-                .collect(Collectors.toMap(SpendRecommendationsResponse.Item::id,
-                        SpendRecommendationsResponse.Item::impact));
-        assertThat(impacts.get("thinking_effort")).isEqualTo(Impact.MEDIUM);
-        assertThat(impacts.get("fewer_tools")).isEqualTo(Impact.LOW);
+            ids.add(traceId);
+        }
+        return ids;
     }
 
-    private List<UUID> createCcTraces(String projectName, String apiKey, String workspaceName, Instant time,
+    private List<UUID> createIdentityOnlyTraces(String projectName, String apiKey, String workspaceName, Instant time,
             List<String> userUuids) {
-        return createTraces(projectName, apiKey, workspaceName, time, userUuids, this::buildCcMetadata);
-    }
-
-    private List<UUID> createIdentityTraces(String projectName, String apiKey, String workspaceName, Instant time,
-            List<String> userUuids) {
-        return createTraces(projectName, apiKey, workspaceName, time, userUuids, this::buildIdentityMetadata);
-    }
-
-    private List<UUID> createTraces(String projectName, String apiKey, String workspaceName, Instant time,
-            List<String> userUuids, Function<String, JsonNode> metadata) {
         List<UUID> ids = new ArrayList<>();
         for (String userUuid : userUuids) {
             UUID id = idGenerator.getTimeOrderedEpoch(time.toEpochMilli());
@@ -806,27 +800,13 @@ class AiSpendResourceTest {
                     .id(id)
                     .projectName(projectName)
                     .startTime(time)
-                    .metadata(metadata.apply(userUuid))
+                    .metadata(buildCipxSessionMetadata(userUuid))
                     .feedbackScores(null)
                     .build();
             traceResourceClient.createTrace(trace, apiKey, workspaceName);
             ids.add(id);
         }
         return ids;
-    }
-
-    private void createMcpSpan(String projectName, String apiKey, String workspaceName, UUID traceId, Instant time) {
-        Span span = factory.manufacturePojo(Span.class).toBuilder()
-                .startTime(time)
-                .id(idGenerator.getTimeOrderedEpoch(time.toEpochMilli()))
-                .traceId(traceId)
-                .name("mcp__chrome__click")
-                .model("claude-opus-4-8")
-                .projectId(null)
-                .projectName(projectName)
-                .feedbackScores(null)
-                .build();
-        spanResourceClient.batchCreateSpans(List.of(span), apiKey, workspaceName);
     }
 
     private SpendBreakdownResponse getBreakdown(String projectName, String apiKey, String workspaceName,
@@ -838,87 +818,124 @@ class AiSpendResourceTest {
                 .build(), apiKey, workspaceName);
     }
 
-    private void createBuiltInToolItemsTrace(String projectName, String apiKey, String workspaceName, Instant time,
+    // A trace with one LLM-call span whose only input is N built-in tool_io
+    // blocks; each block has chars=1 and cache_status=read. With the call's
+    // cache_read_input_tokens = N, the proportional allocator gives each
+    // block exactly 1 token.
+    private void createManyToolsTrace(String projectName, String apiKey, String workspaceName, Instant time,
             int count) {
-        String items = IntStream.range(0, count)
-                .mapToObj(i -> """
-                        { "name": "tool_%d", "kind": "usage", "count": 1, "total": 1, "cache_read": 1 }""".formatted(i))
-                .collect(Collectors.joining(","));
-        String json = """
-                { "cc": { "billing": { "lanes": { "built_in_tools": { "total": %1$d, "cache_read": %1$d, "items": [ %2$s ] } } } } }
-                """
-                .formatted(count, items);
+        UUID traceId = idGenerator.getTimeOrderedEpoch(time.toEpochMilli());
         Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
-                .id(idGenerator.getTimeOrderedEpoch(time.toEpochMilli()))
+                .id(traceId)
                 .projectName(projectName)
                 .startTime(time)
-                .metadata(JsonUtils.getJsonNodeFromString(json))
+                .metadata(buildCipxSessionMetadata(UUID.randomUUID().toString()))
                 .feedbackScores(null)
                 .build();
         traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+        String blocks = IntStream.range(0, count)
+                .mapToObj(i -> """
+                        { "side": "input", "category": "tool_io", "cache_status": "read", "chars": 1,
+                          "tool_name": "tool_%d", "tool_server": "", "kind": "tool_result" }""".formatted(i))
+                .collect(Collectors.joining(","));
+        String spanMetadata = """
+                {
+                  "cipx": {
+                    "call": {
+                      "model": "%s",
+                      "usage": { "input_tokens": 0, "cache_read_input_tokens": %d,
+                                 "cache_creation_input_tokens": 0, "output_tokens": 0 }
+                    },
+                    "blocks": [ %s ]
+                  }
+                }
+                """.formatted(MODEL, count, blocks);
+
+        Span span = factory.manufacturePojo(Span.class).toBuilder()
+                .id(idGenerator.getTimeOrderedEpoch(time.toEpochMilli()))
+                .traceId(traceId)
+                .startTime(time)
+                .name("user_turn")
+                .type(SpanType.llm)
+                .model(MODEL)
+                .projectId(null)
+                .projectName(projectName)
+                .feedbackScores(null)
+                .metadata(JsonUtils.getJsonNodeFromString(spanMetadata))
+                .build();
+        spanResourceClient.batchCreateSpans(List.of(span), apiKey, workspaceName);
     }
 
-    private JsonNode buildIdentityMetadata(String userUuid) {
+    // Trace-level cipx.session shipped by cipx Item 1 (always-on identity).
+    private JsonNode buildCipxSessionMetadata(String userUuid) {
         String json = """
                 {
-                  "cc": {
-                    "identity": { "user_uuid": "%1$s", "user_email": "%1$s@comet.com", "user_display_name": "%1$s" },
-                    "git": { "repository": "repo-a" }
+                  "cipx": {
+                    "session": {
+                      "schema_version": 2,
+                      "harness": "claude_code",
+                      "session_id": "%1$s",
+                      "identity": {
+                        "user_uuid": "%1$s",
+                        "email": "%1$s@comet.com",
+                        "display_name": "%1$s"
+                      },
+                      "repository": { "remote": "repo-a" }
+                    }
                   }
                 }
                 """.formatted(userUuid);
         return JsonUtils.getJsonNodeFromString(json);
     }
 
-    // Every number under cc.billing is a per-LLM-call billing event: lane tier
-    // columns sum to the lane total, lane totals (incl. unattributed) sum to
-    // totals, and items sum to their lane.
-    private JsonNode buildCcMetadata(String userUuid) {
+    // The canonical LLM-call span metadata. One block per lane (or two for
+    // lanes with definition vs usage split). Every block's chars equals its
+    // expected attributed-token count so the chars-share allocator inside
+    // the BE projects token totals 1:1 onto these values. Input blocks
+    // default to cache_status=read; user_prompts is the only fresh block.
+    // A 40-token cache_creation_input_tokens count with no write-tier block
+    // becomes the per-trace 'unattributed' residual.
+    private JsonNode buildCipxLlmSpanMetadata() {
         String json = """
                 {
-                  "cc": {
-                    "identity": { "user_uuid": "%1$s", "user_email": "%1$s@comet.com", "user_display_name": "%1$s" },
-                    "git": { "repository": "repo-a" },
-                    "billing": {
-                      "llm_calls": 2,
-                      "model": "claude-opus-4-8",
-                      "totals": { "total": 3080, "input": 50, "cache_read": 2710, "cache_creation": 40, "output": 280 },
-                      "lanes": {
-                        "user_prompts": { "total": 50, "input": 50, "cache_read": 0, "cache_creation": 0, "output": 0,
-                          "items": [ { "name": "short", "kind": "usage", "count": 1, "total": 50, "input": 50 } ] },
-                        "file_attachments": { "total": 40, "input": 0, "cache_read": 40, "cache_creation": 0, "output": 0,
-                          "items": [ { "name": ".png", "kind": "usage", "count": 1, "total": 40, "cache_read": 40 } ] },
-                        "built_in_tools": { "total": 200, "input": 0, "cache_read": 200, "cache_creation": 0, "output": 0,
-                          "items": [ { "name": "Bash", "kind": "usage", "count": 2, "total": 200, "cache_read": 200 } ] },
-                        "prior_assistant": { "total": 1000, "input": 0, "cache_read": 1000, "cache_creation": 0, "output": 0,
-                          "items": [ { "name": "assistant_text", "kind": "usage", "count": 0, "total": 600, "cache_read": 600 },
-                                     { "name": "thinking", "kind": "usage", "count": 0, "total": 400, "cache_read": 400 } ] },
-                        "skills": { "total": 900, "input": 0, "cache_read": 900, "cache_creation": 0, "output": 0,
-                          "items": [ { "name": "opik-frontend", "kind": "definition", "count": 0, "total": 100, "cache_read": 100 },
-                                     { "name": "opik-frontend", "kind": "usage", "count": 1, "total": 500, "cache_read": 500 },
-                                     { "name": "find-skills", "kind": "usage", "count": 1, "total": 300, "cache_read": 300 } ] },
-                        "custom_agents": { "total": 30, "input": 0, "cache_read": 30, "cache_creation": 0, "output": 0,
-                          "items": [ { "name": "code-reviewer", "kind": "definition", "count": 0, "total": 30, "cache_read": 30 } ] },
-                        "mcp_servers": { "total": 380, "input": 0, "cache_read": 380, "cache_creation": 0, "output": 0,
-                          "items": [ { "name": "chrome-devtools", "kind": "definition", "count": 0, "total": 300, "cache_read": 300 },
-                                     { "name": "chrome-devtools", "kind": "usage", "count": 1, "total": 80, "cache_read": 80 } ] },
-                        "memory": { "total": 60, "input": 0, "cache_read": 60, "cache_creation": 0, "output": 0,
-                          "items": [ { "name": "AGENTS.md", "kind": "definition", "count": 1, "total": 60, "cache_read": 60 } ] },
-                        "static_overhead": { "total": 100, "input": 0, "cache_read": 100, "cache_creation": 0, "output": 0,
-                          "items": [ { "name": "core_prompt", "kind": "definition", "count": 0, "total": 100, "cache_read": 100 } ] },
-                        "unattributed": { "total": 40, "input": 0, "cache_read": 0, "cache_creation": 40, "output": 0 },
-                        "output": { "total": 280, "input": 0, "cache_read": 0, "cache_creation": 0, "output": 280,
-                          "items": [ { "name": "thinking", "kind": "usage", "count": 0, "total": 150, "output": 150 },
-                                     { "name": "assistant_text", "kind": "usage", "count": 0, "total": 70, "output": 70 },
-                                     { "name": "built_in_tools/Bash", "kind": "usage", "count": 1, "total": 30, "output": 30 },
-                                     { "name": "mcp_servers/chrome", "kind": "usage", "count": 1, "total": 20, "output": 20 },
-                                     { "name": "skills/diagram-generation", "kind": "usage", "count": 1, "total": 10, "output": 10 } ] }
+                  "cipx": {
+                    "call": {
+                      "model": "%1$s",
+                      "provider": "anthropic",
+                      "trigger": "user_turn",
+                      "usage": {
+                        "input_tokens": 50,
+                        "cache_read_input_tokens": 2710,
+                        "cache_creation_input_tokens": 40,
+                        "output_tokens": 280
                       }
-                    }
+                    },
+                    "blocks": [
+                      { "side": "input", "category": "user_prompts", "cache_status": "fresh", "chars": 50, "kind": "text" },
+                      { "side": "input", "category": "file_attachments", "cache_status": "read", "chars": 40, "kind": "image", "resource": "screenshot.png" },
+                      { "side": "input", "category": "tool_io", "cache_status": "read", "chars": 100, "tool_name": "Bash", "tool_server": "", "kind": "tool_result" },
+                      { "side": "input", "category": "tool_io", "cache_status": "read", "chars": 100, "tool_name": "Bash", "tool_server": "", "kind": "tool_result" },
+                      { "side": "input", "category": "prior_assistant", "cache_status": "read", "chars": 600, "kind": "text" },
+                      { "side": "input", "category": "prior_assistant", "cache_status": "read", "chars": 400, "kind": "thinking" },
+                      { "side": "input", "category": "skills_menu", "cache_status": "read", "chars": 100, "resource": "opik-frontend" },
+                      { "side": "input", "category": "skills_loaded", "cache_status": "read", "chars": 500, "resource": "opik-frontend" },
+                      { "side": "input", "category": "skills_loaded", "cache_status": "read", "chars": 300, "resource": "find-skills" },
+                      { "side": "input", "category": "custom_agents", "cache_status": "read", "chars": 30, "resource": "code-reviewer" },
+                      { "side": "input", "category": "mcp_tools_active", "cache_status": "read", "chars": 300, "tool_server": "chrome-devtools", "tool_name": "click" },
+                      { "side": "input", "category": "tool_io", "cache_status": "read", "chars": 80, "tool_name": "click", "tool_server": "chrome-devtools", "kind": "tool_result" },
+                      { "side": "input", "category": "memory", "cache_status": "read", "chars": 60, "resource": "AGENTS.md", "parent_category": "identity_context" },
+                      { "side": "input", "category": "system_prompt", "cache_status": "read", "chars": 100 },
+                      { "side": "output", "category": "thinking", "chars": 150, "kind": "thinking" },
+                      { "side": "output", "category": "assistant_text", "chars": 70, "kind": "text" },
+                      { "side": "output", "category": "built_in_tool_calls", "chars": 30, "kind": "tool_use", "tool_name": "Bash" },
+                      { "side": "output", "category": "mcp_tool_calls", "chars": 20, "kind": "tool_use", "tool_server": "chrome", "tool_name": "click" },
+                      { "side": "output", "category": "skill_invocations", "chars": 10, "kind": "tool_use", "tool_name": "Skill", "resource": "diagram-generation" }
+                    ]
                   }
                 }
                 """
-                .formatted(userUuid);
+                .formatted(MODEL);
         return JsonUtils.getJsonNodeFromString(json);
     }
 }

@@ -7,12 +7,12 @@ import java.util.Arrays;
 import java.util.Optional;
 
 /**
- * Output lanes, backed by {@code cc.billing.lanes.output.items}. Item names
- * are {@code thinking}, {@code assistant_text}, or {@code <lane>/<entity>}
- * for tool calls ({@code built_in_tools/Read}, {@code mcp_servers/opik-mcp},
- * {@code skills/Skill}), so the Sankey lanes are name-prefix groups and the
- * per-lane breakdown label is the suffix after '/'. The matching ClickHouse
- * expressions live in {@code AiSpendQueryBuilder}.
+ * Output lanes of the AI Spend composition. Each lane corresponds 1:1 to a
+ * cipx output block {@code category}; output blocks live in
+ * {@code metadata.cipx.blocks[]} with {@code side = 'output'} on the same
+ * LLM-call span as the input blocks. Per-lane breakdowns group on
+ * {@code tool_name}, {@code tool_server}, or {@code resource} depending on
+ * the lane.
  */
 @Getter
 @RequiredArgsConstructor
