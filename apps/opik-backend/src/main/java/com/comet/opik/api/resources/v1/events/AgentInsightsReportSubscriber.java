@@ -1,9 +1,12 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.domain.AgentInsightsMetrics;
 import com.comet.opik.domain.AgentInsightsReportClient;
 import com.comet.opik.domain.AgentInsightsReportMessage;
 import com.comet.opik.infrastructure.AgentInsightsReportConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.LongCounter;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +32,11 @@ public class AgentInsightsReportSubscriber extends BaseRedisSubscriber<AgentInsi
     private final ServiceTogglesConfig serviceToggles;
     private final AgentInsightsReportClient reportClient;
 
+    // The base class records every message as success because processEvent swallows failures (at-most-once
+    // drop), so its processing-errors metric never fires for a failed trigger. This counter restores the
+    // success/failure outcome signal for the platform trigger call.
+    private final LongCounter reportsTriggered;
+
     @Inject
     public AgentInsightsReportSubscriber(
             @NonNull @Config("agentInsightsReport") AgentInsightsReportConfig config,
@@ -39,6 +47,10 @@ public class AgentInsightsReportSubscriber extends BaseRedisSubscriber<AgentInsi
         this.config = config;
         this.serviceToggles = serviceToggles;
         this.reportClient = reportClient;
+        this.reportsTriggered = meter
+                .counterBuilder(AgentInsightsMetrics.REPORTS_TRIGGERED)
+                .setDescription(AgentInsightsMetrics.REPORTS_TRIGGERED_DESC)
+                .build();
     }
 
     @Override
@@ -70,9 +82,13 @@ public class AgentInsightsReportSubscriber extends BaseRedisSubscriber<AgentInsi
                 message.workspaceId(), message.periodStart(), message.periodEnd()))
                 .subscribeOn(Schedulers.boundedElastic())
                 .then()
-                .doOnSuccess(unused -> log.info("Triggered Agent Insights report: reportId='{}', project='{}'",
-                        message.reportId(), message.projectId()))
+                .doOnSuccess(unused -> {
+                    reportsTriggered.add(1, Attributes.of(AgentInsightsMetrics.OUTCOME, AgentInsightsMetrics.SUCCESS));
+                    log.info("Triggered Agent Insights report: reportId='{}', project='{}'",
+                            message.reportId(), message.projectId());
+                })
                 .onErrorResume(throwable -> {
+                    reportsTriggered.add(1, Attributes.of(AgentInsightsMetrics.OUTCOME, AgentInsightsMetrics.FAILURE));
                     // At-most-once on purpose: report generation is a non-idempotent side effect (Ollie
                     // compute + a user-facing report), and the trigger isn't deduplicated downstream, so a
                     // redelivery would run the same report twice. We ack on failure (log + complete) rather

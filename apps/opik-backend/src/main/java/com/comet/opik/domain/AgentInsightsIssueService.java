@@ -12,6 +12,9 @@ import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
 import com.google.inject.ImplementedBy;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.metrics.LongCounter;
+import io.opentelemetry.api.metrics.Meter;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
@@ -51,6 +54,17 @@ public interface AgentInsightsIssueService {
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
+
+    private static final Meter METER = GlobalOpenTelemetry.get().getMeter(AgentInsightsMetrics.METER_NAME);
+
+    private final LongCounter reportsReceived = METER
+            .counterBuilder(AgentInsightsMetrics.REPORTS_RECEIVED)
+            .setDescription(AgentInsightsMetrics.REPORTS_RECEIVED_DESC)
+            .build();
+    private final LongCounter issuesReported = METER
+            .counterBuilder(AgentInsightsMetrics.ISSUES_REPORTED)
+            .setDescription(AgentInsightsMetrics.ISSUES_REPORTED_DESC)
+            .build();
 
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull IdGenerator idGenerator;
@@ -95,6 +109,9 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
 
             return null;
         });
+
+        reportsReceived.add(1);
+        issuesReported.add(report.issues().size());
     }
 
     @Override
