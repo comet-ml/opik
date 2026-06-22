@@ -98,7 +98,18 @@ def _run(shutdown_event: threading.Event) -> None:
             request={name: _to_payload(entry) for name, entry in entrypoints.items()},
         )
 
-    loop = InProcessRunnerLoop(api, runner_id, shutdown_event)
+    poll_interval = client.config.runner_poll_interval
+    if poll_interval <= 0:
+        LOGGER.warning(
+            "OPIK_RUNNER_POLL_INTERVAL must be greater than 0, got %s; "
+            "using the default interval.",
+            poll_interval,
+        )
+        loop = InProcessRunnerLoop(api, runner_id, shutdown_event)
+    else:
+        loop = InProcessRunnerLoop(
+            api, runner_id, shutdown_event, poll_idle_interval_seconds=poll_interval
+        )
 
     try:
         loop.run()

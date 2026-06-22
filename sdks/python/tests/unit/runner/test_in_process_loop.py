@@ -154,6 +154,93 @@ class TestPollLoop:
         assert calls[0][0].id == "j-1"
 
 
+class TestPollFailureLogging:
+    @staticmethod
+    def _make_loop(mock_api, shutdown_event):
+        lp = in_process_loop.InProcessRunnerLoop(
+            mock_api,
+            "r-1",
+            shutdown_event,
+            heartbeat_interval_seconds=100,
+            poll_idle_interval_seconds=0.01,
+            initial_backoff_seconds=0.001,
+            backoff_cap_seconds=0.001,
+        )
+        lp._loop = asyncio.new_event_loop()
+        return lp
+
+    def test_poll__sustained_429__warns_with_firewall_and_interval_hint(
+        self, mock_api, shutdown_event, capfd
+    ):
+        lp = self._make_loop(mock_api, shutdown_event)
+        call_count = 0
+
+        def side_effect(runner_id):
+            nonlocal call_count
+            call_count += 1
+            if call_count >= in_process_loop._POLL_FAILURE_HINT_THRESHOLD:
+                shutdown_event.set()
+            raise ApiError(status_code=429)
+
+        mock_api.runners.next_job.side_effect = side_effect
+
+        t = threading.Thread(target=lp._poll_loop)
+        t.start()
+        t.join(timeout=5)
+
+        stderr = capfd.readouterr().err
+        assert "OPIK_RUNNER_POLL_INTERVAL" in stderr
+        assert "firewall or proxy" in stderr
+        assert "429" in stderr
+
+    def test_poll__sustained_connection_error__hint_without_rate_limit_note(
+        self, mock_api, shutdown_event, capfd
+    ):
+        lp = self._make_loop(mock_api, shutdown_event)
+        call_count = 0
+
+        def side_effect(runner_id):
+            nonlocal call_count
+            call_count += 1
+            if call_count >= in_process_loop._POLL_FAILURE_HINT_THRESHOLD:
+                shutdown_event.set()
+            raise ConnectionError("blocked")
+
+        mock_api.runners.next_job.side_effect = side_effect
+
+        t = threading.Thread(target=lp._poll_loop)
+        t.start()
+        t.join(timeout=5)
+
+        stderr = capfd.readouterr().err
+        assert "firewall or proxy" in stderr
+        assert "connection error" in stderr
+        assert "429" not in stderr
+
+    def test_poll__recovers_after_failures__logs_reconnected(
+        self, mock_api, shutdown_event, capfd
+    ):
+        lp = self._make_loop(mock_api, shutdown_event)
+        call_count = 0
+
+        def side_effect(runner_id):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise ConnectionError("transient")
+            shutdown_event.set()
+            return None
+
+        mock_api.runners.next_job.side_effect = side_effect
+
+        t = threading.Thread(target=lp._poll_loop)
+        t.start()
+        t.join(timeout=5)
+
+        stderr = capfd.readouterr().err
+        assert "Reconnected to Opik server" in stderr
+
+
 class TestJobExecution:
     def test_execute_job__sync_entrypoint__calls_function(
         self, mock_api, shutdown_event
