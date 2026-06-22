@@ -110,6 +110,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -2361,6 +2362,35 @@ class SpansResourceTest {
                     .projectName(DEFAULT_PROJECT);
             SpanMapper.INSTANCE.updateSpanBuilder(expectedSpanBuilder, expectedSpanUpdate);
             getAndAssert(expectedSpanBuilder.build(), API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("when span update usage has a null value, then drop it and accept the update")
+        void update__whenUsageHasNullValue__thenDropNullAndAccept() {
+            var expectedSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(null)
+                    .parentSpanId(null)
+                    .feedbackScores(null)
+                    .build();
+            spanResourceClient.createSpan(expectedSpan, API_KEY, TEST_WORKSPACE);
+
+            // A null token count must not reach the Map(String, Int64) CAST in the update query,
+            // which would otherwise fail with ClickHouse CANNOT_CONVERT_TYPE (code 70). The null
+            // entry is dropped, matching the batch insert path. See OPIK-7050.
+            var usageWithNull = new HashMap<String, Integer>();
+            usageWithNull.put("completion_tokens", 7);
+            usageWithNull.put("prompt_tokens", null);
+
+            var spanUpdate = SpanUpdate.builder()
+                    .usage(usageWithNull)
+                    .parentSpanId(expectedSpan.parentSpanId())
+                    .traceId(expectedSpan.traceId())
+                    .projectName(expectedSpan.projectName())
+                    .build();
+            spanResourceClient.updateSpan(expectedSpan.id(), spanUpdate, API_KEY, TEST_WORKSPACE);
+
+            var actualSpan = spanResourceClient.getById(expectedSpan.id(), TEST_WORKSPACE, API_KEY);
+            assertThat(actualSpan.usage()).isEqualTo(Map.of("completion_tokens", 7));
         }
 
         @ParameterizedTest

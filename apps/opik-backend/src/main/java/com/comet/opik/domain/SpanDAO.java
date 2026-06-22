@@ -1974,6 +1974,13 @@ public class SpanDAO {
                     var usageKeys = new ArrayList<String>();
                     var usageValues = new ArrayList<Integer>();
                     for (var entry : usage.entrySet()) {
+                        // Skip null token counts: the SQL CASTs these arrays into a
+                        // Map(String, Int64) whose value type is non-nullable, so a null value
+                        // triggers ClickHouse CANNOT_CONVERT_TYPE (code 70). Matches the batch
+                        // insert path, which already drops null usage values.
+                        if (entry.getValue() == null) {
+                            continue;
+                        }
                         usageKeys.add(entry.getKey());
                         usageValues.add(entry.getValue());
                     }
@@ -2927,6 +2934,13 @@ public class SpanDAO {
                     var usageKeys = new ArrayList<String>();
                     var usageValues = new ArrayList<Integer>();
                     for (var entry : usage.entrySet()) {
+                        // Skip null token counts: the SQL CASTs these arrays into a
+                        // Map(String, Int64) whose value type is non-nullable, so a null value
+                        // triggers ClickHouse CANNOT_CONVERT_TYPE (code 70). Matches the batch
+                        // insert path, which already drops null usage values.
+                        if (entry.getValue() == null) {
+                            continue;
+                        }
                         usageKeys.add(entry.getKey());
                         usageValues.add(entry.getValue());
                     }
