@@ -256,7 +256,7 @@ public class ReadTool implements ToolExecutor {
                 com.comet.opik.api.attachment.EntityType.TRACE, projectId), ctx)
                 .map(AttachmentSummaries::toJsonArray)
                 .onErrorResume(e -> {
-                    log.warn("read tool failed to list attachments for trace '{}': {}", traceId, e.getMessage());
+                    log.warn("read tool failed to list attachments for trace '{}'", traceId, e);
                     return Mono.just(JsonUtils.getMapper().createArrayNode());
                 });
     }

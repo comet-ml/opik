@@ -29,7 +29,7 @@ public class AttachmentSummaries {
      * whether {@code get_attachment} can load it.
      */
     public static ArrayNode toJsonArray(@NonNull List<AttachmentInfo> attachments) {
-        ArrayNode array = JsonUtils.getMapper().createArrayNode();
+        ArrayNode array = JsonUtils.createArrayNode();
         for (var info : attachments) {
             String mime = StringUtils.isNotBlank(info.mimeType()) ? info.mimeType() : TIKA.detect(info.fileName());
             ObjectNode item = array.addObject();

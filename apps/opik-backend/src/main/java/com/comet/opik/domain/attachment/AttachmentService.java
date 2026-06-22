@@ -72,6 +72,12 @@ public interface AttachmentService {
     Mono<List<AttachmentInfo>> getAttachmentInfoByEntity(UUID entityId, EntityType entityType, UUID containerId);
 
     /**
+     * Returns true if any of the given entity IDs has at least one attachment.
+     * Uses a single batch DB call instead of per-entity queries.
+     */
+    Mono<Boolean> hasAnyAttachmentByEntityIds(EntityType entityType, Set<UUID> entityIds);
+
+    /**
      * Presigned (S3) download URL for a single attachment, reachable by an external
      * caller (e.g. an LLM provider fetching media during online evaluation). Uses the
      * same object-key layout as upload/download so it resolves the stored object.
@@ -104,6 +110,7 @@ class AttachmentServiceImpl implements AttachmentService {
     private final @NonNull OpikConfiguration config;
     private final @NonNull Provider<RequestContext> requestContext;
     private static final Tika tika = new Tika();
+    private static final int MAX_ATTACHMENTS_PER_ENTITY = 1_000;
 
     @Override
     public StartMultipartUploadResponse startMultiPartUpload(@NonNull StartMultipartUploadRequest startUploadRequest,
@@ -369,7 +376,7 @@ class AttachmentServiceImpl implements AttachmentService {
         // RequestContext.WORKSPACE_NAME from the reactive context — which is not
         // always present (e.g. the online-scoring thread path). The URL it builds is
         // discarded here anyway, so skipping it removes a latent context dependency.
-        return attachmentDAO.list(1, Integer.MAX_VALUE, criteria)
+        return attachmentDAO.list(1, MAX_ATTACHMENTS_PER_ENTITY, criteria)
                 .map(attachmentPage -> attachmentPage.content().stream()
                         .map(attachment -> AttachmentInfo.builder()
                                 .fileName(attachment.fileName())
@@ -409,6 +416,15 @@ class AttachmentServiceImpl implements AttachmentService {
                     return Mono.empty(); // Continue processing
                 })
                 .then();
+    }
+
+    @Override
+    public Mono<Boolean> hasAnyAttachmentByEntityIds(@NonNull EntityType entityType, @NonNull Set<UUID> entityIds) {
+        if (entityIds.isEmpty()) {
+            return Mono.just(false);
+        }
+        return attachmentDAO.getAttachmentsByEntityIds(entityType, entityIds)
+                .map(list -> !list.isEmpty());
     }
 
     @Override

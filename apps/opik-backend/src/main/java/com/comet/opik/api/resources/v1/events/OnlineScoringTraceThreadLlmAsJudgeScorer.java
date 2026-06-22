@@ -235,11 +235,10 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
         // path regardless of context size (the judge needs get_attachment to fetch them). Best-effort:
         // a transient listing error returns false and falls back to the normal size-based routing.
         Mono<Boolean> hasAttachmentsMono = serviceTogglesConfig.isAgenticToolsEnabled()
-                ? Flux.fromIterable(traces)
-                        .flatMap(trace -> attachmentService
-                                .getAttachmentInfoByEntity(trace.id(), EntityType.TRACE, message.projectId())
-                                .onErrorReturn(List.of()))
-                        .any(attachments -> !attachments.isEmpty())
+                ? attachmentService.hasAnyAttachmentByEntityIds(
+                        EntityType.TRACE,
+                        traces.stream().map(Trace::id).collect(Collectors.toSet()))
+                        .onErrorReturn(false)
                         .contextWrite(ctx -> ctx
                                 .put(RequestContext.WORKSPACE_ID, message.workspaceId())
                                 .put(RequestContext.USER_NAME, message.userName()))
@@ -394,7 +393,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
         boolean providerSupportsTools = OnlineScoringEngine.supportsToolCalling(
                 llmProviderFactory.getLlmProvider(modelName));
         if (!providerSupportsTools) {
-            log.warn(
+            userFacingLogger.warn(
                     "Thread has attachments or context exceeds '{}' tokens but provider for model '{}'"
                             + " does not support tool calling; falling back to inline path for threadId"
                             + " '{}' — may overflow context window.",
@@ -405,7 +404,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
         // templates (image / audio / video parts alongside text) would otherwise hit the
         // safety throw in renderThreadMessagesWithReplacement and fail the evaluation.
         if (OnlineScoringEngine.hasMultimodalTemplate(templateMessages)) {
-            log.warn(
+            userFacingLogger.warn(
                     "Thread has attachments or context exceeds '{}' tokens but evaluator template has"
                             + " multimodal content; falling back to inline path for threadId '{}'"
                             + " — may overflow context window.",

@@ -29,12 +29,11 @@ import java.util.UUID;
  * Loads a trace/span media attachment (image, audio, video) so the judge can
  * reason over its actual content while scoring (OPIK-6555).
  *
- * <p>Args: {@code {type, id, file_name?}}.
+ * <p>Args: {@code {type, id, file_name}} (all required).
  * <ul>
  *   <li>{@code type} ∈ {@code trace, span} — the entity that owns the attachment.</li>
  *   <li>{@code id} entity id (UUID).</li>
- *   <li>{@code file_name} optional. Omit to <b>list</b> the attachments available for the
- *       entity; provide to <b>fetch</b> that attachment.</li>
+ *   <li>{@code file_name} the exact file name as shown in the entity's {@code attachments} list.</li>
  * </ul>
  *
  * <p>Fetch does not return the media inline as text — that is impossible in a tool result.
@@ -115,8 +114,8 @@ public class GetAttachmentTool implements ToolExecutor {
                 .onErrorResume(Exception.class, e -> {
                     // Don't echo the raw exception to the LLM — surface a correlation id only.
                     String correlationId = UUID.randomUUID().toString();
-                    log.warn("get_attachment tool failed for ref ('{}', '{}'), correlationId='{}'",
-                            args.type, args.id, correlationId, e);
+                    log.warn("get_attachment tool failed for ref ('{}', '{}'), projectId='{}', workspaceId='{}', correlationId='{}'",
+                            args.type, args.id, projectId, ctx.getWorkspaceId(), correlationId, e);
                     return Mono.just(ToolArgs.errorJson(
                             "Failed to load attachment (ref: " + correlationId + ")"));
                 });
@@ -150,14 +149,14 @@ public class GetAttachmentTool implements ToolExecutor {
 
     private Mono<String> fetchFromMinIO(AttachmentInfo info, String mime, MediaCategory category,
             TraceToolContext ctx) {
+        if (!ctx.canInjectMedia()) {
+            return Mono.just(ToolArgs.errorJson(("Attachment '%s' cannot be loaded: the limit on the number of"
+                    + " attachments for this evaluation has been reached.").formatted(info.fileName())));
+        }
         return Mono.fromCallable(() -> attachmentService.downloadAttachment(info, ctx.getWorkspaceId()))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(this::readAllBytes)
                 .map(bytes -> {
-                    if (!ctx.canInjectMedia()) {
-                        return ToolArgs.errorJson(("Attachment '%s' cannot be loaded: the limit on the number of"
-                                + " attachments for this evaluation has been reached.").formatted(info.fileName()));
-                    }
                     String base64 = Base64.getEncoder().encodeToString(bytes);
                     ctx.stageMedia(MediaPayload.ofBase64(info.fileName(), mime, category, base64));
                     return confirmation(info.fileName(), category);
@@ -166,11 +165,11 @@ public class GetAttachmentTool implements ToolExecutor {
 
     private Mono<String> fetchFromS3(AttachmentInfo info, String mime, MediaCategory category,
             TraceToolContext ctx) {
+        if (!ctx.canInjectMedia()) {
+            return Mono.just(ToolArgs.errorJson(("Attachment '%s' cannot be loaded: the limit on the number of"
+                    + " attachments for this evaluation has been reached.").formatted(info.fileName())));
+        }
         return Mono.fromCallable(() -> {
-            if (!ctx.canInjectMedia()) {
-                return ToolArgs.errorJson(("Attachment '%s' cannot be loaded: the limit on the number of"
-                        + " attachments for this evaluation has been reached.").formatted(info.fileName()));
-            }
             String url = attachmentService.presignDownloadUrl(info, ctx.getWorkspaceId());
             ctx.stageMedia(MediaPayload.ofUrl(info.fileName(), mime, category, url));
             return confirmation(info.fileName(), category);
@@ -189,8 +188,13 @@ public class GetAttachmentTool implements ToolExecutor {
     // ---------------- Helpers ----------------
 
     private Mono<byte[]> readAllBytes(InputStream inputStream) {
-        return Mono.fromCallable(() -> IOUtils.toByteArray(inputStream))
-                .subscribeOn(Schedulers.boundedElastic());
+        return Mono.fromCallable(() -> {
+            try {
+                return IOUtils.toByteArray(inputStream);
+            } finally {
+                inputStream.close();
+            }
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
     private static String effectiveMimeType(AttachmentInfo info) {

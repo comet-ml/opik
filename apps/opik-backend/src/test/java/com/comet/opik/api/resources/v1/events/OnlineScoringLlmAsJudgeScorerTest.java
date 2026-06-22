@@ -8,9 +8,12 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudg
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.api.resources.v1.events.tools.GetTraceSpansTool;
+import com.comet.opik.api.resources.v1.events.tools.MediaCategory;
+import com.comet.opik.api.resources.v1.events.tools.MediaPayload;
 import com.comet.opik.api.resources.v1.events.tools.ReadTool;
 import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
 import com.comet.opik.api.resources.v1.events.tools.TraceCompressor;
+import com.comet.opik.api.resources.v1.events.tools.TraceToolContext;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TestSuiteAssertionCounterService;
@@ -18,10 +21,12 @@ import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
+import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.AiMessage;
@@ -45,6 +50,8 @@ import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.redisson.api.RedissonReactiveClient;
+import org.slf4j.Logger;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
@@ -54,7 +61,9 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
@@ -527,6 +536,118 @@ class OnlineScoringLlmAsJudgeScorerTest {
         assertThat(lastMessage).isInstanceOf(UserMessage.class);
         assertThat(((UserMessage) lastMessage).singleText())
                 .contains("Now respond with ONLY the JSON object");
+    }
+
+    @Nested
+    class SurfaceInjectedMediaFailureTests {
+
+        @Test
+        void passesErrorThroughWithoutLoggingWhenNoMediaWasInjected() {
+            Trace trace = Trace.builder()
+                    .id(UUID.randomUUID()).projectId(UUID.randomUUID())
+                    .name(UUID.randomUUID().toString()).startTime(Instant.now()).build();
+            TraceToolContext ctx = TraceToolContext.forActiveTrace(
+                    trace, List.of(), UUID.randomUUID().toString(), UUID.randomUUID().toString());
+            var error = new RuntimeException("original error");
+            var logger = mock(Logger.class);
+
+            assertThatThrownBy(() -> OnlineScoringBaseScorer.surfaceInjectedMediaFailure(
+                    error, ctx, UUID.randomUUID().toString(), logger, Map.of()).block())
+                    .isSameAs(error);
+            verifyNoInteractions(logger);
+        }
+
+        @Test
+        void logsUserFacingErrorAndPassesThroughWhenMediaWasInjected() {
+            Trace trace = Trace.builder()
+                    .id(UUID.randomUUID()).projectId(UUID.randomUUID())
+                    .name(UUID.randomUUID().toString()).startTime(Instant.now()).build();
+            TraceToolContext ctx = TraceToolContext.forActiveTrace(
+                    trace, List.of(), UUID.randomUUID().toString(), UUID.randomUUID().toString());
+            ctx.stageMedia(MediaPayload.ofBase64(
+                    UUID.randomUUID() + ".png", "image/png", MediaCategory.IMAGE, "dGVzdA=="));
+            var error = new RuntimeException("model rejected media");
+            var logger = mock(Logger.class);
+
+            assertThatThrownBy(() -> OnlineScoringBaseScorer.surfaceInjectedMediaFailure(
+                    error, ctx, UUID.randomUUID().toString(), logger, Map.of()).block())
+                    .isSameAs(error);
+            verify(logger, times(1)).error(anyString(), any(), any(), any());
+        }
+    }
+
+    @Nested
+    class ScoringTests {
+
+        // Minimal evaluator JSON with one scored field — valid for OnlineScoringEngine parsing.
+        private static final String EVALUATOR_JSON = """
+                {
+                  "model": { "name": "gpt-test", "temperature": 0.3 },
+                  "messages": [
+                    { "role": "USER", "content": "Score this trace: {{context}}" }
+                  ],
+                  "schema": [
+                    { "name": "Quality", "type": "DOUBLE", "description": "Quality score" }
+                  ]
+                }
+                """;
+
+        private static final String LLM_RESPONSE = """
+                {"Quality": {"score": 4.5, "reason": "good"}}
+                """;
+
+        @Test
+        void skipsAttachmentFetchWhenToggleIsOff() {
+            var code = JsonUtils.readValue(EVALUATOR_JSON, LlmAsJudgeCode.class);
+            var message = buildScoringMessage(code);
+
+            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(false);
+            lenient().when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
+            when(llmProviderFactory.getStructuredOutputStrategy("gpt-test"))
+                    .thenReturn(new ToolCallingStrategy());
+            when(aiProxyService.scoreTrace(any(), any(), any()))
+                    .thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage(LLM_RESPONSE)).build());
+            when(feedbackScoreService.scoreBatchOfTraces(any())).thenReturn(Mono.empty());
+
+            scorer.score(message).block();
+
+            verifyNoInteractions(attachmentService);
+        }
+
+        @Test
+        void attachmentFetchErrorFallsBackToEmptyListAndScoringProceeds() {
+            var code = JsonUtils.readValue(EVALUATOR_JSON, LlmAsJudgeCode.class);
+            var message = buildScoringMessage(code);
+
+            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
+            when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
+            when(llmProviderFactory.getStructuredOutputStrategy("gpt-test"))
+                    .thenReturn(new ToolCallingStrategy());
+            when(spanService.getByTraceIds(any())).thenReturn(Flux.empty());
+            when(attachmentService.getAttachmentInfoByEntity(any(), any(), any()))
+                    .thenReturn(Mono.error(new RuntimeException("DB unavailable")));
+            when(aiProxyService.scoreTrace(any(), any(), any()))
+                    .thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage(LLM_RESPONSE)).build());
+            when(feedbackScoreService.scoreBatchOfTraces(any())).thenReturn(Mono.empty());
+
+            // onErrorReturn(List.of()) swallows the attachment error; scoring proceeds normally.
+            scorer.score(message).block();
+
+            verify(aiProxyService, times(1)).scoreTrace(any(), any(), any());
+        }
+
+        private TraceToScoreLlmAsJudge buildScoringMessage(LlmAsJudgeCode code) {
+            Trace trace = Trace.builder()
+                    .id(UUID.randomUUID())
+                    .projectId(UUID.randomUUID())
+                    .name(UUID.randomUUID().toString())
+                    .startTime(Instant.now())
+                    .build();
+            return new TraceToScoreLlmAsJudge(
+                    trace, UUID.randomUUID(), UUID.randomUUID().toString(), code,
+                    UUID.randomUUID().toString(), UUID.randomUUID().toString(), null, Map.of(),
+                    PromptType.MUSTACHE, null);
+        }
     }
 
     private static ToolSpecification stubSpec(String name) {
