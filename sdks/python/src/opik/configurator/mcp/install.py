@@ -23,16 +23,20 @@ def setup_mcp_server(
     api_url: str,
     use_local: bool,
     self_hosted_comet: bool,
-    check_tls_certificate: bool,
-    force_local_server: bool,
+    *,
+    check_tls_certificate: bool = True,
+    force_local_server: bool = False,
 ) -> None:
     """Register the Opik MCP server with the user's detected AI host(s).
 
     The decision of *whether* to run this lives in the configurator; by the time
     this is called the user has opted in and the session is interactive.
 
-    ``force_local_server`` skips the hosted-server probe and always installs the
-    local ``uvx`` server, even when the deployment offers a hosted one.
+    ``check_tls_certificate`` and ``force_local_server`` are keyword-only with
+    backward-compatible defaults, so the original positional call pattern
+    (``api_key``, ``workspace``, ``base_url``, ``api_url``, ``use_local``,
+    ``self_hosted_comet``) keeps working. ``force_local_server`` skips the
+    hosted-server probe and always installs the local ``uvx`` server.
     """
     # Prefer the Opik-hosted MCP server when the deployment runs one; otherwise
     # fall back to the local `uvx opik-mcp` server. The probe — not the

@@ -44,6 +44,21 @@ def test_collect__remote_matching_config__in_sync(monkeypatch, tmp_path):
     assert host.in_sync is True
 
 
+def test_collect__remote_sse__labeled_as_sse(monkeypatch, tmp_path):
+    _patch_single_host(
+        monkeypatch,
+        tmp_path,
+        block={"type": "sse", "url": "https://dev.comet.com/opik/api/v1/mcp"},
+    )
+
+    [host] = status.collect_host_statuses(
+        _config("https://dev.comet.com/opik/api/", "alex")
+    )
+
+    assert host.transport == status.TRANSPORT_HOSTED_SSE
+    assert host.in_sync is True
+
+
 def test_collect__remote_pointing_elsewhere__out_of_sync(monkeypatch, tmp_path):
     _patch_single_host(
         monkeypatch,

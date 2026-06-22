@@ -18,6 +18,7 @@ from opik.configurator.mcp import targets as mcp_targets
 CLOUD_API_URL = "https://www.comet.com/opik/api/"
 
 TRANSPORT_HOSTED = "Hosted (HTTP + OAuth)"
+TRANSPORT_HOSTED_SSE = "Hosted (SSE)"
 TRANSPORT_LOCAL = "Local (uvx)"
 
 
@@ -60,9 +61,15 @@ def _describe_block(
     current_workspace: Optional[str],
 ) -> None:
     """Fill in transport, target, and sync state from a recorded server block."""
-    if block.get("type") == "http" or "url" in block:
+    block_type = block.get("type")
+    if block_type in ("http", "sse") or "url" in block:
+        # Branch on the recorded transport: only an HTTP server is the Opik-hosted
+        # OAuth one. An SSE registration (hand-written) is reported as SSE rather
+        # than mislabeled. `url` with no type defaults to HTTP.
         url = str(block.get("url", ""))
-        status.transport = TRANSPORT_HOSTED
+        status.transport = (
+            TRANSPORT_HOSTED_SSE if block_type == "sse" else TRANSPORT_HOSTED
+        )
         status.points_to = url
         status.workspace = None  # chosen during the OAuth flow, not stored here
         status.in_sync = _normalize_url(_api_url_from_mcp_url(url)) == current_api_url
