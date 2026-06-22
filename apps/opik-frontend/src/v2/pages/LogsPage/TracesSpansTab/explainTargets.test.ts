@@ -50,18 +50,25 @@ describe("buildDurationTarget", () => {
       payload: { duration: 1234 },
     });
   });
-  it("returns null when duration is not a number", () => {
-    expect(buildDurationTarget(base)).toBeNull();
-  });
-  it("returns null for a zero / non-finite duration (no value to explain)", () => {
+  it("still builds a target for a zero / N/A duration (the value is not gated)", () => {
     expect(
       buildDurationTarget({ ...base, duration: 0 } as ExplainableRow),
-    ).toBeNull();
+    ).toEqual({
+      kind: "trace.duration",
+      entityId: "e1",
+      projectId: "p1",
+      payload: { duration: 0 },
+    });
+    expect(buildDurationTarget(base)).toEqual({
+      kind: "trace.duration",
+      entityId: "e1",
+      projectId: "p1",
+      payload: { duration: undefined },
+    });
+  });
+  it("returns null without project_id", () => {
     expect(
-      buildDurationTarget({ ...base, duration: NaN } as ExplainableRow),
-    ).toBeNull();
-    expect(
-      buildDurationTarget({ ...base, duration: Infinity } as ExplainableRow),
+      buildDurationTarget({ id: "e1", duration: 10 } as ExplainableRow),
     ).toBeNull();
   });
 });
@@ -96,20 +103,26 @@ describe("buildCostTarget", () => {
       payload: { total_estimated_cost: 0.5 },
     });
   });
-  it("returns null when cost is 0, non-finite, or absent", () => {
+  it("still builds a target for a zero / N/A cost (the value is not gated)", () => {
     expect(
       buildCostTarget({ ...base, total_estimated_cost: 0 } as ExplainableRow),
-    ).toBeNull();
+    ).toEqual({
+      kind: "trace.cost",
+      entityId: "e1",
+      projectId: "p1",
+      payload: { total_estimated_cost: 0 },
+    });
+    expect(buildCostTarget(base)).toEqual({
+      kind: "trace.cost",
+      entityId: "e1",
+      projectId: "p1",
+      payload: { total_estimated_cost: undefined },
+    });
+  });
+  it("returns null without project_id", () => {
     expect(
-      buildCostTarget({ ...base, total_estimated_cost: NaN } as ExplainableRow),
+      buildCostTarget({ id: "e1", total_estimated_cost: 1 } as ExplainableRow),
     ).toBeNull();
-    expect(
-      buildCostTarget({
-        ...base,
-        total_estimated_cost: Infinity,
-      } as ExplainableRow),
-    ).toBeNull();
-    expect(buildCostTarget(base)).toBeNull();
   });
 });
 
@@ -146,7 +159,12 @@ describe("span builders", () => {
     });
     expect(
       buildSpanDurationTarget({ ...base, duration: 0 } as ExplainableRow),
-    ).toBeNull();
+    ).toEqual({
+      kind: "span.duration",
+      entityId: "e1",
+      projectId: "p1",
+      payload: { duration: 0 },
+    });
   });
 
   it("buildSpanCostTarget emits span.cost and keeps model/provider/span_type", () => {
@@ -173,6 +191,11 @@ describe("span builders", () => {
         ...base,
         total_estimated_cost: 0,
       } as ExplainableRow),
-    ).toBeNull();
+    ).toEqual({
+      kind: "span.cost",
+      entityId: "e1",
+      projectId: "p1",
+      payload: { total_estimated_cost: 0 },
+    });
   });
 });

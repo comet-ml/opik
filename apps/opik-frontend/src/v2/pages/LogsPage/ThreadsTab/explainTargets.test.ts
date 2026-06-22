@@ -31,18 +31,19 @@ describe("buildThreadDurationTarget", () => {
       payload: { duration: 10 },
     });
   });
-  it("returns null for a zero / non-finite duration or missing project", () => {
+  it("still builds a target for a zero / N/A duration (the value is not gated)", () => {
     expect(
       buildThreadDurationTarget({ ...base, duration: 0 } as Thread),
-    ).toBeNull();
+    ).toEqual({
+      kind: "thread.duration",
+      entityId: "t1",
+      projectId: "p1",
+      payload: { duration: 0, number_of_messages: 6 },
+    });
+  });
+  it("returns null without project_id", () => {
     expect(
-      buildThreadDurationTarget({ ...base, duration: NaN } as Thread),
-    ).toBeNull();
-    expect(
-      buildThreadDurationTarget({
-        id: "t1",
-        duration: 10,
-      } as Thread),
+      buildThreadDurationTarget({ id: "t1", duration: 10 } as Thread),
     ).toBeNull();
   });
 });
@@ -68,16 +69,25 @@ describe("buildThreadCostTarget", () => {
       "total_estimated_cost",
     ]);
   });
-  it("returns null when cost is 0, non-finite, or absent", () => {
+  it("still builds a target for a zero / N/A cost (the value is not gated)", () => {
     expect(
       buildThreadCostTarget({ ...base, total_estimated_cost: 0 } as Thread),
-    ).toBeNull();
+    ).toEqual({
+      kind: "thread.cost",
+      entityId: "t1",
+      projectId: "p1",
+      payload: { total_estimated_cost: 0, number_of_messages: 6 },
+    });
+    expect(buildThreadCostTarget(base)).toEqual({
+      kind: "thread.cost",
+      entityId: "t1",
+      projectId: "p1",
+      payload: { total_estimated_cost: undefined, number_of_messages: 6 },
+    });
+  });
+  it("returns null without project_id", () => {
     expect(
-      buildThreadCostTarget({
-        ...base,
-        total_estimated_cost: Infinity,
-      } as Thread),
+      buildThreadCostTarget({ id: "t1", total_estimated_cost: 1 } as Thread),
     ).toBeNull();
-    expect(buildThreadCostTarget(base)).toBeNull();
   });
 });

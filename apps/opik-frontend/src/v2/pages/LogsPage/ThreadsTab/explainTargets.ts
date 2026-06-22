@@ -3,16 +3,14 @@ import { ExplainTarget } from "@/types/assistant-sidebar";
 import { Thread } from "@/types/traces";
 
 // Visibility rule mirrors the Traces/Spans builders: show the Explain button
-// only when the cell holds a value worth explaining. `isPositive` keeps it off
-// zero / NaN / Infinity. Threads have no per-row error, so only duration and
-// cost are explainable here. entityId is the thread id; projectId scopes it.
-const isPositive = (value: unknown): value is number =>
-  isFinite(value) && (value as number) > 0;
-
+// whenever the row is structurally explainable (it has a project_id). The
+// displayed value is not gated — N/A or 0 duration/cost is still explainable.
+// Threads have no per-row error, so only duration and cost are explainable
+// here. entityId is the thread id; projectId scopes it.
 export const buildThreadDurationTarget = (
   row: Thread,
 ): ExplainTarget | null => {
-  if (!row.project_id || !isPositive(row.duration)) return null;
+  if (!row.project_id) return null;
   const payload: Record<string, unknown> = { duration: row.duration };
   if (isFinite(row.number_of_messages)) {
     payload.number_of_messages = row.number_of_messages;
@@ -26,7 +24,7 @@ export const buildThreadDurationTarget = (
 };
 
 export const buildThreadCostTarget = (row: Thread): ExplainTarget | null => {
-  if (!row.project_id || !isPositive(row.total_estimated_cost)) return null;
+  if (!row.project_id) return null;
   const payload: Record<string, unknown> = {
     total_estimated_cost: row.total_estimated_cost,
   };

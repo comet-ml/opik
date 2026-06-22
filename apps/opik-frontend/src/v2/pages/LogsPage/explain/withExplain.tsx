@@ -9,10 +9,11 @@ type BuildTarget<TData> = (row: TData) => ExplainTarget | null;
 /**
  * Wrap a data-table cell so the Ollie Explain button appears (on cell-content
  * hover) at the cell's right edge. `buildTarget` derives the explain payload
- * from the row; when it returns null (no value worth explaining, or OSS without
- * the plugin button) only the base cell renders. The button positions/reveals
- * itself against this `group/cell` root. Plugin-scoping: core only reads the
- * PluginsStore slot — it never imports the plugin store.
+ * from the row; when it returns null (the row isn't explainable — e.g. no
+ * project_id, or an empty error cell — or OSS without the plugin button) only
+ * the base cell renders. The button positions/reveals itself against this
+ * `group/cell` root. Plugin-scoping: core only reads the PluginsStore slot —
+ * it never imports the plugin store.
  *
  * Generic over the row type so the Traces/Spans tables (BaseTraceData rows) and
  * the Threads table (Thread rows) share one wrapper; the matching `buildTarget`

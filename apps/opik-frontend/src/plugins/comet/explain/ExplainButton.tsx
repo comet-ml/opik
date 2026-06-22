@@ -42,7 +42,13 @@ const ExplainButton = ({ target }: ExplainButtonProps) => {
   };
 
   return (
-    <Popover open={open} onOpenChange={handleOpenChange}>
+    // `modal` matches the rest of the product's in-row menus/popovers (the cell
+    // DropdownMenus are modal by default; FilterChipPopover et al. pass `modal`
+    // explicitly). Without it the popover is non-modal, so the pointer-down that
+    // dismisses it is NOT swallowed and lands on the table row underneath —
+    // opening the trace/span/thread sidebar on the same click. Modal disables
+    // outside pointer events while open, so the dismissing click only closes.
+    <Popover open={open} onOpenChange={handleOpenChange} modal>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -86,6 +92,10 @@ const ExplainButton = ({ target }: ExplainButtonProps) => {
         align="start"
         className="w-72 px-1 py-2 font-mono text-xs shadow-[0px_4px_3px_rgba(0,0,0,0.1),0px_2px_2px_rgba(0,0,0,0.1)]"
         onClick={stop}
+        // The owl trigger is only visible on cell hover / while open, so don't
+        // hand focus back to it on close (it would be focused-but-invisible and
+        // could scroll the row into view). Mirrors PromptLibraryMenu.
+        onCloseAutoFocus={(e) => e.preventDefault()}
       >
         <ExplainPopover target={target} onContinue={() => setOpen(false)} />
       </PopoverContent>

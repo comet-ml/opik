@@ -1,4 +1,3 @@
-import isFinite from "lodash/isFinite";
 import { ExplainKind, ExplainTarget } from "@/types/assistant-sidebar";
 import { BaseTraceData, SPAN_TYPE } from "@/types/traces";
 
@@ -12,16 +11,13 @@ export type ExplainableRow = BaseTraceData & {
   provider?: string;
 };
 
-// Visibility rule: the Explain button is shown only when the cell holds a value
-// worth explaining. Each builder returns null otherwise, and the cell wrapper
-// then renders no button:
-//   - error    → an error is present (`error_info`),
-//   - cost     → a finite cost > 0,
-//   - duration → a finite duration > 0.
-// `isPositive` keeps the button off zero / NaN / Infinity (instrumentation
-// artefacts like a 0ms span where start === end, or an uncosted row).
-const isPositive = (value: unknown): value is number =>
-  isFinite(value) && (value as number) > 0;
+// Visibility rule: the Explain button is shown whenever the row is structurally
+// explainable — it has a project_id (entityId + projectId scope the backend
+// call). The displayed value is intentionally NOT gated: duration/cost are
+// explainable even when N/A or 0, because "why is there no cost/duration here?"
+// is itself a useful question (missing usage data, a 0ms span, an uncosted row).
+// Error is the one exception — an empty error cell renders nothing and has no
+// error to explain, so `buildErrorTarget` still requires `error_info`.
 
 // Traces and Spans extract identical payloads — only the `kind` differs. The
 // span builders pass `entityId: row.id` (the span id); the backend resolves the
@@ -45,7 +41,7 @@ const errorTargetBuilder =
 const durationTargetBuilder =
   (kind: ExplainKind) =>
   (row: ExplainableRow): ExplainTarget | null => {
-    if (!row.project_id || !isPositive(row.duration)) return null;
+    if (!row.project_id) return null;
     return {
       kind,
       entityId: row.id,
@@ -57,7 +53,7 @@ const durationTargetBuilder =
 const costTargetBuilder =
   (kind: ExplainKind) =>
   (row: ExplainableRow): ExplainTarget | null => {
-    if (!row.project_id || !isPositive(row.total_estimated_cost)) return null;
+    if (!row.project_id) return null;
     const payload: Record<string, unknown> = {
       total_estimated_cost: row.total_estimated_cost,
     };
