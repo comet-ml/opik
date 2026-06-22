@@ -41,9 +41,20 @@ type OpikExporterOptions = {
   tags?: string[];
   metadata?: Record<string, AttributeValue>;
   threadId?: string;
+  /**
+   * How long (ms) to retain a trace's accumulated spans/ids after its last
+   * activity before pruning them, to bound memory in long-running processes.
+   * A trace idle longer than this is assumed complete. Defaults to 10 minutes.
+   */
+  traceTtlMs?: number;
 };
 
 const aiSDKClient = new Opik();
+
+// A turn's spans arrive across export batches; we keep accumulating until a
+// trace has been idle this long, then prune it. Generous enough not to drop
+// in-flight turns (durable eve sessions can pause between turns).
+const DEFAULT_TRACE_TTL_MS = 10 * 60 * 1000;
 
 // Instrumentation scopes we ingest. AI SDK v4/v5/v6 emit scope "ai"; AI SDK v7
 // (and frameworks built on it, such as Vercel eve) emit the OpenTelemetry GenAI
@@ -65,22 +76,27 @@ export class OpikExporter implements SpanExporter {
   // an upsert, so revising a trace/span never needs an update() call.
   private readonly traceIds = new Map<string, string>();
   private readonly spanIds = new Map<string, string>();
+  // Wall-clock of the last export that touched each otelTraceId, for TTL pruning.
+  private readonly lastSeenByTrace = new Map<string, number>();
 
   private readonly client: Opik;
   private readonly tags: string[];
   private readonly metadata: Record<string, AttributeValue>;
   private readonly threadId?: string;
+  private readonly traceTtlMs: number;
 
   constructor({
     client = aiSDKClient,
     tags = [],
     metadata = {},
     threadId,
+    traceTtlMs = DEFAULT_TRACE_TTL_MS,
   }: OpikExporterOptions = {}) {
     this.client = client;
     this.tags = [...tags];
     this.metadata = { ...metadata };
     this.threadId = threadId;
+    this.traceTtlMs = traceTtlMs;
   }
 
   private opikTraceId = (otelTraceId: string): string => {
@@ -103,6 +119,29 @@ export class OpikExporter implements SpanExporter {
     }
 
     return id;
+  };
+
+  // Drop accumulated spans and id mappings for traces idle longer than the TTL,
+  // so a long-running exporter doesn't retain every trace for the process'
+  // lifetime. A trace re-derives from all its spans on each batch, so we only
+  // prune once it has been quiet long enough to be considered complete.
+  private pruneStaleTraces = (now: number): void => {
+    for (const [otelTraceId, lastSeen] of this.lastSeenByTrace) {
+      if (now - lastSeen <= this.traceTtlMs) {
+        continue;
+      }
+
+      const spans = this.otelSpansByTrace.get(otelTraceId);
+      if (spans) {
+        for (const otelSpanId of spans.keys()) {
+          this.spanIds.delete(otelSpanId);
+        }
+      }
+
+      this.otelSpansByTrace.delete(otelTraceId);
+      this.traceIds.delete(otelTraceId);
+      this.lastSeenByTrace.delete(otelTraceId);
+    }
   };
 
   private getErrorInfo = (otelSpan: ReadableSpan): ErrorInfo | undefined => {
@@ -191,9 +230,13 @@ export class OpikExporter implements SpanExporter {
       spans.set(otelSpan.spanContext().spanId, otelSpan);
     }
 
+    const now = Date.now();
     for (const otelTraceId of affectedTraceIds) {
+      this.lastSeenByTrace.set(otelTraceId, now);
       this.exportTrace(otelTraceId);
     }
+
+    this.pruneStaleTraces(now);
 
     try {
       await this.client.flush();

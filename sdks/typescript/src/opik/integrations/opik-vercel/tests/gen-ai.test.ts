@@ -383,4 +383,68 @@ describe("OpikExporter - AI SDK v7 / GenAI (eve) spans", () => {
     expect(updateSpanSpy).not.toHaveBeenCalled();
     expect(lastTrace()).toMatchObject({ threadId: SESSION_ID });
   });
+
+  // ── memory bounds (TTL pruning) ──
+
+  // A minimal chat span on its own trace; the span id derives from the trace id.
+  const chatOnTrace = (traceId: string) =>
+    makeSpan(
+      "gen_ai",
+      "chat claude-haiku-4-5",
+      {
+        "gen_ai.operation.name": "chat",
+        "gen_ai.input.messages": JSON.stringify([
+          { role: "user", parts: [{ type: "text", content: "hi" }] },
+        ]),
+        "gen_ai.usage.input_tokens": 5,
+        "gen_ai.usage.output_tokens": 3,
+      },
+      { traceId, spanId: `${traceId}-chat`, startMs: 0, endMs: 10 }
+    );
+
+  const lastTraceId = () =>
+    createTracesSpy.mock.calls.at(-1)![0].traces.at(-1)!.id;
+
+  it("prunes a trace's cache after the TTL (re-export gets a fresh id)", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date(0));
+      const exporter = new OpikExporter({ client, traceTtlMs: 1000 });
+      const send = (span: unknown) =>
+        new Promise((resolve) => exporter.export([span] as never, resolve));
+
+      await send(chatOnTrace("A"));
+      const firstId = lastTraceId();
+
+      // Past the TTL: a new export (trace B) prunes the idle trace A.
+      vi.setSystemTime(new Date(2000));
+      await send(chatOnTrace("B"));
+
+      // A re-arrives → its cache was pruned, so it gets a brand-new Opik id.
+      await send(chatOnTrace("A"));
+      expect(lastTraceId()).not.toBe(firstId);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a trace's stable id while it stays active within the TTL", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date(0));
+      const exporter = new OpikExporter({ client, traceTtlMs: 1000 });
+      const send = (span: unknown) =>
+        new Promise((resolve) => exporter.export([span] as never, resolve));
+
+      await send(chatOnTrace("A"));
+      const firstId = lastTraceId();
+
+      // Within the TTL → not pruned → same id on re-export (upsert).
+      vi.setSystemTime(new Date(500));
+      await send(chatOnTrace("A"));
+      expect(lastTraceId()).toBe(firstId);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
