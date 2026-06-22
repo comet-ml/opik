@@ -45,7 +45,7 @@ const useAiSpendManager = () => {
     isOrganizationAdmin,
     hasAccess:
       Boolean(spendWorkspace) &&
-      isEnterprise &&
+      Boolean(organization?.costIntelligenceEnabled) &&
       isOrganizationAdmin &&
       workspaceVersion === "v2",
   };

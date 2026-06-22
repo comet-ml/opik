@@ -11,9 +11,7 @@ import {
 import get from "lodash/get";
 import { FileTerminal, GitCommitVertical } from "lucide-react";
 import useAppStore from "@/store/AppStore";
-import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
 import TryInPlaygroundButton from "@/v1/pages/PromptPage/TryInPlaygroundButton";
 import PromptContentView, {
   CustomUseInPlaygroundButton,
@@ -82,19 +80,15 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
     null,
   ) as PromptLibraryMetadata[] | null;
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const showOptimizerPrompts = useIsFeatureEnabled(
-    FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED,
-  );
 
   const prompts = useMemo(() => {
-    if (!showOptimizerPrompts) return [];
     if (Array.isArray(rawPrompts) && rawPrompts.length > 0) {
       return (rawPrompts as PromptLibraryMetadata[]).map(
         convertRawPromptToPromptWithLatestVersion,
       );
     }
     return [];
-  }, [rawPrompts, showOptimizerPrompts]);
+  }, [rawPrompts]);
 
   const renderPrompts = () => {
     if (!prompts || prompts.length === 0 || !rawPrompts) return null;

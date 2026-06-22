@@ -21,8 +21,10 @@ from .types import (
     AgentInsightsIssue,
     AgentInsightsIssueDetail,
     AgentInsightsIssuePage,
+    AgentInsightsIssueSeverity,
     AgentInsightsIssueStatus,
     AgentInsightsIssueWithDetails,
+    AgentInsightsIssueWithDetailsSeverity,
     AgentInsightsIssueWithDetailsStatus,
     AgentInsightsJob,
     AgentInsightsJobStatus,
@@ -526,6 +528,7 @@ from .types import (
     RecentActivityPagePublic,
     ReportPreference,
     ReportedIssue,
+    ReportedIssueSeverity,
     ResponseFormat,
     ResponseFormatType,
     Result,
@@ -734,7 +737,11 @@ from . import (
     workspace_permissions,
     workspaces,
 )
-from .agent_insights import AgentInsightsIssueUpdateStatus, FindAgentInsightsIssuesRequestStatus
+from .agent_insights import (
+    AgentInsightsIssueUpdateStatus,
+    FindAgentInsightsIssuesRequestSeverity,
+    FindAgentInsightsIssuesRequestStatus,
+)
 from .agent_insights_jobs import AgentInsightsJobUpdateStatus
 from .alerts import GetWebhookExamplesRequestAlertType
 from .assertion_results import AssertionResultBatchEntityType
@@ -801,9 +808,11 @@ __all__ = [
     "AgentInsightsIssue",
     "AgentInsightsIssueDetail",
     "AgentInsightsIssuePage",
+    "AgentInsightsIssueSeverity",
     "AgentInsightsIssueStatus",
     "AgentInsightsIssueUpdateStatus",
     "AgentInsightsIssueWithDetails",
+    "AgentInsightsIssueWithDetailsSeverity",
     "AgentInsightsIssueWithDetailsStatus",
     "AgentInsightsJob",
     "AgentInsightsJobStatus",
@@ -1153,6 +1162,7 @@ __all__ = [
     "Feedback_Boolean",
     "Feedback_Categorical",
     "Feedback_Numerical",
+    "FindAgentInsightsIssuesRequestSeverity",
     "FindAgentInsightsIssuesRequestStatus",
     "FindFeedbackDefinitionsRequestType",
     "FindFeedbackScoreNames1RequestType",
@@ -1351,6 +1361,7 @@ __all__ = [
     "ReportCompleteRequestStatus",
     "ReportPreference",
     "ReportedIssue",
+    "ReportedIssueSeverity",
     "ResponseFormat",
     "ResponseFormatType",
     "Result",

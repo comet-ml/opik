@@ -11,6 +11,7 @@ export interface FeedbackScorePublic {
     value: number;
     reason?: string;
     source: OpikApi.FeedbackScorePublicSource;
+    sourceQueueId?: string;
     createdAt?: Date;
     lastUpdatedAt?: Date;
     createdBy?: string;

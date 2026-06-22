@@ -90,6 +90,18 @@ databaseAnalytics:
   #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
   healthCheckTimeout: ${ANALYTICS_DB_HEALTH_CHECK_TIMEOUT:-1s}
 
+# Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
+#   window, protecting data quality.
+uuidValidation:
+  #  Default: true
+  #  Description: Operational kill-switch. When false, ids are not checked against the window (the
+  #   window is still validated to be a sane value).
+  enabled: ${UUID_VALIDATION_ENABLED:-true}
+  #  Default: 24h
+  #  Description: Validation window (between 12h and 45d). Writes whose `id` is a UUIDv7 with an
+  #   embedded timestamp more than this far in the past or future are rejected.
+  window: ${UUID_VALIDATION_WINDOW:-24h}
+
 # Description: credentials for the Agent Insights read-only free-form SQL ClickHouse user (restricted user with a
 #   read-only profile + row policies, provisioned by OPIK-6846). Only the user/password live here; the connection
 #   params (protocol/host/port/database) are reused from databaseAnalytics above (same ClickHouse instance). Only used
@@ -801,6 +813,52 @@ datasetExport:
   # Description: Batch size for cleanup job operations (number of jobs to process per batch). Must be between 10 and 1000.
   cleanupBatchSize: ${DATASET_EXPORT_CLEANUP_BATCH_SIZE:-100}
 
+# Configuration for the Agent Insights report trigger queue (manual /trigger + daily cron enqueue here;
+# a bounded Redis consumer group performs the actual report calls)
+agentInsightsReport:
+  # Default: http://react-svc:8080/opik/ollie/generate-agent-insights
+  # Description: Platform BE endpoint that triggers Agent Insights report generation on the Ollie pod
+  triggerUrl: ${AGENT_INSIGHTS_REPORT_TRIGGER_URL:-http://react-svc:8080/opik/ollie/generate-agent-insights}
+  # Default: 0 5 0 * * ? (daily at 00:05 UTC)
+  # Description: Quartz cron expression (UTC) for the daily Agent Insights report sweep
+  schedule: ${AGENT_INSIGHTS_REPORT_SCHEDULE:-'0 5 0 * * ?'}
+  # Default: 5m
+  # Description: Timeout for the daily Agent Insights report job sweep (distributed lock hold time)
+  jobTimeout: ${AGENT_INSIGHTS_REPORT_JOB_TIMEOUT:-5m}
+  # Default: 5s
+  # Description: How long to wait to acquire the distributed lock before giving up the sweep
+  lockWaitTime: ${AGENT_INSIGHTS_REPORT_LOCK_WAIT_TIME:-5s}
+  # Default: agent-insights-reports
+  # Description: Redis stream name for queued Agent Insights report triggers
+  streamName: ${AGENT_INSIGHTS_REPORT_STREAM_NAME:-'agent-insights-reports'}
+  # Default: agent-insights-report-consumers
+  # Description: Consumer group name for Agent Insights report trigger processing
+  consumerGroupName: ${AGENT_INSIGHTS_REPORT_CONSUMER_GROUP_NAME:-'agent-insights-report-consumers'}
+  # Default: 5
+  # Description: Maximum number of report triggers to process in a single batch (caps concurrent runs)
+  consumerBatchSize: ${AGENT_INSIGHTS_REPORT_CONSUMER_BATCH_SIZE:-5}
+  # Default: 1s
+  # Description: How often to poll Redis for new report triggers
+  poolingInterval: ${AGENT_INSIGHTS_REPORT_POOLING_INTERVAL:-1s}
+  # Default: 5s
+  # Description: Timeout for blocking read operations on Redis streams (long polling)
+  longPollingDuration: ${AGENT_INSIGHTS_REPORT_LONG_POLLING_DURATION:-5s}
+  # Default: 3
+  # Description: Maximum number of retries for a failing report trigger before it is dropped
+  maxRetries: ${AGENT_INSIGHTS_REPORT_MAX_RETRIES:-3}
+  # Default: 2
+  # Description: Claim pending messages every N polling intervals
+  claimIntervalRatio: ${AGENT_INSIGHTS_REPORT_CLAIM_INTERVAL_RATIO:-2}
+  # Default: 5m
+  # Description: How long a message can stay pending before it is auto-claimed by another consumer
+  pendingMessageDuration: ${AGENT_INSIGHTS_REPORT_PENDING_MESSAGE_DURATION:-5m}
+  # Default: 10000
+  # Description: Maximum stream length before old entries are trimmed
+  streamMaxLen: ${AGENT_INSIGHTS_REPORT_STREAM_MAX_LEN:-10000}
+  # Default: 100
+  # Description: Number of entries trimmed at a time when the stream exceeds streamMaxLen
+  streamTrimLimit: ${AGENT_INSIGHTS_REPORT_STREAM_TRIM_LIMIT:-100}
+
 # Configuration for Optimization Studio logs synchronization
 optimizationLogs:
   # Default: true
@@ -1091,9 +1149,6 @@ serviceToggles:
   # Description: Whether the deployment is expected to produce demo project data on signup. When false, the FE skips the onboarding demo-loading screen and lets the user proceed to the empty workspace immediately.
   demoDataEnabled: ${TOGGLE_DEMO_DATA_ENABLED:-"true"}
   # Default: false
-  # Description: Whether or not Optimization Studio feature is enabled
-  optimizationStudioEnabled: ${TOGGLE_OPTIMIZATION_STUDIO_ENABLED:-"false"}
-  # Default: false
   # Description: Whether or not the Cost Intelligence (AI Spend) feature is enabled
   costIntelligenceEnabled: ${TOGGLE_COST_INTELLIGENCE_ENABLED:-"false"}
   # Default: true
@@ -1231,6 +1286,26 @@ localRunner:
   # Default: 1048576 (1MB)
   # Description: Maximum payload size in bytes for bridge command args and results
   bridgeMaxPayloadBytes: ${OPIK_RUNNER_BRIDGE_MAX_PAYLOAD_BYTES:-1048576}
+
+# Orphaned Redis stream-consumer reaper (OPIK-6982). Non-graceful pod exits (OOMKill/SIGKILL/crash) leak
+# stream consumers that Redis never removes; this job deletes consumers idle beyond the threshold with no
+# pending entries. One instance runs per cycle (distributed lock with hold-until-expiry).
+streamConsumerReaper:
+  # Default: true
+  # Description: Whether the orphaned stream-consumer reaper job is enabled
+  enabled: ${OPIK_STREAM_CONSUMER_REAPER_ENABLED:-true}
+  # Default: 1h
+  # Description: Interval between reaper job executions
+  jobInterval: ${OPIK_STREAM_CONSUMER_REAPER_JOB_INTERVAL:-1h}
+  # Default: 5m
+  # Description: Delay before the first reaper run after startup, to avoid reaping during warm-up
+  startupDelay: ${OPIK_STREAM_CONSUMER_REAPER_STARTUP_DELAY:-5m}
+  # Default: 3d
+  # Description: Consumers idle beyond this (and with no pending entries) are removed
+  idleThreshold: ${OPIK_STREAM_CONSUMER_REAPER_IDLE_THRESHOLD:-3d}
+  # Default: 10m
+  # Description: How long the reaper holds its distributed lock (until expiry) to prevent concurrent fleet-wide runs
+  lockDuration: ${OPIK_STREAM_CONSUMER_REAPER_LOCK_DURATION:-10m}
 
 # Trace Thread configuration
 traceThreadConfig:

@@ -1075,6 +1075,15 @@ paths:
           - open
           - resolved
           - closed
+      - name: severity
+        in: query
+        schema:
+          type: string
+          enum:
+          - critical
+          - high
+          - medium
+          - low
       - name: sorting
         in: query
         schema:
@@ -8309,6 +8318,13 @@ paths:
           description: "Filter traces created up to this time (ISO-8601 format). If\
             \ not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
+      - name: annotation_queue_id
+        in: query
+        schema:
+          type: string
+          description: Filter traces belonging to this annotation queue and scope
+            feedback scores/comments to it
+          format: uuid
       responses:
         "200":
           description: Trace resource
@@ -8793,6 +8809,13 @@ paths:
           description: "Filter trace threads created up to this time (ISO-8601 format).\
             \ If not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
+      - name: annotation_queue_id
+        in: query
+        schema:
+          type: string
+          description: Filter threads belonging to this annotation queue and scope
+            feedback scores/comments to it
+          format: uuid
       responses:
         "200":
           description: Trace threads resource
@@ -10047,6 +10070,13 @@ components:
           - open
           - resolved
           - closed
+        severity:
+          type: string
+          enum:
+          - critical
+          - high
+          - medium
+          - low
         traces_query:
           type: string
         total_occurrences:
@@ -10145,6 +10175,13 @@ components:
           - open
           - resolved
           - closed
+        severity:
+          type: string
+          enum:
+          - critical
+          - high
+          - medium
+          - low
         traces_query:
           type: string
         created_by:
@@ -10185,6 +10222,7 @@ components:
       required:
       - count
       - name
+      - severity
       - total_count
       - total_users
       - users_impacted
@@ -10205,6 +10243,13 @@ components:
           type: string
         traces_query:
           type: string
+        severity:
+          type: string
+          enum:
+          - critical
+          - high
+          - medium
+          - low
         count:
           type: integer
           format: int64
@@ -14014,6 +14059,9 @@ components:
         text:
           minLength: 1
           type: string
+        source_queue_id:
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -14286,6 +14334,9 @@ components:
           - ui
           - sdk
           - online_scoring
+        source_queue_id:
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -14730,6 +14781,9 @@ components:
         text:
           minLength: 1
           type: string
+        source_queue_id:
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -15011,6 +15065,9 @@ components:
           - ui
           - sdk
           - online_scoring
+        source_queue_id:
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -16771,6 +16828,9 @@ components:
           - ui
           - sdk
           - online_scoring
+        source_queue_id:
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -16974,6 +17034,9 @@ components:
         text:
           minLength: 1
           type: string
+        source_queue_id:
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -20804,7 +20867,6 @@ components:
       - alertsEnabled
       - anthropicProviderEnabled
       - bedrockProviderEnabled
-      - costIntelligenceEnabled
       - customllmProviderEnabled
       - datasetExportEnabled
       - datasetVersioningEnabled
@@ -20849,8 +20911,6 @@ components:
         exportEnabled:
           type: boolean
         optimizationStudioEnabled:
-          type: boolean
-        costIntelligenceEnabled:
           type: boolean
         datasetVersioningEnabled:
           type: boolean
@@ -21156,6 +21216,9 @@ components:
           type: string
         author:
           type: string
+        source_queue_id:
+          type: string
+          format: uuid
     ErrorInfo_Public:
       required:
       - exception_type
@@ -21196,6 +21259,9 @@ components:
           - ui
           - sdk
           - online_scoring
+        source_queue_id:
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -21417,6 +21483,9 @@ components:
           - online_scoring
         author:
           type: string
+        source_queue_id:
+          type: string
+          format: uuid
         id:
           type: string
           format: uuid
@@ -21762,6 +21831,9 @@ components:
             type: string
         author:
           type: string
+        source_queue_id:
+          type: string
+          format: uuid
     DeleteTraceThreads:
       required:
       - thread_ids
@@ -22133,6 +22205,9 @@ components:
           - online_scoring
         author:
           type: string
+        source_queue_id:
+          type: string
+          format: uuid
         thread_id:
           minLength: 1
           type: string
