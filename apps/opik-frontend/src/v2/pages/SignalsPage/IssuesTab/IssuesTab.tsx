@@ -4,7 +4,8 @@ import {
   AGENT_INSIGHTS_ISSUE_STATUS,
   AgentInsightsIssue,
 } from "@/types/signals";
-import { Boxes, Radar, Sparkles } from "lucide-react";
+import { Radar, Sparkles } from "lucide-react";
+import EmptyIssueDetailsIcon from "@/icons/empty-issue-details.svg?react";
 import { Sorting } from "@/types/sorting";
 import useAgentInsightsIssuesList from "@/api/signals/useAgentInsightsIssuesList";
 import Loader from "@/shared/Loader/Loader";
@@ -58,7 +59,7 @@ const DETAIL_SUBTITLE =
 // Empty detail pane shown alongside the running / all-clear list states.
 const DetailPlaceholder: React.FC = () => (
   <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-3 rounded-md border bg-background p-6 text-center">
-    <Boxes className="size-12 text-light-slate" strokeWidth={1.25} />
+    <EmptyIssueDetailsIcon />
     <div className="flex flex-col gap-1">
       <span className="comet-body-s-accented text-foreground">
         Your issue details will appear here
