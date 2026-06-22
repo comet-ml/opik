@@ -4,8 +4,8 @@ import { useTheme } from "@/contexts/theme-provider";
 import { THEME_MODE } from "@/constants/theme";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import TurnOnDiagnosticDialog from "@/v2/pages/SignalsPage/TurnOnDiagnosticDialog";
-import emptyDiagnosticsLightUrl from "/images/empty-prompt-library-light.svg";
-import emptyDiagnosticsDarkUrl from "/images/empty-prompt-library-dark.svg";
+import emptyDiagnosticsLightUrl from "/images/empty-diagnostics-light.svg";
+import emptyDiagnosticsDarkUrl from "/images/empty-diagnostics-dark.svg";
 
 // TODO: point at the dedicated Diagnostics docs page once it ships.
 const DIAGNOSTICS_DOCS_URL = buildDocsUrl();
@@ -35,7 +35,7 @@ const DiagnosticsEmptyState: React.FC<DiagnosticsEmptyStateProps> = ({
   };
 
   return (
-    <div className="flex flex-1 items-center justify-center gap-16 px-8 py-10">
+    <div className="flex min-h-[70vh] items-center justify-center gap-16 px-8 py-10">
       <div className="flex w-full max-w-xl flex-col gap-6">
         <div className="flex flex-col gap-2">
           <h2 className="comet-title-s text-foreground">
