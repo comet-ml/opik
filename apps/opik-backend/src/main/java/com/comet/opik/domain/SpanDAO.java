@@ -1969,24 +1969,7 @@ public class SpanDAO {
         Optional.ofNullable(spanUpdate.tags())
                 .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
         Optional.ofNullable(spanUpdate.usage())
-                .ifPresent(usage -> {
-                    // Need to convert the map to two arrays to bind to the statement
-                    var usageKeys = new ArrayList<String>();
-                    var usageValues = new ArrayList<Integer>();
-                    for (var entry : usage.entrySet()) {
-                        // Skip null token counts: the SQL CASTs these arrays into a
-                        // Map(String, Int64) whose value type is non-nullable, so a null value
-                        // triggers ClickHouse CANNOT_CONVERT_TYPE (code 70). Matches the batch
-                        // insert path, which already drops null usage values.
-                        if (entry.getValue() == null) {
-                            continue;
-                        }
-                        usageKeys.add(entry.getKey());
-                        usageValues.add(entry.getValue());
-                    }
-                    statement.bind("usageKeys", usageKeys.toArray(String[]::new));
-                    statement.bind("usageValues", usageValues.toArray(Integer[]::new));
-                });
+                .ifPresent(usage -> bindUsage(statement, usage));
         Optional.ofNullable(spanUpdate.endTime())
                 .ifPresent(endTime -> statement.bind("end_time", endTime.toString()));
         Optional.ofNullable(spanUpdate.metadata())
@@ -2827,6 +2810,23 @@ public class SpanDAO {
                 spanUpdate.metadata()).compareTo(BigDecimal.ZERO) > 0;
     }
 
+    // Bind the usage map as parallel key/value arrays for the Map(String, Int64) CAST, dropping null
+    // token counts: a null value makes the CAST fail with ClickHouse CANNOT_CONVERT_TYPE (code 70).
+    // Matches the batch insert path, which also drops null usage values. Cost calculation is guarded
+    // separately in CostService.
+    private static void bindUsage(Statement statement, Map<String, Integer> usage) {
+        var usageKeys = new ArrayList<String>();
+        var usageValues = new ArrayList<Integer>();
+        usage.forEach((key, value) -> {
+            if (value != null) {
+                usageKeys.add(key);
+                usageValues.add(value);
+            }
+        });
+        statement.bind("usageKeys", usageKeys.toArray(String[]::new));
+        statement.bind("usageValues", usageValues.toArray(Integer[]::new));
+    }
+
     private void bindCost(Span span, Statement statement, String index) {
         if (span.totalEstimatedCost() != null) {
             // Cost is set manually by the user
@@ -2930,23 +2930,7 @@ public class SpanDAO {
         TagOperations.bindTagParams(statement, spanUpdate);
 
         Optional.ofNullable(spanUpdate.usage())
-                .ifPresent(usage -> {
-                    var usageKeys = new ArrayList<String>();
-                    var usageValues = new ArrayList<Integer>();
-                    for (var entry : usage.entrySet()) {
-                        // Skip null token counts: the SQL CASTs these arrays into a
-                        // Map(String, Int64) whose value type is non-nullable, so a null value
-                        // triggers ClickHouse CANNOT_CONVERT_TYPE (code 70). Matches the batch
-                        // insert path, which already drops null usage values.
-                        if (entry.getValue() == null) {
-                            continue;
-                        }
-                        usageKeys.add(entry.getKey());
-                        usageValues.add(entry.getValue());
-                    }
-                    statement.bind("usageKeys", usageKeys.toArray(String[]::new));
-                    statement.bind("usageValues", usageValues.toArray(Integer[]::new));
-                });
+                .ifPresent(usage -> bindUsage(statement, usage));
         Optional.ofNullable(spanUpdate.endTime())
                 .ifPresent(endTime -> statement.bind("end_time", endTime.toString()));
         Optional.ofNullable(spanUpdate.metadata())

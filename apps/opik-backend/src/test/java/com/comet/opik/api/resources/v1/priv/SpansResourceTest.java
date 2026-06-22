@@ -2374,15 +2374,18 @@ class SpansResourceTest {
                     .build();
             spanResourceClient.createSpan(expectedSpan, API_KEY, TEST_WORKSPACE);
 
-            // A null token count must not reach the Map(String, Int64) CAST in the update query,
-            // which would otherwise fail with ClickHouse CANNOT_CONVERT_TYPE (code 70). The null
-            // entry is dropped, matching the batch insert path. See OPIK-7050.
+            // A null token count must not reach (a) the Map(String, Int64) CAST in the update query
+            // — ClickHouse CANNOT_CONVERT_TYPE (code 70) — nor (b) the cost recalculation, where
+            // SpanCostCalculator unboxes usage.getOrDefault(key, 0) and NPEs on a present-null value.
+            // model+provider are set so the cost recalculation path actually runs. See OPIK-7050.
             var usageWithNull = new HashMap<String, Integer>();
             usageWithNull.put("completion_tokens", 7);
             usageWithNull.put("prompt_tokens", null);
 
             var spanUpdate = SpanUpdate.builder()
                     .usage(usageWithNull)
+                    .model("gpt-4")
+                    .provider("openai")
                     .parentSpanId(expectedSpan.parentSpanId())
                     .traceId(expectedSpan.traceId())
                     .projectName(expectedSpan.projectName())
