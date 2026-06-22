@@ -1,6 +1,5 @@
 import React, { useState } from "react";
-import { ExternalLink, Radar } from "lucide-react";
-import { Button } from "@/ui/button";
+import { Eye, FileText } from "lucide-react";
 import { useTheme } from "@/contexts/theme-provider";
 import { THEME_MODE } from "@/constants/theme";
 import { buildDocsUrl } from "@/v2/lib/utils";
@@ -10,6 +9,9 @@ import emptyDiagnosticsDarkUrl from "/images/empty-prompt-library-dark.svg";
 
 // TODO: point at the dedicated Diagnostics docs page once it ships.
 const DIAGNOSTICS_DOCS_URL = buildDocsUrl();
+
+const CARD_CLASS =
+  "flex w-full items-start gap-3 rounded-lg border border-border bg-background px-4 py-3 text-left transition-colors hover:border-primary";
 
 type DiagnosticsEmptyStateProps = {
   onRun: () => void;
@@ -33,8 +35,8 @@ const DiagnosticsEmptyState: React.FC<DiagnosticsEmptyStateProps> = ({
   };
 
   return (
-    <div className="flex flex-1 items-center justify-center gap-12 px-8 py-10">
-      <div className="flex w-full max-w-md flex-col gap-6">
+    <div className="flex flex-1 items-center justify-center gap-16 px-8 py-10">
+      <div className="flex w-full max-w-xl flex-col gap-6">
         <div className="flex flex-col gap-2">
           <h2 className="comet-title-s text-foreground">
             Catch issues before your users do
@@ -45,38 +47,46 @@ const DiagnosticsEmptyState: React.FC<DiagnosticsEmptyStateProps> = ({
           </p>
         </div>
 
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-3">
           <button
             type="button"
             onClick={() => setDialogOpen(true)}
-            className="group flex w-full flex-col gap-1 rounded-md border border-border bg-background px-4 py-3 text-left transition-colors hover:border-primary"
+            className={CARD_CLASS}
           >
-            <span className="flex items-center gap-2">
-              <Radar className="size-4 shrink-0 text-chart-purple" />
+            <Eye className="mt-0.5 size-4 shrink-0 text-fuchsia-500" />
+            <div className="flex flex-col gap-0.5">
               <span className="comet-body-s-accented text-foreground">
                 Turn on diagnostics
               </span>
-            </span>
-            <span className="comet-body-xs text-muted-slate">
-              Best with 100+ traces logged over the last 7 days
-            </span>
+              <span className="comet-body-xs text-light-slate">
+                Best with 100+ traces logged over the last 7 days
+              </span>
+            </div>
           </button>
-        </div>
 
-        <div>
-          <Button variant="outline" size="sm" asChild>
-            <a href={DIAGNOSTICS_DOCS_URL} target="_blank" rel="noreferrer">
-              View docs
-              <ExternalLink className="ml-1.5 size-3.5" />
-            </a>
-          </Button>
+          <a
+            href={DIAGNOSTICS_DOCS_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={CARD_CLASS}
+          >
+            <FileText className="mt-0.5 size-4 shrink-0 text-[var(--color-green)]" />
+            <div className="flex flex-col gap-0.5">
+              <span className="comet-body-s-accented text-foreground">
+                View docs
+              </span>
+              <span className="comet-body-xs text-light-slate">
+                See how diagnostics works
+              </span>
+            </div>
+          </a>
         </div>
       </div>
 
       <img
         src={emptyImageUrl}
         alt="Catch issues before your users do"
-        className="hidden max-w-sm shrink-0 lg:block"
+        className="hidden max-w-xs shrink-0 lg:block"
       />
 
       <TurnOnDiagnosticDialog
