@@ -128,6 +128,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
         lenient().when(onlineScoringConfig.getClaimIntervalRatio()).thenReturn(10);
         lenient().when(onlineScoringConfig.getPendingMessageDuration()).thenReturn(Duration.minutes(10));
         lenient().when(onlineScoringConfig.getMaxRetries()).thenReturn(3);
+        lenient().when(onlineScoringConfig.getAgenticToolsCharsPerToken()).thenReturn(4);
 
         ToolRegistry toolRegistry = new ToolRegistry(Set.of(
                 stubTool(GetTraceSpansTool.NAME, "{}"),
@@ -588,7 +589,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
                   ],
                   "schema": [
                     { "name": "Quality", "type": "DOUBLE", "description": "Quality score" }
-                  ]
+                  ],
+                  "variables": {}
                 }
                 """;
 
