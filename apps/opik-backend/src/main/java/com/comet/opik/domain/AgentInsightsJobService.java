@@ -5,10 +5,7 @@ import com.comet.opik.api.AgentInsightsJob.EnabledJob;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import io.dropwizard.jersey.errors.ErrorMessage;
-import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.Attributes;
-import io.opentelemetry.api.metrics.LongCounter;
-import io.opentelemetry.api.metrics.Meter;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
@@ -32,17 +29,6 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 public class AgentInsightsJobService {
 
     private static final Duration TRIGGER_WINDOW = Duration.ofHours(24);
-
-    private static final Meter METER = GlobalOpenTelemetry.get().getMeter(AgentInsightsMetrics.METER_NAME);
-
-    private final LongCounter reportsEnqueued = METER
-            .counterBuilder(AgentInsightsMetrics.REPORTS_ENQUEUED)
-            .setDescription(AgentInsightsMetrics.REPORTS_ENQUEUED_DESC)
-            .build();
-    private final LongCounter triggerErrors = METER
-            .counterBuilder(AgentInsightsMetrics.TRIGGER_ERRORS)
-            .setDescription(AgentInsightsMetrics.TRIGGER_ERRORS_DESC)
-            .build();
 
     private final @NonNull TransactionTemplate transactionTemplate;
     private final @NonNull IdGenerator idGenerator;
@@ -111,13 +97,13 @@ public class AgentInsightsJobService {
         reportPublisher.enqueue(job.projectId(), workspaceId, periodEnd.minus(TRIGGER_WINDOW), periodEnd)
                 .subscribe(
                         reportId -> {
-                            reportsEnqueued.add(1,
+                            AgentInsightsMetrics.REPORTS_ENQUEUED.add(1,
                                     Attributes.of(AgentInsightsMetrics.TRIGGER, AgentInsightsMetrics.MANUAL));
                             log.info("Enqueued Agent Insights run reportId='{}' for project '{}'",
                                     reportId, projectId);
                         },
                         error -> {
-                            triggerErrors.add(1,
+                            AgentInsightsMetrics.TRIGGER_ERRORS.add(1,
                                     Attributes.of(AgentInsightsMetrics.TRIGGER, AgentInsightsMetrics.MANUAL));
                             log.error("Failed to enqueue Agent Insights run for project '{}'", projectId,
                                     error);

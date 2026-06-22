@@ -1,36 +1,56 @@
 package com.comet.opik.domain;
 
+import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.metrics.LongCounter;
+import io.opentelemetry.api.metrics.LongHistogram;
+import io.opentelemetry.api.metrics.Meter;
 import lombok.experimental.UtilityClass;
 
 /**
- * Shared OpenTelemetry instrument names and attribute keys for the Agent Insights pipeline (OPIK-7052).
- * The enqueue/error counters in particular are emitted from both the daily sweep
- * ({@code AgentInsightsReportJob}) and the manual {@code /trigger} ({@code AgentInsightsJobService}), so
- * keeping the names here makes that shared usage explicit instead of duplicating string literals.
+ * Shared OpenTelemetry instruments and attribute keys for the Agent Insights pipeline (OPIK-7052).
+ * The instruments are built once here from a single meter so every path emits under the same
+ * instrumentation scope; the enqueue/error counters in particular are shared by the daily sweep
+ * ({@code AgentInsightsReportJob}) and the manual {@code /trigger} ({@code AgentInsightsJobService}).
  */
 @UtilityClass
 public class AgentInsightsMetrics {
 
     public static final String METER_NAME = "opik.agent_insights";
 
-    public static final String SWEEP_DURATION = "opik_agent_insights_sweep_duration_ms";
-    public static final String SWEEP_DURATION_DESC = "Wall time of the daily Agent Insights sweep; _count by outcome gives run totals";
+    private static final Meter METER = GlobalOpenTelemetry.get().getMeter(METER_NAME);
 
-    public static final String REPORTS_ENQUEUED = "opik_agent_insights_reports_enqueued_total";
-    public static final String REPORTS_ENQUEUED_DESC = "Report runs enqueued onto the trigger queue, by trigger source";
+    public static final LongHistogram SWEEP_DURATION_MS = METER
+            .histogramBuilder("opik_agent_insights_sweep_duration_ms")
+            .setDescription("Wall time of the daily Agent Insights sweep; _count by outcome gives run totals")
+            .setUnit("ms")
+            .ofLongs()
+            .build();
 
-    public static final String TRIGGER_ERRORS = "opik_agent_insights_trigger_errors_total";
-    public static final String TRIGGER_ERRORS_DESC = "Failures enqueueing a report run, by trigger source";
+    public static final LongCounter REPORTS_ENQUEUED = METER
+            .counterBuilder("opik_agent_insights_reports_enqueued_total")
+            .setDescription("Report runs enqueued onto the trigger queue, by trigger source")
+            .build();
 
-    public static final String REPORTS_TRIGGERED = "opik_agent_insights_reports_triggered_total";
-    public static final String REPORTS_TRIGGERED_DESC = "Report trigger calls to the platform, by outcome";
+    public static final LongCounter TRIGGER_ERRORS = METER
+            .counterBuilder("opik_agent_insights_trigger_errors_total")
+            .setDescription("Failures enqueueing a report run, by trigger source")
+            .build();
 
-    public static final String REPORTS_RECEIVED = "opik_agent_insights_reports_received_total";
-    public static final String REPORTS_RECEIVED_DESC = "Generated reports received on the reporting endpoint";
+    public static final LongCounter REPORTS_TRIGGERED = METER
+            .counterBuilder("opik_agent_insights_reports_triggered_total")
+            .setDescription("Report trigger calls to the platform, by outcome")
+            .build();
 
-    public static final String ISSUES_REPORTED = "opik_agent_insights_issues_reported_total";
-    public static final String ISSUES_REPORTED_DESC = "Issues persisted from generated reports";
+    public static final LongCounter REPORTS_RECEIVED = METER
+            .counterBuilder("opik_agent_insights_reports_received_total")
+            .setDescription("Generated reports received on the reporting endpoint")
+            .build();
+
+    public static final LongCounter ISSUES_REPORTED = METER
+            .counterBuilder("opik_agent_insights_issues_reported_total")
+            .setDescription("Issues persisted from generated reports")
+            .build();
 
     public static final AttributeKey<String> TRIGGER = AttributeKey.stringKey("trigger");
     public static final AttributeKey<String> OUTCOME = AttributeKey.stringKey("outcome");
