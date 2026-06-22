@@ -13,7 +13,7 @@ import logging
 import sys
 import time
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any, Dict, Iterator, Optional
 
 import click
 from rich.console import Console
@@ -48,6 +48,11 @@ from .prompts.planner import (
 )
 
 console = Console()
+# Dedicated stderr console for the loud-fail path so the SKIP_SUMMARY
+# line lands on stderr without flipping the default console (OPIK-6599).
+# Tests assert against this stream; CI gates can grep stderr without
+# parsing the audit JSON.
+_stderr_console = Console(stderr=True)
 
 MIGRATE_CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
 
@@ -185,6 +190,91 @@ def _finalize_and_fail(
     sys.exit(1)
 
 
+def _finalize_with_skips_or_ok(
+    audit: AuditLog,
+    audit_path: Path,
+    name: str,
+    target_label: str,
+    target_project: str,
+    elapsed_seconds: float,
+) -> None:
+    """Finalize the audit log, then either fail loud on skips or print the
+    happy-path message.
+
+    Per OPIK-6599: when the cascade emits any ``skip`` audit record, the
+    migrate is "succeeded but lossy" — the destination state has partial
+    data and is **not** rolled back. We finalize the audit to ``failed``,
+    print a SKIP_SUMMARY line to **stderr** so CI pipelines can grep
+    without parsing the JSON, and exit non-zero. Operators rely on the
+    audit log to know what made it across.
+    """
+    skip_records = [
+        action for action in audit.actions if action.get("status") == "skipped"
+    ]
+    if not skip_records:
+        audit.finalize("ok")
+        audit.write(audit_path)
+        elapsed = _format_elapsed(elapsed_seconds)
+        console.print(
+            f"[green]Migrated '{name}' into project '{target_project}' as "
+            f"'{target_label}'.[/green] Took {elapsed}. Audit log: {audit_path}"
+        )
+        return
+
+    # Aggregate counts by reason for the SKIP_SUMMARY line. The cascade
+    # summary record carries the totals too, but reading from skip records
+    # directly keeps the message decoupled from the summary record's shape.
+    totals: Dict[str, int] = {
+        "experiments_skipped": 0,
+        "items_skipped_missing_trace": 0,
+        "items_skipped_missing_item": 0,
+    }
+    reason_to_total_key = {
+        "experiment_recreate_returned_false": "experiments_skipped",
+        "items_missing_trace_remap": "items_skipped_missing_trace",
+        "items_missing_dataset_item_remap": "items_skipped_missing_item",
+    }
+    for record in skip_records:
+        total_key = reason_to_total_key.get(record.get("reason", ""))
+        if total_key is None:
+            continue
+        totals[total_key] += int(record.get("count", 0))
+
+    total_skipped = sum(totals.values())
+    audit.finalize("failed")
+    audit.write(audit_path)
+
+    elapsed = _format_elapsed(elapsed_seconds)
+    _stderr_console.print(
+        f"[red]opik migrate: {total_skipped} item{'s' if total_skipped != 1 else ''} "
+        f"skipped — destination state was NOT rolled back; see audit log: "
+        f"{audit_path}[/red]"
+    )
+    _stderr_console.print(
+        f"SKIP_SUMMARY: "
+        f"experiments_skipped={totals['experiments_skipped']} "
+        f"items_skipped_missing_trace={totals['items_skipped_missing_trace']} "
+        f"items_skipped_missing_item={totals['items_skipped_missing_item']}"
+    )
+    # High-level rollback hint. We deliberately don't ship a step-by-step
+    # CLI playbook here -- the audit log is the source of truth for what
+    # was actually created. Each ``ok`` action in ``audit.actions`` carries
+    # the destination entity id; an operator can grep the audit JSON to
+    # see exactly what landed in the destination project before deciding
+    # what to delete. Auto-rollback (a one-flag clean reverse) is tracked
+    # as a follow-up; this PR is the loud-fail mechanic only.
+    _stderr_console.print(
+        f"[yellow]To roll back manually: in project "
+        f"'{target_project}', delete the destination dataset "
+        f"'{target_label}' along with any experiments, optimizations, "
+        f"traces, and spans that were cascaded into it (the audit log "
+        f"lists each created entity id); then rename the source "
+        f"'{name}_v1' back to '{name}'.[/yellow]"
+    )
+    _stderr_console.print(f"[dim](after {elapsed})[/dim]")
+    sys.exit(1)
+
+
 @migrate_group.command(name="dataset")
 @click.argument("name", type=str)
 @click.option(
@@ -289,12 +379,13 @@ def migrate_dataset_command(
             elapsed_seconds=time.monotonic() - started_at,
         )
 
-    audit.finalize("ok")
-    audit.write(audit_path)
-    elapsed = _format_elapsed(time.monotonic() - started_at)
-    console.print(
-        f"[green]Migrated '{name}' into project '{to_project}' as '{plan.target_name}'.[/green] "
-        f"Took {elapsed}. Audit log: {audit_path}"
+    _finalize_with_skips_or_ok(
+        audit,
+        audit_path,
+        name=name,
+        target_label=plan.target_name,
+        target_project=to_project,
+        elapsed_seconds=time.monotonic() - started_at,
     )
 
 

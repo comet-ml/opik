@@ -3,6 +3,8 @@ package com.comet.opik.api;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import lombok.Builder;
@@ -19,5 +21,7 @@ public record AnnotationQueueUpdate(
         String description,
         String instructions,
         Boolean commentsEnabled,
-        List<@NotBlank String> feedbackDefinitionNames) {
+        List<@NotBlank String> feedbackDefinitionNames,
+        @Min(1) @Max(1000) Integer annotatorsPerItem,
+        @Min(1) @Max(3600) Integer lockTimeoutSeconds) {
 }

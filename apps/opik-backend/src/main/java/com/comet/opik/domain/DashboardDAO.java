@@ -20,6 +20,7 @@ import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -35,9 +36,6 @@ import java.util.UUID;
 @RegisterColumnMapper(DashboardScopeMapper.class)
 @RegisterConstructorMapper(Dashboard.class)
 public interface DashboardDAO {
-
-    @SqlQuery("SELECT EXISTS(SELECT 1 FROM dashboards WHERE workspace_id = :workspaceId AND project_id IS NULL)")
-    boolean hasVersion1Dashboards(@Bind("workspaceId") String workspaceId);
 
     @SqlUpdate("INSERT INTO dashboards(id, workspace_id, project_id, name, slug, description, config, type, scope, created_by, last_updated_by) "
             +
@@ -106,7 +104,20 @@ public interface DashboardDAO {
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
 
-    @SqlQuery("SELECT * FROM dashboards " +
+    /**
+     * Returns the ordered ids for a single page, selecting only {@code id} so the sort stays narrow.
+     * <p>
+     * Part of the two-step page fetch (OPIK-6482): this query does the ordering and pagination, then
+     * {@link #findByIds(Collection, String)} loads the row bodies. Selecting the large JSON
+     * {@code config} column here would make MySQL 8.0.20+ pack it into the filesort addon and raise
+     * {@code ER_OUT_OF_SORTMEMORY} (HTTP 500) once a single {@code config} exceeds
+     * {@code sort_buffer_size}; selecting only {@code id} keeps the sort buffer narrow regardless of
+     * config size.
+     *
+     * @return the page's ids in the requested order; the caller must preserve this order when
+     *         assembling the result
+     */
+    @SqlQuery("SELECT id FROM dashboards " +
             "WHERE workspace_id = :workspaceId " +
             "<if(search)> AND name like concat('%', :search, '%') <endif> " +
             "<if(project_id)> AND project_id = :projectId <endif>" +
@@ -116,7 +127,7 @@ public interface DashboardDAO {
             "LIMIT :limit OFFSET :offset")
     @UseStringTemplateEngine
     @AllowUnusedBindings
-    List<Dashboard> find(@Bind("workspaceId") String workspaceId,
+    List<UUID> findPageIdsSorted(@Bind("workspaceId") String workspaceId,
             @Define("search") @Bind("search") String search,
             @Define("project_id") @Bind("projectId") UUID projectId,
             @Define("scope") @Bind("scope") String scope,
@@ -125,6 +136,19 @@ public interface DashboardDAO {
             @Define("sort_fields") String sortingFields,
             @Bind("limit") int limit,
             @Bind("offset") int offset);
+
+    /**
+     * Loads the full row bodies for a page of ids, without an {@code ORDER BY}.
+     * <p>
+     * The caller re-orders the result by the id list from
+     * {@link #findPageIdsSorted(String, String, UUID, String, String, Map, String, int, int)}, so the
+     * JSON {@code config} column never passes through a sort. Callers must skip this call when
+     * {@code ids} is empty, as {@code IN ()} is invalid SQL.
+     */
+    @SqlQuery("SELECT * FROM dashboards WHERE workspace_id = :workspaceId AND id IN (<ids>)")
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    List<Dashboard> findByIds(@BindList("ids") Collection<UUID> ids, @Bind("workspaceId") String workspaceId);
 
     @SqlQuery("SELECT COUNT(*) FROM dashboards WHERE workspace_id = :workspaceId AND slug LIKE concat(:slugPrefix, '%')")
     long countBySlugPrefix(@Bind("workspaceId") String workspaceId, @Bind("slugPrefix") String slugPrefix);

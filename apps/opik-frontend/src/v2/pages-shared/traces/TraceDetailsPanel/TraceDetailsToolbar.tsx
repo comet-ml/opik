@@ -25,6 +25,8 @@ import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import SelectBox, { SelectBoxProps } from "@/shared/SelectBox/SelectBox";
 import { Skeleton } from "@/ui/skeleton";
 import SpanDetailsButton from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceTreeViewer/SpanDetailsButton";
+import HiddenSpansToggle from "@/v2/pages-shared/traces/HiddenSpansToggle";
+import VisibleSpanCount from "@/v2/pages-shared/traces/VisibleSpanCount";
 import useTreeDetailsStore, {
   TreeNodeConfig,
 } from "@/v2/pages-shared/traces/TraceDetailsPanel/TreeDetailsStore";
@@ -187,9 +189,7 @@ export const TraceTreeToolbar: React.FC<TraceTreeToolbarProps> = ({
   return (
     <div className="flex h-10 shrink-0 items-center border-b bg-muted/50 px-4">
       <div className="relative flex flex-1 items-center">
-        <span className="comet-body-xs-accented whitespace-nowrap text-foreground">
-          Spans ({spanCount})
-        </span>
+        <VisibleSpanCount total={spanCount} spans={treeData} />
         <div className="flex-auto" />
         <ExpandableSearchInput
           value={search}
@@ -213,6 +213,7 @@ export const TraceTreeToolbar: React.FC<TraceTreeToolbarProps> = ({
           align="start"
           tooltip="Filter spans"
         />
+        <HiddenSpansToggle spans={treeData} />
         <Separator orientation="vertical" className="mx-0.5 h-3" />
         {!hasSearchOrFilter ? (
           <>
@@ -251,12 +252,14 @@ type TraceDataToolbarProps = {
   dataToView: Trace | Span | undefined;
   setActiveSection: (v: DetailsActionSectionValue) => void;
   isLoading?: boolean;
+  hideAnnotateActions?: boolean;
 };
 
 export const TraceDataToolbar: React.FC<TraceDataToolbarProps> = ({
   dataToView,
   setActiveSection,
   isLoading = false,
+  hideAnnotateActions,
 }) => {
   const {
     permissions: { canAnnotateTraceSpanThread },
@@ -298,15 +301,17 @@ export const TraceDataToolbar: React.FC<TraceDataToolbarProps> = ({
 
       <div className="flex-auto" />
 
-      <AddToDropdown
-        getDataForExport={async () => rows}
-        selectedRows={rows}
-        dataType={dataType}
-        buttonVariant="ghost"
-        buttonSize="2xs"
-        disabled={isLoading || !dataToView}
-      />
-      {canAnnotateTraceSpanThread && (
+      {!hideAnnotateActions && (
+        <AddToDropdown
+          getDataForExport={async () => rows}
+          selectedRows={rows}
+          dataType={dataType}
+          buttonVariant="ghost"
+          buttonSize="2xs"
+          disabled={isLoading || !dataToView}
+        />
+      )}
+      {canAnnotateTraceSpanThread && !hideAnnotateActions && (
         <DetailsActionSectionToggle
           activeSection={null}
           setActiveSection={setActiveSection}

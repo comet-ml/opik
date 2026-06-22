@@ -108,16 +108,7 @@ export class AttachmentsClient {
                 case 401:
                     throw new OpikApi.UnauthorizedError(_response.error.body, _response.rawResponse);
                 case 403:
-                    throw new OpikApi.ForbiddenError(
-                        serializers.ErrorMessage.parseOrThrow(_response.error.body, {
-                            unrecognizedObjectKeys: "passthrough",
-                            allowUnrecognizedUnionMembers: true,
-                            allowUnrecognizedEnumValues: true,
-                            skipValidation: true,
-                            breadcrumbsPrefix: ["response"],
-                        }),
-                        _response.rawResponse,
-                    );
+                    throw new OpikApi.ForbiddenError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
@@ -202,16 +193,7 @@ export class AttachmentsClient {
                 case 401:
                     throw new OpikApi.UnauthorizedError(_response.error.body, _response.rawResponse);
                 case 403:
-                    throw new OpikApi.ForbiddenError(
-                        serializers.ErrorMessage.parseOrThrow(_response.error.body, {
-                            unrecognizedObjectKeys: "passthrough",
-                            allowUnrecognizedUnionMembers: true,
-                            allowUnrecognizedEnumValues: true,
-                            skipValidation: true,
-                            breadcrumbsPrefix: ["response"],
-                        }),
-                        _response.rawResponse,
-                    );
+                    throw new OpikApi.ForbiddenError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
@@ -301,16 +283,7 @@ export class AttachmentsClient {
                 case 401:
                     throw new OpikApi.UnauthorizedError(_response.error.body, _response.rawResponse);
                 case 403:
-                    throw new OpikApi.ForbiddenError(
-                        serializers.ErrorMessage.parseOrThrow(_response.error.body, {
-                            unrecognizedObjectKeys: "passthrough",
-                            allowUnrecognizedUnionMembers: true,
-                            allowUnrecognizedEnumValues: true,
-                            skipValidation: true,
-                            breadcrumbsPrefix: ["response"],
-                        }),
-                        _response.rawResponse,
-                    );
+                    throw new OpikApi.ForbiddenError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
@@ -390,16 +363,7 @@ export class AttachmentsClient {
                 case 401:
                     throw new OpikApi.UnauthorizedError(_response.error.body, _response.rawResponse);
                 case 403:
-                    throw new OpikApi.ForbiddenError(
-                        serializers.ErrorMessage.parseOrThrow(_response.error.body, {
-                            unrecognizedObjectKeys: "passthrough",
-                            allowUnrecognizedUnionMembers: true,
-                            allowUnrecognizedEnumValues: true,
-                            skipValidation: true,
-                            breadcrumbsPrefix: ["response"],
-                        }),
-                        _response.rawResponse,
-                    );
+                    throw new OpikApi.ForbiddenError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
@@ -494,16 +458,7 @@ export class AttachmentsClient {
                 case 401:
                     throw new OpikApi.UnauthorizedError(_response.error.body, _response.rawResponse);
                 case 403:
-                    throw new OpikApi.ForbiddenError(
-                        serializers.ErrorMessage.parseOrThrow(_response.error.body, {
-                            unrecognizedObjectKeys: "passthrough",
-                            allowUnrecognizedUnionMembers: true,
-                            allowUnrecognizedEnumValues: true,
-                            skipValidation: true,
-                            breadcrumbsPrefix: ["response"],
-                        }),
-                        _response.rawResponse,
-                    );
+                    throw new OpikApi.ForbiddenError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
@@ -601,16 +556,7 @@ export class AttachmentsClient {
                 case 401:
                     throw new OpikApi.UnauthorizedError(_response.error.body, _response.rawResponse);
                 case 403:
-                    throw new OpikApi.ForbiddenError(
-                        serializers.ErrorMessage.parseOrThrow(_response.error.body, {
-                            unrecognizedObjectKeys: "passthrough",
-                            allowUnrecognizedUnionMembers: true,
-                            allowUnrecognizedEnumValues: true,
-                            skipValidation: true,
-                            breadcrumbsPrefix: ["response"],
-                        }),
-                        _response.rawResponse,
-                    );
+                    throw new OpikApi.ForbiddenError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,

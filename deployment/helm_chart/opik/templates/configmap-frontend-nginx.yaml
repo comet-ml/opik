@@ -75,7 +75,7 @@ data:
     {{- range $name,$limit := .Values.component.frontend.throttling }}
     limit_req_zone {{ $limit.variable }} zone={{ $limit.zone | default $name }}:{{ $limit.size | default "1m" }} rate={{ $limit.rate | default "10r/m" }};
     {{- end }}
-    
+
     server {
         listen {{ (.Values.component.frontend.service.ports | first).targetPort }} default_server;
         server_name _;
@@ -86,7 +86,7 @@ data:
         client_max_body_size {{ .Values.component.frontend.clientMaxBodySize | default "500M" }};
         client_header_buffer_size 16k;
         large_client_header_buffers 4 64k;
-        
+
         # Add custom header to identify this nginx instance in multi-proxy setups
         add_header X-Opik-Nginx "frontend" always;
         # Add trace ID header for OpenTelemetry
@@ -118,7 +118,7 @@ data:
         add_header {{ $name }} {{ $value | squote }} always;
         {{- end }}
         {{- end }}
-        
+
         {{- $rootPath := ternary "" "/opik" .Values.standalone }}
         # Dedicated healthcheck endpoint
         # Returns 200 OK if nginx is running and can serve requests
@@ -147,10 +147,52 @@ data:
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection "upgrade";
         }
-        
+
         location {{ $rootPath }}/api/ {
           try_files /dev/null @api;
         }
+        {{- if .Values.mcpOAuth.enabled }}
+
+        # MCP OAuth — issuer at {{ $rootPath | default "/" }}.
+        # AS endpoints are mounted directly at /oauth/* on opik-backend
+        # (no /api prefix in @Path). The exact-match `consent` route MUST
+        # come before the prefix block — nginx exact-match wins, so the
+        # React consent page renders from the SPA bundle while every other
+        # /oauth/* path is rewritten to / and proxied to the backend.
+        # Clickjacking protection comes from the server-level CSP `frame-ancestors 'none'`
+        # above, which the consent page inherits. We deliberately do NOT set a per-location
+        # add_header here: nginx add_header is all-or-nothing per context, so a local
+        # add_header would drop the inherited CSP/HSTS/extraServerHeaders for this route.
+        location = {{ $rootPath }}/oauth/consent {
+          try_files /dev/null {{ $rootPath }}/index.html;
+        }
+        location @mcp_oauth_backend {
+          rewrite ^{{ $rootPath }}/(.*)$ /$1 break;
+          proxy_pass http://backend;
+          proxy_redirect off;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        location ^~ {{ $rootPath }}/oauth/ {
+          try_files /dev/null @mcp_oauth_backend;
+        }
+        # RFC 8414 §3 — for issuer `<host>{{ $rootPath }}`, the AS metadata
+        # MUST live at `/.well-known/oauth-authorization-server{{ $rootPath }}`
+        # (the well-known segment is inserted between host and issuer path).
+        # Backend mounts the metadata at `/.well-known/oauth-authorization-server`
+        # directly, so we strip the path suffix before proxying.
+        location = /.well-known/oauth-authorization-server{{ $rootPath }} {
+          rewrite ^.*$ /.well-known/oauth-authorization-server break;
+          proxy_pass http://backend;
+          proxy_redirect off;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        {{- end }}
 
         location @swagger {
             rewrite /swagger/(.*) /$1 break;

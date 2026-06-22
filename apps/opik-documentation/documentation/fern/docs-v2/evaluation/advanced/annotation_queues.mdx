@@ -203,6 +203,58 @@ await queue.addTraces([singleTraceResponse.data]);
     </Tab>
 </Tabs>
 
+### Fetching Items from a Queue
+
+Use `get_items()` to retrieve all the traces (or threads, for a thread queue) currently in a queue. The items are scoped to the queue's project.
+
+<Tabs>
+    <Tab value="Python" title="Python">
+
+```python
+import opik
+
+client = opik.Opik()
+
+# Get an existing traces queue
+queue = client.get_traces_annotation_queue("queue-id")
+
+# Fetch all traces currently in the queue
+traces = queue.get_items()
+
+for trace in traces:
+    print(trace.id, trace.name)
+
+# For a threads queue, get_items() returns the threads instead
+thread_queue = client.get_threads_annotation_queue("thread-queue-id")
+threads = thread_queue.get_items()
+```
+
+    </Tab>
+    <Tab value="TypeScript" title="TypeScript">
+
+```typescript
+import { Opik } from "opik";
+
+const client = new Opik();
+
+// Get an existing traces queue
+const queue = await client.getTracesAnnotationQueue("queue-id");
+
+// Fetch all traces currently in the queue
+const traces = await queue.getItems();
+
+for (const trace of traces) {
+  console.log(trace.id, trace.name);
+}
+
+// For a threads queue, getItems() returns the threads instead
+const threadQueue = await client.getThreadsAnnotationQueue("thread-queue-id");
+const threads = await threadQueue.getItems();
+```
+
+    </Tab>
+</Tabs>
+
 ### Working with Thread Queues
 
 <Tabs>

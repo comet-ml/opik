@@ -20,6 +20,7 @@ import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.JsonUploadFormat;
 import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.filter.DatasetFilter;
@@ -40,6 +41,7 @@ import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.domain.DemoData;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.JsonDatasetItemProcessor;
 import com.comet.opik.domain.Streamer;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -122,6 +124,7 @@ public class DatasetsResource {
     private final @NonNull Streamer streamer;
     private final @NonNull SortingFactoryDatasets sortingFactory;
     private final @NonNull CsvDatasetItemProcessor csvProcessor;
+    private final @NonNull JsonDatasetItemProcessor jsonProcessor;
     private final @NonNull FeatureFlags featureFlags;
     private final @NonNull CsvDatasetExportService csvExportService;
     private final @NonNull AnalyticsService analyticsService;
@@ -488,12 +491,21 @@ public class DatasetsResource {
         }
     }
 
+    /**
+     * OPIK-6696: the copy_from_* coordinates let callers pin the carry-forward read source to a
+     * specific (dataset, version) pair, avoiding the multi-replica read-after-write window when
+     * chaining version writes against a destination that may not have replicated yet.
+     */
     @PUT
     @Path("/items")
     @Operation(operationId = "createOrUpdateDatasetItems", summary = "Create/update dataset items", description = """
             Create/update dataset items based on dataset item id.
             Each item's 'id' field is the stable identifier and upsert key.
-            Provide it to update an existing item, or omit it to create a new one.""", responses = {
+            Provide it to update an existing item, or omit it to create a new one.
+
+            Set 'copy_from_dataset_id' and 'copy_from_version_id' together to read carry-forward rows
+            from the supplied (dataset, version) pair instead of the destination's prior version. When
+            the fields are null, carry-forward rows are read from the destination's prior version.""", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
     @RateLimited
@@ -611,6 +623,45 @@ public class DatasetsResource {
     }
 
     @POST
+    @Path("/items/from-json")
+    @Consumes(MediaType.MULTIPART_FORM_DATA)
+    @Operation(operationId = "createDatasetItemsFromJson", summary = "Create dataset items from JSON file", description = """
+            Create dataset items from an uploaded JSON or JSONL file. JSON files must contain a top-level array of objects.
+            JSONL files contain one JSON object per non-blank line; multi-line JSON objects are not supported.
+            Reserved keys (id, source, description, tags, evaluators, execution_policy) are extracted into the
+            corresponding DatasetItem fields; all remaining keys form the item's data map and preserve their JSON types.
+            To link dataset items to specific traces or spans use the dedicated /items/from-traces or /items/from-spans endpoints.
+            Processing happens asynchronously in batches. With dataset versioning enabled, a supplied id acts as an upsert key.""", responses = {
+            @ApiResponse(responseCode = "202", description = "Accepted - JSON processing started"),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+    })
+    @RateLimited
+    public Response createDatasetItemsFromJson(
+            @FormDataParam("file") @NotNull InputStream fileInputStream,
+            @FormDataParam("dataset_id") @NotNull UUID datasetId,
+            @FormDataParam("format") @NotNull JsonUploadFormat format) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+        Visibility visibility = requestContext.get().getVisibility();
+
+        log.info("JSON upload request for dataset '{}' on workspaceId '{}', format '{}'",
+                datasetId, workspaceId, format);
+
+        jsonProcessor.processUploadedJson(fileInputStream, datasetId, workspaceId, userName, visibility, format);
+
+        log.info("JSON upload accepted for dataset '{}' on workspaceId '{}', processing asynchronously", datasetId,
+                workspaceId);
+
+        return Response.status(Response.Status.ACCEPTED).build();
+    }
+
+    /**
+     * OPIK-6696: the copy_from_* coordinates let callers pin the carry-forward (and edit-via-SELECT-INSERT)
+     * read source to a specific (dataset, version) pair, avoiding the multi-replica read-after-write window
+     * when chaining version writes against a destination that may not have replicated yet.
+     */
+    @POST
     @Path("/{id}/items/changes")
     @Operation(operationId = "applyDatasetItemChanges", summary = "Apply changes to dataset items", description = """
             Apply delta changes (add, edit, delete) to a dataset version with conflict detection.
@@ -621,6 +672,11 @@ public class DatasetsResource {
             - Returns 409 Conflict if baseVersion is stale and override is not set
 
             Use `override=true` query parameter to force version creation even with stale baseVersion.
+
+            Set 'copy_from_dataset_id' and 'copy_from_version_id' together on the request body to read
+            carry-forward rows from the supplied (dataset, version) pair instead of the destination's
+            prior version. When the fields are null, carry-forward rows are read from the destination's
+            prior version.
             """, responses = {
             @ApiResponse(responseCode = "201", description = "Version created successfully", content = @Content(schema = @Schema(implementation = DatasetVersion.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),

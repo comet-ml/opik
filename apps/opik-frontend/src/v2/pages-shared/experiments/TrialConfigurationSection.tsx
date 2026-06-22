@@ -4,7 +4,9 @@ import isArray from "lodash/isArray";
 import isString from "lodash/isString";
 import get from "lodash/get";
 
-import { GitCompareArrows, List } from "lucide-react";
+import { ChevronRight, GitCompareArrows, List } from "lucide-react";
+
+import { cn } from "@/lib/utils";
 
 import { Experiment } from "@/types/datasets";
 import { OptimizationStudioConfig } from "@/types/optimizations";
@@ -23,10 +25,13 @@ import {
   formatPrimitive,
   extractMessages,
   buildConfigFromStudioConfig,
+  getMetricParamLabels,
   MessageEntry,
 } from "@/lib/optimization-config";
+import { extractNamedPrompts } from "@/lib/prompt";
 
 const PROMPT_MAX_LENGTH = 200;
+const METRIC_KEY = "Metric";
 
 const CONFIG_VIEW_MODE = {
   CONFIG: "config",
@@ -55,9 +60,11 @@ const MessageBlock: React.FC<{ message: MessageEntry }> = ({ message }) => {
   return (
     <div className="rounded-md border bg-muted/30 p-3">
       {message.role && (
-        <Tag variant="gray" size="sm" className="mb-2 capitalize">
-          {message.role}
-        </Tag>
+        <div className="mb-2 flex items-center gap-2">
+          <Tag variant="gray" size="sm" className="capitalize">
+            {message.role}
+          </Tag>
+        </div>
       )}
       <p className="comet-body-s whitespace-pre-wrap break-words">
         {displayText}
@@ -75,11 +82,36 @@ const MessageBlock: React.FC<{ message: MessageEntry }> = ({ message }) => {
 };
 
 const PromptBlock: React.FC<{ value: unknown }> = ({ value }) => {
+  const namedPrompts = useMemo(() => extractNamedPrompts(value), [value]);
+
   const messages = useMemo(() => extractMessages(value), [value]);
   const text = useMemo(
     () => (isString(value) ? value : JSON.stringify(value, null, 2)),
     [value],
   );
+
+  if (namedPrompts) {
+    return (
+      <div className="flex flex-col gap-4">
+        {Object.entries(namedPrompts).map(([name, msgs]) => {
+          const normalized = extractMessages(msgs) ?? [];
+          return (
+            <div key={name}>
+              <p className="comet-body-s mb-1 text-muted-slate">{name}</p>
+              <div className="flex flex-col gap-2">
+                {normalized.map((msg, i) => (
+                  <MessageBlock
+                    key={`${name}-${msg.role}-${i}`}
+                    message={msg}
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
 
   if (messages) {
     return (
@@ -116,6 +148,50 @@ const ToolsBlock: React.FC<{ value: unknown }> = ({ value }) => {
           {name}
         </Tag>
       ))}
+    </div>
+  );
+};
+
+type MetricParam = { key: string; value: unknown };
+
+const MetricEntry: React.FC<{
+  label: string;
+  value: unknown;
+  params: MetricParam[];
+}> = ({ label, value, params }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <div>
+      <div className="flex items-baseline gap-1.5">
+        <span className="comet-body-s text-muted-slate">{label}:</span>
+        <button
+          type="button"
+          onClick={() => setIsOpen((prev) => !prev)}
+          className="flex items-center gap-1"
+        >
+          <span className="comet-body-s-accented">
+            {formatPrimitive(value)}
+          </span>
+          <ChevronRight
+            className={cn(
+              "size-3.5 shrink-0 text-muted-slate transition-transform duration-200",
+              isOpen && "rotate-90",
+            )}
+          />
+        </button>
+      </div>
+      {isOpen && (
+        <div className="mt-1 flex flex-col gap-2 pl-4">
+          {params.map(({ key, value: v }) => (
+            <div key={key}>
+              <p className="comet-body-xs text-muted-slate">{key}</p>
+              <p className="comet-body-s whitespace-pre-wrap break-words rounded-md bg-muted/40 pb-3 pr-3">
+                {String(v)}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
@@ -175,9 +251,22 @@ const TrialConfigurationSection: React.FC<TrialConfigurationSectionProps> = ({
       const config = get(experiment.metadata, "configuration");
       if (config && isObject(config)) {
         const configObj = config as ConfigurationType;
-        const hasRichContent =
-          "prompt_messages" in configObj || "model" in configObj;
-        if (hasRichContent || !studioConfig) {
+
+        if ("prompt_messages" in configObj || "model" in configObj) {
+          return configObj;
+        }
+
+        if ("prompt" in configObj) {
+          if (studioConfig) {
+            const base = {
+              ...(buildConfigFromStudioConfig(studioConfig) as Record<
+                string,
+                unknown
+              >),
+            };
+            delete base["Initial prompt"];
+            return { ...base, ...configObj } as ConfigurationType;
+          }
           return configObj;
         }
       }
@@ -204,7 +293,7 @@ const TrialConfigurationSection: React.FC<TrialConfigurationSectionProps> = ({
       const filtered = result.filter(
         (e) => e.type !== "prompt" && !isOptimizerMetaEntry(e.key, e.value),
       );
-      filtered.unshift({
+      filtered.push({
         key: "Prompt",
         value: configPrompt,
         type: "prompt",
@@ -224,6 +313,11 @@ const TrialConfigurationSection: React.FC<TrialConfigurationSectionProps> = ({
 
     return result;
   }, [configuration]);
+
+  const metricParamKeys = useMemo(
+    () => (studioConfig ? getMetricParamLabels(studioConfig) : []),
+    [studioConfig],
+  );
 
   if (!configuration) return null;
 
@@ -273,30 +367,93 @@ const TrialConfigurationSection: React.FC<TrialConfigurationSectionProps> = ({
       {(viewMode === CONFIG_VIEW_MODE.DIFF_BASELINE ||
         viewMode === CONFIG_VIEW_MODE.DIFF_PARENT) &&
       diffExperiment ? (
-        <ConfigurationDiffContent
-          baselineExperiment={diffExperiment}
-          currentExperiment={experiment}
-        />
-      ) : (
         <div className="flex flex-col gap-4">
-          {entries.map(({ key, value, type }) => {
-            if (type === "number" || type === "string" || type === "boolean") {
+          {entries
+            .filter(
+              ({ type, key }) =>
+                type !== "prompt" && !metricParamKeys.includes(key),
+            )
+            .map(({ key, value, type }) => {
+              if (key === METRIC_KEY && metricParamKeys.length > 0) {
+                const params = entries.filter((e) =>
+                  metricParamKeys.includes(e.key),
+                );
+                return (
+                  <MetricEntry
+                    key={key}
+                    label={key}
+                    value={value}
+                    params={params}
+                  />
+                );
+              }
+              if (
+                type === "number" ||
+                type === "string" ||
+                type === "boolean"
+              ) {
+                return (
+                  <div key={key} className="flex items-baseline gap-1.5">
+                    <span className="comet-body-s text-muted-slate">
+                      {key}:
+                    </span>
+                    <span className="comet-body-s-accented">
+                      {formatPrimitive(value)}
+                    </span>
+                  </div>
+                );
+              }
               return (
-                <div key={key} className="flex items-baseline gap-1.5">
-                  <span className="comet-body-s text-muted-slate">{key}:</span>
-                  <span className="comet-body-s-accented">
-                    {formatPrimitive(value)}
-                  </span>
+                <div key={key}>
+                  <ConfigEntry label={key} value={value} />
                 </div>
               );
-            }
-
-            return (
-              <div key={key}>
-                <ConfigEntry label={key} value={value} />
-              </div>
-            );
-          })}
+            })}
+          <ConfigurationDiffContent
+            baselineExperiment={diffExperiment}
+            currentExperiment={experiment}
+          />
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4">
+          {entries
+            .filter(({ key }) => !metricParamKeys.includes(key))
+            .map(({ key, value, type }) => {
+              if (key === METRIC_KEY && metricParamKeys.length > 0) {
+                const params = entries.filter((e) =>
+                  metricParamKeys.includes(e.key),
+                );
+                return (
+                  <MetricEntry
+                    key={key}
+                    label={key}
+                    value={value}
+                    params={params}
+                  />
+                );
+              }
+              if (
+                type === "number" ||
+                type === "string" ||
+                type === "boolean"
+              ) {
+                return (
+                  <div key={key} className="flex items-baseline gap-1.5">
+                    <span className="comet-body-s text-muted-slate">
+                      {key}:
+                    </span>
+                    <span className="comet-body-s-accented">
+                      {formatPrimitive(value)}
+                    </span>
+                  </div>
+                );
+              }
+              return (
+                <div key={key}>
+                  <ConfigEntry label={key} value={value} />
+                </div>
+              );
+            })}
         </div>
       )}
     </div>

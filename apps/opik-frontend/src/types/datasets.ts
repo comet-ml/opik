@@ -81,6 +81,8 @@ export enum DATASET_ITEM_DRAFT_STATUS {
   // deleted items are filtered out, not shown
 }
 
+export type JsonUploadFormat = "json" | "jsonl";
+
 export interface Evaluator {
   name: string;
   type: string;
@@ -120,6 +122,7 @@ export interface ExperimentOutputColumn {
 export interface ExperimentPromptVersion {
   id: string;
   commit: string;
+  version_number?: string;
   prompt_id: string;
   prompt_name: string;
 }

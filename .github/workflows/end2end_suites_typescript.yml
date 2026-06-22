@@ -1,4 +1,9 @@
-name: Application E2E Tests (TypeScript)
+name: Application E2E Tests (TypeScript) [DEPRECATED — v1]
+
+# DEPRECATED: replaced by end2end_suites_v2.yml (OPIK-6707).
+# PR/auto triggers removed; left dispatchable for grace-period manual runs.
+# The v2 PR-gate covers tests_end_to_end/e2e/** paths.
+
 env:
   OPIK_SENTRY_ENABLE: False
   ALLURE_TOKEN: ${{ secrets.ALLURE_TOKEN }}
@@ -34,11 +39,6 @@ on:
                 description: ALLURE_JOB_RUN_ID service parameter. Leave blank.
             ALLURE_USERNAME:
                 description: ALLURE_USERNAME service parameter. Leave blank.
-
-    pull_request:
-      paths:
-        - 'sdks/code_generation/fern/openapi/openapi.yaml'
-        - 'tests_end_to_end/**'
 
 
 concurrency:

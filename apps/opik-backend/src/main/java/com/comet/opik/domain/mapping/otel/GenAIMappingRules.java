@@ -46,6 +46,9 @@ public final class GenAIMappingRules {
                     .rule("gen_ai.system").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.PROVIDER)
                     .spanType(SpanType.llm).build(),
             OpenTelemetryMappingRule.builder()
+                    .rule("gen_ai.usage.cost").source(SOURCE)
+                    .outcome(OpenTelemetryMappingRule.Outcome.COST).spanType(SpanType.llm).build(),
+            OpenTelemetryMappingRule.builder()
                     .rule("gen_ai.usage.").isPrefix(true).source(SOURCE)
                     .outcome(OpenTelemetryMappingRule.Outcome.USAGE).spanType(SpanType.llm).build(),
             OpenTelemetryMappingRule.builder()
@@ -60,6 +63,15 @@ public final class GenAIMappingRules {
             OpenTelemetryMappingRule.builder()
                     .rule("gen_ai.cost.").isPrefix(true).source(SOURCE)
                     .outcome(OpenTelemetryMappingRule.Outcome.METADATA).spanType(SpanType.llm).build(),
+            // Tool call arguments/result carry the tool span's input/output. They must be
+            // matched before the broad `gen_ai.tool.` prefix below, otherwise that prefix
+            // would bucket them into METADATA and the tool span would lose input/output.
+            OpenTelemetryMappingRule.builder()
+                    .rule("gen_ai.tool.call.arguments").source(SOURCE)
+                    .outcome(OpenTelemetryMappingRule.Outcome.INPUT).build(),
+            OpenTelemetryMappingRule.builder()
+                    .rule("gen_ai.tool.call.result").source(SOURCE)
+                    .outcome(OpenTelemetryMappingRule.Outcome.OUTPUT).build(),
             OpenTelemetryMappingRule.builder()
                     .rule("gen_ai.tool.").isPrefix(true).source(SOURCE)
                     .outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),

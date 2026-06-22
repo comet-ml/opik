@@ -10,4 +10,6 @@ export interface AnnotationQueueUpdate {
     instructions?: string;
     commentsEnabled?: boolean;
     feedbackDefinitionNames?: string[];
+    annotatorsPerItem?: number;
+    lockTimeoutSeconds?: number;
 }

@@ -2,7 +2,25 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Set
+from typing import Any, Callable, Dict, Optional, Set
+
+
+def coerce_temperature_to_float(value: Any) -> Optional[float]:
+    """Normalize a `temperature` value to a float.
+
+    LiteLLM accepts `temperature` as int, float, or numeric string and
+    coerces internally before the API call. Conflict-resolution code
+    (e.g. "drop X when temperature is non-1") needs the same coercion
+    to avoid false positives from string forms like ``"1"`` / ``"1.0"``.
+    Returns ``None`` when the value can't be coerced — callers should
+    treat that as "type mismatch, fall back to keeping the param" so a
+    bad input doesn't *also* trigger a silent drop of an unrelated
+    parameter.
+    """
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def normalise_choice(choice: Any) -> Dict[str, Any]:
@@ -81,10 +99,7 @@ def _apply_gpt5_filters(
 
     if "temperature" in params:
         value = params["temperature"]
-        try:
-            numeric_value = float(value)
-        except (TypeError, ValueError):
-            numeric_value = None
+        numeric_value = coerce_temperature_to_float(value)
         if numeric_value is None or abs(numeric_value - 1.0) > 1e-6:
             unsupported.append(("temperature", value))
 

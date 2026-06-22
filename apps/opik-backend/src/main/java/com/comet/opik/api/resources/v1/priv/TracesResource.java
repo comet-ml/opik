@@ -4,6 +4,7 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.BatchDeleteByProject;
 import com.comet.opik.api.Comment;
+import com.comet.opik.api.CreateCommentResponse;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.DeleteThreadFeedbackScores;
 import com.comet.opik.api.DeleteTraceThreads;
@@ -139,7 +140,8 @@ public class TracesResource {
             @QueryParam("exclude") String exclude,
             @QueryParam("search") @Schema(description = "Full-text search across trace fields") String search,
             @QueryParam("from_time") @Schema(description = "Filter traces created from this time (ISO-8601 format).") Instant startTime,
-            @QueryParam("to_time") @Schema(description = "Filter traces created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.") Instant endTime) {
+            @QueryParam("to_time") @Schema(description = "Filter traces created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.") Instant endTime,
+            @QueryParam("annotation_queue_id") @Schema(description = "Filter traces belonging to this annotation queue and scope feedback scores/comments to it") UUID annotationQueueId) {
 
         validateProjectNameAndProjectId(projectName, projectId);
         validateTimeRangeParameters(startTime, endTime);
@@ -169,6 +171,7 @@ public class TracesResource {
                 .exclude(ParamsValidator.get(exclude, Trace.TraceField.class, "exclude"))
                 .sortingFields(sortingFields)
                 .searchText(StringUtils.trimToNull(search))
+                .annotationQueueId(annotationQueueId)
                 .build();
 
         log.info("Get traces by '{}' on workspaceId '{}'", searchCriteria, workspaceId);
@@ -550,7 +553,7 @@ public class TracesResource {
         log.info("Added comment with id '{}' for trace with id '{}' on workspaceId '{}'", comment.id(), id,
                 workspaceId);
 
-        return Response.created(uri).build();
+        return Response.created(uri).entity(new CreateCommentResponse(commentId)).build();
     }
 
     @GET
@@ -634,7 +637,8 @@ public class TracesResource {
             @QueryParam("sorting") String sorting,
             @QueryParam("search") @Schema(description = "Full-text search across thread fields") String search,
             @QueryParam("from_time") @Schema(description = "Filter trace threads created from this time (ISO-8601 format).") Instant startTime,
-            @QueryParam("to_time") @Schema(description = "Filter trace threads created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.") Instant endTime) {
+            @QueryParam("to_time") @Schema(description = "Filter trace threads created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.") Instant endTime,
+            @QueryParam("annotation_queue_id") @Schema(description = "Filter threads belonging to this annotation queue and scope feedback scores/comments to it") UUID annotationQueueId) {
 
         validateProjectNameAndProjectId(projectName, projectId);
         validateTimeRangeParameters(startTime, endTime);
@@ -663,6 +667,7 @@ public class TracesResource {
                 .searchText(StringUtils.trimToNull(search))
                 .uuidFromTime(instantToUUIDMapper.toLowerBound(startTime))
                 .uuidToTime(instantToUUIDMapper.toUpperBound(endTime))
+                .annotationQueueId(annotationQueueId)
                 .build();
 
         log.info("Get trace threads by '{}' on workspaceId '{}'", searchCriteria, workspaceId);
@@ -785,19 +790,14 @@ public class TracesResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        // Validate project identifier and get projectId
-        UUID projectId = projectService.validateProjectIdentifier(identifier.projectId(), identifier.projectName(),
-                workspaceId);
+        log.info("Open trace thread_id: '{}' for project_id: '{}', project_name: '{}' on workspace_id: '{}'",
+                identifier.threadId(), identifier.projectId(), identifier.projectName(), workspaceId);
 
-        log.info("Open trace thread_id: '{}' and project_id: '{}' on workspace_id: '{}'", identifier.threadId(),
-                projectId, workspaceId);
-
-        traceThreadService.openThread(projectId, identifier.threadId())
+        traceThreadService.openThread(identifier.projectId(), identifier.projectName(), identifier.threadId())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Opened trace thread_id: '{}' and project_id: '{}' on workspace_id: '{}'", identifier.threadId(),
-                projectId, workspaceId);
+        log.info("Opened trace thread_id: '{}' on workspace_id: '{}'", identifier.threadId(), workspaceId);
 
         return Response.noContent().build();
     }
@@ -814,24 +814,19 @@ public class TracesResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        // Validate project identifier and get projectId
-        UUID projectId = projectService.validateProjectIdentifier(identifier.projectId(), identifier.projectName(),
-                workspaceId);
-
         // Handle both single and batch operations
         Set<String> threadIds = CollectionUtils.isNotEmpty(identifier.threadIds())
                 ? Set.copyOf(identifier.threadIds())
                 : Set.of(identifier.threadId());
 
-        log.info("Close trace thread_ids: '{}' and project_id: '{}' on workspace_id: '{}'", threadIds,
-                projectId, workspaceId);
+        log.info("Close trace thread_ids: '{}' for project_id: '{}', project_name: '{}' on workspace_id: '{}'",
+                threadIds, identifier.projectId(), identifier.projectName(), workspaceId);
 
-        traceThreadService.closeThreads(projectId, threadIds)
+        traceThreadService.closeThreads(identifier.projectId(), identifier.projectName(), threadIds)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Closed trace thread_ids: '{}' and project_id: '{}' on workspace_id: '{}'", threadIds,
-                projectId, workspaceId);
+        log.info("Closed trace thread_ids: '{}' on workspace_id: '{}'", threadIds, workspaceId);
 
         return Response.noContent().build();
     }
@@ -960,7 +955,8 @@ public class TracesResource {
                 scores.threadId(),
                 projectName, scores.author(), workspaceId);
 
-        feedbackScoreService.deleteThreadScores(projectName, scores.threadId(), scores.names(), scores.author())
+        feedbackScoreService.deleteThreadScores(projectName, scores.threadId(), scores.names(), scores.author(),
+                scores.sourceQueueId())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
@@ -1018,7 +1014,7 @@ public class TracesResource {
         log.info("Added comment with id '{}' for thread with id '{}' on workspaceId '{}'", comment.id(), id,
                 workspaceId);
 
-        return Response.created(uri).build();
+        return Response.created(uri).entity(new CreateCommentResponse(commentId)).build();
     }
 
     @GET

@@ -5,10 +5,12 @@ import {
   ListChecks,
   AlertTriangle,
   Sparkles,
-  Workflow,
+  FileTerminal,
   ArrowRight,
+  ListTree,
   LucideIcon,
 } from "lucide-react";
+import lowerFirst from "lodash/lowerFirst";
 import activityCloudIcon from "@/icons/activity-cloud.svg";
 import { formatRelativeDateTime } from "@/lib/date";
 import { Skeleton } from "@/ui/skeleton";
@@ -16,13 +18,22 @@ import useRecentActivity from "@/api/projects/useRecentActivity";
 import { ActivityType, RecentActivityItem } from "@/types/recent-activity";
 
 type ActivityConfigEntry = {
-  label: string;
+  label: string | ((item: RecentActivityItem) => string);
   icon: LucideIcon;
   color: string;
   getLink: (item: RecentActivityItem, base: string) => string;
 };
 
 const ACTIVITY_CONFIG: Record<ActivityType, ActivityConfigEntry> = {
+  [ActivityType.TRACE_DAILY]: {
+    label: (item) =>
+      `Traces logged ${lowerFirst(
+        formatRelativeDateTime(item.created_at, false),
+      )}`,
+    icon: ListTree,
+    color: "text-chart-teal",
+    getLink: (_item, base) => `${base}/logs?logsType=traces`,
+  },
   [ActivityType.OPTIMIZATION]: {
     label: "Optimization run created",
     icon: Sparkles,
@@ -39,7 +50,7 @@ const ACTIVITY_CONFIG: Record<ActivityType, ActivityConfigEntry> = {
   [ActivityType.DATASET_VERSION]: {
     label: "Dataset updated",
     icon: Database,
-    color: "text-chart-teal",
+    color: "text-chart-purple",
     getLink: (item, base) => `${base}/datasets/${item.id}/items`,
   },
   [ActivityType.TEST_SUITE_VERSION]: {
@@ -48,11 +59,11 @@ const ACTIVITY_CONFIG: Record<ActivityType, ActivityConfigEntry> = {
     color: "text-chart-purple",
     getLink: (item, base) => `${base}/test-suites/${item.id}/items`,
   },
-  [ActivityType.AGENT_CONFIG_VERSION]: {
-    label: "Agent configuration created",
-    icon: Workflow,
+  [ActivityType.PROMPT_VERSION]: {
+    label: "Prompt created",
+    icon: FileTerminal,
     color: "text-chart-blue",
-    getLink: (item, base) => `${base}/agent-configuration?configId=${item.id}`,
+    getLink: (item, base) => `${base}/prompts/${item.id}`,
   },
   [ActivityType.ALERT_EVENT]: {
     label: "Alert triggered",
@@ -75,17 +86,25 @@ function ActivityItem({ item }: { item: RecentActivityItem }) {
   return (
     <Link
       to={config.getLink(item, base)}
-      className="group flex w-full items-center gap-3 rounded-md border border-transparent px-3 py-2 text-left hover:border-primary hover:bg-primary/5"
+      className="group flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left hover:border-primary hover:bg-primary/5"
     >
       <Icon className={`size-4 shrink-0 ${config.color}`} />
       <span className="comet-body-xs min-w-0 flex-1 truncate">
-        <span className="comet-body-xs-accented">{config.label}:</span>{" "}
+        <span className="comet-body-xs-accented">
+          {typeof config.label === "function"
+            ? config.label(item)
+            : config.label}
+          :
+        </span>{" "}
         <span className="text-muted-foreground">{item.name}</span>
       </span>
-      <span className="shrink-0 text-xs text-muted-foreground">
-        {formatRelativeDateTime(item.created_at)}
+      <span className="shrink-0 text-xs text-muted-foreground group-hover:hidden">
+        {formatRelativeDateTime(
+          item.created_at,
+          item.type !== ActivityType.TRACE_DAILY,
+        )}
       </span>
-      <ArrowRight className="size-4 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100" />
+      <ArrowRight className="hidden size-4 shrink-0 text-primary group-hover:block" />
     </Link>
   );
 }
@@ -106,7 +125,8 @@ function EmptyState() {
       <img src={activityCloudIcon} alt="" className="mb-4 size-10" />
       <p className="text-sm font-medium">No activity yet</p>
       <p className="mt-2 text-xs text-muted-foreground">
-        We&apos;ll display recent activity on this project here
+        Tracks meaningful activity in this project — new artifacts, updates, and
+        triggered alerts.
       </p>
     </div>
   );
@@ -123,13 +143,13 @@ export default function RecentActivitySection() {
 
   return (
     <section>
-      <h2 className="comet-body-s-accented mb-3">Recent activity</h2>
+      <h2 className="comet-body-s-accented mb-1.5">Recent activity</h2>
       {isPending ? (
         <LoadingSkeleton />
       ) : !items.length ? (
         <EmptyState />
       ) : (
-        <div className="flex flex-col">
+        <div className="flex flex-col gap-1">
           {items.map((item) => (
             <ActivityItem
               key={`${item.type}-${item.id}-${item.created_at}`}

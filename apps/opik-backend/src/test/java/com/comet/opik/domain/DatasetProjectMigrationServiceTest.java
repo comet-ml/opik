@@ -19,7 +19,6 @@ import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.resources.WorkspaceResourceClient;
-import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -91,6 +90,9 @@ class DatasetProjectMigrationServiceTest {
                         .runtimeInfo(wireMock.runtimeInfo())
                         .redisUrl(REDIS.getRedisURI())
                         .customConfigs(List.of(
+                                // Entity-based determination required so the migration's V1 -> V2 transition
+                                // is observable.
+                                new CustomConfig("serviceToggles.forceWorkspaceVersion", "disabled"),
                                 new CustomConfig("migration.excludedWorkspaceIds",
                                         "%s,%s".formatted(EXCLUDED_WORKSPACE_ID_1, EXCLUDED_WORKSPACE_ID_2)),
                                 // Cache enabled with the production TTL so only the migration's
@@ -195,12 +197,13 @@ class DatasetProjectMigrationServiceTest {
     }
 
     /**
-     * One workspace exercising all 4 buckets: certain, ambiguous, certain-deleted, demo.
-     * After the D1 policy alignment certain-deleted reroutes to Default Project (auto-created),
-     * so only ambiguous + demo stay V1 and the workspace remains trapped on {@code all_ambiguous}.
+     * One workspace exercising all migration buckets: certain (single project), multi-project
+     * resolved by dominant assignment, certain-deleted, demo. No bucket traps the workspace —
+     * every non-demo orphan is migrated, the workspace flips to V2, and the demo dataset is left
+     * untouched (it was filtered out at the MySQL orphan lookup, never reaching CH inference).
      */
     @Test
-    void mixedWorkspaceMigratesAcrossBucketsAndTrapsOnAmbiguous(WorkspacesService workspacesService) {
+    void mixedWorkspaceMigratesAllBucketsIncludingMultiProjectAsDominant() {
         var apiKey = randomName("api-key");
         var workspaceName = randomName("workspace");
         var workspaceId = UUID.randomUUID().toString();
@@ -213,15 +216,16 @@ class DatasetProjectMigrationServiceTest {
         var eligibleDatasetId = createOrphanDataset(apiKey, workspaceName, eligibleDatasetName);
         seedTracedExperiment(apiKey, workspaceName, eligibleDatasetName, eligibleProjectName);
 
-        // Ambiguous: two V2 experiments whose traces span two different projects.
-        var ambiguousProjectName1 = randomName("project");
-        var ambiguousProjectName2 = randomName("project");
-        createProject(apiKey, workspaceName, ambiguousProjectName1);
-        createProject(apiKey, workspaceName, ambiguousProjectName2);
-        var ambiguousDatasetName = randomName("dataset");
-        var ambiguousDatasetId = createOrphanDataset(apiKey, workspaceName, ambiguousDatasetName);
-        seedTracedExperiment(apiKey, workspaceName, ambiguousDatasetName, ambiguousProjectName1);
-        seedTracedExperiment(apiKey, workspaceName, ambiguousDatasetName, ambiguousProjectName2);
+        // Multi-project: two V2 experiments in project1, one in project2 — project1 dominates by count.
+        var multiProject1Name = randomName("project");
+        var multiProject2Name = randomName("project");
+        var multiProject1Id = createProject(apiKey, workspaceName, multiProject1Name);
+        createProject(apiKey, workspaceName, multiProject2Name);
+        var multiDatasetName = randomName("dataset");
+        var multiDatasetId = createOrphanDataset(apiKey, workspaceName, multiDatasetName);
+        seedTracedExperiment(apiKey, workspaceName, multiDatasetName, multiProject1Name);
+        seedTracedExperiment(apiKey, workspaceName, multiDatasetName, multiProject1Name);
+        seedTracedExperiment(apiKey, workspaceName, multiDatasetName, multiProject2Name);
 
         // Certain-deleted: V2 experiment with a trace in a single project that gets deleted after seeding.
         var deletedProjectName = randomName("project");
@@ -248,17 +252,14 @@ class DatasetProjectMigrationServiceTest {
 
         migrationService.runMigrationCycle().block();
 
-        // Ambiguous keeps the workspace pinned to V1; the cycle migrates the other three buckets
-        // and traps the workspace with all_ambiguous.
-        assertWorkspaceVersion(apiKey, workspaceName, OpikVersion.VERSION_1);
+        // Every non-demo orphan is migrated; the workspace flips to V2.
+        assertWorkspaceVersion(apiKey, workspaceName, OpikVersion.VERSION_2);
 
         assertDatasetMigrated(apiKey, workspaceName, eligibleDatasetId, eligibleProjectId);
-        assertDatasetUnchanged(apiKey, workspaceName, ambiguousDatasetId);
+        assertDatasetMigrated(apiKey, workspaceName, multiDatasetId, multiProject1Id);
         var migratedDeleted = datasetResourceClient.getDatasetById(deletedDatasetId, apiKey, workspaceName);
         assertThat(migratedDeleted.projectId()).isNotNull().isNotEqualTo(eligibleProjectId);
         assertDatasetUnchanged(apiKey, workspaceName, demoDatasetId);
-
-        assertWorkspaceTrapped(workspacesService, workspaceId, "all_ambiguous");
     }
 
     /**
@@ -391,51 +392,143 @@ class DatasetProjectMigrationServiceTest {
     }
 
     /**
-     * All orphans ambiguous (multi-project) → workspace trapped with {@code all_ambiguous}, the
-     * only remaining trap reason after the D1 policy alignment. Default Project is intentionally
-     * NOT pre-seeded — there are no certain-deleted or no-inference orphans, so
-     * {@code getOrCreate} is never reached.
+     * Dominant-project assignment by count: experiments split across two projects with different
+     * counts, the higher-count project wins. The workspace flips to V2 — no trap, no leftover
+     * orphan rows. A second cycle is a no-op (re-runs are deterministic; same input → same
+     * assignment).
      */
     @Test
-    void trapWorkspaceWhenAllAmbiguous(WorkspacesService workspacesService) {
+    void migrateMultiProjectDatasetToDominantProjectByCount() {
         var apiKey = randomName("api-key");
         var workspaceName = randomName("workspace");
         var workspaceId = UUID.randomUUID().toString();
         mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
 
-        var projectName1 = randomName("project");
-        var projectName2 = randomName("project");
-        createProject(apiKey, workspaceName, projectName1);
-        createProject(apiKey, workspaceName, projectName2);
+        var dominantProjectName = randomName("project");
+        var dominantProjectId = createProject(apiKey, workspaceName, dominantProjectName);
+        var minorityProjectName = randomName("project");
+        createProject(apiKey, workspaceName, minorityProjectName);
 
         var datasetName = randomName("dataset");
         var datasetId = createOrphanDataset(apiKey, workspaceName, datasetName);
-        seedTracedExperiment(apiKey, workspaceName, datasetName, projectName1);
-        seedTracedExperiment(apiKey, workspaceName, datasetName, projectName2);
+        // 3 experiments in the dominant project, 1 in the minority project.
+        seedTracedExperiment(apiKey, workspaceName, datasetName, dominantProjectName);
+        seedTracedExperiment(apiKey, workspaceName, datasetName, dominantProjectName);
+        seedTracedExperiment(apiKey, workspaceName, datasetName, dominantProjectName);
+        seedTracedExperiment(apiKey, workspaceName, datasetName, minorityProjectName);
 
         migrationService.runMigrationCycle().block();
 
-        assertWorkspaceVersion(apiKey, workspaceName, OpikVersion.VERSION_1);
-        assertDatasetUnchanged(apiKey, workspaceName, datasetId);
-        assertWorkspaceTrapped(workspacesService, workspaceId, "all_ambiguous");
+        assertWorkspaceVersion(apiKey, workspaceName, OpikVersion.VERSION_2);
+        assertDatasetMigrated(apiKey, workspaceName, datasetId, dominantProjectId);
+
+        var afterFirstCycle = datasetResourceClient.getDatasetById(datasetId, apiKey, workspaceName);
+        migrationService.runMigrationCycle().block();
+        var afterSecondCycle = datasetResourceClient.getDatasetById(datasetId, apiKey, workspaceName);
+
+        assertThat(afterSecondCycle.projectId()).isEqualTo(dominantProjectId);
+        assertThat(afterSecondCycle.lastUpdatedAt()).isEqualTo(afterFirstCycle.lastUpdatedAt());
     }
 
+    /**
+     * Dominant-project tiebreaker by recency: equal experiment counts across two projects, the
+     * project with the more recently updated experiment wins. Two seed calls run back-to-back
+     * with a short pause to keep the {@code last_updated_at} values distinguishable at CH's
+     * nanosecond precision.
+     */
     @Test
-    void skipPreMarkedTrappedWorkspaces(WorkspacesService workspacesService) {
+    void migrateMultiProjectDatasetToMostRecentProjectWhenCountTies() {
         var apiKey = randomName("api-key");
         var workspaceName = randomName("workspace");
         var workspaceId = UUID.randomUUID().toString();
         mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
 
-        workspacesService.markDatasetProjectMigrationSkipped(workspaceId, "test-pre-marked-trap");
+        var olderProjectName = randomName("project");
+        createProject(apiKey, workspaceName, olderProjectName);
+        var newerProjectName = randomName("project");
+        var newerProjectId = createProject(apiKey, workspaceName, newerProjectName);
 
-        var seeded = seedEligibleDataset(apiKey, workspaceName, randomName("project"));
-        var datasetId = seeded.getLeft();
+        var datasetName = randomName("dataset");
+        var datasetId = createOrphanDataset(apiKey, workspaceName, datasetName);
+        seedTracedExperiment(apiKey, workspaceName, datasetName, olderProjectName);
+        TestUtils.waitForMillis(20);
+        seedTracedExperiment(apiKey, workspaceName, datasetName, newerProjectName);
 
         migrationService.runMigrationCycle().block();
 
-        assertWorkspaceVersion(apiKey, workspaceName, OpikVersion.VERSION_1);
-        assertDatasetUnchanged(apiKey, workspaceName, datasetId);
+        assertWorkspaceVersion(apiKey, workspaceName, OpikVersion.VERSION_2);
+        assertDatasetMigrated(apiKey, workspaceName, datasetId, newerProjectId);
+    }
+
+    /**
+     * Multi-project orphans where one referencing experiment is itself still V1 (project_id=''):
+     * the empty-project row is filtered out by the CH inference and the dominant choice is made
+     * over the remaining V2 experiments only. Workspace version is intentionally not asserted:
+     * the residual V1 experiment is the experiment-migration job's responsibility, not this one's.
+     */
+    @Test
+    void multiProjectDatasetIgnoresExperimentsWithEmptyProjectId() {
+        var apiKey = randomName("api-key");
+        var workspaceName = randomName("workspace");
+        var workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
+
+        var dominantProjectName = randomName("project");
+        var dominantProjectId = createProject(apiKey, workspaceName, dominantProjectName);
+        var minorityProjectName = randomName("project");
+        createProject(apiKey, workspaceName, minorityProjectName);
+
+        var datasetName = randomName("dataset");
+        var datasetId = createOrphanDataset(apiKey, workspaceName, datasetName);
+        seedTracedExperiment(apiKey, workspaceName, datasetName, dominantProjectName);
+        seedTracedExperiment(apiKey, workspaceName, datasetName, dominantProjectName);
+        seedTracedExperiment(apiKey, workspaceName, datasetName, minorityProjectName);
+        // V1 experiment linked to the dataset (no projectName/projectId). The CH filter
+        // {@code HAVING experiment_project_id != ''} drops this row, so the dominant tally
+        // is taken across only the three V2 experiments above.
+        experimentResourceClient.create(
+                experimentResourceClient.createPartialExperiment().id(null).datasetName(datasetName).build(),
+                apiKey, workspaceName);
+
+        migrationService.runMigrationCycle().block();
+
+        assertDatasetMigrated(apiKey, workspaceName, datasetId, dominantProjectId);
+    }
+
+    /**
+     * Multi-project dataset whose dominant project (the higher-count one the query chooses) is
+     * deleted before the cycle runs. Validation drops the now-missing dominant project, so the
+     * dataset falls back to the Default Project — it is not reassigned to the surviving
+     * lower-count project, and it is not counted as a dominant assignment.
+     */
+    @Test
+    void migrateMultiProjectDatasetToDefaultProjectWhenDominantProjectWasDeleted() {
+        var apiKey = randomName("api-key");
+        var workspaceName = randomName("workspace");
+        var workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
+
+        var defaultProjectId = createProject(apiKey, workspaceName, ProjectService.DEFAULT_PROJECT);
+
+        var dominantProjectName = randomName("project");
+        var dominantProjectId = createProject(apiKey, workspaceName, dominantProjectName);
+        var minorityProjectName = randomName("project");
+        createProject(apiKey, workspaceName, minorityProjectName);
+
+        var datasetName = randomName("dataset");
+        var datasetId = createOrphanDataset(apiKey, workspaceName, datasetName);
+        // Dominant project (2 experiments) beats the minority project (1) by count.
+        seedTracedExperiment(apiKey, workspaceName, datasetName, dominantProjectName);
+        seedTracedExperiment(apiKey, workspaceName, datasetName, dominantProjectName);
+        seedTracedExperiment(apiKey, workspaceName, datasetName, minorityProjectName);
+
+        // Delete the dominant project: the query still infers it, but validation drops it.
+        projectResourceClient.deleteProject(dominantProjectId, apiKey, workspaceName);
+
+        migrationService.runMigrationCycle().block();
+
+        assertWorkspaceVersion(apiKey, workspaceName, OpikVersion.VERSION_2);
+        assertDatasetMigrated(apiKey, workspaceName, datasetId, defaultProjectId);
     }
 
     @Test
@@ -535,11 +628,5 @@ class DatasetProjectMigrationServiceTest {
     private void assertDatasetUnchanged(String apiKey, String workspaceName, UUID datasetId) {
         var actual = datasetResourceClient.getDatasetById(datasetId, apiKey, workspaceName);
         assertThat(actual.projectId()).isNull();
-    }
-
-    private void assertWorkspaceTrapped(WorkspacesService workspacesService, String workspaceId, String reason) {
-        assertThat(workspacesService.findDatasetProjectMigrationSkippedWorkspaceIds()).contains(workspaceId);
-        assertThat(workspacesService.findById(workspaceId))
-                .hasValueSatisfying(w -> assertThat(w.datasetProjectMigrationSkipReason()).isEqualTo(reason));
     }
 }

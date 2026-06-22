@@ -2,6 +2,10 @@ package com.comet.opik.api.sorting;
 
 import lombok.experimental.UtilityClass;
 
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+
 @UtilityClass
 public class SortableFields {
 
@@ -59,4 +63,31 @@ public class SortableFields {
     public static final String TEMPLATE = "template";
     public static final String CHANGE_DESCRIPTION = "change_description";
     public static final String ENVIRONMENT = "environment";
+    public static final String LAST_SEEN = "last_seen";
+    public static final String TOTAL_OCCURRENCES = "total_occurrences";
+    public static final String SEVERITY = "severity";
+
+    /** Wide text columns deferred past pagination by the TraceDAO/SpanDAO page_wide optimization. */
+    private static final Set<String> WIDE_TEXT_FIELDS = Set.of(INPUT, OUTPUT, METADATA);
+
+    /**
+     * Whether any sort targets a wide text column (input/output/metadata), including dynamic JSON keys such as
+     * "input.foo". When true, those columns must be kept in the pre-pagination scan (the *_deduped CTE) so the
+     * paginating ORDER BY can resolve them; otherwise they are dropped and re-read only for the page via page_wide.
+     * Operates on the structured sort fields (not rendered SQL) so a sortable field whose name merely contains
+     * "input"/"output"/"metadata" cannot trigger a false match.
+     */
+    public boolean sortsByWideTextColumn(List<SortingField> sortingFields) {
+        return Optional.ofNullable(sortingFields).orElseGet(List::of).stream()
+                .map(SortingField::field)
+                .anyMatch(field -> WIDE_TEXT_FIELDS.contains(baseField(field)));
+    }
+
+    private String baseField(String field) {
+        if (field == null) {
+            return "";
+        }
+        int dot = field.indexOf('.');
+        return dot >= 0 ? field.substring(0, dot) : field;
+    }
 }

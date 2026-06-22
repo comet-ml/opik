@@ -26,10 +26,10 @@ import EmptyPageLayout from "@/v2/layout/EmptyPageLayout/EmptyPageLayout";
 import ProjectPage from "@/v2/pages/ProjectPage/ProjectPage";
 import ProjectsPage from "@/v2/pages/ProjectsPage/ProjectsPage";
 import LogsPage from "@/v2/pages/LogsPage/LogsPage";
-import WorkspacePage from "@/v2/pages/WorkspacePage/WorkspacePage";
 import RedirectProjects from "@/v2/redirect/RedirectProjects";
 import RedirectDatasets from "@/v2/redirect/RedirectDatasets";
 import { createV1RedirectRoutes } from "@/v2/redirect/v1RedirectConfig";
+import usePluginsStore from "@/store/PluginsStore";
 const PlaygroundPage = lazy(
   () => import("@/v2/pages/PlaygroundPage/PlaygroundPage"),
 );
@@ -40,10 +40,10 @@ import AutomationLogsPage from "@/v2/pages/AutomationLogsPage/AutomationLogsPage
 import OnlineEvaluationPage from "@/v2/pages/OnlineEvaluationPage/OnlineEvaluationPage";
 import AnnotationQueuesPage from "@/v2/pages/AnnotationQueuesPage/AnnotationQueuesPage";
 import AnnotationQueuePage from "@/v2/pages/AnnotationQueuePage/AnnotationQueuePage";
-import AgentConfigurationPage from "@/v2/pages/AgentConfigurationPage/AgentConfigurationPage";
 import AgentRunnerPage from "@/v2/pages/AgentRunnerPage/AgentRunnerPage";
 import PairingPage from "@/v2/pages/PairingPage/PairingPage";
 import PairRouteVersionGuard from "@/shared/WorkspaceVersionResolver/PairRouteVersionGuard";
+import { createOAuthConsentRoute } from "@/shared/OAuthConsentPage/createOAuthConsentRoute";
 import OptimizationsPage from "@/v2/pages/OptimizationsPage/OptimizationsPage";
 import OptimizationsNewPage from "@/v2/pages/OptimizationsPage/OptimizationsNewPage/OptimizationsNewPage";
 import OptimizationPage from "@/v2/pages/OptimizationPage/OptimizationPage";
@@ -60,8 +60,11 @@ import DatasetDetailPage from "@/v2/pages-shared/datasets/DatasetDetailPage/Data
 import TestSuitesPage from "@/v2/pages/TestSuitesPage/TestSuitesPage";
 import TestSuiteItemsPage from "@/v2/pages/TestSuiteItemsPage/TestSuiteItemsPage";
 import DatasetItemsPage from "@/v2/pages/DatasetItemsPage/DatasetItemsPage";
+import PromptsPage from "@/v2/pages/PromptsPage/PromptsPage";
+import PromptPage from "@/v2/pages/PromptPage/PromptPage";
 
 import OlliePage from "@/v2/pages/OlliePage/OlliePage";
+import ProjectHomePage from "@/v2/pages/ProjectHomePage/ProjectHomePage";
 import TracesTabRedirect from "@/v2/redirect/TracesTabRedirect";
 import ProjectDashboardsPage from "@/v2/pages/ProjectDashboardsPage/ProjectDashboardsPage";
 
@@ -135,6 +138,11 @@ const pairingRouteOssAlias = createRoute({
   component: PairRouteComponent,
 });
 
+// ----------- MCP OAuth consent (root-level, no workspace guard, no layout)
+// Browser lands here after the backend's GET /oauth/authorize 302-redirects with the OAuth
+// request parameters preserved. The page reads them from window.location.search.
+const oauthConsentRoute = createOAuthConsentRoute(rootRoute);
+
 // ----------- base redirect
 const baseRoute = createRoute({
   path: "/",
@@ -157,7 +165,17 @@ const homeRoute = createRoute({
 const workspaceRoute = createRoute({
   path: "/$workspaceName",
   getParentRoute: () => workspaceGuardRoute,
-  component: WorkspacePage,
+});
+
+const workspaceIndexRoute = createRoute({
+  path: "/",
+  getParentRoute: () => workspaceRoute,
+  component: () => (
+    <Navigate
+      to="/$workspaceName/home"
+      params={{ workspaceName: useAppStore.getState().activeWorkspaceName }}
+    />
+  ),
 });
 
 // ----------- quickstart
@@ -210,12 +228,11 @@ const projectScopedRoute = createRoute({
   },
 });
 
-// TODO: OPIK-6260 - Restore ProjectHomePage as /home component once home page redesign is complete
-// ----------- project home (project-scoped) — temporarily shows Ollie
+// ----------- project home (project-scoped)
 const projectHomeRoute = createRoute({
   path: "/home",
   getParentRoute: () => projectScopedRoute,
-  component: OlliePage,
+  component: ProjectHomePage,
 });
 
 // ----------- ollie (project-scoped)
@@ -346,6 +363,30 @@ const testSuiteItemsRoute = createRoute({
   component: TestSuiteItemsPage,
 });
 
+// ----------- prompts (project-scoped)
+const promptsRoute = createRoute({
+  path: "/prompts",
+  getParentRoute: () => projectScopedRoute,
+  staticData: {
+    title: "Prompt library",
+  },
+});
+
+const promptsListRoute = createRoute({
+  path: "/",
+  getParentRoute: () => promptsRoute,
+  component: PromptsPage,
+});
+
+const promptRoute = createRoute({
+  path: "/$promptId",
+  getParentRoute: () => promptsRoute,
+  component: PromptPage,
+  staticData: {
+    param: "promptId",
+  },
+});
+
 // ----------- playground (project-scoped)
 const playgroundRoute = createRoute({
   path: "/playground",
@@ -422,16 +463,6 @@ const trialRoute = createRoute({
     param: "trial",
     paramValue: "trials",
   },
-});
-
-// ----------- agent configuration (project-scoped)
-const agentConfigurationRoute = createRoute({
-  path: "/agent-configuration",
-  getParentRoute: () => projectScopedRoute,
-  staticData: {
-    title: "Agent configuration",
-  },
-  component: AgentConfigurationPage,
 });
 
 // ----------- agent runner (project-scoped)
@@ -592,6 +623,10 @@ const automationLogsRoute = createRoute({
 
 const v1RedirectRoutes = createV1RedirectRoutes(workspaceRoute);
 
+const pluginWorkspaceGuardRoutes = usePluginsStore
+  .getState()
+  .collectRoutes({ workspaceGuard: workspaceGuardRoute });
+
 // ═══════════════════════════════════════════════════════════════
 // ROUTE TREE
 // ═══════════════════════════════════════════════════════════════
@@ -599,6 +634,7 @@ const v1RedirectRoutes = createV1RedirectRoutes(workspaceRoute);
 const routeTree = rootRoute.addChildren([
   pairingRoute,
   pairingRouteOssAlias,
+  oauthConsentRoute,
   workspaceGuardEmptyLayoutRoute.addChildren([automationLogsRoute]),
   workspaceGuardPartialLayoutRoute.addChildren([
     quickstartRoute,
@@ -609,6 +645,7 @@ const routeTree = rootRoute.addChildren([
     baseRoute,
     homeRoute,
     workspaceRoute.addChildren([
+      workspaceIndexRoute,
       // Projects: workspace-level list + project-scoped routes
       projectsRoute.addChildren([
         projectsListRoute,
@@ -630,6 +667,7 @@ const routeTree = rootRoute.addChildren([
             testSuitesListRoute,
             testSuiteRoute.addChildren([testSuiteItemsRoute]),
           ]),
+          promptsRoute.addChildren([promptsListRoute, promptRoute]),
           playgroundRoute.addChildren([playgroundIndexRoute]),
           optimizationsRoute.addChildren([
             optimizationsListRoute,
@@ -637,7 +675,6 @@ const routeTree = rootRoute.addChildren([
             optimizationCompareRedirectRoute,
             optimizationBaseRoute.addChildren([optimizationRoute, trialRoute]),
           ]),
-          agentConfigurationRoute,
           agentRunnerRoute,
           onlineEvaluationRoute,
           annotationQueuesRoute.addChildren([
@@ -661,6 +698,7 @@ const routeTree = rootRoute.addChildren([
 
       // V1 compat redirects (workspace-level → project-scoped)
       ...v1RedirectRoutes,
+      ...pluginWorkspaceGuardRoutes,
     ]),
   ]),
 ]);

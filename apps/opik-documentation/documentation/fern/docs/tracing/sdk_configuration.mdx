@@ -5,6 +5,7 @@ og:description: Configure Python and TypeScript SDKs effectively. Set up your AP
 og:site_name: Opik Documentation
 og:title: SDK Configuration Guide - Opik
 title: SDK configuration
+canonical-url: https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration
 ---
 
 # SDK Configuration
@@ -117,7 +118,7 @@ Both SDKs support environment variables for configuration. Here's a comparison o
 | Workspace           | `OPIK_WORKSPACE`             | `OPIK_WORKSPACE`        | Workspace name                                 |
 | Config Path         | `OPIK_CONFIG_PATH`           | `OPIK_CONFIG_PATH`      | Custom config file location                    |
 | Default LLM         | `OPIK_DEFAULT_LLM`           | N/A                     | Default model used by Python evaluation/simulation helpers |
-| Track Disable       | `OPIK_TRACK_DISABLE`         | N/A                     | Disable tracking (Python only)                 |
+| Track Disable       | `OPIK_TRACK_DISABLE`         | `OPIK_TRACK_DISABLE`    | Disable tracing of traces and spans            |
 | Flush Timeout       | `OPIK_DEFAULT_FLUSH_TIMEOUT` | N/A                     | Default flush timeout (Python only)            |
 | TLS Certificate     | `OPIK_CHECK_TLS_CERTIFICATE` | N/A                     | Check TLS certificates (Python only)           |
 | Batch Delay         | N/A                          | `OPIK_BATCH_DELAY_MS`   | Batching delay in ms (TypeScript only)         |
@@ -452,6 +453,7 @@ await flushAll();
 | projectName        | `OPIK_PROJECT_NAME`     | The project name - Defaults to `Default Project`                     |
 | batchDelayMs       | `OPIK_BATCH_DELAY_MS`   | Batching delay in milliseconds - Defaults to `300`                   |
 | holdUntilFlush     | `OPIK_HOLD_UNTIL_FLUSH` | Hold data until manual flush - Defaults to `false`                   |
+| trackDisable       | `OPIK_TRACK_DISABLE`    | Disable tracing of traces and spans - Defaults to `false`            |
 | N/A                | `OPIK_LOG_LEVEL`        | Logging level - Defaults to `INFO`                                   |
 | N/A                | `OPIK_CONFIG_PATH`      | Custom config file location                                          |
 

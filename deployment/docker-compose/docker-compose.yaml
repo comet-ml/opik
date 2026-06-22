@@ -39,7 +39,7 @@ services:
       - clickhouse-config:/config
     command: |
       sh -c "
-        cp -r /clickhouse_config_files/* /config/ && 
+        cp -r /clickhouse_config_files/* /config/ &&
         chown -R 1000:1000 /config
       "
   clickhouse:
@@ -131,12 +131,12 @@ services:
       sleep 10s;
       /usr/bin/mc alias set s3 http://minio:9000 ${MINIO_ROOT_USER:-THAAIOSFODNN7EXAMPLE} ${MINIO_ROOT_PASSWORD:-LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY} --api S3v4 ;
       /usr/bin/mc mb --ignore-existing s3/public;
-      /usr/bin/mc anonymous set download s3/public/;       
+      /usr/bin/mc anonymous set download s3/public/;
       "
 
   backend:
     image: ghcr.io/comet-ml/opik/opik-backend:${OPIK_VERSION:-latest}
-    pull_policy: always
+    pull_policy: ${OPIK_BACKEND_PULL_POLICY:-always}
     profiles:
       - backend
       - opik
@@ -147,7 +147,7 @@ services:
       args:
         OPIK_VERSION: ${OPIK_VERSION:-latest}
     hostname: backend
-    command: [ "bash", "-c", "./run_db_migrations.sh && ./entrypoint.sh" ]
+    command: [ "bash", "-c", "./run_db_migrations.sh && ./provision_agent_insights_readonly_user.sh && ./entrypoint.sh" ]
     environment:
       # WARNING: Do not set OPIK_VERSION as env var here. It's a multi-stage build, so build and runtime values can differ.
       DOCKER_BUILDKIT: 1
@@ -167,6 +167,11 @@ services:
       ANALYTICS_DB_DATABASE_NAME: opik
       ANALYTICS_DB_USERNAME: opik
       ANALYTICS_DB_PASS: opik
+      # Agent Insights read-only freeform SQL (default off). When true, the backend provisions the restricted
+      # read-only user (provision_agent_insights_readonly_user.sh, after migrations) and connects as it.
+      TOGGLE_AGENT_INSIGHTS_ENABLED: ${TOGGLE_AGENT_INSIGHTS_ENABLED:-"false"}
+      ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_USER: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_USER:-comet_readonly_freeform_sql_user}
+      ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_PASS: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_PASS:-opik}
       JAVA_OPTS: "-Dliquibase.propertySubstitutionEnabled=true -XX:+UseG1GC -XX:MaxRAMPercentage=80.0"
       REDIS_URL: redis://:opik@redis:6379/
       OPIK_OTEL_SDK_ENABLED: ${OPIK_OTEL_SDK_ENABLED:-false}
@@ -190,7 +195,7 @@ services:
       TOGGLE_GUARDRAILS_ENABLED: ${TOGGLE_GUARDRAILS_ENABLED:-"false"}
       TOGGLE_OPTIMIZATION_STUDIO_ENABLED: ${TOGGLE_OPTIMIZATION_STUDIO_ENABLED:-"false"}
       TOGGLE_WELCOME_WIZARD_ENABLED: ${TOGGLE_WELCOME_WIZARD_ENABLED:-"true"}
-      TOGGLE_FORCE_WORKSPACE_VERSION: ${TOGGLE_FORCE_WORKSPACE_VERSION:-"disabled"}
+      TOGGLE_FORCE_WORKSPACE_VERSION: ${TOGGLE_FORCE_WORKSPACE_VERSION:-"version_2"}
       LLM_MODEL_REGISTRY_DEFAULT_RESOURCE: ${LLM_MODEL_REGISTRY_DEFAULT_RESOURCE:-llm-models-default.yaml}
       LLM_MODEL_REGISTRY_LOCAL_OVERRIDE_PATH: ${LLM_MODEL_REGISTRY_LOCAL_OVERRIDE_PATH:-}
       LLM_MODEL_REGISTRY_REMOTE_ENABLED: ${LLM_MODEL_REGISTRY_REMOTE_ENABLED:-"false"}
@@ -247,10 +252,6 @@ services:
       OPIK_VERSION: ${OPIK_VERSION:-latest}
       OPIK_REVERSE_PROXY_URL: ${OPIK_REVERSE_PROXY_URL:-http://frontend:${NGINX_PORT:-5173}/api}
       PYTHON_BACKEND_PORT: ${PYTHON_BACKEND_PORT:-8000}
-      # LLM API Keys for Optimizer
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       # Redis Configuration
       REDIS_URL: redis://:opik@redis:6379/0
       RQ_WORKER_ENABLED: ${RQ_WORKER_ENABLED:-true}
@@ -275,7 +276,7 @@ services:
 
   guardrails-backend:
     image: ghcr.io/comet-ml/opik/opik-guardrails-backend:${OPIK_VERSION:-latest}
-    pull_policy: always
+    pull_policy: ${OPIK_GUARDRAILS_BACKEND_PULL_POLICY:-always}
     profiles:
       - guardrails
     build:
@@ -360,7 +361,7 @@ services:
       OTEL_COLLECTOR_PORT: ${OTEL_COLLECTOR_PORT:-4317}
       # NGINX_EXTRA_ACCESS_LOG: access_log syslog:server=otel-collector:5140 logger-json;
       # NGINX_EXTRA_ERROR_LOG: error_log syslog:server=otel-collector:5140 error;
-      
+
   # Jaeger - receives traces via OTLP
   jaeger:
     image: jaegertracing/all-in-one:latest

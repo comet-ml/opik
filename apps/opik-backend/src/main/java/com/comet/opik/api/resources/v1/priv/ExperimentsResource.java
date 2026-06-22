@@ -38,6 +38,7 @@ import com.comet.opik.domain.ExperimentItemService;
 import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.Streamer;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -510,16 +511,13 @@ public class ExperimentsResource {
             "Maximum request size is 4MB.", responses = {
                     @ApiResponse(responseCode = "204", description = "No content"),
                     @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-                    @ApiResponse(responseCode = "409", description = "Experiment dataset mismatch", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+                    @ApiResponse(responseCode = "409", description = "Conflict", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
                     @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = com.comet.opik.api.error.ErrorMessage.class))),
             })
     @RateLimited
     @UsageLimited
     public Response experimentItemsBulk(
             @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentItemBulkUpload.class))) @NotNull @Valid @JsonView(ExperimentItemBulkUpload.View.ExperimentItemBulkWriteView.class) ExperimentItemBulkUpload request) {
-
-        String workspaceId = requestContext.get().getWorkspaceId();
-        String userName = requestContext.get().getUserName();
 
         log.info("Recording experiment items in bulk, count '{}', experimentId '{}'", request.items().size(),
                 request.experimentId());
@@ -537,18 +535,40 @@ public class ExperimentsResource {
                 .id(request.experimentId())
                 .datasetName(request.datasetName())
                 .name(request.experimentName())
+                .projectName(request.projectName())
                 .build();
 
-        experimentItemBulkIngestionService.ingest(experiment, items)
-                .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
-                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+        // The service resolves the project (explicit project_name, else derived from the existing experiment
+        // or dataset, else the default project) and reports which deprecated fallback (if any) it used.
+        ExperimentItemBulkIngestionService.ProjectFallback fallback = experimentItemBulkIngestionService
+                .ingest(experiment, request.projectName(), items)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .retryWhen(RetryUtils.handleConnectionError())
                 .block();
 
         log.info("Recorded experiment items in bulk, count '{}', experimentId '{}'", request.items().size(),
                 request.experimentId());
 
-        return Response.noContent().build();
+        Response.ResponseBuilder responseBuilder = Response.noContent();
+
+        // Surface the deprecated implicit-fallback as the X-Opik-Deprecation header (on the request thread, so
+        // the request-scoped fallback message can be set/read safely — same mechanism as other resources).
+        switch (fallback) {
+            case DATASET -> {
+                requestContext.get().setWorkspaceFallbackFor("Dataset", request.datasetName());
+                responseBuilder.header(RequestContext.WORKSPACE_FALLBACK_HEADER,
+                        requestContext.get().getWorkspaceFallbackMessage());
+            }
+            case DEFAULT -> responseBuilder.header(RequestContext.WORKSPACE_FALLBACK_HEADER,
+                    ("project_name could not be resolved; traces without a project were placed in the default "
+                            + "project '%s'. This fallback is deprecated, please provide project_name.")
+                            .formatted(ProjectService.DEFAULT_PROJECT));
+            case NONE -> {
+                // no deprecation
+            }
+        }
+
+        return responseBuilder.build();
     }
 
     @GET

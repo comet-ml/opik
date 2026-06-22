@@ -21,6 +21,41 @@ async function globalTeardown() {
 
   console.log(`[global-teardown] Sweeping entities with prefix ${prefix}`);
 
+  /** Sweep order: experiments → datasets → projects. Experiments reference datasets which reference projects. */
+  try {
+    const experiments = await backend.listExperimentsWithPrefix(prefix);
+    if (experiments.length === 0) {
+      console.log('  no experiments to sweep');
+    }
+    for (const e of experiments) {
+      try {
+        await backend.deleteExperiment(e.id);
+        console.log(`  deleted experiment ${e.name}`);
+      } catch (err) {
+        console.warn(`  experiment ${e.name} delete warning:`, err);
+      }
+    }
+  } catch (err) {
+    console.warn('[global-teardown] experiment sweep warning:', err);
+  }
+
+  try {
+    const datasets = await backend.listDatasetsWithPrefix(prefix);
+    if (datasets.length === 0) {
+      console.log('  no datasets to sweep');
+    }
+    for (const d of datasets) {
+      try {
+        await backend.deleteDataset(d.id);
+        console.log(`  deleted dataset ${d.name}`);
+      } catch (e) {
+        console.warn(`  dataset ${d.name} delete warning:`, e);
+      }
+    }
+  } catch (e) {
+    console.warn('[global-teardown] dataset sweep warning:', e);
+  }
+
   try {
     const projects = await backend.listProjectsWithPrefix(prefix);
     if (projects.length === 0) {

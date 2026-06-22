@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @UtilityClass
 public class CommentAssertionUtils {
     public static final String[] IGNORED_FIELDS_COMMENTS = {"id", "createdAt", "lastUpdatedAt", "createdBy",
-            "lastUpdatedBy"};
+            "lastUpdatedBy", "sourceQueueId"};
 
     public static void assertComment(Comment expected, Comment actual) {
         assertThat(actual)

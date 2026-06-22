@@ -24,7 +24,13 @@ public class OpikConfiguration extends JobConfiguration {
     private DatabaseAnalyticsFactory databaseAnalytics = new DatabaseAnalyticsFactory();
 
     @Valid @NotNull @JsonProperty
+    private DatabaseAnalyticsReadOnlyFreeFormSqlConfig databaseAnalyticsReadOnlyFreeFormSql = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
+
+    @Valid @NotNull @JsonProperty
     private AuthenticationConfig authentication = new AuthenticationConfig();
+
+    @Valid @NotNull @JsonProperty
+    private McpOAuthConfig mcpOAuth = new McpOAuthConfig();
 
     @Valid @NotNull @JsonProperty
     private RedisConfig redis = new RedisConfig();
@@ -68,6 +74,9 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private DatasetExportConfig datasetExport = new DatasetExportConfig();
+
+    @Valid @NotNull @JsonProperty
+    private AgentInsightsReportConfig agentInsightsReport = new AgentInsightsReportConfig();
 
     @Valid @NotNull @JsonProperty
     private ClickHouseLogAppenderConfig clickHouseLogAppender = new ClickHouseLogAppenderConfig();
@@ -124,6 +133,9 @@ public class OpikConfiguration extends JobConfiguration {
     private DatasetVersioningMigrationConfig datasetVersioningMigration = new DatasetVersioningMigrationConfig();
 
     @Valid @NotNull @JsonProperty
+    private DatasetVersioningConfig datasetVersioning = DatasetVersioningConfig.builder().build();
+
+    @Valid @NotNull @JsonProperty
     private MigrationConfig migration = new MigrationConfig();
 
     @Valid @NotNull @JsonProperty
@@ -132,6 +144,11 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private DatasetProjectMigrationConfig datasetProjectMigration = DatasetProjectMigrationConfig.builder()
+            .build();
+
+    @Valid @NotNull @JsonProperty
+    private OptimizationProjectMigrationConfig optimizationProjectMigration = OptimizationProjectMigrationConfig
+            .builder()
             .build();
 
     @Valid @NotNull @JsonProperty
@@ -148,6 +165,9 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private LocalRunnerConfig localRunner = new LocalRunnerConfig();
+
+    @Valid @NotNull @JsonProperty
+    private StreamConsumerReaperConfig streamConsumerReaper = StreamConsumerReaperConfig.builder().build();
 
     @Valid @NotNull @JsonProperty
     private ExperimentAggregatesConfig experimentAggregates = new ExperimentAggregatesConfig();
@@ -172,4 +192,7 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private EnvironmentConfig environment = new EnvironmentConfig();
+
+    @Valid @NotNull @JsonProperty
+    private ReportGenerationConfig reportGeneration = new ReportGenerationConfig();
 }

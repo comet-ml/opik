@@ -195,14 +195,11 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
             when(pythonEvaluatorService.evaluateThread(eq(message.code().metric()), any()))
                     .thenReturn(Mono.just(List.of(pythonScore)));
             when(feedbackScoreService.scoreBatchOfThreads(any())).thenReturn(Mono.empty());
-            when(traceThreadService.setScoredAt(eq(projectId), eq(List.of(threadId)), any()))
-                    .thenReturn(Mono.empty());
 
             scorer.score(message).block();
 
             var captor = ArgumentCaptor.forClass(List.class);
             verify(feedbackScoreService).scoreBatchOfThreads(captor.capture());
-            verify(traceThreadService).setScoredAt(eq(projectId), eq(List.of(threadId)), any());
 
             assertThat(captor.getValue()).usingRecursiveComparison().isEqualTo(List.of(
                     threadScore("test_score", BigDecimal.valueOf(0.95), "test reason", project)));
@@ -231,8 +228,6 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
             when(pythonEvaluatorService.evaluateThread(eq(message.code().metric()), any()))
                     .thenReturn(Mono.just(List.of(pythonScore)));
             when(feedbackScoreService.scoreBatchOfThreads(any())).thenReturn(Mono.empty());
-            when(traceThreadService.setScoredAt(eq(projectId), eq(List.of(threadId)), any()))
-                    .thenReturn(Mono.empty());
             // Toggle off — the scorer should not even ask the SpanService.
             when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(false);
 
@@ -279,8 +274,6 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
             when(pythonEvaluatorService.evaluateThread(eq(message.code().metric()), contextCaptor.capture()))
                     .thenReturn(Mono.just(List.of(pythonScore)));
             when(feedbackScoreService.scoreBatchOfThreads(any())).thenReturn(Mono.empty());
-            when(traceThreadService.setScoredAt(eq(projectId), eq(List.of(threadId)), any()))
-                    .thenReturn(Mono.empty());
 
             scorer.score(message).block();
 
@@ -301,8 +294,6 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
             var message = sampleMessage();
 
             when(traceService.search(anyInt(), any(TraceSearchCriteria.class))).thenReturn(Flux.empty());
-            when(traceThreadService.setScoredAt(eq(projectId), eq(List.of(threadId)), any()))
-                    .thenReturn(Mono.empty());
 
             scorer.score(message).block();
 
@@ -320,8 +311,6 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
             when(traceService.search(anyInt(), any(TraceSearchCriteria.class)))
                     .thenReturn(Flux.just(sampleTrace()), Flux.empty());
             when(traceThreadService.getThreadModelId(projectId, threadId)).thenReturn(Mono.empty());
-            when(traceThreadService.setScoredAt(eq(projectId), eq(List.of(threadId)), any()))
-                    .thenReturn(Mono.empty());
 
             scorer.score(message).block();
 
@@ -340,8 +329,6 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
             when(traceThreadService.getThreadModelId(projectId, threadId)).thenReturn(Mono.just(threadModelId));
             when(automationRuleEvaluatorService.findById(ruleId, Set.of(projectId), workspaceId))
                     .thenThrow(new NotFoundException("rule not found"));
-            when(traceThreadService.setScoredAt(eq(projectId), eq(List.of(threadId)), any()))
-                    .thenReturn(Mono.empty());
 
             scorer.score(message).block();
 

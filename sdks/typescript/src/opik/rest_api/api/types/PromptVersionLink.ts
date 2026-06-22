@@ -3,6 +3,8 @@
 export interface PromptVersionLink {
     id: string;
     commit?: string;
+    /** sequential version number in the format v<N>; null for masks */
+    versionNumber?: string;
     promptId?: string;
     promptName?: string;
 }

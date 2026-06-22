@@ -3,7 +3,11 @@ package com.comet.opik.utils;
 import jakarta.ws.rs.BadRequestException;
 import org.apache.commons.lang3.StringUtils;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.UUID;
 
 public class ValidationUtils {
@@ -59,6 +63,20 @@ public class ValidationUtils {
         }
     }
 
+    public static void validateDateRangeParameters(LocalDate fromDate, LocalDate toDate) {
+        // both are optional, but if both are provided, from_date must not be after to_date (equal is a single-day window)
+        if (fromDate != null && toDate != null && fromDate.isAfter(toDate)) {
+            throw new BadRequestException(
+                    "Parameter 'from_date' must not be after 'to_date'");
+        }
+        // when to_date is omitted it defaults to the current day, so a future from_date describes an empty window;
+        // reject it explicitly (an explicit future to_date is a valid forward-looking window)
+        if (fromDate != null && toDate == null && fromDate.isAfter(LocalDate.now(ZoneOffset.UTC))) {
+            throw new BadRequestException(
+                    "Parameter 'from_date' must not be in the future");
+        }
+    }
+
     /**
      * Validates that a URL is not null/empty and starts with http:// or https://.
      *
@@ -73,6 +91,22 @@ public class ValidationUtils {
 
         if (!url.trim().startsWith("http://") && !url.trim().startsWith("https://")) {
             throw new IllegalArgumentException(urlType + " must start with http:// or https://");
+        }
+    }
+
+    /**
+     * Checks whether a string is a syntactically valid, absolute URI.
+     * @return {@code true} if non-null and parses to an absolute URI, {@code false} otherwise
+     */
+    public static boolean isAbsoluteUri(String value) {
+        if (value == null) {
+            return false;
+        }
+
+        try {
+            return new URI(value).isAbsolute();
+        } catch (URISyntaxException e) {
+            return false;
         }
     }
 

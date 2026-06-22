@@ -733,6 +733,49 @@ class DashboardsResourceTest {
         }
 
         @Test
+        @DisplayName("Sort by name with pagination returns every page's content in order")
+        void findDashboards__whenSortingByNameWithPagination__thenReturnEachPageContentInSortedOrder() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Random names (from the generated dashboards) mean the name order differs from id/creation
+            // order, so the two-step fetch's in-memory reorder is exercised under a non-id sort (OPIK-6482).
+            // Creation order is irrelevant (results are re-sorted by name), so create in parallel.
+            List<Dashboard> created = PodamFactoryUtils.manufacturePojoList(podamFactory, Dashboard.class)
+                    .parallelStream()
+                    .map(generated -> dashboardResourceClient.createPartialDashboard().name(generated.name()).build())
+                    .map(dashboard -> {
+                        var id = dashboardResourceClient.create(dashboard, apiKey, workspaceName);
+                        return dashboardResourceClient.get(id, apiKey, workspaceName, HttpStatus.SC_OK);
+                    })
+                    .toList();
+
+            List<Dashboard> sortedByName = created.stream()
+                    .sorted(Comparator.comparing(Dashboard::name, String.CASE_INSENSITIVE_ORDER))
+                    .toList();
+
+            var sorting = SortingField.builder().field("name").direction(Direction.ASC).build();
+
+            // Traverse the whole result set page by page; assert each page's full content (recursive
+            // comparison, not just ids) matches the corresponding slice of the name-sorted list.
+            int size = 2;
+            int totalPages = (sortedByName.size() + size - 1) / size;
+            for (int page = 1; page <= totalPages; page++) {
+                List<Dashboard> expectedPage = sortedByName.stream()
+                        .skip((long) (page - 1) * size)
+                        .limit(size)
+                        .toList();
+
+                var resultPage = dashboardResourceClient.find(apiKey, workspaceName, page, size, null,
+                        List.of(sorting), HttpStatus.SC_OK);
+
+                assertDashboardPage(resultPage, page, expectedPage.size(), expectedPage);
+            }
+        }
+
+        @Test
         @DisplayName("Default sorting without sorting parameter")
         void defaultSortingWithoutSortingParameter() {
             String apiKey = UUID.randomUUID().toString();

@@ -1,23 +1,32 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Span;
+import com.comet.opik.podam.PodamFactoryUtils;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.google.protobuf.ByteString;
 import io.opentelemetry.proto.common.v1.AnyValue;
 import io.opentelemetry.proto.common.v1.KeyValue;
+import io.opentelemetry.proto.trace.v1.Status;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
+import uk.co.jemos.podam.api.PodamFactory;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class OpenTelemetryMapperTest {
+
+    private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
     @Test
     void testThreadIdMappingRule() {
@@ -216,6 +225,73 @@ class OpenTelemetryMapperTest {
         assertThat(span.input()).isNull();
     }
 
+    @ParameterizedTest(name = "gen_ai.usage.cost as {0} -> {2}")
+    @MethodSource("genAiUsageCostCases")
+    void genAiUsageCostExtractedIntoTotalEstimatedCost(String label, AnyValue costValue, BigDecimal expected) {
+        // Pre-computed cost from gen_ai.usage.cost lands on the span's totalEstimatedCost for every
+        // supported value shape. Malformed values (non-finite doubles, unparseable strings) are
+        // skipped so they never abort span enrichment. Sibling token attributes still populate the
+        // integer-only usage map without a 'cost' key — guarding against the original bug where the
+        // double cost was routed there and silently dropped.
+        var attributes = List.of(
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.usage.cost")
+                        .setValue(costValue)
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.usage.prompt_tokens")
+                        .setValue(AnyValue.newBuilder().setIntValue(100))
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.usage.completion_tokens")
+                        .setValue(AnyValue.newBuilder().setIntValue(50))
+                        .build());
+
+        var spanBuilder = newSpanBuilder();
+
+        OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+
+        var span = spanBuilder.build();
+
+        if (expected == null) {
+            assertThat(span.totalEstimatedCost()).isNull();
+        } else {
+            assertThat(span.totalEstimatedCost()).isEqualByComparingTo(expected);
+        }
+        assertThat(span.usage()).doesNotContainKey("cost");
+        assertThat(span.usage().get("prompt_tokens")).isEqualTo(100);
+        assertThat(span.usage().get("completion_tokens")).isEqualTo(50);
+    }
+
+    static Stream<Arguments> genAiUsageCostCases() {
+        return Stream.of(
+                Arguments.of("double", AnyValue.newBuilder().setDoubleValue(0.001234).build(),
+                        new BigDecimal("0.001234")),
+                Arguments.of("int", AnyValue.newBuilder().setIntValue(1).build(),
+                        new BigDecimal("1")),
+                Arguments.of("numeric string", AnyValue.newBuilder().setStringValue("0.005").build(),
+                        new BigDecimal("0.005")),
+                Arguments.of("numeric string with whitespace",
+                        AnyValue.newBuilder().setStringValue("  0.005  ").build(),
+                        new BigDecimal("0.005")),
+                Arguments.of("non-numeric string",
+                        AnyValue.newBuilder().setStringValue("not a number").build(), null),
+                Arguments.of("NaN", AnyValue.newBuilder().setDoubleValue(Double.NaN).build(), null),
+                Arguments.of("positive infinity",
+                        AnyValue.newBuilder().setDoubleValue(Double.POSITIVE_INFINITY).build(), null),
+                Arguments.of("negative infinity",
+                        AnyValue.newBuilder().setDoubleValue(Double.NEGATIVE_INFINITY).build(), null));
+    }
+
+    private Span.SpanBuilder newSpanBuilder() {
+        // PODAM fills in id / traceId / projectId / startTime and every other field with random
+        // values; null out totalEstimatedCost because enrich only sets it on successful extraction,
+        // so the malformed/non-finite cost cases would otherwise inherit PODAM's random BigDecimal.
+        return podamFactory.manufacturePojo(Span.class)
+                .toBuilder()
+                .totalEstimatedCost(null);
+    }
+
     @Test
     void testOldAndNewGenAiAttributesCoexist() {
         var attributes = List.of(
@@ -277,6 +353,124 @@ class OpenTelemetryMapperTest {
 
         assertThat(span.metadata().has("gen_ai.tool.name")).isTrue();
         assertThat(span.metadata().has("gen_ai.tool.call.id")).isTrue();
+    }
+
+    @Test
+    void testLogfireLevelNumIsDroppedNotLeakedIntoInput() {
+        // logfire's internal severity attribute appears on warning/error spans; it must not
+        // pollute the span input.
+        var attributes = List.of(
+                KeyValue.newBuilder()
+                        .setKey("logfire.level_num")
+                        .setValue(AnyValue.newBuilder().setIntValue(17))
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("tool_arguments")
+                        .setValue(AnyValue.newBuilder().setStringValue("{\"query\":\"x\"}"))
+                        .build());
+
+        var spanBuilder = Span.builder()
+                .id(UUID.randomUUID())
+                .traceId(UUID.randomUUID())
+                .projectId(UUID.randomUUID())
+                .startTime(Instant.now());
+
+        OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+
+        var span = spanBuilder.build();
+
+        assertThat(span.input().has("logfire.level_num")).isFalse();
+        assertThat(span.metadata() == null || !span.metadata().has("logfire.level_num")).isTrue();
+        // a real input attribute alongside it is still captured
+        assertThat(span.input().has("tool_arguments")).isTrue();
+    }
+
+    @Test
+    void testLogfireModelNameMapsToMetadataNotModel() {
+        // `model_name` rides on the PydanticAI agent-run span, which is not an LLM call. It must
+        // not set the span model or flip the span type to llm — it belongs in metadata.
+        var attributes = List.of(
+                KeyValue.newBuilder()
+                        .setKey("model_name")
+                        .setValue(AnyValue.newBuilder().setStringValue("gemini-2.5-flash-lite"))
+                        .build());
+
+        var spanBuilder = Span.builder()
+                .id(UUID.randomUUID())
+                .traceId(UUID.randomUUID())
+                .projectId(UUID.randomUUID())
+                .startTime(Instant.now());
+
+        OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+
+        var span = spanBuilder.build();
+
+        assertThat(span.model()).isNull();
+        assertThat(span.type()).isNotEqualTo(SpanType.llm);
+        assertThat(span.metadata().get("model_name").asText()).isEqualTo("gemini-2.5-flash-lite");
+    }
+
+    @Test
+    void testInvokeAgentSpanIsTypedGeneralNotLlm() {
+        // The agent-run span carries gen_ai.system_instructions (llm-typed rule) but is not an LLM
+        // call; gen_ai.operation.name=invoke_agent must force it back to general.
+        var attributes = List.of(
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.operation.name")
+                        .setValue(AnyValue.newBuilder().setStringValue("invoke_agent"))
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.system_instructions")
+                        .setValue(AnyValue.newBuilder().setStringValue("You are a helpful assistant"))
+                        .build());
+
+        var spanBuilder = Span.builder()
+                .id(UUID.randomUUID())
+                .traceId(UUID.randomUUID())
+                .projectId(UUID.randomUUID())
+                .startTime(Instant.now());
+
+        OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+
+        var span = spanBuilder.build();
+
+        assertThat(span.type()).isEqualTo(SpanType.general);
+    }
+
+    @Test
+    void testGenAiToolCallArgumentsAndResultMapToInputAndOutput() {
+        // The OTel GenAI tool-call convention carries the tool span's I/O: arguments -> input,
+        // result -> output. These must win over the broad `gen_ai.tool.` METADATA prefix, while
+        // other gen_ai.tool.* attributes (e.g. call.id) still go to metadata.
+        var attributes = List.of(
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.tool.call.arguments")
+                        .setValue(AnyValue.newBuilder().setStringValue("{\"city\":\"Paris\"}"))
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.tool.call.result")
+                        .setValue(AnyValue.newBuilder().setStringValue("Sunny in Paris"))
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.tool.call.id")
+                        .setValue(AnyValue.newBuilder().setStringValue("call_abc123"))
+                        .build());
+
+        var spanBuilder = Span.builder()
+                .id(UUID.randomUUID())
+                .traceId(UUID.randomUUID())
+                .projectId(UUID.randomUUID())
+                .startTime(Instant.now());
+
+        OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+
+        var span = spanBuilder.build();
+
+        assertThat(span.input().has("gen_ai.tool.call.arguments")).isTrue();
+        assertThat(span.output().has("gen_ai.tool.call.result")).isTrue();
+        // a non-I/O tool attribute still lands in metadata, not input/output
+        assertThat(span.metadata().has("gen_ai.tool.call.id")).isTrue();
+        assertThat(span.input().has("gen_ai.tool.call.id")).isFalse();
     }
 
     @Test
@@ -1139,6 +1333,199 @@ class OpenTelemetryMapperTest {
 
             assertThat(span.provider()).isEqualTo("elastic");
             assertThat(span.model()).isNull();
+        }
+    }
+
+    /**
+     * PydanticAI tool-execution spans carry the result under {@code tool_response} and the call
+     * arguments under {@code tool_arguments}. Verifies the result lands in output (not the default
+     * input bucket) so the tool span renders its output in the UI.
+     */
+    @Nested
+    class PydanticToolSpan {
+
+        @Test
+        void toolResponseMapsToOutputAndArgumentsToInput() {
+            var attributes = List.of(
+                    KeyValue.newBuilder()
+                            .setKey("tool_arguments")
+                            .setValue(AnyValue.newBuilder().setStringValue("{\"query\":\"Opik\"}"))
+                            .build(),
+                    KeyValue.newBuilder()
+                            .setKey("tool_response")
+                            .setValue(AnyValue.newBuilder().setStringValue("Top result for 'Opik'"))
+                            .build());
+
+            var spanBuilder = Span.builder()
+                    .id(UUID.randomUUID())
+                    .traceId(UUID.randomUUID())
+                    .projectId(UUID.randomUUID())
+                    .startTime(Instant.now());
+
+            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+
+            var span = spanBuilder.build();
+
+            assertThat(span.output().has("tool_response")).isTrue();
+            assertThat(span.input().has("tool_arguments")).isTrue();
+            assertThat(span.input().has("tool_response")).isFalse();
+        }
+    }
+
+    /**
+     * The generic {@code "google"} provider (PydanticAI / google-genai) must be resolved to the
+     * Vertex AI vs Gemini API canonical name via {@code server.address}, otherwise cost lookup
+     * can't match a price row.
+     */
+    @Nested
+    class GoogleProviderResolution {
+
+        private Span mapGoogle(String serverAddress) {
+            var attributes = new java.util.ArrayList<KeyValue>();
+            attributes.add(KeyValue.newBuilder()
+                    .setKey("gen_ai.system")
+                    .setValue(AnyValue.newBuilder().setStringValue("google"))
+                    .build());
+            if (serverAddress != null) {
+                attributes.add(KeyValue.newBuilder()
+                        .setKey("server.address")
+                        .setValue(AnyValue.newBuilder().setStringValue(serverAddress))
+                        .build());
+            }
+
+            var spanBuilder = Span.builder()
+                    .id(UUID.randomUUID())
+                    .traceId(UUID.randomUUID())
+                    .projectId(UUID.randomUUID())
+                    .startTime(Instant.now());
+
+            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+
+            return spanBuilder.build();
+        }
+
+        @Test
+        void vertexHostResolvesToGoogleVertexAi() {
+            assertThat(mapGoogle("us-east1-aiplatform.googleapis.com").provider()).isEqualTo("google_vertexai");
+        }
+
+        @Test
+        void geminiApiHostResolvesToGoogleAi() {
+            assertThat(mapGoogle("generativelanguage.googleapis.com").provider()).isEqualTo("google_ai");
+        }
+
+        @Test
+        void missingServerAddressDefaultsToGoogleAi() {
+            assertThat(mapGoogle(null).provider()).isEqualTo("google_ai");
+        }
+
+        @Test
+        void nonGoogleProviderIsNotRewritten() {
+            var attributes = List.of(
+                    KeyValue.newBuilder()
+                            .setKey("gen_ai.system")
+                            .setValue(AnyValue.newBuilder().setStringValue("openai"))
+                            .build(),
+                    KeyValue.newBuilder()
+                            .setKey("server.address")
+                            .setValue(AnyValue.newBuilder().setStringValue("us-east1-aiplatform.googleapis.com"))
+                            .build());
+
+            var spanBuilder = Span.builder()
+                    .id(UUID.randomUUID())
+                    .traceId(UUID.randomUUID())
+                    .projectId(UUID.randomUUID())
+                    .startTime(Instant.now());
+
+            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+
+            assertThat(spanBuilder.build().provider()).isEqualTo("openai");
+        }
+    }
+
+    /**
+     * Failed spans must surface as Opik errors. Both OTel-core signals are covered: the
+     * {@code exception} span event and a {@code STATUS_CODE_ERROR} status.
+     */
+    @Nested
+    class ErrorInfoExtraction {
+
+        private final TimeBasedEpochGenerator uuidV7Generator = Generators.timeBasedEpochGenerator();
+
+        private io.opentelemetry.proto.trace.v1.Span.Builder baseSpan() {
+            return io.opentelemetry.proto.trace.v1.Span.newBuilder()
+                    .setName("running tool")
+                    .setTraceId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
+                    .setSpanId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 1_000) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L);
+        }
+
+        private Span map(io.opentelemetry.proto.trace.v1.Span otelSpan) {
+            return OpenTelemetryMapper.toOpikSpan(otelSpan, uuidV7Generator.generate(), null);
+        }
+
+        @Test
+        void exceptionEventPopulatesErrorInfo() {
+            var otelSpan = baseSpan()
+                    .addEvents(io.opentelemetry.proto.trace.v1.Span.Event.newBuilder()
+                            .setName("exception")
+                            .addAttributes(KeyValue.newBuilder().setKey("exception.type")
+                                    .setValue(AnyValue.newBuilder().setStringValue("RuntimeError")))
+                            .addAttributes(KeyValue.newBuilder().setKey("exception.message")
+                                    .setValue(AnyValue.newBuilder().setStringValue("firecrawl: 502 Bad Gateway")))
+                            .addAttributes(KeyValue.newBuilder().setKey("exception.stacktrace")
+                                    .setValue(
+                                            AnyValue.newBuilder().setStringValue("Traceback (most recent call last)")))
+                            .build())
+                    .build();
+
+            var errorInfo = map(otelSpan).errorInfo();
+
+            assertThat(errorInfo).isNotNull();
+            assertThat(errorInfo.exceptionType()).isEqualTo("RuntimeError");
+            assertThat(errorInfo.message()).isEqualTo("firecrawl: 502 Bad Gateway");
+            assertThat(errorInfo.traceback()).isEqualTo("Traceback (most recent call last)");
+        }
+
+        @Test
+        void errorStatusWithoutExceptionEventPopulatesErrorInfo() {
+            var otelSpan = baseSpan()
+                    .setStatus(Status.newBuilder()
+                            .setCode(Status.StatusCode.STATUS_CODE_ERROR)
+                            .setMessage("tool failed")
+                            .build())
+                    .build();
+
+            var errorInfo = map(otelSpan).errorInfo();
+
+            assertThat(errorInfo).isNotNull();
+            assertThat(errorInfo.exceptionType()).isEqualTo("Error");
+            assertThat(errorInfo.message()).isEqualTo("tool failed");
+            assertThat(errorInfo.traceback()).isEqualTo("tool failed");
+        }
+
+        @Test
+        void exceptionEventTakesPrecedenceOverErrorStatus() {
+            var otelSpan = baseSpan()
+                    .setStatus(Status.newBuilder().setCode(Status.StatusCode.STATUS_CODE_ERROR).build())
+                    .addEvents(io.opentelemetry.proto.trace.v1.Span.Event.newBuilder()
+                            .setName("exception")
+                            .addAttributes(KeyValue.newBuilder().setKey("exception.type")
+                                    .setValue(AnyValue.newBuilder().setStringValue("ValueError")))
+                            .build())
+                    .build();
+
+            assertThat(map(otelSpan).errorInfo().exceptionType()).isEqualTo("ValueError");
+        }
+
+        @Test
+        void successfulSpanHasNoErrorInfo() {
+            var okSpan = baseSpan()
+                    .setStatus(Status.newBuilder().setCode(Status.StatusCode.STATUS_CODE_OK).build())
+                    .build();
+
+            assertThat(map(okSpan).errorInfo()).isNull();
         }
     }
 }

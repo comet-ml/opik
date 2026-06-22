@@ -1,9 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Project;
-import com.comet.opik.domain.workspaces.MigrationSkipReasonCount;
 import com.comet.opik.domain.workspaces.WorkspaceVersionService;
-import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.infrastructure.DatasetProjectMigrationConfig;
 import com.comet.opik.infrastructure.MigrationConfig;
 import com.google.common.collect.Lists;
@@ -29,12 +27,10 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static com.comet.opik.infrastructure.auth.RequestContext.SYSTEM_USER;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -54,15 +50,6 @@ public class DatasetProjectMigrationService implements Managed {
 
     private static final Attributes RESULT_MIGRATED = Attributes.of(RESULT_KEY, "migrated");
     private static final Attributes RESULT_NO_ACTIONABLE = Attributes.of(RESULT_KEY, "no_actionable");
-    private static final Attributes RESULT_ALL_SKIPPED_AMBIGUOUS = Attributes.of(RESULT_KEY, "all_skipped_ambiguous");
-
-    // Skip-reason labels for the `datasets.skipped` counter. Only `ambiguous` is emitted today;
-    // `deleted_project` is kept as a defensive constant in case a future code path needs it
-    // (e.g. a dry-run tool that distinguishes "would have been deleted" from "would have been
-    // assigned to default").
-    @SuppressWarnings("unused")
-    private static final Attributes SKIP_REASON_DELETED_PROJECT = Attributes.of(stringKey("reason"), "deleted_project");
-    private static final Attributes SKIP_REASON_AMBIGUOUS = Attributes.of(stringKey("reason"), "ambiguous");
 
     // Reason labels for the `datasets.assigned_to_default` counter — diagnoses why a dataset
     // ended up in Default Project (their inferred project was deleted vs. no usable traces).
@@ -70,36 +57,33 @@ public class DatasetProjectMigrationService implements Managed {
             "deleted_project");
     private static final Attributes ASSIGNED_REASON_NO_INFERENCE = Attributes.of(stringKey("reason"), "no_inference");
 
-    private static final String TRAPPED_REASON_ALL_AMBIGUOUS = "all_ambiguous";
-    // Kept as defensive constants — neither is emitted by the active code paths after the
-    // policy alignment with D1 (Default Project is auto-created via getOrCreate; certain-deleted
-    // datasets get reassigned to Default Project rather than trapping the workspace). Surfaced
-    // through the gauge tag set so legacy rows persisted before the policy change still bucket.
-    private static final String TRAPPED_REASON_DELETED_PROJECT = "deleted_project";
-    private static final String TRAPPED_REASON_DEFAULT_PROJECT_MISSING = "default_project_missing";
+    /**
+     * Label on the {@code datasets.assigned_to_dominant_project} counter that breaks the count-down
+     * by the number of projects a dataset's experiments referenced.
+     */
+    private static final AttributeKey<String> DISTINCT_PROJECT_COUNT_KEY = stringKey("distinct_project_count");
 
-    private static final AttributeKey<String> TRAP_REASON_KEY = stringKey("reason");
-    // Known reasons surfaced by the trapped-workspaces gauge. Unknown strings (e.g. test-only or
-    // legacy rows) fold to `other` to bound cardinality.
-    private static final Set<String> KNOWN_TRAP_REASONS = Set.of(
-            TRAPPED_REASON_DELETED_PROJECT, TRAPPED_REASON_ALL_AMBIGUOUS, TRAPPED_REASON_DEFAULT_PROJECT_MISSING);
+    /**
+     * Upper bound applied to the {@link #DISTINCT_PROJECT_COUNT_KEY} label value so that an
+     * unexpectedly large project count cannot create an unbounded number of metric series. Counts
+     * at or above this value share a single label.
+     */
+    private static final int DISTINCT_PROJECT_COUNT_MAX = 50;
 
     private static final String DEFAULT_PROJECT_NAME = ProjectService.DEFAULT_PROJECT;
 
     private final @NonNull ExperimentDAO experimentDAO;
     private final @NonNull ProjectService projectService;
     private final @NonNull WorkspaceVersionService workspaceVersionService;
-    private final @NonNull WorkspacesService workspacesService;
     private final @NonNull DatasetProjectMigrationConfig config;
     private final @NonNull MigrationConfig migrationConfig;
     private final @NonNull TransactionTemplate transactionTemplate;
 
     private final LongHistogram cycleEligibleWorkspaces;
-    private final LongGauge cycleTrappedWorkspaces;
     private final LongGauge cycleEnvExcludedWorkspaces;
     private final LongHistogram workspaceDuration;
-    private final LongCounter datasetsSkipped;
     private final LongCounter datasetsAssignedToDefault;
+    private final LongCounter datasetsAssignedToDominantProject;
     private final LongHistogram batchSize;
 
     /**
@@ -115,14 +99,12 @@ public class DatasetProjectMigrationService implements Managed {
             @NonNull ExperimentDAO experimentDAO,
             @NonNull ProjectService projectService,
             @NonNull WorkspaceVersionService workspaceVersionService,
-            @NonNull WorkspacesService workspacesService,
             @NonNull @Config("datasetProjectMigration") DatasetProjectMigrationConfig config,
             @NonNull @Config("migration") MigrationConfig migrationConfig,
             @NonNull TransactionTemplate transactionTemplate) {
         this.experimentDAO = experimentDAO;
         this.projectService = projectService;
         this.workspaceVersionService = workspaceVersionService;
-        this.workspacesService = workspacesService;
         this.config = config;
         this.migrationConfig = migrationConfig;
         this.transactionTemplate = transactionTemplate;
@@ -133,34 +115,28 @@ public class DatasetProjectMigrationService implements Managed {
                 .setDescription("Number of workspaces with eligible datasets found per cycle")
                 .ofLongs()
                 .build();
-        this.cycleTrappedWorkspaces = meter
-                .gaugeBuilder("%s.cycle.trapped_workspaces".formatted(METRIC_NAMESPACE))
-                .setDescription(
-                        "Number of workspaces locally skipped because of a persisted trap, tagged by reason "
-                                + "(deleted_project / all_ambiguous / default_project_missing / other)")
-                .ofLongs()
-                .build();
         this.cycleEnvExcludedWorkspaces = meter
                 .gaugeBuilder("%s.cycle.env_excluded_workspaces".formatted(METRIC_NAMESPACE))
                 .setDescription(
-                        "Number of workspaces excluded from migration via the MIGRATION_EXCLUDED_WORKSPACE_IDS env var. Mirrors trapped_workspaces so the dashboard can show both exclusion paths side by side.")
+                        "Number of workspaces excluded from migration via the MIGRATION_EXCLUDED_WORKSPACE_IDS env var.")
                 .ofLongs()
                 .build();
         this.workspaceDuration = meter
                 .histogramBuilder("%s.workspace.duration".formatted(METRIC_NAMESPACE))
                 .setDescription(
-                        "Duration of a single workspace migration, tagged by result (migrated / no_actionable / all_skipped_ambiguous / error)")
+                        "Duration of a single workspace migration, tagged by result (migrated / no_actionable / error)")
                 .setUnit("ms")
                 .ofLongs()
-                .build();
-        this.datasetsSkipped = meter
-                .counterBuilder("%s.datasets.skipped".formatted(METRIC_NAMESPACE))
-                .setDescription("Total number of datasets skipped during migration, tagged by reason")
                 .build();
         this.datasetsAssignedToDefault = meter
                 .counterBuilder("%s.datasets.assigned_to_default".formatted(METRIC_NAMESPACE))
                 .setDescription(
                         "Total number of orphan datasets (no inferable project) assigned to the workspace's Default Project. Diagnostic for the no-inference bucket size.")
+                .build();
+        this.datasetsAssignedToDominantProject = meter
+                .counterBuilder("%s.datasets.assigned_to_dominant_project".formatted(METRIC_NAMESPACE))
+                .setDescription(
+                        "Total number of orphan datasets that referenced multiple projects and were assigned to the dominant one (most referencing experiments). Tagged by distinct_project_count for the multi-project distribution.")
                 .build();
         this.batchSize = meter
                 .histogramBuilder("%s.batch.size".formatted(METRIC_NAMESPACE))
@@ -194,18 +170,12 @@ public class DatasetProjectMigrationService implements Managed {
 
     public Mono<Void> runMigrationCycle() {
         return Mono.fromCallable(() -> {
-            var skippedWorkspaceIds = workspacesService.findDatasetProjectMigrationSkippedWorkspaceIds();
             var envExcludedWorkspaceIds = migrationConfig.getExcludedWorkspaceIds();
-            recordTrappedWorkspacesByReason(workspacesService.countDatasetProjectMigrationSkippedByReason());
             cycleEnvExcludedWorkspaces.set(envExcludedWorkspaceIds.size());
             log.info(
-                    "Starting dataset project migration cycle, workspacesPerRun='{}', batchSize='{}', trappedWorkspaces='{}', envExcludedWorkspaces='{}'",
-                    config.workspacesPerRun(), config.datasetBatchSize(), skippedWorkspaceIds.size(),
-                    envExcludedWorkspaceIds.size());
-            return Stream.concat(
-                    envExcludedWorkspaceIds.stream(),
-                    skippedWorkspaceIds.stream())
-                    .collect(Collectors.toUnmodifiableSet());
+                    "Starting dataset project migration cycle, workspacesPerRun='{}', batchSize='{}', envExcludedWorkspaces='{}'",
+                    config.workspacesPerRun(), config.datasetBatchSize(), envExcludedWorkspaceIds.size());
+            return envExcludedWorkspaceIds;
         })
                 .subscribeOn(migrationScheduler)
                 .flatMap(this::findEligibleWorkspaces)
@@ -251,7 +221,15 @@ public class DatasetProjectMigrationService implements Managed {
                 });
     }
 
-    /** Four-bucket classification: certain / certain-deleted / ambiguous / no-inference. */
+    /**
+     * Classifies each orphan dataset into one of three groups: certain (a single referencing
+     * project, including the dominant project already chosen for multi-project datasets),
+     * certain-deleted (the inferred project no longer exists), and no-inference (no usable
+     * referencing experiment). Multi-project datasets are treated as certain because the query has
+     * already chosen their dominant project; this method then confirms the project still exists,
+     * records the dominant-assignment metric and log, and routes the other two groups to the
+     * Default Project.
+     */
     private Mono<Boolean> classifyAndMigrate(
             String workspaceId,
             Set<UUID> orphanIds,
@@ -264,22 +242,13 @@ public class DatasetProjectMigrationService implements Managed {
 
         var certainCandidates = new ArrayList<DatasetProjectMapping>();
         var noInferenceIds = new ArrayList<UUID>();
-        int ambiguousAcc = 0;
         for (var datasetId : orphanIds) {
             var inferred = inferenceByDataset.get(datasetId);
             if (inferred == null) {
                 noInferenceIds.add(datasetId);
-            } else if (inferred.distinctProjectCount() == 1) {
-                certainCandidates.add(inferred);
             } else {
-                ambiguousAcc++;
+                certainCandidates.add(inferred);
             }
-        }
-        final int ambiguousCount = ambiguousAcc;
-        if (ambiguousCount > 0) {
-            datasetsSkipped.add(ambiguousCount, SKIP_REASON_AMBIGUOUS);
-            log.info("Skipping ambiguous datasets (multi-project), workspaceId='{}', count='{}'",
-                    workspaceId, ambiguousCount);
         }
 
         return Mono.fromCallable(() -> {
@@ -302,17 +271,38 @@ public class DatasetProjectMigrationService implements Managed {
                             .filter(c -> !validatedCertain.contains(c))
                             .map(DatasetProjectMapping::datasetId)
                             .toList();
+                    recordDominantAssignments(workspaceId, validatedCertain);
                     return resolveDefaultProjectAndMigrate(
                             workspaceId, orphanIds, validatedCertain, noInferenceIds,
-                            certainDeletedIds, ambiguousCount, workspaceStartMillis);
+                            certainDeletedIds, workspaceStartMillis);
                 });
     }
 
     /**
-     * Reroutes certain-deleted and no-inference orphans to the workspace's Default Project.
-     * Uses {@link ProjectService#getOrCreate} (the same path trace ingestion uses), so a missing
-     * Default Project is provisioned in-line rather than trapping the workspace. The lookup is
-     * skipped entirely when neither bucket has rows.
+     * For each validated multi-project dataset, increments
+     * {@code datasets.assigned_to_dominant_project} (labeled by distinct_project_count, capped at
+     * {@link #DISTINCT_PROJECT_COUNT_MAX}) and logs the chosen project together with the per-project
+     * counts that determined it.
+     */
+    private void recordDominantAssignments(String workspaceId, List<DatasetProjectMapping> validatedCertain) {
+        for (var mapping : validatedCertain) {
+            if (mapping.distinctProjectCount() <= 1) {
+                continue;
+            }
+            long boundedCount = Math.min(mapping.distinctProjectCount(), DISTINCT_PROJECT_COUNT_MAX);
+            datasetsAssignedToDominantProject.add(1,
+                    Attributes.of(DISTINCT_PROJECT_COUNT_KEY, Long.toString(boundedCount)));
+            log.info(
+                    "Assigning dominant project to dataset, workspaceId='{}', datasetId='{}', chosenProjectId='{}', distinctProjectCount='{}', projectBreakdown='{}'",
+                    workspaceId, mapping.datasetId(), mapping.projectId(), mapping.distinctProjectCount(),
+                    mapping.projectBreakdown());
+        }
+    }
+
+    /**
+     * Assigns the certain-deleted and no-inference datasets to the workspace's Default Project,
+     * creating it if absent via {@link ProjectService#getOrCreate} (the same call trace ingestion
+     * uses). The lookup is skipped when neither group has any datasets.
      */
     private Mono<Boolean> resolveDefaultProjectAndMigrate(
             String workspaceId,
@@ -320,7 +310,6 @@ public class DatasetProjectMigrationService implements Managed {
             List<DatasetProjectMapping> validatedCertain,
             List<UUID> noInferenceIds,
             List<UUID> certainDeletedIds,
-            int ambiguousCount,
             long workspaceStartMillis) {
         int needsDefault = certainDeletedIds.size() + noInferenceIds.size();
         if (needsDefault == 0) {
@@ -328,35 +317,38 @@ public class DatasetProjectMigrationService implements Managed {
             // getOrCreate call entirely so we never auto-provision a Default Project for
             // workspaces that don't need one.
             return finalizeWorkspace(workspaceId, orphanIds.size(), new ArrayList<>(validatedCertain),
-                    certainDeletedIds.size(), ambiguousCount, 0, workspaceStartMillis);
+                    certainDeletedIds.size(), 0, workspaceStartMillis);
         }
         return Mono
                 .fromCallable(() -> projectService.getOrCreate(workspaceId, DEFAULT_PROJECT_NAME, SYSTEM_USER).id())
                 .subscribeOn(migrationScheduler)
                 .flatMap(defaultProjectId -> {
                     var allMappings = new ArrayList<>(validatedCertain);
-                    // distinctProjectCount is a query-side field; for the synthesized
-                    // mappings it's unused downstream, so 1 is a safe filler.
+                    // distinctProjectCount and projectBreakdown are query-side fields; for the
+                    // synthesized Default Project mappings they're unused downstream, so 1 and an
+                    // empty breakdown are safe fillers.
                     for (var id : certainDeletedIds) {
                         allMappings.add(DatasetProjectMapping.builder()
-                                .datasetId(id).projectId(defaultProjectId).distinctProjectCount(1L).build());
+                                .datasetId(id).projectId(defaultProjectId).distinctProjectCount(1L)
+                                .projectBreakdown("").build());
                     }
                     for (var id : noInferenceIds) {
                         allMappings.add(DatasetProjectMapping.builder()
-                                .datasetId(id).projectId(defaultProjectId).distinctProjectCount(1L).build());
+                                .datasetId(id).projectId(defaultProjectId).distinctProjectCount(1L)
+                                .projectBreakdown("").build());
                     }
-                    if (certainDeletedIds.size() > 0) {
+                    if (!certainDeletedIds.isEmpty()) {
                         datasetsAssignedToDefault.add(certainDeletedIds.size(), ASSIGNED_REASON_DELETED_PROJECT);
                         log.info("Assigning deleted-project datasets to Default Project, workspaceId='{}', count='{}'",
                                 workspaceId, certainDeletedIds.size());
                     }
-                    if (noInferenceIds.size() > 0) {
+                    if (!noInferenceIds.isEmpty()) {
                         datasetsAssignedToDefault.add(noInferenceIds.size(), ASSIGNED_REASON_NO_INFERENCE);
                         log.info("Assigning no-inference datasets to Default Project, workspaceId='{}', count='{}'",
                                 workspaceId, noInferenceIds.size());
                     }
                     return finalizeWorkspace(workspaceId, orphanIds.size(), allMappings,
-                            certainDeletedIds.size(), ambiguousCount, needsDefault, workspaceStartMillis);
+                            certainDeletedIds.size(), needsDefault, workspaceStartMillis);
                 });
     }
 
@@ -365,7 +357,6 @@ public class DatasetProjectMigrationService implements Managed {
             int totalOrphans,
             List<DatasetProjectMapping> mappings,
             int certainDeleted,
-            int ambiguousCount,
             int assignedToDefault,
             long workspaceStartMillis) {
 
@@ -373,25 +364,14 @@ public class DatasetProjectMigrationService implements Managed {
                 .flatMap(migrated -> migrated
                         ? evictWorkspaceVersionCache(workspaceId).thenReturn(true)
                         : Mono.just(false))
-                .flatMap(__ -> resolveTrapReason(totalOrphans, mappings, certainDeleted, ambiguousCount)
-                        .map(trap -> Mono.fromRunnable(
-                                () -> workspacesService.markDatasetProjectMigrationSkipped(
-                                        workspaceId, trap.reason()))
-                                .subscribeOn(migrationScheduler)
-                                .doOnSubscribe(s -> log.info(
-                                        "Trapping workspace, workspaceId='{}', reason='{}', certainDeleted='{}', ambiguous='{}'",
-                                        workspaceId, trap.reason(), certainDeleted, ambiguousCount))
-                                .then(Mono.just(trap.resultAttrs())))
-                        .orElseGet(() -> Mono.just(mappings.isEmpty()
-                                ? RESULT_NO_ACTIONABLE
-                                : RESULT_MIGRATED)))
+                .map(__ -> mappings.isEmpty() ? RESULT_NO_ACTIONABLE : RESULT_MIGRATED)
                 .doOnSuccess(resultAttrs -> {
                     var duration = Duration.ofMillis(System.currentTimeMillis() - workspaceStartMillis);
                     int validatedCertainCount = mappings.size() - assignedToDefault;
                     log.info(
-                            "Workspace migration completed, workspaceId='{}', migrated='{}' (certain='{}', defaultProject='{}'), skippedDeletedProject='{}', skippedAmbiguous='{}', duration='{}'",
-                            workspaceId, mappings.size(), validatedCertainCount, assignedToDefault,
-                            certainDeleted, ambiguousCount, duration);
+                            "Workspace migration completed, workspaceId='{}', totalOrphans='{}', migrated='{}' (certain='{}', defaultProject='{}'), skippedDeletedProject='{}', duration='{}'",
+                            workspaceId, totalOrphans, mappings.size(), validatedCertainCount, assignedToDefault,
+                            certainDeleted, duration);
                     recordWorkspaceDuration(resultAttrs, workspaceStartMillis);
                 })
                 .thenReturn(true);
@@ -432,44 +412,8 @@ public class DatasetProjectMigrationService implements Managed {
         });
     }
 
-    // Picks a trap reason if the workspace cannot make further progress next cycle, else empty.
-    // After the D1 policy alignment, certain-deleted and no-inference both reroute to Default
-    // Project (auto-provisioned), so the only remaining trap is `all_ambiguous` — workspaces
-    // where every un-migrated orphan has trace links across multiple projects and the CLI/UI
-    // tooling is required to disambiguate.
-    private Optional<TrapDecision> resolveTrapReason(
-            int totalOrphans, List<DatasetProjectMapping> mappings, int certainDeleted, int ambiguousCount) {
-        if (mappings.isEmpty() && ambiguousCount == totalOrphans) {
-            return Optional.of(new TrapDecision(TRAPPED_REASON_ALL_AMBIGUOUS, RESULT_ALL_SKIPPED_AMBIGUOUS));
-        }
-        // Post-migration: every remaining orphan is ambiguous → trap so we don't re-query CH
-        // every cycle for a workspace that has nothing actionable left.
-        int remaining = totalOrphans - mappings.size();
-        if (remaining > 0 && ambiguousCount == remaining) {
-            return Optional.of(new TrapDecision(TRAPPED_REASON_ALL_AMBIGUOUS, RESULT_ALL_SKIPPED_AMBIGUOUS));
-        }
-        return Optional.empty();
-    }
-
-    private record TrapDecision(String reason, Attributes resultAttrs) {
-    }
-
     private void recordWorkspaceDuration(Attributes resultAttributes, long startMillis) {
         workspaceDuration.record(System.currentTimeMillis() - startMillis, resultAttributes);
-    }
-
-    // Always emits one measurement per known reason (zero when absent) so dashboards see a stable
-    // series. Unknown reasons collapse to `other` to bound cardinality.
-    private void recordTrappedWorkspacesByReason(List<MigrationSkipReasonCount> counts) {
-        var byReason = counts.stream().collect(Collectors.toMap(
-                c -> KNOWN_TRAP_REASONS.contains(c.reason()) ? c.reason() : "other",
-                MigrationSkipReasonCount::count,
-                Long::sum));
-        for (var knownReason : KNOWN_TRAP_REASONS) {
-            cycleTrappedWorkspaces.set(byReason.getOrDefault(knownReason, 0L),
-                    Attributes.of(TRAP_REASON_KEY, knownReason));
-        }
-        cycleTrappedWorkspaces.set(byReason.getOrDefault("other", 0L), Attributes.of(TRAP_REASON_KEY, "other"));
     }
 
     private Mono<Boolean> evictWorkspaceVersionCache(String workspaceId) {

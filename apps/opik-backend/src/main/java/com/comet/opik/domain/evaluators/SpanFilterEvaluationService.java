@@ -62,6 +62,8 @@ public class SpanFilterEvaluationService extends FilterEvaluationServiceBase<Spa
             case TYPE -> span.type() != null ? span.type().toString() : null;
             case START_TIME -> span.startTime();
             case END_TIME -> span.endTime();
+            case CREATED_AT -> span.createdAt();
+            case LAST_UPDATED_AT -> span.lastUpdatedAt();
             case INPUT -> extractStringFromJson(span.input());
             case OUTPUT -> extractStringFromJson(span.output());
             case INPUT_JSON -> key != null ? extractNestedValue(span.input(), key) : span.input();

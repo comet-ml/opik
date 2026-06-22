@@ -19,4 +19,9 @@ export class DatasetsPage extends BasePage {
       this.page.getByRole('heading', { name: /no datasets yet/i }).waitFor({ state: 'visible', timeout: 8000 }),
     ]);
   }
+
+  async waitForEmpty(): Promise<void> {
+    await this.page.getByRole('heading', { name: 'Datasets', exact: true }).waitFor({ state: 'visible', timeout: 10000 });
+    await this.page.getByRole('heading', { name: /no datasets yet/i }).waitFor({ state: 'visible', timeout: 20000 });
+  }
 }

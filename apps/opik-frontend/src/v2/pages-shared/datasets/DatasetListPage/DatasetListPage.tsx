@@ -12,16 +12,18 @@ import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
-import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
+import DatasetEmptyState from "@/v2/pages-shared/datasets/DatasetEmptyState";
 import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
 import { Dataset, DATASET_TYPE, DatasetListType } from "@/types/datasets";
-import AddEditDatasetDialog from "@/v2/pages-shared/datasets/AddEditDatasetDialog/AddEditDatasetDialog";
-import AddEditTestSuiteDialog from "@/v2/pages-shared/datasets/AddEditTestSuiteDialog/AddEditTestSuiteDialog";
-import CreateDatasetSidebar from "@/v2/pages-shared/datasets/CreateDatasetSidebar/CreateDatasetSidebar";
+import CreateDatasetSidebar, {
+  CreateDatasetMode,
+} from "@/v2/pages-shared/datasets/CreateDatasetSidebar/CreateDatasetSidebar";
+import EditDatasetSidebar from "@/v2/pages-shared/datasets/EditDatasetSidebar";
 import DatasetActionsPanel from "@/v2/pages-shared/datasets/DatasetActionsPanel/DatasetActionsPanel";
 import { createDatasetRowActionsCell } from "@/v2/pages-shared/datasets/DatasetRowActionsCell/DatasetRowActionsCell";
 import { Plus } from "lucide-react";
 import { Button } from "@/ui/button";
+import CreateEntityMenu from "@/v2/pages-shared/datasets/CreateEntityMenu";
 import { Separator } from "@/ui/separator";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import SearchInput from "@/shared/SearchInput/SearchInput";
@@ -65,7 +67,6 @@ const TYPE_CONFIG = {
     emptyStateTitle: "No datasets yet",
     emptyStateDescription:
       "Get started by creating your first dataset.\nDefine inputs and expected outputs to evaluate and optimize your agent.",
-    emptyStatePrimaryActionLabel: "Create your first dataset",
     storagePrefix: "datasets",
     typeFilter: [
       {
@@ -76,7 +77,6 @@ const TYPE_CONFIG = {
         value: DATASET_TYPE.DATASET,
       },
     ] as Filter[],
-    useSimpleDialog: true,
     rowActionsEntityName: "dataset",
     detailRoute:
       "/$workspaceName/projects/$projectId/datasets/$datasetId" as const,
@@ -92,7 +92,6 @@ const TYPE_CONFIG = {
     emptyStateTitle: "No test suites yet",
     emptyStateDescription:
       "Get started by creating your first test suite.\nDefine test cases with expected outputs and scoring to compare and optimize your configurations.",
-    emptyStatePrimaryActionLabel: "Create your first suite",
     storagePrefix: "test-suites",
     typeFilter: [
       {
@@ -103,7 +102,6 @@ const TYPE_CONFIG = {
         value: DATASET_TYPE.TEST_SUITE,
       },
     ] as Filter[],
-    useSimpleDialog: false,
     rowActionsEntityName: "test suite",
     detailRoute:
       "/$workspaceName/projects/$projectId/test-suites/$suiteId" as const,
@@ -243,6 +241,7 @@ const DatasetListPage: React.FunctionComponent<DatasetListPageProps> = ({
   } = usePermissions();
 
   const [openDialog, setOpenDialog] = useState<boolean>(false);
+  const [createMode, setCreateMode] = useState<CreateDatasetMode>("upload");
 
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
@@ -331,9 +330,14 @@ const DatasetListPage: React.FunctionComponent<DatasetListPageProps> = ({
     defaultValue: {},
   });
 
-  const EditDialog = config.useSimpleDialog
-    ? AddEditDatasetDialog
-    : AddEditTestSuiteDialog;
+  const EditDialog = useMemo(() => {
+    const BoundEditSidebar: React.FC<{
+      open: boolean;
+      setOpen: (open: boolean) => void;
+      dataset?: Dataset;
+    }> = (props) => <EditDatasetSidebar {...props} type={type} />;
+    return BoundEditSidebar;
+  }, [type]);
 
   const RowActionsCell = useMemo(
     () =>
@@ -393,9 +397,13 @@ const DatasetListPage: React.FunctionComponent<DatasetListPageProps> = ({
     [columnsWidth, setColumnsWidth],
   );
 
-  const handleCreateClick = useCallback(() => {
-    setOpenDialog(true);
-  }, []);
+  const handleCreateClick = useCallback(
+    (mode: CreateDatasetMode = "upload") => {
+      setCreateMode(mode);
+      setOpenDialog(true);
+    },
+    [],
+  );
 
   const handleRowClick = useCallback(
     (row: Dataset) => {
@@ -425,23 +433,23 @@ const DatasetListPage: React.FunctionComponent<DatasetListPageProps> = ({
         <h1 className="comet-body-accented truncate break-words">
           {config.title}
         </h1>
-        {canCreateDatasets && (
-          <Button variant="default" size="xs" onClick={handleCreateClick}>
-            <Plus className="mr-1 size-4" />
-            {config.createButtonText}
-          </Button>
+        {canCreateDatasets && !isEmpty && (
+          <CreateEntityMenu onSelect={handleCreateClick}>
+            <Button variant="default" size="xs">
+              <Plus className="mr-1 size-4" />
+              {config.createButtonText}
+            </Button>
+          </CreateEntityMenu>
         )}
       </div>
       {isEmpty ? (
-        <PageEmptyState
+        <DatasetEmptyState
           lightImageUrl={emptyTestSuitesLightUrl}
           darkImageUrl={emptyTestSuitesDarkUrl}
           title={config.emptyStateTitle}
           description={config.emptyStateDescription}
-          primaryActionLabel={
-            canCreateDatasets ? config.emptyStatePrimaryActionLabel : undefined
-          }
-          onPrimaryAction={canCreateDatasets ? handleCreateClick : undefined}
+          canCreate={canCreateDatasets}
+          onSelect={handleCreateClick}
           docsUrl={buildDocsUrl(config.docsUrl)}
         />
       ) : (
@@ -496,7 +504,10 @@ const DatasetListPage: React.FunctionComponent<DatasetListPageProps> = ({
             noData={
               <DataTableNoData title={noDataText}>
                 {noData && canCreateDatasets && (
-                  <Button variant="link" onClick={handleCreateClick}>
+                  <Button
+                    variant="link"
+                    onClick={() => handleCreateClick("upload")}
+                  >
                     {config.createButtonText}
                   </Button>
                 )}
@@ -520,6 +531,7 @@ const DatasetListPage: React.FunctionComponent<DatasetListPageProps> = ({
       )}
       <CreateDatasetSidebar
         type={type}
+        mode={createMode}
         open={openDialog}
         setOpen={setOpenDialog}
         onDatasetCreated={handleRowClick}

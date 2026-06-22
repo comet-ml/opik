@@ -107,6 +107,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
 
   [PROVIDER_TYPE.ANTHROPIC]: [
     {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_8,
+      label: "Claude Opus 4.8",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
       label: "Claude Opus 4.7",
     },
@@ -133,6 +137,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1,
       label: "Claude Opus 4.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5,
+      label: "Claude Fable 5",
     },
   ],
 
@@ -250,6 +258,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "anthropic/claude-3.7-sonnet:thinking",
     },
     {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_FABLE_5,
+      label: "anthropic/claude-fable-5",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_HAIKU_4_5,
       label: "anthropic/claude-haiku-4.5",
     },
@@ -280,6 +292,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_7_FAST,
       label: "anthropic/claude-opus-4.7-fast",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_8,
+      label: "anthropic/claude-opus-4.8",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_8_FAST,
+      label: "anthropic/claude-opus-4.8-fast",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4,
@@ -419,6 +439,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "cohere/command-r7b-12-2024",
     },
     {
+      value: PROVIDER_MODEL_TYPE.COHERE_NORTH_MINI_CODE_FREE,
+      label: "cohere/north-mini-code:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.DEEPCOGITO_COGITO_V2_PREVIEW_DEEPSEEK_671B,
       label: "deepcogito/cogito-v2-preview-deepseek-671b",
     },
@@ -539,10 +563,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "essentialai/rnj-1-instruct",
     },
     {
-      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_0_FLASH_001,
-      label: "google/gemini-2.0-flash-001",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_0_FLASH_EXP_FREE,
       label: "google/gemini-2.0-flash-exp:free",
     },
@@ -591,12 +611,20 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "google/gemini-3-flash-preview",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_PRO_IMAGE,
+      label: "google/gemini-3-pro-image",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_PRO_IMAGE_PREVIEW,
       label: "google/gemini-3-pro-image-preview",
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_PRO_PREVIEW,
       label: "google/gemini-3-pro-preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_1_FLASH_IMAGE,
+      label: "google/gemini-3.1-flash-image",
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_1_FLASH_IMAGE_PREVIEW,
@@ -939,6 +967,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "minimax/minimax-m2.7",
     },
     {
+      value: PROVIDER_MODEL_TYPE.MINIMAX_MINIMAX_M3,
+      label: "minimax/minimax-m3",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_CODESTRAL_2501,
       label: "mistralai/codestral-2501",
     },
@@ -1143,6 +1175,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "moonshotai/kimi-k2.6",
     },
     {
+      value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2_6_FREE,
+      label: "moonshotai/kimi-k2.6:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2_7_CODE,
+      label: "moonshotai/kimi-k2.7-code",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2_FREE,
       label: "moonshotai/kimi-k2:free",
     },
@@ -1169,6 +1209,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.NEX_AGI_DEEPSEEK_V3_1_NEX_N1,
       label: "nex-agi/deepseek-v3.1-nex-n1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.NEX_AGI_NEX_N2_PRO_FREE,
+      label: "nex-agi/nex-n2-pro:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_DEEPHERMES_3_MISTRAL_24B_PREVIEW,
@@ -1230,6 +1274,18 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_SUPER_120B_A12B_FREE,
       label: "nvidia/nemotron-3-super-120b-a12b:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_ULTRA_550B_A55B,
+      label: "nvidia/nemotron-3-ultra-550b-a55b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_ULTRA_550B_A55B_FREE,
+      label: "nvidia/nemotron-3-ultra-550b-a55b:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_5_CONTENT_SAFETY_FREE,
+      label: "nvidia/nemotron-3.5-content-safety:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_NANO_12B_V2_VL,
@@ -1548,6 +1604,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openrouter/free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENROUTER_FUSION,
+      label: "openrouter/fusion",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENROUTER_HEALER_ALPHA,
       label: "openrouter/healer-alpha",
     },
@@ -1592,8 +1652,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "perplexity/sonar-reasoning-pro",
     },
     {
+      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_M_1,
+      label: "poolside/laguna-m.1",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_M_1_FREE,
       label: "poolside/laguna-m.1:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_XS_2,
+      label: "poolside/laguna-xs.2",
     },
     {
       value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_XS_2_FREE,
@@ -1864,6 +1932,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen3.7-max",
     },
     {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_7_PLUS,
+      label: "qwen/qwen3.7-plus",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWQ_32B,
       label: "qwen/qwq-32b",
     },
@@ -1922,6 +1994,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.STEPFUN_STEP_3_5_FLASH_FREE,
       label: "stepfun/step-3.5-flash:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.STEPFUN_STEP_3_7_FLASH,
+      label: "stepfun/step-3.7-flash",
     },
     {
       value: PROVIDER_MODEL_TYPE.SWITCHPOINT_ROUTER,
@@ -2124,8 +2200,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "z-ai/glm-5.1",
     },
     {
+      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5_2,
+      label: "z-ai/glm-5.2",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5V_TURBO,
       label: "z-ai/glm-5v-turbo",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_FABLE_LATEST,
+      label: "~anthropic/claude-fable-latest",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_HAIKU_LATEST,
@@ -2193,14 +2277,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
       label: "Gemini 2.5 Flash-Lite",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH,
-      label: "Gemini 2.0 Flash",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH_LITE,
-      label: "Gemini 2.0 Flash-Lite",
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMMA_4_26B_A4B_IT,

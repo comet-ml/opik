@@ -19,6 +19,7 @@ import Logo from "@/shared/Logo/Logo";
 import { identifyReoUser } from "./analytics/reo";
 import useSegment from "./analytics/useSegment";
 import { ORGANIZATION_ROLE_TYPE, Organization, Workspace } from "./types";
+import { isHiddenSpendWorkspace } from "./lib/aiSpend";
 import useOrganizations from "./useOrganizations";
 import useUser from "./useUser";
 import { buildUrl } from "./utils";
@@ -40,6 +41,24 @@ const hasWorkspaceAccess = (
 
 const redirectToEM = () => {
   window.location.href = buildUrl("");
+};
+
+// Dedicated key (not redirectURLAfterLogin, which the SSO modal overwrites) so the
+// MCP OAuth return survives both email and SSO logins. comet-react consumes it post-login.
+const MCP_OAUTH_REDIRECT_URL_KEY = "mcpOAuthRedirectURL";
+
+// Persist the MCP OAuth authorize URL (carried as ?returnTo= by opik-backend) before
+// bouncing to login, so the user returns there after authenticating.
+const persistMcpOAuthReturn = () => {
+  const returnTo = new URLSearchParams(window.location.search).get("returnTo");
+  if (!returnTo) return;
+  try {
+    if (new URL(returnTo).origin === window.location.origin) {
+      window.localStorage.setItem(MCP_OAUTH_REDIRECT_URL_KEY, returnTo);
+    }
+  } catch {
+    // ignore a malformed returnTo
+  }
 };
 
 const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
@@ -127,6 +146,7 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
   }
 
   if (!user || !user.loggedIn) {
+    persistMcpOAuthReturn();
     window.location.href =
       workspaceNameFromURL === DEFAULT_WORKSPACE_NAME || !workspaceNameFromURL
         ? buildUrl("login")
@@ -148,11 +168,14 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
     return <Loader />;
   }
 
-  const workspace = workspaceNameFromURL
-    ? allWorkspaces.find(
-        (workspace) => workspace.workspaceName === workspaceNameFromURL,
-      )
+  const matchedWorkspace = workspaceNameFromURL
+    ? allWorkspaces.find((ws) => ws.workspaceName === workspaceNameFromURL)
     : null;
+
+  // Hidden spend workspace resolves as "not found" → private-project message.
+  const workspace = isHiddenSpendWorkspace(matchedWorkspace, pathname)
+    ? null
+    : matchedWorkspace;
 
   if (workspace) {
     if (organizations && !hasWorkspaceAccess(workspace, organizations)) {

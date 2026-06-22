@@ -6,7 +6,6 @@ import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 
 @RegisterConstructorMapper(Workspace.class)
@@ -55,128 +54,6 @@ public interface WorkspacesDAO {
     void insertFirstTrace(@Bind("id") String id,
             @Bind("reportedAt") Instant reportedAt,
             @Bind("userName") String userName);
-
-    /**
-     * Atomic NULL → timestamp transition for the experiment-project-migration-skipped flag.
-     * Returns 1 only when this caller flipped the column from NULL; returns 0 if no row exists
-     * or the column was already non-null. Pair with {@link #insertExperimentProjectMigrationSkipped}
-     * for the missing-row case.
-     */
-    @SqlUpdate("""
-            UPDATE workspaces
-            SET experiment_project_migration_skipped_at = :skippedAt,
-                experiment_project_migration_skip_reason = :reason,
-                last_updated_by = :userName
-            WHERE id = :id AND experiment_project_migration_skipped_at IS NULL
-            """)
-    int updateExperimentProjectMigrationSkippedIfNull(@Bind("id") String id,
-            @Bind("skippedAt") Instant skippedAt,
-            @Bind("reason") String reason,
-            @Bind("userName") String userName);
-
-    /**
-     * Plain INSERT (no upsert). Throws on duplicate-key — caller handles the "row already exists"
-     * branch via the {@link #updateExperimentProjectMigrationSkippedIfNull} attempt that precedes it.
-     */
-    @SqlUpdate("""
-            INSERT INTO workspaces (id, experiment_project_migration_skipped_at, experiment_project_migration_skip_reason, created_by, last_updated_by)
-            VALUES (:id, :skippedAt, :reason, :userName, :userName)
-            """)
-    void insertExperimentProjectMigrationSkipped(@Bind("id") String id,
-            @Bind("skippedAt") Instant skippedAt,
-            @Bind("reason") String reason,
-            @Bind("userName") String userName);
-
-    @SqlQuery("SELECT id FROM workspaces WHERE experiment_project_migration_skipped_at IS NOT NULL")
-    List<String> findExperimentProjectMigrationSkippedWorkspaceIds();
-
-    /**
-     * Atomic NULL → timestamp transition for the prompt-project-migration trap flag. Parallel to
-     * {@link #updateExperimentProjectMigrationSkippedIfNull} but scoped to the prompt cycle's own
-     * column so the two migrations record their traps independently.
-     */
-    @SqlUpdate("""
-            UPDATE workspaces
-            SET prompt_project_migration_skipped_at = :skippedAt,
-                prompt_project_migration_skip_reason = :reason,
-                last_updated_by = :userName
-            WHERE id = :id AND prompt_project_migration_skipped_at IS NULL
-            """)
-    int updatePromptProjectMigrationSkippedIfNull(@Bind("id") String id,
-            @Bind("skippedAt") Instant skippedAt,
-            @Bind("reason") String reason,
-            @Bind("userName") String userName);
-
-    /**
-     * Plain INSERT (no upsert). Paired with {@link #updatePromptProjectMigrationSkippedIfNull}
-     * for the missing-row case, mirroring {@link #insertExperimentProjectMigrationSkipped}.
-     */
-    @SqlUpdate("""
-            INSERT INTO workspaces (
-                id,
-                prompt_project_migration_skipped_at,
-                prompt_project_migration_skip_reason,
-                created_by,
-                last_updated_by
-            )
-            VALUES (
-                :id,
-                :skippedAt,
-                :reason,
-                :userName,
-                :userName
-            )
-            """)
-    void insertPromptProjectMigrationSkipped(@Bind("id") String id,
-            @Bind("skippedAt") Instant skippedAt,
-            @Bind("reason") String reason,
-            @Bind("userName") String userName);
-
-    @SqlQuery("SELECT id FROM workspaces WHERE prompt_project_migration_skipped_at IS NOT NULL")
-    List<String> findPromptProjectMigrationSkippedWorkspaceIds();
-
-    /**
-     * Atomic NULL → timestamp transition for the dataset-project-migration-skipped flag. Returns 1 only when
-     * this caller flipped {@code dataset_project_migration_skipped_at} from NULL to {@code :skippedAt}; returns
-     * 0 if no row exists or the column was already non-null. Pair with {@link #insertDatasetProjectMigrationSkipped}
-     * for the missing-row case.
-     */
-    @SqlUpdate("""
-            UPDATE workspaces
-            SET dataset_project_migration_skipped_at = :skippedAt,
-                dataset_project_migration_skip_reason = :reason,
-                last_updated_by = :userName
-            WHERE id = :id AND dataset_project_migration_skipped_at IS NULL
-            """)
-    int updateDatasetProjectMigrationSkippedIfNull(@Bind("id") String id,
-            @Bind("skippedAt") Instant skippedAt,
-            @Bind("reason") String reason,
-            @Bind("userName") String userName);
-
-    /**
-     * Plain INSERT (no upsert). Throws on duplicate-key — caller handles the "row already exists"
-     * branch via the {@link #updateDatasetProjectMigrationSkippedIfNull} attempt that precedes it.
-     */
-    @SqlUpdate("""
-            INSERT INTO workspaces (id, dataset_project_migration_skipped_at, dataset_project_migration_skip_reason, created_by, last_updated_by)
-            VALUES (:id, :skippedAt, :reason, :userName, :userName)
-            """)
-    void insertDatasetProjectMigrationSkipped(@Bind("id") String id,
-            @Bind("skippedAt") Instant skippedAt,
-            @Bind("reason") String reason,
-            @Bind("userName") String userName);
-
-    @SqlQuery("SELECT id FROM workspaces WHERE dataset_project_migration_skipped_at IS NOT NULL")
-    List<String> findDatasetProjectMigrationSkippedWorkspaceIds();
-
-    @SqlQuery("""
-            SELECT dataset_project_migration_skip_reason AS reason, COUNT(*) AS count
-            FROM workspaces
-            WHERE dataset_project_migration_skipped_at IS NOT NULL
-            GROUP BY dataset_project_migration_skip_reason
-            """)
-    @RegisterConstructorMapper(MigrationSkipReasonCount.class)
-    List<MigrationSkipReasonCount> countDatasetProjectMigrationSkippedByReason();
 
     /**
      * Returns the workspace's legacy-feedback-scores flag. {@code Optional.empty()} when the

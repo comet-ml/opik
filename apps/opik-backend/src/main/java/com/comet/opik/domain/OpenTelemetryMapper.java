@@ -1,14 +1,17 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span.SpanBuilder;
 import com.comet.opik.domain.mapping.OpenTelemetryMappingRuleFactory;
 import com.comet.opik.domain.mapping.otel.ElasticInferenceServiceResolver;
 import com.comet.opik.domain.mapping.otel.GeneralMappingRules;
+import com.comet.opik.domain.mapping.otel.GoogleProviderResolver;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.opentelemetry.proto.common.v1.KeyValue;
 import io.opentelemetry.proto.trace.v1.Span;
+import io.opentelemetry.proto.trace.v1.Status;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.digest.DigestUtils;
@@ -27,6 +30,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.domain.mapping.OpenTelemetryEventsMapper.processEvents;
+import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractCost;
 import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractTags;
 import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractToJsonColumn;
 import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractUsageField;
@@ -101,6 +105,8 @@ public class OpenTelemetryMapper {
         List<Span.Event> events = otelSpan.getEventsList();
         enrichSpanWithAttributes(spanBuilder, otelSpan.getAttributesList(), integrationName, events);
 
+        extractErrorInfo(otelSpan).ifPresent(spanBuilder::errorInfo);
+
         return spanBuilder.build();
     }
 
@@ -157,6 +163,10 @@ public class OpenTelemetryMapper {
                     extractUsageField(usage, rule, key, value);
                     break;
 
+                case COST :
+                    extractCost(value).ifPresent(spanBuilder::totalEstimatedCost);
+                    break;
+
                 case INPUT :
                 case OUTPUT :
                 case METADATA :
@@ -200,6 +210,16 @@ public class OpenTelemetryMapper {
         model = resolved.model();
         provider = resolved.provider();
 
+        // Disambiguate the generic 'google' provider (PydanticAI / google-genai) into the Vertex AI
+        // vs Gemini API canonical name using server.address, so cost lookup can match a price row.
+        provider = GoogleProviderResolver.resolve(provider, metadata);
+
+        // Agent-run spans (gen_ai.operation.name=invoke_agent) are not LLM calls. Other attributes
+        // on them (e.g. gen_ai.system_instructions) would otherwise type them as llm; force general.
+        if ("invoke_agent".equals(metadata.path("gen_ai.operation.name").asText(null))) {
+            spanBuilder.type(SpanType.general);
+        }
+
         if (model != null) {
             spanBuilder.model(model);
         }
@@ -229,6 +249,63 @@ public class OpenTelemetryMapper {
         if (!tags.isEmpty()) {
             spanBuilder.tags(tags);
         }
+    }
+
+    private static final String EXCEPTION_EVENT_NAME = "exception";
+    private static final String EXCEPTION_TYPE_ATTR = "exception.type";
+    private static final String EXCEPTION_MESSAGE_ATTR = "exception.message";
+    private static final String EXCEPTION_STACKTRACE_ATTR = "exception.stacktrace";
+    private static final String DEFAULT_EXCEPTION_TYPE = "Error";
+
+    /**
+     * Translates the OpenTelemetry error signals into Opik's {@link ErrorInfo}, so failed spans
+     * surface as errors instead of hiding the failure inside raw event metadata. Both signals are
+     * OTel core conventions emitted by every instrumentation, not PydanticAI-specific:
+     * <ul>
+     *     <li>An {@code exception} span event (from {@code Span.record_exception}) carrying
+     *     {@code exception.type} / {@code exception.message} / {@code exception.stacktrace}.</li>
+     *     <li>A span {@code STATUS_CODE_ERROR} status with an optional message.</li>
+     * </ul>
+     * The exception event is richer, so it takes precedence; the last one wins when several exist.
+     *
+     * @param otelSpan the OpenTelemetry span to inspect
+     * @return the extracted error info, or empty when the span did not fail
+     */
+    static Optional<ErrorInfo> extractErrorInfo(Span otelSpan) {
+        var exceptionEvent = otelSpan.getEventsList().stream()
+                .filter(event -> EXCEPTION_EVENT_NAME.equals(event.getName()))
+                .reduce((first, second) -> second);
+
+        if (exceptionEvent.isPresent()) {
+            var attributes = exceptionEvent.get().getAttributesList();
+            var message = eventAttribute(attributes, EXCEPTION_MESSAGE_ATTR);
+            return Optional.of(ErrorInfo.builder()
+                    .exceptionType(StringUtils.firstNonBlank(
+                            eventAttribute(attributes, EXCEPTION_TYPE_ATTR), DEFAULT_EXCEPTION_TYPE))
+                    .message(message)
+                    .traceback(StringUtils.firstNonBlank(
+                            eventAttribute(attributes, EXCEPTION_STACKTRACE_ATTR), message, DEFAULT_EXCEPTION_TYPE))
+                    .build());
+        }
+
+        if (otelSpan.getStatus().getCode() == Status.StatusCode.STATUS_CODE_ERROR) {
+            var message = StringUtils.trimToNull(otelSpan.getStatus().getMessage());
+            return Optional.of(ErrorInfo.builder()
+                    .exceptionType(DEFAULT_EXCEPTION_TYPE)
+                    .message(message)
+                    .traceback(StringUtils.firstNonBlank(message, DEFAULT_EXCEPTION_TYPE))
+                    .build());
+        }
+
+        return Optional.empty();
+    }
+
+    private static String eventAttribute(List<KeyValue> attributes, String key) {
+        return attributes.stream()
+                .filter(attribute -> key.equals(attribute.getKey()))
+                .map(attribute -> attribute.getValue().getStringValue())
+                .findFirst()
+                .orElse(null);
     }
 
     /**

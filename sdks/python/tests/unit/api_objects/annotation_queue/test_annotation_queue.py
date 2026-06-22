@@ -1,3 +1,4 @@
+import json
 from unittest.mock import Mock
 import pytest
 
@@ -5,7 +6,10 @@ from opik.api_objects.annotation_queue.annotation_queue import (
     TracesAnnotationQueue,
     ThreadsAnnotationQueue,
 )
-from opik.rest_api.types import trace_public, trace_thread
+from opik.rest_api.types import (
+    trace_public,
+    trace_thread,
+)
 from opik.exceptions import OpikException
 
 
@@ -338,3 +342,50 @@ class TestThreadsAnnotationQueueRemoveThreads:
             id="queue-123", ids=["thread-model-1"]
         )
         assert queue._items_count is None
+
+
+class TestTracesAnnotationQueueGetItems:
+    def test_get_items__happyflow(self):
+        mock_rest_client = Mock()
+        mock_rest_client.traces.search_traces.return_value = [
+            json.dumps({"id": "trace-1", "start_time": "2024-01-01T00:00:00Z"}).encode(
+                "utf-8"
+            )
+            + b"\n",
+            json.dumps({"id": "trace-2", "start_time": "2024-01-01T00:00:00Z"}).encode(
+                "utf-8"
+            ),
+        ]
+
+        queue = TracesAnnotationQueue(
+            id="queue-123",
+            name="test_queue",
+            project_id="project-123",
+            rest_client=mock_rest_client,
+        )
+
+        items = queue.get_items()
+
+        assert [item.id for item in items] == ["trace-1", "trace-2"]
+        assert all(isinstance(item, trace_public.TracePublic) for item in items)
+
+
+class TestThreadsAnnotationQueueGetItems:
+    def test_get_items__happyflow(self):
+        mock_rest_client = Mock()
+        mock_rest_client.traces.search_trace_threads.return_value = [
+            json.dumps({"id": "thread-1"}).encode("utf-8") + b"\n",
+            json.dumps({"id": "thread-2"}).encode("utf-8"),
+        ]
+
+        queue = ThreadsAnnotationQueue(
+            id="queue-123",
+            name="test_queue",
+            project_id="project-123",
+            rest_client=mock_rest_client,
+        )
+
+        items = queue.get_items()
+
+        assert [item.id for item in items] == ["thread-1", "thread-2"]
+        assert all(isinstance(item, trace_thread.TraceThread) for item in items)

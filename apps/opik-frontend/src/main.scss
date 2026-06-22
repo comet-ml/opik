@@ -13,6 +13,7 @@
     --primary-active: 238 65% 43%;
     --secondary: 240 93% 95%;
     --primary-100: 235 85% 97%;
+    --primary-50: 240 71% 99%;
     --white: #ffffff;
 
     --foreground-secondary: 224 71% 4%;
@@ -68,6 +69,11 @@
     /* Toggle colors */
     --toggle-outline-active: #f3f4fe;
 
+    /* Dataset/test-suite upload chip colors */
+    --upload-chip-bg: #bae6fd1a;
+    --upload-chip-border: #bae6fd99;
+    --upload-chip-icon-bg: #89deff;
+
     /* CodeMirror theme colors */
     --codemirror-background: #f8fafc;
     --codemirror-gutter: #94a3b8;
@@ -87,6 +93,7 @@
     --chart-red: #ef6868;
     --chart-burgundy: #bf399e;
     --chart-purple: #945fcf;
+    --chart-violet: #7c3aed;
     --chart-pink: #ed4a7b;
     --chart-orange: #fb9341;
     --chart-teal: #12a4b4;
@@ -103,7 +110,7 @@
     --thread-inactive: #e2effd;
     --thread-icon-background: #3438d0;
     --thread-icon-text: #ffffff;
-    --message-input-background: #e7ecff;
+    --message-input-background: #f2f2ff;
 
     /* Action cards */
     --action-card-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1),
@@ -270,6 +277,7 @@
     --primary-active: 220, 91%, 67%;
     --secondary: 0, 0%, 18%;
     --primary-100: 222, 25%, 14%;
+    --primary-50: 222, 25%, 12%;
     --white: #ffffff;
 
     --foreground-secondary: 214, 32%, 91%;
@@ -358,6 +366,11 @@
     /* Toggle colors - Dark Mode */
     --toggle-outline-active: #2c3c56;
 
+    /* Dataset/test-suite upload chip colors - Dark Mode */
+    --upload-chip-bg: #38bdf814;
+    --upload-chip-border: #38bdf833;
+    --upload-chip-icon-bg: #0ea5e9;
+
     /* Thread colors - Dark Mode */
     --thread-icon-background: #2e2932;
     --thread-icon-text: #a06dd9;
@@ -386,6 +399,7 @@
     --chart-red: #ef6868;
     --chart-burgundy: #bf399e;
     --chart-purple: #945fcf;
+    --chart-violet: #7c3aed;
     --chart-pink: #ed4a7b;
     --chart-orange: #fb9341;
     --chart-teal: #12a4b4;
@@ -503,6 +517,11 @@
 
   .dark .cm-focused .cm-selectionBackground {
     background-color: rgba(255, 255, 255, 0.15) !important;
+  }
+
+  .cm-editor:not(.cm-focused) .cm-activeLine,
+  .cm-editor:not(.cm-focused) .cm-activeLineGutter {
+    background-color: transparent !important;
   }
 
   /* Static Lezer code highlighting (used in PrettyLLMMessageCodeBlock) */
@@ -832,14 +851,21 @@
 
   td:last-child,
   th:last-child,
-  // Pinned/grouped cells use box-shadow for their border (see getCommonPinningStyles)
-  .comet-pinned-cell,
-  .comet-grouped-cell ~ td {
+  // Pinned cells use box-shadow for their border (see getCommonPinningStyles)
+  .comet-pinned-cell {
     border-right: none;
   }
 
   .comet-pinned-last-left {
     box-shadow: inset -1px 0px 0px 0px hsl(var(--border));
+  }
+
+  // In group rows the grouped cell paints its right border via inline
+  // box-shadow; the immediately-adjacent aggregated cell is only a thin
+  // (~1px) phantom slot whose own border-right would render as a second
+  // line right next to it. Suppress only that one neighbour's border-right.
+  .comet-grouped-cell + td {
+    border-right: none;
   }
 }
 
@@ -903,6 +929,15 @@
   overflow-wrap: break-word;
   word-break: break-word;
 
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-medium;
+  }
+
   pre {
     color: hsl(var(--foreground));
     background-color: hsl(var(--muted));
@@ -919,6 +954,19 @@
     white-space: pre-wrap;
     overflow-wrap: break-word;
     word-break: break-word;
+  }
+
+  :not(pre) > code {
+    @apply comet-code;
+    background-color: hsl(var(--muted));
+    border-radius: 0.25rem;
+    padding: 0.125rem 0.375rem;
+    font-size: inherit;
+
+    &::before,
+    &::after {
+      content: none;
+    }
   }
 }
 

@@ -40,7 +40,7 @@ const LogsPage = () => {
     <>
       <PageBodyScrollContainer>
         <PageBodyStickyContainer
-          className="mb-4 mt-6 flex items-center justify-between"
+          className="mb-3 mt-6 flex items-center justify-between"
           direction="horizontal"
         >
           <h1 className="comet-body-accented truncate break-words">Logs</h1>

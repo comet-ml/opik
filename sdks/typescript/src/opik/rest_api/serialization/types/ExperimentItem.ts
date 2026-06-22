@@ -21,6 +21,7 @@ export const ExperimentItem: core.serialization.ObjectSchema<serializers.Experim
         projectName: core.serialization.property("project_name", core.serialization.string().optional()),
         input: JsonListString.optional(),
         output: JsonListString.optional(),
+        traceMetadata: core.serialization.property("trace_metadata", JsonListString.optional()),
         feedbackScores: core.serialization.property(
             "feedback_scores",
             core.serialization.list(FeedbackScore).optional(),
@@ -56,6 +57,7 @@ export declare namespace ExperimentItem {
         project_name?: string | null;
         input?: JsonListString.Raw | null;
         output?: JsonListString.Raw | null;
+        trace_metadata?: JsonListString.Raw | null;
         feedback_scores?: FeedbackScore.Raw[] | null;
         comments?: Comment.Raw[] | null;
         total_estimated_cost?: number | null;

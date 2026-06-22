@@ -15,6 +15,7 @@ import com.comet.opik.api.DatasetItemUpdate;
 import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.DatasetVersion;
+import com.comet.opik.api.DatasetVersionSummary;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.api.DatasetVersionUpdate;
 import com.comet.opik.api.EvaluatorItem;
@@ -1915,6 +1916,60 @@ class DatasetVersionResourceTest {
         }
 
         @Test
+        @DisplayName("Success: GET datasets list returns correct latest version across many versions and multiple datasets")
+        void getDatasets__whenManyVersions__thenLatestVersionNameTagsAndIdCorrect() {
+            // Given - two datasets with different version counts so the latest version's name
+            // (= total version count) is unambiguous and an off-by-one or wrong-dataset join
+            // would be caught.
+            int dataset1Versions = 5;
+            int dataset2Versions = 3;
+
+            var dataset1Id = createDataset(UUID.randomUUID().toString());
+            IntStream.range(0, dataset1Versions).forEach(i -> createDatasetItems(dataset1Id, 1));
+
+            var dataset2Id = createDataset(UUID.randomUUID().toString());
+            IntStream.range(0, dataset2Versions).forEach(i -> createDatasetItems(dataset2Id, 1));
+
+            var latest1 = getLatestVersion(dataset1Id);
+            var latest2 = getLatestVersion(dataset2Id);
+            assertThat(latest1.versionName()).isEqualTo("v" + dataset1Versions);
+            assertThat(latest2.versionName()).isEqualTo("v" + dataset2Versions);
+
+            var expectedSummary1 = toSummary(latest1);
+            var expectedSummary2 = toSummary(latest2);
+
+            // When - the datasets list endpoint resolves the latest version per dataset
+            var datasetsPage = datasetResourceClient.getDatasets(TEST_WORKSPACE, API_KEY);
+
+            // Then - each dataset reports its own latest version as a full summary object
+            assertThat(datasetsPage.content())
+                    .filteredOn(d -> d.id().equals(dataset1Id))
+                    .singleElement()
+                    .extracting(Dataset::latestVersion)
+                    .usingRecursiveComparison()
+                    .ignoringCollectionOrder()
+                    .isEqualTo(expectedSummary1);
+
+            assertThat(datasetsPage.content())
+                    .filteredOn(d -> d.id().equals(dataset2Id))
+                    .singleElement()
+                    .extracting(Dataset::latestVersion)
+                    .usingRecursiveComparison()
+                    .ignoringCollectionOrder()
+                    .isEqualTo(expectedSummary2);
+        }
+
+        private DatasetVersionSummary toSummary(DatasetVersion version) {
+            return DatasetVersionSummary.builder()
+                    .id(version.id())
+                    .versionHash(version.versionHash())
+                    .versionName(version.versionName())
+                    .changeDescription(version.changeDescription())
+                    .tags(version.tags())
+                    .build();
+        }
+
+        @Test
         @DisplayName("Success: Filter versioned dataset items by data field")
         void getItems__whenFilteringVersionedItems__thenReturnMatchingItems() {
             // Given - Create dataset with items that have specific data fields
@@ -2708,8 +2763,14 @@ class DatasetVersionResourceTest {
         @Test
         @DisplayName("Success: Create items from traces for regular DATASET includes all enriched data")
         void createFromTraces__whenRegularDataset__thenDataContainsAllEnrichedFields() {
-            // Given - Create a regular DATASET
-            var datasetId = createDataset(UUID.randomUUID().toString());
+            // Given - Create a regular DATASET (type must be pinned: PODAM otherwise randomizes it,
+            // and a TEST_SUITE unwraps the input instead of keeping the enriched keys)
+            var dataset = buildDataset().toBuilder()
+                    .id(null)
+                    .name(UUID.randomUUID().toString())
+                    .type(DatasetType.DATASET)
+                    .build();
+            var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
 
             // Create a trace with known input
             String projectName = traceIdGenerator.generate().toString();

@@ -21,6 +21,7 @@ import com.comet.opik.domain.EndpointJobService;
 import com.comet.opik.domain.RunnerService;
 import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.NullNode;
@@ -59,6 +60,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -78,6 +80,7 @@ public class LocalRunnersResource {
     private final @NonNull EndpointJobService endpointJobService;
     private final @NonNull ConnectBridgeService connectBridgeService;
     private final @NonNull LocalRunnerConfig runnerConfig;
+    private final @NonNull AnalyticsService analyticsService;
 
     @GET
     @Operation(operationId = "listRunners", summary = "List local runners", description = "List local runners owned by the current user in the workspace", responses = {
@@ -112,7 +115,19 @@ public class LocalRunnersResource {
     @Operation(operationId = "disconnectRunner", summary = "Disconnect local runner", description = "Disconnect a local runner, terminating its connection and failing any pending jobs", responses = {
             @ApiResponse(responseCode = "204", description = "No content")})
     public Response disconnectRunner(@PathParam("runnerId") UUID runnerId) {
-        runnerService.disconnectRunner(runnerId);
+        // Emit only on a real disconnect; no-op calls (already reaped / not owned) would
+        // pollute the clean-shutdown vs heartbeat-reaper comparison.
+        runnerService.disconnectRunner(runnerId).ifPresent(type -> {
+            String workspaceId = requestContext.get().getWorkspaceId();
+            String userName = requestContext.get().getUserName();
+            analyticsService.trackEvent("opik_runner_disconnected", Map.of(
+                    "runner_id", runnerId.toString(),
+                    "workspace_id", workspaceId,
+                    "user_name", userName,
+                    "runner_type", type.getValue(),
+                    "reason", "stopped",
+                    "date", Instant.now().toString()));
+        });
         return Response.noContent().build();
     }
 

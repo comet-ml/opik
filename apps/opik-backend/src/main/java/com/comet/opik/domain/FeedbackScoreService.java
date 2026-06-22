@@ -66,7 +66,8 @@ public interface FeedbackScoreService {
 
     Mono<Void> scoreBatchOfThreads(List<FeedbackScoreBatchItemThread> scores);
 
-    Mono<Void> deleteThreadScores(String projectName, String threadId, Set<String> names, String author);
+    Mono<Void> deleteThreadScores(String projectName, String threadId, Set<String> names, String author,
+            UUID sourceQueueId);
 
     Mono<FeedbackScoreNames> getTraceThreadsFeedbackScoreNames(UUID projectId);
 
@@ -322,7 +323,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
 
     @Override
     public Mono<Void> deleteThreadScores(@NonNull String projectName, @NonNull String threadId,
-            @NonNull Set<String> names, String author) {
+            @NonNull Set<String> names, String author, UUID sourceQueueId) {
         Preconditions.checkArgument(!StringUtils.isBlank(projectName), "Project name cannot be blank");
         Preconditions.checkArgument(!StringUtils.isBlank(threadId), "Thread ID cannot be blank");
 
@@ -335,7 +336,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
         return getProject(projectName)
                 .flatMap(projectId -> traceThreadService.getThreadModelId(projectId, threadId)
                         .flatMap(threadModelId -> dao.deleteByEntityIdAndNames(EntityType.THREAD, threadModelId, names,
-                                author))
+                                author, sourceQueueId))
                         .switchIfEmpty(Mono.defer(() -> {
                             log.info("ThreadId '{}' not found in project '{}'. No scores deleted.", threadId,
                                     projectId);

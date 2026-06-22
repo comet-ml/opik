@@ -1,4 +1,4 @@
-export { test, expect } from './trace.fixture';
+export { test, expect } from './traced-agent.fixture';
 export type { ProjectFixtures } from './project.fixture';
 export type { ScratchDir, ScratchDirFixtures } from './scratch-dir.fixture';
 export type {
@@ -8,4 +8,25 @@ export type {
   FailureArtifactsFixtures,
 } from './failure-artifacts.fixture';
 export type { TraceRef, TraceFixtures } from './trace.fixture';
+export type { DatasetRef, DatasetFixtures, DatasetItemSeed } from './dataset.fixture';
+export type {
+  ExperimentRef,
+  ExperimentFixtures,
+  ExperimentItemSeed,
+  ExperimentItemScore,
+} from './experiment.fixture';
+export type {
+  TestSuiteRef,
+  TestSuiteFixtures,
+  TestSuiteItemSeed,
+} from './test-suite.fixture';
+export type {
+  FeedbackDefinitionRef,
+  FeedbackDefinitionFixtures,
+} from './feedback-definition.fixture';
+export type {
+  TracedAgentRef,
+  TracedAgentSpanRef,
+  TracedAgentFixtures,
+} from './traced-agent.fixture';
 export type { ProjectRef } from '../core/backend';

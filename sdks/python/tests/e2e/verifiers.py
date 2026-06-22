@@ -297,6 +297,63 @@ def verify_dataset(
         testlib.assert_dicts_equal(actual_item, expected_item, ignore_keys=["id"])
 
 
+def verify_dashboard(
+    opik_client: opik.Opik,
+    dashboard_id: str,
+    name: str = mock.ANY,
+    type: str = mock.ANY,
+    version: int = mock.ANY,
+    section_count: int = mock.ANY,
+    expected_widget_configs: Optional[Dict[str, Dict[str, Any]]] = None,
+    expected_widget_positions: Optional[Dict[str, Dict[str, int]]] = None,
+):
+    assert synchronization.until(
+        lambda: opik_client.get_dashboard(dashboard_id),
+        allow_errors=True,
+    ), f"Failed to get dashboard with id {dashboard_id}."
+
+    fetched = opik_client.get_dashboard(dashboard_id)
+    config = fetched.config
+
+    testlib.assert_equal(name, fetched.name)
+    testlib.assert_equal(type, fetched.type)
+    if version is not mock.ANY:
+        assert config["version"] == version
+    if section_count is not mock.ANY:
+        assert len(config["sections"]) == section_count
+
+    configs_by_type: Dict[str, List[Dict[str, Any]]] = {}
+    for section in config["sections"]:
+        for widget in section.get("widgets", []):
+            configs_by_type.setdefault(widget["type"], []).append(widget["config"])
+    if expected_widget_configs is not None:
+        for widget_type, expected_config in expected_widget_configs.items():
+            assert widget_type in configs_by_type, (
+                f"Expected widget of type {widget_type!r} not found in dashboard. "
+                f"Present types: {sorted(configs_by_type)}"
+            )
+            actual_config = configs_by_type[widget_type][0]
+            actual_subset = {key: actual_config.get(key) for key in expected_config}
+            testlib.assert_equal(expected_config, actual_subset)
+
+    # Every widget has a matching layout item and vice versa.
+    for section in config["sections"]:
+        section_widget_ids = {widget["id"] for widget in section.get("widgets", [])}
+        layout_ids = {item["i"] for item in section.get("layout", [])}
+        assert section_widget_ids == layout_ids, (
+            f"Widget/layout id mismatch in section {section.get('id')!r}"
+        )
+
+    if expected_widget_positions is not None:
+        layout_by_id = {
+            item.id: item for section in fetched.sections for item in section.layout
+        }
+        for widget_id, expected_pos in expected_widget_positions.items():
+            actual_item = layout_by_id[widget_id]
+            actual_subset = {key: getattr(actual_item, key) for key in expected_pos}
+            testlib.assert_equal(expected_pos, actual_subset)
+
+
 def verify_experiment(
     opik_client: opik.Opik,
     id: str,
@@ -358,6 +415,55 @@ def verify_experiment(
             f"Expected dataset_version_id {dataset_version_id}, "
             f"got {experiment_content.dataset_version_id}"
         )
+
+
+def verify_experiment_items_completed(
+    opik_client: opik.Opik,
+    experiment_id: str,
+    *,
+    expected_completed_dataset_item_ids: Set[str],
+    timeout: float = 15,
+) -> None:
+    """
+    Assert that the set of dataset item ids with at least one fully-
+    completed experiment item matches ``expected_completed_dataset_item_ids``
+    exactly.
+
+    Goes through the same predicate ``opik.evaluate_resume`` uses
+    (``trace.output`` is set only when the engine's happy-path-only line
+    runs), so this check correctly excludes both task-side failures
+    (task raised before producing output) and scoring-side failures
+    (output stripped by the engine when scoring did not finish).
+    """
+    from opik.evaluation.resume import context as resume_context
+
+    # The experiment record is eventually consistent: looking it up right
+    # after ``evaluate()`` returns can hit a 404, or a transient API/network
+    # error. Fetch the handle inside the poll (matching ``verify_experiment``
+    # / ``verify_test_suite_result``), so a fresh handle is also taken on
+    # each iteration rather than a stale one being cached across the poll.
+    def _completed_ids_or_none() -> Optional[Set[str]]:
+        experiment = opik_client.get_experiment_by_id(experiment_id)
+        return {
+            item.dataset_item_id
+            for item in experiment.get_items()
+            if resume_context.is_trial_fully_completed(item)
+        }
+
+    last_observed: Set[str] = set()
+
+    def _converged() -> bool:
+        nonlocal last_observed
+        last_observed = _completed_ids_or_none() or set()
+        return last_observed == expected_completed_dataset_item_ids
+
+    assert synchronization.until(
+        _converged, max_try_seconds=timeout, allow_errors=True
+    ), (
+        f"Expected completed dataset item ids "
+        f"{sorted(expected_completed_dataset_item_ids)}; got "
+        f"{sorted(last_observed)} after {timeout}s"
+    )
 
 
 def verify_attachments(
@@ -508,10 +614,56 @@ def _verify_experiment_metadata(
     experiment_metadata = experiment_content.metadata
     if experiment_content.metadata is not None:
         experiment_metadata = {**experiment_content.metadata}
+        # SDK-managed keys that ``evaluate()`` writes into the
+        # experiment config; tests assert on user-supplied keys only.
         experiment_metadata.pop("prompt", None)
         experiment_metadata.pop("prompts", None)
+        experiment_metadata.pop("_opik_resume", None)
+        # Tests that supplied no ``experiment_config`` expect
+        # ``metadata=None``; after stripping SDK keys we may be left
+        # with an empty dict for the same case.
+        if not experiment_metadata:
+            experiment_metadata = None
 
     assert experiment_metadata == metadata, f"{experiment_metadata} != {metadata}"
+
+
+def verify_experiment_traces_have_opik_prompts(
+    opik_client: opik.Opik,
+    trace_ids: List[str],
+    prompts: List[Prompt],
+) -> None:
+    """Verify each trace produced by an experiment carries `opik_prompts`
+    in its metadata. Backend needs this for trace-level prompt linkage."""
+    assert trace_ids, "Expected at least one trace_id to verify prompt injection"
+
+    expected_prompt_keys = sorted(
+        (p.__internal_api__prompt_id__, p.commit) for p in prompts
+    )
+
+    for trace_id in trace_ids:
+        assert synchronization.until(
+            lambda: opik_client.get_trace_content(id=trace_id) is not None,
+            allow_errors=True,
+        ), f"Failed to get trace {trace_id}"
+
+        trace_content = opik_client.get_trace_content(id=trace_id)
+        assert trace_content.metadata is not None, (
+            f"Trace {trace_id} has no metadata; expected opik_prompts"
+        )
+        actual_prompts = trace_content.metadata.get("opik_prompts")
+        assert actual_prompts, (
+            f"Trace {trace_id} metadata is missing 'opik_prompts': "
+            f"{trace_content.metadata}"
+        )
+        actual_keys = sorted(
+            (p.get("id"), (p.get("version") or {}).get("commit"))
+            for p in actual_prompts
+        )
+        assert actual_keys == expected_prompt_keys, (
+            f"Trace {trace_id} opik_prompts mismatch: "
+            f"actual={actual_keys}, expected={expected_prompt_keys}"
+        )
 
 
 def _verify_experiment_prompts(
@@ -731,6 +883,7 @@ def verify_prompt_version(
     prompt_id: Any = mock.ANY,  # type: ignore
     commit: Any = mock.ANY,  # type: ignore
     project_name: Any = mock.ANY,
+    environments: Optional[Iterable[str]] = None,
 ) -> None:
     testlib.assert_equal(name, prompt.name)
     testlib.assert_equal(project_name, prompt.project_name)
@@ -744,6 +897,8 @@ def verify_prompt_version(
         f"{prompt.__internal_api__prompt_id__} != {prompt_id}"
     )
     assert commit == prompt.commit, f"{prompt.commit} != {commit}"
+    if environments is not None:
+        verify_prompt_environments(prompt, contains=environments)
 
 
 def verify_chat_prompt_version(
@@ -757,6 +912,7 @@ def verify_chat_prompt_version(
     prompt_id: Any = mock.ANY,  # type: ignore
     commit: Any = mock.ANY,  # type: ignore
     project_name: Any = mock.ANY,  # type: ignore
+    environments: Optional[Iterable[str]] = None,
 ) -> None:
     """
     Verifies that a ChatPrompt has the expected properties.
@@ -777,6 +933,39 @@ def verify_chat_prompt_version(
         f"{chat_prompt.__internal_api__prompt_id__} != {prompt_id}"
     )
     assert commit == chat_prompt.commit, f"{chat_prompt.commit} != {commit}"
+    if environments is not None:
+        verify_prompt_environments(chat_prompt, contains=environments)
+
+
+def verify_prompt_environments(
+    prompt: Union[Prompt, ChatPrompt],
+    *,
+    contains: Optional[Iterable[str]] = None,
+    excludes: Optional[Iterable[str]] = None,
+    exactly: Optional[Iterable[str]] = None,
+) -> None:
+    """Verify the environment ownership of a prompt version.
+
+    Environment order is not guaranteed by the backend, so checks are
+    set-based:
+    - ``contains``: every listed environment must be present
+    - ``excludes``: none of the listed environments may be present
+    - ``exactly``: the environment set must match exactly (use an empty
+      iterable to assert ownership was cleared)
+    """
+    actual: Set[str] = set(prompt.environments or [])
+
+    if exactly is not None:
+        expected = set(exactly)
+        assert actual == expected, f"environments {actual} != expected {expected}"
+
+    if contains is not None:
+        missing = set(contains) - actual
+        assert not missing, f"environments {actual} missing {missing}"
+
+    if excludes is not None:
+        present = set(excludes) & actual
+        assert not present, f"environments {actual} should not contain {present}"
 
 
 def verify_opik_prompt_entry(

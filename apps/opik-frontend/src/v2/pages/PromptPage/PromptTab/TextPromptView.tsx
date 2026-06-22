@@ -11,6 +11,8 @@ const TextPromptView: React.FC<TextPromptViewProps> = ({ template }) => {
     <PromptTemplateView
       template={template}
       templateStructure={PROMPT_TEMPLATE_STRUCTURE.TEXT}
+      hideHeader
+      bareContent
     />
   );
 };

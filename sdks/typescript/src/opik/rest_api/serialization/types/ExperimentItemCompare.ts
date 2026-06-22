@@ -22,6 +22,7 @@ export const ExperimentItemCompare: core.serialization.ObjectSchema<
     projectId: core.serialization.property("project_id", core.serialization.string().optional()),
     input: JsonListStringCompare.optional(),
     output: JsonListStringCompare.optional(),
+    traceMetadata: core.serialization.property("trace_metadata", JsonListStringCompare.optional()),
     feedbackScores: core.serialization.property(
         "feedback_scores",
         core.serialization.list(FeedbackScoreCompare).optional(),
@@ -56,6 +57,7 @@ export declare namespace ExperimentItemCompare {
         project_id?: string | null;
         input?: JsonListStringCompare.Raw | null;
         output?: JsonListStringCompare.Raw | null;
+        trace_metadata?: JsonListStringCompare.Raw | null;
         feedback_scores?: FeedbackScoreCompare.Raw[] | null;
         comments?: CommentCompare.Raw[] | null;
         total_estimated_cost?: number | null;

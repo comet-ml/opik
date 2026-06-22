@@ -6,6 +6,7 @@ import com.comet.opik.api.LogItem;
 import com.comet.opik.api.Optimization;
 import com.comet.opik.api.RecentActivity.ActivityType;
 import com.comet.opik.api.RecentActivity.RecentActivityItem;
+import com.comet.opik.api.metrics.ProjectMetricResponse;
 import com.comet.opik.domain.alerts.AlertEventLogsDAO;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -51,6 +52,8 @@ class RecentActivityServiceTest {
     @Mock
     private AlertEventLogsDAO alertEventLogsDAO;
     @Mock
+    private ProjectMetricsService projectMetricsService;
+    @Mock
     private TransactionTemplate transactionTemplate;
     @Mock
     private InstantToUUIDMapper instantToUUIDMapper;
@@ -72,6 +75,8 @@ class RecentActivityServiceTest {
     private void mockEmptyJdbiSources() {
         when(transactionTemplate.inTransaction(any(), any()))
                 .thenReturn(List.of());
+        when(projectMetricsService.getProjectMetrics(any(), any()))
+                .thenReturn(Mono.just(ProjectMetricResponse.EMPTY));
     }
 
     @Nested
@@ -198,6 +203,8 @@ class RecentActivityServiceTest {
                     .thenReturn(Flux.error(new RuntimeException("fail")));
             when(transactionTemplate.inTransaction(any(), any()))
                     .thenThrow(new RuntimeException("fail"));
+            when(projectMetricsService.getProjectMetrics(any(), any()))
+                    .thenReturn(Mono.error(new RuntimeException("fail")));
 
             StepVerifier.create(service.getRecentActivity(PROJECT_ID, 1, 10))
                     .assertNext(result -> assertThat(result.content()).isEmpty())

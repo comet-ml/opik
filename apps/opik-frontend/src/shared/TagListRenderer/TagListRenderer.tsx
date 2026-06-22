@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Plus, Tag } from "lucide-react";
-import { Button } from "@/ui/button";
+import { Button, ButtonProps } from "@/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { Input } from "@/ui/input";
 import { useToast } from "@/ui/use-toast";
@@ -9,13 +9,39 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
 import { TagProps } from "@/ui/tag";
 
+type TagListSize = "md" | "sm";
+
+type TagSizeConfig = {
+  iconClassName: string;
+  tagSize: TagProps["size"];
+  addButtonSize: ButtonProps["size"];
+  addButtonClassName?: string;
+  rowMinHeight: string;
+};
+
+const TAG_SIZE_CONFIG: Record<TagListSize, TagSizeConfig> = {
+  md: {
+    iconClassName: "mx-1 size-3.5",
+    tagSize: "md",
+    addButtonSize: "icon-2xs",
+    rowMinHeight: "min-h-6",
+  },
+  sm: {
+    iconClassName: "mx-1 size-3",
+    tagSize: "default",
+    addButtonSize: "icon-2xs",
+    addButtonClassName: "size-5",
+    rowMinHeight: "min-h-7",
+  },
+};
+
 export type TagListRendererProps = {
   tags: string[];
   immutableTags?: string[];
   onAddTag: (tag: string) => void;
   onDeleteTag: (tag: string) => void;
   align?: "start" | "end";
-  size?: "md" | "sm";
+  size?: TagListSize;
   className?: string;
   tooltipText?: string;
   placeholderText?: string;
@@ -46,8 +72,7 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
 
   const hasTags = tags.length > 0 || immutableTags.length > 0;
 
-  const tagSizeClass = size === "sm" ? "w-3" : "w-4";
-  const tagMarginClass = size === "sm" ? "mx-0" : "mx-1";
+  const tagSizeConfig = TAG_SIZE_CONFIG[size];
 
   const isImmutableTag = (tag: string): boolean =>
     immutableTags.some((t) => t.toLowerCase() === tag.toLowerCase());
@@ -76,18 +101,19 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
   return (
     <div
       className={cn(
-        "flex min-h-7 w-full flex-wrap items-center gap-2 overflow-x-hidden",
+        "flex w-full flex-wrap items-center gap-2 overflow-x-hidden",
+        tagSizeConfig.rowMinHeight,
         className,
       )}
     >
       <TooltipWrapper content={tooltipText}>
-        <Tag className={`${tagMarginClass} ${tagSizeClass} text-muted-slate`} />
+        <Tag className={`${tagSizeConfig.iconClassName} text-muted-slate`} />
       </TooltipWrapper>
       {[...immutableTags].sort().map((tag) => (
         <RemovableTag
           label={tag}
           key={`immutable-${tag}`}
-          size="md"
+          size={tagSizeConfig.tagSize}
           variant={tagVariant}
         />
       ))}
@@ -95,7 +121,7 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
         <RemovableTag
           label={tag}
           key={tag}
-          size="md"
+          size={tagSizeConfig.tagSize}
           variant={tagVariant}
           onDelete={() => onDeleteTag(tag)}
         />
@@ -106,7 +132,8 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
             <Button
               data-testid="add-tag-button"
               variant="outline"
-              size="icon-2xs"
+              size={tagSizeConfig.addButtonSize}
+              className={cn(tagSizeConfig.addButtonClassName)}
             >
               <Plus />
             </Button>

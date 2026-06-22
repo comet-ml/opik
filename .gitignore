@@ -1,6 +1,9 @@
 # Mac
 .DS_Store
 
+# Load-test suite runtime output (one JSON file per scenario per run)
+.last_run/
+
 # Environment variables
 .env.local
 .env
@@ -27,6 +30,7 @@ target/
 # Test suite reports
 opik_evaluation_suite_reports/
 opik_test_suite_reports/
+allure-results/
 
 # Opik opimizer related
 /sdks/opik_optimizer/artifacts
@@ -128,3 +132,6 @@ tests_end_to_end/visual-tests/screenshots/
 
 # `opik migrate` audit logs (runtime artifacts written to CWD by default)
 opik-migrate-*.json
+
+# private opik plugin
+apps/opik-frontend/src/plugins/ai-spend

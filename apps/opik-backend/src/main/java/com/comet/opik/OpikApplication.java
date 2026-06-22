@@ -1,6 +1,8 @@
 package com.comet.opik;
 
 import com.comet.opik.api.error.JsonProcessingExceptionMapper;
+import com.comet.opik.api.resources.oauth.McpOAuthBundle;
+import com.comet.opik.api.resources.oauth.OAuthExceptionMapper;
 import com.comet.opik.api.resources.v1.events.tools.ToolsModule;
 import com.comet.opik.infrastructure.ConfigurationModule;
 import com.comet.opik.infrastructure.EncryptionUtils;
@@ -32,6 +34,8 @@ import com.comet.opik.infrastructure.ratelimit.RateLimitModule;
 import com.comet.opik.infrastructure.redis.RedisModule;
 import com.comet.opik.infrastructure.usagelimit.UsageLimitModule;
 import com.comet.opik.infrastructure.web.InstantParamConverter;
+import com.comet.opik.infrastructure.web.JsonUploadFormatMessageBodyReader;
+import com.comet.opik.infrastructure.web.LocalDateParamConverter;
 import com.comet.opik.utils.JsonBigDecimalDeserializer;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.OpenAiMessageJsonDeserializer;
@@ -94,7 +98,8 @@ public class OpikApplication extends Application<OpikConfiguration> {
                 .bundles(JdbiBundle
                         .<OpikConfiguration>forDatabase(
                                 (conf, env) -> FilterUtils.filterProperties(conf.getDatabase()))
-                        .withPlugins(new SqlObjectPlugin(), new Jackson2Plugin()))
+                        .withPlugins(new SqlObjectPlugin(), new Jackson2Plugin()),
+                        new McpOAuthBundle())
                 .modules(new DatabaseAnalyticsModule(), new IdGeneratorModule(), new AuthModule(), new RedisModule(),
                         new RateLimitModule(), new NameGeneratorModule(), new HttpModule(), new EventModule(),
                         new ConfigurationModule(), new CacheModule(), new JobModule(), new AnthropicModule(),
@@ -143,6 +148,9 @@ public class OpikApplication extends Application<OpikConfiguration> {
         jersey.property(ServerProperties.RESPONSE_SET_STATUS_OVER_SEND_ERROR, true);
 
         jersey.register(JsonProcessingExceptionMapper.class);
+        jersey.register(OAuthExceptionMapper.class);
         jersey.register(InstantParamConverter.class);
+        jersey.register(LocalDateParamConverter.class);
+        jersey.register(JsonUploadFormatMessageBodyReader.class);
     }
 }

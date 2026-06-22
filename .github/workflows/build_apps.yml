@@ -26,6 +26,16 @@ on:
         required: true
         description: Build guardrails backend
         default: true
+      build_arm64:
+        type: boolean
+        required: false
+        description: Build multiarch images
+        default: true
+      ai_spend_plugin_ref:
+        type: string
+        required: false
+        description: ai-spend plugin ref
+        default: "main"
   workflow_call:
     inputs:
       version:
@@ -51,7 +61,17 @@ on:
         required: false
         description: Build guardrails backend
         default: true
-        
+      build_arm64:
+        type: boolean
+        required: false
+        description: Build multiarch images
+        default: true
+      ai_spend_plugin_ref:
+        type: string
+        required: false
+        description: ai-spend plugin ref
+        default: "main"
+
     outputs:
       version:
         description: "The version that was built"
@@ -97,15 +117,15 @@ jobs:
                 VERSION="${BASE_VERSION}-${fixedBranchName}-${{ github.run_number }}"
               fi
             fi
-            echo "version=${VERSION}" | tee -a $GITHUB_OUTPUT
-            echo "Version is ${VERSION}" >> $GITHUB_STEP_SUMMARY
+            echo "version=${VERSION}" | tee -a "$GITHUB_OUTPUT"
+            echo "Version is ${VERSION}" >> "$GITHUB_STEP_SUMMARY"
 
             if [ "${{inputs.ref}}" != "" ]; then
-              echo "build_from=${{inputs.ref}}" | tee -a $GITHUB_OUTPUT
+              echo "build_from=${{inputs.ref}}" | tee -a "$GITHUB_OUTPUT"
             elif [[ "${{inputs.version}}" == "" ]]; then
-              echo "build_from=${{github.ref_name}}" | tee -a $GITHUB_OUTPUT
+              echo "build_from=${{github.ref_name}}" | tee -a "$GITHUB_OUTPUT"
             else
-              echo "build_from=${{inputs.version}}" | tee -a $GITHUB_OUTPUT
+              echo "build_from=${{inputs.version}}" | tee -a "$GITHUB_OUTPUT"
             fi
             
   build-backend:
@@ -121,6 +141,8 @@ jobs:
       comet_build_args: ""
       is_release: ${{ inputs.is_release || false }}
       is_adhoc: ${{ inputs.is_adhoc || false }}
+      # push events have no `inputs` context, so force multi-arch there; otherwise honor the input (workflow_dispatch / workflow_call use the declared default: true)
+      build_arm64: ${{ github.event_name == 'push' || inputs.build_arm64 }}
 
   build-sandbox-executor-python:
     if: ${{ !inputs.is_adhoc }}
@@ -136,6 +158,7 @@ jobs:
       comet_build_args: ""
       is_release: ${{ inputs.is_release || false }}
       is_adhoc: ${{ inputs.is_adhoc || false }}
+      build_arm64: ${{ github.event_name == 'push' || inputs.build_arm64 }}
 
   build-python-backend:
     if: always() && needs.set-version.result == 'success'
@@ -152,6 +175,7 @@ jobs:
       comet_build_args: ""
       is_release: ${{ inputs.is_release || false }}
       is_adhoc: ${{ inputs.is_adhoc || false }}
+      build_arm64: ${{ github.event_name == 'push' || inputs.build_arm64 }}
 
   # build-guardrails-backend:
   #   if: inputs.build_guardrails != false 
@@ -180,6 +204,8 @@ jobs:
       comet_build_args: ${{ !inputs.is_adhoc && 'BUILD_MODE=comet' || '' }}
       is_release: ${{ inputs.is_release || false }}
       is_adhoc: ${{ inputs.is_adhoc || false }}
+      build_arm64: ${{ github.event_name == 'push' || inputs.build_arm64 }}
+      ai_spend_plugin_ref: ${{ inputs.ai_spend_plugin_ref || 'main' }}
 
   create-git-tag:
     if: |

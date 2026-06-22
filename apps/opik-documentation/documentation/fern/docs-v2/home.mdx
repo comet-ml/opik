@@ -6,15 +6,7 @@ og:title: "Opik - Open-Source LLM Observability & Agent Optimization"
 og:description: "Build, test, and optimize GenAI apps from prototype to production. Comprehensive tracing, evaluation, and prompt optimization for RAG, agents, and more."
 ---
 
-Opik is an [open-source](https://github.com/comet-ml/opik) logging, debugging, and optimization
-platform for AI agents and LLM applications. If you're building AI features, you know it's easy to
-spin up a working prototype but harder to log, test, iterate, and monitor to meet production
-requirements.
-
-Opik gives you all the tools you need to go from LLM observability to action across your AI
-application footprint and dev cycle. Ship measurable improvements with gorgeous logs, annotation and
-scoring functions, pre-configured LLM-as-a-judge [eval metrics](/evaluation/metrics/overview), and
-even [automated agent optimization algorithms](/development/optimization-runs/overview) to maximize performance. 
+Opik is an [open-source](https://github.com/comet-ml/opik) platform that helps you understand what your LLM application is doing, measure how well it's working, and systematically make it better. Whether you're building a chatbot, a RAG pipeline, or a multi-step agent, Opik gives you the tools to go from "it works on my laptop" to "it works reliably in production."
 
 ## End-to-End AI Engineering
 
@@ -27,37 +19,67 @@ even [automated agent optimization algorithms](/development/optimization-runs/ov
   self-hosting guide can be found [here](/self-host/local_deployment).
 </Tip>
 
-## Core Functions
+## How to use Opik
+
+<Tip>
+  **Using Claude Code, Cursor, or VS Code Copilot?** Install the [Opik MCP server](/mcp-server) and drive your entire workspace from chat — read traces, score outputs, save prompts, and run experiments without opening the UI.
+</Tip>
+
+<Steps>
+  ### See what your application is doing
+
+  Opik records every LLM call, tool invocation, and agent step so you can inspect the full chain of events that led to any output. Add a few lines of code and you'll have a complete log of every request and response.
+
+  [Start logging traces →](/tracing/getting-started)
+
+  ### Build test suites from your traces
+
+  When you spot a trace that looks wrong, turn it into a test case. Use [Ollie](/ollie) to do this automatically (just describe what went wrong), or add test cases through the UI or SDK. Then run your test suite with Ollie or from the SDK to verify your fixes.
+
+  Over time, your test suite grows from real production failures, not hypothetical examples.
+
+  [Build your first test suite →](/evaluation/advanced/building-test-suites)
+
+  ### Track quality in production
+
+  Set up online evaluation rules that automatically score incoming traces, and monitor feedback scores, latency, cost, and error rates from the project dashboard.
+
+  [Set up production monitoring →](/production/online-evaluation/rules)
+
+  ### Automatically improve your prompts
+
+  Opik's optimization algorithms test variations of your prompts against your metrics and datasets to find what works best, without manual trial and error.
+
+  [Run your first optimization →](/development/optimization-runs/quickstart)
+</Steps>
+
+## Explore by feature
 
 <CardGroup cols={2}>
-  <Card title="Quickstart Guide" href="/quickstart" icon="fa-solid fa-rocket" iconPosition="left">
-    Opik integrates with your existing AI stack through your model provider or LLM framework.
+  <Card title="Quickstart" href="/quickstart" icon="fa-solid fa-rocket" iconPosition="left">
+    Get Opik running with your existing AI stack in minutes. Works with OpenAI, Anthropic, LangChain, and 50+ other providers and frameworks.
   </Card>
-  <Card title="LLM Observability - Log LLM Traces" href="/tracing/advanced/log_traces" icon="fa-solid fa-eye" iconPosition="left">
-    Traces give you instant visibility into what's working, what's not, and why and includes
-    advanced analysis and debugging features built in. 
+  <Card title="MCP Server" href="/mcp-server" icon="fa-solid fa-network-wired" iconPosition="left">
+    Connect Claude Code, Cursor, or VS Code Copilot directly to your Opik workspace. Read traces, score outputs, and run experiments from chat — no UI required.
   </Card>
-  <Card title="Evaluation - Score Performance" href="/evaluation/overview" icon="fa-solid fa-chart-line" iconPosition="left">
-    Use LLM-as-a-judge and heuristic eval metrics to score your app or agent on hallucination,
-    context recall, and more. 
+  <Card title="Log traces" href="/tracing/advanced/log_traces" icon="fa-solid fa-eye" iconPosition="left">
+    Record every LLM call, tool invocation, and agent step. Debug failures, track token costs, and understand what your application is doing.
   </Card>
-  <Card title="Agent Optimization" href="/development/optimization-runs/overview" icon="fa-solid fa-brain" iconPosition="left">
-    Choose from six advanced optimization algorithms to auto-generate and score the best prompts for
-    the steps in your agentic system. 
+  <Card title="Evaluate performance" href="/evaluation/overview" icon="fa-solid fa-chart-line" iconPosition="left">
+    Score your application on hallucination, context recall, relevance, and more using automated LLM-as-a-judge and heuristic metrics.
   </Card>
-  <Card title="Prompt Engineering" href="/v1/prompt_engineering/prompt_management" icon="fa-solid fa-wand-magic-sparkles" iconPosition="left">
-    Store and version system prompts, compare results live in the [Prompt Playground](/v1/prompt_engineering/playground),
-    and experiment with different models with our LLM proxy. 
+  <Card title="Optimize prompts" href="/development/optimization-runs/overview" icon="fa-solid fa-brain" iconPosition="left">
+    Automatically generate and test better prompts for every step in your agent using six optimization algorithms.
   </Card>
-  <Card title="Self-hosting Opik" href="/self-host/overview" icon="fa-solid fa-server" iconPosition="left">
-    Deploy Opik on your own infrastructure with local or Kubernetes deployment options.
+  <Card title="Manage prompts" href="/development/prompt-library/getting-started" icon="fa-solid fa-wand-magic-sparkles" iconPosition="left">
+    Store and version your prompts, compare results in the [Prompt Playground](/development/prompt-playground), and experiment with different models.
+  </Card>
+  <Card title="Self-host Opik" href="/self-host/overview" icon="fa-solid fa-server" iconPosition="left">
+    Deploy on your own infrastructure with Docker locally or Kubernetes at scale. Full control over your data.
   </Card>
 </CardGroup>
 
-## Video Tutorials
-
-Prefer a visual guide ? Follow along as we cover everything from basic setup and trace logging to
-LLM evaluation metrics, production monitoring, and more.
+## See it in action
 
 <Frame>
   <iframe
@@ -71,18 +93,10 @@ LLM evaluation metrics, production monitoring, and more.
   ></iframe>
 </Frame>
 
-<Tip>
-  You can find a full set of video tutorials in the [Opik University](/v1/opik-university/overview).
-</Tip>
-
-## Open-Source access meets enterprise performance
+## Open-source access meets enterprise performance
 
 All Opik versions ([cloud](https://www.comet.com/signup?from=llm),
 [open source](https://github.com/comet-ml/opik), and
-[enterprise](https://www.comet.com/site/pricing/)) include the full AI engineering featureset
+[enterprise](https://www.comet.com/site/pricing/)) include the full AI engineering feature set
 and run on the Comet platform, with proven performance at scale supporting many of the world's
-largest organizations. 
-
-Compare Opik to other LLM observability tools and you'll find that traces populate faster,
-evaluations run smoother, and reliability comes standard — even for complex agentic systems serving
-millions of users in production. 
+largest organizations.

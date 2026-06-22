@@ -107,6 +107,8 @@ public record Experiment(
     public record PromptVersionLink(@JsonView({
             Experiment.View.Public.class, Experiment.View.Write.class}) @NotNull UUID id,
             @JsonView({Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String commit,
+            @JsonView({
+                    Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "sequential version number in the format v<N>; null for masks") String versionNumber,
             @JsonView({Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID promptId,
             @JsonView({
                     Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String promptName) {

@@ -36,7 +36,12 @@ class PromptVersionDetail(UniversalBaseModel):
     version type discriminator; defaults to prompt_version
     """
 
-    environment: typing.Optional[str] = None
+    environment: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Deprecated: use 'environments' instead
+    """
+
+    environments: typing.Optional[typing.List[str]] = None
     change_description: typing.Optional[str] = None
     tags: typing.Optional[typing.List[str]] = None
     variables: typing.Optional[typing.List[str]] = None

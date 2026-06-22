@@ -45,7 +45,7 @@ jobs:
         run: env
 
       - name: Print event object
-        run: cat $GITHUB_EVENT_PATH
+        run: cat "$GITHUB_EVENT_PATH"
 
       - name: Print the PR title
         env:
@@ -67,7 +67,9 @@ jobs:
           pip list
 
       - name: Running SDK Unit Tests
-        run: python -m pytest -vv tests/unit/ --junitxml=${{ github.workspace }}/test_results.xml
+        # Per-test timeout (thread method dumps all thread stacks via faulthandler)
+        # so a hung test fails fast with a traceback instead of a silent 20-min cancel.
+        run: python -m pytest -vv tests/unit/ --timeout=120 --timeout-method=thread --junitxml=${{ github.workspace }}/test_results.xml
 
       - name: Publish Test Report
         uses: EnricoMi/publish-unit-test-result-action/linux@v2

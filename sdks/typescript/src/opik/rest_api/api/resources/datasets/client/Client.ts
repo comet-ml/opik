@@ -37,6 +37,11 @@ export class DatasetsClient {
      *
      * Use `override=true` query parameter to force version creation even with stale baseVersion.
      *
+     * Set 'copy_from_dataset_id' and 'copy_from_version_id' together on the request body to read
+     * carry-forward rows from the supplied (dataset, version) pair instead of the destination's
+     * prior version. When the fields are null, carry-forward rows are read from the destination's
+     * prior version.
+     *
      * @param {string} id
      * @param {OpikApi.ApplyDatasetItemChangesRequest} request
      * @param {DatasetsClient.RequestOptions} requestOptions - Request-specific configuration.
@@ -369,6 +374,10 @@ export class DatasetsClient {
      * Each item's 'id' field is the stable identifier and upsert key.
      * Provide it to update an existing item, or omit it to create a new one.
      *
+     * Set 'copy_from_dataset_id' and 'copy_from_version_id' together to read carry-forward rows
+     * from the supplied (dataset, version) pair instead of the destination's prior version. When
+     * the fields are null, carry-forward rows are read from the destination's prior version.
+     *
      * @param {OpikApi.DatasetItemBatchWrite} request
      * @param {DatasetsClient.RequestOptions} requestOptions - Request-specific configuration.
      *
@@ -520,6 +529,104 @@ export class DatasetsClient {
             _response.rawResponse,
             "POST",
             "/v1/private/datasets/items/from-csv",
+        );
+    }
+
+    /**
+     * Create dataset items from an uploaded JSON or JSONL file. JSON files must contain a top-level array of objects.
+     * JSONL files contain one JSON object per non-blank line; multi-line JSON objects are not supported.
+     * Reserved keys (id, source, description, tags, evaluators, execution_policy) are extracted into the
+     * corresponding DatasetItem fields; all remaining keys form the item's data map and preserve their JSON types.
+     * To link dataset items to specific traces or spans use the dedicated /items/from-traces or /items/from-spans endpoints.
+     * Processing happens asynchronously in batches. With dataset versioning enabled, a supplied id acts as an upsert key.
+     *
+     * @param {OpikApi.CreateDatasetItemsFromJsonRequest} request
+     * @param {DatasetsClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.BadRequestError}
+     *
+     * @example
+     *     import { createReadStream } from "fs";
+     *     await client.datasets.createDatasetItemsFromJson({
+     *         file: {
+     *             "key": "value"
+     *         },
+     *         datasetId: "dataset_id",
+     *         format: "json"
+     *     })
+     */
+    public createDatasetItemsFromJson(
+        request: OpikApi.CreateDatasetItemsFromJsonRequest,
+        requestOptions?: DatasetsClient.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__createDatasetItemsFromJson(request, requestOptions));
+    }
+
+    private async __createDatasetItemsFromJson(
+        request: OpikApi.CreateDatasetItemsFromJsonRequest,
+        requestOptions?: DatasetsClient.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
+        const _body = await core.newFormData();
+        _body.append("file", toJson(request.file));
+        _body.append("dataset_id", request.datasetId);
+        _body.append(
+            "format",
+            serializers.CreateDatasetItemsFromJsonRequestFormat.jsonOrThrow(request.format, {
+                unrecognizedObjectKeys: "strip",
+                omitUndefined: true,
+            }),
+        );
+        const _maybeEncodedRequest = await _body.getRequest();
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+                ..._maybeEncodedRequest.headers,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/datasets/items/from-json",
+            ),
+            method: "POST",
+            headers: _headers,
+            queryParameters: requestOptions?.queryParams,
+            requestType: "file",
+            duplex: _maybeEncodedRequest.duplex,
+            body: _maybeEncodedRequest.body,
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return { data: undefined, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "POST",
+            "/v1/private/datasets/items/from-json",
         );
     }
 

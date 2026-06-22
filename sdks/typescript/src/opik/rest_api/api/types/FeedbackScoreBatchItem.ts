@@ -12,5 +12,6 @@ export interface FeedbackScoreBatchItem {
     reason?: string;
     source: OpikApi.FeedbackScoreBatchItemSource;
     author?: string;
+    sourceQueueId?: string;
     id: string;
 }

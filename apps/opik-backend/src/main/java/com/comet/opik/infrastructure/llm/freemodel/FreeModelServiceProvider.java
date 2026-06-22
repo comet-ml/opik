@@ -9,6 +9,7 @@ import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
 import com.comet.opik.infrastructure.llm.openai.OpenAIClientGenerator;
+import com.comet.opik.infrastructure.llm.openai.QuotaAwareHttpClient;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import lombok.NonNull;
@@ -73,6 +74,9 @@ public class FreeModelServiceProvider implements LlmServiceProvider {
         var builder = OpenAiChatModel.builder()
                 .modelName(transformedParameters.name())
                 .apiKey(config.apiKey())
+                // Treat insufficient_quota (429, out-of-credits) as non-retryable so the model's
+                // internal retry does not keep hitting an exhausted key.
+                .httpClientBuilder(QuotaAwareHttpClient.builder())
                 .logRequests(true)
                 .logResponses(true);
 

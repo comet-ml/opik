@@ -28,6 +28,35 @@ describe("Opik client config", () => {
     }).toThrow("OPIK_API_KEY is not set");
   });
 
+  it("should load trackDisable from the OPIK_TRACK_DISABLE env var", async () => {
+    process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/api";
+    process.env.OPIK_API_KEY = "test";
+    process.env.OPIK_WORKSPACE = "test";
+    process.env.OPIK_TRACK_DISABLE = "true";
+
+    const opik = new Opik();
+    expect(opik.config.trackDisable).toBe(true);
+  });
+
+  it("should default trackDisable to false when OPIK_TRACK_DISABLE is unset", async () => {
+    process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/api";
+    process.env.OPIK_API_KEY = "test";
+    process.env.OPIK_WORKSPACE = "test";
+
+    const opik = new Opik();
+    expect(opik.config.trackDisable).toBe(false);
+  });
+
+  it("should not require an API key on cloud when tracking is disabled", async () => {
+    process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/api";
+    process.env.OPIK_API_KEY = "";
+    process.env.OPIK_TRACK_DISABLE = "true";
+
+    expect(() => {
+      new Opik();
+    }).not.toThrow();
+  });
+
   it("should throw an error if the host is cloud and workspace is not set", async () => {
     process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/api";
     process.env.OPIK_API_KEY = "test";
