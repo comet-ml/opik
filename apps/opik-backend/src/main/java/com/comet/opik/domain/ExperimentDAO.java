@@ -490,7 +490,7 @@ public class ExperimentDAO {
                     <endif>
                     AND entity_id IN (SELECT trace_id FROM experiment_items_final)
                     ORDER BY last_updated_at DESC
-                    LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
+                    LIMIT 1 BY workspace_id, project_id, entity_id, name, author
                 )
                 GROUP BY entity_id, name
             ),
@@ -1425,7 +1425,7 @@ public class ExperimentDAO {
                     <endif>
                     AND entity_id IN (SELECT trace_id FROM experiment_items_final)
                     ORDER BY last_updated_at DESC
-                    LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
+                    LIMIT 1 BY workspace_id, project_id, entity_id, name, author
                 )
                 GROUP BY entity_id, name
             ),

@@ -471,6 +471,7 @@ export const SMEFlowProvider: React.FunctionComponent<{
     currentItem,
     currentUserName,
     annotationQueue?.feedback_definition_names,
+    annotationQueue?.id,
     resetLastSaved,
   ]);
 

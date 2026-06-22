@@ -328,13 +328,18 @@ export const setTraceSpanFeedbackScoresCache = async (
   });
 };
 
+const buildValueByAuthorKey = (
+  author?: string,
+  sourceQueueId?: string,
+): string | undefined =>
+  author && sourceQueueId ? `${author}_${sourceQueueId}` : author;
+
 export const generateUpdateMutation =
   (score: TraceFeedbackScore, author?: string, sourceQueueId?: string) =>
   (feedbackScores?: TraceFeedbackScore[]) => {
     let retVal = feedbackScores || [];
 
-    const mapKey =
-      author && sourceQueueId ? `${author}_${sourceQueueId}` : author;
+    const mapKey = buildValueByAuthorKey(author, sourceQueueId);
 
     let isUpdated = false;
     retVal = retVal.map((feedbackScore) => {
@@ -388,13 +393,13 @@ export const generateDeleteMutation =
       return retVal.filter((feedbackScore) => feedbackScore.name !== name);
     }
 
-    const mapKey = sourceQueueId ? `${author}_${sourceQueueId}` : author;
+    const mapKey = buildValueByAuthorKey(author, sourceQueueId);
 
     return retVal
       .map((feedbackScore) => {
         if (feedbackScore.name === name && hasValuesByAuthor(feedbackScore)) {
           const updatedValueByAuthor = { ...feedbackScore.value_by_author };
-          delete updatedValueByAuthor[mapKey];
+          delete updatedValueByAuthor[mapKey!];
 
           if (Object.keys(updatedValueByAuthor).length === 0) {
             return null;

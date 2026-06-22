@@ -162,7 +162,7 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
         return baseData;
       });
     },
-    [reviewers, feedbackDefinitionNames],
+    [reviewers, feedbackDefinitionNames, annotationQueue.id],
   );
 
   const getThreadsExportData = useCallback(
@@ -213,7 +213,7 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
         return baseData;
       });
     },
-    [reviewers, feedbackDefinitionNames],
+    [reviewers, feedbackDefinitionNames, annotationQueue.id],
   );
 
   const getData = useCallback(async () => {
