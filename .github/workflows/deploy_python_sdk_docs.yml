@@ -33,7 +33,7 @@ jobs:
           show-progress: false
       
       - name: Setup uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v8.2.0
 
       - name: Build Python SDK docs
         run: |
