@@ -35,6 +35,9 @@ const SORT_OPTIONS: { value: string; label: string; sorting: Sorting }[] = [
 
 const PAGE_SIZE = 100;
 
+const RUNNING_DESC =
+  "We're analyzing your traces to detect issues. Results will update automatically — you can leave this page.";
+
 type IssuesTabProps = {
   projectId: string;
   showResolved?: boolean;
@@ -117,8 +120,7 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
                   Running your first diagnostic
                 </span>
                 <span className="comet-body-xs text-muted-slate">
-                  We&apos;re analyzing your traces to detect issues. Results
-                  will update automatically — you can leave this page.
+                  {RUNNING_DESC}
                 </span>
               </div>
               <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
@@ -180,6 +182,26 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
           </Select>
         </div>
         <div className="flex flex-col overflow-y-auto">
+          {isRunning && (
+            <div className="flex flex-col gap-2.5 border-b border-border bg-primary-50 px-4 py-3">
+              <div className="flex items-start gap-3">
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary-100">
+                  <Radar className="size-4 text-[var(--color-primary)]" />
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <span className="comet-body-s-accented text-foreground">
+                    Running diagnostic
+                  </span>
+                  <span className="comet-body-xs text-muted-slate">
+                    {RUNNING_DESC}
+                  </span>
+                </div>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                <div className="h-full w-2/5 animate-pulse rounded-full bg-[var(--color-primary)]" />
+              </div>
+            </div>
+          )}
           {issues.map((issue) => (
             <IssueListItem
               key={issue.id}
