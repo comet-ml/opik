@@ -181,9 +181,10 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 : Mono.just(List.of());
 
         // Fetch the trace's attachments up front (toggle-gated, best-effort) so the routing decision
-        // can force the agentic-tools path when media is present — the judge needs get_attachment to
-        // load it — and so the {{trace}} variable can list them. A transient listing failure degrades
-        // to an empty list and falls back to the normal size-based routing; it never blocks scoring.
+        // can force the agentic-tools path when media is present. The judge discovers them by calling
+        // read(type=trace), which is guaranteed because the first tool call uses ToolChoice.REQUIRED.
+        // A transient listing failure degrades to an empty list and falls back to normal size-based
+        // routing; it never blocks scoring.
         Mono<List<AttachmentInfo>> attachmentsMono = serviceTogglesConfig.isAgenticToolsEnabled()
                 ? attachmentService.getAttachmentInfoByEntity(trace.id(),
                         com.comet.opik.api.attachment.EntityType.TRACE, trace.projectId())
