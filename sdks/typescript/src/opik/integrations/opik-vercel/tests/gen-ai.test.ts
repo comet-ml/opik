@@ -215,11 +215,14 @@ describe("OpikExporter - AI SDK v7 / GenAI (eve) spans", () => {
     expect((lastTrace() as { usage?: unknown }).usage).toBeUndefined();
   });
 
-  it("records token usage (incl. cache tokens) on the LLM span", async () => {
+  it("records model, provider and token usage on the LLM span (for cost)", async () => {
     await exportSpans(TURN_SPAN, CHAT_SPAN, TOOL_SPAN);
 
     const chat = createdSpans().find((span) => span.name?.startsWith("chat"));
     expect(chat!.type).toBe("llm");
+    // model + provider are the dedicated fields the backend prices from.
+    expect(chat!.model).toBe("claude-haiku-4-5");
+    expect(chat!.provider).toBe("anthropic");
     expect(chat!.usage).toMatchObject({
       prompt_tokens: 5170,
       completion_tokens: 54,
@@ -349,7 +352,11 @@ describe("OpikExporter - AI SDK v7 / GenAI (eve) spans", () => {
     const chat = spans.find((span) => span.name?.startsWith("chat"));
 
     expect(agent!.type).toBe("general");
-    expect(agent!.usage).toBeUndefined(); // no tokens on the orchestration span
+    // No tokens, model or provider on the orchestration span — only the LLM
+    // span is priced, so the trace total isn't double-counted.
+    expect(agent!.usage).toBeUndefined();
+    expect(agent!.model).toBeUndefined();
+    expect(agent!.provider).toBeUndefined();
     expect(chat!.type).toBe("llm");
     expect(chat!.usage).toMatchObject({ prompt_tokens: 5170, completion_tokens: 54 });
   });

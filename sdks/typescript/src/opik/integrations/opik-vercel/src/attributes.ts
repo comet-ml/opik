@@ -311,15 +311,12 @@ const genAi = {
   metadata(attributes: Attributes): Record<string, unknown> {
     const metadata: Record<string, unknown> = {};
 
-    const model =
-      attributes["gen_ai.response.model"] ?? attributes["gen_ai.request.model"];
+    const model = getModel(attributes);
     if (model) {
       metadata.model = model;
     }
 
-    // `gen_ai.system` (v6) and `gen_ai.provider.name` (v7) both name the provider.
-    const provider =
-      attributes["gen_ai.system"] ?? attributes["gen_ai.provider.name"];
+    const provider = getProvider(attributes);
     if (provider) {
       metadata.provider = provider;
     }
@@ -380,6 +377,21 @@ const LLM_OPERATIONS = new Set([
   "generate_content",
   "embeddings",
 ]);
+
+// The model id and provider — the Opik backend needs both (plus usage) on the
+// LLM span to compute estimated cost. `gen_ai.system` (v6) and
+// `gen_ai.provider.name` (v7) both name the provider (e.g. "anthropic").
+export function getModel(attributes: Attributes): string | undefined {
+  const model =
+    attributes["gen_ai.response.model"] ?? attributes["gen_ai.request.model"];
+  return model != null ? String(model) : undefined;
+}
+
+export function getProvider(attributes: Attributes): string | undefined {
+  const provider =
+    attributes["gen_ai.system"] ?? attributes["gen_ai.provider.name"];
+  return provider != null ? String(provider) : undefined;
+}
 
 export function getSpanType(attributes: Attributes): SpanType {
   const operation = attributes["gen_ai.operation.name"];

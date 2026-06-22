@@ -4,6 +4,8 @@ import type { ExportResultCode } from "@opentelemetry/core";
 import type { NodeSDKConfiguration } from "@opentelemetry/sdk-node";
 import { Opik, generateId, logger } from "opik";
 import {
+  getModel,
+  getProvider,
   getSpanInput,
   getSpanMetadata,
   getSpanOutput,
@@ -325,6 +327,17 @@ export class OpikExporter implements SpanExporter {
           : undefined;
       const spanErrorInfo = this.getErrorInfo(otelSpan);
       const spanType = getSpanType(otelSpan.attributes);
+      // Only LLM spans carry model/provider and token usage. The backend prices
+      // a span from its model + provider + usage; eve also repeats the model
+      // call's usage on the agent/step wrapper spans, so keeping any of these on
+      // non-LLM spans would mislabel them and double-count the trace total.
+      const llmFields =
+        spanType === "llm"
+          ? {
+              ...withModelProvider(otelSpan.attributes),
+              usage: getSpanUsage(otelSpan.attributes),
+            }
+          : {};
 
       this.client.spanBatchQueue.create({
         id: this.opikSpanId(otelSpanId),
@@ -337,13 +350,7 @@ export class OpikExporter implements SpanExporter {
         input: getSpanInput(otelSpan.attributes),
         output: getSpanOutput(otelSpan.attributes),
         metadata: getSpanMetadata(otelSpan.attributes),
-        // Only LLM spans carry token usage. eve emits the same usage on both
-        // the agent/step wrapper and the underlying model-call span, so keeping
-        // it on non-LLM spans would double-count when the trace usage is
-        // aggregated across spans.
-        ...(spanType === "llm"
-          ? { usage: getSpanUsage(otelSpan.attributes) }
-          : {}),
+        ...llmFields,
         projectName,
         ...(spanErrorInfo && { errorInfo: spanErrorInfo }),
       });
@@ -473,6 +480,20 @@ function mergeMetadata(otelSpans: ReadableSpan[]): Record<string, unknown> {
   }
 
   return metadata;
+}
+
+// The model/provider span fields the backend uses to price a span, omitting
+// either when unknown.
+function withModelProvider(
+  attributes: ReadableSpan["attributes"]
+): { model?: string; provider?: string } {
+  const model = getModel(attributes);
+  const provider = getProvider(attributes);
+
+  return {
+    ...(model ? { model } : {}),
+    ...(provider ? { provider } : {}),
+  };
 }
 
 // Each span's parent: a real OTel parent link when the parent is one of our
