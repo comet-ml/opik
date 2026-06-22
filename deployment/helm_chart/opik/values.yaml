@@ -675,6 +675,8 @@ clickhouse:
             <default>
                 <max_bytes_ratio_before_external_sort>0.2</max_bytes_ratio_before_external_sort>
                 <max_bytes_ratio_before_external_group_by>0.2</max_bytes_ratio_before_external_group_by>
+                <!-- CH 25.8 made the experimental Time type opt-in; required for fresh installs to replay migration 000030. -->
+                <enable_time_time64_type>1</enable_time_time64_type>
             </default>
           </profiles>
         </clickhouse>
