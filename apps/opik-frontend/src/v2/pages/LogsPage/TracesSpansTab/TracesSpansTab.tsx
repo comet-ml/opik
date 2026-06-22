@@ -58,6 +58,8 @@ import useEnvironmentsList from "@/api/environments/useEnvironmentsList";
 import useFilterChips from "@/shared/filter-chips/hooks/useFilterChips";
 import FilterChipBar from "@/shared/filter-chips/FilterChipBar/FilterChipBar";
 import { useTagsChipActions } from "@/shared/filter-chips/hooks/useTagsChipActions";
+import { useQuickAttributeFilterActions } from "@/shared/filter-chips/hooks/useQuickAttributeFilterActions";
+import { QuickAttributeFilterProvider } from "@/shared/filter-chips/QuickAttributeFilterContext";
 import {
   ChipDefinition,
   ChipOptionsResult,
@@ -613,6 +615,16 @@ const SPAN_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     defaultOperator: "contains",
     value: { placeholder: "Enter trace ID" },
   },
+  {
+    id: "provider",
+    field: "provider",
+    label: "Provider",
+    kind: "query-builder",
+    columnType: COLUMN_TYPE.string,
+    operators: STRING_OPERATORS,
+    defaultOperator: "contains",
+    value: { placeholder: "Enter provider" },
+  },
 ];
 
 const TRACE_CHIP_ORDER: string[] = [
@@ -651,6 +663,7 @@ const SPAN_CHIP_ORDER: string[] = [
   "input",
   "output",
   "name",
+  "provider",
   "with_errors",
   "error_type",
   "type",
@@ -758,6 +771,7 @@ const buildSharedDynamicChips = ({
       kind: "query-builder",
       columnType: COLUMN_TYPE.dictionary,
       operators: DICTIONARY_OPERATORS,
+      defaultOperator: "contains",
       key: {
         placeholder: "key",
         options: chipOptions(usePathsOptions, {
@@ -1063,6 +1077,19 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     applyValue: applyChipValue,
     pinChip,
   });
+
+  const { canFilter: quickFilterCanFilter, filter: quickFilterFilter } =
+    useQuickAttributeFilterActions({
+      type,
+      values: chipValues,
+      applyValue: applyChipValue,
+      pinChip,
+    });
+
+  const quickAttributeFilterApi = useMemo(
+    () => ({ canFilter: quickFilterCanFilter, filter: quickFilterFilter }),
+    [quickFilterCanFilter, quickFilterFilter],
+  );
 
   const effectiveFilters = useMemo(() => {
     if (!environment || envIsValid === false) return chipFilters;
@@ -1871,18 +1898,20 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           />
         </PageBodyStickyContainer>
       </DataTableStateHandler>
-      <TraceDetailsPanel
-        projectId={projectId}
-        traceId={traceId!}
-        spanId={spanId!}
-        setSpanId={setSpanId}
-        setThreadId={setThreadId}
-        hasPreviousRow={hasPrevious}
-        hasNextRow={hasNext}
-        open={Boolean(traceId) && !threadId}
-        onClose={handleClose}
-        onRowChange={handleRowChange}
-      />
+      <QuickAttributeFilterProvider value={quickAttributeFilterApi}>
+        <TraceDetailsPanel
+          projectId={projectId}
+          traceId={traceId!}
+          spanId={spanId!}
+          setSpanId={setSpanId}
+          setThreadId={setThreadId}
+          hasPreviousRow={hasPrevious}
+          hasNextRow={hasNext}
+          open={Boolean(traceId) && !threadId}
+          onClose={handleClose}
+          onRowChange={handleRowChange}
+        />
+      </QuickAttributeFilterProvider>
       <ThreadDetailsPanel
         projectId={projectId}
         projectName={projectName}
