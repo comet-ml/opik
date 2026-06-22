@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import sys
+import traceback
 import warnings
 
 # =============================================================================
@@ -189,6 +190,75 @@ def route_litellm_calls_through_gateway(workspace_name):
     )
 
 
+def _gateway_model(model: str) -> str:
+    """Prefix with ``openai/`` so LiteLLM uses its OpenAI handler — the only one
+    that honors ``OPENAI_API_BASE`` (the gateway). LiteLLM strips the prefix, so
+    the gateway still receives the provider-qualified model and routes it (e.g.
+    ``vertex_ai/gemini-2.5-flash``)."""
+    return model if model.startswith("openai/") else f"openai/{model}"
+
+
+def _with_stream(params):
+    """The gateway requires an explicit ``stream`` field; LiteLLM omits it by
+    default, which NPEs the Java backend's Anthropic mapper."""
+    params = dict(params or {})
+    params.setdefault("stream", False)
+    return params
+
+
+def build_optimizer_and_prompt(config):
+    """Build the optimizer and the prompt for a parsed ``OptimizationConfig``.
+
+    The prompt (task evaluation) uses the configured prompt model and its
+    parameters; the optimizer/algorithm uses its own configured model and
+    parameters (GEPA's reflection LM, hierarchical's reasoning model), defaulting
+    to the prompt model when none was picked. Both models are routed through the
+    gateway. ``config`` is not modified — the gateway-routed task model is
+    carried on the returned ``prompt.model``, which the metric reuses.
+
+    Returns ``(optimizer, prompt)``.
+    """
+    from opik_optimizer import ChatPrompt
+    from opik_backend.studio.optimizers import (
+        OptimizerFactory,
+        ensure_default_model_params,
+    )
+
+    task_model = _gateway_model(config.model)
+    task_params = _with_stream(config.model_params)
+
+    if config.optimizer_model:
+        optimizer_model = _gateway_model(config.optimizer_model)
+        optimizer_model_params = _with_stream(config.optimizer_model_params)
+    else:
+        # No separate algorithm model — default to the prompt model. Still honor
+        # optimizer model_parameters if the config set them without a model
+        # (saved configs / API clients), instead of silently dropping them.
+        optimizer_model = task_model
+        optimizer_model_params = (
+            _with_stream(config.optimizer_model_params)
+            if config.optimizer_model_params is not None
+            else task_params
+        )
+
+    # The factory injects defaults (e.g. max_tokens) into the optimizer params.
+    optimizer = OptimizerFactory.build(
+        config.optimizer_type,
+        optimizer_model,
+        optimizer_model_params,
+        config.optimizer_params or {},
+    )
+    # Set the model on the prompt itself — the optimizer uses its own model for
+    # reasoning, while baseline/per-trial task calls run through the prompt's
+    # model. Apply the same max_tokens default so task calls don't truncate.
+    prompt = ChatPrompt(
+        messages=config.prompt_messages,
+        model=task_model,
+        model_parameters=ensure_default_model_params(task_params),
+    )
+    return optimizer, prompt
+
+
 def main():
     """Main entry point for optimizer runner subprocess."""
     try:
@@ -208,17 +278,17 @@ def main():
         reconfigure_rich_console()
 
         # Import after setting up environment
-        from opik_optimizer import ChatPrompt
-
         from opik_backend.studio import OptimizationJobContext
-        from opik_backend.studio.types import OptimizationConfig
+        from opik_backend.studio.types import (
+            OptimizationConfig,
+            OptimizationRunResult,
+        )
         from opik_backend.studio.helpers import (
             initialize_opik_client,
             load_and_validate_dataset,
             run_optimization,
         )
         from opik_backend.studio.metrics import MetricFactory
-        from opik_backend.studio.optimizers import OptimizerFactory
         from opik_backend.studio.status_manager import (
             OptimizationStatusManager,
             optimization_lifecycle,
@@ -232,29 +302,11 @@ def main():
         # the backend can authenticate it (see optimizer.py for OPENAI_API_BASE).
         route_litellm_calls_through_gateway(context.workspace_name)
 
-        # Treat the Opik backend gateway as an OpenAI-compatible endpoint.
-        # The "openai/" prefix tells LiteLLM to use its OpenAI handler, which
-        # is the only handler that honors OPENAI_API_BASE (set to the gateway
-        # URL in optimizer.py). LiteLLM strips the prefix before the HTTP
-        # request, so the gateway still receives the original provider-
-        # qualified model string (e.g. "vertex_ai/gemini-2.5-flash") and
-        # dispatches to the correct provider on the Java backend side.
-        if not config.model.startswith("openai/"):
-            config.model = f"openai/{config.model}"
-
-        # The gateway requires an explicit stream field; LiteLLM omits it by
-        # default which causes an NPE in the Java backend's Anthropic mapper.
-        config.model_params = config.model_params or {}
-        config.model_params.setdefault("stream", False)
-
-        # Ensure optimizer_params is a dict before mutating
+        # Ensure optimizer_params is a dict and force verbose for Rich output.
         config.optimizer_params = config.optimizer_params or {}
-
-        # Force verbose mode for testing Rich output
         config.optimizer_params["verbose"] = True
 
         logger.debug(f"Processing optimization: {context.optimization_id}")
-        logger.debug(f"Using model: {config.model} with params: {config.model_params}")
 
         # Initialize Opik client (sets env vars for SDK)
         client = initialize_opik_client(context)
@@ -267,24 +319,19 @@ def main():
             # Load dataset
             dataset = load_and_validate_dataset(client, config.dataset_name)
 
-            # Build metric function
+            # Build the optimizer + prompt: resolves the gateway-routed prompt
+            # (task) model and the optimizer (algorithm) model, each with their
+            # configured parameters. See build_optimizer_and_prompt.
+            optimizer, prompt = build_optimizer_and_prompt(config)
+
+            # Build metric function — reuse the prompt's gateway-routed model so
+            # LLM-as-judge metrics route through the gateway too.
             metric_fn = MetricFactory.build(
                 config.metric_type,
                 config.metric_params,
-                config.model,
+                prompt.model,
                 dataset_items_provider=lambda: list(dataset.get_items()),
             )
-
-            # Build optimizer
-            optimizer = OptimizerFactory.build(
-                config.optimizer_type,
-                config.model,
-                config.model_params,
-                config.optimizer_params,
-            )
-
-            # Create prompt from config
-            prompt = ChatPrompt(messages=config.prompt_messages)
 
             # Run optimization
             result = run_optimization(
@@ -297,7 +344,7 @@ def main():
             )
 
             # Build result dict
-            output = {
+            output: OptimizationRunResult = {
                 "success": True,
                 "optimization_id": str(context.optimization_id),
                 "score": result.score,
@@ -320,10 +367,15 @@ def main():
     except Exception as e:
         logger.exception(f"Optimization failed: {e}")
 
-        # Output error as JSON
-        error_output = {
+        # Output error as JSON, including the full traceback so the parent
+        # process (and CI) can surface what failed inside this subprocess.
+        # Local import: an exception can fire before the deferred import above.
+        from opik_backend.studio.types import OptimizationErrorResult
+
+        error_output: OptimizationErrorResult = {
             "success": False,
             "error": str(e),
+            "traceback": traceback.format_exc(),
         }
         print(json.dumps(error_output))
         sys.exit(1)

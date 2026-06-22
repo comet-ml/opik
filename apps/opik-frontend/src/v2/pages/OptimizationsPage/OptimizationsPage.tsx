@@ -46,8 +46,6 @@ import { buildDocsUrl } from "@/v2/lib/utils";
 import emptyOptStudioLightUrl from "/images/empty-optimization-studio-light.svg";
 import emptyOptStudioDarkUrl from "/images/empty-optimization-studio-dark.svg";
 import StudioTemplates from "@/v2/pages-shared/optimizations/StudioTemplates";
-import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { useOptimizationsView } from "@/hooks/useOptimizationsView";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
@@ -165,9 +163,6 @@ const OptimizationsPage: React.FunctionComponent = () => {
   const navigate = useNavigate();
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
-  const isOptimizationStudioEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED,
-  );
 
   const {
     permissions: {
@@ -331,7 +326,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
         </h1>
       </div>
       {isEmpty ? (
-        isOptimizationStudioEnabled && canUseOptimizationStudio ? (
+        canUseOptimizationStudio ? (
           <OptimizationsEmptyState
             onOptimizeViaSdkClick={handleNewOptimizationClick}
           />
@@ -348,9 +343,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
         )
       ) : (
         <>
-          {isOptimizationStudioEnabled && canUseOptimizationStudio && (
-            <StudioTemplates />
-          )}
+          {canUseOptimizationStudio && <StudioTemplates />}
           <div className="pt-4">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
               <div className="flex items-center gap-2">
