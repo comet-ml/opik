@@ -398,7 +398,7 @@ public class SpanDAO {
             	<if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> total_estimated_cost <endif> as total_estimated_cost,
             	<if(total_estimated_cost_version)> :total_estimated_cost_version <else> total_estimated_cost_version <endif> as total_estimated_cost_version,
             	<if(tags)> :tags <else> tags <endif> as tags,
-            	<if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else> usage <endif> as usage,
+            	<if(usage)> CAST((:usage_keys, :usage_values), 'Map(String, Int64)') <else> usage <endif> as usage,
             	<if(error_info)> :error_info <else> error_info <endif> as error_info,
             	created_at,
             	created_by,
@@ -573,7 +573,7 @@ public class SpanDAO {
                     <if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> toDecimal128(0, 12) <endif> as total_estimated_cost,
                     <if(total_estimated_cost_version)> :total_estimated_cost_version <else> '' <endif> as total_estimated_cost_version,
                     <if(tags)> :tags <else> [] <endif> as tags,
-                    <if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else>  mapFromArrays([], []) <endif> as usage,
+                    <if(usage)> CAST((:usage_keys, :usage_values), 'Map(String, Int64)') <else>  mapFromArrays([], []) <endif> as usage,
                     <if(error_info)> :error_info <else> '' <endif> as error_info,
                     now64(9) as created_at,
                     :user_name as created_by,
@@ -1635,7 +1635,7 @@ public class SpanDAO {
             + TagOperations.tagUpdateFragment("s.tags")
             + """
                         as tags,
-                        <if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else> s.usage <endif> as usage,
+                        <if(usage)> CAST((:usage_keys, :usage_values), 'Map(String, Int64)') <else> s.usage <endif> as usage,
                         <if(error_info)> :error_info <else> s.error_info <endif> as error_info,
                         s.created_at,
                         s.created_by,
@@ -2809,8 +2809,8 @@ public class SpanDAO {
     // drops null token counts (a null value would fail the CAST with CANNOT_CONVERT_TYPE, code 70).
     private static void bindUsage(Statement statement, Map<String, Integer> usage) {
         var sanitized = UsageUtils.sanitizeUsage(usage);
-        statement.bind("usageKeys", sanitized.keySet().toArray(String[]::new));
-        statement.bind("usageValues", sanitized.values().toArray(Integer[]::new));
+        statement.bind("usage_keys", sanitized.keySet().toArray(String[]::new));
+        statement.bind("usage_values", sanitized.values().toArray(Integer[]::new));
     }
 
     private void bindCost(Span span, Statement statement, String index) {
