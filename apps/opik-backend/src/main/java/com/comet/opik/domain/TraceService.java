@@ -44,6 +44,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.http.HttpStatus;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -101,6 +102,9 @@ public interface TraceService {
     Mono<Long> getDailyCreatedCount();
 
     Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(Set<UUID> projectIds, String workspaceId);
+
+    Mono<Set<UUID>> getProjectsWithTracesInRange(@NonNull Collection<Pair<String, UUID>> workspaceProjectPairs,
+            @NonNull Instant from, @NonNull Instant to);
 
     Mono<Void> deleteTraceThreads(DeleteTraceThreads traceThreads);
 
@@ -564,6 +568,16 @@ class TraceServiceImpl implements TraceService {
     public Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(Set<UUID> projectIds, String workspaceId) {
         return template
                 .nonTransaction(connection -> dao.getLastUpdatedTraceAt(projectIds, workspaceId, connection));
+    }
+
+    @Override
+    public Mono<Set<UUID>> getProjectsWithTracesInRange(@NonNull Collection<Pair<String, UUID>> workspaceProjectPairs,
+            @NonNull Instant from, @NonNull Instant to) {
+        if (workspaceProjectPairs.isEmpty()) {
+            return Mono.just(Set.of());
+        }
+        return template.nonTransaction(
+                connection -> dao.getProjectsWithTracesInRange(workspaceProjectPairs, from, to, connection));
     }
 
     @Override

@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AgentInsightsJob;
+import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -13,9 +14,14 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AgentInsightsJobResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.v1.jobs.AgentInsightsReportJob;
+import com.comet.opik.domain.AgentInsightsReportClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.google.inject.AbstractModule;
+import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.http.HttpStatus;
@@ -33,11 +39,16 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
@@ -53,6 +64,14 @@ class AgentInsightsJobsResourceTest {
     private static final String WORKSPACE_ID_2 = UUID.randomUUID().toString();
     private static final String WORKSPACE_NAME_2 = "workspace" + RandomStringUtils.secure().nextAlphanumeric(36);
     private static final String USER_2 = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);
+
+    private record Trigger(UUID projectId, String workspaceId, Instant periodStart, Instant periodEnd) {
+    }
+
+    // Recording client bound in place of the platform default, to capture triggers fired via the queue.
+    private static final List<Trigger> TRIGGERS = new CopyOnWriteArrayList<>();
+    private static final AgentInsightsReportClient RECORDING_CLIENT = (reportId, projectId, workspaceId,
+            periodStart, periodEnd) -> TRIGGERS.add(new Trigger(projectId, workspaceId, periodStart, periodEnd));
 
     // Full stack: creating projects via the API exercises ClickHouse, so analytics containers are required.
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
@@ -87,21 +106,35 @@ class AgentInsightsJobsResourceTest {
                 .redisUrl(REDIS.getRedisURI())
                 .minioUrl(minioUrl)
                 .isMinIO(true)
+                // Enable the Agent Insights feature so the publisher publishes and the subscriber consumes.
+                .customConfigs(List.of(
+                        new TestDropwizardAppExtensionUtils.CustomConfig("serviceToggles.agentInsightsEnabled",
+                                "true")))
+                .modules(List.of(new AbstractModule() {
+                    @Override
+                    protected void configure() {
+                        bind(AgentInsightsReportClient.class).toInstance(RECORDING_CLIENT);
+                    }
+                }))
                 .build());
     }
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
     private ProjectResourceClient projectResourceClient;
+    private TraceResourceClient traceResourceClient;
     private AgentInsightsJobResourceClient jobsClient;
+    private AgentInsightsReportJob reportJob;
 
     @BeforeAll
-    void beforeAll(ClientSupport client) {
+    void beforeAll(ClientSupport client, Injector injector) {
         var baseURI = TestUtils.getBaseUrl(client);
         ClientSupportUtils.config(client);
 
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, podamFactory);
+        this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.jobsClient = new AgentInsightsJobResourceClient(client, baseURI);
+        this.reportJob = injector.getInstance(AgentInsightsReportJob.class);
 
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY_2, WORKSPACE_NAME_2, WORKSPACE_ID_2, USER_2);
@@ -219,7 +252,6 @@ class AgentInsightsJobsResourceTest {
 
         jobsClient.create(projectId, API_KEY, WORKSPACE_NAME).close();
 
-        // No-op trigger client is bound by default, so the run is accepted but records nothing.
         try (var triggered = jobsClient.trigger(projectId, API_KEY, WORKSPACE_NAME)) {
             assertThat(triggered.getStatus()).isEqualTo(HttpStatus.SC_ACCEPTED);
         }
@@ -234,5 +266,45 @@ class AgentInsightsJobsResourceTest {
         try (var otherWorkspace = jobsClient.get(projectId, API_KEY_2, WORKSPACE_NAME_2)) {
             assertThat(otherWorkspace.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
         }
+    }
+
+    @Test
+    @DisplayName("Trigger fires exactly one run via the queue; create alone does not")
+    void trigger__firesRunOnce() {
+        var projectId = createProject();
+
+        // Create does NOT trigger a run.
+        jobsClient.create(projectId, API_KEY, WORKSPACE_NAME).close();
+        assertThat(TRIGGERS.stream().anyMatch(t -> t.projectId().equals(projectId))).isFalse();
+
+        // The trigger endpoint accepts the request (202) and fires the run via the bounded queue.
+        jobsClient.trigger(projectId, API_KEY, WORKSPACE_NAME).close();
+
+        await().atMost(10, SECONDS).untilAsserted(() -> assertThat(
+                TRIGGERS.stream().filter(t -> t.projectId().equals(projectId)).toList()).hasSize(1));
+        var trigger = TRIGGERS.stream().filter(t -> t.projectId().equals(projectId)).findFirst().orElseThrow();
+        assertThat(trigger.workspaceId()).isEqualTo(WORKSPACE_ID);
+        assertThat(trigger.periodStart()).isBefore(trigger.periodEnd());
+    }
+
+    @Test
+    @DisplayName("Daily sweep triggers enabled jobs that had traces in the window")
+    void cronSweep__triggersJobsWithTraces() {
+        String projectName = "project-" + UUID.randomUUID();
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        jobsClient.create(projectId, API_KEY, WORKSPACE_NAME).close();
+
+        // Seed a trace so the sweep's trace gate passes for this project.
+        var trace = podamFactory.manufacturePojo(Trace.class).toBuilder().projectName(projectName).build();
+        traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+
+        // Drive the real sweep over a window bracketing the just-ingested trace. Exercises the real queries
+        // end-to-end: findAllEnabled (MySQL, JOIN projects) -> getProjectsWithTracesInRange (ClickHouse, one
+        // tuple-IN query) -> publish (Redis) -> subscriber -> recording client.
+        Instant now = Instant.now();
+        reportJob.runSweep(now.minusSeconds(3600), now.plusSeconds(3600)).block();
+
+        await().atMost(10, SECONDS).untilAsserted(() -> assertThat(
+                TRIGGERS.stream().filter(t -> t.projectId().equals(projectId)).toList()).hasSize(1));
     }
 }

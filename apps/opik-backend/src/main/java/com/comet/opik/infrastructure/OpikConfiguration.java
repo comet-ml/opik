@@ -76,6 +76,9 @@ public class OpikConfiguration extends JobConfiguration {
     private DatasetExportConfig datasetExport = new DatasetExportConfig();
 
     @Valid @NotNull @JsonProperty
+    private AgentInsightsReportConfig agentInsightsReport = new AgentInsightsReportConfig();
+
+    @Valid @NotNull @JsonProperty
     private ClickHouseLogAppenderConfig clickHouseLogAppender = new ClickHouseLogAppenderConfig();
 
     @Valid @NotNull @JsonProperty
