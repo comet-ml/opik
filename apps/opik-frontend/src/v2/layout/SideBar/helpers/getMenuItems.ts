@@ -31,6 +31,7 @@ const getMenuItems = ({
   canViewOptimizationRuns,
   showHomePage,
   showOlliePage,
+  showDiagnostics,
 }: {
   projectId: string | null;
   canViewExperiments: boolean;
@@ -40,6 +41,7 @@ const getMenuItems = ({
   canViewOptimizationRuns: boolean;
   showHomePage: boolean;
   showOlliePage: boolean;
+  showDiagnostics: boolean;
 }): MenuItemGroup[] => {
   const projectPrefix = projectId
     ? "/$workspaceName/projects/$projectId"
@@ -90,7 +92,7 @@ const getMenuItems = ({
           label: "Logs",
           disabled: !projectPrefix,
         },
-        ...(showOlliePage
+        ...(showDiagnostics
           ? [
               {
                 id: "diagnostics",

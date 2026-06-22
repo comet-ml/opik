@@ -21,10 +21,13 @@ const SignalsPage: React.FC = () => {
     workspaceName: string;
   };
 
-  // Diagnostics is powered by the Ollie assistant, so it's only available when
-  // Ollie is enabled (feature toggle + assistant plugin present).
+  // Diagnostics is powered by the Ollie assistant and surfaces Agent Insights,
+  // so it requires both the Ollie plugin/toggle and the Agent Insights toggle.
   const AssistantSidebar = usePluginsStore((state) => state.AssistantSidebar);
   const ollieEnabled = useIsFeatureEnabled(FeatureToggleKeys.OLLIE_ENABLED);
+  const agentInsightsEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.AGENT_INSIGHTS_ENABLED,
+  );
 
   // No dedicated stats endpoint yet — derive the header metrics from the issues
   // list (all statuses) until the backend exposes aggregates.
@@ -49,7 +52,7 @@ const SignalsPage: React.FC = () => {
   // Default view shows open issues; toggling shows resolved ones.
   const [showResolved, setShowResolved] = useState(false);
 
-  if (!AssistantSidebar || !ollieEnabled) {
+  if (!AssistantSidebar || !ollieEnabled || !agentInsightsEnabled) {
     return (
       <Navigate
         to="/$workspaceName/projects/$projectId/home"
