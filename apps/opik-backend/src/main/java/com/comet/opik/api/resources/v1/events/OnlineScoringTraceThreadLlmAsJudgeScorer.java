@@ -446,7 +446,8 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
             // Thread-scoped context: no single active trace. ReadTool fetches any trace from the
             // thread on demand via the standard read(type=trace, id=X) path. GetTraceSpansTool
             // returns a redirect error on this context (see GetTraceSpansTool#execute).
-            var ctx = TraceToolContext.forThread(message.workspaceId(), message.userName(), message.projectId());
+            var ctx = TraceToolContext.forThread(message.workspaceId(), message.userName(), message.projectId(),
+                    onlineScoringConfig.getAgenticToolsMaxInjectedBytes());
 
             var followUpParameters = ChatRequestParameters.builder()
                     .overrideWith(toolRequest.parameters())

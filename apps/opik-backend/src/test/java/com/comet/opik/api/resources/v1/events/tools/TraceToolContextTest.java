@@ -9,7 +9,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class TraceToolContextTest {
 
     private static final UUID PROJECT_ID = UUID.randomUUID();
-    private static final long MAX = TraceToolContext.MAX_INJECTED_BYTES; // 20 MB
+    private static final long MAX = TraceToolContext.DEFAULT_MAX_INJECTED_BYTES; // 50 MB
 
     private TraceToolContext ctx() {
         return TraceToolContext.forThread("ws", "user", PROJECT_ID);

@@ -618,6 +618,11 @@ onlineScoring:
   #   length. 4 ≈ natural-language English. Lower for code/JSON-heavy workloads (≈ 2) — yields a more
   #   pessimistic estimate so the agentic-tools path engages earlier.
   agenticToolsCharsPerToken: ${ONLINE_SCORING_AGENTIC_TOOLS_CHARS_PER_TOKEN:-4}
+  # Default: 52428800 (50 MB)
+  # Description: Maximum total bytes of attachment data injected as multimodal content per judge invocation.
+  #   Every injected attachment is re-sent on every follow-up tool round, so cost is multiplicative.
+  #   Lower this on memory-constrained deployments.
+  agenticToolsMaxInjectedBytes: ${ONLINE_SCORING_AGENTIC_TOOLS_MAX_INJECTED_BYTES:-52428800}
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only

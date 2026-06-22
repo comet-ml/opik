@@ -166,12 +166,12 @@ class GetAttachmentToolTest {
         assertThat(result).contains("error").contains("Missing required argument: file_name");
     }
 
-    // Size-cap tests (MAX_INJECTED_BYTES = 20 MB)
+    // Size-cap tests (DEFAULT_MAX_INJECTED_BYTES = 50 MB)
 
     @Test
     void fetchFromMinIORejectWhenSizeCapExceeded() {
         when(s3Config.isMinIO()).thenReturn(true);
-        long overLimit = TraceToolContext.MAX_INJECTED_BYTES + 1;
+        long overLimit = TraceToolContext.DEFAULT_MAX_INJECTED_BYTES + 1;
         AttachmentInfo bigAttachment = AttachmentInfo.builder()
                 .fileName(IMAGE_FILE_NAME)
                 .entityType(EntityType.TRACE)
@@ -193,7 +193,7 @@ class GetAttachmentToolTest {
     @Test
     void fetchFromS3RejectWhenSizeCapExceeded() {
         when(s3Config.isMinIO()).thenReturn(false);
-        long overLimit = TraceToolContext.MAX_INJECTED_BYTES + 1;
+        long overLimit = TraceToolContext.DEFAULT_MAX_INJECTED_BYTES + 1;
         AttachmentInfo bigAttachment = AttachmentInfo.builder()
                 .fileName(IMAGE_FILE_NAME)
                 .entityType(EntityType.TRACE)
@@ -217,7 +217,7 @@ class GetAttachmentToolTest {
         when(s3Config.isMinIO()).thenReturn(true);
 
         // First attachment consumes most of the budget
-        long firstSize = TraceToolContext.MAX_INJECTED_BYTES - 1024;
+        long firstSize = TraceToolContext.DEFAULT_MAX_INJECTED_BYTES - 1024;
         byte[] firstBytes = new byte[4]; // actual content doesn't matter for the cap logic
         AttachmentInfo firstInfo = AttachmentInfo.builder()
                 .fileName(IMAGE_FILE_NAME)

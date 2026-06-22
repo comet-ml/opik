@@ -68,13 +68,15 @@ public final class TraceToolContext {
     private final Set<EntityRef> truncated = new HashSet<>();
 
     /**
-     * Hard cap on the total bytes of attachment data that may be injected as
-     * multimodal content across a single judge invocation. Bounds prompt growth:
-     * every injected attachment is re-sent on every subsequent follow-up round and
-     * on the final structured re-issue, so the cost is multiplicative in rounds.
-     * 20 MB accommodates a few high-resolution images without blowing context.
+     * Default cap used when no explicit limit is provided (e.g., in tests). Production
+     * evaluations override this via {@code onlineScoring.agenticToolsMaxInjectedBytes}
+     * in the server config (env: {@code ONLINE_SCORING_AGENTIC_TOOLS_MAX_INJECTED_BYTES}).
+     *
+     * <p>50 MB accommodates several high-resolution images without blowing context.
+     * Every injected attachment is re-sent on every follow-up round and on the final
+     * structured re-issue, so the cost is multiplicative in the number of tool rounds.
      */
-    static final long MAX_INJECTED_BYTES = 20L * 1024 * 1024;
+    public static final long DEFAULT_MAX_INJECTED_BYTES = 50L * 1024 * 1024;
 
     /**
      * Media fetched by {@code get_attachment} this round, awaiting injection.
@@ -83,6 +85,7 @@ public final class TraceToolContext {
      * on the loop thread (same single-thread guarantee as {@link #fetched}).
      */
     private final List<MediaPayload> pendingMedia = new ArrayList<>();
+    private final long maxInjectedBytes;
     private long injectedBytes = 0;
 
     /**
@@ -104,12 +107,13 @@ public final class TraceToolContext {
      * an active trace is the point.
      */
     private TraceToolContext(Trace trace, List<Span> spans,
-            @NonNull String workspaceId, @NonNull String userName, UUID projectId) {
+            @NonNull String workspaceId, @NonNull String userName, UUID projectId, long maxInjectedBytes) {
         this.trace = trace;
         this.spans = spans != null ? List.copyOf(spans) : null;
         this.workspaceId = workspaceId;
         this.userName = userName;
         this.projectId = projectId;
+        this.maxInjectedBytes = maxInjectedBytes;
     }
 
     /**
@@ -120,7 +124,12 @@ public final class TraceToolContext {
      */
     public static TraceToolContext forActiveTrace(@NonNull Trace trace, @NonNull List<Span> spans,
             @NonNull String workspaceId, @NonNull String userName) {
-        return new TraceToolContext(trace, spans, workspaceId, userName, trace.projectId());
+        return forActiveTrace(trace, spans, workspaceId, userName, DEFAULT_MAX_INJECTED_BYTES);
+    }
+
+    public static TraceToolContext forActiveTrace(@NonNull Trace trace, @NonNull List<Span> spans,
+            @NonNull String workspaceId, @NonNull String userName, long maxInjectedBytes) {
+        return new TraceToolContext(trace, spans, workspaceId, userName, trace.projectId(), maxInjectedBytes);
     }
 
     /**
@@ -132,7 +141,12 @@ public final class TraceToolContext {
      */
     public static TraceToolContext forThread(@NonNull String workspaceId, @NonNull String userName,
             @NonNull UUID projectId) {
-        return new TraceToolContext(null, null, workspaceId, userName, projectId);
+        return forThread(workspaceId, userName, projectId, DEFAULT_MAX_INJECTED_BYTES);
+    }
+
+    public static TraceToolContext forThread(@NonNull String workspaceId, @NonNull String userName,
+            @NonNull UUID projectId, long maxInjectedBytes) {
+        return new TraceToolContext(null, null, workspaceId, userName, projectId, maxInjectedBytes);
     }
 
     /**
@@ -173,7 +187,7 @@ public final class TraceToolContext {
      * S3 presigned-URL path — it is the only bound on injected media.
      */
     public boolean canInjectMedia(long sizeBytes) {
-        return injectedBytes + sizeBytes <= MAX_INJECTED_BYTES;
+        return injectedBytes + sizeBytes <= maxInjectedBytes;
     }
 
     /**

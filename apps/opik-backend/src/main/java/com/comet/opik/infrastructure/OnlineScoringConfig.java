@@ -86,6 +86,21 @@ public class OnlineScoringConfig {
     @JsonProperty
     @Min(1) private int agenticToolsCharsPerToken = 4;
 
+    /**
+     * Maximum total bytes of attachment data that may be injected as multimodal content
+     * across a single judge invocation. Every injected attachment is re-sent on every
+     * follow-up tool round and on the final structured re-issue, so the cost is
+     * multiplicative in the number of rounds. 50 MB (default) accommodates several
+     * high-resolution images without blowing context; lower this on memory-constrained
+     * deployments.
+     *
+     * <p>Floor at 1 MB — below that almost no real attachment fits, so a typo'd env var
+     * would silently disable attachment injection rather than failing fast. Dropwizard
+     * catches the violation on startup instead.
+     */
+    @JsonProperty
+    @Min(1_048_576) private long agenticToolsMaxInjectedBytes = 50L * 1024 * 1024;
+
     @Data
     @Builder(toBuilder = true)
     @NoArgsConstructor

@@ -482,7 +482,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         // cold and pure, so it doesn't need to be inside the defer.
         return Mono.defer(() -> {
             var trace = message.trace();
-            var ctx = TraceToolContext.forActiveTrace(trace, spans, message.workspaceId(), message.userName());
+            var ctx = TraceToolContext.forActiveTrace(trace, spans, message.workspaceId(), message.userName(),
+                    onlineScoringConfig.getAgenticToolsMaxInjectedBytes());
             // Pre-seed the active trace into the cache using the JSON that prepareEvaluation
             // already built for the size estimate — saves a redundant traceCompressor.buildFullJson
             // call on big-trace evaluations. Fall back to rebuilding if the caller didn't supply
