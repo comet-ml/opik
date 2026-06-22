@@ -1092,8 +1092,9 @@ class PromptResourceTest {
 
             return Stream.of(
                     Arguments.of(prompt, HttpStatus.SC_BAD_REQUEST,
-                            new ErrorMessage(List.of("prompt id must be a version 7 UUID")),
-                            ErrorMessage.class),
+                            new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                                    "Invalid UUID for id", "prompt id must be a version 7 UUID"),
+                            io.dropwizard.jersey.errors.ErrorMessage.class),
                     Arguments.of(duplicatedPrompt.toBuilder().name(UUID.randomUUID().toString()).build(),
                             HttpStatus.SC_CONFLICT,
                             new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_CONFLICT,
@@ -2320,8 +2321,9 @@ class PromptResourceTest {
                                     .templateStructure(null)
                                     .build(),
                             HttpStatus.SC_BAD_REQUEST,
-                            new ErrorMessage(List.of("prompt version id must be a version 7 UUID")),
-                            ErrorMessage.class),
+                            new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                                    "Invalid UUID for id", "prompt version id must be a version 7 UUID"),
+                            io.dropwizard.jersey.errors.ErrorMessage.class),
                     arguments(
                             CreatePromptVersion.builder()
                                     .name(UUID.randomUUID().toString())

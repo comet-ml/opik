@@ -4848,8 +4848,8 @@ class ExperimentsResourceTest {
             var experiment = experimentResourceClient.createPartialExperiment()
                     .id(UUID.randomUUID())
                     .build();
-            var expectedError = new com.comet.opik.api.error.ErrorMessage(
-                    List.of("Experiment id must be a version 7 UUID"));
+            var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST, "Invalid UUID for id",
+                    "Experiment id must be a version 7 UUID");
 
             try (var actualResponse = client.target(getExperimentsPath())
                     .request()
@@ -4859,7 +4859,7 @@ class ExperimentsResourceTest {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
 
-                var actualError = actualResponse.readEntity(com.comet.opik.api.error.ErrorMessage.class);
+                var actualError = actualResponse.readEntity(ErrorMessage.class);
 
                 assertThat(actualError).isEqualTo(expectedError);
             }
@@ -6036,8 +6036,8 @@ class ExperimentsResourceTest {
         void insertInvalidId(ExperimentItem experimentItem, String expectedErrorMessage) {
             var request = ExperimentItemsBatch.builder()
                     .experimentItems(Set.of(experimentItem)).build();
-            var expectedError = new com.comet.opik.api.error.ErrorMessage(
-                    List.of(expectedErrorMessage + " id must be a version 7 UUID"));
+            var expectedError = new ErrorMessage(HttpStatus.SC_BAD_REQUEST, "Invalid UUID for id",
+                    expectedErrorMessage + " id must be a version 7 UUID");
 
             try (var actualResponse = client.target(getExperimentItemsPath())
                     .request()
@@ -6047,7 +6047,7 @@ class ExperimentsResourceTest {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
 
-                var actualError = actualResponse.readEntity(com.comet.opik.api.error.ErrorMessage.class);
+                var actualError = actualResponse.readEntity(ErrorMessage.class);
 
                 assertThat(actualError).isEqualTo(expectedError);
             }

@@ -48,8 +48,8 @@ import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.FeedbackScoreDAO;
 import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.GuardrailsMapper;
-import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.retention.RetentionUtils;
 import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -1856,7 +1856,7 @@ class ProjectsResourceTest {
         long recentErrorCount = traces.stream()
                 .filter(trace -> trace.errorInfo() != null)
                 .filter(trace -> {
-                    Instant traceTime = IdGenerator.extractTimestampFromUUIDv7(trace.id());
+                    Instant traceTime = RetentionUtils.extractInstant(trace.id());
                     return !traceTime.isBefore(lastWeekStart) && !traceTime.isAfter(now);
                 })
                 .count();
@@ -1864,7 +1864,7 @@ class ProjectsResourceTest {
         long pastPeriodErrorCount = traces.stream()
                 .filter(trace -> trace.errorInfo() != null)
                 .filter(trace -> {
-                    Instant traceTime = IdGenerator.extractTimestampFromUUIDv7(trace.id());
+                    Instant traceTime = RetentionUtils.extractInstant(trace.id());
                     return traceTime.isBefore(lastWeekStart);
                 })
                 .count();

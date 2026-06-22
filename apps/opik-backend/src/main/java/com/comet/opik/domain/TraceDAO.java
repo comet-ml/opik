@@ -49,6 +49,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
@@ -58,12 +59,14 @@ import reactor.core.publisher.SignalType;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.api.ErrorInfo.ERROR_INFO_TYPE;
 import static com.comet.opik.api.Trace.TracePage;
@@ -113,6 +116,9 @@ public interface TraceDAO {
     Flux<WorkspaceTraceCount> countTracesPerWorkspace(Map<UUID, Instant> excludedProjectIds);
 
     Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(Set<UUID> projectIds, String workspaceId, Connection connection);
+
+    Mono<Set<UUID>> getProjectsWithTracesInRange(Collection<Pair<String, UUID>> workspaceProjectPairs, Instant from,
+            Instant to, Connection connection);
 
     Mono<UUID> getProjectIdFromTrace(UUID traceId);
 
@@ -1946,6 +1952,16 @@ class TraceDAOImpl implements TraceDAO {
             WHERE t.workspace_id = :workspace_id
             AND t.project_id IN :project_ids
             GROUP BY t.project_id
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    private static final String SELECT_PROJECTS_WITH_TRACES_IN_RANGE = """
+            SELECT DISTINCT project_id
+            FROM traces
+            WHERE (workspace_id, project_id) IN (<workspace_project_pairs>)
+            AND created_at >= parseDateTime64BestEffort(:from_time, 9)
+            AND created_at \\< parseDateTime64BestEffort(:to_time, 9)
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -4120,6 +4136,34 @@ class TraceDAOImpl implements TraceDAO {
                         log.info("Got last updated trace at for projectIds, size '{}'", projectIds.size());
                     }
                 });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Set<UUID>> getProjectsWithTracesInRange(@NonNull Collection<Pair<String, UUID>> workspaceProjectPairs,
+            @NonNull Instant from, @NonNull Instant to, @NonNull Connection connection) {
+
+        var template = getSTWithLogComment(SELECT_PROJECTS_WITH_TRACES_IN_RANGE, "projects_with_traces_in_range",
+                "", "", workspaceProjectPairs.size());
+        // Exact (workspace_id, project_id) tuple match in one query for the whole sweep.
+        template.add("workspace_project_pairs", toPairsLiteral(workspaceProjectPairs));
+
+        var statement = connection.createStatement(template.render())
+                .bind("from_time", from.toString())
+                .bind("to_time", to.toString());
+
+        return Mono.from(statement.execute())
+                .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("project_id", UUID.class)))
+                .collect(Collectors.toSet());
+    }
+
+    // Renders the (workspace_id, project_id) tuples as a ClickHouse IN list, e.g. ('ws','proj'),('ws2','proj2').
+    // Single quotes are escaped (doubled) so a value can't reshape the literal; project_id is a UUID.
+    private static String toPairsLiteral(Collection<Pair<String, UUID>> pairs) {
+        return pairs.stream()
+                .map(pair -> "('%s','%s')".formatted(
+                        pair.getLeft().replace("'", "''"), pair.getRight().toString().replace("'", "''")))
+                .collect(Collectors.joining(","));
     }
 
     @Override

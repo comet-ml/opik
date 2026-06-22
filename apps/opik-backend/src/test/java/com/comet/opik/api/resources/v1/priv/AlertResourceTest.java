@@ -363,8 +363,9 @@ class AlertResourceTest {
                     arguments(
                             generateAlert().toBuilder().id(UUID.randomUUID()).build(),
                             HttpStatus.SC_BAD_REQUEST,
-                            new ErrorMessage(List.of("Alert id must be a version 7 UUID")),
-                            ErrorMessage.class));
+                            new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                                    "Invalid UUID for id", "Alert id must be a version 7 UUID"),
+                            io.dropwizard.jersey.errors.ErrorMessage.class));
         }
 
         @Test
