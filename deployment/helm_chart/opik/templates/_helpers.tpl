@@ -119,6 +119,41 @@ Note: Directives are sorted alphabetically to ensure deterministic output
 {{- end -}}
 
 {{/*
+Renders a container probe (liveness / readiness / startup) from a probe spec.
+Supports two shapes for the same spec:
+  1. Simplified path/port: BOTH `path` and `port` must be set. The remaining
+     probe fields (timeoutSeconds, periodSeconds, initialDelaySeconds,
+     successThreshold, failureThreshold) are each honored if the caller sets
+     them, otherwise fall back to defaults (2 / 10 / 0 / 1 / 2). This is a
+     common case for HTTP probes.
+     (Setting only one of `path`/`port` is a misconfiguration — provide both,
+     or use a full probe spec below.)
+  2. Full definition: any other spec is emitted verbatim, so values.yaml can
+     define httpGet/exec/tcpSocket plus any probe timing fields directly.
+Usage:
+{{- include "opik.probe" $value.livenessProbe | nindent 12 }}
+*/}}
+{{- define "opik.probe" -}}
+{{- if and .path .port }}
+{{- /* Backward compatibility: simplified path/port definition */}}
+httpGet:
+  path: {{ .path }}
+  port: {{ .port }}
+  httpHeaders:
+    - name: Accept
+      value: application/json
+timeoutSeconds: {{ .timeoutSeconds | default 2 }}
+periodSeconds: {{ .periodSeconds | default 10 }}
+initialDelaySeconds: {{ .initialDelaySeconds | default 0 }}
+successThreshold: {{ .successThreshold | default 1 }}
+failureThreshold: {{ .failureThreshold | default 2 }}
+{{- else }}
+{{- /* Full probe definition from values.yaml */}}
+{{- toYaml . }}
+{{- end }}
+{{- end -}}
+
+{{/*
 Renders a value that contains template perhaps with scope if the scope is present.
 Usage:
 {{ include "common.tplvalues.render" (dict "value" .Values.path.to.value "context" $) }}
