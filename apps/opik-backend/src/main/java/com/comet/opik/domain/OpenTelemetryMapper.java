@@ -7,6 +7,7 @@ import com.comet.opik.domain.mapping.OpenTelemetryMappingRuleFactory;
 import com.comet.opik.domain.mapping.otel.ElasticInferenceServiceResolver;
 import com.comet.opik.domain.mapping.otel.GeneralMappingRules;
 import com.comet.opik.domain.mapping.otel.GoogleProviderResolver;
+import com.comet.opik.domain.retention.RetentionUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.opentelemetry.proto.common.v1.KeyValue;
@@ -360,7 +361,7 @@ public class OpenTelemetryMapper {
      * @return the extracted timestamp as a long (milliseconds since Unix epoch)
      */
     private long extractTimestampFromUUIDv7(UUID uuid) {
-        return IdGenerator.extractTimestampFromUUIDv7(uuid).toEpochMilli();
+        return RetentionUtils.extractInstant(uuid).toEpochMilli();
     }
 
     /**

@@ -90,6 +90,18 @@ databaseAnalytics:
   #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
   healthCheckTimeout: ${ANALYTICS_DB_HEALTH_CHECK_TIMEOUT:-1s}
 
+# Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
+#   window, protecting data quality.
+uuidValidation:
+  #  Default: true
+  #  Description: Operational kill-switch. When false, ids are not checked against the window (the
+  #   window is still validated to be a sane value).
+  enabled: ${UUID_VALIDATION_ENABLED:-true}
+  #  Default: 24h
+  #  Description: Validation window (between 12h and 45d). Writes whose `id` is a UUIDv7 with an
+  #   embedded timestamp more than this far in the past or future are rejected.
+  window: ${UUID_VALIDATION_WINDOW:-24h}
+
 # Description: credentials for the Agent Insights read-only free-form SQL ClickHouse user (restricted user with a
 #   read-only profile + row policies, provisioned by OPIK-6846). Only the user/password live here; the connection
 #   params (protocol/host/port/database) are reused from databaseAnalytics above (same ClickHouse instance). Only used
@@ -1137,8 +1149,8 @@ serviceToggles:
   # Description: Whether the deployment is expected to produce demo project data on signup. When false, the FE skips the onboarding demo-loading screen and lets the user proceed to the empty workspace immediately.
   demoDataEnabled: ${TOGGLE_DEMO_DATA_ENABLED:-"true"}
   # Default: false
-  # Description: Whether or not Optimization Studio feature is enabled
-  optimizationStudioEnabled: ${TOGGLE_OPTIMIZATION_STUDIO_ENABLED:-"false"}
+  # Description: Whether or not the Cost Intelligence (AI Spend) feature is enabled
+  costIntelligenceEnabled: ${TOGGLE_COST_INTELLIGENCE_ENABLED:-"false"}
   # Default: true
   # Description: Whether or not OpenAI provider is enabled
   openaiProviderEnabled: ${TOGGLE_OPENAI_PROVIDER_ENABLED:-"true"}

@@ -114,12 +114,27 @@ def run_optimization(
     Returns:
         Optimization result object
     """
+    # Optimizers default to optimizing only `system` messages. When the user's
+    # prompt has no system message (e.g. a single user message), that leaves the
+    # optimizer with zero editable components — GEPA then divides by zero while
+    # round-robin selecting one. Optimize whichever roles the prompt actually
+    # contains so a run succeeds for any prompt shape.
+    present_roles = sorted(
+        {
+            message.get("role")
+            for message in prompt.get_messages()
+            if message.get("role") in {"system", "user", "assistant"}
+        }
+    )
+    optimize_prompts = present_roles or "system"
+
     result = optimizer.optimize_prompt(
         optimization_id=optimization_id,
         prompt=prompt,
         dataset=dataset,
         metric=metric_fn,
         project_name=project_name,
+        optimize_prompts=optimize_prompts,
         **OPTIMIZER_RUNTIME_PARAMS,
     )
 

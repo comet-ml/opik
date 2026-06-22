@@ -1211,6 +1211,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "nex-agi/deepseek-v3.1-nex-n1",
     },
     {
+      value: PROVIDER_MODEL_TYPE.NEX_AGI_NEX_N2_PRO,
+      label: "nex-agi/nex-n2-pro",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.NEX_AGI_NEX_N2_PRO_FREE,
       label: "nex-agi/nex-n2-pro:free",
     },
