@@ -6,7 +6,11 @@ import { useCallback, useEffect, useState } from "react";
 // land or a timeout elapses. Persisted per project so it survives navigation
 // and reloads while a run is still in flight.
 const STORAGE_KEY = (projectId: string) => `diagnostics-run:${projectId}`;
-const RUN_TIMEOUT_MS = 5 * 60 * 1000;
+// Fallback only — the run normally clears as soon as results land (see below).
+// Kept comfortably above a typical run so the "Run diagnostic" button can't
+// re-enable mid-run and let a second, concurrent run start (which would create
+// duplicate issues instead of refreshing the existing ones).
+const RUN_TIMEOUT_MS = 12 * 60 * 1000;
 
 type RunState = {
   // Client epoch ms at trigger — used only for the timeout fallback.
