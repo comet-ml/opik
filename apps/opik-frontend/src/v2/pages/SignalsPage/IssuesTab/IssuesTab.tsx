@@ -48,7 +48,7 @@ const RunningIcon: React.FC = () => (
 // Indeterminate "running" bar — a fixed-width fill sliding across the track.
 const RunningBar: React.FC = () => (
   <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-muted">
-    <div className="absolute inset-y-0 left-0 w-2/5 animate-progress-indeterminate rounded-full bg-[var(--color-primary)]" />
+    <div className="absolute inset-y-0 left-0 w-2/5 animate-progress-indeterminate rounded-full bg-[#A78BFA]" />
   </div>
 );
 
@@ -193,9 +193,9 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
         </div>
         <div className="flex flex-col overflow-y-auto">
           {isRunning && (
-            <div className="flex flex-col justify-center gap-2 border-b border-border bg-primary-50 px-4 py-3">
-              <div className="flex items-start gap-3">
-                <RunningIcon />
+            <div className="flex items-start gap-3 border-b border-border bg-primary-50 px-4 py-3">
+              <RunningIcon />
+              <div className="flex min-w-0 flex-1 flex-col gap-2.5">
                 <div className="flex flex-col gap-0.5">
                   <span className="comet-body-s-accented text-foreground">
                     Running diagnostic
@@ -204,8 +204,8 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
                     {RUNNING_DESC}
                   </span>
                 </div>
+                <RunningBar />
               </div>
-              <RunningBar />
             </div>
           )}
           {issues.map((issue) => (
