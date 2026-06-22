@@ -104,11 +104,28 @@ public class OnlineScoringSampler {
                 .build();
     }
 
-    private void recordDecision(String workspaceId, AutomationRuleEvaluator<?, ?> evaluator, String decision) {
-        samplingDecisions.add(1, Attributes.of(
+    private void recordDecision(String workspaceId, AutomationRuleEvaluator<?, ?> evaluator, String decision,
+            long count) {
+        samplingDecisions.add(count, Attributes.of(
                 WORKSPACE_ID_KEY, workspaceId,
                 EVALUATOR_TYPE_KEY, evaluator.getType().name(),
                 DECISION_KEY, decision));
+    }
+
+    /**
+     * Records a skip decision and emits the user-facing log line for it. Shared by the disabled,
+     * filter-mismatch and sampling-skip branches of {@link #shouldSampleTrace} so a new skip reason
+     * is a single call site rather than three. Always returns {@code false} so callers can
+     * {@code return skip(...)}.
+     */
+    private boolean skip(String workspaceId, AutomationRuleEvaluator<?, ?> evaluator, Trace trace,
+            String decision, String message, Object... args) {
+        recordDecision(workspaceId, evaluator, decision, 1);
+        // Important to set the workspaceId for logging purposes
+        try (var logContext = createTraceLoggingContext(workspaceId, evaluator, trace)) {
+            userFacingLogger.info(message, args);
+        }
+        return false;
     }
 
     /**
@@ -233,6 +250,7 @@ public class OnlineScoringSampler {
                                 .toList();
                         logSampledTrace(evaluator, messages, scorableTraces.size());
                         if (!messages.isEmpty()) {
+                            recordDecision(workspaceId, evaluator, DECISION_SAMPLED, messages.size());
                             onlineScorePublisher.enqueueMessage(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE);
                         }
                     }
@@ -244,6 +262,7 @@ public class OnlineScoringSampler {
                                     .toList();
                             logSampledTrace(evaluator, messages, scorableTraces.size());
                             if (!messages.isEmpty()) {
+                                recordDecision(workspaceId, evaluator, DECISION_SAMPLED, messages.size());
                                 onlineScorePublisher.enqueueMessage(messages,
                                         AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
                             }
@@ -299,43 +318,27 @@ public class OnlineScoringSampler {
     private boolean shouldSampleTrace(AutomationRuleEvaluator<?, ?> evaluator, String workspaceId, Trace trace) {
         // Check if rule is enabled first
         if (!evaluator.isEnabled()) {
-            recordDecision(workspaceId, evaluator, DECISION_SKIPPED_DISABLED);
-            // Important to set the workspaceId for logging purposes
-            try (var logContext = createTraceLoggingContext(workspaceId, evaluator, trace)) {
-                userFacingLogger.info(
-                        "The traceId '{}' was skipped for rule: '{}' as the rule is disabled",
-                        trace.id(), evaluator.getName());
-            }
-            return false;
+            return skip(workspaceId, evaluator, trace, DECISION_SKIPPED_DISABLED,
+                    "The traceId '{}' was skipped for rule: '{}' as the rule is disabled",
+                    trace.id(), evaluator.getName());
         }
 
         // Check if trace matches all filters
         if (!filterEvaluationService.matchesAllFilters(evaluator.getFilters(), trace)) {
-            recordDecision(workspaceId, evaluator, DECISION_SKIPPED_FILTER);
-            // Important to set the workspaceId for logging purposes
-            try (var logContext = createTraceLoggingContext(workspaceId, evaluator, trace)) {
-                userFacingLogger.info(
-                        "The traceId '{}' was skipped for rule: '{}' as it does not match the configured filters",
-                        trace.id(), evaluator.getName());
-            }
-            return false;
+            return skip(workspaceId, evaluator, trace, DECISION_SKIPPED_FILTER,
+                    "The traceId '{}' was skipped for rule: '{}' as it does not match the configured filters",
+                    trace.id(), evaluator.getName());
         }
 
-        var shouldBeSampled = secureRandom.nextFloat() < evaluator.getSamplingRate();
-
-        if (shouldBeSampled) {
-            recordDecision(workspaceId, evaluator, DECISION_SAMPLED);
-        } else {
-            recordDecision(workspaceId, evaluator, DECISION_SKIPPED_SAMPLING);
-            // Important to set the workspaceId for logging purposes
-            try (var logContext = createTraceLoggingContext(workspaceId, evaluator, trace)) {
-                userFacingLogger.info(
-                        "The traceId '{}' was skipped for rule: '{}' and per the sampling rate '{}'",
-                        trace.id(), evaluator.getName(), evaluator.getSamplingRate());
-            }
+        if (secureRandom.nextFloat() >= evaluator.getSamplingRate()) {
+            return skip(workspaceId, evaluator, trace, DECISION_SKIPPED_SAMPLING,
+                    "The traceId '{}' was skipped for rule: '{}' and per the sampling rate '{}'",
+                    trace.id(), evaluator.getName(), evaluator.getSamplingRate());
         }
 
-        return shouldBeSampled;
+        // The DECISION_SAMPLED metric is recorded at enqueue time (see sampleAndScore), so it
+        // reflects messages actually published to Redis rather than the sampling roll alone.
+        return true;
     }
 
     private TraceToScoreLlmAsJudge toLlmAsJudgeMessage(String workspaceId, String userName,
