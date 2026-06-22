@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.error.InvalidUUIDException.Reason;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -34,10 +35,13 @@ import io.opentelemetry.proto.trace.v1.ScopeSpans;
 import io.opentelemetry.proto.trace.v1.Span;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.http.HttpStatus;
 import org.junit.experimental.runners.Enclosed;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -104,7 +108,7 @@ class OpenTelemetryResourceTest {
     private final WireMockUtils.WireMockRuntime wireMock;
 
     @RegisterApp
-    private final TestDropwizardAppExtension APP;
+    private final TestDropwizardAppExtension app;
 
     {
         Startables.deepStart(REDIS, MY_SQL_CONTAINER, CLICK_HOUSE_CONTAINER, ZOOKEEPER_CONTAINER).join();
@@ -117,7 +121,7 @@ class OpenTelemetryResourceTest {
         MigrationUtils.runMysqlDbMigration(MY_SQL_CONTAINER);
         MigrationUtils.runClickhouseDbMigration(CLICK_HOUSE_CONTAINER);
 
-        APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
+        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 MY_SQL_CONTAINER.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
     }
 
@@ -173,7 +177,7 @@ class OpenTelemetryResourceTest {
                     post(urlPathEqualTo("/opik/auth"))
                             .withHeader(HttpHeaders.AUTHORIZATION, equalTo(fakeApikey))
                             .withRequestBody(matchingJsonPath("$.workspaceName", matching(".+")))
-                            .willReturn(WireMock.unauthorized().withHeader("Content-Type", "application/json")
+                            .willReturn(WireMock.unauthorized().withHeader("Content-Type", MediaType.APPLICATION_JSON)
                                     .withJsonBody(JsonUtils.readTree(
                                             new ReactServiceErrorResponse(FAKE_API_KEY_MESSAGE,
                                                     401)))));
@@ -221,7 +225,7 @@ class OpenTelemetryResourceTest {
             Collections.shuffle(otelSpansBatch2);
 
             // opik trace id should be created with the earliest timestamp in the batch;
-            // we use batch as its the first server will receive
+            // we use batch as it's the first server will receive
             var minTimestamp = otelSpansBatch1.stream().map(Span::getStartTimeUnixNano).min(Long::compareTo)
                     .orElseThrow();
             var minTimestampMs = Duration.ofNanos(minTimestamp).toMillis();
@@ -282,11 +286,17 @@ class OpenTelemetryResourceTest {
 
             Entity<String> payload = Entity.json(injectedPayload);
 
-            sendBatch(payload, "application/json", projectName, workspaceName, apiKey, expected, errorMessage);
+            sendBatch(payload, projectName, workspaceName, apiKey, expected, errorMessage);
+        }
+
+        void sendBatch(Entity<?> payload, String projectName, String workspaceName, String apiKey,
+                boolean expected, ErrorMessage errorMessage) {
+            sendBatch(payload, MediaType.APPLICATION_JSON, projectName, workspaceName, apiKey,
+                    expected ? HttpStatus.SC_OK : HttpStatus.SC_UNAUTHORIZED, errorMessage);
         }
 
         void sendBatch(Entity<?> payload, String mediaType, String projectName, String workspaceName, String apiKey,
-                boolean expected, ErrorMessage errorMessage) {
+                int expectedStatus, ErrorMessage expectedError) {
 
             var requestBuilder = client.target(URL_TEMPLATE.formatted(baseURI))
                     .request(mediaType)
@@ -298,20 +308,23 @@ class OpenTelemetryResourceTest {
             }
 
             try (Response actualResponse = requestBuilder.post(payload)) {
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
 
-                if (expected) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-
-                } else {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
+                if (expectedError != null) {
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                            .isEqualTo(errorMessage);
+                            .isEqualTo(expectedError);
                 }
             }
         }
 
         void sendProtobufTraces(List<Span> otelSpans, String projectName, String workspaceName, String apiKey,
                 boolean expected, ErrorMessage errorMessage) {
+            sendProtobufTraces(otelSpans, projectName, workspaceName, apiKey,
+                    expected ? HttpStatus.SC_OK : HttpStatus.SC_UNAUTHORIZED, errorMessage);
+        }
+
+        void sendProtobufTraces(List<Span> otelSpans, String projectName, String workspaceName, String apiKey,
+                int expectedStatus, ErrorMessage expectedError) {
 
             var protoBuilder = ExportTraceServiceRequest.newBuilder()
                     .addResourceSpans(ResourceSpans.newBuilder()
@@ -322,7 +335,8 @@ class OpenTelemetryResourceTest {
             byte[] requestProtobufBytes = protoBuilder.toByteArray();
             var payload = Entity.entity(requestProtobufBytes, "application/x-protobuf");
 
-            sendBatch(payload, "application/x-protobuf", projectName, workspaceName, apiKey, expected, errorMessage);
+            sendBatch(payload, "application/x-protobuf", projectName, workspaceName, apiKey, expectedStatus,
+                    expectedError);
         }
 
         @ParameterizedTest
@@ -1018,6 +1032,34 @@ class OpenTelemetryResourceTest {
             assertThat(existingTraceSpans.size()).isEqualTo(1);
             assertThat(existingTraceSpans.content().getFirst().name()).isEqualTo("override span");
             assertThat(existingTraceSpans.content().getFirst().traceId()).isEqualTo(existingTraceId);
+        }
+
+        Stream<Arguments> sendProtobufTracesOutOfWindowTimestampThrowsException() {
+            var now = Instant.now();
+            return Stream.of(
+                    arguments("before the window", now.minus(Duration.ofHours(25)), Reason.TOO_OLD),
+                    arguments("after the window", now.plus(Duration.ofHours(25)), Reason.TOO_FAR_FUTURE));
+        }
+
+        @ParameterizedTest(name = "OTel protobuf ingestion rejects a trace with timestamp {0}")
+        @MethodSource
+        void sendProtobufTracesOutOfWindowTimestampThrowsException(String testName, Instant instant, Reason reason) {
+            // OTel derives the Opik trace id (a UUIDv7) from the span's start timestamp
+            var projectName = "project-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(32));
+            var timestamp = instant.toEpochMilli() * 1_000_000L;
+            var otelSpan = Span.newBuilder()
+                    .setName("root span")
+                    .setTraceId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
+                    .setSpanId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
+                    .setStartTimeUnixNano(timestamp)
+                    .setEndTimeUnixNano(timestamp * 2)
+                    .build();
+            var expectedDetails = "id with timestamp '%s' must be in the allowed ingestion window of '%s' around now, reason '%s'"
+                    .formatted(Instant.ofEpochMilli(instant.toEpochMilli()), Duration.ofHours(24), reason.getValue());
+            var expectedEntity = new ErrorMessage(HttpStatus.SC_BAD_REQUEST, "Invalid UUID for id", expectedDetails);
+
+            sendProtobufTraces(
+                    List.of(otelSpan), projectName, TEST_WORKSPACE, API_KEY, HttpStatus.SC_BAD_REQUEST, expectedEntity);
         }
     }
 }

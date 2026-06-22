@@ -854,6 +854,8 @@ openrouter:
     label: "neversleep/noromaid-20b"
   - id: "nex-agi/deepseek-v3.1-nex-n1"
     label: "nex-agi/deepseek-v3.1-nex-n1"
+  - id: "nex-agi/nex-n2-pro"
+    label: "nex-agi/nex-n2-pro"
   - id: "nex-agi/nex-n2-pro:free"
     label: "nex-agi/nex-n2-pro:free"
   - id: "nousresearch/deephermes-3-mistral-24b-preview"
