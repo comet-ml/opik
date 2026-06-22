@@ -9,11 +9,17 @@ import PageBodyScrollContainer from "@/v2/layout/PageBodyScrollContainer/PageBod
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
-import { AGENT_INSIGHTS_ISSUE_STATUS } from "@/types/signals";
+import {
+  AGENT_INSIGHTS_ISSUE_STATUS,
+  AGENT_INSIGHTS_JOB_STATUS,
+} from "@/types/signals";
 import useAgentInsightsIssuesList from "@/api/signals/useAgentInsightsIssuesList";
+import useAgentInsightsJob from "@/api/signals/useAgentInsightsJob";
 import useTriggerAgentInsightsJobMutation from "@/api/signals/useTriggerAgentInsightsJobMutation";
 import SignalsStatsCards from "@/v2/pages/SignalsPage/SignalsStatsCards";
 import IssuesTab from "@/v2/pages/SignalsPage/IssuesTab/IssuesTab";
+import DiagnosticsEmptyState from "@/v2/pages/SignalsPage/DiagnosticsEmptyState";
+import Loader from "@/shared/Loader/Loader";
 
 const SignalsPage: React.FC = () => {
   const projectId = useActiveProjectId()!;
@@ -28,6 +34,13 @@ const SignalsPage: React.FC = () => {
   const agentInsightsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.AGENT_INSIGHTS_ENABLED,
   );
+
+  // The per-project job drives onboarding: no job (404 → null) or a disabled
+  // job shows the empty state; an enabled job shows the issues view.
+  const { data: job, isPending: isJobPending } = useAgentInsightsJob({
+    projectId,
+  });
+  const isJobEnabled = job?.status === AGENT_INSIGHTS_JOB_STATUS.enabled;
 
   // No dedicated stats endpoint yet — derive the header metrics from the issues
   // list (all statuses) until the backend exposes aggregates.
@@ -62,15 +75,24 @@ const SignalsPage: React.FC = () => {
     );
   }
 
-  return (
-    <PageBodyScrollContainer>
-      <PageBodyStickyContainer
-        className="mb-4 mt-6 flex items-center justify-between"
-        direction="horizontal"
-      >
-        <h1 className="comet-title-l truncate break-words">Diagnostics</h1>
-      </PageBodyStickyContainer>
+  const renderBody = () => {
+    if (isJobPending) {
+      return <Loader />;
+    }
 
+    // No job yet, or it was turned off → onboarding. "Run first diagnostic"
+    // creates+enables the job and triggers a run; the job query then refetches
+    // and this page swaps to the issues view below.
+    if (!isJobEnabled) {
+      return (
+        <DiagnosticsEmptyState
+          onRun={() => triggerMutation.mutate({ projectId })}
+          isPending={triggerMutation.isPending}
+        />
+      );
+    }
+
+    return (
       <div className="flex flex-col gap-4 px-6 pb-6">
         <SignalsStatsCards
           tracesAffected={stats.tracesAffected}
@@ -102,6 +124,18 @@ const SignalsPage: React.FC = () => {
 
         <IssuesTab projectId={projectId} showResolved={showResolved} />
       </div>
+    );
+  };
+
+  return (
+    <PageBodyScrollContainer>
+      <PageBodyStickyContainer
+        className="mb-4 mt-6 flex items-center justify-between"
+        direction="horizontal"
+      >
+        <h1 className="comet-title-l truncate break-words">Diagnostics</h1>
+      </PageBodyStickyContainer>
+      {renderBody()}
     </PageBodyScrollContainer>
   );
 };
