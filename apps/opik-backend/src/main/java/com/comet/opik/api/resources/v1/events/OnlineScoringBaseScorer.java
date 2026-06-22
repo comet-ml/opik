@@ -86,15 +86,27 @@ public abstract class OnlineScoringBaseScorer<M extends WorkspaceScopedMessage> 
     }
 
     /**
-     * Defers the subscription of {@link #score(Object)} so any synchronous work in implementations
-     * runs at subscription time on the per-stream worker scheduler. On success, records the
-     * per-workspace processed count; failures are attributed via {@link #messageContext(Object)}.
+     * Records the per-workspace processed count only after the FULL processing chain succeeds.
+     * The counter wraps {@link #doScore(Object)} (which subclasses may extend with post-scoring
+     * work), so a failure anywhere in the chain leaves the message unacked/retried and does NOT
+     * count as processed. Failures are attributed via {@link #messageContext(Object)}.
      */
     @Override
-    protected Mono<Void> processEvent(M message) {
-        return Mono.defer(() -> score(message))
+    protected final Mono<Void> processEvent(M message) {
+        return doScore(message)
                 .doOnSuccess(ignored -> processedCounter.add(1,
                         Attributes.of(WORKSPACE_ID_KEY, message.workspaceId())));
+    }
+
+    /**
+     * Full per-message processing chain. Defaults to {@link #score(Object)}, deferred so any
+     * synchronous work runs at subscription time on the per-stream worker scheduler. Subclasses
+     * that need post-scoring steps (e.g. test-suite assertion finalization) override this — not
+     * {@code processEvent} — so the processed-success counter fires only once the whole chain
+     * completes successfully.
+     */
+    protected Mono<Void> doScore(M message) {
+        return Mono.defer(() -> score(message));
     }
 
     /**
