@@ -73,6 +73,16 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
 
         projectService.get(report.projectId(), workspaceId);
 
+        // An "all clear" report (no issues detected) is a valid outcome: validate
+        // the project, then return without touching the DB. Skipping the batch
+        // writes also avoids empty-batch failures in the DAO.
+        if (report.issues().isEmpty()) {
+            log.info(
+                    "No agent insights issues to store for project '{}' on report day '{}' in workspace '{}' (all clear)",
+                    report.projectId(), report.reportDay(), workspaceId);
+            return;
+        }
+
         log.info("Storing '{}' agent insights issues for project '{}' on report day '{}' in workspace '{}'",
                 report.issues().size(), report.projectId(), report.reportDay(), workspaceId);
 
