@@ -3,6 +3,7 @@ import uniqid from "uniqid";
 import { Filter, FilterOperator } from "@/types/filters";
 import { JsonValue } from "@/types/shared";
 import { createFilter } from "@/lib/filters";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import {
   ChipDefinition,
@@ -109,20 +110,28 @@ export const useQuickAttributeFilterActions = ({
       if (!target) return;
 
       const definition = definitions.find((d) => d.id === target.chipId);
-      const operators =
-        definition && definition.kind === "query-builder"
-          ? definition.operators
-          : FALLBACK_OPERATORS;
+      const queryBuilder =
+        definition?.kind === "query-builder" ? definition : undefined;
+      const operators = queryBuilder?.operators ?? FALLBACK_OPERATORS;
+      // Mirror how the chip popover picks its initial operator
+      // (`defaultOperator ?? operators[0]`) so quick-filter always matches the
+      // chip's own default — metadata/custom/provider default to "contains" so
+      // a value pulled verbatim from a long input/output string still matches.
+      const defaultOperator =
+        queryBuilder?.defaultOperator ??
+        queryBuilder?.operators[0] ??
+        DEFAULT_OPERATOR;
       const chipLabel = definition?.label ?? target.chipId;
 
       setDraft({
         id: uniqid(),
+        section,
         chipId: target.chipId,
         key: target.key,
         chipLabel,
         field: target.key ?? chipLabel,
         operators,
-        defaultOperator: DEFAULT_OPERATOR,
+        defaultOperator,
         value: stringifyFilterValue(value),
       });
     },
@@ -134,7 +143,7 @@ export const useQuickAttributeFilterActions = ({
   const onApply = useCallback(
     (operator: FilterOperator, value: string) => {
       if (!draft) return;
-      const { chipId, key } = draft;
+      const { chipId, key, section } = draft;
 
       const existing = getRows(values[chipId]);
       const alreadyApplied = existing.some(
@@ -158,9 +167,19 @@ export const useQuickAttributeFilterActions = ({
       }
 
       pinChip(chipId);
+
+      // Usage signal: which tab (traces/spans) and Inspect section the
+      // quick-filter was applied from.
+      trackEvent(OpikEvent.QUICK_FILTER_APPLIED, {
+        data_type: type,
+        source: section,
+        filter_name: chipId,
+        operator,
+      });
+
       setDraft(null);
     },
-    [draft, values, applyValue, pinChip],
+    [draft, values, applyValue, pinChip, type],
   );
 
   return useMemo(

@@ -10,7 +10,7 @@ import { Extension, RangeSetBuilder } from "@codemirror/state";
 import { syntaxTree } from "@codemirror/language";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Plus } from "lucide-react";
+import { ListFilter } from "lucide-react";
 import { JsonValue } from "@/types/shared";
 import {
   QuickFilterMode,
@@ -22,12 +22,13 @@ export type QuickFilterCodeConfig = {
   onFilter: (path: string, value: JsonValue) => void;
 };
 
-const PLUS_ICON = renderToStaticMarkup(
-  createElement(Plus, { size: 14, strokeWidth: 2.25 }),
+const FILTER_ICON = renderToStaticMarkup(
+  createElement(ListFilter, { size: 14, strokeWidth: 2.25 }),
 );
 
-// Inline "+" rendered at the end of a leaf attribute line; revealed on line
-// hover. Clicking seeds a filter for that attribute.
+// Inline filter icon rendered at the end of a leaf attribute line; faintly
+// visible at rest and brightened on line hover. Clicking seeds a filter for
+// that attribute.
 class QuickFilterWidget extends WidgetType {
   constructor(
     readonly path: string,
@@ -48,7 +49,7 @@ class QuickFilterWidget extends WidgetType {
     button.setAttribute("tabindex", "0");
     button.setAttribute("aria-label", "Filter by this attribute");
     button.title = "Filter by this attribute";
-    button.innerHTML = PLUS_ICON;
+    button.innerHTML = FILTER_ICON;
     const activate = (event: Event) => {
       // Keep the read-only editor from moving the caret / selection.
       event.preventDefault();
@@ -75,7 +76,9 @@ const quickFilterTheme = EditorView.baseTheme({
     marginLeft: "6px",
     color: "var(--codemirror-gutter)",
     cursor: "pointer",
-    opacity: "0",
+    // Faintly visible at rest so the affordance is discoverable without
+    // hovering each line; brightens on line / direct hover.
+    opacity: "0.25",
     transition: "opacity 0.1s ease-in-out, color 0.1s ease-in-out",
   },
   ".cm-line:hover .cm-quick-filter-add": {
@@ -89,7 +92,7 @@ const quickFilterTheme = EditorView.baseTheme({
 });
 
 /**
- * Adds a hover "+" affordance to each filterable leaf attribute in the
+ * Adds a hover filter affordance to each filterable leaf attribute in the
  * read-only JSON / YAML viewers. The attribute path and value are resolved
  * from the CodeMirror syntax tree, so the raw code view is preserved exactly.
  */
@@ -118,7 +121,10 @@ export const createQuickFilterExtension = (
               target.value,
               config.onFilter,
             ),
-            side: 1,
+            // Negative side keeps the filter icon directly after the value and
+            // before the fold control, so the order stays consistent whether
+            // the foldable line is expanded (chevron) or collapsed (placeholder).
+            side: -1,
           }),
         );
       });

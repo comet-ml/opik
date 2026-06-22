@@ -623,7 +623,7 @@ const SPAN_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     kind: "query-builder",
     columnType: COLUMN_TYPE.string,
     operators: STRING_OPERATORS,
-    defaultOperator: "=",
+    defaultOperator: "contains",
     value: { placeholder: "Enter provider" },
   },
 ];
@@ -772,6 +772,7 @@ const buildSharedDynamicChips = ({
       kind: "query-builder",
       columnType: COLUMN_TYPE.dictionary,
       operators: DICTIONARY_OPERATORS,
+      defaultOperator: "contains",
       key: {
         placeholder: "key",
         options: chipOptions(usePathsOptions, {

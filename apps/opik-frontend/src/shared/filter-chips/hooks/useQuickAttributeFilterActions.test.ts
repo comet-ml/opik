@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import {
   resolveQuickFilterTarget,
@@ -12,6 +12,17 @@ import {
   QueryBuilderChipValue,
 } from "@/shared/filter-chips/types";
 import { COLUMN_TYPE } from "@/types/shared";
+import {
+  DICTIONARY_OPERATORS,
+  STRING_OPERATORS,
+} from "@/shared/filter-chips/chips/QueryBuilderChip/operators";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
+
+vi.mock("@/lib/analytics/tracking", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/analytics/tracking")>();
+  return { ...actual, trackEvent: vi.fn() };
+});
 
 const SPANS = TRACE_DATA_TYPE.spans;
 const TRACES = TRACE_DATA_TYPE.traces;
@@ -21,6 +32,7 @@ const qb = (
   label: string,
   columnType: COLUMN_TYPE,
   operators: FilterOperator[],
+  defaultOperator: FilterOperator = operators[0],
 ): ChipDefinition => ({
   id,
   field: id,
@@ -28,13 +40,28 @@ const qb = (
   kind: "query-builder",
   columnType,
   operators,
-  defaultOperator: operators[0],
+  defaultOperator,
 });
 
+// Use the real production operator sets so fixtures match the live chips.
+// Note DICTIONARY_OPERATORS leads with "=", so the "contains" default on the
+// metadata/custom chips comes from their explicit defaultOperator, not [0].
 const DEFINITIONS: ChipDefinition[] = [
-  qb("metadata", "Metadata", COLUMN_TYPE.dictionary, ["=", "contains"]),
-  qb("custom", "Custom filter", COLUMN_TYPE.dictionary, ["=", "contains"]),
-  qb("provider", "Provider", COLUMN_TYPE.string, ["=", "contains"]),
+  qb(
+    "metadata",
+    "Metadata",
+    COLUMN_TYPE.dictionary,
+    DICTIONARY_OPERATORS,
+    "contains",
+  ),
+  qb(
+    "custom",
+    "Custom filter",
+    COLUMN_TYPE.dictionary,
+    DICTIONARY_OPERATORS,
+    "contains",
+  ),
+  qb("provider", "Provider", COLUMN_TYPE.string, STRING_OPERATORS, "contains"),
 ];
 
 describe("resolveQuickFilterTarget", () => {
@@ -118,7 +145,7 @@ describe("useQuickAttributeFilterActions", () => {
   });
 
   describe("filter opens an approval dialog (does not apply yet)", () => {
-    it("seeds a metadata draft with the chip operators", () => {
+    it("seeds a metadata draft inheriting the chip's default operator", () => {
       const { result, applyValue } = setup(TRACES);
       act(() => result.current.filter("metadata", "git.branch", "main"));
 
@@ -126,10 +153,13 @@ describe("useQuickAttributeFilterActions", () => {
         chipId: "metadata",
         key: "git.branch",
         field: "git.branch",
-        defaultOperator: "=",
+        // metadata/custom dictionary chips default to "contains", not "="
+        defaultOperator: "contains",
         value: "main",
       });
-      expect(result.current.dialog.draft?.operators).toEqual(["=", "contains"]);
+      expect(result.current.dialog.draft?.operators).toEqual(
+        DICTIONARY_OPERATORS,
+      );
       expect(applyValue).not.toHaveBeenCalled();
     });
 
@@ -140,9 +170,30 @@ describe("useQuickAttributeFilterActions", () => {
       expect(result.current.dialog.draft).toMatchObject({
         chipId: "provider",
         field: "Provider",
+        // provider now defaults to "contains" like the other string chips
+        defaultOperator: "contains",
         value: "openai",
       });
       expect(result.current.dialog.draft?.key).toBeUndefined();
+    });
+
+    it("falls back to the chip's first operator when no defaultOperator is set", () => {
+      // mirrors the chip popover: defaultOperator ?? operators[0]. Use a chip
+      // whose operators[0] ("contains" for STRING_OPERATORS) differs from the
+      // hard fallback ("=") so this proves operators[0] is used.
+      const noDefault: ChipDefinition[] = [
+        qb("provider", "Provider", COLUMN_TYPE.string, STRING_OPERATORS),
+      ];
+      const { result } = setup(SPANS, {}, noDefault);
+      act(() => result.current.filter("metadata", "provider", "openai"));
+      expect(STRING_OPERATORS[0]).toBe("contains");
+      expect(result.current.dialog.draft?.defaultOperator).toBe("contains");
+    });
+
+    it("records the originating section on the draft", () => {
+      const { result } = setup(SPANS);
+      act(() => result.current.filter("input", "messages[0].content", "hi"));
+      expect(result.current.dialog.draft?.section).toBe("input");
     });
 
     it("is a no-op for non-filterable computed keys", () => {
@@ -155,6 +206,7 @@ describe("useQuickAttributeFilterActions", () => {
       const { result } = setup(TRACES, {}, []);
       act(() => result.current.filter("metadata", "git.branch", "main"));
       expect(result.current.dialog.draft?.operators).toEqual(["="]);
+      expect(result.current.dialog.draft?.defaultOperator).toBe("=");
       expect(result.current.dialog.draft?.chipLabel).toBe("metadata");
     });
   });
@@ -248,6 +300,60 @@ describe("useQuickAttributeFilterActions", () => {
 
       expect(applyValue).not.toHaveBeenCalled();
       expect(pinChip).toHaveBeenCalledWith("metadata");
+    });
+  });
+
+  describe("fires the quick-filter BI event on apply", () => {
+    beforeEach(() => vi.mocked(trackEvent).mockClear());
+
+    it("captures the entity (data_type) and section (source) dimensions", () => {
+      const { result } = setup(SPANS);
+      act(() => result.current.filter("input", "messages[0].content", "hi"));
+      act(() => result.current.dialog.onApply("contains", "hi"));
+
+      expect(trackEvent).toHaveBeenCalledWith(OpikEvent.QUICK_FILTER_APPLIED, {
+        data_type: SPANS,
+        source: "input",
+        filter_name: "custom",
+        operator: "contains",
+      });
+    });
+
+    it("reports trace metadata applies from the traces tab", () => {
+      const { result } = setup(TRACES);
+      act(() => result.current.filter("metadata", "git.branch", "main"));
+      act(() => result.current.dialog.onApply("=", "main"));
+
+      expect(trackEvent).toHaveBeenCalledWith(OpikEvent.QUICK_FILTER_APPLIED, {
+        data_type: TRACES,
+        source: "metadata",
+        filter_name: "metadata",
+        operator: "=",
+      });
+    });
+
+    it("still fires on the duplicate/no-op path (usage signal, not a state change)", () => {
+      const existing: QueryBuilderChipValue = {
+        rows: [
+          {
+            id: "1",
+            field: "",
+            type: "",
+            operator: "=",
+            key: "git.branch",
+            value: "main",
+          },
+        ],
+      };
+      const { result, applyValue } = setup(SPANS, { metadata: existing });
+      act(() => result.current.filter("metadata", "git.branch", "main"));
+      act(() => result.current.dialog.onApply("=", "main"));
+
+      expect(applyValue).not.toHaveBeenCalled();
+      expect(trackEvent).toHaveBeenCalledWith(
+        OpikEvent.QUICK_FILTER_APPLIED,
+        expect.objectContaining({ filter_name: "metadata", operator: "=" }),
+      );
     });
   });
 });

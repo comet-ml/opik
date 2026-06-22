@@ -9,6 +9,7 @@ import {
 import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
 import { FilterOperator } from "@/types/filters";
+import { QuickFilterSection } from "@/shared/filter-chips/QuickAttributeFilterContext";
 import { OperatorCell } from "@/shared/filter-chips/chips/QueryBuilderChip/cells/OperatorCell";
 import {
   getOperatorLabel,
@@ -18,6 +19,8 @@ import {
 export type QuickFilterDraft = {
   // Changes on each open so the dialog resets its local edit state.
   id: string;
+  // The Inspect section the attribute came from (analytics dimension).
+  section: QuickFilterSection;
   chipId: string;
   key?: string;
   chipLabel: string;
