@@ -16,7 +16,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: ${{ inputs.environment }}
-    steps:      
+    permissions:
+      id-token: write   # required for OIDC
+      contents: read
+    steps:
       - name: checkout
         uses: actions/checkout@v6
       
@@ -33,22 +36,20 @@ jobs:
             source .venv/bin/activate
             make build
       
-      - name: Verify AWS credentials
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: us-east-1
-        run: |
-          aws s3 ls s3://site.comet.com/${{ inputs.environment }}/docs-opik/python-sdk-reference/ --region us-east-1
-
-      - name: Upload sdk docs to S3 ${{ inputs.environment }}
-        uses: jakejarvis/s3-sync-action@master
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
         with:
-          args: --follow-symlinks --delete --exclude '.git*'
-        env:
-          AWS_S3_BUCKET: site.comet.com
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: us-east-1
-          DEST_DIR: ${{ inputs.environment }}/docs-opik/python-sdk-reference
-          SOURCE_DIR: apps/opik-documentation/python-sdk-docs/build/html
+          role-to-assume: ${{ vars.AWS_OPIK_CDN_ROLE }}
+          aws-region: ${{ vars.AWS_REGION}}
+
+      - name: Verify AWS credentials
+        run: |
+          aws sts get-caller-identity
+          aws s3 ls s3://site.comet.com/${{ inputs.environment }}/docs-opik/python-sdk-reference/
+
+
+      - name: Upload sdk docs to site.comet.com (${{ inputs.environment }})
+        run: |
+          aws s3 sync apps/opik-documentation/python-sdk-docs/build/html \
+            s3://site.comet.com/${{ inputs.environment }}/docs-opik/python-sdk-reference \
+            --follow-symlinks --delete --exclude '.git*'
