@@ -56,6 +56,7 @@ class SpansClient:
         *,
         text: str,
         id: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -72,6 +73,8 @@ class SpansClient:
         text : str
 
         id : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -98,6 +101,7 @@ class SpansClient:
             id_,
             text=text,
             id=id,
+            source_queue_id=source_queue_id,
             created_at=created_at,
             last_updated_at=last_updated_at,
             created_by=created_by,
@@ -115,6 +119,7 @@ class SpansClient:
         source: FeedbackScoreSource,
         category_name: typing.Optional[str] = OMIT,
         reason: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -138,6 +143,8 @@ class SpansClient:
         category_name : typing.Optional[str]
 
         reason : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -169,6 +176,7 @@ class SpansClient:
             source=source,
             category_name=category_name,
             reason=reason,
+            source_queue_id=source_queue_id,
             created_at=created_at,
             last_updated_at=last_updated_at,
             created_by=created_by,
@@ -662,6 +670,7 @@ class SpansClient:
         *,
         name: str,
         author: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -674,6 +683,8 @@ class SpansClient:
         name : str
 
         author : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -689,7 +700,7 @@ class SpansClient:
         client.spans.delete_span_feedback_score(id='id', name='name', )
         """
         _response = self._raw_client.delete_span_feedback_score(
-            id, name=name, author=author, request_options=request_options
+            id, name=name, author=author, source_queue_id=source_queue_id, request_options=request_options
         )
         return _response.data
 
@@ -932,6 +943,7 @@ class SpansClient:
         *,
         text: str,
         id: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -948,6 +960,8 @@ class SpansClient:
         text : str
 
         id : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -974,6 +988,7 @@ class SpansClient:
             comment_id,
             text=text,
             id=id,
+            source_queue_id=source_queue_id,
             created_at=created_at,
             last_updated_at=last_updated_at,
             created_by=created_by,
@@ -1004,6 +1019,7 @@ class AsyncSpansClient:
         *,
         text: str,
         id: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -1020,6 +1036,8 @@ class AsyncSpansClient:
         text : str
 
         id : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -1049,6 +1067,7 @@ class AsyncSpansClient:
             id_,
             text=text,
             id=id,
+            source_queue_id=source_queue_id,
             created_at=created_at,
             last_updated_at=last_updated_at,
             created_by=created_by,
@@ -1066,6 +1085,7 @@ class AsyncSpansClient:
         source: FeedbackScoreSource,
         category_name: typing.Optional[str] = OMIT,
         reason: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -1089,6 +1109,8 @@ class AsyncSpansClient:
         category_name : typing.Optional[str]
 
         reason : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -1123,6 +1145,7 @@ class AsyncSpansClient:
             source=source,
             category_name=category_name,
             reason=reason,
+            source_queue_id=source_queue_id,
             created_at=created_at,
             last_updated_at=last_updated_at,
             created_by=created_by,
@@ -1640,6 +1663,7 @@ class AsyncSpansClient:
         *,
         name: str,
         author: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -1652,6 +1676,8 @@ class AsyncSpansClient:
         name : str
 
         author : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1670,7 +1696,7 @@ class AsyncSpansClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.delete_span_feedback_score(
-            id, name=name, author=author, request_options=request_options
+            id, name=name, author=author, source_queue_id=source_queue_id, request_options=request_options
         )
         return _response.data
 
@@ -1929,6 +1955,7 @@ class AsyncSpansClient:
         *,
         text: str,
         id: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -1945,6 +1972,8 @@ class AsyncSpansClient:
         text : str
 
         id : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -1974,6 +2003,7 @@ class AsyncSpansClient:
             comment_id,
             text=text,
             id=id,
+            source_queue_id=source_queue_id,
             created_at=created_at,
             last_updated_at=last_updated_at,
             created_by=created_by,

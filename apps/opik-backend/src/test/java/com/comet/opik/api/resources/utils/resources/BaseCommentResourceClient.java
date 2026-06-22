@@ -28,7 +28,15 @@ public abstract class BaseCommentResourceClient {
     protected final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
     public Comment generateAndCreateComment(UUID entityId, String apiKey, String workspaceName, int expectedStatus) {
-        Comment comment = Comment.builder().text(podamFactory.manufacturePojo(String.class)).build();
+        return generateAndCreateComment(entityId, null, apiKey, workspaceName, expectedStatus);
+    }
+
+    public Comment generateAndCreateComment(UUID entityId, UUID sourceQueueId, String apiKey, String workspaceName,
+            int expectedStatus) {
+        Comment comment = Comment.builder()
+                .text(podamFactory.manufacturePojo(String.class))
+                .sourceQueueId(sourceQueueId)
+                .build();
         var commentId = createComment(comment, entityId, apiKey, workspaceName, expectedStatus);
 
         return comment.toBuilder().id(commentId).build();

@@ -21,9 +21,13 @@ from .types import (
     AgentInsightsIssue,
     AgentInsightsIssueDetail,
     AgentInsightsIssuePage,
+    AgentInsightsIssueSeverity,
     AgentInsightsIssueStatus,
     AgentInsightsIssueWithDetails,
+    AgentInsightsIssueWithDetailsSeverity,
     AgentInsightsIssueWithDetailsStatus,
+    AgentInsightsJob,
+    AgentInsightsJobStatus,
     AggregationData,
     Alert,
     AlertAlertType,
@@ -524,6 +528,7 @@ from .types import (
     RecentActivityPagePublic,
     ReportPreference,
     ReportedIssue,
+    ReportedIssueSeverity,
     ResponseFormat,
     ResponseFormatType,
     Result,
@@ -692,6 +697,7 @@ from .errors import (
 from . import (
     agent_configs,
     agent_insights,
+    agent_insights_jobs,
     ai_spend,
     alerts,
     annotation_queues,
@@ -731,7 +737,12 @@ from . import (
     workspace_permissions,
     workspaces,
 )
-from .agent_insights import AgentInsightsIssueUpdateStatus, FindAgentInsightsIssuesRequestStatus
+from .agent_insights import (
+    AgentInsightsIssueUpdateStatus,
+    FindAgentInsightsIssuesRequestSeverity,
+    FindAgentInsightsIssuesRequestStatus,
+)
+from .agent_insights_jobs import AgentInsightsJobUpdateStatus
 from .alerts import GetWebhookExamplesRequestAlertType
 from .assertion_results import AssertionResultBatchEntityType
 from .attachments import (
@@ -797,10 +808,15 @@ __all__ = [
     "AgentInsightsIssue",
     "AgentInsightsIssueDetail",
     "AgentInsightsIssuePage",
+    "AgentInsightsIssueSeverity",
     "AgentInsightsIssueStatus",
     "AgentInsightsIssueUpdateStatus",
     "AgentInsightsIssueWithDetails",
+    "AgentInsightsIssueWithDetailsSeverity",
     "AgentInsightsIssueWithDetailsStatus",
+    "AgentInsightsJob",
+    "AgentInsightsJobStatus",
+    "AgentInsightsJobUpdateStatus",
     "AggregationData",
     "Alert",
     "AlertAlertType",
@@ -1146,6 +1162,7 @@ __all__ = [
     "Feedback_Boolean",
     "Feedback_Categorical",
     "Feedback_Numerical",
+    "FindAgentInsightsIssuesRequestSeverity",
     "FindAgentInsightsIssuesRequestStatus",
     "FindFeedbackDefinitionsRequestType",
     "FindFeedbackScoreNames1RequestType",
@@ -1344,6 +1361,7 @@ __all__ = [
     "ReportCompleteRequestStatus",
     "ReportPreference",
     "ReportedIssue",
+    "ReportedIssueSeverity",
     "ResponseFormat",
     "ResponseFormatType",
     "Result",
@@ -1506,6 +1524,7 @@ __all__ = [
     "WorkspaceVersionOpikVersion",
     "agent_configs",
     "agent_insights",
+    "agent_insights_jobs",
     "ai_spend",
     "alerts",
     "annotation_queues",

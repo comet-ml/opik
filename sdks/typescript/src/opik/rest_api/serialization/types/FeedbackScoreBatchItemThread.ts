@@ -17,6 +17,7 @@ export const FeedbackScoreBatchItemThread: core.serialization.ObjectSchema<
     reason: core.serialization.string().optional(),
     source: FeedbackScoreBatchItemThreadSource,
     author: core.serialization.string().optional(),
+    sourceQueueId: core.serialization.property("source_queue_id", core.serialization.string().optional()),
     threadId: core.serialization.property("thread_id", core.serialization.string()),
 });
 
@@ -30,6 +31,7 @@ export declare namespace FeedbackScoreBatchItemThread {
         reason?: string | null;
         source: FeedbackScoreBatchItemThreadSource.Raw;
         author?: string | null;
+        source_queue_id?: string | null;
         thread_id: string;
     }
 }

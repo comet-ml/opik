@@ -650,9 +650,6 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Optimization Studio feature is enabled
   optimizationStudioEnabled: "false"
-  # Default: false
-  # Description: Whether or not the Cost Intelligence (AI Spend) feature is enabled
-  costIntelligenceEnabled: "false"
   # Default: true
   # Description: Whether or not OpenAI provider is enabled
   openaiProviderEnabled: "true"
@@ -719,6 +716,15 @@ localRunner:
   reaperLockDuration: 10s
   reaperLockWait: 2s
   nextJobAsyncTimeoutBuffer: 2s
+
+# Orphaned Redis stream-consumer reaper (OPIK-6982).
+# Disabled by default in tests so it does not auto-schedule when the app context boots; enable per-test if needed.
+streamConsumerReaper:
+  enabled: false
+  jobInterval: 1h
+  startupDelay: 0s
+  idleThreshold: 1d
+  lockDuration: 10m
 
 # Trace Thread configuration
 traceThreadConfig:

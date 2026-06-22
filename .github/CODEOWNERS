@@ -11,6 +11,7 @@
 *.mdx @comet-ml/product @comet-ml/comet-opik-devs
 
 /.github/ISSUE_TEMPLATE/ @comet-ml/product @comet-ml/comet-opik-devs
+/.github/actions/ @comet-ml/comet-devops @comet-ml/comet-qa @comet-ml/comet-opik-devs
 /.github/workflows/ @comet-ml/comet-devops @comet-ml/comet-qa @comet-ml/comet-opik-devs
 
 /apps/opik-documentation/ @comet-ml/product @comet-ml/comet-opik-devs

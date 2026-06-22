@@ -3,6 +3,11 @@
 # isort: skip_file
 
 from .agent_insights_issue_update_status import AgentInsightsIssueUpdateStatus
+from .find_agent_insights_issues_request_severity import FindAgentInsightsIssuesRequestSeverity
 from .find_agent_insights_issues_request_status import FindAgentInsightsIssuesRequestStatus
 
-__all__ = ["AgentInsightsIssueUpdateStatus", "FindAgentInsightsIssuesRequestStatus"]
+__all__ = [
+    "AgentInsightsIssueUpdateStatus",
+    "FindAgentInsightsIssuesRequestSeverity",
+    "FindAgentInsightsIssuesRequestStatus",
+]

@@ -24,6 +24,7 @@ type UseTracesListParams = {
   toTime?: string;
   exclude?: string[];
   logsSource?: LOGS_SOURCE;
+  annotationQueueId?: string;
 };
 
 export type UseTracesListResponse = {
@@ -47,6 +48,7 @@ const getTracesList = async (
     toTime,
     exclude,
     logsSource,
+    annotationQueueId,
   }: UseTracesListParams,
 ) => {
   const additionalFilters = [
@@ -71,6 +73,9 @@ const getTracesList = async (
       ...(toTime && { to_time: toTime }),
       ...(exclude &&
         exclude.length > 0 && { exclude: JSON.stringify(exclude) }),
+      ...(annotationQueueId && {
+        annotation_queue_id: annotationQueueId,
+      }),
     },
   });
 

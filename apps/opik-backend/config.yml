@@ -1093,9 +1093,6 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Optimization Studio feature is enabled
   optimizationStudioEnabled: ${TOGGLE_OPTIMIZATION_STUDIO_ENABLED:-"false"}
-  # Default: false
-  # Description: Whether or not the Cost Intelligence (AI Spend) feature is enabled
-  costIntelligenceEnabled: ${TOGGLE_COST_INTELLIGENCE_ENABLED:-"false"}
   # Default: true
   # Description: Whether or not OpenAI provider is enabled
   openaiProviderEnabled: ${TOGGLE_OPENAI_PROVIDER_ENABLED:-"true"}
@@ -1231,6 +1228,26 @@ localRunner:
   # Default: 1048576 (1MB)
   # Description: Maximum payload size in bytes for bridge command args and results
   bridgeMaxPayloadBytes: ${OPIK_RUNNER_BRIDGE_MAX_PAYLOAD_BYTES:-1048576}
+
+# Orphaned Redis stream-consumer reaper (OPIK-6982). Non-graceful pod exits (OOMKill/SIGKILL/crash) leak
+# stream consumers that Redis never removes; this job deletes consumers idle beyond the threshold with no
+# pending entries. One instance runs per cycle (distributed lock with hold-until-expiry).
+streamConsumerReaper:
+  # Default: true
+  # Description: Whether the orphaned stream-consumer reaper job is enabled
+  enabled: ${OPIK_STREAM_CONSUMER_REAPER_ENABLED:-true}
+  # Default: 1h
+  # Description: Interval between reaper job executions
+  jobInterval: ${OPIK_STREAM_CONSUMER_REAPER_JOB_INTERVAL:-1h}
+  # Default: 5m
+  # Description: Delay before the first reaper run after startup, to avoid reaping during warm-up
+  startupDelay: ${OPIK_STREAM_CONSUMER_REAPER_STARTUP_DELAY:-5m}
+  # Default: 3d
+  # Description: Consumers idle beyond this (and with no pending entries) are removed
+  idleThreshold: ${OPIK_STREAM_CONSUMER_REAPER_IDLE_THRESHOLD:-3d}
+  # Default: 10m
+  # Description: How long the reaper holds its distributed lock (until expiry) to prevent concurrent fleet-wide runs
+  lockDuration: ${OPIK_STREAM_CONSUMER_REAPER_LOCK_DURATION:-10m}
 
 # Trace Thread configuration
 traceThreadConfig:

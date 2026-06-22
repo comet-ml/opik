@@ -46,7 +46,8 @@ public interface FeedbackScoreDAO {
 
     Mono<Void> deleteByEntityIds(EntityType entityType, Set<UUID> entityIds, UUID projectId);
 
-    Mono<Long> deleteByEntityIdAndNames(EntityType entityType, UUID entityId, Set<String> names, String author);
+    Mono<Long> deleteByEntityIdAndNames(EntityType entityType, UUID entityId, Set<String> names, String author,
+            UUID sourceQueueId);
 
     Mono<Long> scoreBatchOf(EntityType entityType, List<? extends FeedbackScoreItem> scores, @Nullable String author);
 
@@ -88,6 +89,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 reason,
                 source,
                 <if(author)>author,<endif>
+                <if(author)>source_queue_id,<endif>
                 created_by,
                 last_updated_by
             )
@@ -105,6 +107,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                          :reason<item.index>,
                          :source<item.index>,
                          <if(author)>:author<item.index>,<endif>
+                         <if(author)>:source_queue_id<item.index>,<endif>
                          :user_name,
                          :user_name
                      )
@@ -122,6 +125,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             AND name = :name
             AND workspace_id = :workspace_id
             <if(author)>AND <author> = :author<endif>
+            <if(source_queue_id)>AND source_queue_id = :source_queue_id<endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -151,6 +155,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             <if(names)>AND name IN :names <endif>
             <if(project_id)>AND project_id = :project_id<endif>
             <if(sources)>AND source IN :sources<endif>
+            <if(source_queue_id)>AND source_queue_id = :source_queue_id<endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -369,6 +374,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
             if (author != null) {
                 statement.bind("author" + i, getValueOrDefault(author));
+                statement.bind("source_queue_id" + i,
+                        Optional.ofNullable(feedbackScoreBatchItem.sourceQueueId()).map(UUID::toString).orElse(""));
             }
         }
     }
@@ -379,7 +386,6 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
 
-            // Delete from feedback_scores table
             var deleteFeedbackScore = getSTWithLogComment(DELETE_FEEDBACK_SCORE, "delete_feedback_score", workspaceId,
                     userName, "")
                     .add("table_name", "feedback_scores");
@@ -402,13 +408,16 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             var deleteNonAuthoredOperation = Mono.from(statement1.execute())
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
 
-            // Delete from authored_feedback_scores table
             var deleteAuthoredFeedbackScore = getSTWithLogComment(DELETE_FEEDBACK_SCORE,
                     "delete_authored_feedback_score", workspaceId, userName, "")
                     .add("table_name", "authored_feedback_scores");
             Optional.ofNullable(score.author())
                     .filter(StringUtils::isNotBlank)
                     .ifPresent(author -> deleteAuthoredFeedbackScore.add("author", "author"));
+
+            if (score.sourceQueueId() != null) {
+                deleteAuthoredFeedbackScore.add("source_queue_id", "source_queue_id");
+            }
 
             var statement2 = connection.createStatement(deleteAuthoredFeedbackScore.render());
             statement2
@@ -419,6 +428,10 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             Optional.ofNullable(score.author())
                     .filter(StringUtils::isNotBlank)
                     .ifPresent(author -> statement2.bind("author", author));
+
+            if (score.sourceQueueId() != null) {
+                statement2.bind("source_queue_id", score.sourceQueueId().toString());
+            }
 
             return deleteNonAuthoredOperation
                     .then(Mono.from(statement2.execute()))
@@ -441,7 +454,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     @Override
     public Mono<Long> deleteByEntityIdAndNames(@NonNull EntityType entityType, @NonNull UUID entityId,
-            @NonNull Set<String> names, String author) {
+            @NonNull Set<String> names, String author, UUID sourceQueueId) {
 
         if (names.isEmpty()) {
             return Mono.just(0L);
@@ -449,7 +462,6 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
 
-            // Delete from feedback_scores table
             var template1 = getSTWithLogComment(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS,
                     "delete_feedback_scores_by_entity_ids", workspaceId, userName, names.size());
             template1.add("names", names);
@@ -472,7 +484,6 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             var deleteNonAuthoredOperation = Mono.from(statement1.execute())
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
 
-            // Delete from authored_feedback_scores table
             var template2 = getSTWithLogComment(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS,
                     "delete_authored_feedback_scores_by_entity_ids", workspaceId, userName, names.size());
             template2.add("names", names);
@@ -480,6 +491,9 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             Optional.ofNullable(author)
                     .filter(StringUtils::isNotBlank)
                     .ifPresent(a -> template2.add("author", "author"));
+            if (sourceQueueId != null) {
+                template2.add("source_queue_id", "source_queue_id");
+            }
 
             var statement2 = connection.createStatement(template2.render())
                     .bind("entity_ids", Set.of(entityId))
@@ -489,6 +503,9 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             Optional.ofNullable(author)
                     .filter(StringUtils::isNotBlank)
                     .ifPresent(a -> statement2.bind("author", a));
+            if (sourceQueueId != null) {
+                statement2.bind("source_queue_id", sourceQueueId.toString());
+            }
 
             return deleteNonAuthoredOperation
                     .then(Mono.from(statement2.execute()))

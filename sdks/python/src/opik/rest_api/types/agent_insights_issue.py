@@ -5,6 +5,7 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .agent_insights_issue_severity import AgentInsightsIssueSeverity
 from .agent_insights_issue_status import AgentInsightsIssueStatus
 
 
@@ -15,6 +16,7 @@ class AgentInsightsIssue(UniversalBaseModel):
     cause: typing.Optional[str] = None
     suggested_fix: typing.Optional[str] = None
     status: typing.Optional[AgentInsightsIssueStatus] = None
+    severity: typing.Optional[AgentInsightsIssueSeverity] = None
     traces_query: typing.Optional[str] = None
     total_occurrences: typing.Optional[int] = pydantic.Field(default=None)
     """

@@ -326,7 +326,7 @@ class OpenTelemetryResourceTest {
         }
 
         @ParameterizedTest
-        @ValueSource(strings = {"model_name", "gen_ai.request.model", "gen_ai.response.model", "gen_ai.request_model",
+        @ValueSource(strings = {"gen_ai.request.model", "gen_ai.response.model", "gen_ai.request_model",
                 "gen_ai.response_model"})
         void testRuleMapping(String modelKey) {
             String randomKeyArray = UUID.randomUUID().toString();

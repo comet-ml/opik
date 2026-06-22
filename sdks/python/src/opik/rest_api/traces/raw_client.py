@@ -54,6 +54,7 @@ class RawTracesClient:
         *,
         text: str,
         id: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -70,6 +71,8 @@ class RawTracesClient:
         text : str
 
         id : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -92,6 +95,7 @@ class RawTracesClient:
             json={
                 "id": id,
                 "text": text,
+                "source_queue_id": source_queue_id,
                 "created_at": created_at,
                 "last_updated_at": last_updated_at,
                 "created_by": created_by,
@@ -117,6 +121,7 @@ class RawTracesClient:
         *,
         text: str,
         id: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -133,6 +138,8 @@ class RawTracesClient:
         text : str
 
         id : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -155,6 +162,7 @@ class RawTracesClient:
             json={
                 "id": id,
                 "text": text,
+                "source_queue_id": source_queue_id,
                 "created_at": created_at,
                 "last_updated_at": last_updated_at,
                 "created_by": created_by,
@@ -183,6 +191,7 @@ class RawTracesClient:
         source: FeedbackScoreSource,
         category_name: typing.Optional[str] = OMIT,
         reason: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -206,6 +215,8 @@ class RawTracesClient:
         category_name : typing.Optional[str]
 
         reason : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -233,6 +244,7 @@ class RawTracesClient:
                 "value": value,
                 "reason": reason,
                 "source": source,
+                "source_queue_id": source_queue_id,
                 "created_at": created_at,
                 "last_updated_at": last_updated_at,
                 "created_by": created_by,
@@ -498,6 +510,7 @@ class RawTracesClient:
         search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
+        annotation_queue_id: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[TracePagePublic]:
         """
@@ -529,6 +542,8 @@ class RawTracesClient:
 
         to_time : typing.Optional[dt.datetime]
 
+        annotation_queue_id : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -553,6 +568,7 @@ class RawTracesClient:
                 "search": search,
                 "from_time": serialize_datetime(from_time) if from_time is not None else None,
                 "to_time": serialize_datetime(to_time) if to_time is not None else None,
+                "annotation_queue_id": annotation_queue_id,
             },
             request_options=request_options,
         )
@@ -910,6 +926,7 @@ class RawTracesClient:
         thread_id: str,
         names: typing.Sequence[str],
         author: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -924,6 +941,8 @@ class RawTracesClient:
         names : typing.Sequence[str]
 
         author : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -940,6 +959,7 @@ class RawTracesClient:
                 "thread_id": thread_id,
                 "names": names,
                 "author": author,
+                "source_queue_id": source_queue_id,
             },
             headers={
                 "content-type": "application/json",
@@ -998,6 +1018,7 @@ class RawTracesClient:
         *,
         name: str,
         author: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -1010,6 +1031,8 @@ class RawTracesClient:
         name : str
 
         author : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1024,6 +1047,7 @@ class RawTracesClient:
             json={
                 "name": name,
                 "author": author,
+                "source_queue_id": source_queue_id,
             },
             headers={
                 "content-type": "application/json",
@@ -1523,6 +1547,7 @@ class RawTracesClient:
         search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
+        annotation_queue_id: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[TraceThreadPage]:
         """
@@ -1552,6 +1577,8 @@ class RawTracesClient:
 
         to_time : typing.Optional[dt.datetime]
 
+        annotation_queue_id : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -1575,6 +1602,7 @@ class RawTracesClient:
                 "search": search,
                 "from_time": serialize_datetime(from_time) if from_time is not None else None,
                 "to_time": serialize_datetime(to_time) if to_time is not None else None,
+                "annotation_queue_id": annotation_queue_id,
             },
             request_options=request_options,
         )
@@ -2017,6 +2045,7 @@ class RawTracesClient:
         *,
         text: str,
         id: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -2033,6 +2062,8 @@ class RawTracesClient:
         text : str
 
         id : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -2055,6 +2086,7 @@ class RawTracesClient:
             json={
                 "id": id,
                 "text": text,
+                "source_queue_id": source_queue_id,
                 "created_at": created_at,
                 "last_updated_at": last_updated_at,
                 "created_by": created_by,
@@ -2091,6 +2123,7 @@ class RawTracesClient:
         *,
         text: str,
         id: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -2107,6 +2140,8 @@ class RawTracesClient:
         text : str
 
         id : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -2129,6 +2164,7 @@ class RawTracesClient:
             json={
                 "id": id,
                 "text": text,
+                "source_queue_id": source_queue_id,
                 "created_at": created_at,
                 "last_updated_at": last_updated_at,
                 "created_by": created_by,
@@ -2170,6 +2206,7 @@ class AsyncRawTracesClient:
         *,
         text: str,
         id: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -2186,6 +2223,8 @@ class AsyncRawTracesClient:
         text : str
 
         id : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -2208,6 +2247,7 @@ class AsyncRawTracesClient:
             json={
                 "id": id,
                 "text": text,
+                "source_queue_id": source_queue_id,
                 "created_at": created_at,
                 "last_updated_at": last_updated_at,
                 "created_by": created_by,
@@ -2233,6 +2273,7 @@ class AsyncRawTracesClient:
         *,
         text: str,
         id: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -2249,6 +2290,8 @@ class AsyncRawTracesClient:
         text : str
 
         id : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -2271,6 +2314,7 @@ class AsyncRawTracesClient:
             json={
                 "id": id,
                 "text": text,
+                "source_queue_id": source_queue_id,
                 "created_at": created_at,
                 "last_updated_at": last_updated_at,
                 "created_by": created_by,
@@ -2299,6 +2343,7 @@ class AsyncRawTracesClient:
         source: FeedbackScoreSource,
         category_name: typing.Optional[str] = OMIT,
         reason: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -2322,6 +2367,8 @@ class AsyncRawTracesClient:
         category_name : typing.Optional[str]
 
         reason : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -2349,6 +2396,7 @@ class AsyncRawTracesClient:
                 "value": value,
                 "reason": reason,
                 "source": source,
+                "source_queue_id": source_queue_id,
                 "created_at": created_at,
                 "last_updated_at": last_updated_at,
                 "created_by": created_by,
@@ -2614,6 +2662,7 @@ class AsyncRawTracesClient:
         search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
+        annotation_queue_id: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[TracePagePublic]:
         """
@@ -2645,6 +2694,8 @@ class AsyncRawTracesClient:
 
         to_time : typing.Optional[dt.datetime]
 
+        annotation_queue_id : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -2669,6 +2720,7 @@ class AsyncRawTracesClient:
                 "search": search,
                 "from_time": serialize_datetime(from_time) if from_time is not None else None,
                 "to_time": serialize_datetime(to_time) if to_time is not None else None,
+                "annotation_queue_id": annotation_queue_id,
             },
             request_options=request_options,
         )
@@ -3026,6 +3078,7 @@ class AsyncRawTracesClient:
         thread_id: str,
         names: typing.Sequence[str],
         author: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -3040,6 +3093,8 @@ class AsyncRawTracesClient:
         names : typing.Sequence[str]
 
         author : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -3056,6 +3111,7 @@ class AsyncRawTracesClient:
                 "thread_id": thread_id,
                 "names": names,
                 "author": author,
+                "source_queue_id": source_queue_id,
             },
             headers={
                 "content-type": "application/json",
@@ -3114,6 +3170,7 @@ class AsyncRawTracesClient:
         *,
         name: str,
         author: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -3126,6 +3183,8 @@ class AsyncRawTracesClient:
         name : str
 
         author : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -3140,6 +3199,7 @@ class AsyncRawTracesClient:
             json={
                 "name": name,
                 "author": author,
+                "source_queue_id": source_queue_id,
             },
             headers={
                 "content-type": "application/json",
@@ -3639,6 +3699,7 @@ class AsyncRawTracesClient:
         search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
+        annotation_queue_id: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[TraceThreadPage]:
         """
@@ -3668,6 +3729,8 @@ class AsyncRawTracesClient:
 
         to_time : typing.Optional[dt.datetime]
 
+        annotation_queue_id : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -3691,6 +3754,7 @@ class AsyncRawTracesClient:
                 "search": search,
                 "from_time": serialize_datetime(from_time) if from_time is not None else None,
                 "to_time": serialize_datetime(to_time) if to_time is not None else None,
+                "annotation_queue_id": annotation_queue_id,
             },
             request_options=request_options,
         )
@@ -4135,6 +4199,7 @@ class AsyncRawTracesClient:
         *,
         text: str,
         id: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -4151,6 +4216,8 @@ class AsyncRawTracesClient:
         text : str
 
         id : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -4173,6 +4240,7 @@ class AsyncRawTracesClient:
             json={
                 "id": id,
                 "text": text,
+                "source_queue_id": source_queue_id,
                 "created_at": created_at,
                 "last_updated_at": last_updated_at,
                 "created_by": created_by,
@@ -4209,6 +4277,7 @@ class AsyncRawTracesClient:
         *,
         text: str,
         id: typing.Optional[str] = OMIT,
+        source_queue_id: typing.Optional[str] = OMIT,
         created_at: typing.Optional[dt.datetime] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         created_by: typing.Optional[str] = OMIT,
@@ -4225,6 +4294,8 @@ class AsyncRawTracesClient:
         text : str
 
         id : typing.Optional[str]
+
+        source_queue_id : typing.Optional[str]
 
         created_at : typing.Optional[dt.datetime]
 
@@ -4247,6 +4318,7 @@ class AsyncRawTracesClient:
             json={
                 "id": id,
                 "text": text,
+                "source_queue_id": source_queue_id,
                 "created_at": created_at,
                 "last_updated_at": last_updated_at,
                 "created_by": created_by,

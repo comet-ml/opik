@@ -35,6 +35,7 @@ public record AgentInsightsReport(
             String cause,
             String suggestedFix,
             String tracesQuery,
+            @NotNull AgentInsightsIssueSeverity severity,
             @NotNull @PositiveOrZero Long count,
             @NotNull @PositiveOrZero Long totalCount,
             @NotNull @PositiveOrZero Long usersImpacted,

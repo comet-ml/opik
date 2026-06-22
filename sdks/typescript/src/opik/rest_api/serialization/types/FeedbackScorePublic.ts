@@ -15,6 +15,7 @@ export const FeedbackScorePublic: core.serialization.ObjectSchema<
     value: core.serialization.number(),
     reason: core.serialization.string().optional(),
     source: FeedbackScorePublicSource,
+    sourceQueueId: core.serialization.property("source_queue_id", core.serialization.string().optional()),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
@@ -32,6 +33,7 @@ export declare namespace FeedbackScorePublic {
         value: number;
         reason?: string | null;
         source: FeedbackScorePublicSource.Raw;
+        source_queue_id?: string | null;
         created_at?: string | null;
         last_updated_at?: string | null;
         created_by?: string | null;

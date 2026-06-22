@@ -78,13 +78,33 @@ class AnnotationQueueItemLockServiceTest {
     class TryLock {
 
         @Test
-        @DisplayName("should return denied when scoredCount >= annotatorsPerItem")
+        @DisplayName("should return denied when scoredCount >= annotatorsPerItem and user has no lock")
         void shouldDenyWhenFullyScored() {
+            when(mapCache.get(anyString())).thenReturn(Mono.empty());
+
             StepVerifier.create(service.tryLock(
                     WORKSPACE_ID, QUEUE_ID, ITEM_ID, USER_ALICE, 2, 2, 5))
                     .assertNext(result -> assertThat(result.acquired()).isFalse())
                     .verifyComplete();
 
+            verify(lockService, never()).tryAcquireSlot(any(), anyInt(), any());
+        }
+
+        @Test
+        @DisplayName("should allow heartbeat when user already scored but still holds a valid lock")
+        void shouldAllowHeartbeatWhenUserAlreadyScoredButHoldsLock() {
+            when(mapCache.get(field(ITEM_ID, USER_ALICE)))
+                    .thenReturn(Mono.just(packValue(PERMIT_ID, futureExpiry())));
+            when(lockService.refreshSlot(any(), eq(PERMIT_ID), any())).thenReturn(Mono.just(true));
+            when(mapCache.fastPut(anyString(), anyString()))
+                    .thenReturn(Mono.just(true));
+
+            StepVerifier.create(service.tryLock(
+                    WORKSPACE_ID, QUEUE_ID, ITEM_ID, USER_ALICE, 1, 1, 5))
+                    .assertNext(result -> assertThat(result.acquired()).isTrue())
+                    .verifyComplete();
+
+            verify(lockService).refreshSlot(any(), eq(PERMIT_ID), any());
             verify(lockService, never()).tryAcquireSlot(any(), anyInt(), any());
         }
 
