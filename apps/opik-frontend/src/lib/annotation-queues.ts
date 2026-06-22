@@ -119,7 +119,9 @@ export const getCommentsByUser = (
 
   return comments
     .filter((comment) => comment.created_by === userName)
-    .filter((comment) => !sourceQueueId || comment.source_queue_id === sourceQueueId)
+    .filter(
+      (comment) => !sourceQueueId || comment.source_queue_id === sourceQueueId,
+    )
     .map((comment) => comment.text);
 };
 

@@ -149,7 +149,7 @@ public interface FeedbackScoreMapper {
                     builder.sourceQueueId(sourceQueueId);
                 }
             }
-            // source_queue_id is the 9th element (index 8)
+            // author is the 9th element (index 8)
             if (tuple.size() > 8 && tuple.get(8) != null) {
                 builder.author(getIfNotEmpty(tuple.get(8)));
             }

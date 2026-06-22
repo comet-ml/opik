@@ -281,14 +281,22 @@ class ExperimentItemDAO {
                                                   v.2,
                                                   v.3,
                                                   toString(v.4),
-                                                  concat(replaceOne(toString(v.5), ' ', 'T'), 'Z')
+                                                  concat(replaceOne(toString(v.5), ' ', 'T'), 'Z'),
+                                                  v.6,
+                                                  v.7,
+                                                  v.8,
+                                                  v.9
                                               ),
                                               'Tuple(
                                                   value Decimal(18,9),
                                                   reason String,
                                                   category_name String,
                                                   source String,
-                                                  last_updated_at String
+                                                  last_updated_at String,
+                                                  span_type String,
+                                                  span_id String,
+                                                  source_queue_id String,
+                                                  author String
                                               )'
                                           ),
                                           mapValues(value_by_author)
@@ -312,7 +320,11 @@ class ExperimentItemDAO {
                                               reason String,
                                               category_name String,
                                               source String,
-                                              last_updated_at String
+                                              last_updated_at String,
+                                              span_type String,
+                                              span_id String,
+                                              source_queue_id String,
+                                              author String
                                           )
                                       )
                                   )'

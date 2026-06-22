@@ -315,7 +315,7 @@ class MultiValueFeedbackScoresE2ETest {
                     .ignoringFields("createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
                             "sourceQueueId", "valueByAuthor")
                     .isEqualTo(score);
-            assertThat(actual.valueByAuthor().keySet()).containsExactly(USER1);
+            assertThat(actual.valueByAuthor().keySet()).containsExactly(USER1 + "_" + queueIdA);
         });
 
         // Delete scoped to correct queue A — should remove the score
@@ -627,7 +627,7 @@ class MultiValueFeedbackScoresE2ETest {
                     .ignoringFields("createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
                             "sourceQueueId", "valueByAuthor")
                     .isEqualTo(score);
-            assertThat(actual.valueByAuthor().keySet()).containsExactly(USER1);
+            assertThat(actual.valueByAuthor().keySet()).containsExactly(USER1 + "_" + queueIdA);
         });
 
         // Delete scoped to correct queue A — should remove the score
