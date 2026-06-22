@@ -21,7 +21,7 @@ You will need:
 
 - **`OPIK_API_KEY`** — generate one at [`comet.com/api/my/settings`](https://www.comet.com/api/my/settings/).
 - **`OPIK_WORKSPACE`** — the lowercase workspace name from your Comet URL. For example, `https://www.comet.com/acme-ai/...` → `OPIK_WORKSPACE=acme-ai`. Optional — defaults to `default` (the Opik SDK convention), which is correct for local/OSS installs; cloud users with a named workspace should set it. `COMET_WORKSPACE` is accepted as a deprecated alias (`OPIK_WORKSPACE` wins if both are set).
-- **[`uv`](https://docs.astral.sh/uv/)** installed locally. The fastest way is `brew install uv` (macOS) or `curl -LsSf https://astral.sh/uv/install.sh | sh`. `uvx` (bundled with `uv`) fetches and runs the latest published `opik-mcp` on demand — no global install required.
+- **[`uv`](https://docs.astral.sh/uv/)** installed locally — required for the **local server** only (not the hosted server). The fastest way is `brew install uv` (macOS) or `curl -LsSf https://astral.sh/uv/install.sh | sh`. `uvx` (bundled with `uv`) fetches and runs the latest published `opik-mcp` on demand — no global install required.
 
 <Tip>
 **Pre-release note:** `opik-mcp` is not yet published to PyPI. Until the first
@@ -49,15 +49,67 @@ That's it — restart your AI host and ask **"list my Opik projects"** to confir
 it works.
 
 <Note>
-You need [`uv`](https://docs.astral.sh/uv/) installed (`brew install uv` or
-`curl -LsSf https://astral.sh/uv/install.sh | sh`). If your host isn't detected,
-use [Manual setup](#manual-setup) below.
+If your host isn't detected, use [Manual setup](#manual-setup) below.
 </Note>
+
+### Hosted vs. local server
+
+`opik mcp configure` adapts to whichever Opik deployment you have configured:
+
+- **Hosted server** — if your configured Opik environment provides a hosted MCP
+  server, the CLI registers it over HTTP. Your AI host signs in with a
+  browser-based OAuth flow on first connect, and no API key is stored in the
+  host's config. `uv` is not required.
+- **Local server** — otherwise, the CLI sets up the local server, run on demand
+  via `uvx opik-mcp` with your credentials passed through the host's `env` block.
+  This requires [`uv`](https://docs.astral.sh/uv/) (see [Before you start](#before-you-start)).
+
+The CLI detects which is available for your environment automatically, so the
+same command works for Opik Cloud, self-hosted, and local installs. To force the
+local server even when a hosted one is available, pass `--local-server`:
+
+```bash
+opik mcp configure --local-server
+```
+
+### Check your setup
+
+Each AI host stores its own copy of the MCP configuration, written when you set
+it up and not kept in sync with `~/.opik.config` afterwards. To see what every
+detected host points at — and whether it still matches your current Opik
+configuration — run:
+
+```bash
+opik mcp status
+```
+
+It lists each assistant that has the Opik MCP server configured, the server it
+reports to (hosted or local), its workspace, and flags any that have drifted
+from your Opik configuration.
+
+<Warning>
+A host keeps its MCP connection for the lifetime of its process. After changing
+your Opik configuration or re-running `opik mcp configure`, **restart your AI
+host** so it reconnects with the updated settings.
+</Warning>
+
+To view just your active Opik configuration (file path, environment, workspace):
+
+```bash
+opik configure status
+```
 
 ## Manual setup
 
 Prefer to wire it up yourself, or your host wasn't detected? Configure any host
 by hand below.
+
+<Note>
+These snippets configure the **local server** (`uvx opik-mcp`). If your
+deployment offers a **hosted server**, set it up with
+[`opik mcp configure`](#quick-setup-with-the-opik-cli) instead — it registers the
+HTTP endpoint and handles the browser-based OAuth sign-in for you.
+</Note>
 
 <Tip>
 `OPIK_WORKSPACE` is **optional** — you can omit the `OPIK_WORKSPACE` line/key
