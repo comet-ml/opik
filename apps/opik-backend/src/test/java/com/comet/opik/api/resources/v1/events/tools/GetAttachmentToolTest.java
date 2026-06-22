@@ -165,4 +165,93 @@ class GetAttachmentToolTest {
 
         assertThat(result).contains("error").contains("Missing required argument: file_name");
     }
+
+    // Size-cap tests (MAX_INJECTED_BYTES = 20 MB)
+
+    @Test
+    void fetchFromMinIORejectWhenSizeCapExceeded() {
+        when(s3Config.isMinIO()).thenReturn(true);
+        long overLimit = TraceToolContext.MAX_INJECTED_BYTES + 1;
+        AttachmentInfo bigAttachment = AttachmentInfo.builder()
+                .fileName(IMAGE_FILE_NAME)
+                .entityType(EntityType.TRACE)
+                .entityId(traceId)
+                .containerId(projectId)
+                .mimeType("image/png")
+                .fileSize(overLimit)
+                .build();
+        when(attachmentService.getAttachmentInfoByEntity(any(), any(), any()))
+                .thenReturn(Mono.just(List.of(bigAttachment)));
+
+        String result = run(
+                "{\"type\":\"trace\",\"id\":\"%s\",\"file_name\":\"%s\"}".formatted(traceId, IMAGE_FILE_NAME));
+
+        assertThat(result).contains("error").contains("size limit");
+        assertThat(ctx.hasPendingMedia()).isFalse();
+    }
+
+    @Test
+    void fetchFromS3RejectWhenSizeCapExceeded() {
+        when(s3Config.isMinIO()).thenReturn(false);
+        long overLimit = TraceToolContext.MAX_INJECTED_BYTES + 1;
+        AttachmentInfo bigAttachment = AttachmentInfo.builder()
+                .fileName(IMAGE_FILE_NAME)
+                .entityType(EntityType.TRACE)
+                .entityId(traceId)
+                .containerId(projectId)
+                .mimeType("image/png")
+                .fileSize(overLimit)
+                .build();
+        when(attachmentService.getAttachmentInfoByEntity(any(), any(), any()))
+                .thenReturn(Mono.just(List.of(bigAttachment)));
+
+        String result = run(
+                "{\"type\":\"trace\",\"id\":\"%s\",\"file_name\":\"%s\"}".formatted(traceId, IMAGE_FILE_NAME));
+
+        assertThat(result).contains("error").contains("size limit");
+        assertThat(ctx.hasPendingMedia()).isFalse();
+    }
+
+    @Test
+    void fetchFromMinIORejectSecondAttachmentThatPushesOverCap() {
+        when(s3Config.isMinIO()).thenReturn(true);
+
+        // First attachment consumes most of the budget
+        long firstSize = TraceToolContext.MAX_INJECTED_BYTES - 1024;
+        byte[] firstBytes = new byte[4]; // actual content doesn't matter for the cap logic
+        AttachmentInfo firstInfo = AttachmentInfo.builder()
+                .fileName(IMAGE_FILE_NAME)
+                .entityType(EntityType.TRACE)
+                .entityId(traceId)
+                .containerId(projectId)
+                .mimeType("image/png")
+                .fileSize(firstSize)
+                .build();
+        when(attachmentService.getAttachmentInfoByEntity(any(), any(), any()))
+                .thenReturn(Mono.just(List.of(firstInfo)));
+        when(attachmentService.downloadAttachment(any(), eq(WORKSPACE_ID)))
+                .thenReturn(new ByteArrayInputStream(firstBytes));
+
+        String firstResult = run(
+                "{\"type\":\"trace\",\"id\":\"%s\",\"file_name\":\"%s\"}".formatted(traceId, IMAGE_FILE_NAME));
+        assertThat(firstResult).contains("\"loaded\":true");
+
+        // Second attachment pushes total over 20 MB
+        String secondFileName = "second-" + IMAGE_FILE_NAME;
+        long secondSize = 2048; // 1024 + 2048 > 1024 remaining
+        AttachmentInfo secondInfo = AttachmentInfo.builder()
+                .fileName(secondFileName)
+                .entityType(EntityType.TRACE)
+                .entityId(traceId)
+                .containerId(projectId)
+                .mimeType("image/png")
+                .fileSize(secondSize)
+                .build();
+        when(attachmentService.getAttachmentInfoByEntity(any(), any(), any()))
+                .thenReturn(Mono.just(List.of(secondInfo)));
+
+        String secondResult = run(
+                "{\"type\":\"trace\",\"id\":\"%s\",\"file_name\":\"%s\"}".formatted(traceId, secondFileName));
+        assertThat(secondResult).contains("error").contains("size limit");
+    }
 }
