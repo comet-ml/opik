@@ -178,7 +178,7 @@ class TestPollFailureLogging:
         def side_effect(runner_id):
             nonlocal call_count
             call_count += 1
-            if call_count >= 2:
+            if call_count >= in_process_loop._POLL_FAILURE_HINT_THRESHOLD:
                 shutdown_event.set()
             raise ApiError(status_code=429)
 
@@ -202,7 +202,7 @@ class TestPollFailureLogging:
         def side_effect(runner_id):
             nonlocal call_count
             call_count += 1
-            if call_count >= 2:
+            if call_count >= in_process_loop._POLL_FAILURE_HINT_THRESHOLD:
                 shutdown_event.set()
             raise ConnectionError("blocked")
 
@@ -238,6 +238,35 @@ class TestPollFailureLogging:
         t.join(timeout=5)
 
         stderr = capfd.readouterr().err
+        assert "Reconnected to Opik server" in stderr
+
+    def test_poll__success_resets_counter__intermittent_failures_stay_quiet(
+        self, mock_api, shutdown_event, capfd
+    ):
+        lp = self._make_loop(mock_api, shutdown_event)
+        # Two failures, a success (resets), two more failures: never 3 in a row.
+        outcomes = ["fail", "fail", "ok", "fail", "fail", "stop"]
+        call_count = 0
+
+        def side_effect(runner_id):
+            nonlocal call_count
+            outcome = outcomes[min(call_count, len(outcomes) - 1)]
+            call_count += 1
+            if outcome == "stop":
+                shutdown_event.set()
+                return None
+            if outcome == "ok":
+                return None
+            raise ConnectionError("blip")
+
+        mock_api.runners.next_job.side_effect = side_effect
+
+        t = threading.Thread(target=lp._poll_loop)
+        t.start()
+        t.join(timeout=5)
+
+        stderr = capfd.readouterr().err
+        assert "firewall or proxy" not in stderr
         assert "Reconnected to Opik server" in stderr
 
 

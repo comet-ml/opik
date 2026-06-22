@@ -30,6 +30,11 @@ _POLL_IDLE_INTERVAL_SECONDS = 0.5
 _CANCELLED_JOBS_TTL_SECONDS = 300
 _CANCELLED_JOBS_MAX_SIZE = 10_000
 
+# Number of consecutive poll failures before we surface the firewall/proxy hint.
+# Below this, failures are transient blips the backoff is already retrying; from
+# here on we warn on every attempt until a poll succeeds and resets the counter.
+_POLL_FAILURE_HINT_THRESHOLD = 3
+
 
 def cast_input_value(value: object, type_name: str) -> object:
     """Cast *value* to the native Python type indicated by *type_name*.
@@ -159,18 +164,18 @@ class InProcessRunnerLoop:
                 self._loop.call_soon_threadsafe(self._job_queue.put_nowait, job)
 
     def _log_poll_failure(self, failures: int, status_code: Optional[int]) -> None:
-        """Log every job-poll failure; the backoff already throttles the cadence.
+        """Warn once poll failures are sustained, then on every further attempt.
 
-        The first failure is a gentle "retrying" line so a single transient blip
-        does not shout "firewall"; every failure after that includes the
-        actionable hint.
+        Failures below ``_POLL_FAILURE_HINT_THRESHOLD`` are transient blips the
+        backoff is already retrying, so they stay on debug. From the threshold
+        onward we warn on every attempt; the caller resets ``failures`` to 0 as
+        soon as a poll succeeds.
         """
         detail = f"API {status_code}" if status_code is not None else "connection error"
 
-        if failures == 1:
-            LOGGER.warning(
-                "Unable to reach Opik server while polling for jobs (%s). Retrying...",
-                detail,
+        if failures < _POLL_FAILURE_HINT_THRESHOLD:
+            LOGGER.debug(
+                "Poll failed (%s), attempt %d", detail, failures, exc_info=True
             )
             return
 
