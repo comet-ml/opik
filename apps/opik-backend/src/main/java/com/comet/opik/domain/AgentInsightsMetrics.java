@@ -22,29 +22,29 @@ public class AgentInsightsMetrics {
     private static final Meter METER = GlobalOpenTelemetry.get().getMeter(METER_NAME);
 
     public static final LongHistogram SWEEP_DURATION_MS = METER
-            .histogramBuilder("opik_agent_insights_sweep_duration_ms")
+            .histogramBuilder("sweep_duration_ms")
             .setDescription("Wall time of the daily Agent Insights sweep; _count by outcome gives run totals")
             .setUnit("ms")
             .ofLongs()
             .build();
 
     public static final LongCounter REPORTS_ENQUEUED = METER
-            .counterBuilder("opik_agent_insights_reports_enqueued_total")
+            .counterBuilder("reports_enqueued_total")
             .setDescription("Report run enqueue attempts onto the trigger queue, by trigger source and outcome")
             .build();
 
     public static final LongCounter REPORTS_TRIGGERED = METER
-            .counterBuilder("opik_agent_insights_reports_triggered_total")
+            .counterBuilder("reports_triggered_total")
             .setDescription("Report trigger calls to the platform, by outcome")
             .build();
 
     public static final LongCounter REPORTS_RECEIVED = METER
-            .counterBuilder("opik_agent_insights_reports_received_total")
+            .counterBuilder("reports_received_total")
             .setDescription("Generated reports received on the reporting endpoint")
             .build();
 
     public static final LongCounter ISSUES_REPORTED = METER
-            .counterBuilder("opik_agent_insights_issues_reported_total")
+            .counterBuilder("issues_reported_total")
             .setDescription("Issues persisted from generated reports")
             .build();
 
