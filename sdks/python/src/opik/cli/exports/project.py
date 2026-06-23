@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Optional, Set
+from typing import Any, Iterable, Optional, Set
 
 import random
 
@@ -197,7 +197,7 @@ def _fetch_traces_page(
     )
 
 
-def _spans_trace_id_range_filter(trace_ids) -> Optional[str]:
+def _spans_trace_id_range_filter(trace_ids: Iterable[str]) -> Optional[str]:
     """Build a parsed (JSON) spans filter bounding the scan to the trace_id
     range covering the matched traces.
 
