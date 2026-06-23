@@ -36,6 +36,9 @@ const ExplainPopover = ({ target, onContinue }: Props) => {
   const thinking = !entry || (phase === "loading" && entry.text.length === 0);
   const waking = phase === "waking";
   const isError = phase === "error";
+  // Stream has reached a terminal state — drives aria-busy (announce once here,
+  // not on every streamed token).
+  const isSettled = phase === "done" || phase === "error";
   const hasText =
     (phase === "loading" || phase === "done") && (entry?.text.length ?? 0) > 0;
 
@@ -51,22 +54,18 @@ const ExplainPopover = ({ target, onContinue }: Props) => {
       <div className="my-1 h-px w-full bg-border" />
 
       <div className="px-2 pt-0.5">
-        {/* Live region stays mounted for the popover's lifetime so streamed
-            updates are announced — a region inserted only once content arrives
-            is often missed by screen readers. */}
-        <div role="status" aria-live="polite">
-          {thinking && (
-            <div className="flex items-center gap-2">
-              <span className="size-2 shrink-0 rounded-full bg-[var(--color-ollie-live)] text-[var(--color-ollie-live)] motion-safe:animate-beacon-pulse" />
-              <span className="leading-4 text-muted-slate">Thinking...</span>
-            </div>
-          )}
-
-          {waking && (
+        {/* Live region stays mounted for the popover's lifetime so the result
+            is announced — a region inserted only once content arrives is often
+            missed by screen readers. aria-busy suppresses announcements while the
+            answer is still streaming so the reader gets the settled text once,
+            not a flood of partial re-reads on every token; it clears on
+            done/error, which is when the region is read out. */}
+        <div role="status" aria-live="polite" aria-busy={!isSettled}>
+          {(thinking || waking) && (
             <div className="flex items-center gap-2">
               <span className="size-2 shrink-0 rounded-full bg-[var(--color-ollie-live)] text-[var(--color-ollie-live)] motion-safe:animate-beacon-pulse" />
               <span className="leading-4 text-muted-slate">
-                Ollie is waking up…
+                {waking ? "Ollie is waking up…" : "Thinking..."}
               </span>
             </div>
           )}

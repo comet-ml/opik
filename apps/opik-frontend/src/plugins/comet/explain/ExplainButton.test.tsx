@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import useExplainStore from "./explainStore";
+import useExplainStore, { cellKey } from "./explainStore";
 import { ExplainTarget } from "@/types/assistant-sidebar";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import ExplainButton from "./ExplainButton";
@@ -64,6 +64,34 @@ describe("ExplainButton", () => {
     expect(trackEvent).toHaveBeenCalledWith(OpikEvent.EXPLAIN_CLICKED, {
       kind: "trace.error",
     });
+  });
+
+  it("reuses a cached cell on reopen without re-dispatching or re-tracking", () => {
+    const emit = vi.fn();
+    enable(emit);
+    // Pre-seed a settled (cached) answer for this cell, as if it had already
+    // been explained and the popover was closed.
+    useExplainStore.setState({
+      entries: {
+        [cellKey(target)]: {
+          explainId: "cached",
+          kind: target.kind,
+          phase: "done",
+          text: "cached answer",
+          startedAt: 0,
+        },
+      },
+    });
+    render(<ExplainButton target={target} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Explain error" }));
+
+    // Cache hit: no new stream and no fresh-explain BI event.
+    expect(emit).not.toHaveBeenCalledWith("explain:run", expect.anything());
+    expect(trackEvent).not.toHaveBeenCalledWith(
+      OpikEvent.EXPLAIN_CLICKED,
+      expect.anything(),
+    );
   });
 
   it("cancels the in-flight stream on close", () => {

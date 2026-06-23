@@ -4,7 +4,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import OllieOwl from "@/icons/ollie-owl.svg?react";
 import { ExplainButtonProps } from "@/types/assistant-sidebar";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
-import useExplainStore, { useCanExplain } from "./explainStore";
+import useExplainStore, { cellKey, useCanExplain } from "./explainStore";
 import { getExplainConfig } from "./registry";
 import ExplainPopover from "./ExplainPopover";
 
@@ -21,12 +21,16 @@ const ExplainButton = ({ target }: ExplainButtonProps) => {
   // Fail-closed: pod not ready / no "explain" capability / unknown kind → no button.
   if (!canExplain || !config) return null;
 
-  // Opening dispatches the stream; only count a click that actually surfaces an
-  // explanation — a throttled open returns false (and shows a "try again"
-  // message), so it shouldn't read as a successful explain in BI.
+  // Opening dispatches the stream; only count a click that requests a *new*
+  // explanation in BI. Checked before explain() mutates the store: reopening a
+  // popover on a cached/in-flight cell reuses the entry (explain() still returns
+  // true) and must not recount, and a throttled open returns false (shows a "try
+  // again" message) and surfaces nothing — neither is a fresh explain.
   const handleOpen = () => {
+    const cached = useExplainStore.getState().entries[cellKey(target)];
+    const isFresh = !cached || cached.phase === "error";
     if (!explain(target)) return;
-    trackEvent(OpikEvent.EXPLAIN_CLICKED, { kind: target.kind });
+    if (isFresh) trackEvent(OpikEvent.EXPLAIN_CLICKED, { kind: target.kind });
   };
 
   // Closing mid-stream stops the (paid) generation the user won't see (no-op
@@ -90,7 +94,7 @@ const ExplainButton = ({ target }: ExplainButtonProps) => {
       <PopoverContent
         side="right"
         align="start"
-        className="w-72 px-1 py-2 font-mono text-xs shadow-[0px_4px_3px_rgba(0,0,0,0.1),0px_2px_2px_rgba(0,0,0,0.1)]"
+        className="w-72 px-1 py-2 font-mono text-xs"
         onClick={stop}
         // The owl trigger is only visible on cell hover / while open, so don't
         // hand focus back to it on close (it would be focused-but-invisible and
