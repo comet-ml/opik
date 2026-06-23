@@ -4,6 +4,7 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.domain.DatasetItemSearchCriteria;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetService;
@@ -252,8 +253,13 @@ public class ReadTool implements ToolExecutor {
         if (projectId == null) {
             return Mono.just(JsonUtils.getMapper().createArrayNode());
         }
+        Optional<List<AttachmentInfo>> cached = ctx.getCachedAttachments(traceId);
+        if (cached.isPresent()) {
+            return Mono.just(AttachmentSummaries.toJsonArray(cached.get()));
+        }
         return withRequestContext(attachmentService.getAttachmentInfoByEntity(traceId,
                 com.comet.opik.api.attachment.EntityType.TRACE, projectId), ctx)
+                .doOnSuccess(attachments -> ctx.cacheAttachments(traceId, attachments))
                 .map(AttachmentSummaries::toJsonArray)
                 .onErrorResume(e -> {
                     log.warn("read tool failed to list attachments for trace '{}'", traceId, e);

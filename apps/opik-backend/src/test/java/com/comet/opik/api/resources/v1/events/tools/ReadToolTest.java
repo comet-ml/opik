@@ -22,6 +22,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -445,6 +447,45 @@ class ReadToolTest {
         assertThat(entry.get("file_name").asText()).isEqualTo(fileName);
         assertThat(entry.get("mime_type").asText()).isEqualTo("image/png");
         assertThat(entry.get("media_type").asText()).isEqualTo("image");
+    }
+
+    @Test
+    void attachmentListCachedAfterFirstRead_serviceNotCalledOnReread() {
+        var traceId = UUID.randomUUID();
+        var projectId = UUID.randomUUID();
+        String fileName = "img-" + RandomStringUtils.secure().nextAlphanumeric(8) + ".png";
+        var trace = Trace.builder()
+                .id(traceId)
+                .projectId(projectId)
+                .name("trace-" + RandomStringUtils.secure().nextAlphanumeric(8))
+                .startTime(Instant.now())
+                .build();
+        var ctx = TraceToolContext.forActiveTrace(trace, List.of(),
+                "ws-" + RandomStringUtils.secure().nextAlphanumeric(8),
+                "user-" + RandomStringUtils.secure().nextAlphanumeric(8));
+        ctx.cache(new EntityRef(EntityType.TRACE, traceId.toString()),
+                traceCompressor.buildFullJson(trace, List.of()));
+
+        when(attachmentService.getAttachmentInfoByEntity(any(), any(), any()))
+                .thenReturn(Mono.just(List.of(AttachmentInfo.builder()
+                        .fileName(fileName)
+                        .mimeType("image/png")
+                        .entityType(com.comet.opik.api.attachment.EntityType.TRACE)
+                        .entityId(traceId)
+                        .containerId(projectId)
+                        .fileSize(1024L)
+                        .build())));
+
+        String args = "{\"type\": \"trace\", \"id\": \"%s\"}".formatted(traceId);
+        var firstResult = JsonUtils.getJsonNodeFromString(tool.execute(args, ctx).block());
+        var secondResult = JsonUtils.getJsonNodeFromString(tool.execute(args, ctx).block());
+
+        // Service must have been called exactly once — the second read hits the cache.
+        verify(attachmentService, times(1)).getAttachmentInfoByEntity(any(), any(), any());
+
+        // Both reads must expose the same attachment.
+        assertThat(firstResult.get("attachments").get(0).get("file_name").asText()).isEqualTo(fileName);
+        assertThat(secondResult.get("attachments").get(0).get("file_name").asText()).isEqualTo(fileName);
     }
 
     @Test

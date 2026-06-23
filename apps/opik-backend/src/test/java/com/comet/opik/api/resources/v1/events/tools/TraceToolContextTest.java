@@ -1,8 +1,12 @@
 package com.comet.opik.api.resources.v1.events.tools;
 
+import com.comet.opik.api.attachment.AttachmentInfo;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -97,5 +101,40 @@ class TraceToolContextTest {
         ctx.drainPendingMedia();
         // bytes already counted; even after drain the budget should still be exhausted
         assertThat(ctx.canInjectMedia(1L)).isFalse();
+    }
+
+    // Attachment cache ---
+
+    @Test
+    void getCachedAttachments_emptyWhenNothingCached() {
+        assertThat(ctx().getCachedAttachments(UUID.randomUUID())).isEmpty();
+    }
+
+    @Test
+    void cacheAttachments_roundTripPreservesTheList() {
+        var ctx = ctx();
+        UUID traceId = UUID.randomUUID();
+        String fileName = "img-" + RandomStringUtils.secure().nextAlphanumeric(8) + ".png";
+        long fileSize = ThreadLocalRandom.current().nextLong(1, 1_048_576);
+        List<AttachmentInfo> attachments = List.of(
+                AttachmentInfo.builder()
+                        .fileName(fileName)
+                        .entityType(com.comet.opik.api.attachment.EntityType.TRACE)
+                        .entityId(traceId)
+                        .containerId(PROJECT_ID)
+                        .mimeType("image/png")
+                        .fileSize(fileSize)
+                        .build());
+        ctx.cacheAttachments(traceId, attachments);
+        assertThat(ctx.getCachedAttachments(traceId)).hasValue(attachments);
+    }
+
+    @Test
+    void cacheAttachments_keysAreIndependentPerTraceId() {
+        var ctx = ctx();
+        UUID id1 = UUID.randomUUID();
+        UUID id2 = UUID.randomUUID();
+        ctx.cacheAttachments(id1, List.of());
+        assertThat(ctx.getCachedAttachments(id2)).isEmpty();
     }
 }

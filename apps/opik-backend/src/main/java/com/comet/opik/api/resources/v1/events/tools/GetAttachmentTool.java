@@ -143,8 +143,9 @@ public class GetAttachmentTool implements ToolExecutor {
         }
 
         if (info.fileSize() == 0) {
-            return Mono.just(ToolArgs.errorJson(("Attachment '%s' cannot be loaded because its reported file size is 0." )
-                    .formatted(args.fileName)));
+            return Mono
+                    .just(ToolArgs.errorJson(("Attachment '%s' cannot be loaded because its reported file size is 0.")
+                            .formatted(args.fileName)));
         }
 
         if (config.getS3Config().isMinIO()) {

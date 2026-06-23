@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.events.tools;
 
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.attachment.AttachmentInfo;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.Getter;
 import lombok.NonNull;
@@ -57,6 +58,9 @@ public final class TraceToolContext {
      */
     private final UUID projectId;
     private final Map<EntityRef, JsonNode> fetched = new HashMap<>();
+    /** Per-trace attachment-list cache. Populated on the first read; subsequent reads of the same
+     *  trace skip the DB round-trip. Keyed by trace UUID. */
+    private final Map<UUID, List<AttachmentInfo>> attachmentCache = new HashMap<>();
     /**
      * Refs whose cached form has already been capped at least once (10 MB cache
      * cap, see {@code ReadTool#applyCacheCap}). The cap is sticky for the
@@ -177,6 +181,14 @@ public final class TraceToolContext {
 
     public Map<EntityRef, JsonNode> snapshot() {
         return Collections.unmodifiableMap(fetched);
+    }
+
+    public Optional<List<AttachmentInfo>> getCachedAttachments(@NonNull UUID traceId) {
+        return Optional.ofNullable(attachmentCache.get(traceId));
+    }
+
+    public void cacheAttachments(@NonNull UUID traceId, @NonNull List<AttachmentInfo> attachments) {
+        attachmentCache.put(traceId, attachments);
     }
 
     // ---------------- Media side-channel (OPIK-6555) ----------------
