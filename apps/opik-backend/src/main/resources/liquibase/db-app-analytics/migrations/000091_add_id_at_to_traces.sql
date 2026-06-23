@@ -1,5 +1,6 @@
 --liquibase formatted sql
 --changeset andrescrz:000091_add_id_at_to_traces
+--comment: Add id_at materialized column to traces for future weekly partitioning
 
 -- Adds id_at so retention/read predicates can target the future partition expression now
 -- and need no change at cutover. UTC matches the table's other temporal columns and keeps
