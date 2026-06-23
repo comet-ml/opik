@@ -4,7 +4,6 @@ import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.api.spend.SpendBreakdownResponse;
 import com.comet.opik.api.spend.SpendCompositionResponse;
 import com.comet.opik.api.spend.SpendMetricRequest;
-import com.comet.opik.api.spend.SpendRecommendationsResponse;
 import com.comet.opik.api.spend.SpendSummaryResponse;
 import com.comet.opik.api.spend.SpendUserPage;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -133,17 +132,4 @@ public class AiSpendResourceClient {
                 .post(Entity.json(request));
     }
 
-    public SpendRecommendationsResponse getRecommendations(SpendMetricRequest request, String apiKey,
-            String workspaceName) {
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("/recommendations")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(request))) {
-
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-            return response.readEntity(SpendRecommendationsResponse.class);
-        }
-    }
 }

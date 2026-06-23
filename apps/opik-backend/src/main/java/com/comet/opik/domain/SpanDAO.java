@@ -22,6 +22,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TruncationUtils;
+import com.comet.opik.utils.UsageUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Preconditions;
@@ -46,7 +47,6 @@ import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -398,7 +398,7 @@ public class SpanDAO {
             	<if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> total_estimated_cost <endif> as total_estimated_cost,
             	<if(total_estimated_cost_version)> :total_estimated_cost_version <else> total_estimated_cost_version <endif> as total_estimated_cost_version,
             	<if(tags)> :tags <else> tags <endif> as tags,
-            	<if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else> usage <endif> as usage,
+            	<if(usage)> CAST((:usage_keys, :usage_values), 'Map(String, Int64)') <else> usage <endif> as usage,
             	<if(error_info)> :error_info <else> error_info <endif> as error_info,
             	created_at,
             	created_by,
@@ -573,7 +573,7 @@ public class SpanDAO {
                     <if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> toDecimal128(0, 12) <endif> as total_estimated_cost,
                     <if(total_estimated_cost_version)> :total_estimated_cost_version <else> '' <endif> as total_estimated_cost_version,
                     <if(tags)> :tags <else> [] <endif> as tags,
-                    <if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else>  mapFromArrays([], []) <endif> as usage,
+                    <if(usage)> CAST((:usage_keys, :usage_values), 'Map(String, Int64)') <else>  mapFromArrays([], []) <endif> as usage,
                     <if(error_info)> :error_info <else> '' <endif> as error_info,
                     now64(9) as created_at,
                     :user_name as created_by,
@@ -1635,7 +1635,7 @@ public class SpanDAO {
             + TagOperations.tagUpdateFragment("s.tags")
             + """
                         as tags,
-                        <if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else> s.usage <endif> as usage,
+                        <if(usage)> CAST((:usage_keys, :usage_values), 'Map(String, Int64)') <else> s.usage <endif> as usage,
                         <if(error_info)> :error_info <else> s.error_info <endif> as error_info,
                         s.created_at,
                         s.created_by,
@@ -1728,12 +1728,7 @@ public class SpanDAO {
                     statement.bindNull("end_time" + i, String.class);
                 }
 
-                Map<String, Integer> usageMap = span.usage() == null
-                        ? Map.of()
-                        : span.usage().entrySet().stream()
-                                .filter(e -> e.getValue() != null)
-                                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-                statement.bind("usage" + i, usageMap);
+                statement.bind("usage" + i, UsageUtils.sanitizeUsage(span.usage()));
 
                 // Format the timestamp client-side so the SQL contains a plain string literal in the
                 // last_updated_at cell. Fall back to "now" when the client did not provide a value —
@@ -1969,17 +1964,7 @@ public class SpanDAO {
         Optional.ofNullable(spanUpdate.tags())
                 .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
         Optional.ofNullable(spanUpdate.usage())
-                .ifPresent(usage -> {
-                    // Need to convert the map to two arrays to bind to the statement
-                    var usageKeys = new ArrayList<String>();
-                    var usageValues = new ArrayList<Integer>();
-                    for (var entry : usage.entrySet()) {
-                        usageKeys.add(entry.getKey());
-                        usageValues.add(entry.getValue());
-                    }
-                    statement.bind("usageKeys", usageKeys.toArray(String[]::new));
-                    statement.bind("usageValues", usageValues.toArray(Integer[]::new));
-                });
+                .ifPresent(usage -> bindUsage(statement, usage));
         Optional.ofNullable(spanUpdate.endTime())
                 .ifPresent(endTime -> statement.bind("end_time", endTime.toString()));
         Optional.ofNullable(spanUpdate.metadata())
@@ -2820,6 +2805,14 @@ public class SpanDAO {
                 spanUpdate.metadata()).compareTo(BigDecimal.ZERO) > 0;
     }
 
+    // Bind the usage map as parallel key/value arrays for the Map(String, Int64) CAST. UsageUtils
+    // drops null token counts (a null value would fail the CAST with CANNOT_CONVERT_TYPE, code 70).
+    private static void bindUsage(Statement statement, Map<String, Integer> usage) {
+        var sanitized = UsageUtils.sanitizeUsage(usage);
+        statement.bind("usage_keys", sanitized.keySet().toArray(String[]::new));
+        statement.bind("usage_values", sanitized.values().toArray(Integer[]::new));
+    }
+
     private void bindCost(Span span, Statement statement, String index) {
         if (span.totalEstimatedCost() != null) {
             // Cost is set manually by the user
@@ -2923,16 +2916,7 @@ public class SpanDAO {
         TagOperations.bindTagParams(statement, spanUpdate);
 
         Optional.ofNullable(spanUpdate.usage())
-                .ifPresent(usage -> {
-                    var usageKeys = new ArrayList<String>();
-                    var usageValues = new ArrayList<Integer>();
-                    for (var entry : usage.entrySet()) {
-                        usageKeys.add(entry.getKey());
-                        usageValues.add(entry.getValue());
-                    }
-                    statement.bind("usageKeys", usageKeys.toArray(String[]::new));
-                    statement.bind("usageValues", usageValues.toArray(Integer[]::new));
-                });
+                .ifPresent(usage -> bindUsage(statement, usage));
         Optional.ofNullable(spanUpdate.endTime())
                 .ifPresent(endTime -> statement.bind("end_time", endTime.toString()));
         Optional.ofNullable(spanUpdate.metadata())
