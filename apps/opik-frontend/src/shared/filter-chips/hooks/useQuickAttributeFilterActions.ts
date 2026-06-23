@@ -1,14 +1,11 @@
 import { useCallback, useMemo } from "react";
-import { Filter, FilterOperator } from "@/types/filters";
+import { FilterOperator } from "@/types/filters";
 import { JsonValue } from "@/types/shared";
 import { createFilter } from "@/lib/filters";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
-import {
-  ChipValue,
-  ChipValueMap,
-  QueryBuilderChipValue,
-} from "@/shared/filter-chips/types";
+import { ChipValue, ChipValueMap } from "@/shared/filter-chips/types";
+import { getRows } from "@/shared/filter-chips/lib/helpers";
 import {
   QuickAttributeFilterApi,
   QuickFilterSection,
@@ -42,12 +39,6 @@ interface UseQuickAttributeFilterActionsArgs {
   applyValue: (id: string, value: ChipValue) => void;
   pinChip: (id: string) => void;
 }
-
-const getRows = (value: ChipValue | undefined): Filter[] => {
-  if (!value || typeof value !== "object") return [];
-  const candidate = (value as QueryBuilderChipValue).rows;
-  return Array.isArray(candidate) ? candidate : [];
-};
 
 export const stringifyFilterValue = (value: JsonValue): string => {
   if (value === null) return "";
