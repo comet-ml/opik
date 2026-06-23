@@ -33,6 +33,7 @@ import reactor.util.context.ContextView;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -64,6 +65,8 @@ public interface TraceThreadService {
     Mono<Void> closeThreads(UUID projectId, String projectName, Set<String> threadIds);
 
     Mono<UUID> getOrCreateThreadId(UUID projectId, String threadId);
+
+    Mono<Map<String, UUID>> getOrCreateThreadIds(UUID projectId, Set<String> threadIds);
 
     Mono<UUID> getThreadModelId(UUID projectId, String threadId);
 
@@ -130,6 +133,24 @@ class TraceThreadServiceImpl implements TraceThreadService {
         return Mono.deferContextual(context -> traceThreadIdService
                 .getOrCreateTraceThreadId(context.get(RequestContext.WORKSPACE_ID), projectId, threadId, timestamp)
                 .map(TraceThreadIdModel::id));
+    }
+
+    @Override
+    public Mono<Map<String, UUID>> getOrCreateThreadIds(@NonNull UUID projectId, Set<String> threadIds) {
+        if (CollectionUtils.isEmpty(threadIds)) {
+            return Mono.just(Map.of());
+        }
+        // Bulk get-or-create in a single query instead of one round-trip per thread. Null timestamps match
+        // getOrCreateThreadId(projectId, threadId): a missing thread's model id is generated from the current time.
+        return Mono.deferContextual(context -> {
+            Map<String, Instant> threadIdToTimestamp = new HashMap<>();
+            threadIds.forEach(threadId -> threadIdToTimestamp.put(threadId, null));
+            return traceThreadIdService
+                    .getOrCreateTraceThreadIds(context.get(RequestContext.WORKSPACE_ID), projectId, threadIdToTimestamp)
+                    .map(models -> models.stream()
+                            .collect(Collectors.toMap(TraceThreadIdModel::threadId, TraceThreadIdModel::id,
+                                    (existing, duplicate) -> existing)));
+        });
     }
 
     @Override
@@ -448,7 +469,12 @@ class TraceThreadServiceImpl implements TraceThreadService {
     private Mono<Void> createMissingThreads(UUID projectId, String workspaceId, String userName,
             List<TraceThread> threads) {
         List<UUID> modelIds = threads.stream().map(TraceThread::threadModelId).toList();
-        var criteria = TraceThreadCriteria.builder().projectId(projectId).ids(modelIds).build();
+        // OPIK-7035: also constrain by thread_id so the (workspace_id, project_id, thread_id, id) primary key
+        // can seek instead of scanning the whole project's trace_threads. Filtering by id alone leaves thread_id
+        // (the 3rd PK column) unbound, forcing a full-project scan (~750K rows in prod to find a handful).
+        // thread_model_id maps 1:1 to thread_id, so this excludes no matching row.
+        Set<String> threadIds = threads.stream().map(TraceThread::id).collect(Collectors.toSet());
+        var criteria = TraceThreadCriteria.builder().projectId(projectId).ids(modelIds).threadIds(threadIds).build();
 
         return traceThreadDAO.findThreadsByProject(1, modelIds.size(), criteria)
                 .flatMap(existing -> {

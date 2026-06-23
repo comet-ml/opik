@@ -12,6 +12,7 @@ from .utils import (
     console,
     debug_print,
     dataset_to_csv_rows,
+    prepare_project_export_dir,
     should_skip_file,
     write_csv_data,
     write_json_data,
@@ -27,13 +28,13 @@ def export_single_dataset(
     debug: bool,
     format: str,
 ) -> int:
-    """Export a single dataset."""
+    """Export a single dataset. The file is named by dataset ID; the human
+    name is stored inside the file."""
     try:
-        # Check if already exists and force is not set
-        if format.lower() == "csv":
-            dataset_file = output_dir / f"dataset_{dataset.name}.csv"
-        else:
-            dataset_file = output_dir / f"dataset_{dataset.name}.json"
+        # File is keyed by dataset ID (the name lives inside the file).
+        dataset_id = dataset.id
+        ext = "csv" if format.lower() == "csv" else "json"
+        dataset_file = output_dir / f"dataset_{dataset_id}.{ext}"
 
         if should_skip_file(dataset_file, force):
             if debug:
@@ -56,6 +57,7 @@ def export_single_dataset(
 
         # Create dataset data structure
         dataset_data = {
+            "id": dataset_id,
             "name": dataset.name,
             "description": dataset.description,
             "items": formatted_items,
@@ -80,6 +82,7 @@ def export_single_dataset(
 def export_dataset_by_name(
     name: str,
     workspace: str,
+    project_name: str,
     output_path: str,
     max_results: Optional[int],
     force: bool,
@@ -87,7 +90,7 @@ def export_dataset_by_name(
     format: str,
     api_key: Optional[str] = None,
 ) -> None:
-    """Export a dataset by exact name."""
+    """Export a dataset by exact name from the given project."""
     try:
         if debug:
             debug_print(f"Exporting dataset: {name}", debug)
@@ -98,16 +101,19 @@ def export_dataset_by_name(
         else:
             client = opik.Opik(workspace=workspace)
 
-        # Create output directory
-        output_dir = Path(output_path) / workspace / "datasets"
+        # Resolve the project to its ID and create projects/<id>/datasets.
+        _project_id, project_dir = prepare_project_export_dir(
+            client, output_path, workspace, project_name
+        )
+        output_dir = project_dir / "datasets"
         output_dir.mkdir(parents=True, exist_ok=True)
 
         if debug:
             debug_print(f"Target directory: {output_dir}", debug)
 
-        # Try to get dataset by exact name
+        # Try to get dataset by exact name within the project
         try:
-            dataset = client.get_dataset(name)
+            dataset = client.get_dataset(name, project_name=project_name)
             if debug:
                 debug_print(f"Found dataset by direct lookup: {dataset.name}", debug)
         except Exception as e:
@@ -146,6 +152,7 @@ def export_experiment_datasets(
     client: opik.Opik,
     datasets_to_export: set[str],
     datasets_dir: Path,
+    project_name: str,
     format: str,
     debug: bool,
     force: bool,
@@ -156,6 +163,7 @@ def export_experiment_datasets(
         client: Opik client instance
         datasets_to_export: Set of dataset names to export
         datasets_dir: Directory to save datasets
+        project_name: Project the experiment (and its datasets) belong to
         format: Export format ('json' or 'csv')
         debug: Enable debug output
         force: Re-download datasets even if they already exist locally
@@ -168,12 +176,18 @@ def export_experiment_datasets(
 
     for dataset_name in datasets_to_export:
         try:
-            # Use format parameter to determine file extension
-            if format.lower() == "csv":
-                dataset_file = datasets_dir / f"dataset_{dataset_name}.csv"
-            else:
-                dataset_file = datasets_dir / f"dataset_{dataset_name}.json"
             datasets_dir.mkdir(parents=True, exist_ok=True)
+
+            dataset_obj = opik.Dataset(
+                name=dataset_name,
+                description=None,  # Description not available from experiment
+                project_name=project_name,
+                rest_client=client.rest_client,
+            )
+            # File is keyed by dataset ID (the name lives inside the file).
+            dataset_id = dataset_obj.id
+            ext = "csv" if format.lower() == "csv" else "json"
+            dataset_file = datasets_dir / f"dataset_{dataset_id}.{ext}"
 
             # Check if file already exists and should be skipped
             if should_skip_file(dataset_file, force):
@@ -188,18 +202,12 @@ def export_experiment_datasets(
                 skipped_count += 1
                 continue
 
-            dataset_obj = opik.Dataset(
-                name=dataset_name,
-                description=None,  # Description not available from experiment
-                project_name=None,
-                rest_client=client.rest_client,
-            )
             dataset_items = dataset_obj.get_items()
 
             dataset_data = {
                 "dataset": {
                     "name": dataset_name,
-                    "id": getattr(dataset_obj, "id", None),
+                    "id": dataset_id,
                 },
                 # Use all fields from each item, excluding 'id' (internal field)
                 "items": [
@@ -268,10 +276,11 @@ def export_dataset_command(
     debug: bool,
     format: str,
 ) -> None:
-    """Export a dataset by exact name to workspace/datasets."""
-    # Get workspace and API key from context
+    """Export a dataset by exact name to projects/<project>/datasets."""
+    # Get workspace, project, and API key from context
     workspace = ctx.obj["workspace"]
+    project_name = ctx.obj["project_name"]
     api_key = ctx.obj.get("api_key") if ctx.obj else None
     export_dataset_by_name(
-        name, workspace, path, max_results, force, debug, format, api_key
+        name, workspace, project_name, path, max_results, force, debug, format, api_key
     )

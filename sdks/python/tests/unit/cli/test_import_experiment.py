@@ -17,7 +17,7 @@ from opik.cli.imports.experiment import (  # noqa: E402
     ExperimentData,
     load_experiment_data,
     recreate_experiment,
-    _import_traces_from_projects_directory,
+    _import_traces_for_project,
 )
 from opik.cli.imports.utils import (  # noqa: E402
     translate_trace_id as utils_translate_trace_id,
@@ -488,8 +488,8 @@ class TestImportTracesWithSpans:
             json.dump(trace_data, f)
 
         # Import traces
-        trace_id_map, _ = _import_traces_from_projects_directory(
-            mock_client, tmp_path, dry_run=False, debug=False
+        trace_id_map, _ = _import_traces_for_project(
+            mock_client, projects_dir, "test-project", dry_run=False, debug=False
         )
 
         # Verify spans were created
@@ -572,8 +572,8 @@ class TestImportTracesWithSpans:
             json.dump(trace_data, f)
 
         # Import traces
-        trace_id_map, _ = _import_traces_from_projects_directory(
-            mock_client, tmp_path, dry_run=False, debug=False
+        trace_id_map, _ = _import_traces_for_project(
+            mock_client, projects_dir, "test-project", dry_run=False, debug=False
         )
 
         # Verify all spans were created
@@ -635,8 +635,8 @@ class TestImportTracesWithSpans:
             json.dump(trace_data, f)
 
         # Import traces
-        _, _ = _import_traces_from_projects_directory(
-            mock_client, tmp_path, dry_run=False, debug=False
+        _, _ = _import_traces_for_project(
+            mock_client, projects_dir, "test-project", dry_run=False, debug=False
         )  # Returns (trace_id_map, stats), but we don't need them for this test
 
         # Verify spans were created in correct order
@@ -843,8 +843,8 @@ class TestModuleNameUsage:
         assert isinstance(id_helpers_module, types.ModuleType)
 
 
-class TestProjectInference:
-    """Test trace-to-project mapping built from project directory filenames."""
+class TestProjectTraceImport:
+    """Test importing a project's traces from its project directory."""
 
     @pytest.fixture
     def mock_client(self) -> Mock:
@@ -857,12 +857,12 @@ class TestProjectInference:
         client.span = Mock()
         return client
 
-    def test_project_inference__trace_filename_maps_to_project__happyflow(
+    def test_trace_files_in_project_dir_are_imported(
         self, mock_client: Mock, tmp_path: Path
     ) -> None:
-        """A trace_{id}.json file under projects/my-project/ should map the trace
-        ID to 'my-project' in the trace_to_project_map returned by
-        _import_traces_from_projects_directory."""
+        """trace_{id}.json files directly under the project dir are imported and
+        appear in the returned trace_id_map, and the trace is created in the
+        named project."""
         project_dir = tmp_path / "projects" / "my-project"
         project_dir.mkdir(parents=True)
 
@@ -875,35 +875,26 @@ class TestProjectInference:
         with open(trace_file, "w") as f:
             json.dump(trace_data, f)
 
-        trace_id_map, _ = _import_traces_from_projects_directory(
-            mock_client, tmp_path, dry_run=False, debug=False
+        trace_id_map, _ = _import_traces_for_project(
+            mock_client, project_dir, "my-project", dry_run=False, debug=False
         )
 
         # The original trace ID must appear in the returned map
         assert trace_id in trace_id_map
+        # The trace must be created in the named project (no "default" fallback)
+        assert mock_client.trace.call_args.kwargs.get("project_name") == "my-project"
 
-    def test_project_inference__no_filename_no_metadata__uses_default(
+    def test_empty_project_dir_returns_empty_map(
         self, mock_client: Mock, tmp_path: Path
     ) -> None:
-        """When a trace file has no project_name in metadata and does not sit
-        under a named projects/ sub-directory, the importer should still
-        complete without raising an exception (using the fallback 'default'
-        project internally)."""
-        # Place a trace directly in tmp_path (no projects/ sub-dir) —
-        # _import_traces_from_projects_directory only scans projects/**,
-        # so this trace is simply not found and the function returns an
-        # empty map without error.
-        trace_data: Dict[str, Any] = {
-            "trace": {"id": "orphan-trace", "name": "t", "input": {}, "output": {}},
-            "spans": [],
-        }
-        orphan_file = tmp_path / "trace_orphan-trace.json"
-        with open(orphan_file, "w") as f:
-            json.dump(trace_data, f)
+        """A project dir with no trace files yields an empty map without error."""
+        project_dir = tmp_path / "projects" / "empty-project"
+        project_dir.mkdir(parents=True)
 
-        # Should not raise; returns empty map when no projects/ dir exists
-        trace_id_map, _ = _import_traces_from_projects_directory(
-            mock_client, tmp_path, dry_run=False, debug=False
+        trace_id_map, stats = _import_traces_for_project(
+            mock_client, project_dir, "empty-project", dry_run=False, debug=False
         )
 
-        assert "orphan-trace" not in trace_id_map
+        assert trace_id_map == {}
+        assert stats["traces"] == 0
+        assert not mock_client.trace.called

@@ -39,7 +39,7 @@ class MysqlRdsIamE2eTest {
 
     /// See PR: https://github.com/comet-ml/opik/pull/306
     // RDS DB endpoint, port, and database name
-    // JDBC URL format: jdbc:aws-wrapper:mysql://<rds-endpoint>:<port>/<db-name>?createDatabaseIfNotExist=true&rewriteBatchedStatements=true
+    // JDBC URL format: jdbc:aws-wrapper:mysql://<rds-endpoint>:<port>/<db-name>?createDatabaseIfNotExist=true&rewriteBatchedStatements=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
     // DB endpoint: <rds-instance>.<region>.rds.amazonaws.com
     // AWS Driver only supports rds.amazonaws.com endpoints, not custom endpoints
     private static final String MYSQL_TEMPLATE_URL = "jdbc:aws-wrapper:mysql://%s";
@@ -61,7 +61,7 @@ class MysqlRdsIamE2eTest {
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(CLICKHOUSE,
                 ClickHouseContainerUtils.DATABASE_NAME);
 
-        String rdsEndpoint = "<rds-instance>.<aws-region>.rds.amazonaws.com:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true";
+        String rdsEndpoint = "<rds-instance>.<aws-region>.rds.amazonaws.com:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true";
 
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 AppContextConfig.builder()

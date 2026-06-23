@@ -15,9 +15,9 @@ logging:
 # Description: state database configuration
 # https://www.dropwizard.io/en/stable/manual/configuration.html#database
 database:
-  #  Default: jdbc:mysql://localhost:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true
-  #  Description: The URL of the server
-  url: ${STATE_DB_PROTOCOL:-jdbc:mysql://}${STATE_DB_URL:-localhost:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true}
+  #  Default: jdbc:mysql://localhost:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
+  #  Description: The URL of the server.
+  url: ${STATE_DB_PROTOCOL:-jdbc:mysql://}${STATE_DB_URL:-localhost:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true}
   #  Default: opik
   #  Description: The username used to connect to the server
   user: ${STATE_DB_USER:-opik}
@@ -93,10 +93,10 @@ databaseAnalytics:
 # Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
 #   window, protecting data quality.
 uuidValidation:
-  #  Default: true
+  #  Default: false
   #  Description: Operational kill-switch. When false, ids are not checked against the window (the
   #   window is still validated to be a sane value).
-  enabled: ${UUID_VALIDATION_ENABLED:-true}
+  enabled: ${UUID_VALIDATION_ENABLED:-false}
   #  Default: 24h
   #  Description: Validation window (between 12h and 45d). Writes whose `id` is a UUIDv7 with an
   #   embedded timestamp more than this far in the past or future are rejected.

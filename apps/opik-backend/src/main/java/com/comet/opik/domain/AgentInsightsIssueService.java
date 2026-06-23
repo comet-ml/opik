@@ -73,8 +73,11 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
 
         projectService.get(report.projectId(), workspaceId);
 
-        log.info("Storing '{}' agent insights issues for project '{}' on report day '{}' in workspace '{}'",
-                report.issues().size(), report.projectId(), report.reportDay(), workspaceId);
+        int issueCount = report.issues().size();
+        boolean allClear = issueCount == 0;
+
+        log.info("Reporting agent insights issues for project '{}' on report day '{}' in workspace '{}': {}",
+                report.projectId(), report.reportDay(), workspaceId, allClear ? "all clear" : issueCount);
 
         List<UUID> issueIds = report.issues().stream()
                 .map(issue -> issue.id() != null ? issue.id() : idGenerator.generateId())
@@ -89,12 +92,20 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
         transactionTemplate.inTransaction(WRITE, handle -> {
             AgentInsightsIssueDAO dao = handle.attach(AgentInsightsIssueDAO.class);
 
-            dao.upsertIssues(workspaceId, report.projectId(), userName, issueIds, report.issues());
-            dao.upsertDetails(workspaceId, report.projectId(), report.reportDay(), userName,
-                    detailIds, issueIds, report.issues(), metadata);
+            if (!allClear) {
+                dao.upsertIssues(workspaceId, report.projectId(), userName, issueIds, report.issues());
+                dao.upsertDetails(workspaceId, report.projectId(), report.reportDay(), userName,
+                        detailIds, issueIds, report.issues(), metadata);
+            }
+
+            handle.attach(AgentInsightsJobDAO.class)
+                    .markScanned(workspaceId, report.projectId(), userName);
 
             return null;
         });
+
+        AgentInsightsMetrics.REPORTS_RECEIVED.add(1);
+        AgentInsightsMetrics.ISSUES_REPORTED.add(report.issues().size());
     }
 
     @Override

@@ -2,7 +2,6 @@
 
 import json
 import sys
-import threading
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,6 +24,7 @@ from .utils import (
     create_experiment_data_structure,
     debug_print,
     extract_trace_id_from_filename,
+    prepare_project_export_dir,
     write_json_data,
     write_csv_data,
     print_export_summary,
@@ -47,42 +47,20 @@ MAX_WORKERS = 20
 def _fetch_trace_data(
     client: opik.Opik,
     trace_id: str,
-    project_name_cache: dict[str, str],
-    cache_lock: threading.Lock,
+    project_name: str,
     debug: bool,
-) -> Optional[Tuple[str, dict, str]]:
+) -> Optional[Tuple[str, dict]]:
     """Fetch trace and span data for a single trace ID.
 
+    The export is scoped to ``project_name``, so the trace is recorded under
+    that project without a per-trace project lookup.
+
     Returns:
-        Tuple of (trace_id, trace_data_dict, project_name) or None if failed.
+        Tuple of (trace_id, trace_data_dict) or None if failed.
     """
     try:
         # Get trace by ID
         trace = client.get_trace_content(trace_id)
-
-        # Get project name for this trace
-        if not trace.project_id:
-            return None
-
-        # Get project name (use cache if available).
-        # Fast path: check without the lock first (already-cached entries).
-        # If missing, fetch without holding the lock (slow API call), then
-        # use setdefault so that the first writer wins in case two threads
-        # raced on the same project_id.
-        if trace.project_id not in project_name_cache:
-            try:
-                project = client.get_project(trace.project_id)
-                with cache_lock:
-                    project_name_cache.setdefault(trace.project_id, project.name)
-            except Exception as e:
-                if debug:
-                    debug_print(
-                        f"Warning: Could not get project for trace {trace_id}: {e}",
-                        debug,
-                    )
-                return None
-
-        project_name = project_name_cache[trace.project_id]
 
         # Get spans for this trace
         spans = client.search_spans(
@@ -99,7 +77,7 @@ def _fetch_trace_data(
             "project_name": project_name,
         }
 
-        return (trace_id, trace_data, project_name)
+        return (trace_id, trace_data)
     except Exception as e:
         if debug:
             import traceback
@@ -113,16 +91,14 @@ def _fetch_trace_data(
 def _write_trace_file(
     trace_id: str,
     trace_data: dict,
-    project_name: str,
-    workspace_root: Path,
+    project_dir: Path,
     format: str,
     force: bool,
     debug: bool,
 ) -> bool:
     """Write a single trace to file. Returns True if exported, False if skipped."""
     try:
-        # Save trace in projects/PROJECT_NAME/ directory
-        project_dir = workspace_root / "projects" / project_name
+        # Save trace directly in the project directory
         project_dir.mkdir(parents=True, exist_ok=True)
 
         # Determine file path based on format
@@ -157,18 +133,17 @@ def _write_trace_file(
         return False
 
 
-def _scan_downloaded_trace_ids(workspace_root: Path, format: str) -> Set[str]:
-    """Scan projects/ dirs for already-downloaded trace files and return their IDs.
+def _scan_downloaded_trace_ids(project_dir: Path, format: str) -> Set[str]:
+    """Scan the project dir for already-downloaded trace files and return their IDs.
 
     This is a fast, zero-network way to pre-filter traces before making any API
-    calls.  A single glob over the output directory is all it takes.
+    calls.  A single glob over the project directory is all it takes.
     """
     ext = "csv" if format.lower() == "csv" else "json"
     downloaded: Set[str] = set()
-    projects_dir = workspace_root / "projects"
-    if not projects_dir.is_dir():
+    if not project_dir.is_dir():
         return downloaded
-    for trace_file in projects_dir.glob(f"*/trace_*.{ext}"):
+    for trace_file in project_dir.glob(f"trace_*.{ext}"):
         trace_id = extract_trace_id_from_filename(trace_file)
         if trace_id:
             downloaded.add(trace_id)
@@ -177,7 +152,8 @@ def _scan_downloaded_trace_ids(workspace_root: Path, format: str) -> Set[str]:
 
 def export_collected_trace_ids(
     client: opik.Opik,
-    workspace_root: Path,
+    project_dir: Path,
+    project_name: str,
     all_trace_ids: set,
     max_limit: Optional[int],
     format: str,
@@ -204,7 +180,8 @@ def export_collected_trace_ids(
     return export_traces_by_ids(
         client,
         trace_ids_list,
-        workspace_root,
+        project_dir,
+        project_name,
         None,
         format,
         debug,
@@ -217,7 +194,8 @@ def export_collected_trace_ids(
 def export_traces_by_ids(
     client: opik.Opik,
     trace_ids: List[str],
-    workspace_root: Path,
+    project_dir: Path,
+    project_name: str,
     max_traces: Optional[int],
     format: str,
     debug: bool,
@@ -227,12 +205,12 @@ def export_traces_by_ids(
 ) -> tuple[int, int]:
     """Export traces by their IDs using parallel batch processing.
 
-    Traces are saved in projects/PROJECT_NAME/ directory based on each trace's project.
+    Traces are saved directly in the project directory (``project_dir``).
     Uses parallel execution to fetch traces/spans and write files concurrently.
 
     Already-downloaded traces are skipped before any API call is made:
     - When *manifest* is provided its downloaded-ID set is used for the check.
-    - Otherwise the projects/ directory is scanned for existing trace files.
+    - Otherwise the project directory is scanned for existing trace files.
     """
     exported_count = 0
     skipped_count = 0
@@ -258,9 +236,9 @@ def export_traces_by_ids(
             # exist on disk from an earlier run.  Fall back to a filesystem scan so
             # pre-existing traces are detected and skipped before any API call.
             if not already_downloaded:
-                already_downloaded = _scan_downloaded_trace_ids(workspace_root, format)
+                already_downloaded = _scan_downloaded_trace_ids(project_dir, format)
         else:
-            already_downloaded = _scan_downloaded_trace_ids(workspace_root, format)
+            already_downloaded = _scan_downloaded_trace_ids(project_dir, format)
         pending_ids = [tid for tid in trace_ids if tid not in already_downloaded]
         skipped_count = len(trace_ids) - len(pending_ids)
     else:
@@ -274,10 +252,6 @@ def export_traces_by_ids(
         )
 
     if pending_ids:
-        # Cache project names to avoid repeated API calls (shared across threads).
-        project_name_cache: dict[str, str] = {}
-        cache_lock = threading.Lock()
-
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
@@ -300,20 +274,17 @@ def export_traces_by_ids(
                     )
 
                 # Fetch trace data in parallel
-                fetched_traces: dict[str, Tuple[dict, str]] = {}
+                fetched_traces: dict[str, dict] = {}
 
                 with ThreadPoolExecutor(max_workers=MAX_WORKERS) as fetch_executor:
-                    fetch_futures: Dict[
-                        Future[Optional[Tuple[str, dict, str]]], str
-                    ] = {}
+                    fetch_futures: Dict[Future[Optional[Tuple[str, dict]]], str] = {}
                     for trace_id in batch_trace_ids:
-                        fetch_future: Future[Optional[Tuple[str, dict, str]]] = (
+                        fetch_future: Future[Optional[Tuple[str, dict]]] = (
                             fetch_executor.submit(
                                 _fetch_trace_data,
                                 client,
                                 trace_id,
-                                project_name_cache,
-                                cache_lock,
+                                project_name,
                                 debug,
                             )
                         )
@@ -326,22 +297,19 @@ def export_traces_by_ids(
                         try:
                             result = fetch_future.result()
                             if result is not None:
-                                fetched_trace_id, trace_data, project_name = result
+                                fetched_trace_id, trace_data = result
                                 if filter_string and not matches_trace_filter(
                                     trace_data.get("trace", {}), filter_string
                                 ):
                                     skipped_count += 1
                                     batch_filter_skipped += 1
                                     continue
-                                fetched_traces[fetched_trace_id] = (
-                                    trace_data,
-                                    project_name,
-                                )
+                                fetched_traces[fetched_trace_id] = trace_data
                             else:
-                                # _fetch_trace_data returns None for unresolvable
-                                # traces (e.g. missing project_id).  Treat as skipped
-                                # rather than failed so manifest.complete() isn't
-                                # permanently blocked by permanently-unresolvable IDs.
+                                # _fetch_trace_data returns None for traces that could
+                                # not be fetched.  Treat as skipped rather than failed
+                                # so manifest.complete() isn't permanently blocked by
+                                # permanently-unresolvable IDs.
                                 skipped_count += 1
                                 batch_none_count += 1
                         except Exception as e:
@@ -362,13 +330,12 @@ def export_traces_by_ids(
                 # Write files in parallel
                 with ThreadPoolExecutor(max_workers=MAX_WORKERS) as write_executor:
                     write_futures: Dict[Future[bool], str] = {}
-                    for trace_id, (trace_data, project_name) in fetched_traces.items():
+                    for trace_id, trace_data in fetched_traces.items():
                         write_future: Future[bool] = write_executor.submit(
                             _write_trace_file,
                             trace_id,
                             trace_data,
-                            project_name,
-                            workspace_root,
+                            project_dir,
                             format,
                             force,
                             debug,
@@ -413,6 +380,7 @@ def export_traces_by_ids(
 def export_experiment_by_id(
     client: opik.Opik,
     output_dir: Path,
+    project_name: str,
     experiment_id: str,
     max_traces: Optional[int],
     force: bool,
@@ -456,9 +424,7 @@ def export_experiment_by_id(
         # e.g. a previous run that fetched items but crashed before finishing traces.
         if not force:
             stored_ids = manifest.get_all_trace_ids()
-            experiment_files = list(
-                output_dir.glob(f"experiment_*_{experiment_id}.json")
-            )
+            experiment_files = list(output_dir.glob(f"experiment_{experiment_id}.json"))
             if stored_ids is not None and experiment_files:
                 if trace_ids_collector is not None:
                     trace_ids_collector.update(stored_ids)
@@ -558,9 +524,7 @@ def export_experiment_by_id(
 
         # Save experiment data
         # Include experiment ID in filename to handle multiple experiments with same name
-        experiment_file = (
-            output_dir / f"experiment_{experiment.name}_{experiment.id}.json"
-        )
+        experiment_file = output_dir / f"experiment_{experiment.id}.json"
         file_already_exists = experiment_file.exists()
         experiment_file_written = False
 
@@ -587,7 +551,7 @@ def export_experiment_by_id(
             "traces_skipped": 0,
         }
         stats["prompts"] = export_related_prompts_by_name(
-            client, experiment, output_dir, force, debug, format
+            client, experiment, output_dir, project_name, force, debug, format
         )
 
         # Collect trace IDs from experiment items (for batch export later).
@@ -620,6 +584,7 @@ def export_experiment_by_id(
 def export_experiment_by_name(
     name: str,
     workspace: str,
+    project_name: str,
     output_path: str,
     dataset: Optional[str],
     max_traces: Optional[int],
@@ -629,7 +594,7 @@ def export_experiment_by_name(
     api_key: Optional[str] = None,
     filter_string: Optional[str] = None,
 ) -> None:
-    """Export an experiment by exact name."""
+    """Export an experiment by exact name from the given project."""
     try:
         if debug:
             debug_print(f"Exporting experiment: {name}", debug)
@@ -640,18 +605,23 @@ def export_experiment_by_name(
         else:
             client = opik.Opik(workspace=workspace)
 
-        # Create output directory
-        output_dir = Path(output_path) / workspace / "experiments"
+        # Resolve the project to its ID and create projects/<id>/.
+        _project_id, project_root = prepare_project_export_dir(
+            client, output_path, workspace, project_name
+        )
+        output_dir = project_root / "experiments"
         output_dir.mkdir(parents=True, exist_ok=True)
-        datasets_dir = Path(output_path) / workspace / "datasets"
+        datasets_dir = project_root / "datasets"
         datasets_dir.mkdir(parents=True, exist_ok=True)
 
         if debug:
             debug_print(f"Target directory: {output_dir}", debug)
 
-        # Try to get experiments by exact name
+        # Try to get experiments by exact name within the project
         try:
-            experiments = client.get_experiments_by_name(name)
+            experiments = client.get_experiments_by_name(
+                name, project_name=project_name
+            )
             if not experiments:
                 console.print(f"[red]Experiment '{name}' not found[/red]")
                 return
@@ -707,7 +677,13 @@ def export_experiment_by_name(
                     f"[blue]Exporting {len(unique_datasets)} unique dataset(s) used by these experiments...[/blue]"
                 )
             datasets_exported, datasets_skipped = export_experiment_datasets(
-                client, unique_datasets, datasets_dir, format, debug, force
+                client,
+                unique_datasets,
+                datasets_dir,
+                project_name,
+                format,
+                debug,
+                force,
             )
 
         # Export all unique prompts once before processing experiments
@@ -721,7 +697,13 @@ def export_experiment_by_name(
                     f"[blue]Exporting {len(unique_prompt_ids)} unique prompt(s) used by these experiments...[/blue]"
                 )
             prompts_exported, prompts_skipped = export_prompts_by_ids(
-                client, unique_prompt_ids, prompts_dir, format, debug, force
+                client,
+                unique_prompt_ids,
+                prompts_dir,
+                project_name,
+                format,
+                debug,
+                force,
             )
 
         # Collect all unique trace IDs from all experiments as we process them
@@ -752,6 +734,7 @@ def export_experiment_by_name(
             result = export_experiment_by_id(
                 client,
                 output_dir,
+                project_name,
                 experiment.id,
                 max_traces,
                 force,
@@ -777,7 +760,6 @@ def export_experiment_by_name(
         # For a single experiment we pass its manifest so Phase 2 can skip traces
         # that are already in the downloaded set without touching the filesystem.
         # For multiple experiments we pass None and rely on Phase 1 (filesystem scan).
-        workspace_root = output_dir.parent
         trace_manifest: Optional[ExportManifest] = (
             experiment_manifests.get(experiments[0].id)
             if len(experiments) == 1
@@ -785,7 +767,8 @@ def export_experiment_by_name(
         )
         traces_exported, traces_skipped = export_collected_trace_ids(
             client,
-            workspace_root,
+            project_root,
+            project_name,
             all_trace_ids,
             max_traces,
             format,
@@ -832,6 +815,7 @@ def export_experiment_by_name(
 def export_experiment_by_name_or_id(
     name_or_id: str,
     workspace: str,
+    project_name: str,
     output_path: str,
     dataset: Optional[str],
     max_traces: Optional[int],
@@ -841,7 +825,7 @@ def export_experiment_by_name_or_id(
     api_key: Optional[str] = None,
     filter_string: Optional[str] = None,
 ) -> None:
-    """Export an experiment by name or ID.
+    """Export an experiment by name or ID from the given project.
 
     First tries to get the experiment by ID. If not found, tries by name.
     """
@@ -855,10 +839,13 @@ def export_experiment_by_name_or_id(
         else:
             client = opik.Opik(workspace=workspace)
 
-        # Create output directory
-        output_dir = Path(output_path) / workspace / "experiments"
+        # Resolve the project to its ID and create projects/<id>/.
+        _project_id, project_root = prepare_project_export_dir(
+            client, output_path, workspace, project_name
+        )
+        output_dir = project_root / "experiments"
         output_dir.mkdir(parents=True, exist_ok=True)
-        datasets_dir = Path(output_path) / workspace / "datasets"
+        datasets_dir = project_root / "datasets"
         datasets_dir.mkdir(parents=True, exist_ok=True)
 
         # Try to get experiment by ID first
@@ -881,6 +868,7 @@ def export_experiment_by_name_or_id(
             result = export_experiment_by_id(
                 client,
                 output_dir,
+                project_name,
                 name_or_id,
                 max_traces,
                 force,
@@ -900,12 +888,17 @@ def export_experiment_by_name_or_id(
             datasets_skipped = 0
             if unique_datasets:
                 datasets_exported, datasets_skipped = export_experiment_datasets(
-                    client, unique_datasets, datasets_dir, format, debug, force
+                    client,
+                    unique_datasets,
+                    datasets_dir,
+                    project_name,
+                    format,
+                    debug,
+                    force,
                 )
 
             # Export traces collected from experiment items, passing the manifest
             # so already-downloaded traces are skipped before any API call.
-            workspace_root = output_dir.parent
             traces_exported = 0
             traces_skipped = 0
             if trace_ids_collector:
@@ -916,7 +909,8 @@ def export_experiment_by_name_or_id(
                     traces_exported, traces_skipped = export_traces_by_ids(
                         client,
                         trace_ids_list,
-                        workspace_root,
+                        project_root,
+                        project_name,
                         None,
                         format,
                         debug,
@@ -963,6 +957,7 @@ def export_experiment_by_name_or_id(
         export_experiment_by_name(
             name_or_id,
             workspace,
+            project_name,
             output_path,
             dataset,
             max_traces,
@@ -1030,16 +1025,18 @@ def export_experiment_command(
     debug: bool,
     format: str,
 ) -> None:
-    """Export an experiment by exact name to workspace/experiments.
+    """Export an experiment by exact name to projects/<project>/experiments.
 
     The command will first try to find the experiment by ID. If not found, it will try by name.
     """
-    # Get workspace and API key from context
+    # Get workspace, project, and API key from context
     workspace = ctx.obj["workspace"]
+    project_name = ctx.obj["project_name"]
     api_key = ctx.obj.get("api_key") if ctx.obj else None
     export_experiment_by_name_or_id(
         name_or_id,
         workspace,
+        project_name,
         path,
         dataset,
         max_traces,
