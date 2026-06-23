@@ -43,10 +43,6 @@ interface AgentInsightsJobDAO {
     Optional<AgentInsightsJob> findByProject(@Bind("workspaceId") String workspaceId,
             @Bind("projectId") UUID projectId);
 
-    // Stamp the time a diagnostic report was last generated. Called on every
-    // report (including "all clear"); a no-op if the project has no job row.
-    // last_updated_by is set alongside so the audit actor stays in sync with the
-    // last_updated_at bumped by ON UPDATE.
     @SqlUpdate("""
             UPDATE agent_insights_jobs
             SET last_scan_at = CURRENT_TIMESTAMP(6), last_updated_by = :userName

@@ -22,8 +22,6 @@ import java.util.UUID;
 public record AgentInsightsReport(
         @NotNull UUID projectId,
         @NotNull LocalDate reportDay,
-        // May be empty: an "all clear" report (no issues detected) is valid and
-        // must be accepted so the run can complete cleanly instead of erroring.
         @NotNull List<@NotNull @Valid ReportedIssue> issues) {
 
     @Builder(toBuilder = true)

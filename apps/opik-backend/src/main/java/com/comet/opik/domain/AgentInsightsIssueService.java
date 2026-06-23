@@ -73,9 +73,6 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
 
         projectService.get(report.projectId(), workspaceId);
 
-        // An "all clear" report (no issues detected) is a valid outcome: skip the
-        // issue writes (also avoids empty-batch failures in the DAO) but still
-        // stamp the scan time below so the UI shows when the run last completed.
         int issueCount = report.issues().size();
         boolean allClear = issueCount == 0;
 
@@ -101,8 +98,6 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
                         detailIds, issueIds, report.issues(), metadata);
             }
 
-            // Record when this project was last scanned (no-op if it has no job row,
-            // which can't happen via the trigger flow — it 404s without a job).
             handle.attach(AgentInsightsJobDAO.class)
                     .markScanned(workspaceId, report.projectId(), userName);
 
