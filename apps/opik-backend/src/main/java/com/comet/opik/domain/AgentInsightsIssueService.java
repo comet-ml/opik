@@ -103,6 +103,9 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
 
             return null;
         });
+
+        AgentInsightsMetrics.REPORTS_RECEIVED.add(1);
+        AgentInsightsMetrics.ISSUES_REPORTED.add(report.issues().size());
     }
 
     @Override

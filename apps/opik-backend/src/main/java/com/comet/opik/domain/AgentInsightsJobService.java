@@ -95,10 +95,16 @@ public class AgentInsightsJobService {
         Instant periodEnd = Instant.now();
         reportPublisher.enqueue(job.projectId(), workspaceId, periodEnd.minus(TRIGGER_WINDOW), periodEnd)
                 .subscribe(
-                        reportId -> log.info("Enqueued Agent Insights run reportId='{}' for project '{}'",
-                                reportId, projectId),
-                        error -> log.error("Failed to enqueue Agent Insights run for project '{}'", projectId,
-                                error));
+                        reportId -> {
+                            AgentInsightsMetrics.REPORTS_ENQUEUED.add(1, AgentInsightsMetrics.ENQUEUE_MANUAL_SUCCESS);
+                            log.info("Enqueued Agent Insights run reportId='{}' for project '{}'",
+                                    reportId, projectId);
+                        },
+                        error -> {
+                            AgentInsightsMetrics.REPORTS_ENQUEUED.add(1, AgentInsightsMetrics.ENQUEUE_MANUAL_FAILURE);
+                            log.error("Failed to enqueue Agent Insights run for project '{}'", projectId,
+                                    error);
+                        });
     }
 
     // Cross-workspace; used by the daily sweep (OPIK-6853), never from a request thread. The DAO's JOIN
