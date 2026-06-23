@@ -422,11 +422,16 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
 
   // Mirror pod readiness into the explain store so the (per-row) Explain
   // buttons gate on one shared value rather than each calling the backend hook.
+  // No unmount reset here on purpose: a surface switch (sidebar↔page) mounts the
+  // new instance — which sets ready=true — BEFORE the old one's cleanup runs (the
+  // same ordering that forces the ownership guards on window.opikBridge/clearEmit
+  // above). An unconditional setReady(false) on unmount would clobber the live
+  // instance and, since its effect dep already settled, never restore it — every
+  // Explain button would silently vanish until reload. Teardown is instead owned
+  // by the ownership-guarded clearEmit, which resets ready only for the instance
+  // that still owns the bridge.
   useEffect(() => {
     useExplainStore.getState().setReady(isBackendReady);
-    // On unmount, drop readiness so the buttons can't linger as enabled.
-    // (clearEmit also resets this; explicit cleanup makes it self-contained.)
-    return () => useExplainStore.getState().setReady(false);
   }, [isBackendReady]);
 
   // Emit context changes to sidebar listeners
