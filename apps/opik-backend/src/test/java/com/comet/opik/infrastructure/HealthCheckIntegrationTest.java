@@ -111,13 +111,18 @@ class HealthCheckIntegrationTest {
                     .name("db").healthy(true).critical(true).type(READY).build();
             var deadlocks = HealthCheckResponse.builder()
                     .name("deadlocks").healthy(true).critical(true).type(ALIVE).build();
+            // Authentication is disabled in config-test → the shared HTTP client is not exercised, so the check is
+            // inert and reports healthy.
+            var authHttpClientResponse = HealthCheckResponse.builder()
+                    .name("auth_http_client").healthy(true).critical(true).type(ALIVE).build();
             var all = List.of(
                     clickHouseResponse,
                     clickhouseFreeformSqlResponse,
                     mysqlResponse,
                     redisResponse,
                     dbResponse,
-                    deadlocks);
+                    deadlocks,
+                    authHttpClientResponse);
             return Stream.of(
                     arguments("clickhouse", List.of(clickHouseResponse)),
                     arguments("mysql", List.of(mysqlResponse)),
