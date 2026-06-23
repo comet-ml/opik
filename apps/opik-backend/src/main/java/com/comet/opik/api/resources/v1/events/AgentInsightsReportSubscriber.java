@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.domain.AgentInsightsMetrics;
 import com.comet.opik.domain.AgentInsightsReportClient;
 import com.comet.opik.domain.AgentInsightsReportMessage;
 import com.comet.opik.infrastructure.AgentInsightsReportConfig;
@@ -70,9 +71,16 @@ public class AgentInsightsReportSubscriber extends BaseRedisSubscriber<AgentInsi
                 message.workspaceId(), message.periodStart(), message.periodEnd()))
                 .subscribeOn(Schedulers.boundedElastic())
                 .then()
-                .doOnSuccess(unused -> log.info("Triggered Agent Insights report: reportId='{}', project='{}'",
-                        message.reportId(), message.projectId()))
+                .doOnSuccess(unused -> {
+                    // The base class records every message as success because processEvent swallows failures
+                    // (at-most-once drop), so its processing-errors metric never fires for a failed trigger.
+                    // This counter restores the success/failure outcome signal for the platform trigger call.
+                    AgentInsightsMetrics.REPORTS_TRIGGERED.add(1, AgentInsightsMetrics.OUTCOME_SUCCESS);
+                    log.info("Triggered Agent Insights report: reportId='{}', project='{}'",
+                            message.reportId(), message.projectId());
+                })
                 .onErrorResume(throwable -> {
+                    AgentInsightsMetrics.REPORTS_TRIGGERED.add(1, AgentInsightsMetrics.OUTCOME_FAILURE);
                     // At-most-once on purpose: report generation is a non-idempotent side effect (Ollie
                     // compute + a user-facing report), and the trigger isn't deduplicated downstream, so a
                     // redelivery would run the same report twice. We ack on failure (log + complete) rather

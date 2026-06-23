@@ -43,6 +43,15 @@ interface AgentInsightsJobDAO {
     Optional<AgentInsightsJob> findByProject(@Bind("workspaceId") String workspaceId,
             @Bind("projectId") UUID projectId);
 
+    @SqlUpdate("""
+            UPDATE agent_insights_jobs
+            SET last_scan_at = CURRENT_TIMESTAMP(6), last_updated_by = :userName
+            WHERE workspace_id = :workspaceId AND project_id = :projectId
+            """)
+    int markScanned(@Bind("workspaceId") String workspaceId,
+            @Bind("projectId") UUID projectId,
+            @Bind("userName") String userName);
+
     // Cross-workspace — used only by the daily sweep (system context), never from a request thread.
     // INNER JOIN projects so jobs whose project was deleted are filtered out at the source (no per-job
     // existence check in the sweep loop).

@@ -451,10 +451,8 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                             .map(FeedbackScoreItem::threadId)
                             .collect(Collectors.toSet());
 
-                    return Flux.fromIterable(threadIds)
-                            // resolve thread model IDs for each thread ID
-                            .flatMap(threadId -> getOrCreateThread(projectDto, threadId))
-                            .collectMap(Map.Entry::getKey, Map.Entry::getValue)
+                    // resolve all thread model IDs in a single bulk get-or-create instead of one per thread
+                    return traceThreadService.getOrCreateThreadIds(projectDto.project().id(), threadIds)
                             .map(threadIdMap -> bindThreadModelId(projectDto, threadIdMap))
                             .filter(projectDtoWithThreads -> !projectDtoWithThreads.scores().isEmpty())
                             // Thread status validation removed - feedback scores can now be added to threads
@@ -465,12 +463,6 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                                             author));
                 })
                 .reduce(0L, Long::sum);
-    }
-
-    private Mono<Map.Entry<String, UUID>> getOrCreateThread(ProjectDto<FeedbackScoreBatchItemThread> projectDto,
-            String threadId) {
-        return traceThreadService.getOrCreateThreadId(projectDto.project().id(), threadId)
-                .map(threadModelId -> Map.entry(threadId, threadModelId));
     }
 
     private ProjectDto<FeedbackScoreBatchItemThread> bindThreadModelId(
