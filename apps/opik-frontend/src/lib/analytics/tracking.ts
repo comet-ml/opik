@@ -17,6 +17,7 @@ export const OpikEvent = {
     "opik_filter_dialog_closed_without_selection",
   FILTERS_ACTIVE_COUNT: "opik_filters_active_count",
   PINNED_FILTERS_COUNT: "opik_pinned_filters_count",
+  QUICK_FILTER_APPLIED: "opik_quick_filter_applied",
 } as const;
 
 type OpikEventValues = (typeof OpikEvent)[keyof typeof OpikEvent];
