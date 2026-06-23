@@ -419,7 +419,6 @@ from .image_url import ImageUrl
 from .image_url_public import ImageUrlPublic
 from .image_url_write import ImageUrlWrite
 from .item import Item
-from .item_impact import ItemImpact
 from .item_lock_info import ItemLockInfo
 from .json_list_string import JsonListString
 from .json_list_string_compare import JsonListStringCompare
@@ -619,7 +618,6 @@ from .spans_count_response import SpansCountResponse
 from .spend_breakdown_response import SpendBreakdownResponse
 from .spend_composition_response import SpendCompositionResponse
 from .spend_metric_request import SpendMetricRequest
-from .spend_recommendations_response import SpendRecommendationsResponse
 from .spend_summary_response import SpendSummaryResponse
 from .spend_user_page import SpendUserPage
 from .spend_user_row import SpendUserRow
@@ -1099,7 +1097,6 @@ __all__ = [
     "ImageUrlPublic",
     "ImageUrlWrite",
     "Item",
-    "ItemImpact",
     "ItemLockInfo",
     "JsonListString",
     "JsonListStringCompare",
@@ -1297,7 +1294,6 @@ __all__ = [
     "SpendBreakdownResponse",
     "SpendCompositionResponse",
     "SpendMetricRequest",
-    "SpendRecommendationsResponse",
     "SpendSummaryResponse",
     "SpendUserPage",
     "SpendUserRow",

@@ -4,17 +4,16 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
-from .item_impact import ItemImpact
+from .model_tiers import ModelTiers
 
 
 class Item(UniversalBaseModel):
-    id: typing.Optional[str] = None
-    title: typing.Optional[str] = None
-    body: typing.Optional[str] = None
-    impact: typing.Optional[ItemImpact] = None
-    estimated_savings_tokens: typing.Optional[int] = None
-    docs_url: typing.Optional[str] = None
-    related_lane_key: typing.Optional[str] = None
+    label: typing.Optional[str] = None
+    total_tokens: typing.Optional[int] = None
+    definition_tokens: typing.Optional[int] = None
+    usage_tokens: typing.Optional[int] = None
+    by_model: typing.Optional[typing.List[ModelTiers]] = None
+    count: typing.Optional[int] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
