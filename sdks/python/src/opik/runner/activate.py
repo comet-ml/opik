@@ -2,9 +2,11 @@
 
 import atexit
 import logging
+import math
 import os
 import signal
 import threading
+from typing import Optional
 
 from rich.console import Console
 
@@ -66,6 +68,23 @@ def _warn_if_no_blocking_call() -> None:
         )
 
 
+def _resolve_poll_interval(value: float) -> Optional[float]:
+    """Validate the configured idle poll interval, or None to use the runner default.
+
+    Non-finite (``nan``/``inf``) or non-positive values are rejected: forwarded to the
+    poll loop they would make it hot-spin (``nan``) or raise (``inf``), so we fall back
+    to the default with a warning.
+    """
+    if not math.isfinite(value) or value <= 0:
+        LOGGER.warning(
+            "OPIK_RUNNER_POLL_INTERVAL must be a finite number greater than 0, "
+            "got %s; using the default interval.",
+            value,
+        )
+        return None
+    return value
+
+
 def _run(shutdown_event: threading.Event) -> None:
     runner_id = os.environ.get("OPIK_RUNNER_ID", "")
 
@@ -98,13 +117,8 @@ def _run(shutdown_event: threading.Event) -> None:
             request={name: _to_payload(entry) for name, entry in entrypoints.items()},
         )
 
-    poll_interval = client.config.runner_poll_interval
-    if poll_interval <= 0:
-        LOGGER.warning(
-            "OPIK_RUNNER_POLL_INTERVAL must be greater than 0, got %s; "
-            "using the default interval.",
-            poll_interval,
-        )
+    poll_interval = _resolve_poll_interval(client.config.runner_poll_interval)
+    if poll_interval is None:
         loop = InProcessRunnerLoop(api, runner_id, shutdown_event)
     else:
         loop = InProcessRunnerLoop(
