@@ -296,7 +296,9 @@ class TestCLIImportExport:
         dataset_name = self._create_test_dataset(opik_client, source_project_name)
 
         # Verify dataset was created
-        datasets = opik_client.get_datasets(max_results=100)
+        datasets = opik_client.get_datasets(
+            max_results=100, project_name=source_project_name
+        )
         assert len(datasets) >= 1, "Expected at least 1 dataset to be created"
 
         # Step 2: Export datasets using direct function call
@@ -359,7 +361,7 @@ class TestCLIImportExport:
         prompt_name = self._create_test_prompt(opik_client, source_project_name)
 
         # Verify prompt was created
-        prompts = opik_client.search_prompts()
+        prompts = opik_client.search_prompts(project_name=source_project_name)
         prompt_names = [p.name for p in prompts]
         assert prompt_name in prompt_names, (
             f"Expected prompt {prompt_name} to be created"
@@ -412,7 +414,7 @@ class TestCLIImportExport:
         assert stats.get("prompts", 0) >= 1, "Expected at least 1 prompt to be imported"
 
         # Verify prompt was correctly imported to backend
-        imported_prompts = opik_client.search_prompts()
+        imported_prompts = opik_client.search_prompts(project_name=source_project_name)
         imported_prompt_names = [p.name for p in imported_prompts]
         assert prompt_name in imported_prompt_names, (
             f"Expected prompt {prompt_name} to be imported"
@@ -858,7 +860,7 @@ class TestCLIImportExport:
         prompt_name = self._create_test_chat_prompt(opik_client, source_project_name)
 
         # Verify chat prompt was created
-        prompts = opik_client.search_prompts()
+        prompts = opik_client.search_prompts(project_name=source_project_name)
         prompt_names = [p.name for p in prompts]
         assert prompt_name in prompt_names, (
             f"Expected chat prompt {prompt_name} to be created"
@@ -916,14 +918,16 @@ class TestCLIImportExport:
         assert stats.get("prompts", 0) >= 1, "Expected at least 1 prompt to be imported"
 
         # Verify chat prompt was correctly imported to backend
-        imported_prompts = opik_client.search_prompts()
+        imported_prompts = opik_client.search_prompts(project_name=source_project_name)
         imported_prompt_names = [p.name for p in imported_prompts]
         assert prompt_name in imported_prompt_names, (
             f"Expected chat prompt {prompt_name} to be imported"
         )
 
         # Get the imported chat prompt and verify its content
-        imported_chat_prompt = opik_client.get_chat_prompt(name=prompt_name)
+        imported_chat_prompt = opik_client.get_chat_prompt(
+            name=prompt_name, project_name=source_project_name
+        )
         verifiers.verify_chat_prompt_version(
             imported_chat_prompt,
             name=prompt_name,
