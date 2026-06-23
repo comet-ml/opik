@@ -45,12 +45,16 @@ interface AgentInsightsJobDAO {
 
     // Stamp the time a diagnostic report was last generated. Called on every
     // report (including "all clear"); a no-op if the project has no job row.
+    // last_updated_by is set alongside so the audit actor stays in sync with the
+    // last_updated_at bumped by ON UPDATE.
     @SqlUpdate("""
-            UPDATE agent_insights_jobs SET last_scan_at = CURRENT_TIMESTAMP(6)
+            UPDATE agent_insights_jobs
+            SET last_scan_at = CURRENT_TIMESTAMP(6), last_updated_by = :userName
             WHERE workspace_id = :workspaceId AND project_id = :projectId
             """)
     int markScanned(@Bind("workspaceId") String workspaceId,
-            @Bind("projectId") UUID projectId);
+            @Bind("projectId") UUID projectId,
+            @Bind("userName") String userName);
 
     // Cross-workspace — used only by the daily sweep (system context), never from a request thread.
     // INNER JOIN projects so jobs whose project was deleted are filtered out at the source (no per-job
