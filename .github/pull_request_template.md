@@ -14,6 +14,12 @@ If you need to have changes explained in detail include single line dot point(s)
 - Resolves #
 - OPIK-
 
+<!--
+Jira linking: tickets this PR RESOLVES keep the hyphen (OPIK-1234) here and anywhere — they link in Jira's Development panel, which is wanted. A PR may resolve more than one ticket; list each resolved key.
+Tickets RELATED but NOT resolved here (escalations, references to older tickets) must NOT link: in the sections above/below and in commit messages, write them with an underscore (OPIK_7000) and paste no Jira URL (the URL contains the hyphenated key and links anyway). See CONTRIBUTING.md.
+-->
+
+
 ## AI-WATERMARK
 
 AI-WATERMARK: [yes|no]
