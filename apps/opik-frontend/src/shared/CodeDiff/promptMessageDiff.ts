@@ -8,6 +8,9 @@
  * line by line).
  */
 
+import isArray from "lodash/isArray";
+import isObject from "lodash/isObject";
+
 import {
   OpenAIMessage,
   extractMessageContent,
@@ -30,13 +33,34 @@ export type RoleDiffRow = {
   currentContent: string;
 };
 
+/**
+ * Text of a message. `extractMessageContent` only pulls `type: "text"` blocks,
+ * so a media-only message (image/audio/video parts) would collapse to "" and
+ * render a blank card. When that happens, fall back to a "[type]" placeholder
+ * per block so the message is still represented in the diff.
+ */
+const messageContentToText = (content: OpenAIMessage["content"]): string => {
+  const text = extractMessageContent(content);
+  if (text || !isArray(content)) return text;
+
+  return content
+    .map((block) => {
+      const type =
+        isObject(block) && "type" in block
+          ? String((block as { type: unknown }).type)
+          : "content";
+      return `[${type}]`;
+    })
+    .join(" ");
+};
+
 const groupByRole = (messages: OpenAIMessage[]): Map<string, string> => {
   const map = new Map<string, string>();
   messages.forEach((msg) => {
     const existing = map.get(msg.role) ?? "";
     map.set(
       msg.role,
-      existing + (existing ? "\n" : "") + extractMessageContent(msg.content),
+      existing + (existing ? "\n" : "") + messageContentToText(msg.content),
     );
   });
   return map;

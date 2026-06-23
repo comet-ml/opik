@@ -34,6 +34,43 @@ describe("groupMessageContentByRole", () => {
     expect(groupMessageContentByRole(null)).toBeNull();
     expect(groupMessageContentByRole({ foo: "bar" })).toBeNull();
   });
+
+  it("emits a placeholder for media-only content instead of a blank card", () => {
+    const prompt = [
+      {
+        role: "user",
+        content: [
+          {
+            type: "image_url",
+            image_url: { url: "https://example.com/x.png" },
+          },
+        ],
+      },
+    ];
+
+    expect(groupMessageContentByRole(prompt)).toEqual([
+      { role: "user", content: "[image_url]" },
+    ]);
+  });
+
+  it("keeps text when a message mixes text and media", () => {
+    const prompt = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "describe this" },
+          {
+            type: "image_url",
+            image_url: { url: "https://example.com/x.png" },
+          },
+        ],
+      },
+    ];
+
+    expect(groupMessageContentByRole(prompt)).toEqual([
+      { role: "user", content: "describe this" },
+    ]);
+  });
 });
 
 describe("buildRoleDiffRows", () => {
