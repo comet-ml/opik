@@ -322,7 +322,7 @@ run_db_migrations() {
     # Set the database connection environment variables for MySQL migrations (using dynamic port)
     # Note: STATE_DB_URL format is "host:port/database?params" - the jdbc:mysql:// prefix is added by config.yml
     export STATE_DB_DATABASE_NAME="opik"
-    export STATE_DB_URL="localhost:${MYSQL_PORT}/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true"
+    export STATE_DB_URL="localhost:${MYSQL_PORT}/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true"
     log_debug "MySQL connection: localhost:${MYSQL_PORT}"
     if java -jar "$JAR_FILE" db migrate config.yml; then
         log_success "MySQL migrations completed successfully"
@@ -664,7 +664,7 @@ start_backend() {
     # Set worktree-specific ports for backend to connect to infrastructure
     export SERVER_APPLICATION_PORT="$BACKEND_PORT"
     export SERVER_ADMIN_PORT="$BACKEND_ADMIN_PORT"
-    export STATE_DB_URL="localhost:${MYSQL_PORT}/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true"
+    export STATE_DB_URL="localhost:${MYSQL_PORT}/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true"
     export REDIS_URL="${REDIS_URL:-redis://:opik@localhost:${REDIS_PORT}/0}"
     export ANALYTICS_DB_PORT="${CLICKHOUSE_HTTP_PORT}"
 
