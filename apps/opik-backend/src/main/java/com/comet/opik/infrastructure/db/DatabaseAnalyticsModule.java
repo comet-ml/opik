@@ -21,6 +21,13 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
     public static final String READ_ONLY_FREE_FORM_SQL_CLICKHOUSE_CLIENT = "readOnlyFreeFormSqlClickHouseClient";
     public static final String CLICKHOUSE_HEALTH_CHECK_TIMEOUT = "clickhouse_health_check_timeout";
 
+    // Bounds for the read-only free-form SQL client (caller-supplied queries). socket > query
+    // execution cap (DAO) so the server-side limit fires first; connection-request timeout fails
+    // fast when the pool is saturated instead of hanging the request (and the whole instance).
+    private static final int READ_ONLY_FREE_FORM_SQL_MAX_CONNECTIONS = 20;
+    private static final Duration READ_ONLY_FREE_FORM_SQL_CONNECTION_REQUEST_TIMEOUT = Duration.seconds(10);
+    private static final Duration READ_ONLY_FREE_FORM_SQL_SOCKET_TIMEOUT = Duration.seconds(120);
+
     private transient DatabaseAnalyticsFactory databaseAnalyticsFactory;
     private transient ConnectionFactory connectionFactory;
     private transient Client clickHouseClient;
@@ -69,6 +76,12 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
         factory.setDatabaseName(main.getDatabaseName());
         factory.setUsername(credentials.getUsername());
         factory.setPassword(credentials.getPassword());
+        // Bound this client: caller-supplied free-form SQL must not be able to pin connections or
+        // exhaust the pool indefinitely (a stuck query would otherwise wedge ClickHouse access for
+        // the whole instance until restart). Pairs with the per-query max_execution_time in the DAO.
+        factory.setClientMaxConnections(READ_ONLY_FREE_FORM_SQL_MAX_CONNECTIONS);
+        factory.setClientConnectionRequestTimeout(READ_ONLY_FREE_FORM_SQL_CONNECTION_REQUEST_TIMEOUT);
+        factory.setClientSocketTimeout(READ_ONLY_FREE_FORM_SQL_SOCKET_TIMEOUT);
         return factory.buildClient();
     }
 

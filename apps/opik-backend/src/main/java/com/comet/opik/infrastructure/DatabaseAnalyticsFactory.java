@@ -11,6 +11,7 @@ import lombok.Data;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -36,6 +37,13 @@ public class DatabaseAnalyticsFactory {
     private @NotBlank String databaseName;
     private String queryParameters;
     private Duration healthCheckTimeout = Duration.seconds(1);
+
+    // V2 client bounds, applied in buildClient() only when set. Left null for the shared
+    // (bulk-insert) client to preserve library defaults; set on the read-only free-form SQL
+    // client so caller-supplied queries can't pin connections or saturate the pool indefinitely.
+    private Integer clientMaxConnections;
+    private Duration clientConnectionRequestTimeout;
+    private Duration clientSocketTimeout;
 
     public ConnectionFactory build() {
         var options = queryParameters == null ? "" : "?%s".formatted(queryParameters);
@@ -80,6 +88,17 @@ public class DatabaseAnalyticsFactory {
         // are still returned by parseQueryParameters() for tests/observability.
         ParsedQueryParameters parsed = parseQueryParameters(queryParameters);
         parsed.serverSettings().forEach(builder::serverSetting);
+
+        if (clientMaxConnections != null) {
+            builder.setMaxConnections(clientMaxConnections);
+        }
+        if (clientConnectionRequestTimeout != null) {
+            builder.setConnectionRequestTimeout(clientConnectionRequestTimeout.toMilliseconds(), ChronoUnit.MILLIS);
+        }
+        if (clientSocketTimeout != null) {
+            builder.setSocketTimeout(clientSocketTimeout.toMilliseconds(), ChronoUnit.MILLIS);
+        }
+
         return builder.build();
     }
 
