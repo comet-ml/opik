@@ -212,16 +212,29 @@ def _spans_trace_id_range_filter(trace_ids) -> Optional[str]:
     Returns ``None`` (unfiltered scan, prior behaviour) when the set is empty or
     any id is not a UUIDv7.
     """
+    import uuid
+
     from opik.api_objects import opik_query_language
 
-    ids = [t for t in trace_ids if t]
-    if not ids:
+    # Derive the timestamp per id from the parsed UUID rather than lexicographic
+    # min/max over raw strings: ids may arrive non-canonical (uppercase or
+    # hyphenless, e.g. preset/custom trace ids), which breaks string ordering and
+    # could yield a too-narrow bound that drops a matched trace's spans (the
+    # client-side membership check can only discard, never recover).
+    ms_values = []
+    for t in trace_ids:
+        if not t:
+            continue
+        try:
+            parsed = uuid.UUID(str(t))
+        except ValueError:
+            return None  # non-UUID id: don't risk an incorrect bound
+        if parsed.version != 7:
+            return None  # non-UUIDv7: timestamp prefix isn't meaningful
+        ms_values.append(parsed.int >> 80)  # UUIDv7: top 48 bits = unix ms
+    if not ms_values:
         return None
-    try:
-        lo_ms = int(min(ids).replace("-", "")[:12], 16)
-        hi_ms = int(max(ids).replace("-", "")[:12], 16)
-    except ValueError:
-        return None  # non-UUIDv7 ids: don't risk an incorrect bound
+    lo_ms, hi_ms = min(ms_values), max(ms_values)
 
     def _floor_uuid7(ms: int) -> str:
         h = f"{max(ms, 0):012x}"
