@@ -8,6 +8,7 @@ import jakarta.ws.rs.client.Client;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.hc.client5.http.impl.ConnectionShutdownException;
 import org.glassfish.jersey.client.ClientProperties;
 import ru.vyarus.dropwizard.guice.module.installer.feature.health.NamedHealthCheck;
 
@@ -76,6 +77,12 @@ public class AuthHttpClientHealthCheck extends NamedHealthCheck {
 
     static boolean isConnectionPoolShutDown(Throwable throwable) {
         for (Throwable cause = throwable; cause != null && cause != cause.getCause(); cause = cause.getCause()) {
+            // ConnectionShutdownException is the direct httpclient5 shutdown signal but carries a null message, so it
+            // must be matched by type. The message match stays as a fallback for the pool-level
+            // IllegalStateException("Connection pool shut down") thrown by StrictConnPool.lease().
+            if (cause instanceof ConnectionShutdownException) {
+                return true;
+            }
             if (cause instanceof IllegalStateException && cause.getMessage() != null
                     && cause.getMessage().toLowerCase(Locale.ROOT).contains(DEAD_POOL_MARKER)) {
                 return true;

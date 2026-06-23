@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.auth;
 
 import jakarta.ws.rs.ProcessingException;
+import org.apache.hc.client5.http.impl.ConnectionShutdownException;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -16,6 +17,8 @@ class AuthHttpClientHealthCheckTest {
     static Stream<Arguments> exceptions() {
         return Stream.of(
                 Arguments.of(new IllegalStateException("Connection pool shut down"), true),
+                Arguments.of(new ConnectionShutdownException(), true),
+                Arguments.of(new ProcessingException(new ConnectionShutdownException()), true),
                 Arguments.of(new ProcessingException(new IllegalStateException("Connection pool shut down")), true),
                 Arguments.of(new RuntimeException("wrapper",
                         new ProcessingException(new IllegalStateException("Connection pool shut down"))), true),
