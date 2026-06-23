@@ -196,23 +196,66 @@ def _fetch_traces_page(
     )
 
 
+def _spans_trace_id_range_filter(trace_ids) -> Optional[str]:
+    """Build a parsed (JSON) spans filter bounding the scan to the trace_id
+    range covering the matched traces.
+
+    Spans are sorted by ``(workspace_id, project_id, trace_id, ...)``, so a
+    ``trace_id`` range lets the backend prune by primary key instead of paging
+    through every span in the project (which never completes for large
+    projects). ``trace_id`` is a STRING_EXACT field that only supports strict
+    ``>`` / ``<`` (``>=`` / ``<=`` are rejected by the backend), so we widen the
+    bounds by 1 ms on each side via the UUIDv7 timestamp prefix. Callers still
+    filter spans by exact trace_id membership, so the range only needs to be a
+    correct *superset*.
+
+    Returns ``None`` (unfiltered scan, prior behaviour) when the set is empty or
+    any id is not a UUIDv7.
+    """
+    from opik.api_objects import opik_query_language
+
+    ids = [t for t in trace_ids if t]
+    if not ids:
+        return None
+    try:
+        lo_ms = int(min(ids).replace("-", "")[:12], 16)
+        hi_ms = int(max(ids).replace("-", "")[:12], 16)
+    except ValueError:
+        return None  # non-UUIDv7 ids: don't risk an incorrect bound
+
+    def _floor_uuid7(ms: int) -> str:
+        h = f"{max(ms, 0):012x}"
+        return f"{h[:8]}-{h[8:12]}-0000-0000-000000000000"
+
+    lower = _floor_uuid7(lo_ms - 1)  # strictly < min(trace_id)
+    upper = _floor_uuid7(hi_ms + 1)  # strictly > max(trace_id)
+    return opik_query_language.OpikQueryLanguage.for_spans(
+        f'trace_id > "{lower}" AND trace_id < "{upper}"'
+    ).parsed_filters
+
+
 @_export_rest_retry
 def _fetch_spans_page(
     client: opik.Opik,
     project_name: str,
     page: int,
     page_size: int,
+    parsed_filter: Optional[str] = None,
 ) -> Any:
-    """Fetch one page of all spans for a project (no trace_id filter).
+    """Fetch one page of spans for a project.
 
     Using GET /v1/private/spans avoids the much stricter rate limit on
     POST /v1/private/spans/search.  Each span includes its trace_id so
     callers can group client-side.
+
+    ``parsed_filter`` (parsed OQL JSON) optionally bounds the scan by
+    ``trace_id`` range so the backend prunes by primary key.
     """
     return client.rest_client.spans.get_spans_by_project(
         project_name=project_name,
         page=page,
         size=page_size,
+        filters=parsed_filter,
         truncate=False,
     )
 
@@ -606,6 +649,13 @@ def export_traces(
             if progress and task is not None:
                 progress.update(task, description="Fetching spans...")
 
+            # Bound the span scan to the trace_id range of the matched traces so
+            # the backend prunes by primary key instead of paging every span in
+            # the project. Exactness is still guaranteed by the membership check
+            # (`tid in spans_by_trace_id`) below, so this only needs to be a
+            # superset of the matched trace_ids.
+            spans_filter = _spans_trace_id_range_filter(traces_to_fetch.keys())
+
             span_page = 1
             span_consecutive_failures = 0
 
@@ -614,7 +664,7 @@ def export_traces(
                     debug_print(f"DEBUG: Fetching span page {span_page}", debug)
                 try:
                     span_result = _fetch_spans_page(
-                        client, project_name, span_page, page_size
+                        client, project_name, span_page, page_size, spans_filter
                     )
                     span_consecutive_failures = 0
                 except (
