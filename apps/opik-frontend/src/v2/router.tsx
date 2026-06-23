@@ -26,6 +26,7 @@ import EmptyPageLayout from "@/v2/layout/EmptyPageLayout/EmptyPageLayout";
 import ProjectPage from "@/v2/pages/ProjectPage/ProjectPage";
 import ProjectsPage from "@/v2/pages/ProjectsPage/ProjectsPage";
 import LogsPage from "@/v2/pages/LogsPage/LogsPage";
+import SignalsPage from "@/v2/pages/SignalsPage/SignalsPage";
 import RedirectProjects from "@/v2/redirect/RedirectProjects";
 import RedirectDatasets from "@/v2/redirect/RedirectDatasets";
 import { createV1RedirectRoutes } from "@/v2/redirect/v1RedirectConfig";
@@ -249,6 +250,16 @@ const logsRoute = createRoute({
   component: LogsPage,
   staticData: {
     title: "Logs",
+  },
+});
+
+// ----------- diagnostics (project-scoped)
+const diagnosticsRoute = createRoute({
+  path: "/diagnostics",
+  getParentRoute: () => projectScopedRoute,
+  component: SignalsPage,
+  staticData: {
+    title: "Diagnostics",
   },
 });
 
@@ -653,6 +664,7 @@ const routeTree = rootRoute.addChildren([
           projectHomeRoute,
           ollieRoute,
           logsRoute,
+          diagnosticsRoute,
           projectDashboardsRoute.addChildren([projectDashboardsIndexRoute]),
           tracesRedirectRoute,
           experimentsRoute.addChildren([
