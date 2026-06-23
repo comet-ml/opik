@@ -22,6 +22,7 @@ def _get_provider(openai_client: OpenAIClient) -> str:
 def track_openai(
     openai_client: OpenAIClient,
     project_name: Optional[str] = None,
+    provider: Optional[str] = None,
 ) -> OpenAIClient:
     """Adds Opik tracking wrappers to an OpenAI client.
 
@@ -46,6 +47,12 @@ def track_openai(
     Args:
         openai_client: An instance of OpenAI or AsyncOpenAI client.
         project_name: The name of the project to log data.
+        provider: The provider name to record on every LLM span created by the
+            integration. Useful for OpenAI-compatible APIs (e.g. Together,
+            OpenRouter, vLLM) where the default value derived from the client's
+            base URL is not descriptive enough. When not provided, the provider
+            is inferred from the client's base URL ("openai" for api.openai.com,
+            otherwise the base URL host).
 
     Returns:
         The modified OpenAI client with Opik tracking enabled.
@@ -55,28 +62,33 @@ def track_openai(
 
     openai_client.opik_tracked = True
 
-    _patch_openai_chat_completions(openai_client, project_name)
+    resolved_provider = (
+        provider if provider is not None else _get_provider(openai_client)
+    )
+
+    _patch_openai_chat_completions(openai_client, resolved_provider, project_name)
 
     if hasattr(openai_client, "responses"):
-        _patch_openai_responses(openai_client, project_name)
+        _patch_openai_responses(openai_client, resolved_provider, project_name)
 
     if hasattr(openai_client, "videos"):
-        _patch_openai_videos(openai_client, project_name)
+        _patch_openai_videos(openai_client, resolved_provider, project_name)
 
     if hasattr(openai_client, "audio"):
-        _patch_openai_audio(openai_client, project_name)
+        _patch_openai_audio(openai_client, resolved_provider, project_name)
 
     return openai_client
 
 
 def _patch_openai_chat_completions(
     openai_client: OpenAIClient,
+    provider: str,
     project_name: Optional[str] = None,
 ) -> None:
     chat_completions_decorator_factory = (
         openai_chat_completions_decorator.OpenaiChatCompletionsTrackDecorator()
     )
-    chat_completions_decorator_factory.provider = _get_provider(openai_client)
+    chat_completions_decorator_factory.provider = provider
 
     completions_create_decorator = chat_completions_decorator_factory.track(
         type="llm",
@@ -127,6 +139,7 @@ def _patch_openai_chat_completions(
 
 def _patch_openai_responses(
     openai_client: OpenAIClient,
+    provider: str,
     project_name: Optional[str] = None,
 ) -> None:
     from . import (
@@ -137,7 +150,7 @@ def _patch_openai_responses(
     responses_decorator_factory = (
         openai_responses_decorator.OpenaiResponsesTrackDecorator()
     )
-    responses_decorator_factory.provider = _get_provider(openai_client)
+    responses_decorator_factory.provider = provider
 
     if hasattr(openai_client.responses, "create"):
         responses_create_decorator = responses_decorator_factory.track(
@@ -164,11 +177,11 @@ def _patch_openai_responses(
 
 def _patch_openai_videos(
     openai_client: OpenAIClient,
+    provider: str,
     project_name: Optional[str] = None,
 ) -> None:
     from . import videos
 
-    provider = _get_provider(openai_client)
     create_decorator_factory = videos.VideosCreateTrackDecorator(provider=provider)
     download_decorator_factory = videos.VideosDownloadTrackDecorator()
 
@@ -247,11 +260,11 @@ def _patch_openai_videos(
 
 def _patch_openai_audio(
     openai_client: OpenAIClient,
+    provider: str,
     project_name: Optional[str] = None,
 ) -> None:
     from . import audio
 
-    provider = _get_provider(openai_client)
     tts_create_decorator_factory = audio.TTSCreateTrackDecorator(provider=provider)
     tts_streaming_decorator_factory = audio.TTSStreamingResponseCreateTrackDecorator(
         provider=provider,
