@@ -142,6 +142,11 @@ public class GetAttachmentTool implements ToolExecutor {
                     + " or video file and cannot be loaded.").formatted(args.fileName, mime)));
         }
 
+        if (info.fileSize() == 0) {
+            return Mono.just(ToolArgs.errorJson(("Attachment '%s' cannot be loaded because its reported file size is 0." )
+                    .formatted(args.fileName)));
+        }
+
         if (config.getS3Config().isMinIO()) {
             return fetchFromMinIO(info, mime, category, ctx);
         }
