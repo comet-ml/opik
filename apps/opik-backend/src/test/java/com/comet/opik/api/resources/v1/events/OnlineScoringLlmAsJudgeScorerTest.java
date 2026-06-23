@@ -648,7 +648,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
             return new TraceToScoreLlmAsJudge(
                     trace, UUID.randomUUID(), UUID.randomUUID().toString(), code,
                     UUID.randomUUID().toString(), UUID.randomUUID().toString(), null, Map.of(),
-                    PromptType.MUSTACHE, null);
+                    PromptType.MUSTACHE, null, null);
         }
     }
 
