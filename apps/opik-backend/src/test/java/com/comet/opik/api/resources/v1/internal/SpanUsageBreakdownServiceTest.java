@@ -5,6 +5,7 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.SpansCountResponse;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceCountResponse;
+import com.comet.opik.api.UsageByWorkspaceProjectUserResponse;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -60,7 +61,7 @@ import static org.awaitility.Awaitility.await;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @Slf4j
 @ExtendWith(DropwizardAppExtensionProvider.class)
-class UsageResourceTest {
+class SpanUsageBreakdownServiceTest {
 
     public static final String USAGE_RESOURCE_URL_TEMPLATE = "%s/v1/internal/usage";
     public static final String TRACE_RESOURCE_URL_TEMPLATE = "%s/v1/private/traces";
@@ -221,6 +222,50 @@ class UsageResourceTest {
                 var workspaceSpanCountToday = getMatch(response.workspacesSpansCount(),
                         workspaceCount -> workspaceCount.workspace().equals(workspaceIdForToday));
                 assertThat(workspaceSpanCountToday).isEmpty();
+            }
+        }
+
+        @Test
+        @DisplayName("Get span usage breakdown by workspace, project and user for previous day")
+        void spanBreakdownForWorkspace() {
+            var projectName = "breakdown-%s".formatted(UUID.randomUUID());
+            var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class)
+                    .stream()
+                    .map(span -> span.toBuilder().id(null).projectName(projectName).build())
+                    .toList();
+
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            int spansCount = setupEntitiesForWorkspace(workspaceId, apiKey, spans, SPANS_RESOURCE_URL_TEMPLATE);
+            // Backdate to the previous day so the rows land in the yesterday window of the count query
+            subtractClickHouseTableRecordsCreatedAtOneDay("spans").accept(workspaceId);
+
+            // Spans left at today in another workspace must be excluded
+            var workspaceIdForToday = UUID.randomUUID().toString();
+            setupEntitiesForWorkspace(workspaceIdForToday, UUID.randomUUID().toString(), spans,
+                    SPANS_RESOURCE_URL_TEMPLATE);
+
+            try (var actualResponse = client.target(USAGE_RESOURCE_URL_TEMPLATE.formatted(baseURI))
+                    .path("/workspace-span-counts-breakdown")
+                    .request()
+                    .get()) {
+
+                var response = validateResponse(actualResponse, UsageByWorkspaceProjectUserResponse.class);
+
+                var rows = response.breakdown().stream()
+                        .filter(row -> row.workspaceId().equals(workspaceId))
+                        .toList();
+
+                // All spans share one project and one user, so a single breakdown row is expected
+                assertThat(rows).hasSize(1);
+                var row = rows.get(0);
+                assertThat(row.projectName()).isEqualTo(projectName);
+                assertThat(row.user()).isEqualTo(USER);
+                assertThat(row.count()).isEqualTo(spansCount);
+                assertThat(row.projectId()).isNotNull();
+
+                assertThat(response.breakdown())
+                        .noneMatch(r -> r.workspaceId().equals(workspaceIdForToday));
             }
         }
 
