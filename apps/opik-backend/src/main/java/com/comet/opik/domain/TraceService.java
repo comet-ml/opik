@@ -158,7 +158,8 @@ class TraceServiceImpl implements TraceService {
                                     .doOnSuccess(__ -> {
                                         var savedTrace = processedTrace.toBuilder().projectId(project.id())
                                                 .projectName(projectName).build();
-                                        eventBus.post(new TracesCreated(List.of(savedTrace), workspaceId, userName));
+                                        eventBus.post(new TracesCreated(List.of(savedTrace), workspaceId, userName,
+                                                workspaceName));
                                     }));
                 }));
     }
@@ -205,7 +206,8 @@ class TraceServiceImpl implements TraceService {
                             .flatMap(traces -> template
                                     .nonTransaction(connection -> dao.batchInsert(traces, connection))
                                     .doOnSuccess(__ -> {
-                                        eventBus.post(new TracesCreated(traces, workspaceId, userName));
+                                        eventBus.post(new TracesCreated(traces, workspaceId, userName,
+                                                workspaceName));
                                     }));
                 }));
     }
@@ -331,7 +333,8 @@ class TraceServiceImpl implements TraceService {
                                                 Set.of(id),
                                                 ctx.get(RequestContext.WORKSPACE_ID),
                                                 ctx.get(RequestContext.USER_NAME),
-                                                traceUpdate))))))
+                                                traceUpdate,
+                                                ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "")))))))
                         .then()));
     }
 
@@ -344,6 +347,7 @@ class TraceServiceImpl implements TraceService {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
+            String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "");
             return dao.getProjectIdsByTraceIds(new ArrayList<>(batchUpdate.ids()))
                     .flatMap(traceToProjectMap -> {
                         var projectIds = Set.copyOf(traceToProjectMap.values());
@@ -352,7 +356,7 @@ class TraceServiceImpl implements TraceService {
                                 .doOnSuccess(__ -> {
                                     log.info("Completed batch update for '{}' traces", batchUpdate.ids().size());
                                     eventBus.post(new TracesUpdated(projectIds, batchUpdate.ids(), workspaceId,
-                                            userName, batchUpdate.update()));
+                                            userName, batchUpdate.update(), workspaceName));
                                 });
                     });
         });
