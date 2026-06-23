@@ -137,6 +137,11 @@ health:
       type: ready
       initialState: false
       schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
+    - name: auth_http_client
+      critical: true
+      type: alive
+      initialState: false
+      schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
 
 # Configuration for distributed locking using redis
 distributedLock:

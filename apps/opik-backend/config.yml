@@ -143,6 +143,13 @@ health:
     - name: mysql
       critical: true
       type: ready
+    # Gates liveness (type: alive) so a pod whose shared outbound HTTP pool has been shut down gets restarted and
+    # recreates the pool. A shut-down pool is unrecoverable without a restart, so removing it from rotation isn't
+    # enough. Fails only on the local "Connection pool shut down" condition, never on upstream auth errors, so an
+    # auth-service blip cannot restart-storm the fleet.
+    - name: auth_http_client
+      critical: true
+      type: alive
 
 # Configuration for distributed locking using redis
 distributedLock:
