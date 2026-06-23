@@ -43,7 +43,7 @@ import os
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Set
+from typing import Dict, Optional, Set
 
 LOGGER = logging.getLogger(__name__)
 
@@ -110,9 +110,22 @@ class MigrationManifest:
         Defaults to ``DEFAULT_BATCH_SIZE`` (50).
     """
 
-    def __init__(self, base_path: Path, batch_size: int = DEFAULT_BATCH_SIZE) -> None:
+    def __init__(
+        self,
+        base_path: Path,
+        batch_size: int = DEFAULT_BATCH_SIZE,
+        manifest_path: Optional[Path] = None,
+    ) -> None:
+        # base_path is the root that file keys are stored relative to (e.g. the
+        # exported project dir). manifest_path lets the SQLite file live
+        # elsewhere — e.g. a per-destination subdir — without changing how files
+        # are keyed; defaults to ``base_path/migration_manifest.db``.
         self.base_path = base_path
-        self.manifest_file = base_path / MANIFEST_FILENAME
+        self.manifest_file = (
+            manifest_path
+            if manifest_path is not None
+            else base_path / MANIFEST_FILENAME
+        )
         self._batch_size = batch_size
 
         # In-memory write buffers — flushed in one transaction per batch.
@@ -128,7 +141,7 @@ class MigrationManifest:
     # ------------------------------------------------------------------
 
     def _open(self) -> sqlite3.Connection:
-        self.base_path.mkdir(parents=True, exist_ok=True)
+        self.manifest_file.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(
             str(self.manifest_file),
             # autocommit mode — we manage every transaction explicitly with
@@ -146,8 +159,12 @@ class MigrationManifest:
         return conn
 
     @classmethod
-    def exists(cls, base_path: Path) -> bool:
-        return (base_path / MANIFEST_FILENAME).exists()
+    def exists(cls, base_path: Path, manifest_path: Optional[Path] = None) -> bool:
+        return (
+            manifest_path
+            if manifest_path is not None
+            else base_path / MANIFEST_FILENAME
+        ).exists()
 
     # ------------------------------------------------------------------
     # Status
