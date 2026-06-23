@@ -15,7 +15,7 @@ import {
 import { syntaxTree } from "@codemirror/language";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { ListFilter } from "lucide-react";
+import { Check, ListFilter } from "lucide-react";
 import { JsonValue } from "@/types/shared";
 import {
   QuickFilterMode,
@@ -31,23 +31,33 @@ const FILTER_ICON = renderToStaticMarkup(
   createElement(ListFilter, { size: 14, strokeWidth: 2.25 }),
 );
 
+const CHECK_ICON = renderToStaticMarkup(
+  createElement(Check, { size: 12, strokeWidth: 2.5 }),
+);
+
 const TOOLTIP_TEXT = "Filter by this attribute";
+const TOOLTIP_APPLIED_TEXT = "Filter applied";
 
 // A single tooltip element portaled to <body> so CodeMirror's overflow never
 // clips it (the same reason the app's React tooltips render through a portal).
-// It uses fixed positioning and flips above/below to stay on-screen.
+// It uses fixed positioning and flips above/below to stay on-screen. The same
+// element serves both the hover hint and the post-click "Filter applied"
+// confirmation, which reveals a leading success-green check icon.
 let quickFilterTooltip: HTMLElement | null = null;
+let quickFilterTooltipIcon: HTMLElement | null = null;
+let quickFilterTooltipText: HTMLElement | null = null;
 
 const getQuickFilterTooltip = (): HTMLElement => {
   if (!quickFilterTooltip) {
     quickFilterTooltip = document.createElement("div");
-    quickFilterTooltip.textContent = TOOLTIP_TEXT;
     // Matches the app's default tooltip (shadcn TooltipContent): light
     // soft-background, secondary text, border, p-2, rounded-md, text-xs,
     // shadow-md. Tokens are theme-aware, so it adapts in dark mode too.
     Object.assign(quickFilterTooltip.style, {
       position: "fixed",
       display: "none",
+      alignItems: "center",
+      gap: "2px",
       zIndex: "9999",
       background: "hsl(var(--soft-background))",
       color: "hsl(var(--foreground-secondary))",
@@ -63,15 +73,27 @@ const getQuickFilterTooltip = (): HTMLElement => {
       boxShadow:
         "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1)",
     });
+
+    // Success check shown only in the "applied" state.
+    quickFilterTooltipIcon = document.createElement("span");
+    quickFilterTooltipIcon.innerHTML = CHECK_ICON;
+    Object.assign(quickFilterTooltipIcon.style, {
+      display: "none",
+      alignItems: "center",
+      color: "hsl(var(--success))",
+    });
+
+    quickFilterTooltipText = document.createElement("span");
+    quickFilterTooltipText.textContent = TOOLTIP_TEXT;
+
+    quickFilterTooltip.append(quickFilterTooltipIcon, quickFilterTooltipText);
     document.body.appendChild(quickFilterTooltip);
   }
   return quickFilterTooltip;
 };
 
-const showQuickFilterTooltip = (anchor: HTMLElement) => {
+const positionQuickFilterTooltip = (anchor: HTMLElement) => {
   const tooltip = getQuickFilterTooltip();
-  tooltip.style.display = "block";
-
   const anchorRect = anchor.getBoundingClientRect();
   const tooltipRect = tooltip.getBoundingClientRect();
   // Prefer above the icon; flip below only when too close to the viewport top.
@@ -89,8 +111,33 @@ const showQuickFilterTooltip = (anchor: HTMLElement) => {
   tooltip.style.left = `${left}px`;
 };
 
+// Hover hint: plain "Filter by this attribute" copy, no icon.
+const showQuickFilterTooltip = (anchor: HTMLElement) => {
+  const tooltip = getQuickFilterTooltip();
+  if (quickFilterTooltipIcon) quickFilterTooltipIcon.style.display = "none";
+  if (quickFilterTooltipText) quickFilterTooltipText.textContent = TOOLTIP_TEXT;
+  tooltip.style.display = "flex";
+  positionQuickFilterTooltip(anchor);
+};
+
+// Post-click confirmation: success check + "Filter applied" copy.
+const markQuickFilterApplied = (anchor: HTMLElement) => {
+  const tooltip = getQuickFilterTooltip();
+  if (quickFilterTooltipIcon)
+    quickFilterTooltipIcon.style.display = "inline-flex";
+  if (quickFilterTooltipText)
+    quickFilterTooltipText.textContent = TOOLTIP_APPLIED_TEXT;
+  tooltip.style.display = "flex";
+  positionQuickFilterTooltip(anchor);
+};
+
 const hideQuickFilterTooltip = () => {
-  if (quickFilterTooltip) quickFilterTooltip.style.display = "none";
+  if (!quickFilterTooltip) return;
+  quickFilterTooltip.style.display = "none";
+  // Reset to the hint baseline so the "applied" confirmation is strictly
+  // transient and never resurfaces stale on a later show / after teardown.
+  if (quickFilterTooltipIcon) quickFilterTooltipIcon.style.display = "none";
+  if (quickFilterTooltipText) quickFilterTooltipText.textContent = TOOLTIP_TEXT;
 };
 
 // Highlights the attribute value that the hovered/focused filter icon would
@@ -156,6 +203,9 @@ class QuickFilterWidget extends WidgetType {
       event.preventDefault();
       event.stopPropagation();
       this.onFilter(this.path, this.value);
+      // The icon is still hovered/focused after the click, so swap the live
+      // tooltip to the "Filter applied" confirmation in place.
+      markQuickFilterApplied(button);
     };
     button.onmousedown = activate;
     button.onkeydown = (event) => {
