@@ -54,6 +54,11 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
     private static final String SETTING_WORKSPACE_ID = "SQL_workspace_id";
     private static final String SETTING_PROJECT_ID = "SQL_project_id";
 
+    // ClickHouse-side cap so a caller's query can't run unbounded and pin its connection
+    // (surfaced as code 159 → clean 4xx by FreeFormSqlQueryService). Below the client socket
+    // timeout so the server-side limit fires first.
+    private static final int MAX_EXECUTION_TIME_SECONDS = 60;
+
     private final Client readOnlyClient;
 
     @Inject
@@ -65,7 +70,7 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
     @Override
     @WithSpan
     public CompletableFuture<List<String>> explainAst(@NonNull String query) {
-        return readOnlyClient.queryRecords(EXPLAIN_AST_PREFIX + query)
+        return readOnlyClient.queryRecords(EXPLAIN_AST_PREFIX + query, boundedSettings())
                 .thenApply(FreeFormSqlQueryDAOImpl::readNodeLabels);
     }
 
@@ -73,12 +78,16 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
     @WithSpan
     public CompletableFuture<FreeFormSqlResult> execute(@NonNull String workspaceId, @NonNull UUID projectId,
             @NonNull String query) {
-        var settings = new QuerySettings()
+        var settings = boundedSettings()
                 .serverSetting(SETTING_WORKSPACE_ID, workspaceId)
                 .serverSetting(SETTING_PROJECT_ID, projectId.toString());
 
         return readOnlyClient.queryRecords(query, settings)
                 .thenApply(FreeFormSqlQueryDAOImpl::readResult);
+    }
+
+    private static QuerySettings boundedSettings() {
+        return new QuerySettings().setMaxExecutionTime(MAX_EXECUTION_TIME_SECONDS);
     }
 
     /**
