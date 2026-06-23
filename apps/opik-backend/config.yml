@@ -16,8 +16,7 @@ logging:
 # https://www.dropwizard.io/en/stable/manual/configuration.html#database
 database:
   #  Default: jdbc:mysql://localhost:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
-  #  Description: The URL of the server. connectionTimeZone=UTC + forceConnectionTimeZoneToSession=true make Instant reads
-  #   (created_at, last_updated_at, ...) independent of the JVM default timezone; without them a non-UTC host shifts values.
+  #  Description: The URL of the server.
   url: ${STATE_DB_PROTOCOL:-jdbc:mysql://}${STATE_DB_URL:-localhost:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true}
   #  Default: opik
   #  Description: The username used to connect to the server
