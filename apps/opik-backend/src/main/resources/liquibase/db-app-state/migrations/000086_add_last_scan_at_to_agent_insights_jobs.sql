@@ -6,3 +6,4 @@ ALTER TABLE agent_insights_jobs
     ADD COLUMN last_scan_at TIMESTAMP(6) NULL DEFAULT NULL AFTER status;
 
 --rollback ALTER TABLE agent_insights_jobs DROP COLUMN last_scan_at;
+
