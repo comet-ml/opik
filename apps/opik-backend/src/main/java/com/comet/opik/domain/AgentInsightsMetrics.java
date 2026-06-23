@@ -30,12 +30,7 @@ public class AgentInsightsMetrics {
 
     public static final LongCounter REPORTS_ENQUEUED = METER
             .counterBuilder("opik_agent_insights_reports_enqueued_total")
-            .setDescription("Report runs enqueued onto the trigger queue, by trigger source")
-            .build();
-
-    public static final LongCounter TRIGGER_ERRORS = METER
-            .counterBuilder("opik_agent_insights_trigger_errors_total")
-            .setDescription("Failures enqueueing a report run, by trigger source")
+            .setDescription("Report run enqueue attempts onto the trigger queue, by trigger source and outcome")
             .build();
 
     public static final LongCounter REPORTS_TRIGGERED = METER
@@ -65,6 +60,8 @@ public class AgentInsightsMetrics {
     // so the counters/histogram reuse one immutable Attributes instance per outcome instead of allocating.
     public static final Attributes OUTCOME_SUCCESS = Attributes.of(OUTCOME, SUCCESS);
     public static final Attributes OUTCOME_FAILURE = Attributes.of(OUTCOME, FAILURE);
-    public static final Attributes TRIGGER_SCHEDULED = Attributes.of(TRIGGER, SCHEDULED);
-    public static final Attributes TRIGGER_MANUAL = Attributes.of(TRIGGER, MANUAL);
+    public static final Attributes ENQUEUE_SCHEDULED_SUCCESS = Attributes.of(TRIGGER, SCHEDULED, OUTCOME, SUCCESS);
+    public static final Attributes ENQUEUE_SCHEDULED_FAILURE = Attributes.of(TRIGGER, SCHEDULED, OUTCOME, FAILURE);
+    public static final Attributes ENQUEUE_MANUAL_SUCCESS = Attributes.of(TRIGGER, MANUAL, OUTCOME, SUCCESS);
+    public static final Attributes ENQUEUE_MANUAL_FAILURE = Attributes.of(TRIGGER, MANUAL, OUTCOME, FAILURE);
 }

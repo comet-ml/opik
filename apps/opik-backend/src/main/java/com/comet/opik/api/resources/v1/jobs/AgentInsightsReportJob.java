@@ -103,12 +103,12 @@ public class AgentInsightsReportJob extends Job {
                             .concatMap(job -> reportPublisher
                                     .enqueue(job.projectId(), job.workspaceId(), periodStart, periodEnd)
                                     .doOnNext(__ -> AgentInsightsMetrics.REPORTS_ENQUEUED.add(1,
-                                            AgentInsightsMetrics.TRIGGER_SCHEDULED))
+                                            AgentInsightsMetrics.ENQUEUE_SCHEDULED_SUCCESS))
                                     .then()
                                     .onErrorResume(e -> {
                                         // Per-job isolation: a failed enqueue must not skip the rest.
-                                        AgentInsightsMetrics.TRIGGER_ERRORS.add(1,
-                                                AgentInsightsMetrics.TRIGGER_SCHEDULED);
+                                        AgentInsightsMetrics.REPORTS_ENQUEUED.add(1,
+                                                AgentInsightsMetrics.ENQUEUE_SCHEDULED_FAILURE);
                                         log.error("Failed to enqueue Agent Insights run for project '{}'",
                                                 job.projectId(), e);
                                         return Mono.empty();

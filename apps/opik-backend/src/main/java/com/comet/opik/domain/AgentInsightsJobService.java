@@ -96,12 +96,12 @@ public class AgentInsightsJobService {
         reportPublisher.enqueue(job.projectId(), workspaceId, periodEnd.minus(TRIGGER_WINDOW), periodEnd)
                 .subscribe(
                         reportId -> {
-                            AgentInsightsMetrics.REPORTS_ENQUEUED.add(1, AgentInsightsMetrics.TRIGGER_MANUAL);
+                            AgentInsightsMetrics.REPORTS_ENQUEUED.add(1, AgentInsightsMetrics.ENQUEUE_MANUAL_SUCCESS);
                             log.info("Enqueued Agent Insights run reportId='{}' for project '{}'",
                                     reportId, projectId);
                         },
                         error -> {
-                            AgentInsightsMetrics.TRIGGER_ERRORS.add(1, AgentInsightsMetrics.TRIGGER_MANUAL);
+                            AgentInsightsMetrics.REPORTS_ENQUEUED.add(1, AgentInsightsMetrics.ENQUEUE_MANUAL_FAILURE);
                             log.error("Failed to enqueue Agent Insights run for project '{}'", projectId,
                                     error);
                         });
