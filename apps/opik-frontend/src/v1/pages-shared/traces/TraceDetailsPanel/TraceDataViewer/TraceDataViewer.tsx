@@ -42,8 +42,6 @@ import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 import ConfigurableFeedbackScoreTable from "./FeedbackScoreTable/ConfigurableFeedbackScoreTable";
 import { detectLLMMessages } from "@/shared/PrettyLLMMessage/llmMessages";
-import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { useUnifiedMedia } from "@/hooks/useUnifiedMedia";
 
 type TraceDataViewerProps = {
@@ -84,14 +82,10 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   );
   const hasSpanAgentGraph =
     Boolean(agentGraphData) && type !== TRACE_TYPE_FOR_TREE;
-  const showOptimizerPrompts = useIsFeatureEnabled(
-    FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED,
-  );
   const hasPrompts = useMemo(() => {
-    if (!showOptimizerPrompts) return false;
     const prompts = (data.metadata as Record<string, unknown>)?.opik_prompts;
     return Array.isArray(prompts) && prompts.length > 0;
-  }, [data.metadata, showOptimizerPrompts]);
+  }, [data.metadata]);
 
   const { media, transformedInput, transformedOutput } = useUnifiedMedia(data);
 

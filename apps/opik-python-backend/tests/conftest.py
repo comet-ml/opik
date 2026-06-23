@@ -1,27 +1,6 @@
-import pytest
+import os
+import sys
 
-from opik_backend import create_app
-
-
-@pytest.fixture()
-def app():
-    app = create_app(should_init_executor=False)
-    app.config.update({
-        "TESTING": True,
-    })
-
-    # other setup can go here
-
-    yield app
-
-    # clean up / reset resources here
-
-
-@pytest.fixture()
-def client(app):
-    return app.test_client()
-
-
-@pytest.fixture()
-def runner(app):
-    return app.test_cli_runner()
+# Put the tests/ dir on the path so both suites can `from llm_constants import ...`
+# regardless of whether pytest is invoked as `pytest tests/e2e` or `cd tests && pytest unit`.
+sys.path.insert(0, os.path.dirname(__file__))

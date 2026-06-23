@@ -47,12 +47,12 @@ jobs:
           pip install -r requirements.txt -r tests/test_requirements.txt
           pip install .
       
-      - name: Run Tests
+      - name: Run unit tests
         env:
           PYTHON_CODE_EXECUTOR_STRATEGY: process
           PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS: 10
         run: |
-          cd tests && pytest -v --junitxml=../test-results.xml
+          cd tests && pytest unit -v --durations=0 --junitxml=../test-results.xml
       
       - name: Publish Test Report
         uses: EnricoMi/publish-unit-test-result-action/linux@v2

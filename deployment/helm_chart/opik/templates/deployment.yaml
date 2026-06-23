@@ -172,47 +172,15 @@ spec:
           {{- end }}
           {{- with $value.livenessProbe }}
           livenessProbe:
-            {{- if and .path .port }}
-            {{- /* Backward compatibility: simplified path/port definition */}}
-            httpGet:
-              path: {{ .path }}
-              port: {{ .port }}
-              httpHeaders:
-                - name: Accept
-                  value: application/json
-            timeoutSeconds: 2
-            periodSeconds: 10
-            initialDelaySeconds: 0
-            successThreshold: 1
-            failureThreshold: 2
-            {{- else }}
-            {{- /* Full probe definition from values.yaml */}}
-            {{- toYaml . | nindent 12 }}
-            {{- end }}
+            {{- include "opik.probe" . | nindent 12 }}
           {{- end }}
           {{- with $value.readinessProbe }}
           readinessProbe:
-            {{- if and .path .port}}
-            {{- /* Backward compatibility: simplified path/port definition */}}
-            httpGet:
-              path: {{ .path }}
-              port: {{ .port }}
-              httpHeaders:
-                  - name: Accept
-                    value: application/json
-            timeoutSeconds: 2
-            periodSeconds: 10
-            initialDelaySeconds: {{ .initialDelaySeconds }}
-            successThreshold: 1
-            failureThreshold: 2
-            {{- else }}
-            {{- /* Full probe definition from values.yaml */}}
-            {{- toYaml . | nindent 12 }}
-            {{- end }}
+            {{- include "opik.probe" . | nindent 12 }}
           {{- end }}
           {{- with $value.startupProbe }}
           startupProbe:
-            {{- toYaml . | nindent 12 }}
+            {{- include "opik.probe" . | nindent 12 }}
           {{- end }}
           {{- with $value.resources }}
           resources:

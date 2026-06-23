@@ -46,53 +46,45 @@ class AiSpendMapper {
                 .build();
     }
 
-    SpendCompositionResponse composition(List<ModelLanesRow> inputRows, List<OutputModelRow> outputRows) {
+    /**
+     * Composition rows arrive as a flat (lane_key, model, tier, tokens) stream
+     * — both attributed blocks and the per-call unattributed residual fold into
+     * the same shape. Group by lane → per-model → pivot tier values to the
+     * tier columns of {@link ModelTiers}. Iterating {@link SpendLane#values()}
+     * and {@link OutputLane#values()} preserves the FE-facing display order
+     * regardless of how the DB returned the rows.
+     */
+    SpendCompositionResponse composition(List<CompositionRow> rows) {
+        Map<String, Map<String, long[]>> byLane = new LinkedHashMap<>();
+        for (CompositionRow row : rows) {
+            if (row.lane() == null || row.lane().isEmpty()) {
+                continue;
+            }
+            int tierIdx = tierIndex(row.tier());
+            if (tierIdx < 0) {
+                continue;
+            }
+            Map<String, long[]> byModel = byLane.computeIfAbsent(row.lane(), key -> new LinkedHashMap<>());
+            long[] tiers = byModel.computeIfAbsent(row.model() == null ? "" : row.model(), key -> new long[4]);
+            tiers[tierIdx] += row.tokens();
+        }
+
         List<SpendCompositionResponse.Lane> inputLanes = new ArrayList<>();
         long inputTotal = 0L;
         for (SpendLane lane : SpendLane.values()) {
-            List<ModelTiers> byModel = new ArrayList<>();
-            long laneTotal = 0L;
-            for (ModelLanesRow row : inputRows) {
-                LaneTiers tiers = row.lanes().getOrDefault(lane, LaneTiers.empty());
-                laneTotal += tiers.total();
-                addNonZero(byModel, row.model(), tiers.input(), tiers.cacheRead(), tiers.cacheCreation(),
-                        tiers.output());
-            }
-            inputLanes.add(SpendCompositionResponse.Lane.builder()
-                    .key(lane.getKey())
-                    .label(lane.getLabel())
-                    .totalTokens(laneTotal)
-                    .byModel(byModel)
-                    .hasBreakdown(lane.hasBreakdown())
-                    .build());
-            inputTotal += laneTotal;
-        }
-
-        Map<String, List<OutputModelRow>> outputByLane = new LinkedHashMap<>();
-        for (OutputModelRow row : outputRows) {
-            if (row.lane() != null && !row.lane().isEmpty()) {
-                outputByLane.computeIfAbsent(row.lane(), key -> new ArrayList<>()).add(row);
-            }
+            SpendCompositionResponse.Lane laneResponse = buildLane(lane.getKey(), lane.getLabel(),
+                    lane.hasBreakdown(), byLane.get(lane.getKey()));
+            inputLanes.add(laneResponse);
+            inputTotal += laneResponse.totalTokens();
         }
 
         List<SpendCompositionResponse.Lane> outputLanes = new ArrayList<>();
         long outputTotal = 0L;
         for (OutputLane lane : OutputLane.values()) {
-            List<OutputModelRow> rows = outputByLane.getOrDefault(lane.getKey(), List.of());
-            List<ModelTiers> byModel = new ArrayList<>();
-            long laneTotal = 0L;
-            for (OutputModelRow row : rows) {
-                laneTotal += row.tokens();
-                addNonZero(byModel, row.model(), 0L, 0L, 0L, row.tokens());
-            }
-            outputLanes.add(SpendCompositionResponse.Lane.builder()
-                    .key(lane.getKey())
-                    .label(lane.getLabel())
-                    .totalTokens(laneTotal)
-                    .byModel(byModel)
-                    .hasBreakdown(lane.hasBreakdown())
-                    .build());
-            outputTotal += laneTotal;
+            SpendCompositionResponse.Lane laneResponse = buildLane(lane.getKey(), lane.getLabel(),
+                    lane.hasBreakdown(), byLane.get(lane.getKey()));
+            outputLanes.add(laneResponse);
+            outputTotal += laneResponse.totalTokens();
         }
 
         return SpendCompositionResponse.builder()
@@ -102,6 +94,36 @@ class AiSpendMapper {
                         .key("claude_code")
                         .label("Claude Code")
                         .build()))
+                .build();
+    }
+
+    private SpendCompositionResponse.Lane buildLane(String key, String label, boolean hasBreakdown,
+            Map<String, long[]> byModelTiers) {
+        List<ModelTiers> byModel = new ArrayList<>();
+        long laneTotal = 0L;
+        if (byModelTiers != null) {
+            for (Map.Entry<String, long[]> entry : byModelTiers.entrySet()) {
+                long[] t = entry.getValue();
+                long sum = t[0] + t[1] + t[2] + t[3];
+                if (sum <= 0L) {
+                    continue;
+                }
+                laneTotal += sum;
+                byModel.add(ModelTiers.builder()
+                        .model(entry.getKey())
+                        .inputTokens(t[0])
+                        .cacheReadTokens(t[1])
+                        .cacheCreationTokens(t[2])
+                        .outputTokens(t[3])
+                        .build());
+            }
+        }
+        return SpendCompositionResponse.Lane.builder()
+                .key(key)
+                .label(label)
+                .totalTokens(laneTotal)
+                .byModel(byModel)
+                .hasBreakdown(hasBreakdown)
                 .build();
     }
 
@@ -194,6 +216,16 @@ class AiSpendMapper {
         return value == null ? null : value.doubleValue();
     }
 
+    private static int tierIndex(String tier) {
+        return switch (tier == null ? "" : tier) {
+            case "input" -> 0;
+            case "cache_read" -> 1;
+            case "cache_creation" -> 2;
+            case "output" -> 3;
+            default -> -1;
+        };
+    }
+
     record SummaryTierRow(String model, long inputCurrent, long cacheReadCurrent, long cacheCreationCurrent,
             long outputCurrent, long inputPrevious, long cacheReadPrevious, long cacheCreationPrevious,
             long outputPrevious) {
@@ -206,16 +238,8 @@ class AiSpendMapper {
         }
     }
 
-    record LaneTiers(long total, long input, long cacheRead, long cacheCreation, long output) {
-        static LaneTiers empty() {
-            return new LaneTiers(0L, 0L, 0L, 0L, 0L);
-        }
-    }
-
-    record ModelLanesRow(String model, Map<SpendLane, LaneTiers> lanes) {
-    }
-
-    record OutputModelRow(String lane, String model, long tokens) {
+    /** A row in the per-(lane, model, tier) composition stream. */
+    record CompositionRow(String lane, String model, String tier, long tokens) {
     }
 
     record BreakdownRow(String label, String model, long totalTokens, long definitionTokens, long usageTokens,

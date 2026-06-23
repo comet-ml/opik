@@ -24,6 +24,7 @@ import {
   extractMetricNameFromCode,
 } from "@/lib/optimizations";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
+import { updateProviderConfig } from "@/lib/modelUtils";
 import useDatasetSamplePreview from "./useDatasetSamplePreview";
 
 const getBreadcrumbTitle = (name: string) =>
@@ -177,11 +178,18 @@ export const useOptimizationsNewFormHandlers = () => {
         newProvider,
         newModel,
       );
+      // Strip params the model doesn't accept (e.g. temperature on models that
+      // deprecate it), matching the playground's reconciler.
+      const adjustedConfig =
+        updateProviderConfig(defaultConfig, {
+          model: newModel,
+          provider: newProvider,
+        }) ?? defaultConfig;
 
       form.setValue("modelName", newModel);
       form.setValue(
         "modelConfig",
-        defaultConfig as OptimizationConfigFormType["modelConfig"],
+        adjustedConfig as OptimizationConfigFormType["modelConfig"],
       );
     },
     [form, calculateModelProvider],
