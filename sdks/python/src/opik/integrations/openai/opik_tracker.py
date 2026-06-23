@@ -1,4 +1,4 @@
-from typing import Optional, TypeVar
+from typing import Optional, TypeVar, Union
 
 import openai
 import opik
@@ -8,6 +8,7 @@ from . import (
     openai_chat_completions_decorator,
 )
 import opik.semantic_version as semantic_version
+from opik.types import LLMProvider
 
 OpenAIClient = TypeVar("OpenAIClient", openai.OpenAI, openai.AsyncOpenAI)
 
@@ -22,7 +23,7 @@ def _get_provider(openai_client: OpenAIClient) -> str:
 def track_openai(
     openai_client: OpenAIClient,
     project_name: Optional[str] = None,
-    provider: Optional[str] = None,
+    provider: Optional[Union[str, LLMProvider]] = None,
 ) -> OpenAIClient:
     """Adds Opik tracking wrappers to an OpenAI client.
 
@@ -48,10 +49,14 @@ def track_openai(
         openai_client: An instance of OpenAI or AsyncOpenAI client.
         project_name: The name of the project to log data.
         provider: The provider name to record on every LLM span created by the
-            integration. Useful for OpenAI-compatible APIs (e.g. Together,
-            OpenRouter, vLLM) where the default value derived from the client's
-            base URL is not descriptive enough. When not provided, the provider
-            is inferred from the client's base URL ("openai" for api.openai.com,
+            integration. The OpenAI SDK is commonly used as a client for other
+            OpenAI-compatible APIs (Together, OpenRouter, vLLM, DeepSeek, etc.),
+            so this lets you record the actual model provider instead of the
+            base URL host. Accepts any string, or one of the providers Opik
+            recognizes for cost tracking via the `opik.LLMProvider` enum:
+            "openai", "anthropic", "google_vertexai", "google_ai", "groq",
+            "bedrock", "anthropic_vertexai". When not provided, the provider is
+            inferred from the client's base URL ("openai" for api.openai.com,
             otherwise the base URL host).
 
     Returns:
@@ -62,9 +67,14 @@ def track_openai(
 
     openai_client.opik_tracked = True
 
-    resolved_provider = (
-        provider if provider is not None else _get_provider(openai_client)
-    )
+    if provider is None:
+        resolved_provider = _get_provider(openai_client)
+    elif isinstance(provider, LLMProvider):
+        # Normalize to the plain string value so a bare enum member never leaks
+        # into logs/spans as "LLMProvider.OPENAI".
+        resolved_provider = provider.value
+    else:
+        resolved_provider = provider
 
     _patch_openai_chat_completions(openai_client, resolved_provider, project_name)
 

@@ -8,6 +8,7 @@ from pydantic import BaseModel
 import opik
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.integrations.openai import track_openai
+from opik.types import LLMProvider
 from ... import llm_constants
 from ...testlib import (
     ANY_BUT_NONE,
@@ -128,13 +129,20 @@ def test_openai_client_chat_completions_create__happyflow(
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
-def test_openai_client_chat_completions_create__custom_provider__provider_logged_on_llm_span(
-    fake_backend,
+@pytest.mark.parametrize(
+    "provider_argument, expected_provider",
+    [
+        ("custom-provider", "custom-provider"),
+        (LLMProvider.ANTHROPIC, "anthropic"),
+    ],
+)
+def test_openai_client_chat_completions_create__custom_provider__provider_logged_on_llm_span_but_usage_still_parsed_as_openai(
+    fake_backend, provider_argument, expected_provider
 ):
     client = openai.OpenAI()
     wrapped_client = track_openai(
         openai_client=client,
-        provider="custom-provider",
+        provider=provider_argument,
     )
     messages = [
         {"role": "user", "content": "Tell a fact"},
@@ -169,13 +177,15 @@ def test_openai_client_chat_completions_create__custom_provider__provider_logged
                 output={"choices": ANY_BUT_NONE},
                 tags=["openai"],
                 metadata=ANY_DICT,
+                # Usage is still parsed with the OpenAI converter even though the
+                # provider label is overridden.
                 usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=ANY_BUT_NONE,
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
-                provider="custom-provider",
+                provider=expected_provider,
                 source="sdk",
             )
         ],
