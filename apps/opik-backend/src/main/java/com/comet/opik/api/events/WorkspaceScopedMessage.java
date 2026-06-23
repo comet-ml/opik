@@ -15,9 +15,12 @@ public interface WorkspaceScopedMessage {
 
     /**
      * Human-readable workspace name, resolved once at produce time (see {@code OnlineScoringSampler})
-     * and carried on the message so consumers/metrics need no per-message lookup. Defaults to
-     * {@link #workspaceId()} for messages that don't carry a name (older in-flight messages, or
-     * producers that don't resolve it yet).
+     * and carried on the message so consumers/metrics need no per-message lookup.
+     *
+     * <p><strong>Falls back to {@link #workspaceId()}</strong> when the message carries no name
+     * (older in-flight messages, or producers that don't resolve it yet) — so a caller may receive
+     * the workspace <em>id</em> here, not a display name. Callers that need to distinguish the two
+     * should compare against {@link #workspaceId()}.
      */
     default String workspaceName() {
         return workspaceId();

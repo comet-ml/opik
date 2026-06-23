@@ -128,9 +128,11 @@ public abstract class OnlineScoringBaseScorer<M extends WorkspaceScopedMessage> 
      */
     @Override
     protected MessageContext messageContext(M message) {
-        return new MessageContext(message.workspaceId(),
-                StringUtils.defaultIfBlank(message.workspaceName(), message.workspaceId()),
-                message.userName());
+        return MessageContext.builder()
+                .workspaceId(message.workspaceId())
+                .workspaceName(StringUtils.defaultIfBlank(message.workspaceName(), message.workspaceId()))
+                .userName(message.userName())
+                .build();
     }
 
     /**
