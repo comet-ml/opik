@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.filter.Filter;
+import com.comet.opik.api.filter.TraceThreadField;
 import com.comet.opik.api.metrics.KpiCardRequest.EntityType;
 import com.comet.opik.api.metrics.KpiCardResponse;
 import com.comet.opik.api.metrics.KpiCardResponse.KpiMetric;
@@ -434,6 +435,9 @@ class KpiCardDAOImpl implements KpiCardDAO {
                                AND notEquals(min(t.start_time), toDateTime64('1970-01-01 00:00:00.000', 9)),
                            (dateDiff('microsecond', min(t.start_time), max(t.end_time)) / 1000.0),
                            NULL) AS duration,
+                        count(DISTINCT t.id) * 2 as number_of_messages,
+                        <if(trace_thread_first_message_filter)>argMin(t.input, t.start_time) as first_message,<endif>
+                        <if(trace_thread_last_message_filter)>argMax(t.output, t.end_time) as last_message,<endif>
                         max(t.last_updated_at) as last_updated_at,
                         argMax(t.last_updated_by, t.last_updated_at) as last_updated_by,
                         argMin(t.created_by, t.created_at) as created_by,
@@ -606,6 +610,14 @@ class KpiCardDAOImpl implements KpiCardDAO {
         Optional.ofNullable(filters).ifPresent(f -> {
             FilterQueryBuilder.toAnalyticsDbFilters(f, FilterStrategy.TRACE_THREAD)
                     .ifPresent(threadFilters -> template.add("trace_thread_filters", threadFilters));
+            // first_message/last_message aggregate the full input/output payloads, so only project
+            // them in threads_filtered when a filter actually references them (otherwise the thread
+            // KPI query would needlessly materialize large columns). number_of_messages is cheap and
+            // always projected. See OPIK-7050.
+            FilterQueryBuilder.hasField(f, TraceThreadField.FIRST_MESSAGE)
+                    .ifPresent(present -> template.add("trace_thread_first_message_filter", true));
+            FilterQueryBuilder.hasField(f, TraceThreadField.LAST_MESSAGE)
+                    .ifPresent(present -> template.add("trace_thread_last_message_filter", true));
             FilterQueryBuilder.toAnalyticsDbFilters(f, FilterStrategy.FEEDBACK_SCORES)
                     .ifPresent(scoresFilters -> template.add("thread_feedback_scores_filters", scoresFilters));
             FilterQueryBuilder.toAnalyticsDbFilters(f, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
