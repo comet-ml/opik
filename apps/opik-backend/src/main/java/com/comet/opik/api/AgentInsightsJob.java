@@ -23,6 +23,7 @@ public record AgentInsightsJob(
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY, requiredMode = Schema.RequiredMode.REQUIRED) UUID projectId,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Status status,
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastScanAt,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,

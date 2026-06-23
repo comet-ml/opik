@@ -7,7 +7,6 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
@@ -23,7 +22,7 @@ import java.util.UUID;
 public record AgentInsightsReport(
         @NotNull UUID projectId,
         @NotNull LocalDate reportDay,
-        @NotEmpty List<@NotNull @Valid ReportedIssue> issues) {
+        @NotNull List<@NotNull @Valid ReportedIssue> issues) {
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
