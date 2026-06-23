@@ -1472,7 +1472,13 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     }
 
     private <T> Mono<T> handleSqlError(Throwable e, T defaultValue) {
-        if (e instanceof ClickHouseException && e.getMessage().contains("Unable to parse JSONPath. (BAD_ARGUMENTS)")) {
+        // ClickHouse rejects a malformed JSON path with a BAD_ARGUMENTS "Unable to parse JSONPath" error.
+        // Treat that as an empty result rather than surfacing a 500. The surrounding wording varies across
+        // ClickHouse versions (e.g. "JSONPath. (BAD_ARGUMENTS)" vs "JSONPath: In scope ... (BAD_ARGUMENTS)"),
+        // so match on the stable substrings instead of an exact phrase.
+        if (e instanceof ClickHouseException && e.getMessage() != null
+                && e.getMessage().contains("Unable to parse JSONPath")
+                && e.getMessage().contains("BAD_ARGUMENTS")) {
             return Mono.just(defaultValue);
         }
         return Mono.error(e);
