@@ -1,6 +1,5 @@
 package com.comet.opik.domain;
 
-import com.clickhouse.client.ClickHouseException;
 import com.clickhouse.client.api.Client;
 import com.clickhouse.client.api.query.QuerySettings;
 import com.comet.opik.api.Column;
@@ -26,6 +25,7 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.db.ZeroRowsRetryPolicy;
+import com.comet.opik.utils.ErrorUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -2878,7 +2878,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     }
 
     private <T> Mono<T> handleSqlError(Throwable e, T defaultValue) {
-        if (e instanceof ClickHouseException && e.getMessage().contains("Unable to parse JSONPath. (BAD_ARGUMENTS)")) {
+        // A user-supplied malformed JSON path is rejected by ClickHouse; treat it as an empty result.
+        if (ErrorUtils.isMalformedJsonPath(e)) {
             return Mono.just(defaultValue);
         }
         return Mono.error(e);
