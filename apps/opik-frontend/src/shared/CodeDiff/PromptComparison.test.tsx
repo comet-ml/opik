@@ -1,94 +1,98 @@
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 
 import PromptComparison from "./PromptComparison";
 import { PromptComparisonTarget } from "./promptComparisonTargets";
 
+const current = [
+  { role: "system", content: "current system text" },
+  { role: "user", content: "hello" },
+];
+
 const baselineTarget: PromptComparisonTarget = {
   id: "base",
   label: "Baseline",
-  prompt: "alpha baseline prompt",
+  prompt: [{ role: "system", content: "baseline system text" }],
 };
 
 const parentTarget: PromptComparisonTarget = {
   id: "p-1",
-  label: "Parent (Trial #3)",
-  prompt: "parent prompt",
+  label: "Parent",
+  prompt: [{ role: "system", content: "parent system text" }],
 };
 
 describe("PromptComparison", () => {
-  it("renders nothing when there are no targets", () => {
-    const { container } = render(
-      <PromptComparison current="bravo current prompt" targets={[]} />,
-    );
-
-    expect(container).toBeEmptyDOMElement();
-  });
-
-  describe("single target", () => {
-    it("shows the target label as static text instead of a selector", () => {
-      render(
-        <PromptComparison
-          current="bravo current prompt"
-          targets={[baselineTarget]}
-        />,
-      );
-
-      expect(screen.getByText("Compare against:")).toBeInTheDocument();
-      expect(screen.getByText("Baseline")).toBeInTheDocument();
-      expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
-    });
-
-    it("renders the diff against the target prompt", () => {
+  describe("without targets", () => {
+    it("shows the current prompt as role cards with no compare control", () => {
       const { container } = render(
-        <PromptComparison
-          current="bravo current prompt"
-          targets={[baselineTarget]}
-        />,
+        <PromptComparison current={current} targets={[]} />,
       );
 
-      // String prompts fall through to the text diff, which renders both sides.
-      expect(container.textContent).toContain("bravo");
-      expect(container.textContent).toContain("baseline");
+      expect(container.textContent).toContain("current system text");
+      expect(container.textContent).toContain("hello");
+      expect(screen.queryByText("Hide diff")).not.toBeInTheDocument();
+    });
+
+    it("renders nothing when the current prompt is empty", () => {
+      const { container } = render(
+        <PromptComparison current={null} targets={[]} />,
+      );
+
+      expect(container).toBeEmptyDOMElement();
     });
   });
 
-  describe("multiple targets", () => {
-    it("renders a selector to choose the comparison target", () => {
-      render(
-        <PromptComparison
-          current="bravo current prompt"
-          targets={[baselineTarget, parentTarget]}
-        />,
+  describe("with targets", () => {
+    it("renders the compare control and diffs against the target", () => {
+      const { container } = render(
+        <PromptComparison current={current} targets={[baselineTarget]} />,
       );
 
-      expect(screen.getByRole("combobox")).toBeInTheDocument();
+      // Trigger shows the selected target; current side labelled after the arrow.
+      expect(screen.getByText("Baseline")).toBeInTheDocument();
+      expect(screen.getByText("→ Trial")).toBeInTheDocument();
+      expect(screen.getByText("Hide diff")).toBeInTheDocument();
+
+      // Both sides of the diff render (target removed, current added).
+      expect(container.textContent).toContain("baseline system text");
+      expect(container.textContent).toContain("current system text");
     });
 
-    it("defaults to the first target when defaultTargetId is not provided", () => {
-      render(
-        <PromptComparison
-          current="bravo current prompt"
-          targets={[baselineTarget, parentTarget]}
-        />,
+    it("hides the diff and shows only the current prompt when toggled", () => {
+      const { container } = render(
+        <PromptComparison current={current} targets={[baselineTarget]} />,
       );
 
-      // Radix renders the selected item's text inside the trigger.
-      expect(screen.getByRole("combobox")).toHaveTextContent("Baseline");
+      fireEvent.click(screen.getByText("Hide diff"));
+
+      expect(screen.getByText("Show diff")).toBeInTheDocument();
+      expect(container.textContent).toContain("current system text");
+      expect(container.textContent).not.toContain("baseline system text");
     });
 
-    it("honors defaultTargetId when it matches a target", () => {
+    it("honors defaultTargetId", () => {
       render(
         <PromptComparison
-          current="bravo current prompt"
+          current={current}
           targets={[baselineTarget, parentTarget]}
           defaultTargetId="p-1"
         />,
       );
 
-      expect(screen.getByRole("combobox")).toHaveTextContent(
-        "Parent (Trial #3)",
+      expect(screen.getByText("Parent")).toBeInTheDocument();
+      expect(screen.queryByText("Baseline")).not.toBeInTheDocument();
+    });
+
+    it("uses a custom currentLabel", () => {
+      render(
+        <PromptComparison
+          current={current}
+          currentLabel="Best trial"
+          targets={[baselineTarget]}
+        />,
       );
+
+      expect(screen.getByText("→ Best trial")).toBeInTheDocument();
     });
   });
 });
