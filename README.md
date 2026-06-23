@@ -245,7 +245,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.STATE_DB_DATABASE_NAME | string | `"opik"` |  |
 | component.backend.env.STATE_DB_PASS | string | `"opik"` |  |
 | component.backend.env.STATE_DB_PROTOCOL | string | `"jdbc:mysql://"` |  |
-| component.backend.env.STATE_DB_URL | string | `"opik-mysql:3306/opik?rewriteBatchedStatements=true"` |  |
+| component.backend.env.STATE_DB_URL | string | `"opik-mysql:3306/opik?rewriteBatchedStatements=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true"` |  |
 | component.backend.env.STATE_DB_USER | string | `"opik"` |  |
 | component.backend.env.UI_DEFAULT_PAGE_SIZE | string | `"100"` |  |
 | component.backend.envFrom[0].configMapRef.name | string | `"opik-backend"` |  |
