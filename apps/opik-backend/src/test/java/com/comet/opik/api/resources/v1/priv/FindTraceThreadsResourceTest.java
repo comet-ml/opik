@@ -481,22 +481,23 @@ class FindTraceThreadsResourceTest {
                     List.of(), List.of(), Map.of("page", "1", "size", String.valueOf(threadCount + 5)));
             assertThat(fullPage.total()).isEqualTo(threadCount);
             assertThat(fullPage.content()).hasSize(threadCount);
-            var fullOrder = fullPage.content().stream().map(TraceThread::id).toList();
 
             // page through with a size that forces multiple pages (offset > 0 on pages 2..N)
             int size = 3;
             int pages = (threadCount + size - 1) / size;
-            List<String> pagedOrder = new ArrayList<>();
+            List<TraceThread> pagedContent = new ArrayList<>();
             for (int page = 1; page <= pages; page++) {
                 var p = traceResourceClient.getTraceThreads(projectId, null, API_KEY, TEST_WORKSPACE,
                         List.of(), List.of(), Map.of("page", String.valueOf(page), "size", String.valueOf(size)));
                 assertThat(p.total()).isEqualTo(threadCount);
                 assertThat(p.page()).isEqualTo(page);
                 assertThat(p.content()).hasSize(Math.min(size, threadCount - (page - 1) * size));
-                pagedOrder.addAll(p.content().stream().map(TraceThread::id).toList());
+                pagedContent.addAll(p.content());
             }
 
-            assertThat(pagedOrder).containsExactlyElementsOf(fullOrder);
+            // pages must reconstruct the full single-page result exactly — full payload (not just ids),
+            // same order, no overlap, no gaps
+            TraceAssertions.assertThreads(fullPage.content(), pagedContent);
         }
 
         @ParameterizedTest

@@ -136,8 +136,8 @@ class TraceThreadServiceImpl implements TraceThreadService {
     }
 
     @Override
-    public Mono<Map<String, UUID>> getOrCreateThreadIds(@NonNull UUID projectId, @NonNull Set<String> threadIds) {
-        if (threadIds.isEmpty()) {
+    public Mono<Map<String, UUID>> getOrCreateThreadIds(@NonNull UUID projectId, Set<String> threadIds) {
+        if (CollectionUtils.isEmpty(threadIds)) {
             return Mono.just(Map.of());
         }
         // Bulk get-or-create in a single query instead of one round-trip per thread. Null timestamps match
