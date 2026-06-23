@@ -4,6 +4,7 @@ import logging
 import sys
 import threading
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
@@ -212,8 +213,6 @@ def _spans_trace_id_range_filter(trace_ids) -> Optional[str]:
     Returns ``None`` (unfiltered scan, prior behaviour) when the set is empty or
     any id is not a UUIDv7.
     """
-    import uuid
-
     from opik.api_objects import opik_query_language
 
     # Derive the timestamp per id from the parsed UUID rather than lexicographic
