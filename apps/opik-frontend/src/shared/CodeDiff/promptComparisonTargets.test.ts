@@ -66,7 +66,7 @@ describe("buildPromptComparisonTargets", () => {
   });
 
   describe("parent targets", () => {
-    it("offers each parent labelled by its trial number, baseline first", () => {
+    it("offers a single parent labelled simply 'Parent', baseline first", () => {
       const baseline = createCandidate({ id: "base", stepIndex: 0 });
       const parent = createCandidate({
         id: "p-1",
@@ -92,11 +92,11 @@ describe("buildPromptComparisonTargets", () => {
 
       expect(targets).toEqual([
         { id: "base", label: "Baseline", prompt: "baseline prompt" },
-        { id: "p-1", label: "Parent (Trial #4)", prompt: "parent prompt" },
+        { id: "p-1", label: "Parent", prompt: "parent prompt" },
       ]);
     });
 
-    it("preserves the order of multiple parents", () => {
+    it("disambiguates multiple parents by trial number, preserving order", () => {
       const parentA = createCandidate({ id: "p-a", trialNumber: 2 });
       const parentB = createCandidate({ id: "p-b", trialNumber: 3 });
       const candidate = createCandidate({
@@ -192,7 +192,7 @@ describe("buildPromptComparisonTargets", () => {
       });
 
       expect(targets).toEqual([
-        { id: "p-1", label: "Parent (Trial #3)", prompt: "parent prompt" },
+        { id: "p-1", label: "Parent", prompt: "parent prompt" },
       ]);
     });
   });

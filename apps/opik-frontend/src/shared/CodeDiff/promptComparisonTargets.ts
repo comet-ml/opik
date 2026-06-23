@@ -34,9 +34,16 @@ export type ComparisonCandidate = {
 };
 
 export const BASELINE_TARGET_LABEL = "Baseline";
+export const PARENT_TARGET_LABEL = "Parent";
 
+/**
+ * A candidate usually has a single parent, shown simply as "Parent" (matching
+ * the Figma design). Evolutionary crossover can produce multiple parents, so we
+ * disambiguate those by trial number — otherwise the dropdown would list two
+ * identical "Parent" options.
+ */
 export const buildParentTargetLabel = (trialNumber: number): string =>
-  `Parent (Trial #${trialNumber})`;
+  `${PARENT_TARGET_LABEL} (Trial #${trialNumber})`;
 
 type BuildTargetsParams<T extends ComparisonCandidate> = {
   /** The candidate whose prompt is being compared. */
@@ -82,10 +89,16 @@ export const buildPromptComparisonTargets = <T extends ComparisonCandidate>({
     pushTarget(baseline, BASELINE_TARGET_LABEL);
   }
 
+  const hasMultipleParents = candidate.parentCandidateIds.length > 1;
   candidate.parentCandidateIds.forEach((parentId) => {
     const parent = byId.get(parentId);
     if (parent) {
-      pushTarget(parent, buildParentTargetLabel(parent.trialNumber));
+      pushTarget(
+        parent,
+        hasMultipleParents
+          ? buildParentTargetLabel(parent.trialNumber)
+          : PARENT_TARGET_LABEL,
+      );
     }
   });
 
