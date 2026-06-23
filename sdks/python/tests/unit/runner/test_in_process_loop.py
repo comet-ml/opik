@@ -180,7 +180,7 @@ class TestPollFailureLogging:
             call_count += 1
             if call_count >= in_process_loop._POLL_FAILURE_HINT_THRESHOLD:
                 shutdown_event.set()
-            raise ApiError(status_code=429)
+            raise ApiError(status_code=429, body="too many requests")
 
         mock_api.runners.next_job.side_effect = side_effect
 
@@ -192,6 +192,9 @@ class TestPollFailureLogging:
         assert "OPIK_RUNNER_POLL_INTERVAL" in stderr
         assert "firewall or proxy" in stderr
         assert "429" in stderr
+        # Full error detail is surfaced, not just a friendly message.
+        assert "status_code: 429" in stderr
+        assert "too many requests" in stderr
 
     def test_poll__sustained_connection_error__hint_without_rate_limit_note(
         self, mock_api, shutdown_event, capfd
@@ -204,7 +207,7 @@ class TestPollFailureLogging:
             call_count += 1
             if call_count >= in_process_loop._POLL_FAILURE_HINT_THRESHOLD:
                 shutdown_event.set()
-            raise ConnectionError("blocked")
+            raise ConnectionError("name resolution failed")
 
         mock_api.runners.next_job.side_effect = side_effect
 
@@ -214,8 +217,10 @@ class TestPollFailureLogging:
 
         stderr = capfd.readouterr().err
         assert "firewall or proxy" in stderr
-        assert "connection error" in stderr
         assert "429" not in stderr
+        # Full error detail (message + type via traceback) is surfaced.
+        assert "name resolution failed" in stderr
+        assert "ConnectionError" in stderr
 
     def test_poll__recovers_after_failures__logs_reconnected(
         self, mock_api, shutdown_event, capfd

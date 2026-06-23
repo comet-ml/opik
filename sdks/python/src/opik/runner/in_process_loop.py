@@ -133,15 +133,15 @@ class InProcessRunnerLoop:
                 job = self._api.runners.next_job(self._runner_id)
             except ApiError as e:
                 poll_failures += 1
-                self._log_poll_failure(poll_failures, e.status_code)
+                self._log_poll_failure(poll_failures, e)
                 bridge_common.backoff_wait(
                     self._shutdown_event, backoff, self._backoff_cap_seconds
                 )
                 backoff = min(backoff * 2, self._backoff_cap_seconds)
                 continue
-            except Exception:
+            except Exception as e:
                 poll_failures += 1
-                self._log_poll_failure(poll_failures, None)
+                self._log_poll_failure(poll_failures, e)
                 bridge_common.backoff_wait(
                     self._shutdown_event, backoff, self._backoff_cap_seconds
                 )
@@ -163,19 +163,23 @@ class InProcessRunnerLoop:
             if self._loop is not None:
                 self._loop.call_soon_threadsafe(self._job_queue.put_nowait, job)
 
-    def _log_poll_failure(self, failures: int, status_code: Optional[int]) -> None:
+    def _log_poll_failure(self, failures: int, error: Exception) -> None:
         """Warn once poll failures are sustained, then on every further attempt.
 
         Failures below ``_POLL_FAILURE_HINT_THRESHOLD`` are transient blips the
         backoff is already retrying, so they stay on debug. From the threshold
         onward we warn on every attempt; the caller resets ``failures`` to 0 as
         soon as a poll succeeds.
+
+        The full error (for ``ApiError`` that includes status code, headers, and
+        response body) and a traceback are always logged so the failure can be
+        diagnosed, alongside the actionable hint.
         """
-        detail = f"API {status_code}" if status_code is not None else "connection error"
+        status_code = error.status_code if isinstance(error, ApiError) else None
 
         if failures < _POLL_FAILURE_HINT_THRESHOLD:
             LOGGER.debug(
-                "Poll failed (%s), attempt %d", detail, failures, exc_info=True
+                "Job poll failed (attempt %d): %s", failures, error, exc_info=True
             )
             return
 
@@ -183,12 +187,13 @@ class InProcessRunnerLoop:
             " Opik is rate-limiting requests (HTTP 429)." if status_code == 429 else ""
         )
         LOGGER.warning(
-            "Job polling has failed %d times in a row (%s).%s A firewall or proxy may "
+            "Job polling has failed %d times in a row: %s.%s A firewall or proxy may "
             "be blocking the sustained connection to Opik. Check your network/proxy "
             "settings, or increase the poll interval with OPIK_RUNNER_POLL_INTERVAL.",
             failures,
-            detail,
+            error,
             rate_limit_note,
+            exc_info=True,
         )
 
     def _heartbeat_loop(self) -> None:
