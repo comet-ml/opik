@@ -90,6 +90,40 @@ class ThreadDAOImpl implements ThreadDAO {
                 WHERE 1 = 1
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
+            ), <endif><if(page_pushdown)>page_thread_ids AS (
+                SELECT thread_id
+                FROM (
+                    SELECT
+                        thread_id,
+                        min(start_time) AS start_time,
+                        max(end_time) AS end_time,
+                        max(last_updated_at) AS trace_last_updated_at
+                    FROM (
+                        SELECT id, thread_id, start_time, end_time, last_updated_at
+                        FROM traces
+                        WHERE workspace_id = :workspace_id
+                          AND project_id = :project_id
+                          AND thread_id \\<> ''
+                          <if(filters)> AND <filters> <endif>
+                          <if(search_text)> AND <search_text> <endif>
+                        ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    )
+                    GROUP BY thread_id
+                ) AS pt
+                LEFT JOIN (
+                    SELECT thread_id, id, last_updated_at
+                    FROM trace_threads
+                    WHERE workspace_id = :workspace_id
+                      AND project_id = :project_id
+                    ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ) AS ptt ON pt.thread_id = ptt.thread_id
+                ORDER BY if(ptt.last_updated_at = toDateTime64(0, 6, 'UTC'), pt.trace_last_updated_at, ptt.last_updated_at) DESC,
+                    pt.start_time ASC,
+                    pt.end_time DESC,
+                    pt.thread_id
+                LIMIT :limit <if(offset)>OFFSET :offset<endif>
             ), <endif>traces_final AS (
                 SELECT
                     id,
@@ -121,12 +155,18 @@ class ThreadDAOImpl implements ThreadDAO {
                     WHERE workspace_id = :workspace_id
                       AND project_id = :project_id
                       AND thread_id \\<> ''
-                      <if(traces_final_ids)>
-                          AND id IN (SELECT id FROM traces_final_ids)
+                      <if(page_pushdown)>
+                          AND thread_id IN (SELECT thread_id FROM page_thread_ids)
+                          <if(filters)> AND <filters> <endif>
+                          <if(search_text)> AND <search_text> <endif>
                       <else>
-                          <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
-                          <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
-                          <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                          <if(traces_final_ids)>
+                              AND id IN (SELECT id FROM traces_final_ids)
+                          <else>
+                              <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                              <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                              <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                          <endif>
                       <endif>
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
@@ -145,11 +185,15 @@ class ThreadDAOImpl implements ThreadDAO {
                 FROM spans
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
-                  <if(traces_final_ids)>
-                      AND trace_id IN (SELECT id FROM traces_final_ids)
+                  <if(page_pushdown)>
+                      AND trace_id IN (SELECT id FROM traces_final)
                   <else>
-                      <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
-                      <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                      <if(traces_final_ids)>
+                          AND trace_id IN (SELECT id FROM traces_final_ids)
+                      <else>
+                          <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                          <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                      <endif>
                   <endif>
                 ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
@@ -186,6 +230,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     <endif>
                 <endif>
                 <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                <if(page_pushdown)> AND thread_id IN (SELECT thread_id FROM traces_final) <endif>
                 ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ), feedback_scores_deduped AS (
@@ -430,7 +475,7 @@ class ThreadDAOImpl implements ThreadDAO {
             <else>
             <if(sort_fields)> ORDER BY <sort_fields>, last_updated_at DESC <else> ORDER BY last_updated_at DESC, start_time ASC, end_time DESC <endif>
             <endif>
-            LIMIT :limit <if(offset)>OFFSET :offset<endif>
+            LIMIT :limit <if(page_pushdown)><else><if(offset)>OFFSET :offset<endif><endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -1293,6 +1338,34 @@ class ThreadDAOImpl implements ThreadDAO {
         return criteria.searchText() != null || template.getAttribute("filters") != null;
     }
 
+    /**
+     * OPIK-7035: template attributes that make the page-pushdown unsafe. The pushdown resolves the page in
+     * one narrow {@code traces} scan ({@code page_thread_ids}: per-thread min/max sort keys + the filter,
+     * joined to {@code trace_threads} for the {@code last_updated_at} coalesce, limit pushed early), then
+     * enriches only that page so the wide {@code input}/{@code output} columns and spans are read for
+     * ~page-size threads instead of the whole project. It is only output-equivalent when page membership
+     * and ordering are fully determined by that narrow {@code traces}+{@code trace_threads} scan. Any of
+     * these attributes means the page can only be resolved by the full enrichment query (filters/sorts
+     * that need the spans/feedback/annotation joins, or the uuid time-range path that uses a different
+     * INNER join), so we fall back.
+     */
+    private static final List<String> PAGE_PUSHDOWN_DISQUALIFIERS = List.of(
+            "sort_fields", "uuid_from_time", "uuid_to_time", "traces_pushdown_filter",
+            "feedback_scores_filters", "feedback_scores_empty_filters",
+            "span_feedback_scores_filters", "span_feedback_scores_empty_filters",
+            "trace_aggregation_filters", "trace_thread_filters", "annotation_queue_filters",
+            "annotation_queue_id", "experiment_filters", "guardrails_filters", "last_retrieved_id",
+            "stream");
+
+    /**
+     * The page-pushdown is eligible only for the common listing case: default sort over {@code trace_threads}
+     * recency, with no filter/sort that needs the wide-column / spans / feedback / annotation joins to
+     * determine which threads land on the page. Otherwise the full scan query runs unchanged.
+     */
+    private static boolean isPagePushdownEligible(ST template) {
+        return PAGE_PUSHDOWN_DISQUALIFIERS.stream().noneMatch(attr -> template.getAttribute(attr) != null);
+    }
+
     @Override
     @WithSpan
     public Mono<TraceThread.TraceThreadPage> find(int size, int page, @NonNull TraceSearchCriteria criteria) {
@@ -1312,15 +1385,24 @@ class ThreadDAOImpl implements ThreadDAO {
                                     .add("log_comment", getLogComment("find_threads_by_project", workspaceId, userName,
                                             "page:" + page + ":size:" + size));
 
-                            if (shouldUseTracesFinalIdsPrefilter(criteria, template)) {
-                                template.add("traces_final_ids", true);
-                            }
-
                             var finalTemplate = template;
                             Optional.ofNullable(sortingQueryBuilder.toOrderBySql(criteria.sortingFields()))
                                     .ifPresent(sortFields -> finalTemplate.add("sort_fields", sortFields));
 
                             var hasDynamicKeys = sortingQueryBuilder.hasDynamicKeys(criteria.sortingFields());
+
+                            // OPIK-7035: resolve the page first (one narrow filter+order scan over traces,
+                            // limit pushed early), then enrich only that page so the wide input/output columns
+                            // and spans are read for ~page-size threads instead of the whole project. The page
+                            // resolver applies the filter itself, so it is mutually exclusive with the
+                            // traces_final_ids prefilter — enabling both would scan the project traces twice and
+                            // compound under ClickHouse CTE re-evaluation. Falls back to the full query for any
+                            // filter/sort that needs the joined sources to determine the page.
+                            if (isPagePushdownEligible(finalTemplate)) {
+                                finalTemplate.add("page_pushdown", true);
+                            } else if (shouldUseTracesFinalIdsPrefilter(criteria, finalTemplate)) {
+                                finalTemplate.add("traces_final_ids", true);
+                            }
 
                             var statement = connection.createStatement(template.render())
                                     .bind("project_id", criteria.projectId())

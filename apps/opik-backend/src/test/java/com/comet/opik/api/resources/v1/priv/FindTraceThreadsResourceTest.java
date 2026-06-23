@@ -451,6 +451,54 @@ class FindTraceThreadsResourceTest {
                     TEST_WORKSPACE);
         }
 
+        @Test
+        @DisplayName("when paginating threads with default sort, then pages partition the full ordered list")
+        void whenPaginatingThreadsWithDefaultSort__thenPagesPartitionFullOrderedList() {
+            // Exercises the OPIK-7035 page-pushdown path (default sort, no filters): the page_thread_ids CTE
+            // applies LIMIT/OFFSET and the outer query drops its OFFSET, so offset>0 (page >= 2) is only
+            // covered here. Pages must reconstruct the exact full ordered list (no double/missing offset,
+            // no overlaps, no gaps).
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            int threadCount = 7;
+            var baseTime = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+
+            // one single-trace thread per distinct threadId, with distinct start/end times so the default-sort
+            // order is deterministic even if last_updated_at ties on batch insert
+            var traces = IntStream.range(0, threadCount)
+                    .mapToObj(i -> createTrace().toBuilder()
+                            .projectName(projectName)
+                            .threadId(UUID.randomUUID().toString())
+                            .startTime(baseTime.minusSeconds(i + 1L))
+                            .endTime(baseTime.minusSeconds(i + 1L).plusMillis(500))
+                            .build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+
+            // authoritative full ordered list (single page large enough to hold all threads)
+            var fullPage = traceResourceClient.getTraceThreads(projectId, null, API_KEY, TEST_WORKSPACE,
+                    List.of(), List.of(), Map.of("page", "1", "size", String.valueOf(threadCount + 5)));
+            assertThat(fullPage.total()).isEqualTo(threadCount);
+            assertThat(fullPage.content()).hasSize(threadCount);
+            var fullOrder = fullPage.content().stream().map(TraceThread::id).toList();
+
+            // page through with a size that forces multiple pages (offset > 0 on pages 2..N)
+            int size = 3;
+            int pages = (threadCount + size - 1) / size;
+            List<String> pagedOrder = new ArrayList<>();
+            for (int page = 1; page <= pages; page++) {
+                var p = traceResourceClient.getTraceThreads(projectId, null, API_KEY, TEST_WORKSPACE,
+                        List.of(), List.of(), Map.of("page", String.valueOf(page), "size", String.valueOf(size)));
+                assertThat(p.total()).isEqualTo(threadCount);
+                assertThat(p.page()).isEqualTo(page);
+                assertThat(p.content()).hasSize(Math.min(size, threadCount - (page - 1) * size));
+                pagedOrder.addAll(p.content().stream().map(TraceThread::id).toList());
+            }
+
+            assertThat(pagedOrder).containsExactlyElementsOf(fullOrder);
+        }
+
         @ParameterizedTest
         @MethodSource("getUnsupportedOperations")
         void whenFilterUnsupportedOperation__thenReturn400(boolean stream, TraceThreadField field, Operator operator,
