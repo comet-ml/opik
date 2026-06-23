@@ -12,6 +12,7 @@ export const AgentInsightsJob: core.serialization.ObjectSchema<
     id: core.serialization.string().optional(),
     projectId: core.serialization.property("project_id", core.serialization.string().optional()),
     status: AgentInsightsJobStatus.optional(),
+    lastScanAt: core.serialization.property("last_scan_at", core.serialization.date().optional()),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
@@ -23,6 +24,7 @@ export declare namespace AgentInsightsJob {
         id?: string | null;
         project_id?: string | null;
         status?: AgentInsightsJobStatus.Raw | null;
+        last_scan_at?: string | null;
         created_at?: string | null;
         created_by?: string | null;
         last_updated_at?: string | null;
