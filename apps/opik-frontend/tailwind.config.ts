@@ -174,6 +174,10 @@ module.exports = {
           "0%": { backgroundPosition: "200% 0" },
           "100%": { backgroundPosition: "-200% 0" },
         },
+        "progress-indeterminate": {
+          "0%": { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(350%)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -182,6 +186,8 @@ module.exports = {
         "ollie-blink": "ollie-blink 5.4s ease-in-out infinite",
         "ollie-text-in": "ollie-text-in 300ms ease-out",
         shimmer: "shimmer 1.8s ease-in-out infinite",
+        "progress-indeterminate":
+          "progress-indeterminate 1.3s ease-in-out infinite",
       },
       boxShadow: {
         "action-card": "var(--action-card-shadow)",
