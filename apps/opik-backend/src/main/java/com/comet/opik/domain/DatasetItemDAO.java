@@ -1,6 +1,5 @@
 package com.comet.opik.domain;
 
-import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemUpdate;
@@ -12,6 +11,7 @@ import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.utils.ErrorUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
@@ -1472,13 +1472,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     }
 
     private <T> Mono<T> handleSqlError(Throwable e, T defaultValue) {
-        // ClickHouse rejects a malformed JSON path with a BAD_ARGUMENTS "Unable to parse JSONPath" error.
-        // Treat that as an empty result rather than surfacing a 500. The surrounding wording varies across
-        // ClickHouse versions (e.g. "JSONPath. (BAD_ARGUMENTS)" vs "JSONPath: In scope ... (BAD_ARGUMENTS)"),
-        // so match on the stable substrings instead of an exact phrase.
-        if (e instanceof ClickHouseException && e.getMessage() != null
-                && e.getMessage().contains("Unable to parse JSONPath")
-                && e.getMessage().contains("BAD_ARGUMENTS")) {
+        // A user-supplied malformed JSON path is rejected by ClickHouse; treat it as an empty result.
+        if (ErrorUtils.isMalformedJsonPath(e)) {
             return Mono.just(defaultValue);
         }
         return Mono.error(e);
