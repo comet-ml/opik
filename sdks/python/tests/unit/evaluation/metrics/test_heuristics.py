@@ -1,4 +1,5 @@
 import re
+from unittest import mock
 
 import pytest
 
@@ -491,6 +492,25 @@ def test_chrf_metric_uses_custom_fn():
     result = metric.score(output="hello world", reference="hello world")
 
     assert result.value == pytest.approx(0.72)
+
+
+def test_chrf_metric_forwards_config_to_nltk_backend(monkeypatch):
+    # The NLTK backend must receive char_order (as max_len) and ignore_whitespace,
+    # not just beta. Before the fix only beta was forwarded, so char_order and
+    # ignore_whitespace were silently ignored.
+    fake_nltk = mock.MagicMock()
+    fake_nltk.sentence_chrf.return_value = 0.5
+    monkeypatch.setattr(
+        "opik.evaluation.metrics.heuristics.chrf.nltk_chrf_score", fake_nltk
+    )
+
+    metric = ChrF(beta=2.0, char_order=4, ignore_whitespace=True, track=False)
+    metric.score(output="hello world", reference="hello world")
+
+    _, kwargs = fake_nltk.sentence_chrf.call_args
+    assert kwargs["max_len"] == 4
+    assert kwargs["ignore_whitespace"] is True
+    assert kwargs["beta"] == 2.0
 
 
 def test_spearman_ranking_metric():

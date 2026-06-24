@@ -20,9 +20,10 @@ class ChrF(BaseMetric):
     """
     Compute chrF / chrF++ scores between a candidate string and references.
 
-    By default the implementation delegates to ``nltk.translate.chrf_score`` and
-    supports both chrF (character n-gram overlap) and chrF++ (when ``word_order``
-    is non-zero). Scores range from `0.0` (no overlap) to `1.0` (perfect match).
+    By default the implementation delegates to ``nltk.translate.chrf_score``, which
+    computes chrF (character n-gram overlap). chrF++ (word n-grams via ``word_order``)
+    is not supported by the NLTK backend; provide a custom ``chrf_fn`` to compute it.
+    Scores range from `0.0` (no overlap) to `1.0` (perfect match).
 
     References:
       - Popović, "chrF: character n-gram F-score for automatic MT evaluation" (WMT 2015)
@@ -39,7 +40,8 @@ class ChrF(BaseMetric):
         beta: Weighting between precision and recall (``beta = 2`` is standard).
         ignore_whitespace: Whether whitespace is ignored before scoring.
         char_order: Maximum character n-gram order.
-        word_order: Maximum word n-gram order (set ``>0`` to enable chrF++).
+        word_order: Maximum word n-gram order for chrF++. Not supported by the
+            default NLTK backend; provide ``chrf_fn`` to use it.
         lowercase: Whether to lowercase candidate and references prior to scoring.
         chrf_fn: Optional custom scoring callable for testing or offline usage.
 
@@ -88,7 +90,9 @@ class ChrF(BaseMetric):
                         nltk_chrf_score.sentence_chrf(
                             references,
                             candidate,
+                            max_len=self._char_order,
                             beta=self._beta,
+                            ignore_whitespace=self._ignore_whitespace,
                         )
                     )
                 except TypeError:
