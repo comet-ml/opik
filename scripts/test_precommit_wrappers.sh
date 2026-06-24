@@ -85,6 +85,14 @@ out=$(printf 'sdks/python/src/opik/foo.py\n' | python3 scripts/precommit-detect-
 check "emits a skipped array"          '"skipped"'   "$out"
 check "java is skipped on a py change" 'spotless'    "$(printf '%s' "$out" | python3 -c 'import json,sys; print(" ".join(s["id"] for s in json.load(sys.stdin)["skipped"]))')"
 
+echo "precommit-hook-desc.py:"
+# Single shared resolver both tables use. Substring match, TSV order honoured
+# (ruff-format must win over ruff).
+out=$(printf '🤖 ruff-format — optimizer\n🐍 ruff — python sdk\n☕ spotless — java backend\n' | python3 scripts/precommit-hook-desc.py)
+check "ruff-format wins over ruff"  "$(printf 'ruff-format — optimizer\tFormat Python code')" "$out"
+check "ruff maps to lint"           "$(printf 'ruff — python sdk\tLint + autofix Python')"      "$out"
+check "spotless maps to java"       "$(printf 'spotless — java backend\tFormat Java code')"      "$out"
+
 echo "precommit-skipped-table.sh:"
 check_empty "empty skipped → no output"  "$(scripts/precommit-skipped-table.sh '[]')"
 sk=$(scripts/precommit-skipped-table.sh '[{"name":"☕ spotless — java backend","id":"spotless"}]')
