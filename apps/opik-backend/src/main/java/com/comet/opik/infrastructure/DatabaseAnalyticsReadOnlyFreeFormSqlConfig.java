@@ -7,16 +7,10 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 /**
- * Credentials and client bounds for the Agent Insights read-only free-form SQL ClickHouse user. Scope is intentionally
- * reduced to just the user/password and the v2-client bounds: every other connection parameter (protocol, host, port,
- * database) is shared with {@code databaseAnalytics} and reused when building the client (see
- * {@code DatabaseAnalyticsModule}).
- *
- * <p>The bounds exist because this client runs caller-supplied (LLM-generated) SQL: a bounded pool + timeouts keep a
- * slow or stuck query from pinning connections and wedging ClickHouse access for the whole instance. The per-query
- * execution/memory/row caps are enforced server-side on the read-only profile (readonly=1 rejects per-query settings),
- * so {@code socketTimeout} is intentionally larger than the profile's {@code max_execution_time} (180s) — the
- * server-side cap should fire first and surface as a clean error rather than a client-side socket abort.
+ * Credentials and client bounds for the Agent Insights read-only free-form SQL ClickHouse user. Connection params
+ * (protocol/host/port/database) are shared with {@code databaseAnalytics}. The bounds cap caller-supplied SQL so a
+ * slow query can't pin connections; execution/memory/row caps are enforced server-side on the readonly profile, so
+ * {@code socketTimeout} sits above its 180s {@code max_execution_time} (server cap fires first).
  */
 @Data
 public class DatabaseAnalyticsReadOnlyFreeFormSqlConfig {

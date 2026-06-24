@@ -73,10 +73,8 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
     @WithSpan
     public CompletableFuture<FreeFormSqlResult> execute(@NonNull String workspaceId, @NonNull UUID projectId,
             @NonNull String query) {
-        // Only the SQL_ custom settings are sent per query — the read-only profile runs under
-        // readonly=1, which rejects any other per-query setting (e.g. max_execution_time). The
-        // execution-time / memory / row caps are pinned server-side on the profile instead
-        // (see provision_agent_insights_readonly_user.sh), so the SQL text is never modified.
+        // Only the SQL_ custom settings are sent: readonly=1 rejects any other per-query setting.
+        // Execution/memory/row caps are pinned on the profile (provision_agent_insights_readonly_user.sh).
         var settings = new QuerySettings()
                 .serverSetting(SETTING_WORKSPACE_ID, workspaceId)
                 .serverSetting(SETTING_PROJECT_ID, projectId.toString());

@@ -69,11 +69,7 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
         factory.setDatabaseName(main.getDatabaseName());
         factory.setUsername(credentials.getUsername());
         factory.setPassword(credentials.getPassword());
-        // Bound this client: caller-supplied free-form SQL must not be able to pin connections or
-        // exhaust the pool indefinitely (a stuck query would otherwise wedge ClickHouse access for
-        // the whole instance until restart). The execution/memory/row caps are enforced server-side
-        // on the read-only profile; socketTimeout sits above the profile's max_execution_time so the
-        // server-side limit fires first. All three are configurable (see the config record).
+        // Bound the caller-supplied SQL client so a stuck query can't pin connections or exhaust the pool.
         factory.setClientMaxConnections(credentials.getMaxConnections());
         factory.setClientConnectionRequestTimeout(credentials.getConnectionRequestTimeout());
         factory.setClientSocketTimeout(credentials.getSocketTimeout());

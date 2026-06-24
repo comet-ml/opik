@@ -38,9 +38,7 @@ public class DatabaseAnalyticsFactory {
     private String queryParameters;
     private Duration healthCheckTimeout = Duration.seconds(1);
 
-    // V2 client bounds, applied in buildClient() only when set. Left null for the shared
-    // (bulk-insert) client to preserve library defaults; set on the read-only free-form SQL
-    // client so caller-supplied queries can't pin connections or saturate the pool indefinitely.
+    // Optional v2-client bounds, applied in buildClient() only when set (null = library defaults).
     private Integer clientMaxConnections;
     private Duration clientConnectionRequestTimeout;
     private Duration clientSocketTimeout;
