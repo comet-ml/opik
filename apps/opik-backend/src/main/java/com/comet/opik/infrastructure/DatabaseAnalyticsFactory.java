@@ -11,6 +11,7 @@ import lombok.Data;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -36,6 +37,9 @@ public class DatabaseAnalyticsFactory {
     private @NotBlank String databaseName;
     private String queryParameters;
     private Duration healthCheckTimeout = Duration.seconds(1);
+
+    // Optional socket timeout, applied in buildClient() only when set (null = library default of 0/no timeout).
+    private Duration clientSocketTimeout;
 
     public ConnectionFactory build() {
         var options = queryParameters == null ? "" : "?%s".formatted(queryParameters);
@@ -80,6 +84,11 @@ public class DatabaseAnalyticsFactory {
         // are still returned by parseQueryParameters() for tests/observability.
         ParsedQueryParameters parsed = parseQueryParameters(queryParameters);
         parsed.serverSettings().forEach(builder::serverSetting);
+
+        if (clientSocketTimeout != null) {
+            builder.setSocketTimeout(clientSocketTimeout.toMilliseconds(), ChronoUnit.MILLIS);
+        }
+
         return builder.build();
     }
 

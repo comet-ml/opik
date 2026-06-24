@@ -5,6 +5,7 @@ import com.clickhouse.client.api.insert.InsertSettings;
 import com.clickhouse.client.api.query.GenericRecord;
 import com.clickhouse.data.ClickHouseFormat;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
+import io.dropwizard.util.Duration;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -116,6 +117,17 @@ class DatabaseAnalyticsFactoryIntegrationTest {
             List<GenericRecord> records = client.queryAll("SELECT count() AS c FROM t_factory_it");
             assertThat(records).hasSize(1);
             assertThat(records.get(0).getLong("c")).isEqualTo(2L);
+        }
+    }
+
+    @Test
+    @DisplayName("socket timeout is applied and the client still queries")
+    void socketTimeoutIsApplied() throws Exception {
+        var factory = factoryWith(null);
+        factory.setClientSocketTimeout(Duration.seconds(10));
+
+        try (Client client = factory.buildClient()) {
+            client.query("SELECT 1").get().close();
         }
     }
 
