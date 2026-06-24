@@ -57,5 +57,35 @@ check "strips sdks/typescript prefix"  "eslint"             "$out"
 check "passes relative path"           "src/opik/index.ts"  "$out"
 check "uses --no-warn-ignored"         "--no-warn-ignored"  "$out"
 
+echo "precommit-detect-hooks.py:"
+# Path matching against the real config: a python src change → the python hooks
+# (and not optimizer/guardrails); a frontend non-plugin change → fe hooks but
+# NOT no-private-fe-plugins; an unrelated file → no legs.
+out=$(printf 'sdks/python/src/opik/foo.py\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml)
+check "python change emits a python leg" '"id": "ruff"'        "$out"
+check "python leg carries the file"      'sdks/python/src/opik/foo.py' "$out"
+check_empty "respects exclude (rest_api → no legs)" \
+	"$(printf 'sdks/python/src/opik/rest_api/x.py\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml | grep -o '"id"' || true)"
+out=$(printf 'apps/opik-frontend/src/components/Foo.tsx\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml)
+check "fe change emits fe-eslint"        '"id": "fe-eslint"'   "$out"
+check_empty "fe non-plugin change omits no-private-fe-plugins" \
+	"$(printf '%s' "$out" | grep -o 'no-private-fe-plugins' || true)"
+check_empty "unrelated file → no legs" \
+	"$(printf 'README.md\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml | grep -o '"id"' || true)"
+
+echo "precommit-filter-leg-log.sh:"
+# A single-hook verbose run prints the matched hook (Passed/Failed) plus same-id
+# siblings as Skipped; the filter keeps only the non-skipped block.
+filt=$(printf '%s\n' \
+	'🐍 trim trailing whitespace — python sdk......Passed' \
+	'- hook id: trailing-whitespace' \
+	'- duration: 0.02s' \
+	'🤖 trim trailing whitespace — optimizer......(no files to check)Skipped' \
+	'- hook id: trailing-whitespace' \
+	| scripts/precommit-filter-leg-log.sh trailing-whitespace)
+check "keeps the hook that ran"     "python sdk"  "$filt"
+check "keeps its duration"          "0.02s"       "$filt"
+check_empty "drops the Skipped sibling" "$(printf '%s' "$filt" | grep -o 'optimizer' || true)"
+
 echo ""
 if [ "$fails" -eq 0 ]; then echo "All wrapper smoke tests passed."; else echo "$fails test(s) FAILED."; exit 1; fi
