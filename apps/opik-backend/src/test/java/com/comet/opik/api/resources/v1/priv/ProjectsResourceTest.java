@@ -804,6 +804,21 @@ class ProjectsResourceTest {
             // Seed traces/spans so stats would be non-null if they were computed.
             buildProjectStats(project.toBuilder().id(id).build(), apiKey, workspaceName);
 
+            // Without stats requested (OPIK-7101), no ClickHouse aggregation runs on the hot name-resolution path:
+            // identity/core fields are resolved while every stats field stays null. lastUpdatedTraceAt is a `projects`
+            // table column (set on ingestion), not part of the stats aggregation, so it is ignored via IGNORED_FIELD_MIN.
+            var expectedProject = project.toBuilder()
+                    .id(id)
+                    .feedbackScores(null)
+                    .duration(null)
+                    .totalEstimatedCost(null)
+                    .totalEstimatedCostSum(null)
+                    .usage(null)
+                    .traceCount(null)
+                    .guardrailsFailedCount(null)
+                    .errorCount(null)
+                    .build();
+
             try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
                     .path("retrieve")
                     .request()
@@ -815,22 +830,11 @@ class ProjectsResourceTest {
                 assertThat(actualResponse.hasEntity()).isTrue();
 
                 var actualEntity = actualResponse.readEntity(Project.class);
-
-                // Identity fields are still resolved (this endpoint is used for name -> id resolution).
-                assertThat(actualEntity.id()).isEqualTo(id);
-                assertThat(actualEntity.name()).isEqualTo(project.name());
-
-                // Stats are not computed by default (OPIK-7101): no ClickHouse aggregation on the hot name-resolution path.
-                // Note: lastUpdatedTraceAt is a `projects` table column (set on ingestion), not part of the ClickHouse
-                // stats aggregation, so it is intentionally not asserted here.
-                assertThat(actualEntity.feedbackScores()).isNull();
-                assertThat(actualEntity.duration()).isNull();
-                assertThat(actualEntity.totalEstimatedCost()).isNull();
-                assertThat(actualEntity.totalEstimatedCostSum()).isNull();
-                assertThat(actualEntity.usage()).isNull();
-                assertThat(actualEntity.traceCount()).isNull();
-                assertThat(actualEntity.guardrailsFailedCount()).isNull();
-                assertThat(actualEntity.errorCount()).isNull();
+                assertThat(actualEntity)
+                        .usingRecursiveComparison()
+                        .ignoringFields(IGNORED_FIELD_MIN)
+                        .ignoringCollectionOrder()
+                        .isEqualTo(expectedProject);
             }
         }
 

@@ -13,9 +13,12 @@ public record ProjectRetrieve(@NotBlank String name, @Nullable Boolean includeSt
      * <p>
      * Defaults to {@code false}: callers that only need to resolve a project
      * name to its id (the SDK and the UI redirect path) should not trigger the
-     * expensive ClickHouse aggregations. See OPIK-7101.
+     * expensive ClickHouse aggregations. The canonical accessor is overridden to
+     * coalesce {@code null} to {@code false}, so it never returns {@code null}.
+     * See OPIK-7101.
      */
-    public boolean shouldIncludeStats() {
+    @Override
+    public Boolean includeStats() {
         return Boolean.TRUE.equals(includeStats);
     }
 }

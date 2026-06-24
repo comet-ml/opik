@@ -216,7 +216,7 @@ public class ProjectsResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = ProjectRetrieve.class))) @Valid ProjectRetrieve retrieve) {
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Retrieve project by name '{}', on workspace_id '{}'", retrieve.name(), workspaceId);
-        Project project = projectService.retrieveByName(retrieve.name(), retrieve.shouldIncludeStats());
+        Project project = projectService.retrieveByName(retrieve.name(), retrieve.includeStats());
         log.info("Retrieved project id '{}' by name '{}', on workspace_id '{}'", project.id(), retrieve.name(),
                 workspaceId);
         return Response.ok().entity(project).build();
