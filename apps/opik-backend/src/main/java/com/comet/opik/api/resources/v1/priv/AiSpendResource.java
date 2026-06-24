@@ -4,6 +4,7 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.sorting.SpendUserSortingFactory;
 import com.comet.opik.api.spend.SpendBreakdownResponse;
+import com.comet.opik.api.spend.SpendBreakdownsResponse;
 import com.comet.opik.api.spend.SpendCompositionResponse;
 import com.comet.opik.api.spend.SpendMetricRequest;
 import com.comet.opik.api.spend.SpendSummaryResponse;
@@ -109,6 +110,26 @@ public class AiSpendResource {
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Retrieved spend breakdown for lane '{}' on workspace_id '{}'", laneKey, workspaceId);
+
+        return Response.ok().entity(response).build();
+    }
+
+    @POST
+    @Path("/composition/breakdowns")
+    @Operation(operationId = "getSpendAllBreakdowns", summary = "Get all spend lane breakdowns", description = "Get the per-item breakdown for every composition lane in one request", responses = {
+            @ApiResponse(responseCode = "200", description = "Lane breakdowns", content = @Content(schema = @Schema(implementation = SpendBreakdownsResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
+    public Response getSpendAllBreakdowns(
+            @RequestBody(content = @Content(schema = @Schema(implementation = SpendMetricRequest.class))) @NotNull @Valid SpendMetricRequest request) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Retrieve all spend breakdowns on workspace_id '{}'", workspaceId);
+        var response = aiSpendService.getAllBreakdowns(request)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        log.info("Retrieved all spend breakdowns on workspace_id '{}'", workspaceId);
 
         return Response.ok().entity(response).build();
     }

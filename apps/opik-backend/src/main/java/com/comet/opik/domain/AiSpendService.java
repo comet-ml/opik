@@ -4,6 +4,7 @@ import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.api.sorting.SpendUserSortingFactory;
 import com.comet.opik.api.spend.OutputLane;
 import com.comet.opik.api.spend.SpendBreakdownResponse;
+import com.comet.opik.api.spend.SpendBreakdownsResponse;
 import com.comet.opik.api.spend.SpendCompositionResponse;
 import com.comet.opik.api.spend.SpendLane;
 import com.comet.opik.api.spend.SpendMetricRequest;
@@ -29,6 +30,8 @@ public interface AiSpendService {
     Mono<SpendCompositionResponse> getComposition(SpendMetricRequest request);
 
     Mono<SpendBreakdownResponse> getBreakdown(SpendMetricRequest request, String laneKey);
+
+    Mono<SpendBreakdownsResponse> getAllBreakdowns(SpendMetricRequest request);
 
     Mono<SpendUserPage> getUsers(SpendMetricRequest request, List<SortingField> sortingFields, String name, int page,
             int size);
@@ -64,6 +67,13 @@ class AiSpendServiceImpl implements AiSpendService {
                 .filter(OutputLane::hasBreakdown)
                 .orElseThrow(() -> new BadRequestException("No breakdown available for lane: %s".formatted(laneKey)));
         return resolveProject(request).flatMap(resolved -> aiSpendDAO.getOutputBreakdown(resolved, outputLane));
+    }
+
+    @Override
+    public Mono<SpendBreakdownsResponse> getAllBreakdowns(@NonNull SpendMetricRequest request) {
+        return resolveProject(request)
+                .flatMap(aiSpendDAO::getAllBreakdowns)
+                .map(breakdowns -> SpendBreakdownsResponse.builder().breakdowns(breakdowns).build());
     }
 
     @Override
