@@ -100,7 +100,7 @@ public interface ProjectService {
 
     Project getOrCreate(String workspaceId, String projectName, String userName);
 
-    Project retrieveByName(String projectName, boolean includeStats);
+    Project retrieveByName(String projectName);
 
     Mono<List<Project>> retrieveByNamesOrCreate(Set<String> projectNames);
 
@@ -620,7 +620,7 @@ class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
-    public Project retrieveByName(@NonNull String projectName, boolean includeStats) {
+    public Project retrieveByName(@NonNull String projectName) {
         var workspaceId = requestContext.get().getWorkspaceId();
 
         Optional<Project> projects = template.inTransaction(READ_ONLY, handle -> {
@@ -631,34 +631,7 @@ class ProjectServiceImpl implements ProjectService {
 
         return projects
                 .flatMap(project -> verifyVisibility(project, requestContext.get().getVisibility()))
-                .map(project -> includeStats ? enrichWithStats(project, workspaceId) : project)
                 .orElseThrow(this::createNotFoundError);
-    }
-
-    private Project enrichWithStats(Project project, String workspaceId) {
-        Map<UUID, Instant> projectLastUpdatedTraceAtMap = transactionTemplateAsync
-                .nonTransaction(connection -> {
-                    Set<UUID> projectIds = Set.of(project.id());
-                    return traceDAO.getLastUpdatedTraceAt(projectIds, workspaceId, connection);
-                }).block();
-
-        Map<UUID, Map<String, Object>> projectStats = getProjectStats(List.of(project.id()),
-                workspaceId, ProjectCriteria.builder().build());
-
-        return project.toBuilder()
-                .lastUpdatedTraceAt(projectLastUpdatedTraceAtMap.get(project.id()))
-                .feedbackScores(StatsMapper.getStatsFeedbackScores(projectStats.get(project.id())))
-                .usage(StatsMapper.getStatsUsage(projectStats.get(project.id())))
-                .duration(StatsMapper.getStatsDuration(projectStats.get(project.id())))
-                .totalEstimatedCost(
-                        StatsMapper.getStatsTotalEstimatedCost(projectStats.get(project.id())))
-                .totalEstimatedCostSum(
-                        StatsMapper.getStatsTotalEstimatedCostSum(projectStats.get(project.id())))
-                .traceCount(StatsMapper.getStatsTraceCount(projectStats.get(project.id())))
-                .guardrailsFailedCount(
-                        StatsMapper.getStatsGuardrailsFailedCount(projectStats.get(project.id())))
-                .errorCount(StatsMapper.getStatsErrorCount(projectStats.get(project.id())))
-                .build();
     }
 
     @Override

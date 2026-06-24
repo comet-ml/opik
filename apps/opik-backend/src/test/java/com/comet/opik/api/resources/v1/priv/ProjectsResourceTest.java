@@ -753,7 +753,7 @@ class ProjectsResourceTest {
     class RetrieveProjectTest {
 
         @Test
-        @DisplayName("when project exists, then return project")
+        @DisplayName("when project exists, then return project without stats")
         void getProjectById__whenProjectExists__thenReturnProject() {
             String workspaceName = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
@@ -765,48 +765,12 @@ class ProjectsResourceTest {
 
             var id = createProject(project, apiKey, workspaceName);
 
-            project = buildProjectStats(project.toBuilder().id(id).build(), apiKey, workspaceName);
-
-            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
-                    .path("retrieve")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.json(ProjectRetrieve.builder().name(project.name()).includeStats(true).build()))) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
-                assertThat(actualResponse.hasEntity()).isTrue();
-
-                var actualEntity = actualResponse.readEntity(Project.class);
-                assertThat(actualEntity)
-                        .usingRecursiveComparison()
-                        .ignoringFields(IGNORED_FIELD_MIN)
-                        .ignoringCollectionOrder()
-                        .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
-                        .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "totalEstimatedCost")
-                        .isEqualTo(project);
-            }
-        }
-
-        @Test
-        @DisplayName("when project exists and stats are not requested, then return project without stats")
-        void getProjectByName__whenStatsNotRequested__thenReturnProjectWithoutStats() {
-            String workspaceName = UUID.randomUUID().toString();
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var project = factory.manufacturePojo(Project.class);
-
-            var id = createProject(project, apiKey, workspaceName);
-
-            // Seed traces/spans so stats would be non-null if they were computed.
+            // Seed traces/spans so stats would be non-null if they were ever computed.
             buildProjectStats(project.toBuilder().id(id).build(), apiKey, workspaceName);
 
-            // Without stats requested (OPIK-7101), no ClickHouse aggregation runs on the hot name-resolution path:
-            // identity/core fields are resolved while every stats field stays null. lastUpdatedTraceAt is a `projects`
-            // table column (set on ingestion), not part of the stats aggregation, so it is ignored via IGNORED_FIELD_MIN.
+            // /retrieve resolves name -> id only; it never computes ClickHouse stats (OPIK-7104), so every stats field
+            // stays null even when traces exist. lastUpdatedTraceAt is a `projects` table column (set on ingestion),
+            // not part of the stats aggregation, so it is ignored via IGNORED_FIELD_MIN.
             var expectedProject = project.toBuilder()
                     .id(id)
                     .feedbackScores(null)
