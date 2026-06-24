@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useFormContext } from "react-hook-form";
 
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
-import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
+import useDatasetById from "@/api/datasets/useDatasetById";
 import useOptimizationCreateMutation from "@/api/optimizations/useOptimizationCreateMutation";
 import { OptimizationConfigFormType } from "@/v2/pages-shared/optimizations/OptimizationConfigForm/schema";
 import { convertFormDataToStudioConfig } from "@/v2/pages-shared/optimizations/OptimizationConfigForm/schema";
@@ -41,22 +41,6 @@ export const useOptimizationsNewFormHandlers = () => {
 
   const form = useFormContext<OptimizationConfigFormType>();
 
-  const { data: datasetsData } = useProjectDatasetsList(
-    {
-      projectId: activeProjectId!,
-      page: 1,
-      size: 1000,
-    },
-    {
-      enabled: !!activeProjectId,
-    },
-  );
-
-  const datasets = useMemo(
-    () => datasetsData?.content || [],
-    [datasetsData?.content],
-  );
-
   const datasetId = form.watch("datasetId");
   const optimizerType = form.watch("optimizerType");
   const metricType = form.watch("metricType");
@@ -66,6 +50,13 @@ export const useOptimizationsNewFormHandlers = () => {
   const { datasetSample, datasetVariables } = useDatasetSamplePreview({
     datasetId,
   });
+
+  // Resolve the selected dataset's name on demand instead of scanning a
+  // capped list of every project dataset.
+  const { data: selectedDataset } = useDatasetById(
+    { datasetId },
+    { enabled: Boolean(datasetId) },
+  );
 
   const { calculateModelProvider } = useLLMProviderModelsData();
 
@@ -200,8 +191,7 @@ export const useOptimizationsNewFormHandlers = () => {
     if (!isValid) return;
 
     const formData = form.getValues();
-    const selectedDs = datasets.find((ds) => ds.id === formData.datasetId);
-    const datasetNameValue = selectedDs?.name || "";
+    const datasetNameValue = selectedDataset?.name || "";
 
     if (!datasetNameValue) return;
 
@@ -252,7 +242,7 @@ export const useOptimizationsNewFormHandlers = () => {
     }
   }, [
     form,
-    datasets,
+    selectedDataset,
     createOptimization,
     navigate,
     workspaceName,

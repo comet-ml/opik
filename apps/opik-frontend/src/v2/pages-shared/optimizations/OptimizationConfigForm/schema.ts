@@ -23,33 +23,6 @@ export const GepaOptimizerParamsSchema = z.object({
   seed: z.number().optional(),
 });
 
-// export const EvolutionaryOptimizerParamsSchema = z.object({
-//   model: z.string().optional(),
-//   model_parameters: z.record(z.unknown()).optional(),
-//   population_size: z.number().min(1, "Must be at least 1").optional(),
-//   num_generations: z.number().min(1, "Must be at least 1").optional(),
-//   mutation_rate: z
-//     .number()
-//     .min(0, "Must be between 0 and 1")
-//     .max(1, "Must be between 0 and 1")
-//     .optional(),
-//   crossover_rate: z
-//     .number()
-//     .min(0, "Must be between 0 and 1")
-//     .max(1, "Must be between 0 and 1")
-//     .optional(),
-//   tournament_size: z.number().min(1, "Must be at least 1").optional(),
-//   elitism_size: z.number().min(0, "Must be at least 0").optional(),
-//   adaptive_mutation: z.boolean().optional(),
-//   enable_moo: z.boolean().optional(),
-//   enable_llm_crossover: z.boolean().optional(),
-//   output_style_guidance: z.string().optional(),
-//   infer_output_style: z.boolean().optional(),
-//   n_threads: z.number().min(1, "Must be at least 1").optional(),
-//   verbose: z.boolean().optional(),
-//   seed: z.number().optional(),
-// });
-
 export const HierarchicalReflectiveOptimizerParamsSchema = z.object({
   model: z.string().optional(),
   model_parameters: z.record(z.unknown()).optional(),
