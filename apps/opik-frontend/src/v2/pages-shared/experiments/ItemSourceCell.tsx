@@ -35,6 +35,12 @@ type CustomMeta = {
   nameKey?: string;
   idKey?: string;
   getIsDeleted?: (cellData: unknown) => boolean;
+  /**
+   * Forces the linked resource (and matching icon) instead of inferring it from
+   * the row's `evaluation_method`. Used where the row has no evaluation method
+   * of its own — e.g. optimization runs always point at a test suite.
+   */
+  resource?: RESOURCE_TYPE;
 };
 
 const ItemSourceCell = <TData,>(context: CellContext<TData, unknown>) => {
@@ -44,6 +50,7 @@ const ItemSourceCell = <TData,>(context: CellContext<TData, unknown>) => {
     nameKey = "name",
     idKey = "id",
     getIsDeleted,
+    resource: resourceOverride,
   } = (custom ?? {}) as CustomMeta;
 
   const name = get(cellData, nameKey, undefined) as string | undefined;
@@ -60,11 +67,13 @@ const ItemSourceCell = <TData,>(context: CellContext<TData, unknown>) => {
     ? getIsDeleted(cellData)
     : undefined;
 
-  const isTestSuite = evaluationMethod === EVALUATION_METHOD.TEST_SUITE;
+  const isTestSuite = resourceOverride
+    ? resourceOverride === RESOURCE_TYPE.testSuite
+    : evaluationMethod === EVALUATION_METHOD.TEST_SUITE;
   const Icon = isTestSuite ? ListChecks : Database;
-  const resource = isTestSuite
-    ? RESOURCE_TYPE.testSuite
-    : RESOURCE_TYPE.dataset;
+  const resource =
+    resourceOverride ??
+    (isTestSuite ? RESOURCE_TYPE.testSuite : RESOURCE_TYPE.dataset);
 
   const tagSize = getCellTagSize(context, TAG_SIZE_MAP);
 
