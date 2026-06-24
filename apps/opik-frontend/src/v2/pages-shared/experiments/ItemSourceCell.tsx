@@ -96,6 +96,10 @@ const ItemSourceCell = <TData,>(context: CellContext<TData, unknown>) => {
                 resource={resource}
                 isDeleted={isDeleted}
               />
+            ) : name ? (
+              // No id to link to (e.g. an optimization row whose dataset id is
+              // absent) — still show the source name rather than a bare dash.
+              <span className="comet-body-s block truncate">{name}</span>
             ) : (
               "-"
             )}
