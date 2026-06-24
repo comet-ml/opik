@@ -249,7 +249,8 @@ class ThreadDAOImpl implements ThreadDAO {
                         last_updated_by,
                         created_at,
                         last_updated_at,
-                        feedback_scores.last_updated_by AS author
+                        feedback_scores.last_updated_by AS author,
+                        CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores
                     WHERE entity_type = 'thread'
                       AND workspace_id = :workspace_id
@@ -269,7 +270,8 @@ class ThreadDAOImpl implements ThreadDAO {
                         last_updated_by,
                         created_at,
                         last_updated_at,
-                        author
+                        author,
+                        source_queue_id
                     FROM authored_feedback_scores
                     WHERE entity_type = 'thread'
                        AND workspace_id = :workspace_id
@@ -278,14 +280,14 @@ class ThreadDAOImpl implements ThreadDAO {
                        <if(annotation_queue_id)>AND source_queue_id = :annotation_queue_id<endif>
                 )
                 ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ), feedback_scores_grouped AS (
                 SELECT
                     workspace_id,
                     project_id,
                     entity_id,
                     name,
-                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at)) AS entries
+                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at, source_queue_id)) AS entries
                 FROM feedback_scores_deduped
                 GROUP BY workspace_id, project_id, entity_id, name
             ), feedback_scores_final AS (
@@ -299,8 +301,8 @@ class ThreadDAOImpl implements ThreadDAO {
                     IF(length(entries) = 1, entries[1].2, arrayStringConcat(arrayMap(e -> if(e.2 = '', '\\<no reason>', e.2), entries), ', ')) AS reason,
                     entries[1].4 AS source,
                     mapFromArrays(
-                        arrayMap(e -> e.5, entries),
-                        arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9), entries)
+                        arrayMap(e -> if(e.10 = '', e.5, concat(e.5, '_', toString(e.10))), entries),
+                        arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, '', '', e.10, e.5), entries)
                     ) AS value_by_author,
                     arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
                     arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
@@ -340,6 +342,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     last_updated_at,
                     created_by,
                     last_updated_by,
+                    source_queue_id,
                     entity_id,
                     workspace_id,
                     project_id
@@ -575,7 +578,8 @@ class ThreadDAOImpl implements ThreadDAO {
                         last_updated_by,
                         created_at,
                         last_updated_at,
-                        feedback_scores.last_updated_by AS author
+                        feedback_scores.last_updated_by AS author,
+                        CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores
                     WHERE entity_type = 'thread'
                        AND workspace_id = :workspace_id
@@ -595,7 +599,8 @@ class ThreadDAOImpl implements ThreadDAO {
                         last_updated_by,
                         created_at,
                         last_updated_at,
-                        author
+                        author,
+                        source_queue_id
                     FROM authored_feedback_scores
                     WHERE entity_type = 'thread'
                        AND workspace_id = :workspace_id
@@ -604,14 +609,14 @@ class ThreadDAOImpl implements ThreadDAO {
                        <if(annotation_queue_id)>AND source_queue_id = :annotation_queue_id<endif>
                 )
                 ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ), feedback_scores_grouped AS (
                 SELECT
                     workspace_id,
                     project_id,
                     entity_id,
                     name,
-                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at)) AS entries
+                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at, source_queue_id)) AS entries
                 FROM feedback_scores_deduped
                 GROUP BY workspace_id, project_id, entity_id, name
             ), feedback_scores_final AS (
@@ -625,8 +630,8 @@ class ThreadDAOImpl implements ThreadDAO {
                     IF(length(entries) = 1, entries[1].2, arrayStringConcat(arrayMap(e -> if(e.2 = '', '\\<no reason>', e.2), entries), ', ')) AS reason,
                     entries[1].4 AS source,
                     mapFromArrays(
-                        arrayMap(e -> e.5, entries),
-                        arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9), entries)
+                        arrayMap(e -> if(e.10 = '', e.5, concat(e.5, '_', toString(e.10))), entries),
+                        arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, '', '', e.10, e.5), entries)
                     ) AS value_by_author,
                     arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
                     arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
@@ -827,7 +832,8 @@ class ThreadDAOImpl implements ThreadDAO {
                            last_updated_by,
                            created_at,
                            last_updated_at,
-                           feedback_scores.last_updated_by AS author
+                           feedback_scores.last_updated_by AS author,
+                           CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores
                     WHERE entity_type = 'thread'
                       AND workspace_id = :workspace_id
@@ -847,7 +853,8 @@ class ThreadDAOImpl implements ThreadDAO {
                         last_updated_by,
                         created_at,
                         last_updated_at,
-                        author
+                        author,
+                        source_queue_id
                     FROM authored_feedback_scores
                     WHERE entity_type = 'thread'
                        AND workspace_id = :workspace_id
@@ -855,14 +862,14 @@ class ThreadDAOImpl implements ThreadDAO {
                        AND entity_id IN (SELECT thread_model_id FROM trace_threads_ids)
                 )
                 ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ), feedback_scores_grouped AS (
                 SELECT
                     workspace_id,
                     project_id,
                     entity_id,
                     name,
-                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at)) AS entries
+                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at, source_queue_id)) AS entries
                 FROM feedback_scores_deduped
                 GROUP BY workspace_id, project_id, entity_id, name
             ), feedback_scores_final AS (
@@ -876,8 +883,8 @@ class ThreadDAOImpl implements ThreadDAO {
                     IF(length(entries) = 1, entries[1].2, arrayStringConcat(arrayMap(e -> if(e.2 = '', '\\<no reason>', e.2), entries), ', ')) AS reason,
                     entries[1].4 AS source,
                     mapFromArrays(
-                        arrayMap(e -> e.5, entries),
-                        arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9), entries)
+                        arrayMap(e -> if(e.10 = '', e.5, concat(e.5, '_', toString(e.10))), entries),
+                        arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, '', '', e.10, e.5), entries)
                     ) AS value_by_author,
                     arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
                     arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
@@ -917,6 +924,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     last_updated_at,
                     created_by,
                     last_updated_by,
+                    source_queue_id,
                     entity_id,
                     workspace_id,
                     project_id
@@ -1145,7 +1153,8 @@ class ThreadDAOImpl implements ThreadDAO {
                             last_updated_by,
                             created_at,
                             last_updated_at,
-                            feedback_scores.last_updated_by AS author
+                            feedback_scores.last_updated_by AS author,
+                            CAST('' AS FixedString(36)) AS source_queue_id
                         FROM feedback_scores
                         WHERE entity_type = 'thread'
                           AND workspace_id = :workspace_id
@@ -1165,7 +1174,8 @@ class ThreadDAOImpl implements ThreadDAO {
                             last_updated_by,
                             created_at,
                             last_updated_at,
-                            author
+                            author,
+                            source_queue_id
                         FROM authored_feedback_scores
                         WHERE entity_type = 'thread'
                            AND workspace_id = :workspace_id
@@ -1174,14 +1184,14 @@ class ThreadDAOImpl implements ThreadDAO {
                            <if(annotation_queue_id)>AND source_queue_id = :annotation_queue_id<endif>
                     )
                     ORDER BY last_updated_at DESC
-                    LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                    LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
                 ), feedback_scores_grouped AS (
                     SELECT
                         workspace_id,
                         project_id,
                         entity_id,
                         name,
-                        groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at)) AS entries
+                        groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at, source_queue_id)) AS entries
                     FROM feedback_scores_deduped
                     GROUP BY workspace_id, project_id, entity_id, name
                 ), feedback_scores_final AS (
@@ -1195,8 +1205,8 @@ class ThreadDAOImpl implements ThreadDAO {
                         IF(length(entries) = 1, entries[1].2, arrayStringConcat(arrayMap(e -> if(e.2 = '', '\\<no reason>', e.2), entries), ', ')) AS reason,
                         entries[1].4 AS source,
                         mapFromArrays(
-                            arrayMap(e -> e.5, entries),
-                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9), entries)
+                            arrayMap(e -> if(e.10 = '', e.5, concat(e.5, '_', toString(e.10))), entries),
+                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, '', '', e.10, e.5), entries)
                         ) AS value_by_author,
                         arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
                         arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,

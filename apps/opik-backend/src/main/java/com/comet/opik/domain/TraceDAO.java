@@ -453,10 +453,9 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
-    // Build value_by_author map with composite keys (author_spanId) for span feedback scores.
-    // The composite key format ensures uniqueness when multiple spans have the same author.
-    // Format: if span_id exists, use 'author_spanId', otherwise use 'author'.
-    // The tuple contains: (value, reason, category_name, source, last_updated_at, span_type, span_id)
+    // Build value_by_author map with composite keys for feedback scores.
+    // Key format: author + optional _queueId + optional _spanId (ensures uniqueness across queues/spans).
+    // Value tuple: (value, reason, category_name, source, last_updated_at, span_type, span_id, source_queue_id, author)
     private static final String SELECT_BY_IDS = """
             WITH target_spans AS (
                 SELECT id, trace_id, type
@@ -478,7 +477,8 @@ class TraceDAOImpl implements TraceDAO {
                        last_updated_by,
                        created_at,
                        last_updated_at,
-                       author
+                       author,
+                       source_queue_id
                 FROM (
                     SELECT workspace_id,
                            project_id,
@@ -492,7 +492,8 @@ class TraceDAOImpl implements TraceDAO {
                            last_updated_by,
                            created_at,
                            last_updated_at,
-                       feedback_scores.last_updated_by AS author
+                       feedback_scores.last_updated_by AS author,
+                       CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
@@ -512,7 +513,8 @@ class TraceDAOImpl implements TraceDAO {
                         last_updated_by,
                         created_at,
                         last_updated_at,
-                        author
+                        author,
+                        source_queue_id
                    FROM authored_feedback_scores
                    WHERE entity_type = 'trace'
                      AND workspace_id = :workspace_id
@@ -520,7 +522,7 @@ class TraceDAOImpl implements TraceDAO {
                      AND entity_id IN :ids
                 )
                 ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
              ),
              feedback_scores_grouped AS (
                  SELECT
@@ -528,7 +530,7 @@ class TraceDAOImpl implements TraceDAO {
                      project_id,
                      entity_id,
                      name,
-                     groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at)) AS entries
+                     groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at, source_queue_id)) AS entries
                  FROM feedback_scores_deduped
                  GROUP BY workspace_id, project_id, entity_id, name
              ), feedback_scores_final AS (
@@ -542,8 +544,8 @@ class TraceDAOImpl implements TraceDAO {
                      IF(length(entries) = 1, entries[1].2, arrayStringConcat(arrayMap(e -> if(e.2 = '', '\\<no reason>', e.2), entries), ', ')) AS reason,
                      entries[1].4 AS source,
                      mapFromArrays(
-                             arrayMap(e -> e.5, entries),
-                             arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9), entries)
+                             arrayMap(e -> if(e.10 = '', e.5, concat(e.5, '_', toString(e.10))), entries),
+                             arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, '', '', e.10, e.5), entries)
                      ) AS value_by_author,
                      arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
                      arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
@@ -565,7 +567,8 @@ class TraceDAOImpl implements TraceDAO {
                        last_updated_by,
                        created_at,
                        last_updated_at,
-                       author
+                       author,
+                       source_queue_id
                 FROM (
                     SELECT fs.workspace_id,
                            fs.project_id,
@@ -581,7 +584,8 @@ class TraceDAOImpl implements TraceDAO {
                            fs.last_updated_by,
                            fs.created_at,
                            fs.last_updated_at,
-                           fs.last_updated_by AS author
+                           fs.last_updated_by AS author,
+                           CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores AS fs
                     INNER JOIN target_spans s ON fs.entity_id = s.id
                     WHERE fs.entity_type = 'span'
@@ -602,7 +606,8 @@ class TraceDAOImpl implements TraceDAO {
                            afs.last_updated_by,
                            afs.created_at,
                            afs.last_updated_at,
-                           afs.author
+                           afs.author,
+                           afs.source_queue_id
                     FROM authored_feedback_scores AS afs
                     INNER JOIN target_spans s ON afs.entity_id = s.id
                     WHERE afs.entity_type = 'span'
@@ -610,14 +615,14 @@ class TraceDAOImpl implements TraceDAO {
                     <if(has_target_projects)>AND afs.project_id IN :target_project_ids<endif>
                 )
                 ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, span_id, name, author
+                LIMIT 1 BY workspace_id, project_id, span_id, name, author, source_queue_id
             ), span_feedback_scores_grouped AS (
                 SELECT
                     workspace_id,
                     project_id,
                     trace_id,
                     name,
-                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at, span_type, span_id)) AS entries
+                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at, span_type, span_id, source_queue_id)) AS entries
                 FROM span_feedback_scores_deduped
                 GROUP BY workspace_id, project_id, trace_id, name
             ), span_feedback_scores_final AS (
@@ -637,8 +642,8 @@ class TraceDAOImpl implements TraceDAO {
                     ) AS reason,
                     entries[1].4 AS source,
                     mapFromArrays(
-                            arrayMap(e -> if(e.11 IS NULL OR e.11 = '', e.5, concat(e.5, '_', toString(e.11))), entries),
-                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, e.10, e.11), entries)
+                            arrayMap(e -> concat(e.5, if(e.12 = '', '', concat('_', toString(e.12))), if(e.11 IS NULL OR e.11 = '', '', concat('_', toString(e.11)))), entries),
+                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, e.10, e.11, e.12, e.5), entries)
                     ) AS value_by_author,
                     arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
                     arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
@@ -736,6 +741,7 @@ class TraceDAOImpl implements TraceDAO {
                             last_updated_at,
                             created_by,
                             last_updated_by,
+                            source_queue_id,
                             entity_id
                         FROM comments
                         WHERE workspace_id = :workspace_id
@@ -859,7 +865,8 @@ class TraceDAOImpl implements TraceDAO {
                        last_updated_by,
                        created_at,
                        last_updated_at,
-                       author
+                       author,
+                       source_queue_id
                 FROM (
                     SELECT workspace_id,
                            project_id,
@@ -873,7 +880,8 @@ class TraceDAOImpl implements TraceDAO {
                            last_updated_by,
                            created_at,
                            last_updated_at,
-                           feedback_scores.last_updated_by AS author
+                           feedback_scores.last_updated_by AS author,
+                           CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
@@ -896,7 +904,8 @@ class TraceDAOImpl implements TraceDAO {
                            last_updated_by,
                            created_at,
                            last_updated_at,
-                           author
+                           author,
+                           source_queue_id
                     FROM authored_feedback_scores
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
@@ -909,7 +918,7 @@ class TraceDAOImpl implements TraceDAO {
                       <endif>
                 )
                 ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
              ),
              feedback_scores_grouped AS (
                  SELECT
@@ -917,7 +926,7 @@ class TraceDAOImpl implements TraceDAO {
                      project_id,
                      entity_id,
                      name,
-                     groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at)) AS entries
+                     groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at, source_queue_id)) AS entries
                  FROM feedback_scores_deduped
                  GROUP BY workspace_id, project_id, entity_id, name
              ), feedback_scores_final AS (
@@ -931,8 +940,8 @@ class TraceDAOImpl implements TraceDAO {
                     IF(length(entries) = 1, entries[1].2, arrayStringConcat(arrayMap(e -> if(e.2 = '', '\\<no reason>', e.2), entries), ', ')) AS reason,
                     entries[1].4 AS source,
                     mapFromArrays(
-                            arrayMap(e -> e.5, entries),
-                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9), entries)
+                            arrayMap(e -> if(e.10 = '', e.5, concat(e.5, '_', toString(e.10))), entries),
+                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, '', '', e.10, e.5), entries)
                     ) AS value_by_author,
                     arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
                     arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
@@ -1012,7 +1021,8 @@ class TraceDAOImpl implements TraceDAO {
                        last_updated_by,
                        created_at,
                        last_updated_at,
-                       author
+                       author,
+                       source_queue_id
                 FROM (
                     SELECT workspace_id,
                            project_id,
@@ -1026,7 +1036,8 @@ class TraceDAOImpl implements TraceDAO {
                            last_updated_by,
                            created_at,
                            last_updated_at,
-                           feedback_scores.last_updated_by AS author
+                           feedback_scores.last_updated_by AS author,
+                           CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
@@ -1050,7 +1061,8 @@ class TraceDAOImpl implements TraceDAO {
                            last_updated_by,
                            created_at,
                            last_updated_at,
-                           author
+                           author,
+                           source_queue_id
                     FROM authored_feedback_scores
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
@@ -1063,7 +1075,7 @@ class TraceDAOImpl implements TraceDAO {
                       <endif>
                 )
                 ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ), span_feedback_scores_with_trace_id AS (
                 SELECT workspace_id,
                        project_id,
@@ -1077,7 +1089,8 @@ class TraceDAOImpl implements TraceDAO {
                        last_updated_by,
                        created_at,
                        last_updated_at,
-                       author
+                       author,
+                       source_queue_id
                 FROM span_feedback_scores_deduped sfs
                 INNER JOIN target_spans s ON sfs.entity_id = s.id
             ), span_feedback_scores_grouped AS (
@@ -1086,7 +1099,7 @@ class TraceDAOImpl implements TraceDAO {
                     project_id,
                     trace_id,
                     name,
-                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at)) AS entries
+                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at, source_queue_id)) AS entries
                 FROM span_feedback_scores_with_trace_id
                 GROUP BY workspace_id, project_id, trace_id, name
             ), span_feedback_scores_final AS (
@@ -1100,8 +1113,8 @@ class TraceDAOImpl implements TraceDAO {
                     IF(length(entries) = 1, entries[1].2, arrayStringConcat(arrayMap(e -> if(e.2 = '', '\\<no reason>', e.2), entries), ', ')) AS reason,
                     entries[1].4 AS source,
                     mapFromArrays(
-                            arrayMap(e -> e.5, entries),
-                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9), entries)
+                            arrayMap(e -> if(e.10 = '', e.5, concat(e.5, '_', toString(e.10))), entries),
+                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, '', '', e.10, e.5), entries)
                     ) AS value_by_author,
                     arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
                     arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
@@ -1146,7 +1159,7 @@ class TraceDAOImpl implements TraceDAO {
             ), comments_agg AS (
                 SELECT
                     entity_id,
-                    groupArray(tuple(id, text, created_at, last_updated_at, created_by, last_updated_by)) AS comments_array
+                    groupArray(tuple(id, text, created_at, last_updated_at, created_by, last_updated_by, source_queue_id)) AS comments_array
                 FROM (
                     SELECT
                         id,
@@ -1155,6 +1168,7 @@ class TraceDAOImpl implements TraceDAO {
                         last_updated_at,
                         created_by,
                         last_updated_by,
+                        source_queue_id,
                         entity_id,
                         workspace_id,
                         project_id
@@ -1431,7 +1445,8 @@ class TraceDAOImpl implements TraceDAO {
                            name,
                            value,
                            last_updated_at,
-                       feedback_scores.last_updated_by AS author
+                       feedback_scores.last_updated_by AS author,
+                       CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
@@ -1445,7 +1460,8 @@ class TraceDAOImpl implements TraceDAO {
                            name,
                            value,
                            last_updated_at,
-                           author
+                           author,
+                           source_queue_id
                      FROM authored_feedback_scores
                      WHERE entity_type = 'trace'
                        AND workspace_id = :workspace_id
@@ -1455,7 +1471,7 @@ class TraceDAOImpl implements TraceDAO {
                        <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
                 )
                 ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
              ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
@@ -1518,7 +1534,8 @@ class TraceDAOImpl implements TraceDAO {
                        last_updated_by,
                        created_at,
                        last_updated_at,
-                       author
+                       author,
+                       source_queue_id
                 FROM (
                     SELECT workspace_id,
                            project_id,
@@ -1532,7 +1549,8 @@ class TraceDAOImpl implements TraceDAO {
                            last_updated_by,
                            created_at,
                            last_updated_at,
-                           feedback_scores.last_updated_by AS author
+                           feedback_scores.last_updated_by AS author,
+                           CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
@@ -1551,7 +1569,8 @@ class TraceDAOImpl implements TraceDAO {
                            last_updated_by,
                            created_at,
                            last_updated_at,
-                           author
+                           author,
+                           source_queue_id
                     FROM authored_feedback_scores
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
@@ -1559,7 +1578,7 @@ class TraceDAOImpl implements TraceDAO {
                       AND entity_id IN (SELECT id FROM target_spans)
                 )
                 ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ), span_feedback_scores_with_trace_id AS (
                 SELECT workspace_id,
                        project_id,
@@ -1573,7 +1592,8 @@ class TraceDAOImpl implements TraceDAO {
                        last_updated_by,
                        created_at,
                        last_updated_at,
-                       author
+                       author,
+                       source_queue_id
                 FROM span_feedback_scores_deduped sfs
                 INNER JOIN target_spans s ON sfs.entity_id = s.id
             ), span_feedback_scores_grouped AS (
@@ -1582,7 +1602,7 @@ class TraceDAOImpl implements TraceDAO {
                     project_id,
                     trace_id,
                     name,
-                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at)) AS entries
+                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at, source_queue_id)) AS entries
                 FROM span_feedback_scores_with_trace_id
                 GROUP BY workspace_id, project_id, trace_id, name
             ), span_feedback_scores_final AS (
@@ -1596,8 +1616,8 @@ class TraceDAOImpl implements TraceDAO {
                     IF(length(entries) = 1, entries[1].2, arrayStringConcat(arrayMap(e -> if(e.2 = '', '\\<no reason>', e.2), entries), ', ')) AS reason,
                     entries[1].4 AS source,
                     mapFromArrays(
-                            arrayMap(e -> e.5, entries),
-                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9), entries)
+                            arrayMap(e -> if(e.10 = '', e.5, concat(e.5, '_', toString(e.10))), entries),
+                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, '', '', e.10, e.5), entries)
                     ) AS value_by_author,
                     arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
                     arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
@@ -2049,7 +2069,8 @@ class TraceDAOImpl implements TraceDAO {
                        last_updated_by,
                        created_at,
                        last_updated_at,
-                       author
+                       author,
+                       source_queue_id
                 FROM (
                     <if(has_legacy_scores)>
                     SELECT
@@ -2065,7 +2086,8 @@ class TraceDAOImpl implements TraceDAO {
                         last_updated_by,
                         created_at,
                         last_updated_at,
-                        feedback_scores.last_updated_by AS author
+                        feedback_scores.last_updated_by AS author,
+                        CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
@@ -2087,7 +2109,8 @@ class TraceDAOImpl implements TraceDAO {
                         last_updated_by,
                         created_at,
                         last_updated_at,
-                        author
+                        author,
+                        source_queue_id
                     FROM authored_feedback_scores
                     WHERE entity_type = 'trace'
                        AND workspace_id = :workspace_id
@@ -2097,7 +2120,7 @@ class TraceDAOImpl implements TraceDAO {
                        <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
                 )
                 ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
              ),
              feedback_scores_grouped AS (
                  SELECT
@@ -2105,7 +2128,7 @@ class TraceDAOImpl implements TraceDAO {
                      project_id,
                      entity_id,
                      name,
-                     groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at)) AS entries
+                     groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at, source_queue_id)) AS entries
                  FROM feedback_scores_deduped
                  GROUP BY workspace_id, project_id, entity_id, name
             ), feedback_scores_final AS (
@@ -2119,8 +2142,8 @@ class TraceDAOImpl implements TraceDAO {
                    IF(length(entries) = 1, entries[1].2, arrayStringConcat(arrayMap(e -> if(e.2 = '', '\\<no reason>', e.2), entries), ', ')) AS reason,
                    entries[1].4 AS source,
                    mapFromArrays(
-                       arrayMap(e -> e.5, entries),
-                       arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9), entries)
+                       arrayMap(e -> if(e.10 = '', e.5, concat(e.5, '_', toString(e.10))), entries),
+                       arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, '', '', e.10, e.5), entries)
                    ) AS value_by_author,
                    arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
                    arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
@@ -2183,7 +2206,8 @@ class TraceDAOImpl implements TraceDAO {
                        last_updated_by,
                        created_at,
                        last_updated_at,
-                       author
+                       author,
+                       source_queue_id
                 FROM (
                     <if(has_legacy_scores)>
                     SELECT workspace_id,
@@ -2198,7 +2222,8 @@ class TraceDAOImpl implements TraceDAO {
                            last_updated_by,
                            created_at,
                            last_updated_at,
-                           feedback_scores.last_updated_by AS author
+                           feedback_scores.last_updated_by AS author,
+                           CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
@@ -2223,7 +2248,8 @@ class TraceDAOImpl implements TraceDAO {
                            last_updated_by,
                            created_at,
                            last_updated_at,
-                           author
+                           author,
+                           source_queue_id
                     FROM authored_feedback_scores
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
@@ -2236,7 +2262,7 @@ class TraceDAOImpl implements TraceDAO {
                       <endif>
                 )
                 ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ), span_feedback_scores_with_trace_id AS (
                 SELECT workspace_id,
                        project_id,
@@ -2250,7 +2276,8 @@ class TraceDAOImpl implements TraceDAO {
                        last_updated_by,
                        created_at,
                        last_updated_at,
-                       author
+                       author,
+                       source_queue_id
                 FROM span_feedback_scores_deduped sfs
                 INNER JOIN spans_data s ON sfs.entity_id = s.id
             ), span_feedback_scores_grouped AS (
@@ -2259,7 +2286,7 @@ class TraceDAOImpl implements TraceDAO {
                     project_id,
                     trace_id,
                     name,
-                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at)) AS entries
+                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at, source_queue_id)) AS entries
                 FROM span_feedback_scores_with_trace_id
                 GROUP BY workspace_id, project_id, trace_id, name
             ), span_feedback_scores_final AS (
@@ -2273,8 +2300,8 @@ class TraceDAOImpl implements TraceDAO {
                     IF(length(entries) = 1, entries[1].2, arrayStringConcat(arrayMap(e -> if(e.2 = '', '\\<no reason>', e.2), entries), ', ')) AS reason,
                     entries[1].4 AS source,
                     mapFromArrays(
-                            arrayMap(e -> e.5, entries),
-                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9), entries)
+                            arrayMap(e -> if(e.10 = '', e.5, concat(e.5, '_', toString(e.10))), entries),
+                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, '', '', e.10, e.5), entries)
                     ) AS value_by_author,
                     arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
                     arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
@@ -2478,7 +2505,8 @@ class TraceDAOImpl implements TraceDAO {
                        last_updated_by,
                        created_at,
                        last_updated_at,
-                       author
+                       author,
+                       source_queue_id
                 FROM (
                     <if(has_legacy_scores)>
                     SELECT
@@ -2494,7 +2522,8 @@ class TraceDAOImpl implements TraceDAO {
                         last_updated_by,
                         created_at,
                         last_updated_at,
-                        feedback_scores.last_updated_by AS author
+                        feedback_scores.last_updated_by AS author,
+                        CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
@@ -2516,7 +2545,8 @@ class TraceDAOImpl implements TraceDAO {
                         last_updated_by,
                         created_at,
                         last_updated_at,
-                        author
+                        author,
+                        source_queue_id
                     FROM authored_feedback_scores
                     WHERE entity_type = 'trace'
                        AND workspace_id = :workspace_id
@@ -2526,7 +2556,7 @@ class TraceDAOImpl implements TraceDAO {
                        <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
                 )
                 ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ),
             feedback_scores_grouped AS (
                 SELECT
@@ -2534,7 +2564,7 @@ class TraceDAOImpl implements TraceDAO {
                     project_id,
                     entity_id,
                     name,
-                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at)) AS entries
+                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at, source_queue_id)) AS entries
                 FROM feedback_scores_deduped
                 GROUP BY workspace_id, project_id, entity_id, name
             ), feedback_scores_final AS (
@@ -2586,7 +2616,8 @@ class TraceDAOImpl implements TraceDAO {
                        name,
                        value,
                        last_updated_at,
-                       author
+                       author,
+                       source_queue_id
                 FROM (
                     <if(has_legacy_scores)>
                     SELECT workspace_id,
@@ -2595,7 +2626,8 @@ class TraceDAOImpl implements TraceDAO {
                            name,
                            value,
                            last_updated_at,
-                           feedback_scores.last_updated_by AS author
+                           feedback_scores.last_updated_by AS author,
+                           CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
@@ -2614,7 +2646,8 @@ class TraceDAOImpl implements TraceDAO {
                            name,
                            value,
                            last_updated_at,
-                           author
+                           author,
+                           source_queue_id
                     FROM authored_feedback_scores
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
@@ -2627,7 +2660,7 @@ class TraceDAOImpl implements TraceDAO {
                       <endif>
                 )
                 ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ), span_feedback_scores_with_trace_id AS (
                 SELECT workspace_id,
                        project_id,
@@ -2635,7 +2668,8 @@ class TraceDAOImpl implements TraceDAO {
                        name,
                        value,
                        last_updated_at,
-                       author
+                       author,
+                       source_queue_id
                 FROM span_feedback_scores_deduped sfs
                 INNER JOIN spans_data s ON sfs.entity_id = s.id
             ), span_feedback_scores_grouped AS (
