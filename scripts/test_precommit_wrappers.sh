@@ -64,14 +64,32 @@ echo "precommit-detect-hooks.py:"
 out=$(printf 'sdks/python/src/opik/foo.py\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml)
 check "python change emits a python leg" '"id": "ruff"'        "$out"
 check "python leg carries the file"      'sdks/python/src/opik/foo.py' "$out"
+# leg_ids <stdin-json> → space-joined ids of the running legs (ignores skipped).
+leg_ids() { python3 -c 'import json,sys; print(" ".join(l["id"] for l in json.load(sys.stdin)["legs"]))'; }
 check_empty "respects exclude (rest_api → no legs)" \
-	"$(printf 'sdks/python/src/opik/rest_api/x.py\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml | grep -o '"id"' || true)"
+	"$(printf 'sdks/python/src/opik/rest_api/x.py\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml | leg_ids)"
 out=$(printf 'apps/opik-frontend/src/components/Foo.tsx\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml)
 check "fe change emits fe-eslint"        '"id": "fe-eslint"'   "$out"
 check_empty "fe non-plugin change omits no-private-fe-plugins" \
-	"$(printf '%s' "$out" | grep -o 'no-private-fe-plugins' || true)"
+	"$(printf '%s' "$out" | leg_ids | grep -o 'no-private-fe-plugins' || true)"
 check_empty "unrelated file → no legs" \
-	"$(printf 'README.md\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml | grep -o '"id"' || true)"
+	"$(printf 'README.md\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml | leg_ids)"
+# types: gate — a non-.py file under sdks/opik_optimizer must NOT emit the
+# python-only hooks (ruff/mypy/pyupgrade), or they'd spawn jobs that Skip at
+# runtime and drop from the timing table.
+out=$(printf 'sdks/opik_optimizer/Makefile\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml)
+check_empty "non-.py optimizer file omits ruff (types: gate)" \
+	"$(printf '%s' "$out" | python3 -c 'import json,sys; print("ruff" if any(l["id"]=="ruff" for l in json.load(sys.stdin)["legs"]) else "")')"
+# detect emits a skipped list so the summary can show coverage.
+out=$(printf 'sdks/python/src/opik/foo.py\n' | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml)
+check "emits a skipped array"          '"skipped"'   "$out"
+check "java is skipped on a py change" 'spotless'    "$(printf '%s' "$out" | python3 -c 'import json,sys; print(" ".join(s["id"] for s in json.load(sys.stdin)["skipped"]))')"
+
+echo "precommit-skipped-table.sh:"
+check_empty "empty skipped → no output"  "$(scripts/precommit-skipped-table.sh '[]')"
+sk=$(scripts/precommit-skipped-table.sh '[{"name":"☕ spotless — java backend","id":"spotless"}]')
+check "lists the skipped hook"   "spotless — java backend"  "$sk"
+check "uses a collapsible block" "<details>"                "$sk"
 
 echo "precommit-filter-leg-log.sh:"
 # A single-hook verbose run prints the matched hook (Passed/Failed) plus same-id

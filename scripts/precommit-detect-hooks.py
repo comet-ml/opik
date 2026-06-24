@@ -55,8 +55,31 @@ TOOLCHAIN_BY_ID = {
     "ts-sdk-typecheck": "node-ts",
 }
 
+# Some hooks carry a `types:` filter (often defined upstream in the hook repo's
+# .pre-commit-hooks.yaml, so it's invisible in our config) that narrows their
+# `files:` match to a content type. We model that narrowing here so detect
+# doesn't emit a leg for, e.g., ruff on a Makefile that merely lives under
+# sdks/opik_optimizer — at runtime pre-commit would Skip it ("no files to
+# check") and the leg would do nothing. Value is the set of path suffixes the
+# hook actually acts on. Keep in sync with the python tool hooks in the config.
+TYPED_IDS = {
+    "ruff": (".py", ".pyi"),
+    "ruff-format": (".py", ".pyi"),
+    "mypy": (".py", ".pyi"),
+    "pyupgrade": (".py", ".pyi"),
+    "radon-cc": (".py",),
+    "radon-raw": (".py",),
+    "xenon": (".py",),
+    "lizard": (".py",),
+    "vulture": (".py",),
+    # check-* hooks carry an upstream `types:` for their format.
+    "check-yaml": (".yaml", ".yml"),
+    "check-json": (".json",),
+    "check-toml": (".toml",),
+}
 
-def hook_matches(files_re, exclude_re, changed):
+
+def hook_matches(files_re, exclude_re, changed, suffixes=None):
     fpat = re.compile(files_re) if files_re else None
     xpat = re.compile(exclude_re) if exclude_re else None
     matched = []
@@ -64,6 +87,8 @@ def hook_matches(files_re, exclude_re, changed):
         if fpat is not None and not fpat.search(path):
             continue
         if xpat is not None and xpat.search(path):
+            continue
+        if suffixes is not None and not path.endswith(suffixes):
             continue
         matched.append(path)
     return matched
@@ -81,6 +106,7 @@ def main(argv):
     global_exclude = config.get("exclude", DEFAULT_EXCLUDE)
 
     legs = []
+    skipped = []
     for repo in config.get("repos", []):
         for hook in repo.get("hooks", []):
             hook_files = hook.get("files", global_files)
@@ -93,21 +119,26 @@ def main(argv):
                     "regex or extend precommit-detect-hooks.py."
                 )
 
-            matched = hook_matches(hook_files, hook_exclude, changed)
+            hook_id = hook["id"]
+            name = hook.get("name", hook_id)
+            suffixes = TYPED_IDS.get(hook_id)
+            matched = hook_matches(hook_files, hook_exclude, changed, suffixes)
             if not matched:
+                # No matching files → no CI job. Recorded so the summary can
+                # list it as a skipped check (coverage transparency).
+                skipped.append({"name": name, "id": hook_id})
                 continue
 
-            hook_id = hook["id"]
             legs.append(
                 {
-                    "name": hook.get("name", hook_id),
+                    "name": name,
                     "id": hook_id,
                     "files": " ".join(matched),
                     "toolchain": TOOLCHAIN_BY_ID.get(hook_id, "none"),
                 }
             )
 
-    print(json.dumps({"legs": legs}))
+    print(json.dumps({"legs": legs, "skipped": skipped}))
 
 
 if __name__ == "__main__":
