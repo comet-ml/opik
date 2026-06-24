@@ -29,7 +29,9 @@ import reactor.core.publisher.Mono;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -47,6 +49,8 @@ public interface AiSpendDAO {
     Mono<SpendBreakdownResponse> getBreakdown(SpendMetricRequest request, SpendLane lane);
 
     Mono<SpendBreakdownResponse> getOutputBreakdown(SpendMetricRequest request, OutputLane lane);
+
+    Mono<List<SpendBreakdownResponse>> getAllBreakdowns(SpendMetricRequest request);
 
     Mono<SpendUserPage> getUsers(SpendMetricRequest request, List<SortingField> sortingFields, String name, int page,
             int size);
@@ -148,6 +152,54 @@ class AiSpendDAOImpl implements AiSpendDAO {
                         getLong(row.get("group_count", Long.class)),
                         getLong(row.get("total_events", Long.class))))
                 .map(rows -> mapper.breakdown(laneKey, title, subtitle, itemUnit, rows));
+    }
+
+    @Override
+    public Mono<List<SpendBreakdownResponse>> getAllBreakdowns(@NonNull SpendMetricRequest request) {
+        Optional<String> userUuid = resolveUserUuid(request);
+        return queryList(queryBuilder.allBreakdowns(), "ai_spend_all_breakdowns", request.resolvedProjectId(),
+                userFlag(userUuid),
+                statement -> {
+                    bindComposition(statement, request, userUuid);
+                    statement.bind("limit", queryBuilder.breakdownItemLimit());
+                },
+                (row, metadata) -> new LaneBreakdownRow(
+                        row.get("lane", String.class),
+                        new AiSpendMapper.BreakdownRow(
+                                row.get("label", String.class),
+                                row.get("model", String.class),
+                                getLong(row.get("total_tokens", Double.class)),
+                                getLong(row.get("definition_tokens", Double.class)),
+                                getLong(row.get("usage_tokens", Double.class)),
+                                getLong(row.get("events", Long.class)),
+                                getLong(row.get("input_tokens", Double.class)),
+                                getLong(row.get("cache_read_tokens", Double.class)),
+                                getLong(row.get("cache_creation_tokens", Double.class)),
+                                getLong(row.get("output_tokens", Double.class)),
+                                getLong(row.get("grand_total", Double.class)),
+                                getLong(row.get("group_count", Long.class)),
+                                getLong(row.get("total_events", Long.class)))))
+                .map(this::toBreakdownResponses);
+    }
+
+    private List<SpendBreakdownResponse> toBreakdownResponses(List<LaneBreakdownRow> rows) {
+        Map<String, List<AiSpendMapper.BreakdownRow>> byLane = new LinkedHashMap<>();
+        for (LaneBreakdownRow row : rows) {
+            byLane.computeIfAbsent(row.lane(), key -> new ArrayList<>()).add(row.row());
+        }
+        List<SpendBreakdownResponse> responses = new ArrayList<>();
+        for (SpendLane lane : SpendLane.values()) {
+            if (!lane.hasBreakdown()) {
+                continue;
+            }
+            responses.add(mapper.breakdown(lane.getKey(), lane.getLabel(), lane.getDescription(), lane.getItemUnit(),
+                    byLane.getOrDefault(lane.getKey(), List.of())));
+        }
+        for (OutputLane lane : OutputLane.values()) {
+            responses.add(mapper.breakdown(lane.getKey(), lane.getLabel(), null, lane.getItemUnit(),
+                    byLane.getOrDefault(lane.getKey(), List.of())));
+        }
+        return responses;
     }
 
     @Override
@@ -320,5 +372,8 @@ class AiSpendDAOImpl implements AiSpendDAO {
     }
 
     private record LeaderboardRow(SpendUserRow user, long total) {
+    }
+
+    private record LaneBreakdownRow(String lane, AiSpendMapper.BreakdownRow row) {
     }
 }
