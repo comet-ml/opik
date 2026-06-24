@@ -34,9 +34,16 @@ public class AuthSharedHttpClientHealthCheck extends NamedHealthCheck {
      */
     private static final String DEAD_POOL_MARKER = "connection pool shut down";
 
+    /**
+     * Dead-pool detection is target-independent: the Apache pool throws on {@code lease()} — before any DNS, connect,
+     * or headers — when it is shut down, so the probe only needs a syntactically valid route, not a reachable service.
+     * A fixed loopback target avoids depending on the configured auth URL; nothing listens on port 1, so a healthy
+     * pool leases fine and the immediate connection refusal is treated as healthy.
+     */
+    private static final URI POOL_PROBE_TARGET = URI.create("http://localhost:1");
+
     private final Client client;
     private final boolean enabled;
-    private final URI reactServiceUri;
     private final int probeTimeoutMillis;
 
     @Inject
@@ -44,8 +51,9 @@ public class AuthSharedHttpClientHealthCheck extends NamedHealthCheck {
             @NonNull @Config("authentication") AuthenticationConfig authConfig) {
         this.client = client;
         this.enabled = authConfig.isEnabled() && authConfig.isReactServiceConfigured();
-        this.reactServiceUri = enabled ? URI.create(authConfig.getReactService().url()) : null;
-        this.probeTimeoutMillis = Math.toIntExact(authConfig.getHealthCheckTimeout().toMilliseconds());
+        // Jersey timeouts are int millis; clamp so an absurdly large configured Duration cannot overflow at startup.
+        this.probeTimeoutMillis = (int) Math.min(authConfig.getHealthCheckTimeout().toMilliseconds(),
+                Integer.MAX_VALUE);
     }
 
     @Override
@@ -58,12 +66,12 @@ public class AuthSharedHttpClientHealthCheck extends NamedHealthCheck {
         if (!enabled) {
             return Result.healthy("Authentication disabled; shared HTTP client not exercised");
         }
-        try (var response = client.target(reactServiceUri)
+        try (var response = client.target(POOL_PROBE_TARGET)
                 .property(ClientProperties.CONNECT_TIMEOUT, probeTimeoutMillis)
                 .property(ClientProperties.READ_TIMEOUT, probeTimeoutMillis)
                 .request()
                 .head()) {
-            // Any reachable response (including 4xx/5xx) proves the shared connection pool can lease and connect.
+            // Any reachable response proves the shared connection pool can lease and connect.
             return Result.healthy();
         } catch (Exception exception) {
             if (isConnectionPoolShutDown(exception)) {

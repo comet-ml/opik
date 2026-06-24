@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.auth;
 
 import com.comet.opik.infrastructure.AuthenticationConfig;
+import io.dropwizard.util.Duration;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.Invocation;
@@ -19,6 +20,7 @@ import java.net.URI;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -85,5 +87,15 @@ class AuthSharedHttpClientHealthCheckTest {
     void checkReportsHealthyAndSkipsProbeWhenAuthenticationDisabled() {
         assertThat(newHealthCheck(false).check().isHealthy()).isTrue();
         verify(client, never()).target(any(URI.class));
+    }
+
+    @Test
+    void constructorClampsOversizedTimeoutInsteadOfThrowing() {
+        var authConfig = new AuthenticationConfig();
+        authConfig.setEnabled(true);
+        authConfig.setReactService(new AuthenticationConfig.UrlConfig("http://react-svc:8080"));
+        authConfig.setHealthCheckTimeout(Duration.days(100));
+
+        assertThatNoException().isThrownBy(() -> new AuthSharedHttpClientHealthCheck(client, authConfig));
     }
 }

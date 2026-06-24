@@ -179,10 +179,10 @@ class HealthCheckIntegrationTest {
     }
 
     /**
-     * Authentication enabled with an unreachable React service. The liveness {@code auth_shared_http_client} probe
-     * actually fires here, and the connection failure to the dead upstream must be ignored: only a locally shut-down
-     * pool is restart-worthy, so an unreachable auth service must NOT flap liveness. The {@code DefaultConfig}
-     * aggregate already covers the auth-disabled (inert) state.
+     * Authentication enabled, so the liveness {@code auth_shared_http_client} probe actually fires. It leases from the
+     * live shared pool against a fixed internal target and the connection failure there is ignored: only a locally
+     * shut-down pool is restart-worthy, so an alive pool must report healthy. The {@code DefaultConfig} aggregate
+     * already covers the auth-disabled (inert) state.
      */
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -192,7 +192,7 @@ class HealthCheckIntegrationTest {
         @RegisterApp
         private final TestDropwizardAppExtension app = newApp(List.of(
                 new CustomConfig("authentication.enabled", "true"),
-                new CustomConfig("authentication.reactService.url", "http://localhost:1")));
+                new CustomConfig("authentication.reactService.url", "http://react-svc:8080")));
 
         private ClientSupport client;
         private String baseURI;
@@ -205,7 +205,7 @@ class HealthCheckIntegrationTest {
         }
 
         @Test
-        void authSharedHttpClientHealthyWhenUpstreamUnreachable() {
+        void authSharedHttpClientHealthyWhenPoolIsAlive() {
             var expected = HealthCheckResponse.builder()
                     .name("auth_shared_http_client").healthy(true).critical(true).type(ALIVE).build();
 
