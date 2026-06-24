@@ -1,10 +1,17 @@
 import React from "react";
+import { Button } from "@/ui/button";
+import { Spinner } from "@/ui/spinner";
 import { useOptimizationsNewFormHandlers } from "./useOptimizationsNewFormHandlers";
-import OptimizationsNewHeader from "./OptimizationsNewHeader";
 import OptimizationsNewPromptSection from "./OptimizationsNewPromptSection";
 import OptimizationsNewConfigSidebar from "./OptimizationsNewConfigSidebar";
 
-const OptimizationsNewPageContent: React.FC = () => {
+type OptimizationsNewPageContentProps = {
+  onCancel: () => void;
+};
+
+const OptimizationsNewPageContent: React.FC<
+  OptimizationsNewPageContentProps
+> = ({ onCancel }) => {
   const {
     form,
     isSubmitting,
@@ -23,21 +30,13 @@ const OptimizationsNewPageContent: React.FC = () => {
     handleModelConfigChange,
     handleModelChange,
     handleSubmit,
-    handleCancel,
     handleNameChange,
     getFirstMetricParamsError,
   } = useOptimizationsNewFormHandlers();
 
   return (
-    <div className="w-full py-6">
-      <OptimizationsNewHeader
-        isSubmitting={isSubmitting}
-        isFormValid={form.formState.isValid}
-        onSubmit={handleSubmit}
-        onCancel={handleCancel}
-      />
-
-      <div className="flex flex-col gap-6 xl:flex-row">
+    <div className="flex size-full flex-col">
+      <div className="flex flex-1 flex-col gap-6 overflow-y-auto px-6 pb-6 pt-4 xl:flex-row">
         <OptimizationsNewPromptSection
           form={form}
           projectId={activeProjectId!}
@@ -63,6 +62,19 @@ const OptimizationsNewPageContent: React.FC = () => {
           onMetricParamsChange={handleMetricParamsChange}
           getFirstMetricParamsError={getFirstMetricParamsError}
         />
+      </div>
+
+      <div className="flex items-center gap-2 border-t px-6 py-4">
+        <Button
+          onClick={handleSubmit}
+          disabled={isSubmitting || !form.formState.isValid}
+        >
+          {isSubmitting && <Spinner size="small" className="mr-2" />}
+          {isSubmitting ? "Starting..." : "Optimize prompt"}
+        </Button>
+        <Button variant="outline" onClick={onCancel} disabled={isSubmitting}>
+          Cancel
+        </Button>
       </div>
     </div>
   );

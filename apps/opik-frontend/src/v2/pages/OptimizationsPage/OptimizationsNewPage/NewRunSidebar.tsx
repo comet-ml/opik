@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useQueryParam, StringParam } from "use-query-params";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import useGetOrCreateDemoDataset from "@/api/datasets/useGetOrCreateDemoDataset";
@@ -16,14 +15,32 @@ import { OPTIMIZATION_DEMO_TEMPLATES } from "@/constants/optimizations";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import { useModelOptions } from "@/v2/pages-shared/llm/PromptModelSelect/useModelOptions";
-import OptimizationsNewPageContent from "./OptimizationsNewPageContent";
+import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
+import ResizableSidePanelTopBar from "@/shared/ResizableSidePanel/ResizableSidePanelTopBar";
 import Loader from "@/shared/Loader/Loader";
+import OptimizationsNewPageContent from "./OptimizationsNewPageContent";
 
-const OptimizationsNewPage: React.FC = () => {
+type NewRunSidebarProps = {
+  onClose: () => void;
+  /** Pre-fill from a demo template. */
+  templateId?: string;
+  /** Pre-fill by cloning an existing run's config. */
+  rerunId?: string;
+};
+
+/**
+ * The "New optimization run" form, hosted in a right sidebar over the runs
+ * list (replaces the former full-page `/optimizations/new` route). Mount it only
+ * while open so its provider/rerun queries don't run in the background and the
+ * form is re-seeded fresh on each open.
+ */
+const NewRunSidebar: React.FC<NewRunSidebarProps> = ({
+  onClose,
+  templateId,
+  rerunId,
+}) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
-  const [templateId] = useQueryParam("template", StringParam);
-  const [rerunId] = useQueryParam("rerun", StringParam);
   const { getOrCreateDataset } = useGetOrCreateDemoDataset();
   const { data: project } = useProjectById(
     { projectId: activeProjectId! },
@@ -144,19 +161,42 @@ const OptimizationsNewPage: React.FC = () => {
     project?.name,
   ]);
 
-  if (Boolean(rerunId) && isRerunFetching) {
-    return <Loader message="Loading optimization..." />;
-  }
-
-  if (isPreparingDataset) {
-    return <Loader message="Preparing a dataset..." />;
-  }
+  const isLoading = (Boolean(rerunId) && isRerunFetching) || isPreparingDataset;
 
   return (
-    <FormProvider {...form}>
-      <OptimizationsNewPageContent />
-    </FormProvider>
+    <ResizableSidePanel
+      panelId="new-optimization-run-sidebar"
+      entity="optimization run"
+      open
+      onClose={onClose}
+      initialWidth={0.7}
+      minWidth={640}
+      blockOverlayClose
+      header={
+        <ResizableSidePanelTopBar
+          variant="form"
+          title={
+            <span className="comet-body-s-accented">New optimization run</span>
+          }
+          onClose={onClose}
+        />
+      }
+    >
+      {isLoading ? (
+        <Loader
+          message={
+            isPreparingDataset
+              ? "Preparing a dataset..."
+              : "Loading optimization..."
+          }
+        />
+      ) : (
+        <FormProvider {...form}>
+          <OptimizationsNewPageContent onCancel={onClose} />
+        </FormProvider>
+      )}
+    </ResizableSidePanel>
   );
 };
 
-export default OptimizationsNewPage;
+export default NewRunSidebar;

@@ -12,7 +12,6 @@ import WorkspaceGuard from "@/v2/layout/WorkspaceGuard/WorkspaceGuard";
 import ExperimentsPageGuard from "@/v2/layout/ExperimentsPageGuard";
 import DashboardsPageGuard from "@/v2/layout/DashboardsPageGuard";
 import PlaygroundPageGuard from "@/v2/layout/PlaygroundPageGuard";
-import OptimizationStudioPageGuard from "@/v2/layout/OptimizationStudioPageGuard";
 import OptimizationsPageGuard from "@/v2/layout/OptimizationsPageGuard";
 import DatasetsPageGuard from "@/v2/layout/DatasetsPageGuard";
 import SMEPageLayout from "@/v2/layout/SMEPageLayout/SMEPageLayout";
@@ -45,7 +44,6 @@ import PairingPage from "@/v2/pages/PairingPage/PairingPage";
 import PairRouteVersionGuard from "@/shared/WorkspaceVersionResolver/PairRouteVersionGuard";
 import { createOAuthConsentRoute } from "@/shared/OAuthConsentPage/createOAuthConsentRoute";
 import OptimizationsPage from "@/v2/pages/OptimizationsPage/OptimizationsPage";
-import OptimizationsNewPage from "@/v2/pages/OptimizationsPage/OptimizationsNewPage/OptimizationsNewPage";
 import OptimizationPage from "@/v2/pages/OptimizationPage/OptimizationPage";
 import OptimizationCompareRedirect from "@/v2/pages/OptimizationPage/OptimizationCompareRedirect";
 import TrialPage from "@/v2/pages/TrialPage/TrialPage";
@@ -419,22 +417,6 @@ const optimizationsListRoute = createRoute({
   component: OptimizationsPage,
 });
 
-const optimizationsNewRoute = createRoute({
-  path: "/new",
-  getParentRoute: () => optimizationsRoute,
-  component: OptimizationStudioPageGuard,
-  staticData: {
-    param: "optimizationsNew",
-    paramValue: "new",
-  },
-});
-
-const optimizationsNewIndexRoute = createRoute({
-  path: "/",
-  getParentRoute: () => optimizationsNewRoute,
-  component: OptimizationsNewPage,
-});
-
 const optimizationCompareRedirectRoute = createRoute({
   path: "/$datasetId/compare",
   getParentRoute: () => optimizationsRoute,
@@ -671,7 +653,6 @@ const routeTree = rootRoute.addChildren([
           playgroundRoute.addChildren([playgroundIndexRoute]),
           optimizationsRoute.addChildren([
             optimizationsListRoute,
-            optimizationsNewRoute.addChildren([optimizationsNewIndexRoute]),
             optimizationCompareRedirectRoute,
             optimizationBaseRoute.addChildren([optimizationRoute, trialRoute]),
           ]),

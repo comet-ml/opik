@@ -16,10 +16,12 @@ const useNavigateToOptimizationStudio = () => {
 
   return useCallback(
     (templateId?: string) => {
+      // The new-run wizard is now a sidebar over the runs list (no /new route):
+      // open it via the `new` flag, optionally pre-filled from a demo template.
       navigate({
-        to: "/$workspaceName/projects/$projectId/optimizations/new",
+        to: "/$workspaceName/projects/$projectId/optimizations",
         params: { workspaceName, projectId: activeProjectId! },
-        search: templateId ? { template: templateId } : undefined,
+        search: { new: true, ...(templateId ? { template: templateId } : {}) },
       });
     },
     [navigate, workspaceName, activeProjectId],
