@@ -32,6 +32,7 @@ import software.amazon.awssdk.services.s3.model.CreateMultipartUploadResponse;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
@@ -83,6 +84,8 @@ public interface AttachmentService {
      * same object-key layout as upload/download so it resolves the stored object.
      */
     String presignDownloadUrl(AttachmentInfo attachmentInfo, String workspaceId);
+
+    String presignDownloadUrl(AttachmentInfo attachmentInfo, String workspaceId, Duration expiresIn);
 
     /**
      * Delete specific attachments by their filenames for a given entity.
@@ -334,6 +337,13 @@ class AttachmentServiceImpl implements AttachmentService {
     @Override
     public String presignDownloadUrl(@NonNull AttachmentInfo attachmentInfo, @NonNull String workspaceId) {
         return prepareDownloadPresignUrl(attachmentInfo, workspaceId);
+    }
+
+    @Override
+    public String presignDownloadUrl(@NonNull AttachmentInfo attachmentInfo, @NonNull String workspaceId,
+            @NonNull Duration expiresIn) {
+        String key = prepareKey(attachmentInfo, workspaceId);
+        return preSignerService.presignDownloadUrl(key, expiresIn);
     }
 
     private String prepareMinIODownloadUrl(AttachmentInfo attachmentInfo, String baseUrl, String workspaceName) {

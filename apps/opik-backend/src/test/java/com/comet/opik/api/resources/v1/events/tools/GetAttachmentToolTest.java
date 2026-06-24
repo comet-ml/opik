@@ -100,7 +100,7 @@ class GetAttachmentToolTest {
         when(s3Config.isMinIO()).thenReturn(false);
         when(attachmentService.getAttachmentInfoByEntity(any(), any(), any()))
                 .thenReturn(Mono.just(List.of(attachment(IMAGE_FILE_NAME, "image/png"))));
-        when(attachmentService.presignDownloadUrl(any(), eq(WORKSPACE_ID)))
+        when(attachmentService.presignDownloadUrl(any(), eq(WORKSPACE_ID), any()))
                 .thenReturn(presignedUrl);
 
         String result = run(
