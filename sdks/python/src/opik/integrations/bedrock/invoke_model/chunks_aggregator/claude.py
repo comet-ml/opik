@@ -36,6 +36,8 @@ class ClaudeAggregator(ChunkAggregator):
         stop_reason = None
         input_tokens = 0
         output_tokens = 0
+        cache_creation_input_tokens = 0
+        cache_read_input_tokens = 0
 
         for item in items:
             if "chunk" not in item:
@@ -51,6 +53,10 @@ class ClaudeAggregator(ChunkAggregator):
                     usage = message.get("usage", {})
                     input_tokens = usage.get("input_tokens", 0)
                     output_tokens = usage.get("output_tokens", 0)
+                    cache_creation_input_tokens = usage.get(
+                        "cache_creation_input_tokens", 0
+                    )
+                    cache_read_input_tokens = usage.get("cache_read_input_tokens", 0)
                     LOGGER.debug(
                         "Claude message_start: input_tokens=%d, output_tokens=%d",
                         input_tokens,
@@ -109,7 +115,12 @@ class ClaudeAggregator(ChunkAggregator):
 
         # Convert to Bedrock usage format using shared converter
         bedrock_usage = usage_converters.anthropic_to_bedrock_usage(
-            {"input_tokens": input_tokens, "output_tokens": output_tokens}
+            {
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "cache_creation_input_tokens": cache_creation_input_tokens,
+                "cache_read_input_tokens": cache_read_input_tokens,
+            }
         )
 
         # Return Claude's native format with Bedrock usage
