@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.AgentInsightsJob;
+import com.comet.opik.api.AgentInsightsJob.EnabledJob;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -13,6 +14,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -23,10 +27,13 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @Slf4j
 public class AgentInsightsJobService {
 
+    private static final Duration TRIGGER_WINDOW = Duration.ofHours(24);
+
     private final @NonNull TransactionTemplate transactionTemplate;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull ProjectService projectService;
+    private final @NonNull AgentInsightsReportPublisher reportPublisher;
 
     // Creates the job; 409 if one already exists for the (workspace, project).
     public AgentInsightsJob create(@NonNull UUID projectId) {
@@ -72,16 +79,38 @@ public class AgentInsightsJobService {
         });
     }
 
-    // 404 if the job does not exist.
+    // Manual trigger: validate the project (404) and job (404) on the request thread, then enqueue the
+    // report run on the bounded Redis-backed queue and return 202 — the request thread never blocks on
+    // the report call, and the consumer group caps concurrent runs.
     public void triggerNow(@NonNull UUID projectId) {
         String workspaceId = requestContext.get().getWorkspaceId();
-        transactionTemplate.inTransaction(READ_ONLY,
+        // Guard against orphaned jobs: a project may have been deleted out from under the job row.
+        projectService.validateProjectIdExists(projectId, workspaceId);
+        AgentInsightsJob job = transactionTemplate.inTransaction(READ_ONLY,
                 handle -> handle.attach(AgentInsightsJobDAO.class)
                         .findByProject(workspaceId, projectId)
                         .orElseThrow(() -> new NotFoundException(
                                 "Agent insights job not found for project: " + projectId)));
-        // TODO(OPIK-6853): enqueue the run on a bounded async queue (Redisson) for the scheduler
-        // worker to execute. Until then the trigger is accepted but performs no work.
-        log.info("Agent Insights run requested for project '{}' (no-op until OPIK-6853)", projectId);
+
+        Instant periodEnd = Instant.now();
+        reportPublisher.enqueue(job.projectId(), workspaceId, periodEnd.minus(TRIGGER_WINDOW), periodEnd)
+                .subscribe(
+                        reportId -> {
+                            AgentInsightsMetrics.REPORTS_ENQUEUED.add(1, AgentInsightsMetrics.ENQUEUE_MANUAL_SUCCESS);
+                            log.info("Enqueued Agent Insights run reportId='{}' for project '{}'",
+                                    reportId, projectId);
+                        },
+                        error -> {
+                            AgentInsightsMetrics.REPORTS_ENQUEUED.add(1, AgentInsightsMetrics.ENQUEUE_MANUAL_FAILURE);
+                            log.error("Failed to enqueue Agent Insights run for project '{}'", projectId,
+                                    error);
+                        });
+    }
+
+    // Cross-workspace; used by the daily sweep (OPIK-6853), never from a request thread. The DAO's JOIN
+    // with projects already filters out jobs whose project was deleted.
+    public List<EnabledJob> findAllEnabled() {
+        return transactionTemplate.inTransaction(READ_ONLY,
+                handle -> handle.attach(AgentInsightsJobDAO.class).findAllEnabled());
     }
 }

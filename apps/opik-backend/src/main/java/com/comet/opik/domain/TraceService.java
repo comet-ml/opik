@@ -44,6 +44,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.http.HttpStatus;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -102,6 +103,9 @@ public interface TraceService {
 
     Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(Set<UUID> projectIds, String workspaceId);
 
+    Mono<Set<UUID>> getProjectsWithTracesInRange(@NonNull Collection<Pair<String, UUID>> workspaceProjectPairs,
+            @NonNull Instant from, @NonNull Instant to);
+
     Mono<Void> deleteTraceThreads(DeleteTraceThreads traceThreads);
 
     Flux<Trace> search(int limit, TraceSearchCriteria searchCriteria);
@@ -136,8 +140,8 @@ class TraceServiceImpl implements TraceService {
         String projectName = WorkspaceUtils.getProjectName(trace.projectName());
         UUID id = trace.id() == null ? idGenerator.generateId() : trace.id();
 
-        return Mono.deferContextual(ctx -> IdGenerator
-                .validateVersionAsync(id, TRACE_KEY)
+        return Mono.deferContextual(ctx -> idGenerator
+                .validateIdAsync(id, TRACE_KEY)
                 .then(Mono.defer(() -> projectService.getOrCreate(projectName)))
                 .flatMap(project -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
@@ -154,7 +158,8 @@ class TraceServiceImpl implements TraceService {
                                     .doOnSuccess(__ -> {
                                         var savedTrace = processedTrace.toBuilder().projectId(project.id())
                                                 .projectName(projectName).build();
-                                        eventBus.post(new TracesCreated(List.of(savedTrace), workspaceId, userName));
+                                        eventBus.post(new TracesCreated(List.of(savedTrace), workspaceId, userName,
+                                                workspaceName));
                                     }));
                 }));
     }
@@ -201,7 +206,8 @@ class TraceServiceImpl implements TraceService {
                             .flatMap(traces -> template
                                     .nonTransaction(connection -> dao.batchInsert(traces, connection))
                                     .doOnSuccess(__ -> {
-                                        eventBus.post(new TracesCreated(traces, workspaceId, userName));
+                                        eventBus.post(new TracesCreated(traces, workspaceId, userName,
+                                                workspaceName));
                                     }));
                 }));
     }
@@ -241,7 +247,7 @@ class TraceServiceImpl implements TraceService {
                     Project project = projectPerName.get(projectName);
 
                     UUID id = trace.id() == null ? idGenerator.generateId() : trace.id();
-                    IdGenerator.validateVersion(id, TRACE_KEY);
+                    idGenerator.validateId(id, TRACE_KEY);
 
                     return trace.toBuilder().id(id).projectId(project.id()).projectName(project.name()).build();
                 })
@@ -310,23 +316,26 @@ class TraceServiceImpl implements TraceService {
 
         var projectName = WorkspaceUtils.getProjectName(traceUpdate.projectName());
 
-        return Mono.deferContextual(ctx -> getProjectById(traceUpdate)
-                .switchIfEmpty(Mono.defer(() -> projectService.getOrCreate(projectName)))
-                .subscribeOn(Schedulers.boundedElastic())
-                .flatMap(project -> lockService.executeWithLock(
-                        new LockService.Lock(id, TRACE_KEY),
-                        Mono.defer(() -> dao.getPartialById(id)
-                                .flatMap(trace -> updateOrFail(traceUpdate, id, trace, project).thenReturn(id))
-                                .switchIfEmpty(Mono.defer(() -> insertUpdate(project, traceUpdate, id))
-                                        .thenReturn(id))
-                                .onErrorResume(this::handleDBError)
-                                .doOnSuccess(__ -> eventBus.post(new TracesUpdated(
-                                        Set.of(project.id()),
-                                        Set.of(id),
-                                        ctx.get(RequestContext.WORKSPACE_ID),
-                                        ctx.get(RequestContext.USER_NAME),
-                                        traceUpdate))))))
-                .then());
+        return Mono.deferContextual(ctx -> idGenerator
+                .validateIdForUpdateAsync(id, TRACE_KEY)
+                .then(getProjectById(traceUpdate)
+                        .switchIfEmpty(Mono.defer(() -> projectService.getOrCreate(projectName)))
+                        .subscribeOn(Schedulers.boundedElastic())
+                        .flatMap(project -> lockService.executeWithLock(
+                                new LockService.Lock(id, TRACE_KEY),
+                                Mono.defer(() -> dao.getPartialById(id)
+                                        .flatMap(trace -> updateOrFail(traceUpdate, id, trace, project).thenReturn(id))
+                                        .switchIfEmpty(Mono.defer(() -> insertUpdate(project, traceUpdate, id))
+                                                .thenReturn(id))
+                                        .onErrorResume(this::handleDBError)
+                                        .doOnSuccess(__ -> eventBus.post(new TracesUpdated(
+                                                Set.of(project.id()),
+                                                Set.of(id),
+                                                ctx.get(RequestContext.WORKSPACE_ID),
+                                                ctx.get(RequestContext.USER_NAME),
+                                                traceUpdate,
+                                                ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "")))))))
+                        .then()));
     }
 
     @Override
@@ -338,6 +347,7 @@ class TraceServiceImpl implements TraceService {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
+            String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "");
             return dao.getProjectIdsByTraceIds(new ArrayList<>(batchUpdate.ids()))
                     .flatMap(traceToProjectMap -> {
                         var projectIds = Set.copyOf(traceToProjectMap.values());
@@ -346,26 +356,24 @@ class TraceServiceImpl implements TraceService {
                                 .doOnSuccess(__ -> {
                                     log.info("Completed batch update for '{}' traces", batchUpdate.ids().size());
                                     eventBus.post(new TracesUpdated(projectIds, batchUpdate.ids(), workspaceId,
-                                            userName, batchUpdate.update()));
+                                            userName, batchUpdate.update(), workspaceName));
                                 });
                     });
         });
     }
 
     private Mono<Void> insertUpdate(Project project, TraceUpdate traceUpdate, UUID id) {
-        return IdGenerator
-                .validateVersionAsync(id, TRACE_KEY)
-                .then(Mono.deferContextual(ctx -> {
-                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-                    String userName = ctx.get(RequestContext.USER_NAME);
-                    String projectName = project.name();
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+            String projectName = project.name();
 
-                    // Strip attachments from the new trace data before inserting
-                    return attachmentStripperService.stripAttachments(
-                            traceUpdate, id, workspaceId, userName, projectName)
-                            .flatMap(processedUpdate -> template.nonTransaction(
-                                    connection -> dao.partialInsert(project.id(), processedUpdate, id, connection)));
-                }));
+            // Strip attachments from the new trace data before inserting
+            return attachmentStripperService.stripAttachments(
+                    traceUpdate, id, workspaceId, userName, projectName)
+                    .flatMap(processedUpdate -> template.nonTransaction(
+                            connection -> dao.partialInsert(project.id(), processedUpdate, id, connection)));
+        });
     }
 
     private Mono<Void> updateOrFail(TraceUpdate traceUpdate, UUID id, Trace trace, Project project) {
@@ -564,6 +572,16 @@ class TraceServiceImpl implements TraceService {
     public Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(Set<UUID> projectIds, String workspaceId) {
         return template
                 .nonTransaction(connection -> dao.getLastUpdatedTraceAt(projectIds, workspaceId, connection));
+    }
+
+    @Override
+    public Mono<Set<UUID>> getProjectsWithTracesInRange(@NonNull Collection<Pair<String, UUID>> workspaceProjectPairs,
+            @NonNull Instant from, @NonNull Instant to) {
+        if (workspaceProjectPairs.isEmpty()) {
+            return Mono.just(Set.of());
+        }
+        return template.nonTransaction(
+                connection -> dao.getProjectsWithTracesInRange(workspaceProjectPairs, from, to, connection));
     }
 
     @Override

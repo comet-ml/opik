@@ -20,8 +20,10 @@ from .agent_config_value_write_type import AgentConfigValueWriteType
 from .agent_insights_issue import AgentInsightsIssue
 from .agent_insights_issue_detail import AgentInsightsIssueDetail
 from .agent_insights_issue_page import AgentInsightsIssuePage
+from .agent_insights_issue_severity import AgentInsightsIssueSeverity
 from .agent_insights_issue_status import AgentInsightsIssueStatus
 from .agent_insights_issue_with_details import AgentInsightsIssueWithDetails
+from .agent_insights_issue_with_details_severity import AgentInsightsIssueWithDetailsSeverity
 from .agent_insights_issue_with_details_status import AgentInsightsIssueWithDetailsStatus
 from .agent_insights_job import AgentInsightsJob
 from .agent_insights_job_status import AgentInsightsJobStatus
@@ -417,7 +419,6 @@ from .image_url import ImageUrl
 from .image_url_public import ImageUrlPublic
 from .image_url_write import ImageUrlWrite
 from .item import Item
-from .item_impact import ItemImpact
 from .item_lock_info import ItemLockInfo
 from .json_list_string import JsonListString
 from .json_list_string_compare import JsonListStringCompare
@@ -570,6 +571,7 @@ from .recent_activity_item_public_type import RecentActivityItemPublicType
 from .recent_activity_page_public import RecentActivityPagePublic
 from .report_preference import ReportPreference
 from .reported_issue import ReportedIssue
+from .reported_issue_severity import ReportedIssueSeverity
 from .response_format import ResponseFormat
 from .response_format_type import ResponseFormatType
 from .result import Result
@@ -616,7 +618,6 @@ from .spans_count_response import SpansCountResponse
 from .spend_breakdown_response import SpendBreakdownResponse
 from .spend_composition_response import SpendCompositionResponse
 from .spend_metric_request import SpendMetricRequest
-from .spend_recommendations_response import SpendRecommendationsResponse
 from .spend_summary_response import SpendSummaryResponse
 from .spend_user_page import SpendUserPage
 from .spend_user_row import SpendUserRow
@@ -686,6 +687,7 @@ from .trace_visibility_mode import TraceVisibilityMode
 from .trace_write import TraceWrite
 from .trace_write_source import TraceWriteSource
 from .usage import Usage
+from .usage_by_workspace_project_user_response import UsageByWorkspaceProjectUserResponse
 from .user_defined_metric_python_code import UserDefinedMetricPythonCode
 from .user_defined_metric_python_code_public import UserDefinedMetricPythonCodePublic
 from .user_defined_metric_python_code_write import UserDefinedMetricPythonCodeWrite
@@ -715,6 +717,7 @@ from .workspace_metric_response import WorkspaceMetricResponse
 from .workspace_metrics_summary_request import WorkspaceMetricsSummaryRequest
 from .workspace_metrics_summary_response import WorkspaceMetricsSummaryResponse
 from .workspace_name_holder import WorkspaceNameHolder
+from .workspace_project_user_count import WorkspaceProjectUserCount
 from .workspace_spans_count import WorkspaceSpansCount
 from .workspace_trace_count import WorkspaceTraceCount
 from .workspace_user_permissions import WorkspaceUserPermissions
@@ -740,8 +743,10 @@ __all__ = [
     "AgentInsightsIssue",
     "AgentInsightsIssueDetail",
     "AgentInsightsIssuePage",
+    "AgentInsightsIssueSeverity",
     "AgentInsightsIssueStatus",
     "AgentInsightsIssueWithDetails",
+    "AgentInsightsIssueWithDetailsSeverity",
     "AgentInsightsIssueWithDetailsStatus",
     "AgentInsightsJob",
     "AgentInsightsJobStatus",
@@ -1094,7 +1099,6 @@ __all__ = [
     "ImageUrlPublic",
     "ImageUrlWrite",
     "Item",
-    "ItemImpact",
     "ItemLockInfo",
     "JsonListString",
     "JsonListStringCompare",
@@ -1245,6 +1249,7 @@ __all__ = [
     "RecentActivityPagePublic",
     "ReportPreference",
     "ReportedIssue",
+    "ReportedIssueSeverity",
     "ResponseFormat",
     "ResponseFormatType",
     "Result",
@@ -1291,7 +1296,6 @@ __all__ = [
     "SpendBreakdownResponse",
     "SpendCompositionResponse",
     "SpendMetricRequest",
-    "SpendRecommendationsResponse",
     "SpendSummaryResponse",
     "SpendUserPage",
     "SpendUserRow",
@@ -1361,6 +1365,7 @@ __all__ = [
     "TraceWrite",
     "TraceWriteSource",
     "Usage",
+    "UsageByWorkspaceProjectUserResponse",
     "UserDefinedMetricPythonCode",
     "UserDefinedMetricPythonCodePublic",
     "UserDefinedMetricPythonCodeWrite",
@@ -1390,6 +1395,7 @@ __all__ = [
     "WorkspaceMetricsSummaryRequest",
     "WorkspaceMetricsSummaryResponse",
     "WorkspaceNameHolder",
+    "WorkspaceProjectUserCount",
     "WorkspaceSpansCount",
     "WorkspaceTraceCount",
     "WorkspaceUserPermissions",

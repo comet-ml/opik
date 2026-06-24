@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.AgentInsightsIssue;
 import com.comet.opik.api.AgentInsightsIssueDetail;
+import com.comet.opik.api.AgentInsightsIssueSeverity;
 import com.comet.opik.api.AgentInsightsIssueStatus;
 import com.comet.opik.api.AgentInsightsIssueUpdate;
 import com.comet.opik.api.AgentInsightsIssueWithDetails;
@@ -36,7 +37,8 @@ public interface AgentInsightsIssueService {
     void reportIssues(AgentInsightsReport report);
 
     AgentInsightsIssue.AgentInsightsIssuePage findIssues(UUID projectId, LocalDate fromDate, LocalDate toDate,
-            AgentInsightsIssueStatus status, List<SortingField> sortingFields, int page, int size);
+            AgentInsightsIssueStatus status, AgentInsightsIssueSeverity severity, List<SortingField> sortingFields,
+            int page, int size);
 
     AgentInsightsIssueWithDetails getIssue(UUID issueId, UUID projectId, LocalDate fromDate, LocalDate toDate);
 
@@ -71,8 +73,11 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
 
         projectService.get(report.projectId(), workspaceId);
 
-        log.info("Storing '{}' agent insights issues for project '{}' on report day '{}' in workspace '{}'",
-                report.issues().size(), report.projectId(), report.reportDay(), workspaceId);
+        int issueCount = report.issues().size();
+        boolean allClear = issueCount == 0;
+
+        log.info("Reporting agent insights issues for project '{}' on report day '{}' in workspace '{}': {}",
+                report.projectId(), report.reportDay(), workspaceId, allClear ? "all clear" : issueCount);
 
         List<UUID> issueIds = report.issues().stream()
                 .map(issue -> issue.id() != null ? issue.id() : idGenerator.generateId())
@@ -87,18 +92,26 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
         transactionTemplate.inTransaction(WRITE, handle -> {
             AgentInsightsIssueDAO dao = handle.attach(AgentInsightsIssueDAO.class);
 
-            dao.upsertIssues(workspaceId, report.projectId(), userName, issueIds, report.issues());
-            dao.upsertDetails(workspaceId, report.projectId(), report.reportDay(), userName,
-                    detailIds, issueIds, report.issues(), metadata);
+            if (!allClear) {
+                dao.upsertIssues(workspaceId, report.projectId(), userName, issueIds, report.issues());
+                dao.upsertDetails(workspaceId, report.projectId(), report.reportDay(), userName,
+                        detailIds, issueIds, report.issues(), metadata);
+            }
+
+            handle.attach(AgentInsightsJobDAO.class)
+                    .markScanned(workspaceId, report.projectId(), userName);
 
             return null;
         });
+
+        AgentInsightsMetrics.REPORTS_RECEIVED.add(1);
+        AgentInsightsMetrics.ISSUES_REPORTED.add(report.issues().size());
     }
 
     @Override
     public AgentInsightsIssue.AgentInsightsIssuePage findIssues(@NonNull UUID projectId, LocalDate fromDate,
-            LocalDate toDate, AgentInsightsIssueStatus status, List<SortingField> sortingFields, int page,
-            int size) {
+            LocalDate toDate, AgentInsightsIssueStatus status, AgentInsightsIssueSeverity severity,
+            List<SortingField> sortingFields, int page, int size) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         DateWindow window = resolveWindow(fromDate, toDate);
@@ -112,8 +125,8 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
 
             int offset = (page - 1) * size;
             List<AgentInsightsIssue> issues = dao.findIssues(workspaceId, projectId, window.from(), window.to(),
-                    status, sortFields, size, offset);
-            long total = dao.countIssues(workspaceId, projectId, window.from(), window.to(), status);
+                    status, severity, sortFields, size, offset);
+            long total = dao.countIssues(workspaceId, projectId, window.from(), window.to(), status, severity);
 
             return AgentInsightsIssue.AgentInsightsIssuePage.builder()
                     .page(page)

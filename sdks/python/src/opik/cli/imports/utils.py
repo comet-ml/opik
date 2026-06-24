@@ -1,13 +1,21 @@
 """Common utilities for import functionality."""
 
+import hashlib
+import json
+import sys
 from collections import deque
-from typing import Any, Callable, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import click
 import opik
 from opik.types import FeedbackScoreDict
 from rich.console import Console
 from rich.table import Table
+
+from ..migration_manifest import MANIFEST_FILENAME, MigrationManifest
+
+PROJECT_METADATA_FILENAME = "project.json"
 
 
 def no_attachments_option() -> Callable:
@@ -19,7 +27,244 @@ def no_attachments_option() -> Callable:
     )
 
 
+def to_project_option() -> Callable:
+    """Shared Click decorator for the ``--to-project`` flag.
+
+    Overrides the destination project. When omitted, data is imported into a
+    project named after the source (the name recorded in ``project.json``).
+    """
+    return click.option(
+        "--to-project",
+        "to_project",
+        type=str,
+        default=None,
+        help="Create the imported data in this project instead of the source project's name.",
+    )
+
+
 console = Console()
+
+
+def resolve_import_base_path(path: str, workspace: str) -> Path:
+    """Resolve the directory that contains ``projects/`` for import.
+
+    Prefers ``<path>/<workspace>/`` — symmetric with the export layout
+    (``<path>/<workspace>/projects/<id>/``), so the same ``--path`` round-trips
+    within a workspace. Falls back to ``<path>/`` when the workspace segment is
+    absent, which is the cross-workspace case: when importing into a different
+    workspace than the data was exported from, point ``--path`` at the exported
+    workspace directory and the project folders are found directly under it.
+    """
+    workspace_scoped = Path(path) / workspace
+    if (workspace_scoped / "projects").is_dir():
+        return workspace_scoped
+    return Path(path)
+
+
+def _read_project_metadata_name(project_dir: Path) -> Optional[str]:
+    """Return the recorded project name from ``<project_dir>/project.json``.
+
+    Returns ``None`` for a missing/unreadable/malformed file, a non-object JSON
+    body, or a non-string ``name`` — so a corrupt ``project.json`` can never
+    crash ``find_project_export_dir`` / ``available_project_names``.
+    """
+    meta = project_dir / PROJECT_METADATA_FILENAME
+    if not meta.exists():
+        return None
+    try:
+        data = json.loads(meta.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    name = data.get("name")
+    return name if isinstance(name, str) else None
+
+
+def find_project_export_dir(base_path: Path, project_name: str) -> Optional[Path]:
+    """Locate the exported project folder whose ``project.json`` name matches.
+
+    The on-disk layout keys folders by project ID; the human name lives in
+    ``project.json``. This resolves a user-supplied project *name* back to its
+    id-named directory under ``base_path/projects/``. Returns ``None`` if no
+    folder records that name.
+    """
+    projects_dir = base_path / "projects"
+    if not projects_dir.is_dir():
+        return None
+    matches = [
+        child
+        for child in sorted(projects_dir.iterdir())
+        if child.is_dir() and _read_project_metadata_name(child) == project_name
+    ]
+    if not matches:
+        return None
+    if len(matches) > 1:
+        # Ambiguous: e.g. a project renamed and re-exported, or the name reused
+        # across folders. Surface it rather than silently picking by sort order.
+        console.print(
+            f"[yellow]Warning: {len(matches)} exported folders record project "
+            f"name '{project_name}' ({', '.join(m.name for m in matches)}); "
+            f"using '{matches[0].name}'.[/yellow]"
+        )
+    return matches[0]
+
+
+def available_project_names(base_path: Path) -> List[str]:
+    """List the project names recorded under ``base_path/projects/*/project.json``."""
+    projects_dir = base_path / "projects"
+    if not projects_dir.is_dir():
+        return []
+    names = [
+        name
+        for child in sorted(projects_dir.iterdir())
+        if child.is_dir() and (name := _read_project_metadata_name(child)) is not None
+    ]
+    return names
+
+
+def resolve_import_project_root(
+    path: str, workspace: str, project_name: str, to_project: Optional[str] = None
+) -> Tuple[Path, str]:
+    """Locate the exported project folder and resolve the destination project.
+
+    Shared by ``import_all`` and ``_import_by_type`` so the source lookup and the
+    not-found messaging stay in sync. Returns ``(project_root, target_project_name)``
+    where ``target_project_name`` is ``to_project`` when given, else ``project_name``.
+    Prints an error and exits with code 1 when no exported project records the name.
+    """
+    base_path = resolve_import_base_path(path, workspace)
+    project_root = find_project_export_dir(base_path, project_name)
+    if project_root is None:
+        available = available_project_names(base_path)
+        hint = (
+            f" Available: {', '.join(available)}"
+            if available
+            else " No exported projects were found."
+        )
+        console.print(
+            f"[red]No exported project named '{project_name}' under "
+            f"{base_path / 'projects'}.{hint}[/red]"
+        )
+        sys.exit(1)
+    return project_root, (to_project or project_name)
+
+
+def destination_manifest_dir(project_root: Path, destination_project_name: str) -> Path:
+    """Return the per-destination import-manifest directory under the source folder.
+
+    The resume/completion manifest must be keyed by the *destination* project, not
+    just the source folder: importing the same exported project into different
+    ``--to-project`` targets must keep independent state (each destination gets its
+    own newly-created trace ids and completion status). Without this, a clean
+    import into A would make a later import into B short-circuit on
+    ``manifest.is_completed`` (and a partially-failed import into A would resume
+    into B, splitting one project's data across two destinations).
+
+    Destination names may contain ``/``, ``:`` or whitespace, so the directory is
+    keyed by a short hash of the name rather than the name itself.
+    """
+    dest_key = hashlib.sha256(destination_project_name.encode("utf-8")).hexdigest()[:16]
+    return project_root / "import_manifests" / dest_key
+
+
+def setup_import_manifest(
+    project_root: Path,
+    destination_project_name: str,
+    dry_run: bool,
+    force: bool,
+) -> Tuple[Optional[MigrationManifest], bool]:
+    """Construct and initialize the per-destination import manifest.
+
+    Shared by ``import_all`` and ``_import_by_type`` so the start/resume/force
+    lifecycle stays in one place. The manifest's ``base_path`` is ``project_root``
+    (so file keys under ``project_root/datasets`` etc. resolve), while the SQLite
+    file lives in the per-destination subdir from :func:`destination_manifest_dir`.
+
+    Returns ``(manifest, already_completed)``. ``manifest`` is ``None`` for dry
+    runs. When ``already_completed`` is ``True`` (a prior run finished and
+    ``--force`` was not given), the caller should return without re-importing.
+    """
+    if dry_run:
+        return None, False
+
+    manifest_file = (
+        destination_manifest_dir(project_root, destination_project_name)
+        / MANIFEST_FILENAME
+    )
+    # Capture existence BEFORE constructing — the constructor creates the SQLite
+    # file, which would otherwise make the --force "existing manifest" check
+    # tautologically true (and reset/warn against a manifest that never existed)
+    # on a first run.
+    manifest_existed = MigrationManifest.exists(
+        project_root, manifest_path=manifest_file
+    )
+    manifest = MigrationManifest(project_root, manifest_path=manifest_file)
+    if force:
+        if manifest_existed:
+            manifest.reset()
+            console.print(
+                "[yellow]--force: discarding existing manifest, starting fresh[/yellow]"
+            )
+    else:
+        if manifest.is_completed:
+            console.print(
+                "[green]Import already completed. Use --force to re-import.[/green]"
+            )
+            return manifest, True
+        elif manifest.is_in_progress:
+            console.print(
+                f"[blue]Resuming interrupted import: "
+                f"{manifest.completed_count()} file(s) already completed[/blue]"
+            )
+    manifest.start()
+    return manifest, False
+
+
+def finalize_import(
+    manifest: Optional[MigrationManifest],
+    client: opik.Opik,
+    total_errors: int,
+    dry_run: bool,
+) -> None:
+    """Flush ingestion, surface upload failures, and complete the manifest.
+
+    Shared tail of ``import_all`` and ``_import_by_type`` so resume/manifest
+    tweaks stay in one place. No-op on dry runs. Exits with code 1 if the flush
+    times out or any file upload failed. Marks the manifest complete only when
+    ``total_errors == 0``, so a partial failure leaves it ``in_progress`` for a
+    resumable rerun.
+    """
+    if dry_run:
+        return
+
+    # Flush the async ingestion queue so all enqueued traces/spans are persisted
+    # before we return; otherwise the process can exit while the background
+    # worker is still sending data (especially under rate-limiting).
+    flushed = client.flush()
+    if not flushed:
+        console.print(
+            "[yellow]Warning: flush timed out — some traces/spans may not have been "
+            "ingested. Re-run the import to retry.[/yellow]"
+        )
+        sys.exit(1)
+
+    # FileUploadManager.flush() returns True even when individual uploads fail
+    # (only False on timeout), so check failed_uploads separately.
+    failed = client.__internal_api__failed_uploads__(timeout=None)
+    if failed > 0:
+        console.print(
+            f"[yellow]Warning: {failed} file upload(s) failed during import. "
+            "Re-run the import to retry.[/yellow]"
+        )
+        sys.exit(1)
+
+    # Mark complete only on a fully clean run. On any error, leave it in_progress
+    # so the next run (without --force) resumes/retries instead of
+    # short-circuiting on manifest.is_completed.
+    assert manifest is not None  # guaranteed: manifest is set whenever not dry_run
+    if total_errors == 0:
+        manifest.complete()
 
 
 def debug_print(message: str, debug: bool) -> None:

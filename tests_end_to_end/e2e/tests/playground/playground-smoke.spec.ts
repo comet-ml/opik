@@ -3,15 +3,19 @@ import { PlaygroundPage } from '@e2e/pom/playground.page';
 import { ConfigurationPage } from '@e2e/pom/configuration.page';
 
 /**
- * Pick an Anthropic-or-OpenAI model from env; provision the matching provider key
- * via the UI if it isn't already configured. Returns the model display name to use
- * with the playground.
+ * Pick an Anthropic / OpenAI / OpenRouter model from env; provision the matching
+ * provider key via the UI if it isn't already configured. Returns the model
+ * display name to use with the playground.
  */
 async function ensureModelAvailable(page: import('@playwright/test').Page): Promise<string> {
   const anthropic = process.env.ANTHROPIC_API_KEY;
   const openai = process.env.OPENAI_API_KEY;
-  if (!anthropic && !openai) {
-    test.skip(true, 'Neither ANTHROPIC_API_KEY nor OPENAI_API_KEY is set');
+  const openrouter = process.env.OPENROUTER_API_KEY;
+  if (!anthropic && !openai && !openrouter) {
+    test.skip(
+      true,
+      'None of ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY is set',
+    );
     return ''; // unreachable
   }
   const cfg = new ConfigurationPage(page);
@@ -20,8 +24,17 @@ async function ensureModelAvailable(page: import('@playwright/test').Page): Prom
     await cfg.ensureProviderConfigured('Anthropic', anthropic);
     return 'Claude Haiku 4.5';
   }
-  await cfg.ensureProviderConfigured('OpenAI', openai!);
-  return 'GPT 4o Mini';
+  if (openai) {
+    await cfg.ensureProviderConfigured('OpenAI', openai);
+    return 'GPT 4o Mini';
+  }
+  await cfg.ensureCustomProviderConfigured({
+    providerName: 'openrouter',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    apiKey: openrouter!,
+    models: 'openai/gpt-4o-mini',
+  });
+  return 'openai/gpt-4o-mini';
 }
 
 /**

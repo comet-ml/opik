@@ -35,7 +35,7 @@ public class ClickHouseContainerUtils {
 
     public static ClickHouseContainer newClickHouseContainer(boolean reusable) {
         ClickHouseContainer container = new ClickHouseContainer(
-                DockerImageName.parse("clickhouse/clickhouse-server:25.3.6.56-alpine"))
+                DockerImageName.parse("clickhouse/clickhouse-server:25.8.16.34-alpine"))
                 .withReuse(reusable);
 
         CONTAINERS.add(container);

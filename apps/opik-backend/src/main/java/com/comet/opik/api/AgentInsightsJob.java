@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
 import java.time.Instant;
@@ -22,6 +23,7 @@ public record AgentInsightsJob(
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY, requiredMode = Schema.RequiredMode.REQUIRED) UUID projectId,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Status status,
+        @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastScanAt,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
@@ -45,5 +47,11 @@ public record AgentInsightsJob(
             }
             throw new IllegalArgumentException("Unknown agent insights job status: " + value);
         }
+    }
+
+    // Cross-workspace projection for the daily sweep: carries workspaceId (the cron runs in system
+    // context, with no request-scoped auth) alongside the project it targets.
+    @Builder(toBuilder = true)
+    public record EnabledJob(@NonNull UUID id, @NonNull String workspaceId, @NonNull UUID projectId) {
     }
 }

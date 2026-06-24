@@ -4,6 +4,7 @@ import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { JsonNode } from "./JsonNode.js";
+import { ReportedIssueSeverity } from "./ReportedIssueSeverity.js";
 
 export const ReportedIssue: core.serialization.ObjectSchema<serializers.ReportedIssue.Raw, OpikApi.ReportedIssue> =
     core.serialization.object({
@@ -13,6 +14,7 @@ export const ReportedIssue: core.serialization.ObjectSchema<serializers.Reported
         cause: core.serialization.string().optional(),
         suggestedFix: core.serialization.property("suggested_fix", core.serialization.string().optional()),
         tracesQuery: core.serialization.property("traces_query", core.serialization.string().optional()),
+        severity: ReportedIssueSeverity,
         count: core.serialization.number(),
         totalCount: core.serialization.property("total_count", core.serialization.number()),
         usersImpacted: core.serialization.property("users_impacted", core.serialization.number()),
@@ -28,6 +30,7 @@ export declare namespace ReportedIssue {
         cause?: string | null;
         suggested_fix?: string | null;
         traces_query?: string | null;
+        severity: ReportedIssueSeverity.Raw;
         count: number;
         total_count: number;
         users_impacted: number;

@@ -48,8 +48,8 @@ import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.FeedbackScoreDAO;
 import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.GuardrailsMapper;
-import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.retention.RetentionUtils;
 import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -772,7 +772,7 @@ class ProjectsResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.json(ProjectRetrieve.builder().name(project.name()).build()))) {
+                    .post(Entity.json(ProjectRetrieve.builder().name(project.name()).includeStats(true).build()))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                 assertThat(actualResponse.hasEntity()).isTrue();
@@ -785,6 +785,56 @@ class ProjectsResourceTest {
                         .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                         .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "totalEstimatedCost")
                         .isEqualTo(project);
+            }
+        }
+
+        @Test
+        @DisplayName("when project exists and stats are not requested, then return project without stats")
+        void getProjectByName__whenStatsNotRequested__thenReturnProjectWithoutStats() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+
+            var id = createProject(project, apiKey, workspaceName);
+
+            // Seed traces/spans so stats would be non-null if they were computed.
+            buildProjectStats(project.toBuilder().id(id).build(), apiKey, workspaceName);
+
+            // Without stats requested (OPIK-7101), no ClickHouse aggregation runs on the hot name-resolution path:
+            // identity/core fields are resolved while every stats field stays null. lastUpdatedTraceAt is a `projects`
+            // table column (set on ingestion), not part of the stats aggregation, so it is ignored via IGNORED_FIELD_MIN.
+            var expectedProject = project.toBuilder()
+                    .id(id)
+                    .feedbackScores(null)
+                    .duration(null)
+                    .totalEstimatedCost(null)
+                    .totalEstimatedCostSum(null)
+                    .usage(null)
+                    .traceCount(null)
+                    .guardrailsFailedCount(null)
+                    .errorCount(null)
+                    .build();
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("retrieve")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(ProjectRetrieve.builder().name(project.name()).build()))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                assertThat(actualResponse.hasEntity()).isTrue();
+
+                var actualEntity = actualResponse.readEntity(Project.class);
+                assertThat(actualEntity)
+                        .usingRecursiveComparison()
+                        .ignoringFields(IGNORED_FIELD_MIN)
+                        .ignoringCollectionOrder()
+                        .isEqualTo(expectedProject);
             }
         }
 
@@ -1856,7 +1906,7 @@ class ProjectsResourceTest {
         long recentErrorCount = traces.stream()
                 .filter(trace -> trace.errorInfo() != null)
                 .filter(trace -> {
-                    Instant traceTime = IdGenerator.extractTimestampFromUUIDv7(trace.id());
+                    Instant traceTime = RetentionUtils.extractInstant(trace.id());
                     return !traceTime.isBefore(lastWeekStart) && !traceTime.isAfter(now);
                 })
                 .count();
@@ -1864,7 +1914,7 @@ class ProjectsResourceTest {
         long pastPeriodErrorCount = traces.stream()
                 .filter(trace -> trace.errorInfo() != null)
                 .filter(trace -> {
-                    Instant traceTime = IdGenerator.extractTimestampFromUUIDv7(trace.id());
+                    Instant traceTime = RetentionUtils.extractInstant(trace.id());
                     return traceTime.isBefore(lastWeekStart);
                 })
                 .count();

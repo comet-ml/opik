@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.AgentInsightsIssue;
+import com.comet.opik.api.AgentInsightsIssueSeverity;
 import com.comet.opik.api.AgentInsightsIssueStatus;
 import com.comet.opik.api.AgentInsightsIssueUpdate;
 import com.comet.opik.api.AgentInsightsIssueWithDetails;
@@ -64,6 +65,7 @@ public class AgentInsightsResource {
             @QueryParam("from_date") LocalDate fromDate,
             @QueryParam("to_date") LocalDate toDate,
             @QueryParam("status") AgentInsightsIssueStatus status,
+            @QueryParam("severity") AgentInsightsIssueSeverity severity,
             @QueryParam("sorting") String sorting,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @Max(100) @DefaultValue("10") int size) {
@@ -72,7 +74,7 @@ public class AgentInsightsResource {
 
         List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
         AgentInsightsIssue.AgentInsightsIssuePage issuesPage = agentInsightsIssueService.findIssues(
-                projectId, fromDate, toDate, status, sortingFields, page, size);
+                projectId, fromDate, toDate, status, severity, sortingFields, page, size);
 
         return Response.ok(issuesPage).build();
     }

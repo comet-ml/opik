@@ -4,9 +4,9 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.sorting.SpendUserSortingFactory;
 import com.comet.opik.api.spend.SpendBreakdownResponse;
+import com.comet.opik.api.spend.SpendBreakdownsResponse;
 import com.comet.opik.api.spend.SpendCompositionResponse;
 import com.comet.opik.api.spend.SpendMetricRequest;
-import com.comet.opik.api.spend.SpendRecommendationsResponse;
 import com.comet.opik.api.spend.SpendSummaryResponse;
 import com.comet.opik.api.spend.SpendUserPage;
 import com.comet.opik.domain.AiSpendService;
@@ -115,6 +115,26 @@ public class AiSpendResource {
     }
 
     @POST
+    @Path("/composition/breakdowns")
+    @Operation(operationId = "getSpendAllBreakdowns", summary = "Get all spend lane breakdowns", description = "Get the per-item breakdown for every composition lane in one request", responses = {
+            @ApiResponse(responseCode = "200", description = "Lane breakdowns", content = @Content(schema = @Schema(implementation = SpendBreakdownsResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
+    public Response getSpendAllBreakdowns(
+            @RequestBody(content = @Content(schema = @Schema(implementation = SpendMetricRequest.class))) @NotNull @Valid SpendMetricRequest request) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Retrieve all spend breakdowns on workspace_id '{}'", workspaceId);
+        var response = aiSpendService.getAllBreakdowns(request)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        log.info("Retrieved all spend breakdowns on workspace_id '{}'", workspaceId);
+
+        return Response.ok().entity(response).build();
+    }
+
+    @POST
     @Path("/users")
     @Operation(operationId = "getSpendUsers", summary = "Get spend user leaderboard", description = "Get coding-agent spend per user", responses = {
             @ApiResponse(responseCode = "200", description = "User leaderboard", content = @Content(schema = @Schema(implementation = SpendUserPage.class))),
@@ -135,26 +155,6 @@ public class AiSpendResource {
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Retrieved spend users on workspace_id '{}'", workspaceId);
-
-        return Response.ok().entity(response).build();
-    }
-
-    @POST
-    @Path("/recommendations")
-    @Operation(operationId = "getSpendRecommendations", summary = "Get spend recommendations", description = "Get coding-agent cost-saving recommendations", responses = {
-            @ApiResponse(responseCode = "200", description = "Recommendations", content = @Content(schema = @Schema(implementation = SpendRecommendationsResponse.class))),
-            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
-    })
-    @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
-    public Response getSpendRecommendations(
-            @RequestBody(content = @Content(schema = @Schema(implementation = SpendMetricRequest.class))) @NotNull @Valid SpendMetricRequest request) {
-
-        String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Retrieve spend recommendations on workspace_id '{}'", workspaceId);
-        var response = aiSpendService.getRecommendations(request)
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .block();
-        log.info("Retrieved spend recommendations on workspace_id '{}'", workspaceId);
 
         return Response.ok().entity(response).build();
     }

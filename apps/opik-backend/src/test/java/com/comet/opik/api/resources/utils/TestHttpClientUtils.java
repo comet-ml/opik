@@ -1,20 +1,14 @@
 package com.comet.opik.api.resources.utils;
 
 import com.codahale.metrics.MetricRegistry;
-import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.TestConfigUtils;
 import com.comet.opik.infrastructure.http.HttpModule;
 import io.dropwizard.client.JerseyClientBuilder;
-import io.dropwizard.configuration.ConfigurationException;
-import io.dropwizard.configuration.FileConfigurationSourceProvider;
-import io.dropwizard.configuration.YamlConfigurationFactory;
-import io.dropwizard.jackson.Jackson;
-import io.dropwizard.jersey.validation.Validators;
 import jakarta.ws.rs.client.Client;
 import lombok.Getter;
 import lombok.experimental.Accessors;
 import lombok.experimental.UtilityClass;
 
-import java.io.IOException;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
@@ -53,7 +47,7 @@ public class TestHttpClientUtils {
 
     private Client newClient() {
         try {
-            var jerseyConfig = parseTestOpikConfiguration().getJerseyClient();
+            var jerseyConfig = TestConfigUtils.loadConfigTest().getJerseyClient();
             var executor = new ThreadPoolExecutor(
                     jerseyConfig.getMinThreads(),
                     jerseyConfig.getMaxThreads(),
@@ -66,12 +60,6 @@ public class TestHttpClientUtils {
         } catch (Exception exception) {
             throw new RuntimeException(exception);
         }
-    }
-
-    private OpikConfiguration parseTestOpikConfiguration() throws IOException, ConfigurationException {
-        var yamlConfigFactory = new YamlConfigurationFactory<>(
-                OpikConfiguration.class, Validators.newValidator(), Jackson.newObjectMapper(), "dw");
-        return yamlConfigFactory.build(new FileConfigurationSourceProvider(), "src/test/resources/config-test.yml");
     }
 
     private ThreadFactory newThreadFactory() {

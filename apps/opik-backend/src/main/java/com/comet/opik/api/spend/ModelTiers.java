@@ -7,7 +7,7 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.Builder;
 
 /**
- * Cache-tier token sums for a single {@code cc.billing.model}. The FE prices
+ * Cache-tier token sums for a single {@code cipx.call.model}. The FE prices
  * each entry at that model's rates and sums across models, so a workspace
  * mixing models is costed exactly instead of at one representative rate.
  */

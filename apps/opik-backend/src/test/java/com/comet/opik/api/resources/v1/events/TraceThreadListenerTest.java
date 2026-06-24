@@ -5,8 +5,8 @@ import com.comet.opik.api.ThreadTimestamps;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.threads.TraceThreadService;
-import com.comet.opik.infrastructure.db.IdGeneratorImpl;
 import com.comet.opik.podam.PodamFactoryUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,7 +45,7 @@ import static org.mockito.Mockito.when;
 class TraceThreadListenerTest {
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
-    private final IdGenerator idGenerator = new IdGeneratorImpl();
+    private final IdGenerator idGenerator = TestIdGeneratorFactory.create();
 
     @Mock
     private TraceThreadService traceThreadService;

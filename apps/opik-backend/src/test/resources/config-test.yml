@@ -13,9 +13,9 @@ logging:
 # Description: state database configuration
 # https://www.dropwizard.io/en/stable/manual/configuration.html#database
 database:
-  #  Default: jdbc:mysql://localhost:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true
+  #  Default: jdbc:mysql://localhost:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
   #  Description: The URL of the server
-  url: jdbc:mysql://localhost:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true
+  url: jdbc:mysql://localhost:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
   #  Default: opik
   #  Description: The username used to connect to the server
   user: opik
@@ -74,6 +74,18 @@ databaseAnalytics:
   #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
   healthCheckTimeout: 1s
 
+# Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
+#   window, protecting data quality.
+uuidValidation:
+  #  Default: true for tests
+  #  Description: Operational kill-switch. When false, ids are not checked against the window (the
+  #   window is still validated to be a sane value).
+  enabled: true
+  #  Default: 24h
+  #  Description: Validation window (between 12h and 45d). Writes whose `id` is a UUIDv7 with an
+  #   embedded timestamp more than this far in the past or future are rejected.
+  window: 24h
+
 # Description: credentials for the Agent Insights read-only free-form SQL user. The connection params are reused
 #   from databaseAnalytics (overridden to the test container). The username/password match the production-shape user
 #   provisioned globally on the test ClickHouse container via src/test/resources/users.xml (mirrors
@@ -96,6 +108,11 @@ health:
   # healthy for the entire test window.
   healthChecks:
     - name: deadlocks
+      critical: true
+      type: alive
+      initialState: false
+      schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
+    - name: shared_http_client
       critical: true
       type: alive
       initialState: false
@@ -165,6 +182,9 @@ authentication:
   # Description: Configures base url for React service, used for user management and authentication
   reactService:
     url: ''
+
+sharedHttpClientHealthCheck:
+  timeout: 1s
 
 # OAuth 2.1 Authorization Server for hosted/local Opik MCP
 mcpOAuth:
@@ -648,9 +668,6 @@ serviceToggles:
   # Description: Whether the deployment is expected to produce demo project data on signup
   demoDataEnabled: "true"
   # Default: false
-  # Description: Whether or not Optimization Studio feature is enabled
-  optimizationStudioEnabled: "false"
-  # Default: false
   # Description: Whether or not the Cost Intelligence (AI Spend) feature is enabled
   costIntelligenceEnabled: "false"
   # Default: true
@@ -719,6 +736,15 @@ localRunner:
   reaperLockDuration: 10s
   reaperLockWait: 2s
   nextJobAsyncTimeoutBuffer: 2s
+
+# Orphaned Redis stream-consumer reaper (OPIK-6982).
+# Disabled by default in tests so it does not auto-schedule when the app context boots; enable per-test if needed.
+streamConsumerReaper:
+  enabled: false
+  jobInterval: 1h
+  startupDelay: 0s
+  idleThreshold: 1d
+  lockDuration: 10m
 
 # Trace Thread configuration
 traceThreadConfig:

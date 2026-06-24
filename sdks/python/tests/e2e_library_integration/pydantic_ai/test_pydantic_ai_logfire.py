@@ -17,6 +17,7 @@ A ``TestModel`` is used so the test is hermetic (no LLM provider key needed).
 """
 
 import asyncio
+import json
 import urllib.parse
 
 import logfire
@@ -31,6 +32,23 @@ from opik import opik_context, config as opik_config, synchronization
 from opik.integrations.otel import OpikSpanProcessor
 
 from ...e2e import verifiers
+
+
+# PydanticAI instrumentation v<=2 names the agent root span "agent run" and the
+# tool span "running tool". v3+ follows the OpenTelemetry GenAI semantic
+# conventions: "invoke_agent {agent_name}" and "execute_tool {tool_name}". The
+# deps are unpinned, so accept either naming so the test survives version drift.
+def _is_agent_run_span(name: str) -> bool:
+    return name == "agent run" or name.startswith("invoke_agent")
+
+
+def _is_tool_span(name: str) -> bool:
+    return name == "running tool" or name.startswith("execute_tool")
+
+
+# Tool result attribute key: "tool_response" (v<=2) or the GenAI semconv
+# "gen_ai.tool.call.result" (v3+).
+_TOOL_RESULT_KEYS = ("tool_response", "gen_ai.tool.call.result")
 
 
 def _build_otlp_exporter(config: opik_config.OpikConfig) -> OTLPSpanExporter:
@@ -92,12 +110,14 @@ def test_pydantic_ai_logfire_with_opik_track__single_merged_trace(
 
     # entrypoint + at least the "agent run" and a model span all under one trace
     if not synchronization.until(
-        lambda: len(
-            opik_client.search_spans(
-                project_name=opik_client.config.project_name, trace_id=trace_id
+        lambda: (
+            len(
+                opik_client.search_spans(
+                    project_name=opik_client.config.project_name, trace_id=trace_id
+                )
             )
-        )
-        >= 3,
+            >= 3
+        ),
         max_try_seconds=15,
     ):
         raise AssertionError(
@@ -124,11 +144,11 @@ def test_pydantic_ai_logfire_with_opik_track__single_merged_trace(
         (span for span in spans if span.parent_span_id == entrypoint_span_id), None
     )
     assert otel_root is not None, (
-        "PydanticAI 'agent run' span was not nested under the tracked entrypoint"
+        "PydanticAI agent-run span was not nested under the tracked entrypoint"
     )
-    # logfire's PydanticAI instrumentation names the agent root span "agent run";
-    # assert it so a future hierarchy change can't pass on parentage alone
-    assert otel_root.name == "agent run"
+    # assert the name matches the agent-run span so a future hierarchy change
+    # can't pass on parentage alone
+    assert _is_agent_run_span(otel_root.name)
 
     # and the model/LLM span chained below the OTel root (descendant chaining)
     span_ids = {span.id for span in spans}
@@ -178,12 +198,14 @@ def test_pydantic_ai_logfire_with_opik_track__two_agent_calls__correct_nesting(
 
     # entrypoint + 2x (agent run + model span) = 5 spans in a single trace
     if not synchronization.until(
-        lambda: len(
-            opik_client.search_spans(
-                project_name=opik_client.config.project_name, trace_id=trace_id
+        lambda: (
+            len(
+                opik_client.search_spans(
+                    project_name=opik_client.config.project_name, trace_id=trace_id
+                )
             )
-        )
-        == 5,
+            == 5
+        ),
         max_try_seconds=15,
     ):
         raise AssertionError(
@@ -205,8 +227,8 @@ def test_pydantic_ai_logfire_with_opik_track__two_agent_calls__correct_nesting(
         name="run_entrypoint",
     )
 
-    # both 'agent run' subtrees are siblings directly under the entrypoint
-    agent_runs = [span for span in spans if span.name == "agent run"]
+    # both agent-run subtrees are siblings directly under the entrypoint
+    agent_runs = [span for span in spans if _is_agent_run_span(span.name)]
     assert len(agent_runs) == 2
     for agent_run in agent_runs:
         verifiers.verify_span(
@@ -214,7 +236,6 @@ def test_pydantic_ai_logfire_with_opik_track__two_agent_calls__correct_nesting(
             span_id=agent_run.id,
             trace_id=trace_id,
             parent_span_id=entrypoint_span_id,
-            name="agent run",
         )
 
     # each 'agent run' owns exactly one model span parented to that run alone —
@@ -277,12 +298,14 @@ def test_pydantic_ai_logfire__nested_track_and_otel__cross_origin_nesting(
 
     # outer + inner (native) + 2x (agent run + model) = 6 spans in one trace
     if not synchronization.until(
-        lambda: len(
-            opik_client.search_spans(
-                project_name=opik_client.config.project_name, trace_id=trace_id
+        lambda: (
+            len(
+                opik_client.search_spans(
+                    project_name=opik_client.config.project_name, trace_id=trace_id
+                )
             )
-        )
-        == 6,
+            == 6
+        ),
         max_try_seconds=15,
     ):
         raise AssertionError(
@@ -311,9 +334,9 @@ def test_pydantic_ai_logfire__nested_track_and_otel__cross_origin_nesting(
         name="inner_step",
     )
 
-    # the two OTel 'agent run' spans attach to the innermost native span that was
+    # the two OTel agent-run spans attach to the innermost native span that was
     # active when each was started: one under inner_step, one under outer.
-    agent_runs = [span for span in spans if span.name == "agent run"]
+    agent_runs = [span for span in spans if _is_agent_run_span(span.name)]
     assert len(agent_runs) == 2
     assert {run.parent_span_id for run in agent_runs} == {inner_span_id, outer_span_id}
     for agent_run in agent_runs:
@@ -322,7 +345,6 @@ def test_pydantic_ai_logfire__nested_track_and_otel__cross_origin_nesting(
             span_id=agent_run.id,
             trace_id=trace_id,
             parent_span_id=agent_run.parent_span_id,
-            name="agent run",
         )
         children = [span for span in spans if span.parent_span_id == agent_run.id]
         assert len(children) == 1, "each agent run should own exactly one model span"
@@ -332,3 +354,126 @@ def test_pydantic_ai_logfire__nested_track_and_otel__cross_origin_nesting(
             trace_id=trace_id,
             parent_span_id=agent_run.id,
         )
+
+
+def test_pydantic_ai_logfire__tool_span_logs_its_output(
+    opik_client: opik.Opik,
+):
+    """A PydanticAI tool's return value must land on the tool span's OUTPUT.
+
+    The logfire instrumentation emits the result under a tool-result attribute
+    (``tool_response`` in v<=2, ``gen_ai.tool.call.result`` in v3+); without an
+    explicit mapping it falls into the default INPUT bucket, so the tool span
+    renders no output in the UI.
+    """
+    config = opik_config.OpikConfig()
+    exporter = _build_otlp_exporter(config)
+
+    logfire.configure(
+        send_to_logfire=False,
+        console=False,
+        additional_span_processors=[
+            BatchSpanProcessor(exporter),
+            OpikSpanProcessor(),
+        ],
+    )
+    logfire.instrument_pydantic_ai()
+
+    agent = Agent(TestModel())
+
+    @agent.tool_plain
+    def get_weather(city: str) -> str:
+        return f"Sunny in {city}"
+
+    ID_STORAGE = {}
+
+    @opik.track(name="run_entrypoint")
+    def run() -> str:
+        ID_STORAGE["trace_id"] = opik_context.get_current_trace_data().id
+        return str(agent.run_sync("What is the weather?").output)
+
+    run()
+    opik.flush_tracker()
+    logfire.force_flush()
+
+    trace_id = ID_STORAGE["trace_id"]
+
+    def _tool_span():
+        spans = opik_client.search_spans(
+            project_name=opik_client.config.project_name, trace_id=trace_id
+        )
+        tool_span = next((span for span in spans if _is_tool_span(span.name)), None)
+        return tool_span if tool_span is not None and tool_span.output else None
+
+    if not synchronization.until(lambda: _tool_span() is not None, max_try_seconds=15):
+        raise AssertionError(
+            "Expected the PydanticAI tool span to be ingested with a non-empty "
+            "output within timeout"
+        )
+
+    tool_span = _tool_span()
+    # the tool's return value is mapped to OUTPUT, not INPUT
+    assert any(key in tool_span.output for key in _TOOL_RESULT_KEYS)
+    assert "Sunny in" in json.dumps(tool_span.output)
+    assert all(key not in (tool_span.input or {}) for key in _TOOL_RESULT_KEYS)
+
+
+def test_pydantic_ai_logfire__tool_error_is_logged_as_error_info(
+    opik_client: opik.Opik,
+):
+    """When a PydanticAI tool raises, the OTel ``exception`` event must surface as
+    the Opik span's ``error_info`` instead of being buried in raw event metadata.
+    """
+    config = opik_config.OpikConfig()
+    exporter = _build_otlp_exporter(config)
+
+    logfire.configure(
+        send_to_logfire=False,
+        console=False,
+        additional_span_processors=[
+            BatchSpanProcessor(exporter),
+            OpikSpanProcessor(),
+        ],
+    )
+    logfire.instrument_pydantic_ai()
+
+    agent = Agent(TestModel())
+
+    @agent.tool_plain
+    def failing_tool() -> str:
+        raise RuntimeError("boom: upstream 502")
+
+    ID_STORAGE = {}
+
+    @opik.track(name="run_entrypoint")
+    def run() -> None:
+        ID_STORAGE["trace_id"] = opik_context.get_current_trace_data().id
+        try:
+            agent.run_sync("call the tool")
+        except Exception:
+            # the tool error propagates out of the agent run; we only care that
+            # it was recorded on the span, not about handling it here
+            pass
+
+    run()
+    opik.flush_tracker()
+    logfire.force_flush()
+
+    trace_id = ID_STORAGE["trace_id"]
+
+    def _error_spans():
+        spans = opik_client.search_spans(
+            project_name=opik_client.config.project_name, trace_id=trace_id
+        )
+        return [span for span in spans if span.error_info is not None]
+
+    if not synchronization.until(lambda: len(_error_spans()) > 0, max_try_seconds=15):
+        raise AssertionError(
+            "Expected at least one span with error_info populated from the tool "
+            "exception within timeout"
+        )
+
+    error_info = _error_spans()[0].error_info
+    assert error_info.exception_type == "RuntimeError"
+    assert "boom: upstream 502" in (error_info.message or "")
+    assert error_info.traceback

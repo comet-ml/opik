@@ -19,6 +19,7 @@ class FeedbackScorePublic(UniversalBaseModel):
     value: float
     reason: typing.Optional[str] = None
     source: FeedbackScorePublicSource
+    source_queue_id: typing.Optional[str] = None
     created_at: typing.Optional[dt.datetime] = None
     last_updated_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None

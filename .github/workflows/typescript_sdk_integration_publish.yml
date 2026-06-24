@@ -68,9 +68,21 @@ jobs:
 
     steps:
       - name: Checkout
+        # For releases, check out the tag for the version we're publishing — not
+        # `github.ref` (which is the dispatch ref and may have moved past the tag).
+        # Convention: tag name == version string. Locks the build to the commit
+        # the tag points to, so the published tarball is reproducible from the
+        # version label. Non-release runs (build-only PR / push triggers) keep
+        # the dispatch ref because there's no tag to pin to.
+        #
+        # NOTE: This is duplicated with typescript_sdk_publish.yml. We tried
+        # extracting into a local composite action but a local composite cannot
+        # be a workflow's first step — the repo isn't checked out yet, so the
+        # composite's action.yml is not on the runner's filesystem. Keep the
+        # checkout inline.
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ env.IS_RELEASE == 'true' && format('refs/tags/{0}', inputs.version) || github.ref }}
           fetch-depth: 0
           token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API || github.token }}
 

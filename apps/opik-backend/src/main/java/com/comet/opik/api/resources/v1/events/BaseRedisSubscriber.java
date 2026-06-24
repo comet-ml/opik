@@ -98,6 +98,13 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     @Getter
     private final String consumerId;
 
+    /**
+     * Stream key this subscriber consumes. Exposed so the orphaned-consumer reaper job can enumerate the
+     * streams to clean without a keyspace scan; it then discovers each stream's groups via {@code XINFO GROUPS}.
+     */
+    @Getter
+    private final String streamName;
+
     protected final Meter meter;
     private final LongHistogram messageProcessingTime;
     private final LongHistogram messageQueueDelay;
@@ -131,6 +138,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         this.redisson = redisson;
 
         this.payloadField = payloadField;
+        this.streamName = config.getStreamName();
 
         this.consumerId = "consumer-%s-%s".formatted(this.config.getConsumerGroupName(), UUID.randomUUID());
 
@@ -675,6 +683,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
      * Workspace/user a message belongs to, used to attribute error metrics. Mirrors the context
      * subclasses set into the Reactor context inside {@link #processEvent(Object)}.
      */
+    @Builder
     protected record MessageContext(String workspaceId, String workspaceName, String userName) {
         static final MessageContext UNKNOWN = new MessageContext(ErrorMetricsResolver.UNKNOWN,
                 ErrorMetricsResolver.UNKNOWN,

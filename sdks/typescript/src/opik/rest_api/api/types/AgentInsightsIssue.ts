@@ -9,6 +9,7 @@ export interface AgentInsightsIssue {
     cause?: string;
     suggestedFix?: string;
     status?: OpikApi.AgentInsightsIssueStatus;
+    severity?: OpikApi.AgentInsightsIssueSeverity;
     tracesQuery?: string;
     /** SUM(count) over the requested window */
     totalOccurrences?: number;

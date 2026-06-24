@@ -413,6 +413,22 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BiInformationResponse"
+  /v1/internal/usage/workspace-span-counts-breakdown:
+    get:
+      tags:
+      - System usage
+      summary: "Get spans count on previous day grouped by workspace, project and\
+        \ user"
+      description: "Get spans count on previous day grouped by workspace, project\
+        \ and user"
+      operationId: getSpansCountBreakdownForWorkspaces
+      responses:
+        "200":
+          description: UsageByWorkspaceProjectUserResponse resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsageByWorkspaceProjectUserResponse"
   /v1/internal/usage/workspace-span-counts:
     get:
       tags:
@@ -1075,6 +1091,15 @@ paths:
           - open
           - resolved
           - closed
+      - name: severity
+        in: query
+        schema:
+          type: string
+          enum:
+          - critical
+          - high
+          - medium
+          - low
       - name: sorting
         in: query
         schema:
@@ -1292,31 +1317,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SpendBreakdownResponse"
-        "400":
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/ai-spend/recommendations:
-    post:
-      tags:
-      - AI Spend
-      summary: Get spend recommendations
-      description: Get coding-agent cost-saving recommendations
-      operationId: getSpendRecommendations
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SpendMetricRequest"
-      responses:
-        "200":
-          description: Recommendations
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SpendRecommendationsResponse"
         "400":
           description: Bad Request
           content:
@@ -8309,6 +8309,13 @@ paths:
           description: "Filter traces created up to this time (ISO-8601 format). If\
             \ not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
+      - name: annotation_queue_id
+        in: query
+        schema:
+          type: string
+          description: Filter traces belonging to this annotation queue and scope
+            feedback scores/comments to it
+          format: uuid
       responses:
         "200":
           description: Trace resource
@@ -8793,6 +8800,13 @@ paths:
           description: "Filter trace threads created up to this time (ISO-8601 format).\
             \ If not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
+      - name: annotation_queue_id
+        in: query
+        schema:
+          type: string
+          description: Filter threads belonging to this annotation queue and scope
+            feedback scores/comments to it
+          format: uuid
       responses:
         "200":
           description: Trace threads resource
@@ -9632,6 +9646,26 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/BiInformation"
+    UsageByWorkspaceProjectUserResponse:
+      type: object
+      properties:
+        breakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkspaceProjectUserCount"
+    WorkspaceProjectUserCount:
+      type: object
+      properties:
+        workspace_id:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        user:
+          type: string
+        count:
+          type: integer
+          format: int64
     SpansCountResponse:
       type: object
       properties:
@@ -10002,6 +10036,10 @@ components:
           enum:
           - enabled
           - disabled
+        last_scan_at:
+          type: string
+          format: date-time
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -10047,6 +10085,13 @@ components:
           - open
           - resolved
           - closed
+        severity:
+          type: string
+          enum:
+          - critical
+          - high
+          - medium
+          - low
         traces_query:
           type: string
         total_occurrences:
@@ -10145,6 +10190,13 @@ components:
           - open
           - resolved
           - closed
+        severity:
+          type: string
+          enum:
+          - critical
+          - high
+          - medium
+          - low
         traces_query:
           type: string
         created_by:
@@ -10177,7 +10229,6 @@ components:
           type: string
           format: date
         issues:
-          minItems: 1
           type: array
           items:
             $ref: "#/components/schemas/ReportedIssue"
@@ -10185,6 +10236,7 @@ components:
       required:
       - count
       - name
+      - severity
       - total_count
       - total_users
       - users_impacted
@@ -10205,6 +10257,13 @@ components:
           type: string
         traces_query:
           type: string
+        severity:
+          type: string
+          enum:
+          - critical
+          - high
+          - medium
+          - low
         count:
           type: integer
           format: int64
@@ -10322,25 +10381,24 @@ components:
     Item:
       type: object
       properties:
-        id:
+        label:
           type: string
-        title:
-          type: string
-        body:
-          type: string
-        impact:
-          type: string
-          enum:
-          - high
-          - medium
-          - low
-        estimated_savings_tokens:
+        total_tokens:
           type: integer
           format: int64
-        docs_url:
-          type: string
-        related_lane_key:
-          type: string
+        definition_tokens:
+          type: integer
+          format: int64
+        usage_tokens:
+          type: integer
+          format: int64
+        by_model:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModelTiers"
+        count:
+          type: integer
+          format: int64
     SpendBreakdownResponse:
       type: object
       properties:
@@ -10362,16 +10420,6 @@ components:
           format: int32
         item_unit:
           type: string
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/Item"
-    SpendRecommendationsResponse:
-      type: object
-      properties:
-        total_savings_tokens:
-          type: integer
-          format: int64
         items:
           type: array
           items:
@@ -14014,6 +14062,9 @@ components:
         text:
           minLength: 1
           type: string
+        source_queue_id:
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -14286,6 +14337,9 @@ components:
           - ui
           - sdk
           - online_scoring
+        source_queue_id:
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -14730,6 +14784,9 @@ components:
         text:
           minLength: 1
           type: string
+        source_queue_id:
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -15011,6 +15068,9 @@ components:
           - ui
           - sdk
           - online_scoring
+        source_queue_id:
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -16771,6 +16831,9 @@ components:
           - ui
           - sdk
           - online_scoring
+        source_queue_id:
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -16974,6 +17037,9 @@ components:
         text:
           minLength: 1
           type: string
+        source_queue_id:
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -20818,7 +20884,6 @@ components:
       - openaiProviderEnabled
       - openrouterProviderEnabled
       - opikAIEnabled
-      - optimizationStudioEnabled
       - projectHomepageEnabled
       - pythonEvaluatorEnabled
       - spanLlmAsJudgeEnabled
@@ -20847,8 +20912,6 @@ components:
         welcomeWizardEnabled:
           type: boolean
         exportEnabled:
-          type: boolean
-        optimizationStudioEnabled:
           type: boolean
         costIntelligenceEnabled:
           type: boolean
@@ -21156,6 +21219,9 @@ components:
           type: string
         author:
           type: string
+        source_queue_id:
+          type: string
+          format: uuid
     ErrorInfo_Public:
       required:
       - exception_type
@@ -21196,6 +21262,9 @@ components:
           - ui
           - sdk
           - online_scoring
+        source_queue_id:
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -21417,6 +21486,9 @@ components:
           - online_scoring
         author:
           type: string
+        source_queue_id:
+          type: string
+          format: uuid
         id:
           type: string
           format: uuid
@@ -21762,6 +21834,9 @@ components:
             type: string
         author:
           type: string
+        source_queue_id:
+          type: string
+          format: uuid
     DeleteTraceThreads:
       required:
       - thread_ids
@@ -22133,6 +22208,9 @@ components:
           - online_scoring
         author:
           type: string
+        source_queue_id:
+          type: string
+          format: uuid
         thread_id:
           minLength: 1
           type: string

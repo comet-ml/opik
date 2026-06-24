@@ -20,6 +20,7 @@ public record AgentInsightsIssueWithDetails(
         String cause,
         String suggestedFix,
         AgentInsightsIssueStatus status,
+        AgentInsightsIssueSeverity severity,
         String tracesQuery,
         String createdBy,
         Instant createdAt,
