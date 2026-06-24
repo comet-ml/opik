@@ -87,7 +87,10 @@ jobs:
         run: |
           set -o pipefail
           if [ -n "$FROM" ]; then
-            mapfile -t changed < <(git diff --name-only "$FROM..$TO")
+            # ACMR: added/copied/modified/renamed only. Exclude deletions —
+            # pre-commit lints files present in the worktree, so a deleted path
+            # would spawn a leg that finds "no files to check" and Skips.
+            mapfile -t changed < <(git diff --name-only --diff-filter=ACMR "$FROM..$TO")
           else
             # workflow_dispatch full audit: every tracked file is "changed".
             mapfile -t changed < <(git ls-files)
