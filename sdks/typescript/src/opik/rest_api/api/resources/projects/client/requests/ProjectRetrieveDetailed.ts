@@ -8,4 +8,5 @@
  */
 export interface ProjectRetrieveDetailed {
     name: string;
+    includeStats?: boolean;
 }

@@ -519,6 +519,7 @@ export * from "./SpanWrite.js";
 export * from "./SpanWriteSource.js";
 export * from "./SpanWriteType.js";
 export * from "./SpendBreakdownResponse.js";
+export * from "./SpendBreakdownsResponse.js";
 export * from "./SpendCompositionResponse.js";
 export * from "./SpendMetricRequest.js";
 export * from "./SpendSummaryResponse.js";
