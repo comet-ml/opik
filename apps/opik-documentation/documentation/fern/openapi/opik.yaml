@@ -413,6 +413,22 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BiInformationResponse"
+  /v1/internal/usage/workspace-span-counts-breakdown:
+    get:
+      tags:
+      - System usage
+      summary: "Get spans count on previous day grouped by workspace, project and\
+        \ user"
+      description: "Get spans count on previous day grouped by workspace, project\
+        \ and user"
+      operationId: getSpansCountBreakdownForWorkspaces
+      responses:
+        "200":
+          description: UsageByWorkspaceProjectUserResponse resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsageByWorkspaceProjectUserResponse"
   /v1/internal/usage/workspace-span-counts:
     get:
       tags:
@@ -9630,6 +9646,26 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/BiInformation"
+    UsageByWorkspaceProjectUserResponse:
+      type: object
+      properties:
+        breakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkspaceProjectUserCount"
+    WorkspaceProjectUserCount:
+      type: object
+      properties:
+        workspace_id:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        user:
+          type: string
+        count:
+          type: integer
+          format: int64
     SpansCountResponse:
       type: object
       properties:

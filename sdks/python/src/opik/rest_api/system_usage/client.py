@@ -7,6 +7,7 @@ from ..core.request_options import RequestOptions
 from ..types.bi_information_response import BiInformationResponse
 from ..types.spans_count_response import SpansCountResponse
 from ..types.trace_count_response import TraceCountResponse
+from ..types.usage_by_workspace_project_user_response import UsageByWorkspaceProjectUserResponse
 from .raw_client import AsyncRawSystemUsageClient, RawSystemUsageClient
 
 
@@ -94,6 +95,31 @@ class SystemUsageClient:
         client.system_usage.get_spans_bi_info()
         """
         _response = self._raw_client.get_spans_bi_info(request_options=request_options)
+        return _response.data
+
+    def get_spans_count_breakdown_for_workspaces(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> UsageByWorkspaceProjectUserResponse:
+        """
+        Get spans count on previous day grouped by workspace, project and user
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        UsageByWorkspaceProjectUserResponse
+            UsageByWorkspaceProjectUserResponse resource
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.system_usage.get_spans_count_breakdown_for_workspaces()
+        """
+        _response = self._raw_client.get_spans_count_breakdown_for_workspaces(request_options=request_options)
         return _response.data
 
     def get_spans_count_for_workspaces(
@@ -267,6 +293,34 @@ class AsyncSystemUsageClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.get_spans_bi_info(request_options=request_options)
+        return _response.data
+
+    async def get_spans_count_breakdown_for_workspaces(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> UsageByWorkspaceProjectUserResponse:
+        """
+        Get spans count on previous day grouped by workspace, project and user
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        UsageByWorkspaceProjectUserResponse
+            UsageByWorkspaceProjectUserResponse resource
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.system_usage.get_spans_count_breakdown_for_workspaces()
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.get_spans_count_breakdown_for_workspaces(request_options=request_options)
         return _response.data
 
     async def get_spans_count_for_workspaces(
