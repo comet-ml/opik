@@ -121,11 +121,9 @@ class DatabaseAnalyticsFactoryIntegrationTest {
     }
 
     @Test
-    @DisplayName("client bounds (max connections + timeouts) are applied and the client still queries")
-    void clientBoundsAreApplied() throws Exception {
+    @DisplayName("socket timeout is applied and the client still queries")
+    void socketTimeoutIsApplied() throws Exception {
         var factory = factoryWith(null);
-        factory.setClientMaxConnections(5);
-        factory.setClientConnectionRequestTimeout(Duration.seconds(2));
         factory.setClientSocketTimeout(Duration.seconds(10));
 
         try (Client client = factory.buildClient()) {

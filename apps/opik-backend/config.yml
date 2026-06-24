@@ -113,17 +113,10 @@ databaseAnalyticsReadOnlyFreeFormSql:
   #  Default: opik
   #  Description: The read-only user password used to connect to the server
   password: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_PASS:-opik}
-  #  Default: 20
-  #  Description: Max pooled connections for the read-only free-form SQL client. Bounds how many
-  #   caller-supplied (LLM-generated) queries can hold a connection at once.
-  maxConnections: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_MAX_CONNECTIONS:-20}
-  #  Default: 10s
-  #  Description: How long to wait for a pooled connection before failing fast (rather than hanging
-  #   the request, and the instance) when the pool is saturated.
-  connectionRequestTimeout: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_CONNECTION_REQUEST_TIMEOUT:-10s}
   #  Default: 200s
-  #  Description: Socket read timeout. Kept above the read-only profile's max_execution_time (180s)
-  #   so the server-side execution cap fires first and surfaces as a clean error.
+  #  Description: Socket read timeout for the read-only client. The client-v2 default is 0 (no
+  #   timeout), so a half-open/dropped connection would pin a pool slot until restart. Kept above
+  #   the read-only profile's max_execution_time (180s) so the server-side execution cap fires first.
   socketTimeout: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_SOCKET_TIMEOUT:-200s}
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health

@@ -69,9 +69,8 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
         factory.setDatabaseName(main.getDatabaseName());
         factory.setUsername(credentials.getUsername());
         factory.setPassword(credentials.getPassword());
-        // Bound the caller-supplied SQL client so a stuck query can't pin connections or exhaust the pool.
-        factory.setClientMaxConnections(credentials.getMaxConnections());
-        factory.setClientConnectionRequestTimeout(credentials.getConnectionRequestTimeout());
+        // Finite socket timeout so a half-open/stuck connection can't pin a pool slot forever
+        // (client-v2 default is 0 = no timeout). Above the profile's 180s max_execution_time.
         factory.setClientSocketTimeout(credentials.getSocketTimeout());
         return factory.buildClient();
     }

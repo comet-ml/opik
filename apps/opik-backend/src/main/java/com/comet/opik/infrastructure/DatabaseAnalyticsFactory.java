@@ -38,9 +38,7 @@ public class DatabaseAnalyticsFactory {
     private String queryParameters;
     private Duration healthCheckTimeout = Duration.seconds(1);
 
-    // Optional v2-client bounds, applied in buildClient() only when set (null = library defaults).
-    private Integer clientMaxConnections;
-    private Duration clientConnectionRequestTimeout;
+    // Optional socket timeout, applied in buildClient() only when set (null = library default of 0/no timeout).
     private Duration clientSocketTimeout;
 
     public ConnectionFactory build() {
@@ -87,12 +85,6 @@ public class DatabaseAnalyticsFactory {
         ParsedQueryParameters parsed = parseQueryParameters(queryParameters);
         parsed.serverSettings().forEach(builder::serverSetting);
 
-        if (clientMaxConnections != null) {
-            builder.setMaxConnections(clientMaxConnections);
-        }
-        if (clientConnectionRequestTimeout != null) {
-            builder.setConnectionRequestTimeout(clientConnectionRequestTimeout.toMilliseconds(), ChronoUnit.MILLIS);
-        }
         if (clientSocketTimeout != null) {
             builder.setSocketTimeout(clientSocketTimeout.toMilliseconds(), ChronoUnit.MILLIS);
         }
