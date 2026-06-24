@@ -28,6 +28,12 @@ const hasFullSpanData = (span?: SpanWithOptionalPayload): span is Span =>
       span.output !== undefined,
   );
 
+const toSpanPlaceholder = (span: SpanWithOptionalPayload): Span => ({
+  ...span,
+  input: span.input ?? {},
+  output: span.output ?? {},
+});
+
 type UseSpanByIdParams = {
   spanId: string;
   stripAttachments?: boolean;
@@ -92,9 +98,13 @@ export default function useSelectedSpanData(
       ? selectedSpanData
       : undefined;
   const selectedSpanFromListHasFullData = hasFullSpanData(selectedSpanFromList);
-  const selectedSpanDataToView = selectedSpanFromListHasFullData
-    ? selectedSpanFromList
-    : validSelectedSpanData;
+  const selectedSpanDataToView: Span | undefined =
+    selectedSpanFromListHasFullData
+      ? selectedSpanFromList
+      : validSelectedSpanData ??
+        (selectedSpanFromList
+          ? toSpanPlaceholder(selectedSpanFromList)
+          : undefined);
 
   const dataToView = useMemo(
     () => (spanId ? selectedSpanDataToView ?? trace : trace),

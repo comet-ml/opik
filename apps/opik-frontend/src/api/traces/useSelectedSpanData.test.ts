@@ -112,7 +112,12 @@ describe("useSelectedSpanData", () => {
         placeholderData: span,
       }),
     );
-    expect(result.current.dataToView).toBe(trace);
+    expect(result.current.dataToView).toMatchObject({
+      id: span.id,
+      trace_id: span.trace_id,
+      input: {},
+      output: {},
+    });
     expect(result.current.isSelectedSpanPending).toBe(true);
   });
 
@@ -146,7 +151,12 @@ describe("useSelectedSpanData", () => {
       }),
     );
 
-    expect(wrongTraceResult.current.dataToView).toBe(trace);
+    expect(wrongTraceResult.current.dataToView).toMatchObject({
+      id: fetchedSpan.id,
+      trace_id: trace.id,
+      input: {},
+      output: {},
+    });
     expect(wrongTraceResult.current.selectedSpanData).toBeUndefined();
   });
 });
