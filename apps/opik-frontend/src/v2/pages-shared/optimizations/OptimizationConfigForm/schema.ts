@@ -265,13 +265,11 @@ export const convertFormDataToStudioConfig = (
       messages,
     },
     llm_model: {
-      // Registry can return ids that aren't members of PROVIDER_MODEL_TYPE.
-      // Cast intentionally — StudioLlmModel.model is typed against the
-      // deprecated enum (OPIK-5022 removes it).
-      model: formData.modelName as PROVIDER_MODEL_TYPE,
+      model: formData.modelName,
       // Drop params the model doesn't accept (e.g. temperature on models that
       // deprecate it) before the gateway rejects the request — same last-mile
-      // hardening the playground applies.
+      // hardening the playground applies. sanitizeConfigForRequest still types
+      // its first arg against the legacy enum, so the cast is only for that call.
       parameters: sanitizeConfigForRequest(
         formData.modelName as PROVIDER_MODEL_TYPE,
         formData.modelConfig,
