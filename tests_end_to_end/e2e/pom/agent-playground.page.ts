@@ -39,9 +39,18 @@ export class AgentPlaygroundPage {
     return this.page.getByText('Test input');
   }
 
+  /**
+   * The entrypoint param's input control. The "Test input" panel label and the
+   * Connected badge render before the runner's introspected form mounts, so wait
+   * on the actual field (not the panel label) before driving a run.
+   */
+  inputField(fieldName: string): Locator {
+    return this.page.getByPlaceholder(`Enter ${fieldName}...`);
+  }
+
   async fillInput(fieldName: string, value: string): Promise<void> {
     return test.step(`fill input "${fieldName}"`, async () => {
-      await this.page.getByPlaceholder(`Enter ${fieldName}...`).fill(value);
+      await this.inputField(fieldName).fill(value);
     });
   }
 
