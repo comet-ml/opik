@@ -111,10 +111,10 @@ class HealthCheckIntegrationTest {
                     .name("db").healthy(true).critical(true).type(READY).build();
             var deadlocks = HealthCheckResponse.builder()
                     .name("deadlocks").healthy(true).critical(true).type(ALIVE).build();
-            // Authentication is disabled in config-test → the shared HTTP client is not exercised, so the check is
-            // inert and reports healthy.
-            var authSharedHttpClientResponse = HealthCheckResponse.builder()
-                    .name("auth_shared_http_client").healthy(true).critical(true).type(ALIVE).build();
+            // Always-on and independent of auth: the probe leases from the live shared pool against a fixed loopback
+            // target and the connection failure there is ignored, so an alive pool reports healthy.
+            var sharedHttpClientResponse = HealthCheckResponse.builder()
+                    .name("shared_http_client").healthy(true).critical(true).type(ALIVE).build();
             var all = List.of(
                     clickHouseResponse,
                     clickhouseFreeformSqlResponse,
@@ -122,12 +122,13 @@ class HealthCheckIntegrationTest {
                     redisResponse,
                     dbResponse,
                     deadlocks,
-                    authSharedHttpClientResponse);
+                    sharedHttpClientResponse);
             return Stream.of(
                     arguments("clickhouse", List.of(clickHouseResponse)),
                     arguments("mysql", List.of(mysqlResponse)),
                     arguments("redis", List.of(redisResponse)),
                     arguments("clickhouse-readonly-freeform-sql", List.of(clickhouseFreeformSqlResponse)),
+                    arguments("shared_http_client", List.of(sharedHttpClientResponse)),
                     arguments("all", all));
         }
 
@@ -175,41 +176,6 @@ class HealthCheckIntegrationTest {
 
             callHealthCheckAndAwaitAssertResponse(
                     client, baseURI, "clickhouse-readonly-freeform-sql", List.of(expected));
-        }
-    }
-
-    /**
-     * Authentication enabled, so the liveness {@code auth_shared_http_client} probe actually fires. It leases from the
-     * live shared pool against a fixed internal target and the connection failure there is ignored: only a locally
-     * shut-down pool is restart-worthy, so an alive pool must report healthy. The {@code DefaultConfig} aggregate
-     * already covers the auth-disabled (inert) state.
-     */
-    @Nested
-    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    @ExtendWith(DropwizardAppExtensionProvider.class)
-    class AuthenticationEnabled {
-
-        @RegisterApp
-        private final TestDropwizardAppExtension app = newApp(List.of(
-                new CustomConfig("authentication.enabled", "true"),
-                new CustomConfig("authentication.reactService.url", "http://react-svc:8080")));
-
-        private ClientSupport client;
-        private String baseURI;
-
-        @BeforeAll
-        void setUpAll(ClientSupport client) {
-            this.client = client;
-            this.baseURI = TestUtils.getBaseUrl(client);
-            ClientSupportUtils.config(client);
-        }
-
-        @Test
-        void authSharedHttpClientHealthyWhenPoolIsAlive() {
-            var expected = HealthCheckResponse.builder()
-                    .name("auth_shared_http_client").healthy(true).critical(true).type(ALIVE).build();
-
-            callHealthCheckAndAwaitAssertResponse(client, baseURI, "auth_shared_http_client", List.of(expected));
         }
     }
 

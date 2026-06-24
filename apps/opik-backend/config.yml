@@ -127,9 +127,9 @@ health:
       type: alive
     # Gates liveness (type: alive) so a pod whose shared outbound HTTP pool has been shut down gets restarted and
     # recreates the pool. A shut-down pool is unrecoverable without a restart, so removing it from rotation isn't
-    # enough. Fails only on the local "Connection pool shut down" condition, never on upstream auth errors, so an
-    # auth-service blip cannot restart-storm the fleet.
-    - name: auth_shared_http_client
+    # enough. Fails only on the local "Connection pool shut down" condition, never on transient upstream errors, so a
+    # blip in any outbound dependency cannot restart-storm the fleet.
+    - name: shared_http_client
       critical: true
       type: alive
     - name: db
@@ -213,9 +213,12 @@ authentication:
   # Description: Configures base url for React service, used for user management and authentication
   reactService:
     url: ${REACT_SERVICE_URL:-http://react-svc:8080}
+
+# Liveness health check for the shared outbound HTTP client (see shared_http_client under healthChecks)
+sharedHttpClientHealthCheck:
   # Default: 1s
-  # Description: Probe timeout for the auth_shared_http_client liveness health check (connect + read).
-  healthCheckTimeout: ${AUTH_HEALTH_CHECK_TIMEOUT:-1s}
+  # Description: Probe timeout (connect + read) for the shared_http_client liveness health check.
+  timeout: ${SHARED_HTTP_CLIENT_HEALTH_CHECK_TIMEOUT:-1s}
 
 # OAuth 2.1 Authorization Server for hosted/local Opik MCP
 mcpOAuth:

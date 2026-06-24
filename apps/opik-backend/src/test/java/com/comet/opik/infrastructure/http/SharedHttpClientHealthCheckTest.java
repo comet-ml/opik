@@ -1,6 +1,6 @@
-package com.comet.opik.infrastructure.auth;
+package com.comet.opik.infrastructure.http;
 
-import com.comet.opik.infrastructure.AuthenticationConfig;
+import com.comet.opik.infrastructure.SharedHttpClientHealthCheckConfig;
 import io.dropwizard.util.Duration;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.client.Client;
@@ -20,16 +20,14 @@ import java.net.URI;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-class AuthSharedHttpClientHealthCheckTest {
+class SharedHttpClientHealthCheckTest {
 
     private Client client;
     private Invocation.Builder requestBuilder;
@@ -44,11 +42,10 @@ class AuthSharedHttpClientHealthCheckTest {
         when(webTarget.request()).thenReturn(requestBuilder);
     }
 
-    private AuthSharedHttpClientHealthCheck newHealthCheck(boolean authEnabled) {
-        var authConfig = new AuthenticationConfig();
-        authConfig.setEnabled(authEnabled);
-        authConfig.setReactService(new AuthenticationConfig.UrlConfig("http://react-svc:8080"));
-        return new AuthSharedHttpClientHealthCheck(client, authConfig);
+    private SharedHttpClientHealthCheck newHealthCheck() {
+        var config = new SharedHttpClientHealthCheckConfig();
+        config.setTimeout(Duration.seconds(1));
+        return new SharedHttpClientHealthCheck(client, config);
     }
 
     static Stream<Arguments> probeFailures() {
@@ -71,7 +68,7 @@ class AuthSharedHttpClientHealthCheckTest {
     void checkReportsUnhealthyOnlyOnDeadPool(RuntimeException probeFailure, boolean expectedHealthy) {
         when(requestBuilder.head()).thenThrow(probeFailure);
 
-        assertThat(newHealthCheck(true).check().isHealthy()).isEqualTo(expectedHealthy);
+        assertThat(newHealthCheck().check().isHealthy()).isEqualTo(expectedHealthy);
     }
 
     @Test
@@ -79,23 +76,7 @@ class AuthSharedHttpClientHealthCheckTest {
         var response = mock(Response.class);
         when(requestBuilder.head()).thenReturn(response);
 
-        assertThat(newHealthCheck(true).check().isHealthy()).isTrue();
+        assertThat(newHealthCheck().check().isHealthy()).isTrue();
         verify(response).close();
-    }
-
-    @Test
-    void checkReportsHealthyAndSkipsProbeWhenAuthenticationDisabled() {
-        assertThat(newHealthCheck(false).check().isHealthy()).isTrue();
-        verify(client, never()).target(any(URI.class));
-    }
-
-    @Test
-    void constructorClampsOversizedTimeoutInsteadOfThrowing() {
-        var authConfig = new AuthenticationConfig();
-        authConfig.setEnabled(true);
-        authConfig.setReactService(new AuthenticationConfig.UrlConfig("http://react-svc:8080"));
-        authConfig.setHealthCheckTimeout(Duration.days(100));
-
-        assertThatNoException().isThrownBy(() -> new AuthSharedHttpClientHealthCheck(client, authConfig));
     }
 }

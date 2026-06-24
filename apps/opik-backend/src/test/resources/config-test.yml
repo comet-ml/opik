@@ -112,7 +112,7 @@ health:
       type: alive
       initialState: false
       schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
-    - name: auth_shared_http_client
+    - name: shared_http_client
       critical: true
       type: alive
       initialState: false
@@ -182,6 +182,9 @@ authentication:
   # Description: Configures base url for React service, used for user management and authentication
   reactService:
     url: ''
+
+sharedHttpClientHealthCheck:
+  timeout: 1s
 
 # OAuth 2.1 Authorization Server for hosted/local Opik MCP
 mcpOAuth:
