@@ -33,6 +33,9 @@ public class OpikConfiguration extends JobConfiguration {
     private AuthenticationConfig authentication = new AuthenticationConfig();
 
     @Valid @NotNull @JsonProperty
+    private SharedHttpClientHealthCheckConfig sharedHttpClientHealthCheck = new SharedHttpClientHealthCheckConfig();
+
+    @Valid @NotNull @JsonProperty
     private McpOAuthConfig mcpOAuth = new McpOAuthConfig();
 
     @Valid @NotNull @JsonProperty
