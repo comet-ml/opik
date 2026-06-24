@@ -125,6 +125,13 @@ health:
     - name: deadlocks
       critical: true
       type: alive
+    # Gates liveness (type: alive) so a pod whose shared outbound HTTP pool has been shut down gets restarted and
+    # recreates the pool. A shut-down pool is unrecoverable without a restart, so removing it from rotation isn't
+    # enough. Fails only on the local "Connection pool shut down" condition, never on upstream auth errors, so an
+    # auth-service blip cannot restart-storm the fleet.
+    - name: auth_shared_http_client
+      critical: true
+      type: alive
     - name: db
       critical: true
       type: ready
@@ -143,13 +150,6 @@ health:
     - name: mysql
       critical: true
       type: ready
-    # Gates liveness (type: alive) so a pod whose shared outbound HTTP pool has been shut down gets restarted and
-    # recreates the pool. A shut-down pool is unrecoverable without a restart, so removing it from rotation isn't
-    # enough. Fails only on the local "Connection pool shut down" condition, never on upstream auth errors, so an
-    # auth-service blip cannot restart-storm the fleet.
-    - name: auth_http_client
-      critical: true
-      type: alive
 
 # Configuration for distributed locking using redis
 distributedLock:
@@ -213,6 +213,9 @@ authentication:
   # Description: Configures base url for React service, used for user management and authentication
   reactService:
     url: ${REACT_SERVICE_URL:-http://react-svc:8080}
+  # Default: 1s
+  # Description: Probe timeout for the auth_shared_http_client liveness health check (connect + read).
+  healthCheckTimeout: ${AUTH_HEALTH_CHECK_TIMEOUT:-1s}
 
 # OAuth 2.1 Authorization Server for hosted/local Opik MCP
 mcpOAuth:

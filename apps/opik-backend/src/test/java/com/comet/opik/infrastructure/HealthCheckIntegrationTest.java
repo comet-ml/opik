@@ -113,8 +113,8 @@ class HealthCheckIntegrationTest {
                     .name("deadlocks").healthy(true).critical(true).type(ALIVE).build();
             // Authentication is disabled in config-test → the shared HTTP client is not exercised, so the check is
             // inert and reports healthy.
-            var authHttpClientResponse = HealthCheckResponse.builder()
-                    .name("auth_http_client").healthy(true).critical(true).type(ALIVE).build();
+            var authSharedHttpClientResponse = HealthCheckResponse.builder()
+                    .name("auth_shared_http_client").healthy(true).critical(true).type(ALIVE).build();
             var all = List.of(
                     clickHouseResponse,
                     clickhouseFreeformSqlResponse,
@@ -122,7 +122,7 @@ class HealthCheckIntegrationTest {
                     redisResponse,
                     dbResponse,
                     deadlocks,
-                    authHttpClientResponse);
+                    authSharedHttpClientResponse);
             return Stream.of(
                     arguments("clickhouse", List.of(clickHouseResponse)),
                     arguments("mysql", List.of(mysqlResponse)),
@@ -175,6 +175,41 @@ class HealthCheckIntegrationTest {
 
             callHealthCheckAndAwaitAssertResponse(
                     client, baseURI, "clickhouse-readonly-freeform-sql", List.of(expected));
+        }
+    }
+
+    /**
+     * Authentication enabled with an unreachable React service. The liveness {@code auth_shared_http_client} probe
+     * actually fires here, and the connection failure to the dead upstream must be ignored: only a locally shut-down
+     * pool is restart-worthy, so an unreachable auth service must NOT flap liveness. The {@code DefaultConfig}
+     * aggregate already covers the auth-disabled (inert) state.
+     */
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @ExtendWith(DropwizardAppExtensionProvider.class)
+    class AuthenticationEnabled {
+
+        @RegisterApp
+        private final TestDropwizardAppExtension app = newApp(List.of(
+                new CustomConfig("authentication.enabled", "true"),
+                new CustomConfig("authentication.reactService.url", "http://localhost:1")));
+
+        private ClientSupport client;
+        private String baseURI;
+
+        @BeforeAll
+        void setUpAll(ClientSupport client) {
+            this.client = client;
+            this.baseURI = TestUtils.getBaseUrl(client);
+            ClientSupportUtils.config(client);
+        }
+
+        @Test
+        void authSharedHttpClientHealthyWhenUpstreamUnreachable() {
+            var expected = HealthCheckResponse.builder()
+                    .name("auth_shared_http_client").healthy(true).critical(true).type(ALIVE).build();
+
+            callHealthCheckAndAwaitAssertResponse(client, baseURI, "auth_shared_http_client", List.of(expected));
         }
     }
 

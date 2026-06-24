@@ -1,16 +1,16 @@
 package com.comet.opik.infrastructure.auth;
 
 import com.comet.opik.infrastructure.AuthenticationConfig;
-import com.comet.opik.infrastructure.OpikConfiguration;
+import com.google.common.base.Throwables;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.client.Client;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.hc.client5.http.impl.ConnectionShutdownException;
 import org.glassfish.jersey.client.ClientProperties;
 import ru.vyarus.dropwizard.guice.module.installer.feature.health.NamedHealthCheck;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.net.URI;
 import java.util.Locale;
@@ -24,25 +24,28 @@ import java.util.Locale;
  */
 @Singleton
 @Slf4j
-public class AuthHttpClientHealthCheck extends NamedHealthCheck {
+public class AuthSharedHttpClientHealthCheck extends NamedHealthCheck {
 
-    public static final String NAME = "auth_http_client";
+    public static final String NAME = "auth_shared_http_client";
 
-    // The lease() failure on a closed pool surfaces as this message; matched case-insensitively across the cause chain.
+    /**
+     * The {@code lease()} failure on a closed pool surfaces with this message; matched case-insensitively across the
+     * cause chain.
+     */
     private static final String DEAD_POOL_MARKER = "connection pool shut down";
-    private static final int PROBE_TIMEOUT_MILLIS = 2_000;
 
     private final Client client;
     private final boolean enabled;
     private final URI reactServiceUri;
+    private final int probeTimeoutMillis;
 
     @Inject
-    public AuthHttpClientHealthCheck(@NonNull Client client, @NonNull OpikConfiguration configuration) {
+    public AuthSharedHttpClientHealthCheck(@NonNull Client client,
+            @NonNull @Config("authentication") AuthenticationConfig authConfig) {
         this.client = client;
-        AuthenticationConfig authConfig = configuration.getAuthentication();
-        this.enabled = authConfig.isEnabled() && authConfig.getReactService() != null
-                && StringUtils.isNotBlank(authConfig.getReactService().url());
+        this.enabled = authConfig.isEnabled() && authConfig.isReactServiceConfigured();
         this.reactServiceUri = enabled ? URI.create(authConfig.getReactService().url()) : null;
+        this.probeTimeoutMillis = Math.toIntExact(authConfig.getHealthCheckTimeout().toMilliseconds());
     }
 
     @Override
@@ -56,8 +59,8 @@ public class AuthHttpClientHealthCheck extends NamedHealthCheck {
             return Result.healthy("Authentication disabled; shared HTTP client not exercised");
         }
         try (var response = client.target(reactServiceUri)
-                .property(ClientProperties.CONNECT_TIMEOUT, PROBE_TIMEOUT_MILLIS)
-                .property(ClientProperties.READ_TIMEOUT, PROBE_TIMEOUT_MILLIS)
+                .property(ClientProperties.CONNECT_TIMEOUT, probeTimeoutMillis)
+                .property(ClientProperties.READ_TIMEOUT, probeTimeoutMillis)
                 .request()
                 .head()) {
             // Any reachable response (including 4xx/5xx) proves the shared connection pool can lease and connect.
@@ -75,19 +78,14 @@ public class AuthHttpClientHealthCheck extends NamedHealthCheck {
         }
     }
 
-    static boolean isConnectionPoolShutDown(Throwable throwable) {
-        for (Throwable cause = throwable; cause != null && cause != cause.getCause(); cause = cause.getCause()) {
-            // ConnectionShutdownException is the direct httpclient5 shutdown signal but carries a null message, so it
-            // must be matched by type. The message match stays as a fallback for the pool-level
-            // IllegalStateException("Connection pool shut down") thrown by StrictConnPool.lease().
-            if (cause instanceof ConnectionShutdownException) {
-                return true;
-            }
-            if (cause instanceof IllegalStateException && cause.getMessage() != null
-                    && cause.getMessage().toLowerCase(Locale.ROOT).contains(DEAD_POOL_MARKER)) {
-                return true;
-            }
-        }
-        return false;
+    private static boolean isConnectionPoolShutDown(Throwable throwable) {
+        // ConnectionShutdownException is the direct httpclient5 shutdown signal but carries a null message, so it must
+        // be matched by type. The message match stays as a fallback for the pool-level
+        // IllegalStateException("Connection pool shut down") thrown by StrictConnPool.lease(). Throwables.getCausalChain
+        // walks the full cause chain and guards against cyclic causes.
+        return Throwables.getCausalChain(throwable).stream()
+                .anyMatch(cause -> cause instanceof ConnectionShutdownException
+                        || (cause instanceof IllegalStateException && cause.getMessage() != null
+                                && cause.getMessage().toLowerCase(Locale.ROOT).contains(DEAD_POOL_MARKER)));
     }
 }
