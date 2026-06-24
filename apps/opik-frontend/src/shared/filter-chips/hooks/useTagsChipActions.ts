@@ -1,11 +1,8 @@
 import { useCallback } from "react";
-import { Filter, FilterOperator } from "@/types/filters";
+import { FilterOperator } from "@/types/filters";
 import { createFilter } from "@/lib/filters";
-import {
-  ChipValue,
-  ChipValueMap,
-  QueryBuilderChipValue,
-} from "@/shared/filter-chips/types";
+import { ChipValue, ChipValueMap } from "@/shared/filter-chips/types";
+import { getRows } from "@/shared/filter-chips/lib/helpers";
 
 interface UseTagsChipActionsArgs {
   chipId: string;
@@ -18,12 +15,6 @@ interface UseTagsChipActionsArgs {
 interface TagsChipActions {
   addTag: (tag: string) => void;
 }
-
-const getRows = (value: ChipValue | undefined): Filter[] => {
-  if (!value || typeof value !== "object") return [];
-  const candidate = (value as QueryBuilderChipValue).rows;
-  return Array.isArray(candidate) ? candidate : [];
-};
 
 export const useTagsChipActions = ({
   chipId,
