@@ -12,7 +12,11 @@ export class AgentPlaygroundPage {
     return test.step('open the Agent Playground page', async () => {
       const env = loadEnvConfig();
       const url = `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/agent-playground`;
-      await this.page.goto(url, { waitUntil: 'networkidle' });
+      // Don't wait for networkidle: the page embeds the Ollie assistant iframe,
+      // which holds a long-lived streaming connection, so the network never goes
+      // idle and the goto hangs to the test timeout. Readiness is asserted by
+      // waitForHeading() + the Connected badge instead.
+      await this.page.goto(url);
       await this.page.waitForURL(new RegExp('/agent-playground'));
     });
   }
