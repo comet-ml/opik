@@ -144,7 +144,7 @@ public interface FeedbackScoreMapper {
             // source_queue_id is the 8th element (index 7)
             if (tuple.size() > 7 && tuple.get(7) != null) {
                 String sourceQueueId = tuple.get(7).toString();
-                if (StringUtils.isNotEmpty(sourceQueueId)
+                if (StringUtils.isNotBlank(sourceQueueId)
                         && !CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(sourceQueueId)) {
                     builder.sourceQueueId(sourceQueueId);
                 }
@@ -225,6 +225,7 @@ public interface FeedbackScoreMapper {
 
             if (tuple.isArray() && !tuple.isEmpty()) {
                 ValueEntry.ValueEntryBuilder builder = ValueEntry.builder()
+                        .author(author)
                         .value(tuple.get(0).decimalValue())
                         .reason(getJsonTextOrNull(tuple.get(1)))
                         .categoryName(getJsonTextOrNull(tuple.get(2)))
@@ -239,7 +240,7 @@ public interface FeedbackScoreMapper {
                 }
                 if (tuple.size() > 7 && tuple.get(7) != null && !tuple.get(7).isNull()) {
                     String sourceQueueId = tuple.get(7).asText();
-                    if (StringUtils.isNotEmpty(sourceQueueId)
+                    if (StringUtils.isNotBlank(sourceQueueId)
                             && !CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(sourceQueueId)) {
                         builder.sourceQueueId(sourceQueueId);
                     }
@@ -251,6 +252,7 @@ public interface FeedbackScoreMapper {
                 result.put(author, builder.build());
             } else if (tuple.isObject() && !tuple.isEmpty()) {
                 ValueEntry.ValueEntryBuilder builder = ValueEntry.builder()
+                        .author(author)
                         .value(tuple.get("value").decimalValue())
                         .reason(getJsonTextOrNull(tuple.get("reason")))
                         .categoryName(getJsonTextOrNull(tuple.get("category_name")))
@@ -265,7 +267,7 @@ public interface FeedbackScoreMapper {
                 }
                 if (tuple.has("source_queue_id") && !tuple.get("source_queue_id").isNull()) {
                     String sourceQueueId = tuple.get("source_queue_id").asText();
-                    if (StringUtils.isNotEmpty(sourceQueueId)
+                    if (StringUtils.isNotBlank(sourceQueueId)
                             && !CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(sourceQueueId)) {
                         builder.sourceQueueId(sourceQueueId);
                     }

@@ -95,6 +95,8 @@ class MultiValueFeedbackScoresE2ETest {
     private static final String WORKSPACE_ID = randomUUID().toString();
     private static final String TEST_WORKSPACE = randomUUID().toString();
     private static final String EMPTY_REASON_PLACEHOLDER = "<no reason>";
+    private static final String[] IGNORED_FEEDBACK_SCORE_FIELDS = {"createdAt", "lastUpdatedAt", "createdBy",
+            "lastUpdatedBy", "sourceQueueId", "valueByAuthor"};
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
@@ -312,10 +314,11 @@ class MultiValueFeedbackScoresE2ETest {
             assertThat(actual)
                     .usingRecursiveComparison()
                     .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
-                    .ignoringFields("createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
-                            "sourceQueueId", "valueByAuthor")
+                    .ignoringFields(IGNORED_FEEDBACK_SCORE_FIELDS)
                     .isEqualTo(score);
             assertThat(actual.valueByAuthor().keySet()).containsExactly(USER1 + "_" + queueIdA);
+            assertThat(actual.valueByAuthor().get(USER1 + "_" + queueIdA).sourceQueueId())
+                    .isEqualTo(queueIdA.toString());
         });
 
         // Delete scoped to correct queue A — should remove the score
@@ -330,7 +333,7 @@ class MultiValueFeedbackScoresE2ETest {
 
     @Test
     @DisplayName("same author scores from two queues: both visible with correct average")
-    void testSameAuthorTwoQueuesProducesAverage() {
+    void sameAuthorTwoQueuesProducesAverage() {
         var trace = factory.manufacturePojo(Trace.class).toBuilder()
                 .id(null)
                 .projectName(DEFAULT_PROJECT)
@@ -624,10 +627,11 @@ class MultiValueFeedbackScoresE2ETest {
             assertThat(actual)
                     .usingRecursiveComparison()
                     .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
-                    .ignoringFields("createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
-                            "sourceQueueId", "valueByAuthor")
+                    .ignoringFields(IGNORED_FEEDBACK_SCORE_FIELDS)
                     .isEqualTo(score);
             assertThat(actual.valueByAuthor().keySet()).containsExactly(USER1 + "_" + queueIdA);
+            assertThat(actual.valueByAuthor().get(USER1 + "_" + queueIdA).sourceQueueId())
+                    .isEqualTo(queueIdA.toString());
         });
 
         // Delete scoped to correct queue A — should remove the score
@@ -1233,12 +1237,17 @@ class MultiValueFeedbackScoresE2ETest {
     }
 
     private void assertAuthorValue(Map<String, ValueEntry> valueByAuthor, String author, FeedbackScore expected) {
-        assertThat(valueByAuthor.get(author).categoryName()).isEqualTo(expected.categoryName());
-        assertThat(valueByAuthor.get(author).value())
-                .usingComparator(StatsUtils::bigDecimalComparator)
-                .isEqualTo(expected.value());
-        assertThat(valueByAuthor.get(author).reason()).isEqualTo(expected.reason());
-        assertThat(valueByAuthor.get(author).source()).isEqualTo(expected.source());
+        var expectedEntry = ValueEntry.builder()
+                .value(expected.value())
+                .reason(expected.reason())
+                .categoryName(expected.categoryName())
+                .source(expected.source())
+                .build();
+        assertThat(valueByAuthor.get(author))
+                .usingRecursiveComparison()
+                .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                .ignoringFields("lastUpdatedAt", "spanType", "spanId", "sourceQueueId", "author")
+                .isEqualTo(expectedEntry);
     }
 
     private BigDecimal calcAverage(List<BigDecimal> scores) {

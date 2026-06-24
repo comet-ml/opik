@@ -65,7 +65,7 @@ public class CommentResultMapper {
                             .lastUpdatedBy(commentItem.get(5).toString());
                     if (commentItem.size() > 6 && commentItem.get(6) != null) {
                         var sourceQueueId = commentItem.get(6).toString();
-                        if (StringUtils.isNotEmpty(sourceQueueId)
+                        if (StringUtils.isNotBlank(sourceQueueId)
                                 && !CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(sourceQueueId)) {
                             builder.sourceQueueId(UUID.fromString(sourceQueueId));
                         }

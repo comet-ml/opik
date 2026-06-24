@@ -453,9 +453,12 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
-    // Build value_by_author map with composite keys for feedback scores.
-    // Key format: author + optional _queueId + optional _spanId (ensures uniqueness across queues/spans).
-    // Value tuple: (value, reason, category_name, source, last_updated_at, span_type, span_id, source_queue_id, author)
+    /**
+     * Builds the {@code value_by_author} map with composite keys for feedback scores.
+     * Key format: {@code author} + optional {@code _queueId} + optional {@code _spanId} (ensures uniqueness across
+     * queues/spans). Value tuple: (value, reason, category_name, source, last_updated_at, span_type, span_id,
+     * source_queue_id, author).
+     */
     private static final String SELECT_BY_IDS = """
             WITH target_spans AS (
                 SELECT id, trace_id, type
