@@ -19,10 +19,6 @@ public record UsageByWorkspaceProjectUserResponse(
         return new UsageByWorkspaceProjectUserResponse(List.of());
     }
 
-    /**
-     * A single breakdown row. {@code projectName} is resolved from the state DB and may be
-     * {@code null} when the project was deleted after the entities were created.
-     */
     @Builder(toBuilder = true)
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -30,7 +26,6 @@ public record UsageByWorkspaceProjectUserResponse(
     public record WorkspaceProjectUserCount(
             String workspaceId,
             UUID projectId,
-            String projectName,
             String user,
             long count) {
     }

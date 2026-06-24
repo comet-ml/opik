@@ -61,7 +61,7 @@ import static org.awaitility.Awaitility.await;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @Slf4j
 @ExtendWith(DropwizardAppExtensionProvider.class)
-class SpanUsageBreakdownServiceTest {
+class UsageResourceTest {
 
     public static final String USAGE_RESOURCE_URL_TEMPLATE = "%s/v1/internal/usage";
     public static final String TRACE_RESOURCE_URL_TEMPLATE = "%s/v1/private/traces";
@@ -259,7 +259,6 @@ class SpanUsageBreakdownServiceTest {
                 // All spans share one project and one user, so a single breakdown row is expected
                 assertThat(rows).hasSize(1);
                 var row = rows.get(0);
-                assertThat(row.projectName()).isEqualTo(projectName);
                 assertThat(row.user()).isEqualTo(USER);
                 assertThat(row.count()).isEqualTo(spansCount);
                 assertThat(row.projectId()).isNotNull();
