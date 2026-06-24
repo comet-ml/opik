@@ -13,7 +13,7 @@ from opik.cli.exports.project import (
 )
 from opik.cli.imports.project import (
     _upload_attachments_for_trace,
-    import_projects_from_directory,
+    import_traces_from_directory,
 )
 
 
@@ -395,7 +395,7 @@ class TestUploadAttachmentsForTrace:
     """Unit tests for the _upload_attachments_for_trace helper.
 
     This private helper is tested directly (rather than solely via
-    import_projects_from_directory) because it contains security-critical path
+    import_traces_from_directory) because it contains security-critical path
     validation logic (traversal prevention) and ID-translation rules that are
     difficult to observe through the public API without significant fixture
     overhead.  The integration-level behaviour (attachment uploads wired into
@@ -729,7 +729,7 @@ class TestExportTracesWritesAttachmentMetadata:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Integration tests: import_projects_from_directory() uploads attachments
+# Integration tests: import_traces_from_directory() uploads attachments
 # ─────────────────────────────────────────────────────────────────────────────
 
 _TRACE_WITH_ATTACHMENTS = {
@@ -816,9 +816,10 @@ class TestImportProjectsUploadsAttachments:
             project_dir, "span", "orig-span-id", "span_data.csv", b"csv bytes"
         )
 
-        import_projects_from_directory(
+        import_traces_from_directory(
             client=client,
-            source_dir=tmp_path,
+            project_dir=project_dir,
+            project_name="test-project",
             dry_run=False,
             name_pattern=None,
             debug=False,
@@ -844,9 +845,10 @@ class TestImportProjectsUploadsAttachments:
         _write_attachment_file(project_dir, "trace", "orig-trace-id", "trace_img.png")
         _write_attachment_file(project_dir, "span", "orig-span-id", "span_data.csv")
 
-        import_projects_from_directory(
+        import_traces_from_directory(
             client=client,
-            source_dir=tmp_path,
+            project_dir=project_dir,
+            project_name="test-project",
             dry_run=False,
             name_pattern=None,
             debug=False,
@@ -868,9 +870,10 @@ class TestImportProjectsUploadsAttachments:
         _write_attachment_file(project_dir, "trace", "orig-trace-id", "trace_img.png")
         _write_attachment_file(project_dir, "span", "orig-span-id", "span_data.csv")
 
-        import_projects_from_directory(
+        import_traces_from_directory(
             client=client,
-            source_dir=tmp_path,
+            project_dir=project_dir,
+            project_name="test-project",
             dry_run=False,
             name_pattern=None,
             debug=False,
@@ -885,9 +888,10 @@ class TestImportProjectsUploadsAttachments:
         _write_trace_file(project_dir, _TRACE_WITH_ATTACHMENTS)
         _write_attachment_file(project_dir, "trace", "orig-trace-id", "trace_img.png")
 
-        import_projects_from_directory(
+        import_traces_from_directory(
             client=client,
-            source_dir=tmp_path,
+            project_dir=project_dir,
+            project_name="test-project",
             dry_run=False,
             name_pattern=None,
             debug=False,
@@ -906,9 +910,10 @@ class TestImportProjectsUploadsAttachments:
         _write_trace_file(project_dir, _TRACE_WITH_ATTACHMENTS)
         # Do NOT write attachment files — simulate export with --no-attachments
 
-        import_projects_from_directory(
+        import_traces_from_directory(
             client=client,
-            source_dir=tmp_path,
+            project_dir=project_dir,
+            project_name="test-project",
             dry_run=False,
             name_pattern=None,
             debug=False,
@@ -927,9 +932,10 @@ class TestImportProjectsUploadsAttachments:
         _write_trace_file(project_dir, _TRACE_WITH_ATTACHMENTS)
         _write_attachment_file(project_dir, "trace", "orig-trace-id", "trace_img.png")
 
-        import_projects_from_directory(
+        import_traces_from_directory(
             client=client,
-            source_dir=tmp_path,
+            project_dir=project_dir,
+            project_name="test-project",
             dry_run=True,
             name_pattern=None,
             debug=False,
@@ -963,9 +969,10 @@ class TestImportProjectsUploadsAttachments:
         project_dir = tmp_path / "test-project"
         _write_trace_file(project_dir, trace_data)
 
-        import_projects_from_directory(
+        import_traces_from_directory(
             client=client,
-            source_dir=tmp_path,
+            project_dir=project_dir,
+            project_name="test-project",
             dry_run=False,
             name_pattern=None,
             debug=False,
@@ -985,18 +992,16 @@ class TestImportProjectsUploadsAttachments:
 class TestNoAttachmentsCliFlag:
     """Verify --no-attachments is wired through the CLI commands."""
 
-    def test_export_project__no_attachments_flag__accepted(self):
+    def test_export_traces__no_attachments_flag__accepted(self):
         from click.testing import CliRunner
-        from opik.cli.exports.project import export_project_command
+        from opik.cli.exports.project import export_traces_command
 
         runner = CliRunner()
-        with patch(
-            "opik.cli.exports.project.export_project_by_name_or_id"
-        ) as mock_export:
+        with patch("opik.cli.exports.project.export_project_traces") as mock_export:
             result = runner.invoke(
-                export_project_command,
-                ["my-project", "--no-attachments"],
-                obj={"workspace": "ws", "api_key": None},
+                export_traces_command,
+                ["--no-attachments"],
+                obj={"workspace": "ws", "project_name": "my-project", "api_key": None},
                 catch_exceptions=False,
             )
 
@@ -1004,18 +1009,16 @@ class TestNoAttachmentsCliFlag:
         _, kwargs = mock_export.call_args
         assert kwargs.get("include_attachments") is False
 
-    def test_export_project__default__includes_attachments(self):
+    def test_export_traces__default__includes_attachments(self):
         from click.testing import CliRunner
-        from opik.cli.exports.project import export_project_command
+        from opik.cli.exports.project import export_traces_command
 
         runner = CliRunner()
-        with patch(
-            "opik.cli.exports.project.export_project_by_name_or_id"
-        ) as mock_export:
+        with patch("opik.cli.exports.project.export_project_traces") as mock_export:
             result = runner.invoke(
-                export_project_command,
-                ["my-project"],
-                obj={"workspace": "ws", "api_key": None},
+                export_traces_command,
+                [],
+                obj={"workspace": "ws", "project_name": "my-project", "api_key": None},
                 catch_exceptions=False,
             )
 
@@ -1023,7 +1026,7 @@ class TestNoAttachmentsCliFlag:
         _, kwargs = mock_export.call_args
         assert kwargs.get("include_attachments") is True
 
-    def test_import_project__no_attachments_flag__accepted(self):
+    def test_import_traces__no_attachments_flag__accepted(self):
         from click.testing import CliRunner
         from opik.cli.imports import import_group
 
@@ -1033,7 +1036,7 @@ class TestNoAttachmentsCliFlag:
         with patch("opik.cli.imports._import_by_type") as mock_import:
             result = runner.invoke(
                 import_group,
-                ["my-workspace", "project", "my-project", "--no-attachments"],
+                ["my-workspace", "my-project", "traces", "--no-attachments"],
                 catch_exceptions=False,
             )
 
@@ -1042,7 +1045,7 @@ class TestNoAttachmentsCliFlag:
         _, kwargs = mock_import.call_args
         assert kwargs.get("include_attachments") is False
 
-    def test_import_project__default__includes_attachments(self):
+    def test_import_traces__default__includes_attachments(self):
         from click.testing import CliRunner
         from opik.cli.imports import import_group
 
@@ -1050,7 +1053,7 @@ class TestNoAttachmentsCliFlag:
         with patch("opik.cli.imports._import_by_type") as mock_import:
             result = runner.invoke(
                 import_group,
-                ["my-workspace", "project", "my-project"],
+                ["my-workspace", "my-project", "traces"],
                 catch_exceptions=False,
             )
 

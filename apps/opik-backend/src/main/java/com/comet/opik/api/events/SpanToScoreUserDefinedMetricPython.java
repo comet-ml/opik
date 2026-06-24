@@ -17,5 +17,5 @@ public record SpanToScoreUserDefinedMetricPython(
         @NotNull String ruleName,
         @NotNull SpanUserDefinedMetricPythonCode code,
         @NotNull String workspaceId,
-        @NotNull String userName) {
+        @NotNull String userName) implements WorkspaceScopedMessage {
 }

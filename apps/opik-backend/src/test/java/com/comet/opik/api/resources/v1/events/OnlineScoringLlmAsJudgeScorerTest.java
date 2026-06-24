@@ -230,7 +230,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
                     null,
                     Map.of(),
                     PromptType.MUSTACHE,
-                    hasExperimentId ? UUID.randomUUID() : null);
+                    hasExperimentId ? UUID.randomUUID() : null,
+                    "ws-name-1");
         }
     }
 
@@ -574,7 +575,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 null,
                 Map.of(),
                 PromptType.MUSTACHE,
-                experimentId);
+                experimentId,
+                "ws-name-1");
     }
 
     /** Silences "unused import" on Span — used implicitly through Flux<Span>. */

@@ -27,7 +27,13 @@ from .experiment import (
 )
 from .project import export_single_project
 from .prompt import export_single_prompt
-from .utils import console, debug_print, no_attachments_option, print_export_summary
+from .utils import (
+    console,
+    debug_print,
+    no_attachments_option,
+    prepare_project_export_dir,
+    print_export_summary,
+)
 from ..include_validation import validate_include
 
 PAGE_SIZE = 500
@@ -50,7 +56,9 @@ def _paginate(list_fn: Any, **kwargs: Any) -> Iterator:
         page += 1
 
 
-def _fetch_experiments_page_raw(client: opik.Opik, page: int) -> tuple[list, int]:
+def _fetch_experiments_page_raw(
+    client: opik.Opik, page: int, project_id: Optional[str]
+) -> tuple[list, int]:
     """Fetch one page of experiments via raw HTTP, tolerating missing fields.
 
     Used as a fallback when the typed client fails pydantic validation because
@@ -60,11 +68,14 @@ def _fetch_experiments_page_raw(client: opik.Opik, page: int) -> tuple[list, int
     httpx_client = (
         client.rest_client.experiments._raw_client._client_wrapper.httpx_client
     )
+    params: dict = {"page": page, "size": PAGE_SIZE}
+    if project_id is not None:
+        params["project_id"] = project_id
     try:
         response = httpx_client.request(
             "v1/private/experiments",
             method="GET",
-            params={"page": page, "size": PAGE_SIZE},
+            params=params,
         )
         response.raise_for_status()
         data = response.json()
@@ -89,13 +100,13 @@ def _fetch_experiments_page_raw(client: opik.Opik, page: int) -> tuple[list, int
     return items, total
 
 
-def _paginate_experiments(client: opik.Opik) -> Iterator:
+def _paginate_experiments(client: opik.Opik, project_id: Optional[str]) -> Iterator:
     """Paginate experiments, falling back to raw HTTP on pydantic validation errors."""
     page = 1
     while True:
         try:
             resp = client.rest_client.experiments.find_experiments(
-                page=page, size=PAGE_SIZE
+                page=page, size=PAGE_SIZE, project_id=project_id
             )
             items = resp.content or []
             total = resp.total or 0
@@ -104,7 +115,7 @@ def _paginate_experiments(client: opik.Opik) -> Iterator:
                 f"[yellow]Warning: page {page} of experiments failed validation "
                 f"(some experiments may be missing fields). Falling back to raw fetch.[/yellow]"
             )
-            items, total = _fetch_experiments_page_raw(client, page)
+            items, total = _fetch_experiments_page_raw(client, page, project_id)
 
         if not items:
             break
@@ -117,17 +128,21 @@ def _paginate_experiments(client: opik.Opik) -> Iterator:
 def _export_all_datasets(
     client: opik.Opik,
     datasets_dir: Path,
+    project_name: str,
+    project_id: Optional[str],
     max_results: Optional[int],
     force: bool,
     debug: bool,
     format: str,
 ) -> tuple[int, int]:
-    """Export all datasets in the workspace. Returns (exported, skipped)."""
+    """Export all datasets in the project. Returns (exported, skipped)."""
     exported = 0
     skipped = 0
 
     try:
-        all_datasets = list(_paginate(client.rest_client.datasets.find_datasets))
+        all_datasets = list(
+            _paginate(client.rest_client.datasets.find_datasets, project_id=project_id)
+        )
     except Exception as e:
         console.print(f"[red]Error listing datasets: {e}[/red]")
         return 0, 0
@@ -150,7 +165,9 @@ def _export_all_datasets(
         for ds_public in all_datasets:
             progress.update(task, description=f"Dataset: {ds_public.name}")
             try:
-                dataset_obj = client.get_dataset(ds_public.name)
+                dataset_obj = client.get_dataset(
+                    ds_public.name, project_name=project_name
+                )
                 result = export_single_dataset(
                     dataset_obj, datasets_dir, max_results, force, debug, format
                 )
@@ -171,17 +188,21 @@ def _export_all_datasets(
 def _export_all_prompts(
     client: opik.Opik,
     prompts_dir: Path,
+    project_name: str,
+    project_id: Optional[str],
     max_results: Optional[int],
     force: bool,
     debug: bool,
     format: str,
 ) -> tuple[int, int]:
-    """Export all prompts in the workspace. Returns (exported, skipped)."""
+    """Export all prompts in the project. Returns (exported, skipped)."""
     exported = 0
     skipped = 0
 
     try:
-        all_prompts = list(_paginate(client.rest_client.prompts.get_prompts))
+        all_prompts = list(
+            _paginate(client.rest_client.prompts.get_prompts, project_id=project_id)
+        )
     except Exception as e:
         console.print(f"[red]Error listing prompts: {e}[/red]")
         return 0, 0
@@ -208,12 +229,16 @@ def _export_all_prompts(
                 prompt_obj: Optional[Union[Prompt, ChatPrompt]] = None
                 if prompt_public.template_structure == "chat":
                     try:
-                        prompt_obj = client.get_chat_prompt(prompt_public.name)
+                        prompt_obj = client.get_chat_prompt(
+                            prompt_public.name, project_name=project_name
+                        )
                     except Exception:
                         pass
                 if prompt_obj is None:
                     try:
-                        prompt_obj = client.get_prompt(prompt_public.name)
+                        prompt_obj = client.get_prompt(
+                            prompt_public.name, project_name=project_name
+                        )
                     except Exception:
                         pass
 
@@ -227,6 +252,7 @@ def _export_all_prompts(
                         client,
                         prompt_obj,
                         prompts_dir,
+                        project_name,
                         max_results,
                         force,
                         debug,
@@ -246,95 +272,41 @@ def _export_all_prompts(
     return exported, skipped
 
 
-def _export_all_projects(
+def _export_project_traces(
     client: opik.Opik,
-    projects_dir: Path,
+    project_name: str,
+    project_dir: Path,
     max_results: Optional[int],
     force: bool,
     debug: bool,
     format: str,
-    max_workers: int = 5,
     filter_string: Optional[str] = None,
     include_attachments: bool = True,
     page_size: int = 500,
 ) -> tuple[int, int, int, bool]:
-    """Export all projects in the workspace.
+    """Export the named project's traces.
 
     Returns (projects_exported, traces_exported, traces_skipped, had_errors).
     """
-    projects_exported = 0
-    traces_exported = 0
-    traces_skipped = 0
-    had_errors = False
-
-    try:
-        all_projects = list(_paginate(client.rest_client.projects.find_projects))
-    except Exception as e:
-        console.print(f"[red]Error listing projects: {e}[/red]")
-        return 0, 0, 0, True
-
-    if not all_projects:
-        console.print("[yellow]No projects found.[/yellow]")
-        return 0, 0, 0, False
-
-    console.print(f"[blue]Found {len(all_projects)} project(s)[/blue]")
-
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TaskProgressColumn(),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Exporting projects...", total=len(all_projects))
-
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_project = {
-                executor.submit(
-                    export_single_project,
-                    client=client,
-                    project=project,
-                    output_dir=projects_dir,
-                    filter_string=filter_string,
-                    max_results=max_results,
-                    force=force,
-                    debug=debug,
-                    format=format,
-                    show_progress=False,  # outer bar tracks progress
-                    include_attachments=include_attachments,
-                    page_size=page_size,
-                ): project
-                for project in all_projects
-            }
-            for future in as_completed(future_to_project):
-                project = future_to_project[future]
-                try:
-                    proj_count, t_exported, t_skipped, proj_had_errors = future.result()
-                    projects_exported += proj_count
-                    traces_exported += t_exported
-                    traces_skipped += t_skipped
-                    if proj_had_errors:
-                        had_errors = True
-                        console.print(
-                            f"[yellow]Project '{project.name}' exported with errors — "
-                            "some traces may be missing. Run the export again to fill gaps.[/yellow]"
-                        )
-                except Exception as e:
-                    console.print(
-                        f"[red]Error exporting project '{project.name}': {e}[/red]"
-                    )
-                    had_errors = True
-                finally:
-                    progress.update(
-                        task, advance=1, description=f"Project: {project.name}"
-                    )
-
-    return projects_exported, traces_exported, traces_skipped, had_errors
+    return export_single_project(
+        client=client,
+        project_name=project_name,
+        project_dir=project_dir,
+        filter_string=filter_string,
+        max_results=max_results,
+        force=force,
+        debug=debug,
+        format=format,
+        include_attachments=include_attachments,
+        page_size=page_size,
+    )
 
 
 def _export_all_experiments(
     client: opik.Opik,
-    workspace_root: Path,
+    project_dir: Path,
+    project_name: str,
+    project_id: Optional[str],
     experiments_dir: Path,
     max_results: Optional[int],
     force: bool,
@@ -343,7 +315,7 @@ def _export_all_experiments(
     filter_string: Optional[str] = None,
     max_workers: int = 10,
 ) -> tuple[int, int, int, int, bool]:
-    """Export all experiments.
+    """Export all experiments in the project.
 
     Returns (exported, skipped, traces_exported, traces_skipped, had_errors).
     """
@@ -353,7 +325,7 @@ def _export_all_experiments(
     all_trace_ids: set[str] = set()
 
     try:
-        all_experiments = list(_paginate_experiments(client))
+        all_experiments = list(_paginate_experiments(client, project_id))
     except Exception as e:
         console.print(f"[red]Error listing experiments: {e}[/red]")
         return 0, 0, 0, 0, True
@@ -383,6 +355,7 @@ def _export_all_experiments(
                     export_experiment_by_id,
                     client,
                     experiments_dir,
+                    project_name,
                     exp.id,
                     max_results,
                     force,
@@ -425,7 +398,8 @@ def _export_all_experiments(
     # Batch-export all traces collected from experiments
     traces_exported, traces_skipped = export_collected_trace_ids(
         client,
-        workspace_root,
+        project_dir,
+        project_name,
         all_trace_ids,
         max_results,
         format,
@@ -439,6 +413,7 @@ def _export_all_experiments(
 
 def export_all(
     workspace: str,
+    project_name: str,
     output_path: str,
     include: list[str],
     max_results: Optional[int],
@@ -450,15 +425,22 @@ def export_all(
     include_attachments: bool = True,
     page_size: int = 500,
 ) -> None:
-    """Export all data from the workspace."""
+    """Export all data from a single project."""
     try:
         if api_key:
             client = opik.Opik(api_key=api_key, workspace=workspace)
         else:
             client = opik.Opik(workspace=workspace)
 
-        workspace_root = Path(output_path) / workspace
-        workspace_root.mkdir(parents=True, exist_ok=True)
+        # Resolve the project to its ID, create projects/<id>/ and write
+        # project.json. The id also scopes per-entity listings below.
+        try:
+            project_id, project_root = prepare_project_export_dir(
+                client, output_path, workspace, project_name
+            )
+        except ValueError:
+            console.print(f"[red]Project '{project_name}' not found[/red]")
+            sys.exit(1)
 
         total_stats: dict = {}
         any_errors = False
@@ -466,10 +448,17 @@ def export_all(
         # Phase 1: Datasets
         if "datasets" in include:
             console.print("\n[bold blue]--- Exporting Datasets ---[/bold blue]")
-            datasets_dir = workspace_root / "datasets"
+            datasets_dir = project_root / "datasets"
             datasets_dir.mkdir(parents=True, exist_ok=True)
             ds_exp, ds_skip = _export_all_datasets(
-                client, datasets_dir, max_results, force, debug, format
+                client,
+                datasets_dir,
+                project_name,
+                project_id,
+                max_results,
+                force,
+                debug,
+                format,
             )
             total_stats["datasets"] = ds_exp
             total_stats["datasets_skipped"] = ds_skip
@@ -477,22 +466,28 @@ def export_all(
         # Phase 2: Prompts
         if "prompts" in include:
             console.print("\n[bold blue]--- Exporting Prompts ---[/bold blue]")
-            prompts_dir = workspace_root / "prompts"
+            prompts_dir = project_root / "prompts"
             prompts_dir.mkdir(parents=True, exist_ok=True)
             pr_exp, pr_skip = _export_all_prompts(
-                client, prompts_dir, max_results, force, debug, format
+                client,
+                prompts_dir,
+                project_name,
+                project_id,
+                max_results,
+                force,
+                debug,
+                format,
             )
             total_stats["prompts"] = pr_exp
             total_stats["prompts_skipped"] = pr_skip
 
-        # Phase 3: Projects (traces)
-        if "projects" in include:
-            console.print("\n[bold blue]--- Exporting Projects ---[/bold blue]")
-            projects_dir = workspace_root / "projects"
-            projects_dir.mkdir(parents=True, exist_ok=True)
-            proj_exp, tr_exp, tr_skip, proj_errors = _export_all_projects(
+        # Phase 3: Traces
+        if "traces" in include:
+            console.print("\n[bold blue]--- Exporting Traces ---[/bold blue]")
+            proj_exp, tr_exp, tr_skip, proj_errors = _export_project_traces(
                 client,
-                projects_dir,
+                project_name,
+                project_root,
                 max_results,
                 force,
                 debug,
@@ -511,12 +506,14 @@ def export_all(
         # Phase 4: Experiments (related datasets/prompts skipped via file-existence check)
         if "experiments" in include:
             console.print("\n[bold blue]--- Exporting Experiments ---[/bold blue]")
-            experiments_dir = workspace_root / "experiments"
+            experiments_dir = project_root / "experiments"
             experiments_dir.mkdir(parents=True, exist_ok=True)
             exp_exp, exp_skip, exp_tr_exp, exp_tr_skip, exp_errors = (
                 _export_all_experiments(
                     client,
-                    workspace_root,
+                    project_root,
+                    project_name,
+                    project_id,
                     experiments_dir,
                     max_results,
                     force,
@@ -538,12 +535,12 @@ def export_all(
         if any_errors:
             console.print(
                 "\n[bold yellow]Export completed with errors — "
-                "some projects or experiments could not be exported.[/bold yellow]"
+                "some traces or experiments could not be exported.[/bold yellow]"
             )
         else:
             console.print("\n[bold green]Export complete.[/bold green]")
         print_export_summary(total_stats, format)
-        console.print(f"[green]All data saved to: {workspace_root}[/green]")
+        console.print(f"[green]All data saved to: {project_root}[/green]")
         if any_errors:
             sys.exit(1)
 
@@ -556,8 +553,8 @@ def export_all(
         sys.exit(1)
 
 
-_VALID_INCLUDES = {"datasets", "prompts", "projects", "experiments"}
-_DEFAULT_INCLUDE = "datasets,prompts,projects,experiments"
+_VALID_INCLUDES = {"datasets", "prompts", "traces", "experiments"}
+_DEFAULT_INCLUDE = "datasets,prompts,traces,experiments"
 
 
 def _validate_include(
@@ -632,27 +629,29 @@ def export_all_command(
     no_attachments: bool,
     page_size: int,
 ) -> None:
-    """Export all datasets, prompts, projects, and experiments from the workspace.
+    """Export all datasets, prompts, experiments, and traces from the project.
 
-    Downloads everything in the workspace in dependency order:
-    datasets and prompts first, then projects (traces), then experiments.
+    Downloads everything in the project in dependency order:
+    datasets and prompts first, then traces, then experiments.
     Items already downloaded are skipped unless --force is set.
 
     \b
     Examples:
         # Export everything
-        opik export my-workspace all
+        opik export my-workspace my-project all
 
         # Export only datasets and prompts
-        opik export my-workspace all --include datasets,prompts
+        opik export my-workspace my-project all --include datasets,prompts
 
         # Re-download everything to a custom path
-        opik export my-workspace all --force --path ./backup
+        opik export my-workspace my-project all --force --path ./backup
     """
     workspace = ctx.obj["workspace"]
+    project_name = ctx.obj["project_name"]
     api_key = ctx.obj.get("api_key") if ctx.obj else None
     export_all(
         workspace,
+        project_name,
         path,
         include,
         max_results,

@@ -1307,31 +1307,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/ai-spend/recommendations:
-    post:
-      tags:
-      - AI Spend
-      summary: Get spend recommendations
-      description: Get coding-agent cost-saving recommendations
-      operationId: getSpendRecommendations
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SpendMetricRequest"
-      responses:
-        "200":
-          description: Recommendations
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SpendRecommendationsResponse"
-        "400":
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/ai-spend/summary:
     post:
       tags:
@@ -10025,6 +10000,10 @@ components:
           enum:
           - enabled
           - disabled
+        last_scan_at:
+          type: string
+          format: date-time
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -10214,7 +10193,6 @@ components:
           type: string
           format: date
         issues:
-          minItems: 1
           type: array
           items:
             $ref: "#/components/schemas/ReportedIssue"
@@ -10367,25 +10345,24 @@ components:
     Item:
       type: object
       properties:
-        id:
+        label:
           type: string
-        title:
-          type: string
-        body:
-          type: string
-        impact:
-          type: string
-          enum:
-          - high
-          - medium
-          - low
-        estimated_savings_tokens:
+        total_tokens:
           type: integer
           format: int64
-        docs_url:
-          type: string
-        related_lane_key:
-          type: string
+        definition_tokens:
+          type: integer
+          format: int64
+        usage_tokens:
+          type: integer
+          format: int64
+        by_model:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModelTiers"
+        count:
+          type: integer
+          format: int64
     SpendBreakdownResponse:
       type: object
       properties:
@@ -10407,16 +10384,6 @@ components:
           format: int32
         item_unit:
           type: string
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/Item"
-    SpendRecommendationsResponse:
-      type: object
-      properties:
-        total_savings_tokens:
-          type: integer
-          format: int64
         items:
           type: array
           items:
@@ -20867,6 +20834,7 @@ components:
       - alertsEnabled
       - anthropicProviderEnabled
       - bedrockProviderEnabled
+      - costIntelligenceEnabled
       - customllmProviderEnabled
       - datasetExportEnabled
       - datasetVersioningEnabled
@@ -20880,7 +20848,6 @@ components:
       - openaiProviderEnabled
       - openrouterProviderEnabled
       - opikAIEnabled
-      - optimizationStudioEnabled
       - projectHomepageEnabled
       - pythonEvaluatorEnabled
       - spanLlmAsJudgeEnabled
@@ -20910,7 +20877,7 @@ components:
           type: boolean
         exportEnabled:
           type: boolean
-        optimizationStudioEnabled:
+        costIntelligenceEnabled:
           type: boolean
         datasetVersioningEnabled:
           type: boolean

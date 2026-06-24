@@ -194,6 +194,8 @@ If the `EnterWorktree` tool is not available (e.g., running in Cursor or another
   Revision 2: small follow-up rename after emergency patch
   ```
 
+  **Jira key convention in commit messages** (see git-workflow rule): the GitHub for Jira app links any `OPIK-<digits>` it finds in a commit message to that ticket's Development panel, and the link can't be removed. The ticket this branch resolves keeps the hyphen (`OPIK-1234`) — that's the prefix. But any **other** ticket a commit message mentions without resolving (an escalation, a reference to an older ticket) must be written with an underscore (`OPIK_7000`) and with no Jira URL, so the scanner doesn't link it.
+
 ### 9. User Confirmation
 
 - **Ask for user approval** before proceeding with implementation:

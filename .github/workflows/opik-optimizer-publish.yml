@@ -41,3 +41,6 @@ jobs:
           with:
             password: ${{ secrets.PYPI_API_TOKEN }}
             packages-dir: sdks/opik_optimizer/dist
+            # Symmetric to OPIK-6624's npm publish 403-skip: replays / races where
+            # the version is already on PyPI should not fail the release.
+            skip-existing: true
