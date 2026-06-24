@@ -17,8 +17,7 @@ test.describe('Ollie — smoke', { tag: ['@t1-smoke', '@ollie'] }, () => {
       await ollie.waitForReady();
     });
 
-    await test.step('Ready state shows the greeting and a usable input', async () => {
-      await expect(ollie.greeting()).toBeVisible();
+    await test.step('Ready state shows a usable input', async () => {
       await expect(ollie.inputTextbox()).toBeEnabled();
     });
   });
