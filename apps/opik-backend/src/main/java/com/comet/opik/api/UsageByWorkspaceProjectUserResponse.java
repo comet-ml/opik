@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.Builder;
+import lombok.NonNull;
 
 import java.util.List;
 import java.util.UUID;
@@ -13,10 +14,10 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record UsageByWorkspaceProjectUserResponse(
-        List<WorkspaceProjectUserCount> breakdown) {
+        @NonNull List<WorkspaceProjectUserCount> breakdown) {
 
     public static UsageByWorkspaceProjectUserResponse empty() {
-        return new UsageByWorkspaceProjectUserResponse(List.of());
+        return UsageByWorkspaceProjectUserResponse.builder().breakdown(List.of()).build();
     }
 
     @Builder(toBuilder = true)
@@ -24,9 +25,9 @@ public record UsageByWorkspaceProjectUserResponse(
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record WorkspaceProjectUserCount(
-            String workspaceId,
-            UUID projectId,
-            String user,
+            @NonNull String workspaceId,
+            @NonNull UUID projectId,
+            @NonNull String user,
             long count) {
     }
 }
