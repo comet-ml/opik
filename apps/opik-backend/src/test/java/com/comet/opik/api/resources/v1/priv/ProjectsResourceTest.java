@@ -772,7 +772,7 @@ class ProjectsResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.json(ProjectRetrieve.builder().name(project.name()).build()))) {
+                    .post(Entity.json(ProjectRetrieve.builder().name(project.name()).includeStats(true).build()))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                 assertThat(actualResponse.hasEntity()).isTrue();
@@ -785,6 +785,51 @@ class ProjectsResourceTest {
                         .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                         .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "totalEstimatedCost")
                         .isEqualTo(project);
+            }
+        }
+
+        @Test
+        @DisplayName("when project exists and stats are not requested, then return project without stats")
+        void getProjectByName__whenStatsNotRequested__thenReturnProjectWithoutStats() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+
+            var id = createProject(project, apiKey, workspaceName);
+
+            // Seed traces/spans so stats would be non-null if they were computed.
+            buildProjectStats(project.toBuilder().id(id).build(), apiKey, workspaceName);
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("retrieve")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(ProjectRetrieve.builder().name(project.name()).build()))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                assertThat(actualResponse.hasEntity()).isTrue();
+
+                var actualEntity = actualResponse.readEntity(Project.class);
+
+                // Identity fields are still resolved (this endpoint is used for name -> id resolution).
+                assertThat(actualEntity.id()).isEqualTo(id);
+                assertThat(actualEntity.name()).isEqualTo(project.name());
+
+                // Stats are not computed by default (OPIK-7101): no ClickHouse aggregation on the hot name-resolution path.
+                assertThat(actualEntity.lastUpdatedTraceAt()).isNull();
+                assertThat(actualEntity.feedbackScores()).isNull();
+                assertThat(actualEntity.duration()).isNull();
+                assertThat(actualEntity.totalEstimatedCost()).isNull();
+                assertThat(actualEntity.totalEstimatedCostSum()).isNull();
+                assertThat(actualEntity.usage()).isNull();
+                assertThat(actualEntity.traceCount()).isNull();
+                assertThat(actualEntity.guardrailsFailedCount()).isNull();
+                assertThat(actualEntity.errorCount()).isNull();
             }
         }
 
