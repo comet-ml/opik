@@ -20,6 +20,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
 
+import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
@@ -218,18 +219,21 @@ public class DatasetItemResultMapper {
         }
         return Optional.ofNullable(row.get("evaluators", String.class))
                 .filter(s -> !s.isBlank() && !EvaluatorItem.EMPTY_LIST_JSON.equals(s))
-                .map(DatasetItemResultMapper::parseEvaluators)
+                .map(value -> parseEvaluators(value, row.get("id", String.class),
+                        row.get("dataset_id", String.class)))
                 .orElse(null);
     }
 
     // A row whose mapping function throws is silently dropped by the ClickHouse r2dbc driver,
-    // making the whole item vanish from the list. Degrade to null on unparseable JSON so the
-    // item stays visible (without its assertions) instead of disappearing.
-    private static List<EvaluatorItem> parseEvaluators(String value) {
+    // making the whole item vanish from the list. Degrade to null only on unparseable JSON
+    // (UncheckedIOException is what JsonUtils.readValue throws) so the item stays visible without
+    // its assertions; any other exception propagates instead of masking an unrelated bug.
+    private static List<EvaluatorItem> parseEvaluators(String value, String datasetItemId, String datasetId) {
         try {
             return JsonUtils.readValue(value, EVALUATOR_LIST_TYPE);
-        } catch (RuntimeException e) {
-            log.warn("Failed to parse stored evaluators JSON; returning null evaluators for this item", e);
+        } catch (UncheckedIOException e) {
+            log.warn("Failed to parse stored evaluators JSON for dataset item '{}' (dataset '{}'); "
+                    + "returning null evaluators", datasetItemId, datasetId, e);
             return null;
         }
     }
