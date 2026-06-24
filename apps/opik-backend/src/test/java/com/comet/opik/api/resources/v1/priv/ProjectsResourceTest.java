@@ -821,7 +821,8 @@ class ProjectsResourceTest {
                 assertThat(actualEntity.name()).isEqualTo(project.name());
 
                 // Stats are not computed by default (OPIK-7101): no ClickHouse aggregation on the hot name-resolution path.
-                assertThat(actualEntity.lastUpdatedTraceAt()).isNull();
+                // Note: lastUpdatedTraceAt is a `projects` table column (set on ingestion), not part of the ClickHouse
+                // stats aggregation, so it is intentionally not asserted here.
                 assertThat(actualEntity.feedbackScores()).isNull();
                 assertThat(actualEntity.duration()).isNull();
                 assertThat(actualEntity.totalEstimatedCost()).isNull();

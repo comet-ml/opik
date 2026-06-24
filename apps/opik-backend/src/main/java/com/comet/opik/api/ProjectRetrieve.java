@@ -1,10 +1,11 @@
 package com.comet.opik.api;
 
+import jakarta.annotation.Nullable;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Builder;
 
 @Builder
-public record ProjectRetrieve(@NotBlank String name, Boolean includeStats) {
+public record ProjectRetrieve(@NotBlank String name, @Nullable Boolean includeStats) {
 
     /**
      * Whether the response should be enriched with project-level statistics
