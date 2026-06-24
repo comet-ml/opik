@@ -13,6 +13,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Row;
 import io.r2dbc.spi.RowMetadata;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -37,6 +38,7 @@ import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_
 import static java.util.function.Predicate.not;
 import static java.util.stream.Collectors.toMap;
 
+@Slf4j
 public class DatasetItemResultMapper {
 
     private static final int COMMENT_INDEX = 11;
@@ -216,8 +218,20 @@ public class DatasetItemResultMapper {
         }
         return Optional.ofNullable(row.get("evaluators", String.class))
                 .filter(s -> !s.isBlank() && !EvaluatorItem.EMPTY_LIST_JSON.equals(s))
-                .map(s -> JsonUtils.readValue(s, EVALUATOR_LIST_TYPE))
+                .map(DatasetItemResultMapper::parseEvaluators)
                 .orElse(null);
+    }
+
+    // A row whose mapping function throws is silently dropped by the ClickHouse r2dbc driver,
+    // making the whole item vanish from the list. Degrade to null on unparseable JSON so the
+    // item stays visible (without its assertions) instead of disappearing.
+    private static List<EvaluatorItem> parseEvaluators(String value) {
+        try {
+            return JsonUtils.readValue(value, EVALUATOR_LIST_TYPE);
+        } catch (RuntimeException e) {
+            log.warn("Failed to parse stored evaluators JSON; returning null evaluators for this item", e);
+            return null;
+        }
     }
 
     static String getDescription(Row row, RowMetadata rowMetadata) {
