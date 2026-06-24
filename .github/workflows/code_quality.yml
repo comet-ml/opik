@@ -127,7 +127,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          fetch-depth: 0
+          # Shallow: the leg lints explicit files (paths come from detect's
+          # matrix value, not a git diff here), so it needs the worktree content
+          # at HEAD, not history. Avoids a full clone on every one of N legs.
+          fetch-depth: 1
 
       - name: Set up JDK 25
         if: matrix.leg.toolchain == 'java'
@@ -228,6 +231,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          # Only needs the render scripts + shared description TSV, not history.
+          fetch-depth: 1
 
       - name: Download timing fragments
         if: needs.detect.outputs.has_legs == 'true'

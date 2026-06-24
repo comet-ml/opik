@@ -9,6 +9,8 @@
 set -euo pipefail
 
 src="${1:-/dev/stdin}"
+# Shared description map, resolved next to this script so cwd doesn't matter.
+desc_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/precommit-hook-descriptions.tsv"
 
 awk '
   function flush() {
@@ -38,42 +40,27 @@ awk '
     next
   }
   END { flush() }
-' "$src" | sort -t$'\t' -k1 -gr | awk -F'\t' '
-  # What each hook does, matched by tool keyword in the display name. Keep these
-  # in sync if hooks are added to .pre-commit-config.yaml.
-  function desc(n) {
-    if (n ~ /trim trailing whitespace/) return "Strip trailing whitespace"
-    if (n ~ /fix end of files/)         return "Ensure files end in a newline"
-    if (n ~ /ruff-format/)              return "Format Python code (ruff)"
-    if (n ~ /ruff/)                     return "Lint + autofix Python (ruff)"
-    if (n ~ /mypy/)                     return "Static type check"
-    if (n ~ /pyupgrade/)                return "Modernize Python syntax"
-    if (n ~ /check yaml/)               return "Validate YAML syntax"
-    if (n ~ /check json/)               return "Validate JSON syntax"
-    if (n ~ /check toml/)               return "Validate TOML syntax"
-    if (n ~ /added large files/)        return "Block large files (>1MB)"
-    if (n ~ /detect private key/)       return "Block committed private keys"
-    if (n ~ /merge conflicts/)          return "Block merge-conflict markers"
-    if (n ~ /case conflicts/)           return "Block case-only name clashes"
-    if (n ~ /nbstripout/)               return "Strip notebook output"
-    if (n ~ /markdownlint/)             return "Lint Markdown"
-    if (n ~ /codespell/)                return "Fix common misspellings"
-    if (n ~ /radon cc/)                 return "Cyclomatic-complexity gate"
-    if (n ~ /radon raw/)                return "Raw size metrics gate"
-    if (n ~ /xenon/)                    return "Fail on complexity thresholds"
-    if (n ~ /lizard/)                   return "Cyclomatic-complexity gate"
-    if (n ~ /vulture/)                  return "Find dead code"
-    if (n ~ /helm-docs/)                return "Regenerate Helm chart README"
-    if (n ~ /actionlint/)               return "Lint GitHub Actions workflows"
-    if (n ~ /spotless/)                 return "Format Java code"
-    if (n ~ /eslint/)                   return "Lint + autofix JS/TS"
-    if (n ~ /typecheck/)                return "Whole-project tsc type check"
-    if (n ~ /non-public FE plugins/)    return "Block non-public FE plugins"
-    if (n ~ /wrapper smoke tests/)      return "Self-test the wrapper scripts"
+' "$src" | sort -t$'\t' -k1 -gr | awk -F'\t' -v descfile="$desc_file" '
+  # Descriptions come from the shared TSV (precommit-hook-descriptions.tsv) so
+  # this table and the skipped table stay in lockstep. Keyword is matched as a
+  # substring of the hook display name; file order is honoured (most specific
+  # first, e.g. ruff-format before ruff).
+  function desc(n,   i) {
+    for (i = 1; i <= dn; i++) if (index(n, dkw[i]) > 0) return ddesc[i]
     return ""
   }
   BEGIN {
     ran_n = 0; skip_n = 0; total = 0
+    dn = 0
+    while ((getline line < descfile) > 0) {
+      if (line ~ /^#/ || line == "") continue
+      tab = index(line, "\t")
+      if (tab == 0) continue
+      dn++
+      dkw[dn] = substr(line, 1, tab - 1)
+      ddesc[dn] = substr(line, tab + 1)
+    }
+    close(descfile)
   }
   {
     row = sprintf("| %s | %s | %s | %.2fs |", $2, desc($2), $3, $4)
