@@ -11,11 +11,18 @@ on:
         description: 'UUID for tracking this release step'
         required: true
         type: string
+      reuse_existing_tag:
+        description: 'Reuse an existing git tag for this version instead of creating + pushing a new one. Use to replay a release whose tag was already created (e.g. by a prior failed run).'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   trigger-release:
     uses: ./.github/workflows/release.yaml  # Call the actual release workflow
     secrets: inherit
+    with:
+      reuse_existing_tag: ${{ inputs.reuse_existing_tag }}
 
   notify-release-n-deploy-agent:
     runs-on: ubuntu-latest

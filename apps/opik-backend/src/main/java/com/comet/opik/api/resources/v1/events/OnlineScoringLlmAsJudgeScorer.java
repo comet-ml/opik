@@ -125,7 +125,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     }
 
     @Override
-    protected Mono<Void> processEvent(TraceToScoreLlmAsJudge message) {
+    protected Mono<Void> doScore(TraceToScoreLlmAsJudge message) {
         UUID experimentId = message.experimentId();
         if (experimentId != null) {
             // Resolve workspaceName lazily on subscription. ExperimentService.finishExperiments
@@ -133,7 +133,9 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             // WORKSPACE_NAME from the reactive context; without it the post-scoring chain throws
             // NoSuchElementException, the message isn't ack'd, and Redis Streams retries the whole
             // scoring run — re-running the LLM and re-inserting assertion rows.
-            return super.processEvent(message)
+            // Overriding doScore (not processEvent) keeps this post-scoring step inside the chain the
+            // base wraps with the processed-success counter, so a failure here is not counted as processed.
+            return super.doScore(message)
                     .then(Mono.fromCallable(() -> resolveWorkspaceName(message.workspaceId()))
                             .subscribeOn(Schedulers.boundedElastic())
                             .flatMap(workspaceName -> testSuiteAssertionCounterService
@@ -143,7 +145,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                                             .put(RequestContext.WORKSPACE_NAME, workspaceName)
                                             .put(RequestContext.USER_NAME, message.userName()))));
         }
-        return super.processEvent(message);
+        return super.doScore(message);
     }
 
     @Override

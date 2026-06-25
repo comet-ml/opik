@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Dict, Optional
 
 import opik
-from opik.api_objects.prompt import Prompt, ChatPrompt
 from opik.api_objects.prompt.types import PromptType
 from rich.console import Console
 
@@ -18,12 +17,13 @@ console = Console()
 def import_prompts_from_directory(
     client: opik.Opik,
     source_dir: Path,
+    project_name: str,
     dry_run: bool,
     name_pattern: Optional[str],
     debug: bool,
     manifest: Optional[MigrationManifest] = None,
 ) -> Dict[str, int]:
-    """Import prompts from a directory.
+    """Import prompts from a directory into the given project.
 
     Returns:
         Dictionary with keys: 'prompts', 'prompts_skipped', 'prompts_errors'
@@ -134,12 +134,15 @@ def import_prompts_from_directory(
                             skipped_count += 1
                             continue
 
-                        # Create ChatPrompt
-                        ChatPrompt(
+                        # Use the client factory (the opik.ChatPrompt()
+                        # constructor is deprecated) so the prompt lands in the
+                        # target project without a per-prompt deprecation warning.
+                        client.create_chat_prompt(
                             name=prompt_name,
                             messages=prompt_content,
                             metadata=metadata,
                             type=prompt_type_enum,
+                            project_name=project_name,
                         )
                         if debug:
                             console.print(
@@ -154,12 +157,14 @@ def import_prompts_from_directory(
                             skipped_count += 1
                             continue
 
-                        # Create Prompt
-                        Prompt(
+                        # Use the client factory (the opik.Prompt() constructor
+                        # is deprecated).
+                        client.create_prompt(
                             name=prompt_name,
                             prompt=prompt_content,
                             metadata=metadata,
                             type=prompt_type_enum,
+                            project_name=project_name,
                         )
                         if debug:
                             console.print(

@@ -89,24 +89,28 @@ describe("Opik - Vercel AI SDK integration", () => {
     expect(createSpansSpy).toHaveBeenCalledTimes(1);
     expect(updateSpansSpy).toHaveBeenCalledTimes(0);
     expect(updateTracesSpy).toHaveBeenCalledTimes(0);
-    expect(createTracesSpy.mock.calls[0][0]).toMatchObject({
-      traces: [
-        {
-          input: {
-            prompt: input,
-          },
-          metadata: {},
-          name: traceName,
-          output: { text },
-          projectName: "opik-sdk-typescript",
-          usage: {
-            completion_tokens: 20,
-            prompt_tokens: 10,
-            total_tokens: 30,
-          },
-        },
-      ],
+
+    const trace = createTracesSpy.mock.calls[0][0].traces[0];
+    expect(trace).toMatchObject({
+      input: { prompt: input },
+      metadata: {},
+      name: traceName,
+      output: { text },
+      projectName: "opik-sdk-typescript",
     });
+    // Token usage lives only on the LLM span, never on the trace.
+    expect((trace as { usage?: unknown }).usage).toBeUndefined();
+
+    const spans = createSpansSpy.mock.calls.flatMap((call) => call[0].spans);
+    expect(
+      spans.some(
+        (span) =>
+          span.type === "llm" &&
+          span.usage?.prompt_tokens === 10 &&
+          span.usage?.completion_tokens === 20 &&
+          span.usage?.total_tokens === 30
+      )
+    ).toBe(true);
   });
 
   it("generateText with tools", async () => {
@@ -194,11 +198,6 @@ describe("Opik - Vercel AI SDK integration", () => {
           // @todo: if possible implement testing telemetry for tool calls
           output: {},
           projectName: "opik-sdk-typescript",
-          usage: {
-            completion_tokens: 20,
-            prompt_tokens: 10,
-            total_tokens: 30,
-          },
         },
       ],
     });
@@ -265,11 +264,6 @@ describe("Opik - Vercel AI SDK integration", () => {
           output: { text: output },
           projectName: "opik-sdk-typescript",
           threadId: threadId,
-          usage: {
-            completion_tokens: 20,
-            prompt_tokens: 10,
-            total_tokens: 30,
-          },
         },
       ],
     });
@@ -322,11 +316,6 @@ describe("Opik - Vercel AI SDK integration", () => {
           output: { text: output },
           projectName: "opik-sdk-typescript",
           threadId: threadId,
-          usage: {
-            completion_tokens: 20,
-            prompt_tokens: 10,
-            total_tokens: 30,
-          },
         },
       ],
     });
@@ -400,11 +389,6 @@ describe("Opik - Vercel AI SDK integration", () => {
           output: { text: output },
           projectName: "opik-sdk-typescript",
           threadId: metadataThreadId, // Should use metadata threadId, not constructor
-          usage: {
-            completion_tokens: 20,
-            prompt_tokens: 10,
-            total_tokens: 30,
-          },
         },
       ],
     });
@@ -489,23 +473,27 @@ describe("Opik - Vercel AI SDK integration", () => {
     expect(object).toEqual(objectOutput);
     expect(createTracesSpy).toHaveBeenCalledTimes(1);
     expect(createSpansSpy).toHaveBeenCalledTimes(1);
-    expect(createTracesSpy.mock.calls[0][0]).toMatchObject({
-      traces: [
-        {
-          input: {
-            prompt: input,
-          },
-          metadata: {},
-          name: traceName,
-          output: { object: objectOutput },
-          projectName: "opik-sdk-typescript",
-          usage: {
-            completion_tokens: 25,
-            prompt_tokens: 15,
-            total_tokens: 40,
-          },
-        },
-      ],
+
+    const trace = createTracesSpy.mock.calls[0][0].traces[0];
+    expect(trace).toMatchObject({
+      input: { prompt: input },
+      metadata: {},
+      name: traceName,
+      output: { object: objectOutput },
+      projectName: "opik-sdk-typescript",
     });
+    // Token usage lives only on the LLM span, never on the trace.
+    expect((trace as { usage?: unknown }).usage).toBeUndefined();
+
+    const spans = createSpansSpy.mock.calls.flatMap((call) => call[0].spans);
+    expect(
+      spans.some(
+        (span) =>
+          span.type === "llm" &&
+          span.usage?.prompt_tokens === 15 &&
+          span.usage?.completion_tokens === 25 &&
+          span.usage?.total_tokens === 40
+      )
+    ).toBe(true);
   });
 });

@@ -4,6 +4,7 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.SpansCountResponse;
 import com.comet.opik.api.TraceCountResponse;
+import com.comet.opik.api.UsageByWorkspaceProjectUserResponse;
 import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.SpanService;
@@ -54,6 +55,16 @@ public class UsageResource {
     public Response getSpansCountForWorkspaces() {
         return spanService.countSpansPerWorkspace()
                 .map(spansCountResponse -> Response.ok(spansCountResponse).build())
+                .block();
+    }
+
+    @GET
+    @Path("/workspace-span-counts-breakdown")
+    @Operation(operationId = "getSpansCountBreakdownForWorkspaces", summary = "Get spans count on previous day grouped by workspace, project and user", description = "Get spans count on previous day grouped by workspace, project and user", responses = {
+            @ApiResponse(responseCode = "200", description = "UsageByWorkspaceProjectUserResponse resource", content = @Content(schema = @Schema(implementation = UsageByWorkspaceProjectUserResponse.class)))})
+    public Response getSpansCountBreakdownForWorkspaces() {
+        return spanService.getSpanBreakdownPerWorkspace()
+                .map(breakdownResponse -> Response.ok(breakdownResponse).build())
                 .block();
     }
 

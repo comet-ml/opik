@@ -9,6 +9,7 @@ import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.SpanBatchUpdate;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.SpansCountResponse;
+import com.comet.opik.api.UsageByWorkspaceProjectUserResponse;
 import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
@@ -526,5 +527,15 @@ public class SpanService {
                         .biInformation(items)
                         .build())
                 .switchIfEmpty(Mono.just(BiInformationResponse.empty()));
+    }
+
+    @WithSpan
+    public Mono<UsageByWorkspaceProjectUserResponse> getSpanBreakdownPerWorkspace() {
+        log.info("Getting span usage breakdown by workspace, project and user");
+        return projectService.getDemoProjectIdsWithTimestamps()
+                .switchIfEmpty(Mono.just(Map.of()))
+                .flatMapMany(spanDAO::countSpansBreakdownPerWorkspace)
+                .collectList()
+                .map(rows -> UsageByWorkspaceProjectUserResponse.builder().breakdown(rows).build());
     }
 }

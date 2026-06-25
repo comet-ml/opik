@@ -139,6 +139,34 @@ The trace can now be viewed in the UI with hierarchical spans showing the relati
   <img src="/img/cookbook/openai_trace_decorator_cookbook.png" />
 </Frame>
 
+### Setting the provider name
+
+The OpenAI SDK is often used as a client for other OpenAI-compatible APIs (Together, OpenRouter, vLLM, DeepSeek, and many more). In that case the provider recorded on each LLM span defaults to the client's base URL host, which is not always descriptive. You can override it by passing `provider` to `track_openai`:
+
+```python
+from opik.integrations.openai import track_openai
+from openai import OpenAI
+
+# OpenAI client pointing to an OpenAI-compatible provider
+client = OpenAI(api_key="<DeepSeek API Key>", base_url="https://api.deepseek.com")
+
+# Record "deepseek" as the provider on every LLM span
+client = track_openai(client, provider="deepseek")
+```
+
+`provider` accepts any string, or one of the providers Opik recognizes for cost tracking via the `opik.LLMProvider` enum:
+
+```python
+from opik import LLMProvider
+from opik.integrations.openai import track_openai
+
+client = track_openai(client, provider=LLMProvider.ANTHROPIC)
+```
+
+<Tip>
+  Setting `provider` only changes the provider label on the span. Token usage is always parsed using the OpenAI usage format, since `track_openai` is designed for the OpenAI request/response schema.
+</Tip>
+
 ## Using Azure OpenAI
 
 The OpenAI integration also supports Azure OpenAI Services. To use Azure OpenAI, initialize your client with Azure configuration and use it with `track_openai` just like the standard OpenAI client:

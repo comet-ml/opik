@@ -141,50 +141,57 @@ Select the traces or spans you want to export in the Opik dashboard and click **
 
 ## Command-line tools
 
-The `opik export` and `opik import` commands let you export traces, spans, datasets, prompts, and experiments to local JSON or CSV files, and import them back — useful for migrations, backups, and cross-environment syncs.
+The `opik export` and `opik import` commands let you export traces, spans, datasets, prompts, and experiments for a project to local JSON or CSV files, and import them back — useful for migrations, backups, and cross-environment syncs. Every command is scoped to a single project, named right after the workspace.
+
+On disk, folders and files are keyed by **ID**: data lands under `<path>/<workspace>/projects/<project_id>/`, with a `project.json` (`{"id", "name"}`) and id-named item files (`dataset_<id>.json`, `prompt_<id>.json`, `experiment_<id>.json`, `trace_<id>.json`). Human names are stored as data inside the files — this keeps paths free of `/`, `:`, and spaces. You still pass project and item **names** on the command line; the CLI resolves names ↔ IDs for you.
 
 ### Export
 
 ```bash
-opik export WORKSPACE TYPE NAME [OPTIONS]
+opik export WORKSPACE PROJECT ITEM [NAME] [OPTIONS]
 ```
 
-`TYPE` is one of: `all`, `dataset`, `project`, `experiment`, `prompt`
+`ITEM` is one of: `all`, `dataset`, `traces`, `experiment`, `prompt`
 
 ```bash
-# Export everything in a workspace
-opik export my-workspace all
+# Export everything in a project
+opik export my-workspace my-project all
 
-# Export a specific project
-opik export my-workspace project "my-project"
+# Export the project's traces
+opik export my-workspace my-project traces
 
 # Export a specific dataset
-opik export my-workspace dataset "my-test-dataset"
+opik export my-workspace my-project dataset "my-test-dataset"
 
 # Export with a date filter
-opik export my-workspace project "my-project" \
+opik export my-workspace my-project traces \
   --filter 'created_at >= "2024-01-01T00:00:00Z"'
 
 # Export as CSV for analysis
-opik export my-workspace project "my-project" --format csv --path ./csv_data
+opik export my-workspace my-project traces --format csv --path ./csv_data
 ```
 
 ### Import
 
 ```bash
-opik import WORKSPACE TYPE NAME [OPTIONS]
+opik import WORKSPACE PROJECT ITEM [NAME] [OPTIONS]
 ```
 
 ```bash
 # Import a dataset
-opik import my-workspace dataset "my-dataset"
+opik import my-workspace my-project dataset "my-dataset"
 
-# Import a project
-opik import my-workspace project "my-project"
+# Import the project's traces
+opik import my-workspace my-project traces
 
 # Preview what would be imported
-opik import my-workspace project "my-project" --dry-run
+opik import my-workspace my-project all --dry-run
+
+# Import into a different (renamed or scratch) destination project
+opik import my-workspace my-project all --to-project my-restore
 ```
+
+The project name is matched against the `name` recorded in each exported `project.json`. Import uses the same `--path` as export (both resolve `<path>/<workspace>/projects/<id>/`), so no path juggling is needed. Use `--to-project <NAME>` to import into a different destination project (default: the source project's name).
 
 Imports are automatically resumable — if interrupted, re-run the same command and it picks up where it left off using a local `migration_manifest.db`.
 
@@ -192,12 +199,14 @@ Imports are automatically resumable — if interrupted, re-run the same command 
 
 ```bash
 # Step 1: Export from source (use source credentials)
+# Writes to ./migration_data/my-workspace/projects/<project_id>/
 OPIK_API_KEY=<source_key> OPIK_URL_OVERRIDE=https://source.opik.example.com \
-  opik export my-workspace project "my-project" --path ./migration_data
+  opik export my-workspace my-project all --path ./migration_data
 
 # Step 2: Import to destination (use destination credentials)
+# Same --path as export — import resolves <path>/my-workspace/projects/<id>/.
 OPIK_API_KEY=<dest_key> OPIK_URL_OVERRIDE=https://dest.opik.example.com \
-  opik import my-workspace project "my-project" --path ./migration_data
+  opik import my-workspace my-project all --path ./migration_data
 ```
 
 See the CLI help (`opik export --help` / `opik import --help`) for all options and troubleshooting.

@@ -41,6 +41,7 @@ import org.assertj.core.data.Offset;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -848,6 +849,55 @@ class KpiCardsResourceTest {
                 expectedPreviousCount, expectedCurrentCount, 0, 0);
     }
 
+    @Test
+    @DisplayName("thread KPI metrics support first/last message filters (conditional projection)")
+    void threadFiltersByMessageContent() {
+        mockTargetWorkspace();
+        var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        createFilterEntities(EntityType.THREADS, projectName, 3);
+
+        Instant intervalStart = Instant.now();
+
+        var currentEntities = createFilterEntities(EntityType.THREADS, projectName, 3);
+
+        Instant intervalEnd = Instant.now().plus(1, ChronoUnit.MINUTES);
+
+        // Build the filter from the original trace of the first thread so the substring reliably
+        // matches exactly that thread's first/last message. Before the fix these filters failed with
+        // ClickHouse UNKNOWN_IDENTIFIER (code 47) because threads_filtered never projected
+        // first_message/last_message. They are now projected only when filtered. See OPIK-7050.
+        String firstThreadId = currentEntities.threadIds().getFirst();
+        Trace firstThreadTrace = currentEntities.traces().stream()
+                .filter(trace -> firstThreadId.equals(trace.threadId()))
+                .findFirst()
+                .orElseThrow();
+
+        var messageFilters = List.of(
+                TraceThreadFilter.builder()
+                        .field(TraceThreadField.FIRST_MESSAGE)
+                        .operator(Operator.CONTAINS)
+                        .value(firstThreadTrace.input().toString().substring(0, 20))
+                        .build(),
+                TraceThreadFilter.builder()
+                        .field(TraceThreadField.LAST_MESSAGE)
+                        .operator(Operator.CONTAINS)
+                        .value(firstThreadTrace.output().toString().substring(0, 20))
+                        .build());
+
+        for (var filter : messageFilters) {
+            KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
+                    .entityType(EntityType.THREADS)
+                    .intervalStart(intervalStart)
+                    .intervalEnd(intervalEnd)
+                    .filters(JsonUtils.writeValueAsString(List.of(filter)))
+                    .build(), API_KEY, WORKSPACE_NAME);
+
+            assertFilteredMetrics(response, EntityType.THREADS, 1, 0, 0, 0);
+        }
+    }
+
     static Stream<Arguments> threadFilterArguments() {
         return Stream.of(
                 Arguments.of(
@@ -897,6 +947,16 @@ class KpiCardsResourceTest {
                                 .field(TraceThreadField.LAST_UPDATED_AT)
                                 .operator(Operator.GREATER_THAN)
                                 .value(thread.lastUpdatedAt().minusSeconds(1).toString())
+                                .build(),
+                        3, 3),
+                // Regression for the threads_filtered CTE not projecting number_of_messages:
+                // a number_of_messages thread filter previously failed with ClickHouse
+                // UNKNOWN_IDENTIFIER (code 47). Every thread has number_of_messages > 0.
+                Arguments.of(
+                        (Function<TraceThread, TraceThreadFilter>) thread -> TraceThreadFilter.builder()
+                                .field(TraceThreadField.NUMBER_OF_MESSAGES)
+                                .operator(Operator.GREATER_THAN)
+                                .value("0")
                                 .build(),
                         3, 3),
                 Arguments.of(

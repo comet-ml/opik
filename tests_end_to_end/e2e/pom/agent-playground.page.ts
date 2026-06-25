@@ -12,7 +12,11 @@ export class AgentPlaygroundPage {
     return test.step('open the Agent Playground page', async () => {
       const env = loadEnvConfig();
       const url = `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/agent-playground`;
-      await this.page.goto(url, { waitUntil: 'networkidle' });
+      // Don't wait for networkidle: the page embeds the Ollie assistant iframe,
+      // which holds a long-lived streaming connection, so the network never goes
+      // idle and the goto hangs to the test timeout. Readiness is asserted by
+      // waitForHeading() + the Connected badge instead.
+      await this.page.goto(url);
       await this.page.waitForURL(new RegExp('/agent-playground'));
     });
   }
@@ -35,9 +39,18 @@ export class AgentPlaygroundPage {
     return this.page.getByText('Test input');
   }
 
+  /**
+   * The entrypoint param's input control. The "Test input" panel label and the
+   * Connected badge render before the runner's introspected form mounts, so wait
+   * on the actual field (not the panel label) before driving a run.
+   */
+  inputField(fieldName: string): Locator {
+    return this.page.getByPlaceholder(`Enter ${fieldName}...`);
+  }
+
   async fillInput(fieldName: string, value: string): Promise<void> {
     return test.step(`fill input "${fieldName}"`, async () => {
-      await this.page.getByPlaceholder(`Enter ${fieldName}...`).fill(value);
+      await this.inputField(fieldName).fill(value);
     });
   }
 
