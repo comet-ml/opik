@@ -11,12 +11,6 @@ Opik's [MCP server](https://github.com/comet-ml/opik-mcp) connects your AI host
 workspace — read traces, log scores, save prompt versions, and ask Ollie
 investigative questions, all from the chat.
 
-<Note>
-`opik-mcp` has been rewritten in Python. If you previously installed the
-npx-based JavaScript server, replace `npx -y opik-mcp` with `uvx opik-mcp` in
-any snippet below.
-</Note>
-
 ## Quick setup with the Opik CLI
 
 The Opik CLI ships with the `opik` Python package. The `opik mcp` commands
@@ -123,6 +117,12 @@ If no hosted server is available for your environment, the CLI sets up the
 **local server**, which runs on demand via `uvx opik-mcp`. This requires
 [`uv`](https://docs.astral.sh/uv/) — install it with `brew install uv` (macOS)
 or `curl -LsSf https://astral.sh/uv/install.sh | sh`.
+
+<Note>
+`opik-mcp` has been rewritten in Python. If you previously installed the
+npx-based JavaScript server, replace `npx -y opik-mcp` with `uvx opik-mcp` in
+the local-server snippets.
+</Note>
 
 ## Manual setup
 
