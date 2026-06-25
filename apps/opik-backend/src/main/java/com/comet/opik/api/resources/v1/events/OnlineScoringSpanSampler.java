@@ -19,6 +19,7 @@ import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.domain.evaluators.SpanFilterEvaluationService;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.log.LogContextAware;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.google.common.eventbus.Subscribe;
@@ -140,8 +141,8 @@ public class OnlineScoringSpanSampler {
                                 .toList();
                         logSampledSpan(evaluator, messages, scorableSpans.size());
                         if (!messages.isEmpty()) {
-                            onlineScorePublisher.enqueueMessage(messages,
-                                    AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE);
+                            publishSampled(messages, AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE,
+                                    spansBatch.workspaceId());
                         }
                     }
                     case AutomationRuleEvaluatorLlmAsJudge rule -> logUnsupportedEvaluatorType(rule);
@@ -165,8 +166,8 @@ public class OnlineScoringSpanSampler {
                                 .toList();
                         logSampledSpan(evaluator, messages, scorableSpans.size());
                         if (!messages.isEmpty()) {
-                            onlineScorePublisher.enqueueMessage(messages,
-                                    AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON);
+                            publishSampled(messages, AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON,
+                                    spansBatch.workspaceId());
                         }
                     }
                 }
@@ -177,6 +178,17 @@ public class OnlineScoringSpanSampler {
     private void logUnsupportedEvaluatorType(AutomationRuleEvaluator<?, ?> evaluator) {
         log.warn("Received unsupported evaluator type '{}' in span sampler. This should not happen.",
                 evaluator.getType());
+    }
+
+    /**
+     * Subscribes the reactive enqueue, seeding the reactive context with the workspace so the publisher's
+     * enqueue metric is labelled with it. SpansCreated carries no workspace name, so the publisher falls back
+     * to the id for the name label. Fire-and-forget.
+     */
+    private void publishSampled(List<?> messages, AutomationRuleEvaluatorType type, String workspaceId) {
+        onlineScorePublisher.enqueueMessage(messages, type)
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId))
+                .subscribe();
     }
 
     private boolean shouldSampleSpan(AutomationRuleEvaluator<?, SpanFilter> evaluator,

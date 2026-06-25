@@ -9,6 +9,7 @@ import com.comet.opik.api.events.TraceThreadToScoreUserDefinedMetricPython;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OnlineScoringStreamConfigurationAdapter;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.redis.RedisStreamUtils;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.api.GlobalOpenTelemetry;
@@ -20,8 +21,11 @@ import jakarta.inject.Singleton;
 import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.List;
@@ -32,28 +36,37 @@ import java.util.stream.Collectors;
 
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge.TraceThreadLlmAsJudgeCode;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.TraceThreadUserDefinedMetricPythonCode;
+import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.UNKNOWN;
+import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.WORKSPACE_ID_KEY;
+import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.WORKSPACE_NAME_KEY;
 
 @ImplementedBy(OnlineScorePublisherImpl.class)
 public interface OnlineScorePublisher {
 
     /**
-     * Enqueues messages into the Redis stream for online scoring.
+     * Enqueues messages into the Redis stream for online scoring. The returned publisher must be subscribed for
+     * the enqueue to happen; subscribe it within a reactive context carrying the workspace (WORKSPACE_ID /
+     * WORKSPACE_NAME) so the enqueue metric is labelled with it.
      *
      * @param messages the messages to enqueue
      * @param type     the type of evaluator for which the messages are intended
+     * @return a {@link Mono} that completes once all messages are enqueued
      */
-    void enqueueMessage(List<?> messages, AutomationRuleEvaluatorType type);
+    Mono<Void> enqueueMessage(List<?> messages, AutomationRuleEvaluatorType type);
 
     /**
-     * Enqueues a thread message for scoring based on the provided rule.
+     * Enqueues a thread message for scoring based on the provided rule. The returned publisher must be subscribed
+     * for the enqueue to happen.
      *
      * @param threadIds   the IDs of the threads to score
      * @param ruleId      the ID of the rule to apply
      * @param projectId   the ID of the project
      * @param workspaceId the ID of the workspace
      * @param userName    the name of the user who initiated the scoring
+     * @return a {@link Mono} that completes once the message is enqueued
      */
-    void enqueueThreadMessage(List<String> threadIds, UUID ruleId, UUID projectId, String workspaceId, String userName);
+    Mono<Void> enqueueThreadMessage(List<String> threadIds, UUID ruleId, UUID projectId, String workspaceId,
+            String userName);
 }
 
 @Singleton
@@ -80,8 +93,8 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.enqueueCounter = GlobalOpenTelemetry.getMeter(METRIC_NAMESPACE)
                 .counterBuilder("%s_enqueue_total".formatted(METRIC_NAMESPACE))
-                .setDescription("Messages pushed to the online-scoring Redis stream, by evaluator type and result "
-                        + "(success|error). result=error counts publish failures that were previously only logged.")
+                .setDescription("Messages pushed to the online-scoring Redis stream, by evaluator type, workspace and "
+                        + "result (success|error). result=error counts publish failures that were previously only logged.")
                 .build();
         this.streamConfigurations = config.getStreams().stream()
                 .map(streamConfiguration -> {
@@ -95,15 +108,24 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
                 .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
-    public void enqueueMessage(List<?> messages, AutomationRuleEvaluatorType type) {
+    public Mono<Void> enqueueMessage(List<?> messages, AutomationRuleEvaluatorType type) {
         var config = streamConfigurations.get(type);
         var codec = config.getCodec();
         var stream = redisClient.getStream(config.getStreamName(), codec);
-        var successAttrs = Attributes.of(EVALUATOR_TYPE_KEY, type.getType(), RESULT_KEY, "success");
-        var errorAttrs = Attributes.of(EVALUATOR_TYPE_KEY, type.getType(), RESULT_KEY, "error");
-        Flux.fromIterable(messages)
-                .flatMap(message -> {
-                    return stream.add(RedisStreamUtils.buildAddArgs(
+        // Resolve the workspace from the reactive context — populated upstream from RequestContext at the
+        // trace/span ingest endpoint and carried down through the sampler/manual-eval chains. Falls back to
+        // "unknown" (then to the id) so the metric label is always present.
+        return Flux.deferContextual(ctx -> {
+            var workspaceId = StringUtils.defaultIfBlank(ctx.getOrDefault(RequestContext.WORKSPACE_ID, UNKNOWN),
+                    UNKNOWN);
+            var workspaceName = StringUtils.defaultIfBlank(
+                    ctx.getOrDefault(RequestContext.WORKSPACE_NAME, UNKNOWN), workspaceId);
+            var successAttrs = Attributes.of(EVALUATOR_TYPE_KEY, type.getType(),
+                    WORKSPACE_ID_KEY, workspaceId, WORKSPACE_NAME_KEY, workspaceName, RESULT_KEY, "success");
+            var errorAttrs = Attributes.of(EVALUATOR_TYPE_KEY, type.getType(),
+                    WORKSPACE_ID_KEY, workspaceId, WORKSPACE_NAME_KEY, workspaceName, RESULT_KEY, "error");
+            return Flux.fromIterable(messages)
+                    .flatMap(message -> stream.add(RedisStreamUtils.buildAddArgs(
                             OnlineScoringConfig.PAYLOAD_FIELD, message, config))
                             .doOnNext(id -> {
                                 enqueueCounter.add(1, successAttrs);
@@ -112,47 +134,38 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
                             .doOnError(throwable -> {
                                 enqueueCounter.add(1, errorAttrs);
                                 log.error("Error sending message", throwable);
-                            });
-                })
-                .subscribe(id -> {
-                    // noop
-                }, throwable -> log.error("Unexpected error when enqueueing messages into redis", throwable));
+                            }));
+        }).then();
     }
 
-    public void enqueueThreadMessage(@NonNull List<String> threadIds, @NonNull UUID ruleId, @NonNull UUID projectId,
-            @NonNull String workspaceId, @NonNull String userName) {
+    public Mono<Void> enqueueThreadMessage(@NonNull List<String> threadIds, @NonNull UUID ruleId,
+            @NonNull UUID projectId, @NonNull String workspaceId, @NonNull String userName) {
 
-        AutomationRuleEvaluator<?, ?> rule;
-
-        try {
-            rule = automationRuleEvaluatorService.findById(ruleId, Set.of(projectId), workspaceId);
-        } catch (NotFoundException ex) {
-            log.warn("Rule with ID '{}' not found for projectId '{}' and workspaceId '{}'", ruleId, projectId,
-                    workspaceId, ex);
-            return;
-        }
-
-        switch (rule) {
-            case AutomationRuleEvaluatorTraceThreadLlmAsJudge llmAsJudge -> {
-                var message = toLlmAsJudgeMessage(threadIds, ruleId, projectId, workspaceId, userName,
-                        llmAsJudge.getCode());
-                enqueueMessage(List.of(message), rule.getType());
-            }
-            case AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython definedMetricPython -> {
-                var message = toDefinedMetricPython(threadIds, ruleId, projectId, workspaceId, userName,
-                        definedMetricPython.getCode());
-
-                if (serviceTogglesConfig.isTraceThreadPythonEvaluatorEnabled()) {
-                    enqueueMessage(List.of(message), rule.getType());
-                } else {
-                    log.warn(
-                            "Trace Thread online scoring python evaluator is disabled, skipping enqueueing for ruleId: '{}'",
-                            ruleId);
-                }
-            }
-            default -> throw new IllegalStateException("Unknown rule evaluator type: " + rule);
-        }
-
+        // findById is a blocking JDBC lookup, so resolve it lazily on a worker thread; the rest is reactive.
+        return Mono.<AutomationRuleEvaluator<?, ?>>fromCallable(
+                () -> automationRuleEvaluatorService.findById(ruleId, Set.of(projectId), workspaceId))
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMap(rule -> switch (rule) {
+                    case AutomationRuleEvaluatorTraceThreadLlmAsJudge llmAsJudge -> enqueueMessage(
+                            List.of(toLlmAsJudgeMessage(threadIds, ruleId, projectId, workspaceId, userName,
+                                    llmAsJudge.getCode())),
+                            rule.getType());
+                    case AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython definedMetricPython -> {
+                        if (serviceTogglesConfig.isTraceThreadPythonEvaluatorEnabled()) {
+                            yield enqueueMessage(List.of(toDefinedMetricPython(threadIds, ruleId, projectId,
+                                    workspaceId, userName, definedMetricPython.getCode())), rule.getType());
+                        }
+                        log.warn("Trace Thread online scoring python evaluator is disabled, skipping enqueueing "
+                                + "for ruleId: '{}'", ruleId);
+                        yield Mono.<Void>empty();
+                    }
+                    default -> Mono.<Void>error(new IllegalStateException("Unknown rule evaluator type: " + rule));
+                })
+                .onErrorResume(NotFoundException.class, ex -> {
+                    log.warn("Rule with ID '{}' not found for projectId '{}' and workspaceId '{}'", ruleId, projectId,
+                            workspaceId, ex);
+                    return Mono.empty();
+                });
     }
 
     private TraceThreadToScoreLlmAsJudge toLlmAsJudgeMessage(List<String> threadIds, UUID ruleId, UUID projectId,

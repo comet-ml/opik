@@ -26,6 +26,7 @@ import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.ListUtils;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
@@ -176,23 +177,22 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                     spanLevelPythonRules, projectId, workspaceId, userName);
         }
 
-        // Handle trace-thread evaluators - can use IDs directly
-        return spanLevelMono.then(Mono.fromCallable(() -> {
-            if (!traceThreadRules.isEmpty()) {
-                List<String> traceIdStrings = traceIds.stream()
-                        .map(UUID::toString)
-                        .toList();
-
-                traceThreadRules.forEach(rule -> {
+        // Handle trace-thread evaluators - can use IDs directly. Compose the enqueues into the returned chain so
+        // they inherit the request's reactive context (workspace id + name), which the publisher reads for its
+        // enqueue metric.
+        List<String> traceIdStrings = traceIds.stream()
+                .map(UUID::toString)
+                .toList();
+        Mono<Void> traceThreadMono = Flux.fromIterable(traceThreadRules)
+                .flatMap(rule -> {
                     log.info("Enqueueing trace-thread evaluation for rule '{}' with '{}' trace IDs", rule.getId(),
                             traceIdStrings.size());
-                    onlineScorePublisher.enqueueThreadMessage(traceIdStrings, rule.getId(), projectId, workspaceId,
-                            userName);
-                });
-            }
+                    return onlineScorePublisher.enqueueThreadMessage(traceIdStrings, rule.getId(), projectId,
+                            workspaceId, userName);
+                })
+                .then();
 
-            return traceIds.size();
-        }));
+        return spanLevelMono.then(traceThreadMono).thenReturn(traceIds.size());
     }
 
     /**
@@ -220,49 +220,51 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                     log.info("Successfully fetched '{}' traces for span-level evaluation", traces.size());
 
                     // Enqueue LLM as Judge evaluations
-                    llmAsJudgeRules.forEach(rule -> {
-                        List<TraceToScoreLlmAsJudge> messages = traces.stream()
-                                .map(trace -> TraceToScoreLlmAsJudge.builder()
-                                        .trace(trace.toBuilder().projectName(project.name()).build())
-                                        .ruleId(rule.getId())
-                                        .ruleName(rule.getName())
-                                        .llmAsJudgeCode(rule.getCode())
-                                        .workspaceId(workspaceId)
-                                        .userName(userName)
-                                        .scoreNameMapping(Map.of())
-                                        .promptType(PromptType.MUSTACHE)
-                                        .build())
-                                .toList();
-
-                        onlineScorePublisher.enqueueMessage(messages, rule.getType());
-                        log.info("Enqueued '{}' span-level LLM as Judge messages for rule '{}'", messages.size(),
-                                rule.getId());
-                    });
+                    var llmAsJudgeMono = Flux.fromIterable(llmAsJudgeRules)
+                            .flatMap(rule -> {
+                                List<TraceToScoreLlmAsJudge> messages = traces.stream()
+                                        .map(trace -> TraceToScoreLlmAsJudge.builder()
+                                                .trace(trace.toBuilder().projectName(project.name()).build())
+                                                .ruleId(rule.getId())
+                                                .ruleName(rule.getName())
+                                                .llmAsJudgeCode(rule.getCode())
+                                                .workspaceId(workspaceId)
+                                                .userName(userName)
+                                                .scoreNameMapping(Map.of())
+                                                .promptType(PromptType.MUSTACHE)
+                                                .build())
+                                        .toList();
+                                log.info("Enqueued '{}' span-level LLM as Judge messages for rule '{}'",
+                                        messages.size(), rule.getId());
+                                return onlineScorePublisher.enqueueMessage(messages, rule.getType());
+                            })
+                            .then();
 
                     // Enqueue Python evaluations (if enabled)
-                    pythonRules.forEach(rule -> {
-                        if (!serviceTogglesConfig.isPythonEvaluatorEnabled()) {
-                            log.warn("Span-level Python evaluator is disabled, skipping rule '{}'", rule.getId());
-                            return;
-                        }
+                    var pythonMono = Flux.fromIterable(pythonRules)
+                            .flatMap(rule -> {
+                                if (!serviceTogglesConfig.isPythonEvaluatorEnabled()) {
+                                    log.warn("Span-level Python evaluator is disabled, skipping rule '{}'",
+                                            rule.getId());
+                                    return Mono.<Void>empty();
+                                }
+                                List<TraceToScoreUserDefinedMetricPython> messages = traces.stream()
+                                        .map(trace -> TraceToScoreUserDefinedMetricPython.builder()
+                                                .trace(trace.toBuilder().projectName(project.name()).build())
+                                                .ruleId(rule.getId())
+                                                .ruleName(rule.getName())
+                                                .code(rule.getCode())
+                                                .workspaceId(workspaceId)
+                                                .userName(userName)
+                                                .build())
+                                        .toList();
+                                log.info("Enqueued '{}' span-level Python messages for rule '{}'", messages.size(),
+                                        rule.getId());
+                                return onlineScorePublisher.enqueueMessage(messages, rule.getType());
+                            })
+                            .then();
 
-                        List<TraceToScoreUserDefinedMetricPython> messages = traces.stream()
-                                .map(trace -> TraceToScoreUserDefinedMetricPython.builder()
-                                        .trace(trace.toBuilder().projectName(project.name()).build())
-                                        .ruleId(rule.getId())
-                                        .ruleName(rule.getName())
-                                        .code(rule.getCode())
-                                        .workspaceId(workspaceId)
-                                        .userName(userName)
-                                        .build())
-                                .toList();
-
-                        onlineScorePublisher.enqueueMessage(messages, rule.getType());
-                        log.info("Enqueued '{}' span-level Python messages for rule '{}'", messages.size(),
-                                rule.getId());
-                    });
-
-                    return Mono.empty();
+                    return Mono.when(llmAsJudgeMono, pythonMono);
                 });
     }
 
@@ -310,47 +312,48 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                     log.info("Successfully fetched '{}' spans for evaluation", spans.size());
 
                     // Enqueue Span LLM as Judge evaluations
-                    spanLlmAsJudgeRules.forEach(rule -> {
-                        List<SpanToScoreLlmAsJudge> messages = spans.stream()
-                                .map(span -> SpanToScoreLlmAsJudge.builder()
-                                        .span(span.toBuilder().projectName(project.name()).build())
-                                        .ruleId(rule.getId())
-                                        .ruleName(rule.getName())
-                                        .llmAsJudgeCode(rule.getCode())
-                                        .workspaceId(workspaceId)
-                                        .userName(userName)
-                                        .build())
-                                .toList();
-
-                        onlineScorePublisher.enqueueMessage(messages, rule.getType());
-                        log.info("Enqueued '{}' span LLM as Judge messages for rule '{}'", messages.size(),
-                                rule.getId());
-                    });
+                    var llmAsJudgeMono = Flux.fromIterable(spanLlmAsJudgeRules)
+                            .flatMap(rule -> {
+                                List<SpanToScoreLlmAsJudge> messages = spans.stream()
+                                        .map(span -> SpanToScoreLlmAsJudge.builder()
+                                                .span(span.toBuilder().projectName(project.name()).build())
+                                                .ruleId(rule.getId())
+                                                .ruleName(rule.getName())
+                                                .llmAsJudgeCode(rule.getCode())
+                                                .workspaceId(workspaceId)
+                                                .userName(userName)
+                                                .build())
+                                        .toList();
+                                log.info("Enqueued '{}' span LLM as Judge messages for rule '{}'", messages.size(),
+                                        rule.getId());
+                                return onlineScorePublisher.enqueueMessage(messages, rule.getType());
+                            })
+                            .then();
 
                     // Enqueue Span Python evaluations (if enabled)
-                    spanPythonRules.forEach(rule -> {
-                        if (!serviceTogglesConfig.isSpanUserDefinedMetricPythonEnabled()) {
-                            log.warn("Span Python evaluator is disabled, skipping rule '{}'", rule.getId());
-                            return;
-                        }
+                    var pythonMono = Flux.fromIterable(spanPythonRules)
+                            .flatMap(rule -> {
+                                if (!serviceTogglesConfig.isSpanUserDefinedMetricPythonEnabled()) {
+                                    log.warn("Span Python evaluator is disabled, skipping rule '{}'", rule.getId());
+                                    return Mono.<Void>empty();
+                                }
+                                List<SpanToScoreUserDefinedMetricPython> messages = spans.stream()
+                                        .map(span -> SpanToScoreUserDefinedMetricPython.builder()
+                                                .span(span.toBuilder().projectName(project.name()).build())
+                                                .ruleId(rule.getId())
+                                                .ruleName(rule.getName())
+                                                .code(rule.getCode())
+                                                .workspaceId(workspaceId)
+                                                .userName(userName)
+                                                .build())
+                                        .toList();
+                                log.info("Enqueued '{}' span Python messages for rule '{}'", messages.size(),
+                                        rule.getId());
+                                return onlineScorePublisher.enqueueMessage(messages, rule.getType());
+                            })
+                            .then();
 
-                        List<SpanToScoreUserDefinedMetricPython> messages = spans.stream()
-                                .map(span -> SpanToScoreUserDefinedMetricPython.builder()
-                                        .span(span.toBuilder().projectName(project.name()).build())
-                                        .ruleId(rule.getId())
-                                        .ruleName(rule.getName())
-                                        .code(rule.getCode())
-                                        .workspaceId(workspaceId)
-                                        .userName(userName)
-                                        .build())
-                                .toList();
-
-                        onlineScorePublisher.enqueueMessage(messages, rule.getType());
-                        log.info("Enqueued '{}' span Python messages for rule '{}'", messages.size(),
-                                rule.getId());
-                    });
-
-                    return Mono.just(spanIds.size());
+                    return Mono.when(llmAsJudgeMono, pythonMono).thenReturn(spanIds.size());
                 });
     }
 
@@ -377,15 +380,16 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                     // Extract thread ID strings
                     List<String> threadIds = List.copyOf(threadModelIdToThreadIdMap.values());
 
-                    // Enqueue messages for each rule
-                    rules.forEach(rule -> {
-                        log.info("Enqueueing evaluation for rule '{}' with '{}' thread IDs", rule.getId(),
-                                threadIds.size());
-                        onlineScorePublisher.enqueueThreadMessage(threadIds, rule.getId(), projectId, workspaceId,
-                                userName);
-                    });
-
-                    return Mono.just(threadModelIds.size());
+                    // Enqueue messages for each rule, composed into the chain so they inherit the request's
+                    // reactive context. enqueueThreadMessage does a blocking rule lookup, so defer onto boundedElastic.
+                    return Flux.fromIterable(rules)
+                            .flatMap(rule -> {
+                                log.info("Enqueueing evaluation for rule '{}' with '{}' thread IDs", rule.getId(),
+                                        threadIds.size());
+                                return onlineScorePublisher.enqueueThreadMessage(threadIds, rule.getId(), projectId,
+                                        workspaceId, userName);
+                            })
+                            .then(Mono.just(threadModelIds.size()));
                 });
     }
 }
