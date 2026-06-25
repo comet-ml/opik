@@ -16,12 +16,13 @@ console = Console()
 def import_datasets_from_directory(
     client: opik.Opik,
     source_dir: Path,
+    project_name: str,
     dry_run: bool,
     name_pattern: Optional[str],
     debug: bool,
     manifest: Optional[MigrationManifest] = None,
 ) -> Dict[str, int]:
-    """Import datasets from a directory.
+    """Import datasets from a directory into the given project.
 
     Returns:
         Dictionary with keys: 'datasets', 'datasets_skipped', 'datasets_errors'
@@ -97,14 +98,18 @@ def import_datasets_from_directory(
 
                 # Get or create dataset (handles case where dataset already exists)
                 try:
-                    dataset = client.get_dataset(dataset_name)
+                    dataset = client.get_dataset(
+                        dataset_name, project_name=project_name
+                    )
                     if debug:
                         console.print(
                             f"[blue]Dataset '{dataset_name}' already exists, using existing dataset[/blue]"
                         )
                 except Exception:
                     # Dataset doesn't exist, create it
-                    dataset = client.create_dataset(name=dataset_name)
+                    dataset = client.create_dataset(
+                        name=dataset_name, project_name=project_name
+                    )
                     if debug:
                         console.print(
                             f"[blue]Created new dataset: {dataset_name}[/blue]"

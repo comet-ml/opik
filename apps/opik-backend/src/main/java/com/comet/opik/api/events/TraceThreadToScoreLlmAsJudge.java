@@ -18,5 +18,5 @@ public record TraceThreadToScoreLlmAsJudge(
         @NotNull UUID projectId,
         @NotNull TraceThreadLlmAsJudgeCode code,
         @NotNull String workspaceId,
-        @NotNull String userName) {
+        @NotNull String userName) implements WorkspaceScopedMessage {
 }

@@ -851,8 +851,12 @@ public class FilterQueryBuilder {
     }
 
     public static Optional<Boolean> hasGuardrailsFilter(@NonNull List<? extends Filter> filters) {
+        return hasField(filters, TraceField.GUARDRAILS);
+    }
+
+    public static Optional<Boolean> hasField(@NonNull List<? extends Filter> filters, @NonNull Field field) {
         return filters.stream()
-                .filter(filter -> filter.field() == TraceField.GUARDRAILS)
+                .filter(filter -> filter.field() == field)
                 .findFirst()
                 .map(filter -> true);
     }

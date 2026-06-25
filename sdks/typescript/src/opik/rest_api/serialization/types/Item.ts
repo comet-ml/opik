@@ -3,29 +3,24 @@
 import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
-import { ItemImpact } from "./ItemImpact.js";
+import { ModelTiers } from "./ModelTiers.js";
 
 export const Item: core.serialization.ObjectSchema<serializers.Item.Raw, OpikApi.Item> = core.serialization.object({
-    id: core.serialization.string().optional(),
-    title: core.serialization.string().optional(),
-    body: core.serialization.string().optional(),
-    impact: ItemImpact.optional(),
-    estimatedSavingsTokens: core.serialization.property(
-        "estimated_savings_tokens",
-        core.serialization.number().optional(),
-    ),
-    docsUrl: core.serialization.property("docs_url", core.serialization.string().optional()),
-    relatedLaneKey: core.serialization.property("related_lane_key", core.serialization.string().optional()),
+    label: core.serialization.string().optional(),
+    totalTokens: core.serialization.property("total_tokens", core.serialization.number().optional()),
+    definitionTokens: core.serialization.property("definition_tokens", core.serialization.number().optional()),
+    usageTokens: core.serialization.property("usage_tokens", core.serialization.number().optional()),
+    byModel: core.serialization.property("by_model", core.serialization.list(ModelTiers).optional()),
+    count: core.serialization.number().optional(),
 });
 
 export declare namespace Item {
     export interface Raw {
-        id?: string | null;
-        title?: string | null;
-        body?: string | null;
-        impact?: ItemImpact.Raw | null;
-        estimated_savings_tokens?: number | null;
-        docs_url?: string | null;
-        related_lane_key?: string | null;
+        label?: string | null;
+        total_tokens?: number | null;
+        definition_tokens?: number | null;
+        usage_tokens?: number | null;
+        by_model?: ModelTiers.Raw[] | null;
+        count?: number | null;
     }
 }

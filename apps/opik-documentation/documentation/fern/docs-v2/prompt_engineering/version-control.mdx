@@ -22,11 +22,11 @@ You can create new versions from the Opik UI or from code using the SDK.
     1. Navigate to the **Prompt Library** for your project
     2. Open the prompt you want to edit
     3. Click **Edit** and update the template
-    4. Click **Save as new version**
+    4. Click **Create new version**
 
     The new version is available immediately.
   </Tab>
-  <Tab title="Python SDK" language="python">
+  <Tab title="Python SDK">
     Call `create_prompt` (or `create_chat_prompt`) again with the same `name` and the updated
     template — the SDK creates the next sequential version automatically:
 
@@ -52,7 +52,7 @@ You can create new versions from the Opik UI or from code using the SDK.
 
     If the template is identical to the latest version, no new version is created.
   </Tab>
-  <Tab title="TypeScript SDK" language="typescript">
+  <Tab title="TypeScript SDK">
     Call `createPrompt` (or `createChatPrompt`) again with the same `name` and the updated
     template — the SDK creates the next sequential version automatically:
 

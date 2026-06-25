@@ -28,6 +28,16 @@ Follow-up commits (preferred):
 ## PR Title
 `[<TICKET-KEY>] [COMPONENT] <type>: description`
 
+## Jira Key References (commit messages & PR body)
+The GitHub for Jira app links a PR to a ticket's Development panel whenever it finds an issue key matching `[A-Z][A-Z0-9]+-\d+` (project key, literal hyphen, digits) in the branch name, PR title, PR body, or any commit message. It matches on the regex alone — it cannot tell "this PR resolves the ticket" from "this just mentions it" — and the resulting link cannot be removed afterward. So free text must only contain hyphenated keys for tickets the PR actually resolves.
+
+- Tickets this PR **resolves** → keep the hyphen: `OPIK-1234`. Jira links/URLs are fine and wanted (you want these to link). A PR may resolve more than one ticket — list every resolved key this way.
+- Tickets **related but not resolved** in this PR (e.g. an escalation, or a fix that references an older ticket — anything not in the PR title or branch):
+  - Replace the hyphen with an underscore: `OPIK_7000`. The underscore breaks the literal `-` the scanner requires, so the key cannot match.
+  - Do **not** paste a Jira URL for them either — `.../browse/OPIK-7000` contains the hyphenated key and would link anyway. Backticks/parentheses do not help; only breaking the hyphen does.
+
+Branch name, PR title, and the PR template's `## Issues` section are unaffected — resolved keys use normal `OPIK-1234` there.
+
 ## Never
 - Commit directly to main
 - Include customer names in commits/PRs

@@ -2,7 +2,6 @@
 
 import type * as OpikApi from "../index.js";
 
-export interface SpendRecommendationsResponse {
-    totalSavingsTokens?: number;
-    items?: OpikApi.Item[];
+export interface UsageByWorkspaceProjectUserResponse {
+    breakdown?: OpikApi.WorkspaceProjectUserCount[];
 }

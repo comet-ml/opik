@@ -17,34 +17,34 @@ class TestDownloadCommand:
         runner = CliRunner()
         result = runner.invoke(cli, ["export", "--help"])
         assert result.exit_code == 0
-        assert "Export data from Opik workspace" in result.output
+        assert "Export data from an Opik project" in result.output
         assert "dataset" in result.output
-        assert "project" in result.output
+        assert "traces" in result.output
         assert "experiment" in result.output
 
     def test_export_dataset_help(self):
         """Test that the export dataset command shows help."""
         runner = CliRunner()
-        result = runner.invoke(cli, ["export", "default", "dataset", "--help"])
+        result = runner.invoke(cli, ["export", "default", "proj", "dataset", "--help"])
         assert result.exit_code == 0
         assert "Export a dataset by exact name" in result.output
         assert "--force" in result.output
 
-    def test_export_project_help(self):
-        """Test that the export project command shows help."""
+    def test_export_traces_help(self):
+        """Test that the export traces command shows help."""
         runner = CliRunner()
-        result = runner.invoke(cli, ["export", "default", "project", "--help"])
+        result = runner.invoke(cli, ["export", "default", "proj", "traces", "--help"])
         assert result.exit_code == 0
-        assert "Export a project by name or ID" in result.output
-        assert "NAME" in result.output
+        assert "Export the project's traces" in result.output
 
     def test_export_experiment_help(self):
         """Test that the export experiment command shows help."""
         runner = CliRunner()
-        result = runner.invoke(cli, ["export", "default", "experiment", "--help"])
+        result = runner.invoke(
+            cli, ["export", "default", "proj", "experiment", "--help"]
+        )
         assert result.exit_code == 0
         assert "Export an experiment by exact name" in result.output
-        assert "NAME" in result.output
 
 
 class TestUploadCommand:
@@ -55,35 +55,35 @@ class TestUploadCommand:
         runner = CliRunner()
         result = runner.invoke(cli, ["import", "--help"])
         assert result.exit_code == 0
-        assert "Import data to Opik workspace" in result.output
+        assert "Import data into an Opik project" in result.output
         assert "dataset" in result.output
-        assert "project" in result.output
+        assert "traces" in result.output
         assert "experiment" in result.output
 
     def test_import_dataset_help(self):
         """Test that the import dataset command shows help."""
         runner = CliRunner()
-        result = runner.invoke(cli, ["import", "default", "dataset", "--help"])
+        result = runner.invoke(cli, ["import", "default", "proj", "dataset", "--help"])
         assert result.exit_code == 0
-        assert "Import datasets from workspace/datasets directory" in result.output
+        assert "Import datasets from" in result.output
         assert "--dry-run" in result.output
 
-    def test_import_project_help(self):
-        """Test that the import project command shows help."""
+    def test_import_traces_help(self):
+        """Test that the import traces command shows help."""
         runner = CliRunner()
-        result = runner.invoke(cli, ["import", "default", "project", "--help"])
+        result = runner.invoke(cli, ["import", "default", "proj", "traces", "--help"])
         assert result.exit_code == 0
-        assert "Import projects from workspace/projects directory" in result.output
+        assert "Import the project's traces" in result.output
         assert "--dry-run" in result.output
 
     def test_import_experiment_help(self):
         """Test that the import experiment command shows help."""
         runner = CliRunner()
-        result = runner.invoke(cli, ["import", "default", "experiment", "--help"])
-        assert result.exit_code == 0
-        assert (
-            "Import experiments from workspace/experiments directory" in result.output
+        result = runner.invoke(
+            cli, ["import", "default", "proj", "experiment", "--help"]
         )
+        assert result.exit_code == 0
+        assert "Import experiments from" in result.output
         assert "--dry-run" in result.output
 
 

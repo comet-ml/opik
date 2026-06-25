@@ -273,8 +273,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     <endif>
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
-                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
-                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(uuid_from_time)> AND id >= :uuid_from_time
+                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time
+                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
                     <if(trace_filters)> AND <trace_filters> <endif>
                     <if(trace_feedback_scores_filters)>
                     AND id in (
@@ -1062,8 +1064,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             FROM traces final
             WHERE workspace_id = :workspace_id
                 <if(project_ids)> AND project_id IN :project_ids <endif>
-                <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
-                <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
+                <if(uuid_from_time)>AND id >= :uuid_from_time
+                AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
+                <if(uuid_to_time)>AND id \\<= :uuid_to_time
+                AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
             SETTINGS log_comment = '<log_comment>';
             """;
 
@@ -1074,8 +1078,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             WHERE workspace_id = :workspace_id
                 AND length(error_info) > 0
                 <if(project_ids)> AND project_id IN :project_ids <endif>
-                <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
-                <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
+                <if(uuid_from_time)>AND id >= :uuid_from_time
+                AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
+                <if(uuid_to_time)>AND id \\<= :uuid_to_time
+                AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
             SETTINGS log_comment = '<log_comment>';
             """;
 

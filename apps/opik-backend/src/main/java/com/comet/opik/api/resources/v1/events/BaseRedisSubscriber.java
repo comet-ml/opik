@@ -683,6 +683,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
      * Workspace/user a message belongs to, used to attribute error metrics. Mirrors the context
      * subclasses set into the Reactor context inside {@link #processEvent(Object)}.
      */
+    @Builder
     protected record MessageContext(String workspaceId, String workspaceName, String userName) {
         static final MessageContext UNKNOWN = new MessageContext(ErrorMetricsResolver.UNKNOWN,
                 ErrorMetricsResolver.UNKNOWN,

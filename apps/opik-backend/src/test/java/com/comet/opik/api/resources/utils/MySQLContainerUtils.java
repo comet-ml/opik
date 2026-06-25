@@ -11,11 +11,19 @@ public class MySQLContainerUtils {
         return newMySQLContainer(true);
     }
 
+    /**
+     * Creates a new MySQL test container.
+     * <p>
+     * Keeps {@link java.time.Instant} reads independent of the JVM default timezone: {@code connectionTimeZone}
+     * replaces the deprecated {@code serverTimezone} alias, and {@code forceConnectionTimeZoneToSession} pins the
+     * session {@code time_zone} to UTC.
+     */
     public static MySQLContainer newMySQLContainer(boolean reusable) {
         return new MySQLContainer(DockerImageName.parse("mysql:8.4.2"))
                 .withUrlParam("createDatabaseIfNotExist", "true")
                 .withUrlParam("rewriteBatchedStatements", "true")
-                .withUrlParam("serverTimezone", "UTC")
+                .withUrlParam("connectionTimeZone", "UTC")
+                .withUrlParam("forceConnectionTimeZoneToSession", "true")
                 .withDatabaseName("opik")
                 .withPassword("opik")
                 .withUsername("opik")

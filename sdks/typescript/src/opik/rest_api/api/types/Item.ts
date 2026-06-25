@@ -3,11 +3,10 @@
 import type * as OpikApi from "../index.js";
 
 export interface Item {
-    id?: string;
-    title?: string;
-    body?: string;
-    impact?: OpikApi.ItemImpact;
-    estimatedSavingsTokens?: number;
-    docsUrl?: string;
-    relatedLaneKey?: string;
+    label?: string;
+    totalTokens?: number;
+    definitionTokens?: number;
+    usageTokens?: number;
+    byModel?: OpikApi.ModelTiers[];
+    count?: number;
 }

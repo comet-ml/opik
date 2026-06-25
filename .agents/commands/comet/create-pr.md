@@ -75,6 +75,12 @@ This workflow will:
   #
   # Implements <TICKET-KEY>: <ticket summary>
   #
+  # Jira key convention (see git-workflow rule): the resolved ticket(s) keep the
+  # hyphen (OPIK-1234) — that's the whole point of the prefix. But for any OTHER
+  # ticket the message mentions but does NOT resolve (an escalation, a reference
+  # to an older ticket), write it with an underscore (OPIK_7000) so the GitHub
+  # for Jira scanner doesn't link it, and never paste its Jira URL.
+  #
   # Example: "[OPIK-2180] [DOCS] docs: add cursor git workflow rule"
   # Then commit (only if there are staged changes)
   if ! git diff --cached --quiet; then
@@ -177,7 +183,8 @@ This workflow will:
 - **Section guidance**:
   - **Details**: Implementation summary from git analysis (replace the HTML comment placeholder)
   - **Change checklist**: Auto-check based on file types changed (user-facing for UI changes, documentation for docs)
-  - **Issues**: Link to Jira ticket (e.g., `OPIK-2180`) or GitHub issue, or "NA" for hotfixes
+  - **Issues**: Link to Jira ticket (e.g., `OPIK-2180`) or GitHub issue, or "NA" for hotfixes. List every ticket this PR **resolves** here with a normal hyphenated key.
+  - **Jira key convention across the whole body** (see git-workflow rule): the GitHub for Jira app links any `OPIK-<digits>` it finds in the PR body to that ticket's Development panel, and the link can't be removed. So in **all** sections (Details, Testing, etc.) and in commit messages: tickets this PR **resolves** keep the hyphen (`OPIK-1234`) — links/URLs fine and wanted. Tickets **related but not resolved** here (escalations, references to older tickets — anything not in the title/branch) must be written with an underscore (`OPIK_7000`) and with **no** Jira URL (the URL contains the hyphenated key and links anyway). Apply this when generating every section below.
   - **AI-WATERMARK**: Fill with `AI-WATERMARK: yes`, then list: Tools (e.g., "Claude Code"), Model(s), Scope (e.g., "full implementation" or "assisted"), Human verification (e.g., "code review + manual testing")
   - **Testing**: Extract from commit messages or set based on test files changed (replace the HTML comment placeholder)
   - **Documentation**: List docs updated or set "N/A" if no documentation changes

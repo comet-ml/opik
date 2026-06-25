@@ -566,6 +566,7 @@ export enum PROVIDER_MODEL_TYPE {
   REKAAI_REKA_FLASH_3 = "rekaai/reka-flash-3",
   RELACE_RELACE_APPLY_3 = "relace/relace-apply-3",
   RELACE_RELACE_SEARCH = "relace/relace-search",
+  SAKANA_FUGU_ULTRA = "sakana/fugu-ultra",
   SAO10K_L3_EURYALE_70B = "sao10k/l3-euryale-70b",
   SAO10K_L3_LUNARIS_8B = "sao10k/l3-lunaris-8b",
   SAO10K_L3_1_70B_HANAMI_X1 = "sao10k/l3.1-70b-hanami-x1",

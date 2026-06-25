@@ -9,10 +9,12 @@ export const ProjectRetrieveDetailed: core.serialization.Schema<
     OpikApi.ProjectRetrieveDetailed
 > = core.serialization.object({
     name: core.serialization.string(),
+    includeStats: core.serialization.boolean().optional(),
 });
 
 export declare namespace ProjectRetrieveDetailed {
     export interface Raw {
         name: string;
+        includeStats?: boolean | null;
     }
 }

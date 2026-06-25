@@ -7,7 +7,7 @@ import pytest
 import opik
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.integrations.openai import track_openai
-from opik.types import ErrorInfoDict
+from opik.types import ErrorInfoDict, LLMProvider
 
 from .constants import MODEL_FOR_TESTS, EXPECTED_OPENAI_USAGE_LOGGED_FORMAT
 from ...testlib import (
@@ -107,6 +107,65 @@ def test_openai_client_responses_create__happyflow(
 
     llm_span_metadata = trace_tree.spans[0].metadata
     _assert_metadata_contains_required_keys(llm_span_metadata)
+
+
+def test_openai_responses_create__custom_provider__provider_logged_on_llm_span_but_usage_still_parsed_as_openai(
+    fake_backend,
+):
+    client = openai.OpenAI()
+    wrapped_client = track_openai(
+        openai_client=client,
+        provider=LLMProvider.ANTHROPIC,
+    )
+    messages = [
+        {"role": "user", "content": "Tell a fact"},
+    ]
+
+    _ = wrapped_client.responses.create(
+        model=MODEL_FOR_TESTS,
+        input=messages,
+        max_output_tokens=50,
+    )
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="responses_create",
+        input={"input": messages},
+        output={"output": ANY_BUT_NONE, "reasoning": ANY},
+        tags=["openai"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        project_name=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="llm",
+                name="responses_create",
+                input={"input": messages},
+                output={"output": ANY_BUT_NONE, "reasoning": ANY},
+                tags=["openai"],
+                metadata=ANY_DICT,
+                # Usage is still parsed with the OpenAI converter even though the
+                # provider label is overridden.
+                usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=ANY_BUT_NONE,
+                spans=[],
+                model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
+                provider="anthropic",
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
 def test_openai_responses_create__async_call_made_in_another_tracked_async_function__openai_span_attached_to_existing_trace(
