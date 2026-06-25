@@ -1,10 +1,10 @@
-import atexit
 import contextvars
 import copy
 import datetime
 import functools
 import json
 import logging
+import weakref
 from typing import (
     Any,
     Dict,
@@ -72,6 +72,7 @@ from .. import (
 from ..healthcheck import connection_monitor, connection_probe
 from ..message_processing import (
     messages,
+    streamer,
     streamer_constructors,
     message_queue,
     permissions,
@@ -108,6 +109,20 @@ LOGGER = logging.getLogger(__name__)
 T = TypeVar("T")
 _ConfigT = TypeVar("_ConfigT", bound=Config)
 QueueT = TypeVar("QueueT", TracesAnnotationQueue, ThreadsAnnotationQueue)
+
+
+def _shutdown_streamer(
+    message_streamer: streamer.Streamer, flush_timeout: Optional[int]
+) -> None:
+    """Release the streamer (and its connection-monitor thread) when the owning
+    ``Opik`` client is garbage-collected or the process exits.
+
+    Registered via ``weakref.finalize``, so it must capture the streamer rather
+    than the client: holding a reference to the client would keep it alive and
+    defeat the garbage-collection-based cleanup. ``streamer.close()`` is
+    idempotent, so an explicit ``Opik.end()`` followed by this finalizer is safe.
+    """
+    message_streamer.close(flush_timeout)
 
 
 class Opik:
@@ -162,7 +177,13 @@ class Opik:
         self._initialize_streamer(
             use_batching=self._use_batching,
         )
-        atexit.register(self.end, timeout=self._flush_timeout)
+        # Release the connection-monitor thread when this client is dropped/GC'd,
+        # not only on an explicit end() or at process exit. weakref.finalize also
+        # fires at interpreter exit, so it fully replaces the previous
+        # atexit.register(self.end, ...) which kept the client alive (defeating GC).
+        self._finalizer = weakref.finalize(
+            self, _shutdown_streamer, self._streamer, self._flush_timeout
+        )
 
     @property
     def config(self) -> opik_config.OpikConfig:
@@ -1948,6 +1969,7 @@ class Opik:
         """
         timeout = timeout if timeout is not None else self._flush_timeout
         self._streamer.close(timeout, flush=flush)
+        self._finalizer.detach()
 
     def flush(self, timeout: Optional[int] = None) -> bool:
         """

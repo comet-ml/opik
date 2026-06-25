@@ -1,19 +1,66 @@
+import gc
 import json
+import threading
 from typing import List
 
 import pytest
 from unittest.mock import patch, MagicMock, Mock
 
+from opik import synchronization
 from opik.api_objects import opik_client
 from opik.api_objects.dataset import Dataset
 from opik.api_objects.dataset.test_suite import TestSuite
 from opik.api_objects import prompt as prompt_module
 from opik.api_objects.prompt import client as prompt_client_module
 from opik.message_processing import messages
+from opik.message_processing.replay import replay_manager
 from opik.types import BatchFeedbackScoreDict
 from opik import context_storage
 from opik.api_objects.trace import trace_data as trace_data_mod
 from opik.api_objects.span import span_data as span_data_mod
+
+
+def _alive_connection_monitor_threads() -> int:
+    return sum(
+        1
+        for thread in threading.enumerate()
+        if isinstance(thread, replay_manager.ReplayManager) and thread.is_alive()
+    )
+
+
+def test_opik_client__dropped_without_explicit_end__connection_monitor_thread_released():
+    baseline = _alive_connection_monitor_threads()
+
+    clients = [opik_client.Opik() for _ in range(5)]
+    assert _alive_connection_monitor_threads() == baseline + 5
+
+    del clients
+    gc.collect()
+
+    released = synchronization.until(
+        lambda: _alive_connection_monitor_threads() <= baseline,
+        max_try_seconds=10,
+    )
+    assert released, (
+        "Connection-monitor threads were not released after dropping the clients"
+    )
+
+
+def test_opik_client__explicit_end__connection_monitor_thread_released():
+    baseline = _alive_connection_monitor_threads()
+
+    client = opik_client.Opik()
+    assert _alive_connection_monitor_threads() == baseline + 1
+
+    client.end(flush=False)
+
+    released = synchronization.until(
+        lambda: _alive_connection_monitor_threads() <= baseline,
+        max_try_seconds=10,
+    )
+    assert released, (
+        "Connection-monitor thread was not released after an explicit end()"
+    )
 
 
 @pytest.mark.parametrize(
