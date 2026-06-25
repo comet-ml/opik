@@ -26,7 +26,6 @@ type SignalsStatsCardsProps = {
   openIssues: number;
   resolved: number;
   isPending: boolean;
-  // No completed diagnostic yet → show a placeholder dash instead of zeros.
   hasData: boolean;
 };
 

@@ -22,6 +22,7 @@ import {
   MENU_ITEM_TYPE,
   MenuItemGroup,
 } from "@/v2/layout/SideBar/MenuItem/SidebarMenuItem";
+import DiagnosticsNavBadge from "@/v2/layout/SideBar/MenuItem/DiagnosticsNavBadge";
 const getMenuItems = ({
   projectId,
   canViewExperiments,
@@ -101,6 +102,7 @@ const getMenuItems = ({
                 icon: Radar,
                 label: "Diagnostics",
                 disabled: !projectPrefix,
+                badge: DiagnosticsNavBadge,
               },
             ]
           : []),

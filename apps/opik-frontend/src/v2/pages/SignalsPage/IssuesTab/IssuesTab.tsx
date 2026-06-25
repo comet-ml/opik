@@ -32,7 +32,6 @@ import IssueDetail from "@/v2/pages/SignalsPage/IssuesTab/IssueDetail";
 import IssueSeverityBadge from "@/v2/pages/SignalsPage/IssuesTab/IssueSeverityBadge";
 import IssuesSkeleton from "@/v2/pages/SignalsPage/IssuesTab/IssuesSkeleton";
 
-// Sort values map to the backend's sortable fields (last_seen, total_occurrences).
 const SORT_OPTIONS: { value: string; label: string; sorting: Sorting }[] = [
   {
     value: "last_seen",
@@ -45,8 +44,6 @@ const SORT_OPTIONS: { value: string; label: string; sorting: Sorting }[] = [
     sorting: [{ id: "total_occurrences", desc: true }],
   },
   {
-    // Severity is an enum ordered critical→low, so ascending surfaces the most
-    // severe issues first.
     value: "severity",
     label: "By severity",
     sorting: [{ id: "severity", desc: false }],
@@ -61,16 +58,6 @@ const RUNNING_DESC =
 const DETAIL_SUBTITLE =
   "You'll see a summary, affected traces, and Ollie's suggested fix.";
 
-// ---------------------------------------------------------------------------
-// Shared layout pieces — the two columns and small building blocks reused
-// across the loading / running / empty / populated states, so the open and
-// resolved views render through one flexible code path instead of duplicated
-// markup.
-// ---------------------------------------------------------------------------
-
-// Left column: bordered card with a header (title + optional actions) and a
-// body. The header reuses the page (external container) color from the design
-// system so it blends with the surrounding chrome.
 const ListColumn: React.FC<{
   title: React.ReactNode;
   actions?: React.ReactNode;
@@ -91,14 +78,10 @@ const ListColumn: React.FC<{
   </div>
 );
 
-// Right column: bordered card holding the selected issue's detail, or a
-// placeholder when nothing is selected (loading / empty list states).
 const DetailColumn: React.FC<{
   issue?: AgentInsightsIssue;
   projectId: string;
 }> = ({ issue, projectId }) => (
-  // No fixed height: flex-1 fills width in the wide row and height in the
-  // compact column; min-h-0 lets the inner body scroll in both.
   <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border bg-background">
     {issue ? (
       <IssueDetail issue={issue} projectId={projectId} />
@@ -108,7 +91,6 @@ const DetailColumn: React.FC<{
   </div>
 );
 
-// 28px colored tile fronting the running banner and empty-state messages.
 const IconTile: React.FC<{ className?: string; children: React.ReactNode }> = ({
   className,
   children,
@@ -123,16 +105,12 @@ const IconTile: React.FC<{ className?: string; children: React.ReactNode }> = ({
   </div>
 );
 
-// Indeterminate "running" bar — a fixed-width fill sliding across the track.
 const RunningBar: React.FC = () => (
   <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-muted">
     <div className="absolute inset-y-0 left-0 w-2/5 animate-progress-indeterminate rounded-full bg-[#A78BFA]" />
   </div>
 );
 
-// Centered status message shown in the list column when there are no rows
-// (running first diagnostic / nothing resolved / all clear). `className` tints
-// the background; `children` holds the trailing action (button / progress bar).
 const ListEmptyState: React.FC<{
   icon: React.ReactNode;
   title: string;
@@ -152,7 +130,6 @@ const ListEmptyState: React.FC<{
   </div>
 );
 
-// Empty detail pane (right column) shown when no issue is selected.
 const DetailPlaceholder: React.FC = () => {
   const { themeMode } = useTheme();
   const Icon =
@@ -161,7 +138,6 @@ const DetailPlaceholder: React.FC = () => {
       : EmptyIssueDetailsIcon;
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
-      {/* Light icon's pedestal is currentColor; the dark variant is self-colored. */}
       <Icon className="h-[68px] w-[63px] text-[#F3F4FE]" />
       <div className="flex flex-col gap-1">
         <span className="comet-body-s-accented text-foreground">
@@ -178,12 +154,8 @@ const DetailPlaceholder: React.FC = () => {
 type IssuesTabProps = {
   projectId: string;
   showResolved?: boolean;
-  // A diagnostic is in flight — shown as the first-run progress state when no
-  // issues exist yet, or as a banner above an existing list.
   isRunning?: boolean;
-  // Trigger a new run (used by the "All clear" state's link).
   onRunDiagnostic?: () => void;
-  // Switch back to the open-issues view (the resolved-view back arrow / link).
   onShowOpenIssues?: () => void;
 };
 
@@ -220,14 +192,11 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
       page: 1,
       size: PAGE_SIZE,
     },
-    // Keep the current list visible while a re-sort/refetch is in flight so the
-    // layout doesn't collapse to the loader and jump.
     { placeholderData: keepPreviousData },
   );
 
   const issues = useMemo(() => data?.content ?? [], [data]);
 
-  // Default selection: first issue once data is available.
   useEffect(() => {
     if (
       issues.length > 0 &&
@@ -245,14 +214,9 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
   const handleSelect = (issue: AgentInsightsIssue) =>
     setActiveIssueId(issue.id);
 
-  // Below lg the two-pane collapses: the list becomes a dropdown and the report
-  // shows beneath it (mirrors the prompt version-history responsive pattern).
   const isWide = useMediaQuery("(min-width: 1024px)");
   const [listOpen, setListOpen] = useState(false);
 
-  // The list column is always titled "Issues", with a count for the current
-  // view (open vs resolved) since the stat cards only summarize open findings.
-  // The resolved view is named by the page header (with its own back arrow).
   const issueCount = data?.total ?? issues.length;
   const titleNode = (
     <span className="comet-body-xs-accented">
@@ -285,8 +249,6 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
 
   const hasIssues = issues.length > 0;
 
-  // List body: the scrollable rows (with an optional running banner) when we
-  // have issues, otherwise the matching centered status message.
   const renderListBody = () => {
     if (hasIssues) {
       return (
@@ -321,7 +283,6 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
       );
     }
 
-    // A diagnostic is in flight and nothing is reported yet → first-run progress.
     if (isRunning) {
       return (
         <ListEmptyState
@@ -339,7 +300,6 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
       );
     }
 
-    // Resolved tab with nothing resolved yet.
     if (showResolved) {
       return (
         <ListEmptyState
@@ -367,7 +327,6 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
       );
     }
 
-    // Diagnostics ran but found no open issues → all clear.
     return (
       <ListEmptyState
         className="bg-[#BAE6FD1A]"
@@ -396,9 +355,6 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
 
   const detail = <DetailColumn issue={activeIssue} projectId={projectId} />;
 
-  // Compact (< lg): an empty state is a single full-width card (no list to
-  // collapse, no issue selected); otherwise the list collapses into a dropdown
-  // above the report.
   if (!isWide) {
     if (!hasIssues) {
       return (
@@ -434,8 +390,6 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
             align="start"
             className="max-h-[60vh] w-[var(--radix-dropdown-menu-trigger-width)] overflow-y-auto p-0"
             onInteractOutside={(e) => {
-              // Keep the panel open while using the nested sort Select — its
-              // options render in a separate popper portal counted as "outside".
               const target = e.target as HTMLElement | null;
               if (target?.closest("[data-radix-popper-content-wrapper]")) {
                 e.preventDefault();
@@ -466,9 +420,6 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
     );
   }
 
-  // Wide (lg+): persistent two-pane. Handles empty states too — the list shows
-  // the empty message and the report column shows its placeholder. Sorting
-  // shows only in the open view, once there are issues to sort.
   return (
     <div className="flex min-h-0 flex-1 gap-2">
       <ListColumn
