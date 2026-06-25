@@ -134,21 +134,6 @@ public class OnlineScoringSampler {
     }
 
     /**
-     * Subscribes the reactive enqueue, seeding the reactive context with the workspace so the publisher's
-     * enqueue metric is labelled with it. Fire-and-forget: enqueueing is a side effect of sampling and must
-     * not block the sampler.
-     */
-    private void publishSampled(List<?> messages, AutomationRuleEvaluatorType type, String workspaceId,
-            String workspaceName) {
-        onlineScorePublisher.enqueueMessage(messages, type)
-                .contextWrite(ctx -> ctx
-                        .put(RequestContext.WORKSPACE_ID, workspaceId)
-                        .put(RequestContext.WORKSPACE_NAME, StringUtils.defaultIfBlank(workspaceName, workspaceId)))
-                .subscribe(unused -> {
-                }, error -> log.error("Error enqueueing sampled online-scoring messages into redis", error));
-    }
-
-    /**
      * Listen for trace batches to check for existent Automation Rules to score them. It samples the trace batch and
      * enqueues the sample into Redis Stream.
      *
@@ -272,8 +257,8 @@ public class OnlineScoringSampler {
                         logSampledTrace(evaluator, messages, scorableTraces.size());
                         if (!messages.isEmpty()) {
                             recordDecision(workspaceId, workspaceName, evaluator, DECISION_SAMPLED, messages.size());
-                            publishSampled(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE, workspaceId,
-                                    workspaceName);
+                            OnlineScoringSamplerSupport.publishSampled(onlineScorePublisher, log, messages,
+                                    AutomationRuleEvaluatorType.LLM_AS_JUDGE, workspaceId, workspaceName);
                         }
                     }
                     case USER_DEFINED_METRIC_PYTHON -> {
@@ -286,8 +271,9 @@ public class OnlineScoringSampler {
                             if (!messages.isEmpty()) {
                                 recordDecision(workspaceId, workspaceName, evaluator, DECISION_SAMPLED,
                                         messages.size());
-                                publishSampled(messages, AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON,
-                                        workspaceId, workspaceName);
+                                OnlineScoringSamplerSupport.publishSampled(onlineScorePublisher, log, messages,
+                                        AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON, workspaceId,
+                                        workspaceName);
                             }
                         } else {
                             log.warn("Python evaluator is disabled. Skipping sampling for evaluator type '{}'",
