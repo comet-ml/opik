@@ -151,6 +151,63 @@ def test_install_via_json_file__non_object_root__returns_manual_instructions(tmp
     assert "some-key" not in result.detail
 
 
+def _read_target(tmp_path, top_level_key="mcpServers"):
+    return targets.HostTarget(
+        key="probe",
+        display_name="Probe",
+        config_path=lambda: tmp_path / "config.json",
+        top_level_key=top_level_key,
+        is_detected=lambda: True,
+        install=lambda spec: None,
+    )
+
+
+def test_read_registered_block__returns_recorded_block(tmp_path):
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps({"mcpServers": {"opik-mcp": {"type": "http", "url": "https://x"}}}),
+        encoding="utf-8",
+    )
+
+    block = targets.read_registered_block(_read_target(tmp_path))
+
+    assert block == {"type": "http", "url": "https://x"}
+
+
+def test_read_registered_block__missing_file__returns_none(tmp_path):
+    assert targets.read_registered_block(_read_target(tmp_path)) is None
+
+
+def test_read_registered_block__no_entry__returns_none(tmp_path):
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps({"mcpServers": {"other-server": {}}}), encoding="utf-8"
+    )
+
+    assert targets.read_registered_block(_read_target(tmp_path)) is None
+
+
+def test_read_registered_block__malformed_json__returns_none(tmp_path):
+    config_path = tmp_path / "config.json"
+    config_path.write_text("{ not json", encoding="utf-8")
+
+    assert targets.read_registered_block(_read_target(tmp_path)) is None
+
+
+def test_read_registered_block__honors_top_level_key(tmp_path):
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps({"servers": {"opik-mcp": {"type": "http", "url": "https://y"}}}),
+        encoding="utf-8",
+    )
+
+    # Looking under "mcpServers" finds nothing; under "servers" finds the block.
+    assert targets.read_registered_block(_read_target(tmp_path)) is None
+    assert targets.read_registered_block(
+        _read_target(tmp_path, top_level_key="servers")
+    ) == {"type": "http", "url": "https://y"}
+
+
 def test_install_via_json_file__os_error__returns_failed_result(monkeypatch, tmp_path):
     config_path = tmp_path / "mcp.json"
 

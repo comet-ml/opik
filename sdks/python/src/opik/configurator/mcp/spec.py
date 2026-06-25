@@ -5,11 +5,14 @@ is registered with. Host-install code (``targets.py``) consumes specs only
 through :class:`McpServerSpec`, so adding a new transport or auth mechanism does
 not require changing any per-host install path.
 
-Today only a local stdio server (run via ``uvx opik-mcp``, authenticated with an
-API key passed through the environment) is supported. When Opik Cloud hosts a
-remote MCP server with browser-based OAuth, add a ``RemoteServerSpec`` here and a
-``McpConnectionMode.REMOTE`` branch in ``install._create_server_spec``; the host
-targets will keep working unchanged.
+Two transports are supported:
+
+- :class:`RemoteServerSpec` — the Opik-hosted MCP server reached over HTTP, with
+  the AI host handling browser-based OAuth. Used when the configured deployment
+  advertises an MCP auth server (see ``detection.detect_hosted_mcp_server``).
+- :class:`StdioServerSpec` — a local server run via ``uvx opik-mcp`` and
+  authenticated with an API key passed through the environment. Used as the
+  fallback when no hosted server is available.
 """
 
 import abc
@@ -47,12 +50,14 @@ def redact_block_for_display(block: Dict[str, Any]) -> Dict[str, Any]:
 class McpConnectionMode(enum.Enum):
     """How the configured MCP server connects to Opik.
 
-    Only ``LOCAL_STDIO`` exists today. A ``REMOTE`` member (Opik Cloud-hosted
-    server reached over HTTP with browser OAuth) is the planned addition, and it
-    applies to Opik Cloud only — localhost and self-hosted deployments always run
-    the MCP server locally. See ``install._available_connection_modes``.
+    ``REMOTE`` is the Opik-hosted server reached over HTTP with browser OAuth; it
+    is used whenever the configured deployment advertises an MCP auth server.
+    ``LOCAL_STDIO`` is the ``uvx opik-mcp`` fallback used otherwise. The choice is
+    made by probing the deployment, not by deployment type — see
+    ``install.setup_mcp_server`` and ``detection.detect_hosted_mcp_server``.
     """
 
+    REMOTE = "remote"
     LOCAL_STDIO = "local_stdio"
 
 
@@ -64,6 +69,23 @@ class McpServerSpec(abc.ABC):
     @abc.abstractmethod
     def to_claude_add_args(self) -> List[str]:
         """Arguments appended after ``claude mcp add --scope user``."""
+
+
+@dataclasses.dataclass
+class RemoteServerSpec(McpServerSpec):
+    """The Opik-hosted MCP server, reached over HTTP.
+
+    No credentials are written into the host config: the AI host performs the
+    OAuth browser flow against the deployment's auth server on first connection.
+    """
+
+    url: str
+
+    def to_block(self) -> Dict[str, Any]:
+        return {"type": "http", "url": self.url}
+
+    def to_claude_add_args(self) -> List[str]:
+        return ["--transport", "http", SERVER_NAME, self.url]
 
 
 @dataclasses.dataclass

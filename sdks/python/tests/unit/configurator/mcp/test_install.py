@@ -1,9 +1,10 @@
+import pathlib
 import subprocess
 from unittest import mock
 
 import pytest
 
-from opik.configurator.mcp import install, targets
+from opik.configurator.mcp import install, spec, targets
 
 
 @pytest.fixture(autouse=True)
@@ -16,6 +17,17 @@ def prefetch_run(monkeypatch):
     return run_mock
 
 
+@pytest.fixture(autouse=True)
+def no_hosted_mcp(monkeypatch):
+    """Default every test to the uvx fallback: no hosted MCP server detected.
+
+    Tests that exercise the remote path override this within the test body.
+    """
+    monkeypatch.setattr(
+        install.mcp_detection, "detect_hosted_mcp_server", lambda **kwargs: None
+    )
+
+
 def _make_args(**overrides):
     args = dict(
         api_key="some-key",
@@ -24,6 +36,8 @@ def _make_args(**overrides):
         api_url="https://www.comet.com/opik/api/",
         use_local=False,
         self_hosted_comet=False,
+        check_tls_certificate=True,
+        force_local_server=False,
     )
     args.update(overrides)
     return args
@@ -33,6 +47,8 @@ def _target(key, detected, install_fn):
     return targets.HostTarget(
         key=key,
         display_name=key,
+        config_path=lambda: pathlib.Path("/dev/null"),
+        top_level_key="mcpServers",
         is_detected=lambda: detected,
         install=install_fn,
     )
@@ -273,3 +289,72 @@ def test_setup_mcp_server__install_failure__is_reported(monkeypatch):
     install_spy.assert_called_once()
     logged = " ".join(str(call) for call in logger_spy.warning.call_args_list)
     assert "could not write config" in logged
+
+
+def test_setup_mcp_server__hosted_detected__installs_remote_spec(monkeypatch):
+    monkeypatch.setattr(
+        install.mcp_detection,
+        "detect_hosted_mcp_server",
+        lambda **kwargs: "https://dev.comet.com/opik/api/v1/mcp",
+    )
+    install_spy = mock.Mock(return_value=targets.InstallResult("Cursor", True, "Added"))
+    monkeypatch.setattr(targets, "HOST_TARGETS", [_target("cursor", True, install_spy)])
+    monkeypatch.setattr("builtins.input", lambda message: "y")
+
+    install.setup_mcp_server(**_make_args())
+
+    install_spy.assert_called_once()
+    server_spec = install_spy.call_args.args[0]
+    assert isinstance(server_spec, spec.RemoteServerSpec)
+    assert server_spec.url == "https://dev.comet.com/opik/api/v1/mcp"
+
+
+def test_setup_mcp_server__hosted_detected__does_not_prefetch(
+    monkeypatch, prefetch_run
+):
+    monkeypatch.setattr(
+        install.mcp_detection,
+        "detect_hosted_mcp_server",
+        lambda **kwargs: "https://dev.comet.com/opik/api/v1/mcp",
+    )
+    install_spy = mock.Mock(return_value=targets.InstallResult("Cursor", True, "Added"))
+    monkeypatch.setattr(targets, "HOST_TARGETS", [_target("cursor", True, install_spy)])
+    monkeypatch.setattr("builtins.input", lambda message: "y")
+
+    install.setup_mcp_server(**_make_args())
+
+    prefetch_run.assert_not_called()
+    install_spy.assert_called_once()
+
+
+def test_setup_mcp_server__force_local__skips_probe_and_installs_uvx(monkeypatch):
+    monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
+    detect_spy = mock.Mock(return_value="https://dev.comet.com/opik/api/v1/mcp")
+    monkeypatch.setattr(install.mcp_detection, "detect_hosted_mcp_server", detect_spy)
+    install_spy = mock.Mock(return_value=targets.InstallResult("Cursor", True, "Added"))
+    monkeypatch.setattr(targets, "HOST_TARGETS", [_target("cursor", True, install_spy)])
+    monkeypatch.setattr("builtins.input", lambda message: "y")
+
+    install.setup_mcp_server(**_make_args(force_local_server=True))
+
+    detect_spy.assert_not_called()
+    install_spy.assert_called_once()
+    server_spec = install_spy.call_args.args[0]
+    assert isinstance(server_spec, spec.StdioServerSpec)
+
+
+def test_setup_mcp_server__hosted_detected__no_uvx_still_installs(monkeypatch):
+    """The remote path has no `uvx` prerequisite, unlike the local fallback."""
+    monkeypatch.setattr(install.shutil, "which", lambda name: None)
+    monkeypatch.setattr(
+        install.mcp_detection,
+        "detect_hosted_mcp_server",
+        lambda **kwargs: "https://dev.comet.com/opik/api/v1/mcp",
+    )
+    install_spy = mock.Mock(return_value=targets.InstallResult("Cursor", True, "Added"))
+    monkeypatch.setattr(targets, "HOST_TARGETS", [_target("cursor", True, install_spy)])
+    monkeypatch.setattr("builtins.input", lambda message: "y")
+
+    install.setup_mcp_server(**_make_args())
+
+    install_spy.assert_called_once()

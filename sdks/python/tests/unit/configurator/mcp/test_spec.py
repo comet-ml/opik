@@ -30,6 +30,24 @@ def test_stdio_server_spec__to_claude_add_args__transport_env_and_command():
     assert args[separator_index + 1 :] == ["/usr/bin/uvx", "opik-mcp"]
 
 
+def test_remote_server_spec__to_block__produces_http_json():
+    server_spec = mcp_spec.RemoteServerSpec(url="https://dev.comet.com/opik/api/v1/mcp")
+    assert server_spec.to_block() == {
+        "type": "http",
+        "url": "https://dev.comet.com/opik/api/v1/mcp",
+    }
+
+
+def test_remote_server_spec__to_claude_add_args__http_transport_and_url():
+    server_spec = mcp_spec.RemoteServerSpec(url="https://dev.comet.com/opik/api/v1/mcp")
+    assert server_spec.to_claude_add_args() == [
+        "--transport",
+        "http",
+        mcp_spec.SERVER_NAME,
+        "https://dev.comet.com/opik/api/v1/mcp",
+    ]
+
+
 def test_redact_block_for_display__masks_secret_env_values():
     block = _stdio_spec().to_block()
 
