@@ -43,6 +43,8 @@ _paginate helper
   - Empty first page
 """
 
+import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -50,6 +52,9 @@ import pytest
 from opik.cli.export_manifest import ExportManifest
 from opik.cli.migration_manifest import MigrationManifest
 
+_PROJECT = "proj"
+_PROJECT_ID = "proj-id"
+_WORKSPACE = "ws"
 _IMPORT_MODULE = "opik.cli.imports.all"
 _EXPORT_MODULE = "opik.cli.exports.all"
 
@@ -69,6 +74,37 @@ def _make_import_client() -> MagicMock:
 
 def _make_export_client() -> MagicMock:
     return MagicMock()
+
+
+def _seed_project_meta(tmp_path: Path) -> Path:
+    """Create the on-disk project folder + project.json so import_all can resolve
+    the source project by its recorded name. Folders are keyed by id on disk; the
+    folder name is irrelevant — find_project_export_dir matches project.json's name.
+    """
+    proj = tmp_path / _WORKSPACE / "projects" / _PROJECT
+    proj.mkdir(parents=True, exist_ok=True)
+    (proj / "project.json").write_text(
+        json.dumps({"id": _PROJECT_ID, "name": _PROJECT})
+    )
+    return proj
+
+
+def _manifest_dir(tmp_path: Path) -> Path:
+    """Destination-keyed import-manifest dir for the default (no --to-project)
+    case, where the destination project == the source project name."""
+    from opik.cli.imports.utils import destination_manifest_dir
+
+    return destination_manifest_dir(
+        tmp_path / _WORKSPACE / "projects" / _PROJECT, _PROJECT
+    )
+
+
+def _fake_prepare_export_dir(client, output_path, workspace, project_name):
+    """Stand-in for prepare_project_export_dir that skips ID resolution (the
+    client is mocked) and returns a deterministic id-named project dir."""
+    project_dir = Path(output_path) / workspace / "projects" / _PROJECT_ID
+    project_dir.mkdir(parents=True, exist_ok=True)
+    return _PROJECT_ID, project_dir
 
 
 # ---------------------------------------------------------------------------
@@ -326,6 +362,127 @@ class TestMigrationManifest:
 
 
 # ---------------------------------------------------------------------------
+# resolve_import_base_path
+# ---------------------------------------------------------------------------
+
+
+class TestResolveImportBasePath:
+    """Import base-path resolution: workspace-scoped with cross-workspace fallback."""
+
+    def test_prefers_workspace_segment_when_present(self, tmp_path):
+        from opik.cli.imports.utils import resolve_import_base_path
+
+        (tmp_path / "ws" / "projects").mkdir(parents=True)
+        # Same-workspace round-trip: <path>/<workspace>/projects exists.
+        assert resolve_import_base_path(str(tmp_path), "ws") == tmp_path / "ws"
+
+    def test_falls_back_to_path_for_cross_workspace(self, tmp_path):
+        from opik.cli.imports.utils import resolve_import_base_path
+
+        # Data exported from workspace "src" lives at <path>/projects; importing
+        # into workspace "dst" (no <path>/dst/projects) falls back to <path>.
+        (tmp_path / "projects").mkdir(parents=True)
+        assert resolve_import_base_path(str(tmp_path), "dst") == tmp_path
+
+    def test_falls_back_when_nothing_present(self, tmp_path):
+        from opik.cli.imports.utils import resolve_import_base_path
+
+        # Neither layout exists → return <path> (caller surfaces a not-found error).
+        assert resolve_import_base_path(str(tmp_path), "ws") == tmp_path
+
+
+# ---------------------------------------------------------------------------
+# setup_import_manifest
+# ---------------------------------------------------------------------------
+
+
+class TestSetupImportManifest:
+    """The per-destination manifest must key files relative to project_root even
+    though the SQLite db lives in a per-destination subdir."""
+
+    def test_setup_import_manifest__files_under_project_root__allows_marking_files_completed_without_value_error(
+        self, tmp_path
+    ):
+        from opik.cli.imports.utils import (
+            setup_import_manifest,
+            destination_manifest_dir,
+        )
+
+        project_root = tmp_path / _WORKSPACE / "projects" / _PROJECT
+        (project_root / "datasets").mkdir(parents=True)
+        ds_file = project_root / "datasets" / "dataset_x.json"
+        ds_file.write_text("{}")
+
+        manifest, already_completed = setup_import_manifest(
+            project_root, "dest", dry_run=False, force=False
+        )
+        assert manifest is not None
+        assert not already_completed
+
+        # Regression: file keys are relative to project_root, so marking a file
+        # under project_root/datasets must not raise ValueError.
+        manifest.mark_file_completed(ds_file)
+        manifest.save()
+        assert manifest.is_file_completed(ds_file)
+
+        # The SQLite db lives in the per-destination subdir, not at project_root.
+        assert (
+            destination_manifest_dir(project_root, "dest") / "migration_manifest.db"
+        ).exists()
+        assert not (project_root / "migration_manifest.db").exists()
+
+    def test_setup_import_manifest__dry_run__returns_no_manifest(self, tmp_path):
+        from opik.cli.imports.utils import setup_import_manifest
+
+        project_root = tmp_path / _WORKSPACE / "projects" / _PROJECT
+        project_root.mkdir(parents=True)
+        manifest, already_completed = setup_import_manifest(
+            project_root, "dest", dry_run=True, force=False
+        )
+        assert manifest is None
+        assert not already_completed
+
+    def test_setup_import_manifest__force_on_fresh_run__does_not_warn_about_discarding(
+        self, tmp_path, capsys
+    ):
+        from opik.cli.imports.utils import setup_import_manifest
+
+        project_root = tmp_path / _WORKSPACE / "projects" / _PROJECT
+        project_root.mkdir(parents=True)
+        # No manifest exists yet — constructing it must not make --force think it
+        # is discarding a prior manifest.
+        manifest, already_completed = setup_import_manifest(
+            project_root, "dest", dry_run=False, force=True
+        )
+        assert manifest is not None
+        assert not already_completed
+        assert "discarding existing manifest" not in capsys.readouterr().out
+
+    def test_setup_import_manifest__force_with_existing_manifest__warns_and_resets(
+        self, tmp_path, capsys
+    ):
+        from opik.cli.imports.utils import setup_import_manifest
+
+        project_root = tmp_path / _WORKSPACE / "projects" / _PROJECT
+        project_root.mkdir(parents=True)
+        # First run creates and completes a manifest.
+        first, _ = setup_import_manifest(
+            project_root, "dest", dry_run=False, force=False
+        )
+        assert first is not None
+        first.complete()
+        capsys.readouterr()  # discard output so far
+
+        # A --force run with a pre-existing manifest discards it and proceeds.
+        second, already_completed = setup_import_manifest(
+            project_root, "dest", dry_run=False, force=True
+        )
+        assert second is not None
+        assert not already_completed  # reset() cleared the completed status
+        assert "discarding existing manifest" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
 # _merge_stats
 # ---------------------------------------------------------------------------
 
@@ -363,10 +520,11 @@ class TestImportAll:
 
     def test_fresh_run_calls_all_phases_and_completes_manifest(self, tmp_path):
         """A fresh import runs all four phases and marks the manifest completed."""
-        for d in ("datasets", "prompts", "projects", "experiments"):
-            (tmp_path / d).mkdir()
+        for d in ("datasets", "prompts", "experiments"):
+            (tmp_path / _WORKSPACE / "projects" / _PROJECT / d).mkdir(parents=True)
 
         client = _make_import_client()
+        _seed_project_meta(tmp_path)
 
         with (
             patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client),
@@ -378,7 +536,7 @@ class TestImportAll:
                 return_value={"prompts": 0},
             ),
             patch(
-                f"{_IMPORT_MODULE}.import_projects_from_directory", return_value={}
+                f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}
             ) as mock_proj,
             patch(
                 f"{_IMPORT_MODULE}.import_experiments_from_directory", return_value={}
@@ -388,8 +546,9 @@ class TestImportAll:
 
             import_all(
                 workspace="ws",
+                project_name=_PROJECT,
                 path=str(tmp_path),
-                include=["datasets", "prompts", "projects", "experiments"],
+                include=["datasets", "prompts", "traces", "experiments"],
                 dry_run=False,
                 force=False,
                 debug=False,
@@ -399,13 +558,14 @@ class TestImportAll:
         mock_proj.assert_called_once()
         mock_exp.assert_called_once()
 
-        m = MigrationManifest(tmp_path)
+        m = MigrationManifest(_manifest_dir(tmp_path))
         assert m.is_completed
 
     def test_dry_run_skips_manifest_and_flush(self, tmp_path):
         """Dry-run must not create a manifest or flush the client."""
-        (tmp_path / "datasets").mkdir()
+        (tmp_path / _WORKSPACE / "projects" / _PROJECT / "datasets").mkdir(parents=True)
         client = _make_import_client()
+        _seed_project_meta(tmp_path)
 
         with (
             patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client),
@@ -414,7 +574,7 @@ class TestImportAll:
                 f"{_IMPORT_MODULE}.import_prompts_from_directory",
                 return_value={"prompts": 0},
             ),
-            patch(f"{_IMPORT_MODULE}.import_projects_from_directory", return_value={}),
+            patch(f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}),
             patch(
                 f"{_IMPORT_MODULE}.import_experiments_from_directory", return_value={}
             ),
@@ -423,6 +583,7 @@ class TestImportAll:
 
             import_all(
                 workspace="ws",
+                project_name=_PROJECT,
                 path=str(tmp_path),
                 include=["datasets"],
                 dry_run=True,
@@ -430,16 +591,19 @@ class TestImportAll:
                 debug=False,
             )
 
-        assert not MigrationManifest.exists(tmp_path)
+        assert not MigrationManifest.exists(
+            tmp_path / _WORKSPACE / "projects" / _PROJECT
+        )
         client.flush.assert_not_called()
 
     def test_completed_manifest_returns_early_without_reimporting(self, tmp_path):
         """A completed manifest without --force causes immediate return."""
-        manifest = MigrationManifest(tmp_path)
+        manifest = MigrationManifest(_manifest_dir(tmp_path))
         manifest.start()
         manifest.complete()
 
         client = _make_import_client()
+        _seed_project_meta(tmp_path)
 
         with (
             patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client),
@@ -451,7 +615,7 @@ class TestImportAll:
                 return_value={"prompts": 0},
             ),
             patch(
-                f"{_IMPORT_MODULE}.import_projects_from_directory", return_value={}
+                f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}
             ) as mock_proj,
             patch(
                 f"{_IMPORT_MODULE}.import_experiments_from_directory", return_value={}
@@ -461,8 +625,9 @@ class TestImportAll:
 
             import_all(
                 workspace="ws",
+                project_name=_PROJECT,
                 path=str(tmp_path),
-                include=["datasets", "prompts", "projects", "experiments"],
+                include=["datasets", "prompts", "traces", "experiments"],
                 dry_run=False,
                 force=False,
                 debug=False,
@@ -474,12 +639,13 @@ class TestImportAll:
 
     def test_force_flag_resets_completed_manifest_and_reimports(self, tmp_path):
         """--force discards a completed manifest and runs all requested phases."""
-        (tmp_path / "datasets").mkdir()
-        manifest = MigrationManifest(tmp_path)
+        (tmp_path / _WORKSPACE / "projects" / _PROJECT / "datasets").mkdir(parents=True)
+        manifest = MigrationManifest(_manifest_dir(tmp_path))
         manifest.start()
         manifest.complete()
 
         client = _make_import_client()
+        _seed_project_meta(tmp_path)
 
         with (
             patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client),
@@ -490,7 +656,7 @@ class TestImportAll:
                 f"{_IMPORT_MODULE}.import_prompts_from_directory",
                 return_value={"prompts": 0},
             ),
-            patch(f"{_IMPORT_MODULE}.import_projects_from_directory", return_value={}),
+            patch(f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}),
             patch(
                 f"{_IMPORT_MODULE}.import_experiments_from_directory", return_value={}
             ),
@@ -499,6 +665,7 @@ class TestImportAll:
 
             import_all(
                 workspace="ws",
+                project_name=_PROJECT,
                 path=str(tmp_path),
                 include=["datasets"],
                 dry_run=False,
@@ -510,14 +677,15 @@ class TestImportAll:
 
     def test_resume_in_progress_manifest_runs_phases_and_completes(self, tmp_path):
         """An in_progress manifest is treated as a resume; phases run and manifest completes."""
-        (tmp_path / "datasets").mkdir()
-        (tmp_path / "prompts").mkdir()
+        (tmp_path / _WORKSPACE / "projects" / _PROJECT / "datasets").mkdir(parents=True)
+        (tmp_path / _WORKSPACE / "projects" / _PROJECT / "prompts").mkdir(parents=True)
 
         # Simulate an interrupted import
-        manifest = MigrationManifest(tmp_path)
+        manifest = MigrationManifest(_manifest_dir(tmp_path))
         manifest.start()
 
         client = _make_import_client()
+        _seed_project_meta(tmp_path)
 
         with (
             patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client),
@@ -528,7 +696,7 @@ class TestImportAll:
                 f"{_IMPORT_MODULE}.import_prompts_from_directory",
                 return_value={"prompts": 0},
             ) as mock_pr,
-            patch(f"{_IMPORT_MODULE}.import_projects_from_directory", return_value={}),
+            patch(f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}),
             patch(
                 f"{_IMPORT_MODULE}.import_experiments_from_directory", return_value={}
             ),
@@ -537,6 +705,7 @@ class TestImportAll:
 
             import_all(
                 workspace="ws",
+                project_name=_PROJECT,
                 path=str(tmp_path),
                 include=["datasets", "prompts"],
                 dry_run=False,
@@ -546,13 +715,14 @@ class TestImportAll:
 
         mock_ds.assert_called_once()
         mock_pr.assert_called_once()
-        m = MigrationManifest(tmp_path)
+        m = MigrationManifest(_manifest_dir(tmp_path))
         assert m.is_completed
 
     def test_include_filter_runs_only_specified_phases(self, tmp_path):
         """When include=['datasets'], only the dataset phase is called."""
-        (tmp_path / "datasets").mkdir()
+        (tmp_path / _WORKSPACE / "projects" / _PROJECT / "datasets").mkdir(parents=True)
         client = _make_import_client()
+        _seed_project_meta(tmp_path)
 
         with (
             patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client),
@@ -564,7 +734,7 @@ class TestImportAll:
                 return_value={"prompts": 0},
             ) as mock_pr,
             patch(
-                f"{_IMPORT_MODULE}.import_projects_from_directory", return_value={}
+                f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}
             ) as mock_proj,
             patch(
                 f"{_IMPORT_MODULE}.import_experiments_from_directory", return_value={}
@@ -574,6 +744,7 @@ class TestImportAll:
 
             import_all(
                 workspace="ws",
+                project_name=_PROJECT,
                 path=str(tmp_path),
                 include=["datasets"],
                 dry_run=False,
@@ -590,6 +761,7 @@ class TestImportAll:
         """If datasets/ does not exist, the dataset phase is silently skipped."""
         # Do NOT create (tmp_path / "datasets")
         client = _make_import_client()
+        _seed_project_meta(tmp_path)
 
         with (
             patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client),
@@ -600,7 +772,7 @@ class TestImportAll:
                 f"{_IMPORT_MODULE}.import_prompts_from_directory",
                 return_value={"prompts": 0},
             ),
-            patch(f"{_IMPORT_MODULE}.import_projects_from_directory", return_value={}),
+            patch(f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}),
             patch(
                 f"{_IMPORT_MODULE}.import_experiments_from_directory", return_value={}
             ),
@@ -609,6 +781,7 @@ class TestImportAll:
 
             import_all(
                 workspace="ws",
+                project_name=_PROJECT,
                 path=str(tmp_path),
                 include=["datasets"],
                 dry_run=False,
@@ -618,20 +791,24 @@ class TestImportAll:
 
         mock_ds.assert_not_called()
 
-    def test_flush_timeout_exits_with_code_1(self, tmp_path):
-        """If client.flush() returns False (timeout), import_all raises SystemExit(1)."""
-        (tmp_path / "datasets").mkdir()
+    def test_phase_errors_exit_with_code_1(self, tmp_path):
+        """If an importer reports *_errors, import_all exits non-zero (fail-fast)
+        rather than masking the failure with a 0 exit code."""
+        (tmp_path / _WORKSPACE / "projects" / _PROJECT / "datasets").mkdir(parents=True)
         client = _make_import_client()
-        client.flush.return_value = False  # simulate timeout
+        _seed_project_meta(tmp_path)
 
         with (
             patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client),
-            patch(f"{_IMPORT_MODULE}.import_datasets_from_directory", return_value={}),
+            patch(
+                f"{_IMPORT_MODULE}.import_datasets_from_directory",
+                return_value={"datasets": 1, "datasets_errors": 2},
+            ),
             patch(
                 f"{_IMPORT_MODULE}.import_prompts_from_directory",
                 return_value={"prompts": 0},
             ),
-            patch(f"{_IMPORT_MODULE}.import_projects_from_directory", return_value={}),
+            patch(f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}),
             patch(
                 f"{_IMPORT_MODULE}.import_experiments_from_directory", return_value={}
             ),
@@ -641,6 +818,143 @@ class TestImportAll:
 
             import_all(
                 workspace="ws",
+                project_name=_PROJECT,
+                path=str(tmp_path),
+                include=["datasets"],
+                dry_run=False,
+                force=False,
+                debug=False,
+            )
+
+        assert exc_info.value.code == 1
+
+    def test_failed_import_is_retryable_without_force(self, tmp_path):
+        """A failed import must not be recorded as completed: re-running without
+        ``--force`` must re-attempt the phases instead of short-circuiting on
+        "already completed". Verified through observable behavior (the importer
+        is invoked again on the second run) rather than the internal manifest.
+        """
+        (tmp_path / _WORKSPACE / "projects" / _PROJECT / "datasets").mkdir(parents=True)
+        client = _make_import_client()
+        _seed_project_meta(tmp_path)
+
+        from opik.cli.imports.all import import_all
+
+        def _run_import_datasets(datasets_result):
+            """Run `import_all` for the datasets phase with a patched importer.
+
+            Returns the dataset-importer mock so the caller can assert it was
+            invoked (i.e. the run was not short-circuited as already-completed).
+            """
+            mock_ds = MagicMock(return_value=datasets_result)
+            with (
+                patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client),
+                patch(f"{_IMPORT_MODULE}.import_datasets_from_directory", mock_ds),
+                patch(
+                    f"{_IMPORT_MODULE}.import_prompts_from_directory",
+                    return_value={"prompts": 0},
+                ),
+                patch(
+                    f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}
+                ),
+                patch(
+                    f"{_IMPORT_MODULE}.import_experiments_from_directory",
+                    return_value={},
+                ),
+            ):
+                import_all(
+                    workspace="ws",
+                    project_name=_PROJECT,
+                    path=str(tmp_path),
+                    include=["datasets"],
+                    dry_run=False,
+                    force=False,
+                    debug=False,
+                )
+            return mock_ds
+
+        # First run: the dataset import reports an error -> SystemExit(1).
+        with pytest.raises(SystemExit):
+            _run_import_datasets({"datasets": 0, "datasets_errors": 1})
+
+        # Second run (no --force): a clean dataset import must run AGAIN. If the
+        # failed run had wrongly marked the manifest completed, import_all would
+        # short-circuit and never call the importer.
+        mock_ds_ok = _run_import_datasets({"datasets": 1})
+        assert mock_ds_ok.called
+
+    def test_to_project_imports_are_independent(self, tmp_path):
+        """Importing one exported project into different --to-project targets must
+        keep independent resume/completion state: a clean import into A must not
+        short-circuit a later import into B (which would write nothing to B).
+        Verified via observable behavior — the importer runs on both A and B.
+        """
+        (tmp_path / _WORKSPACE / "projects" / _PROJECT / "datasets").mkdir(parents=True)
+        client = _make_import_client()
+        _seed_project_meta(tmp_path)
+
+        from opik.cli.imports.all import import_all
+
+        def _run_into(to_project):
+            mock_ds = MagicMock(return_value={"datasets": 1})
+            with (
+                patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client),
+                patch(f"{_IMPORT_MODULE}.import_datasets_from_directory", mock_ds),
+                patch(
+                    f"{_IMPORT_MODULE}.import_prompts_from_directory",
+                    return_value={"prompts": 0},
+                ),
+                patch(
+                    f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}
+                ),
+                patch(
+                    f"{_IMPORT_MODULE}.import_experiments_from_directory",
+                    return_value={},
+                ),
+            ):
+                import_all(
+                    workspace="ws",
+                    project_name=_PROJECT,
+                    path=str(tmp_path),
+                    include=["datasets"],
+                    dry_run=False,
+                    force=False,
+                    debug=False,
+                    to_project=to_project,
+                )
+            return mock_ds
+
+        # Clean import into A completes (and marks A's manifest completed).
+        assert _run_into("dest-a").called
+        # A later import into B must still run — its own (separate) manifest is
+        # not yet completed, so it does not short-circuit on "already completed".
+        assert _run_into("dest-b").called
+
+    def test_flush_timeout_exits_with_code_1(self, tmp_path):
+        """If client.flush() returns False (timeout), import_all raises SystemExit(1)."""
+        (tmp_path / _WORKSPACE / "projects" / _PROJECT / "datasets").mkdir(parents=True)
+        client = _make_import_client()
+        _seed_project_meta(tmp_path)
+        client.flush.return_value = False  # simulate timeout
+
+        with (
+            patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client),
+            patch(f"{_IMPORT_MODULE}.import_datasets_from_directory", return_value={}),
+            patch(
+                f"{_IMPORT_MODULE}.import_prompts_from_directory",
+                return_value={"prompts": 0},
+            ),
+            patch(f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}),
+            patch(
+                f"{_IMPORT_MODULE}.import_experiments_from_directory", return_value={}
+            ),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            from opik.cli.imports.all import import_all
+
+            import_all(
+                workspace="ws",
+                project_name=_PROJECT,
                 path=str(tmp_path),
                 include=["datasets"],
                 dry_run=False,
@@ -652,8 +966,9 @@ class TestImportAll:
 
     def test_failed_uploads_exits_with_code_1(self, tmp_path):
         """If failed_uploads > 0, import_all raises SystemExit(1)."""
-        (tmp_path / "datasets").mkdir()
+        (tmp_path / _WORKSPACE / "projects" / _PROJECT / "datasets").mkdir(parents=True)
         client = _make_import_client()
+        _seed_project_meta(tmp_path)
         client.__internal_api__failed_uploads__ = MagicMock(return_value=3)
 
         with (
@@ -663,7 +978,7 @@ class TestImportAll:
                 f"{_IMPORT_MODULE}.import_prompts_from_directory",
                 return_value={"prompts": 0},
             ),
-            patch(f"{_IMPORT_MODULE}.import_projects_from_directory", return_value={}),
+            patch(f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}),
             patch(
                 f"{_IMPORT_MODULE}.import_experiments_from_directory", return_value={}
             ),
@@ -673,6 +988,7 @@ class TestImportAll:
 
             import_all(
                 workspace="ws",
+                project_name=_PROJECT,
                 path=str(tmp_path),
                 include=["datasets"],
                 dry_run=False,
@@ -685,8 +1001,9 @@ class TestImportAll:
     def test_intermediate_flush_after_prompts_imported(self, tmp_path):
         """client.flush() is called once after prompts phase (before end flush)
         when at least one prompt was imported."""
-        (tmp_path / "prompts").mkdir()
+        (tmp_path / _WORKSPACE / "projects" / _PROJECT / "prompts").mkdir(parents=True)
         client = _make_import_client()
+        _seed_project_meta(tmp_path)
 
         with (
             patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client),
@@ -695,7 +1012,7 @@ class TestImportAll:
                 f"{_IMPORT_MODULE}.import_prompts_from_directory",
                 return_value={"prompts": 2},
             ),
-            patch(f"{_IMPORT_MODULE}.import_projects_from_directory", return_value={}),
+            patch(f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}),
             patch(
                 f"{_IMPORT_MODULE}.import_experiments_from_directory", return_value={}
             ),
@@ -704,6 +1021,7 @@ class TestImportAll:
 
             import_all(
                 workspace="ws",
+                project_name=_PROJECT,
                 path=str(tmp_path),
                 include=["prompts"],
                 dry_run=False,
@@ -717,8 +1035,9 @@ class TestImportAll:
     def test_no_intermediate_flush_when_zero_prompts_imported(self, tmp_path):
         """client.flush() is called exactly once (end-of-import) when no prompts
         were imported — no intermediate flush is triggered."""
-        (tmp_path / "prompts").mkdir()
+        (tmp_path / _WORKSPACE / "projects" / _PROJECT / "prompts").mkdir(parents=True)
         client = _make_import_client()
+        _seed_project_meta(tmp_path)
 
         with (
             patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client),
@@ -727,7 +1046,7 @@ class TestImportAll:
                 f"{_IMPORT_MODULE}.import_prompts_from_directory",
                 return_value={"prompts": 0},
             ),
-            patch(f"{_IMPORT_MODULE}.import_projects_from_directory", return_value={}),
+            patch(f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}),
             patch(
                 f"{_IMPORT_MODULE}.import_experiments_from_directory", return_value={}
             ),
@@ -736,6 +1055,7 @@ class TestImportAll:
 
             import_all(
                 workspace="ws",
+                project_name=_PROJECT,
                 path=str(tmp_path),
                 include=["prompts"],
                 dry_run=False,
@@ -748,6 +1068,7 @@ class TestImportAll:
     def test_api_key_passed_to_opik_constructor(self, tmp_path):
         """When api_key is provided it is forwarded to opik.Opik()."""
         client = _make_import_client()
+        _seed_project_meta(tmp_path)
 
         with (
             patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client) as mock_opik,
@@ -756,7 +1077,7 @@ class TestImportAll:
                 f"{_IMPORT_MODULE}.import_prompts_from_directory",
                 return_value={"prompts": 0},
             ),
-            patch(f"{_IMPORT_MODULE}.import_projects_from_directory", return_value={}),
+            patch(f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}),
             patch(
                 f"{_IMPORT_MODULE}.import_experiments_from_directory", return_value={}
             ),
@@ -764,7 +1085,8 @@ class TestImportAll:
             from opik.cli.imports.all import import_all
 
             import_all(
-                workspace="my-ws",
+                workspace=_WORKSPACE,
+                project_name=_PROJECT,
                 path=str(tmp_path),
                 include=[],
                 dry_run=False,
@@ -776,7 +1098,7 @@ class TestImportAll:
         mock_opik.assert_called_once()
         kwargs = mock_opik.call_args[1]
         assert kwargs.get("api_key") == "secret-key"
-        assert kwargs.get("workspace") == "my-ws"
+        assert kwargs.get("workspace") == _WORKSPACE
 
 
 # ---------------------------------------------------------------------------
@@ -791,10 +1113,15 @@ class TestExportAll:
         client = _make_export_client()
         with (
             patch(f"{_EXPORT_MODULE}.opik.Opik", return_value=client),
+            patch(
+                f"{_EXPORT_MODULE}.prepare_project_export_dir",
+                side_effect=_fake_prepare_export_dir,
+            ),
             patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(0, 0)),
             patch(f"{_EXPORT_MODULE}._export_all_prompts", return_value=(0, 0)),
             patch(
-                f"{_EXPORT_MODULE}._export_all_projects", return_value=(0, 0, 0, False)
+                f"{_EXPORT_MODULE}._export_project_traces",
+                return_value=(0, 0, 0, False),
             ),
             patch(
                 f"{_EXPORT_MODULE}._export_all_experiments",
@@ -805,24 +1132,30 @@ class TestExportAll:
 
             export_all(
                 workspace="my-ws",
+                project_name=_PROJECT,
                 output_path=str(tmp_path),
-                include=["datasets", "prompts", "projects", "experiments"],
+                include=["datasets", "prompts", "traces", "experiments"],
                 max_results=None,
                 force=False,
                 debug=False,
                 format="json",
             )
 
-        assert (tmp_path / "my-ws").is_dir()
+        assert (tmp_path / "my-ws" / "projects" / _PROJECT_ID).is_dir()
 
     def test_subdirectories_created_for_all_phases(self, tmp_path):
         client = _make_export_client()
         with (
             patch(f"{_EXPORT_MODULE}.opik.Opik", return_value=client),
+            patch(
+                f"{_EXPORT_MODULE}.prepare_project_export_dir",
+                side_effect=_fake_prepare_export_dir,
+            ),
             patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(0, 0)),
             patch(f"{_EXPORT_MODULE}._export_all_prompts", return_value=(0, 0)),
             patch(
-                f"{_EXPORT_MODULE}._export_all_projects", return_value=(0, 0, 0, False)
+                f"{_EXPORT_MODULE}._export_project_traces",
+                return_value=(0, 0, 0, False),
             ),
             patch(
                 f"{_EXPORT_MODULE}._export_all_experiments",
@@ -833,16 +1166,17 @@ class TestExportAll:
 
             export_all(
                 workspace="ws",
+                project_name=_PROJECT,
                 output_path=str(tmp_path),
-                include=["datasets", "prompts", "projects", "experiments"],
+                include=["datasets", "prompts", "traces", "experiments"],
                 max_results=None,
                 force=False,
                 debug=False,
                 format="json",
             )
 
-        ws = tmp_path / "ws"
-        for subdir in ("datasets", "prompts", "projects", "experiments"):
+        ws = tmp_path / "ws" / "projects" / _PROJECT_ID
+        for subdir in ("datasets", "prompts", "experiments"):
             assert (ws / subdir).is_dir(), f"Missing {subdir}/ directory"
 
     def test_only_included_phases_are_called(self, tmp_path):
@@ -857,7 +1191,8 @@ class TestExportAll:
                 f"{_EXPORT_MODULE}._export_all_prompts", return_value=(0, 0)
             ) as mock_pr,
             patch(
-                f"{_EXPORT_MODULE}._export_all_projects", return_value=(0, 0, 0, False)
+                f"{_EXPORT_MODULE}._export_project_traces",
+                return_value=(0, 0, 0, False),
             ) as mock_proj,
             patch(
                 f"{_EXPORT_MODULE}._export_all_experiments",
@@ -868,6 +1203,7 @@ class TestExportAll:
 
             export_all(
                 workspace="ws",
+                project_name=_PROJECT,
                 output_path=str(tmp_path),
                 include=["datasets"],
                 max_results=None,
@@ -889,7 +1225,8 @@ class TestExportAll:
             patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(1, 0)),
             patch(f"{_EXPORT_MODULE}._export_all_prompts", return_value=(2, 0)),
             patch(
-                f"{_EXPORT_MODULE}._export_all_projects", return_value=(1, 5, 0, False)
+                f"{_EXPORT_MODULE}._export_project_traces",
+                return_value=(1, 5, 0, False),
             ),
             patch(
                 f"{_EXPORT_MODULE}._export_all_experiments",
@@ -901,8 +1238,9 @@ class TestExportAll:
 
             export_all(
                 workspace="ws",
+                project_name=_PROJECT,
                 output_path=str(tmp_path),
-                include=["datasets", "prompts", "projects", "experiments"],
+                include=["datasets", "prompts", "traces", "experiments"],
                 max_results=None,
                 force=False,
                 debug=False,
@@ -924,7 +1262,8 @@ class TestExportAll:
             patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(0, 0)),
             patch(f"{_EXPORT_MODULE}._export_all_prompts", return_value=(0, 0)),
             patch(
-                f"{_EXPORT_MODULE}._export_all_projects", return_value=(0, 0, 0, False)
+                f"{_EXPORT_MODULE}._export_project_traces",
+                return_value=(0, 0, 0, False),
             ),
             patch(
                 f"{_EXPORT_MODULE}._export_all_experiments",
@@ -935,6 +1274,7 @@ class TestExportAll:
 
             export_all(
                 workspace="ws",
+                project_name=_PROJECT,
                 output_path=str(tmp_path),
                 include=[],
                 max_results=None,
@@ -1035,7 +1375,7 @@ class TestExportExperimentByIdJsonFastPath:
         experiment_id = "exp-abc-123"
 
         # Create the experiment JSON file the fast path will read from disk.
-        experiment_file = tmp_path / f"experiment_my_exp_{experiment_id}.json"
+        experiment_file = tmp_path / f"experiment_{experiment_id}.json"
         experiment_data = {
             "id": experiment_id,
             "name": "my_exp",
@@ -1057,6 +1397,7 @@ class TestExportExperimentByIdJsonFastPath:
         stats, file_written, _ = export_experiment_by_id(
             mock_client,
             tmp_path,
+            _PROJECT,
             experiment_id,
             max_traces=None,
             force=False,
@@ -1082,7 +1423,7 @@ class TestExportExperimentByIdJsonFastPath:
         experiment_id = "exp-corrupt-456"
 
         # Write a corrupt JSON file.
-        experiment_file = tmp_path / f"experiment_bad_{experiment_id}.json"
+        experiment_file = tmp_path / f"experiment_{experiment_id}.json"
         experiment_file.write_text("{ not valid json }")
 
         mock_client = MagicMock()
@@ -1097,6 +1438,7 @@ class TestExportExperimentByIdJsonFastPath:
         export_experiment_by_id(
             mock_client,
             tmp_path,
+            _PROJECT,
             experiment_id,
             max_traces=None,
             force=False,
@@ -1115,27 +1457,19 @@ class TestExportExperimentByIdJsonFastPath:
 # ---------------------------------------------------------------------------
 
 
-class TestFilenameBasedProjectInference:
-    """Verify trace_to_project_map is built from on-disk trace filenames and used
-    to infer project_for_logs when experiment metadata has no explicit project."""
+class TestImportExperimentsDryRun:
+    """Experiments now always import into the project named on the command line
+    (the old filename-based project inference was removed). Verify the importer
+    accepts the project_name positional and returns stats without error."""
 
-    def test_project_name_inferred_from_trace_filename(self, tmp_path):
-        """When a trace file exists under projects/my-project/, its project name
-        is inferred without opening the file."""
+    def test_dry_run_returns_stats_for_named_project(self, tmp_path):
         import json
 
         from opik.cli.imports.experiment import import_experiments_from_directory
 
-        # Build workspace layout: experiments/ and projects/my-project/
         experiments_dir = tmp_path / "experiments"
         experiments_dir.mkdir()
-        projects_dir = tmp_path / "projects" / "my-project"
-        projects_dir.mkdir(parents=True)
 
-        trace_id = "trace-abc-123"
-        (projects_dir / f"trace_{trace_id}.json").write_text("{}")
-
-        # Write a minimal experiment JSON that references the trace above.
         exp_data = {
             "experiment": {
                 "name": "test-exp",
@@ -1143,7 +1477,7 @@ class TestFilenameBasedProjectInference:
                 "dataset_name": "ds",
             },
             "items": [
-                {"trace_id": trace_id},
+                {"trace_id": "trace-abc-123"},
             ],
             "downloaded_at": "2024-01-01T00:00:00",
         }
@@ -1152,22 +1486,17 @@ class TestFilenameBasedProjectInference:
         )
 
         mock_client = MagicMock()
-        # create_experiment returns a mock with id
-        created_exp = MagicMock()
-        created_exp.id = "new-exp-id"
-        mock_client.create_experiment.return_value = created_exp
-        mock_client.get_experiment_by_id.return_value = MagicMock(id="new-exp-id")
         mock_client.flush.return_value = True
 
         result = import_experiments_from_directory(
             mock_client,
             experiments_dir,
+            _PROJECT,
             dry_run=True,  # dry_run avoids real API calls for import
             name_pattern=None,
             debug=False,
         )
 
-        # The function should complete without error regardless of dry_run;
-        # the key assertion is that no exception is raised and it returns stats.
+        # Completes without error and returns stats for the named project.
         assert isinstance(result, dict)
         assert "experiments" in result

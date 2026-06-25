@@ -4,11 +4,12 @@ import logging
 import sys
 import threading
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Optional, Set
+from typing import Any, Iterable, Optional, Set
 
 import random
 
@@ -23,7 +24,6 @@ from opik import exceptions as opik_exceptions
 from opik.rate_limit import rate_limit
 from opik.rest_api.core.api_error import ApiError
 from opik.rest_api.core.http_client import _parse_retry_after
-from opik.rest_api.types.project_public import ProjectPublic
 from opik.rest_client_configurator import retry_decorator
 from .._attachment_path import safe_attachment_path
 from ..export_manifest import ExportManifest
@@ -33,6 +33,7 @@ from .utils import (
     extract_trace_id_from_filename,
     matches_name_pattern,
     no_attachments_option,
+    prepare_project_export_dir,
     print_export_summary,
     trace_to_csv_rows,
     write_csv_data,
@@ -196,23 +197,77 @@ def _fetch_traces_page(
     )
 
 
+def _spans_trace_id_range_filter(trace_ids: Iterable[str]) -> Optional[str]:
+    """Build a parsed (JSON) spans filter bounding the scan to the trace_id
+    range covering the matched traces.
+
+    Spans are sorted by ``(workspace_id, project_id, trace_id, ...)``, so a
+    ``trace_id`` range lets the backend prune by primary key instead of paging
+    through every span in the project (which never completes for large
+    projects). ``trace_id`` is a STRING_EXACT field that only supports strict
+    ``>`` / ``<`` (``>=`` / ``<=`` are rejected by the backend), so we widen the
+    bounds by 1 ms on each side via the UUIDv7 timestamp prefix. Callers still
+    filter spans by exact trace_id membership, so the range only needs to be a
+    correct *superset*.
+
+    Returns ``None`` (unfiltered scan, prior behaviour) when the set is empty or
+    any id is not a UUIDv7.
+    """
+    from opik.api_objects import opik_query_language
+
+    # Derive the timestamp per id from the parsed UUID rather than lexicographic
+    # min/max over raw strings: ids may arrive non-canonical (uppercase or
+    # hyphenless, e.g. preset/custom trace ids), which breaks string ordering and
+    # could yield a too-narrow bound that drops a matched trace's spans (the
+    # client-side membership check can only discard, never recover).
+    ms_values = []
+    for t in trace_ids:
+        if not t:
+            continue
+        try:
+            parsed = uuid.UUID(str(t))
+        except ValueError:
+            return None  # non-UUID id: don't risk an incorrect bound
+        if parsed.version != 7:
+            return None  # non-UUIDv7: timestamp prefix isn't meaningful
+        ms_values.append(parsed.int >> 80)  # UUIDv7: top 48 bits = unix ms
+    if not ms_values:
+        return None
+    lo_ms, hi_ms = min(ms_values), max(ms_values)
+
+    def _floor_uuid7(ms: int) -> str:
+        h = f"{max(ms, 0):012x}"
+        return f"{h[:8]}-{h[8:12]}-0000-0000-000000000000"
+
+    lower = _floor_uuid7(lo_ms - 1)  # strictly < min(trace_id)
+    upper = _floor_uuid7(hi_ms + 1)  # strictly > max(trace_id)
+    return opik_query_language.OpikQueryLanguage.for_spans(
+        f'trace_id > "{lower}" AND trace_id < "{upper}"'
+    ).parsed_filters
+
+
 @_export_rest_retry
 def _fetch_spans_page(
     client: opik.Opik,
     project_name: str,
     page: int,
     page_size: int,
+    parsed_filter: Optional[str] = None,
 ) -> Any:
-    """Fetch one page of all spans for a project (no trace_id filter).
+    """Fetch one page of spans for a project.
 
     Using GET /v1/private/spans avoids the much stricter rate limit on
     POST /v1/private/spans/search.  Each span includes its trace_id so
     callers can group client-side.
+
+    ``parsed_filter`` (parsed OQL JSON) optionally bounds the scan by
+    ``trace_id`` range so the backend prunes by primary key.
     """
     return client.rest_client.spans.get_spans_by_project(
         project_name=project_name,
         page=page,
         size=page_size,
+        filters=parsed_filter,
         truncate=False,
     )
 
@@ -606,6 +661,13 @@ def export_traces(
             if progress and task is not None:
                 progress.update(task, description="Fetching spans...")
 
+            # Bound the span scan to the trace_id range of the matched traces so
+            # the backend prunes by primary key instead of paging every span in
+            # the project. Exactness is still guaranteed by the membership check
+            # (`tid in spans_by_trace_id`) below, so this only needs to be a
+            # superset of the matched trace_ids.
+            spans_filter = _spans_trace_id_range_filter(traces_to_fetch.keys())
+
             span_page = 1
             span_consecutive_failures = 0
 
@@ -614,7 +676,7 @@ def export_traces(
                     debug_print(f"DEBUG: Fetching span page {span_page}", debug)
                 try:
                     span_result = _fetch_spans_page(
-                        client, project_name, span_page, page_size
+                        client, project_name, span_page, page_size, spans_filter
                     )
                     span_consecutive_failures = 0
                 except (
@@ -783,8 +845,8 @@ def export_traces(
     return exported_count, skipped_count, had_errors
 
 
-def export_project_by_name(
-    name: str,
+def export_project_traces(
+    project_name: str,
     workspace: str,
     output_path: str,
     filter_string: Optional[str],
@@ -796,10 +858,10 @@ def export_project_by_name(
     include_attachments: bool = True,
     page_size: int = 500,
 ) -> None:
-    """Export a project by exact name."""
+    """Export the named project's traces into projects/<project>/."""
     try:
         if debug:
-            debug_print(f"Exporting project: {name}", debug)
+            debug_print(f"Exporting traces for project: {project_name}", debug)
 
         # Validate filter syntax before doing anything else
         if filter_string and filter_string.strip():
@@ -811,76 +873,25 @@ def export_project_by_name(
         else:
             client = opik.Opik(workspace=workspace)
 
-        # Create output directory
-        output_dir = Path(output_path) / workspace / "projects"
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        if debug:
-            debug_print(f"Target directory: {output_dir}", debug)
-
-        # Get projects and find exact match
-        # Use name filter to narrow down results (backend does partial match, case-insensitive)
-        # Then verify exact match on client side
-        projects_response = client.rest_client.projects.find_projects(name=name)
-        projects = projects_response.content or []
-        matching_project = None
-
-        for project in projects:
-            if project.name == name:
-                matching_project = project
-                break
-
-        # If not found with name filter, try paginating through all projects as fallback
-        # This handles edge cases where the name filter might not work as expected
-        if not matching_project:
-            if debug:
-                debug_print(
-                    f"Project '{name}' not found in filtered results, searching all projects...",
-                    debug,
-                )
-            # Paginate through all projects
-            page = 1
-            page_size = 100
-            while True:
-                projects_response = client.rest_client.projects.find_projects(
-                    page=page, size=page_size
-                )
-                projects = projects_response.content or []
-                if not projects:
-                    break
-
-                for project in projects:
-                    if project.name == name:
-                        matching_project = project
-                        break
-
-                if matching_project:
-                    break
-
-                # Check if there are more pages
-                if projects_response.total is not None:
-                    total_pages = (projects_response.total + page_size - 1) // page_size
-                    if page >= total_pages:
-                        break
-                elif len(projects) < page_size:
-                    # No more pages if we got fewer results than page size
-                    break
-
-                page += 1
-
-        if not matching_project:
-            console.print(f"[red]Project '{name}' not found[/red]")
+        # Resolve the project to its ID and create projects/<id>/ (writes
+        # project.json). Raises ValueError if the project does not exist.
+        try:
+            _project_id, project_dir = prepare_project_export_dir(
+                client, output_path, workspace, project_name
+            )
+        except ValueError:
+            console.print(f"[red]Project '{project_name}' not found[/red]")
             sys.exit(1)
 
         if debug:
-            debug_print(f"Found project by exact match: {matching_project.name}", debug)
+            debug_print(f"Target directory: {project_dir}", debug)
 
-        # Export the project
+        # Export the project's traces
         exported_count, traces_exported, traces_skipped, had_errors = (
             export_single_project(
                 client=client,
-                project=matching_project,
-                output_dir=output_dir,
+                project_name=project_name,
+                project_dir=project_dir,
                 filter_string=filter_string,
                 max_results=max_results,
                 force=force,
@@ -902,24 +913,26 @@ def export_project_by_name(
         # Show export summary
         print_export_summary(stats, format)
 
-        _print_project_export_status(name, output_dir, exported_count, had_errors)
+        _print_project_export_status(
+            project_name, project_dir, exported_count, had_errors
+        )
 
     except ValueError as e:
         # Filter validation errors are already formatted, just exit
         if "Invalid filter syntax" in str(e):
             sys.exit(1)
         # Other ValueErrors should be shown
-        console.print(f"[red]Error exporting project: {e}[/red]")
+        console.print(f"[red]Error exporting traces: {e}[/red]")
         sys.exit(1)
     except Exception as e:
-        console.print(f"[red]Error exporting project: {e}[/red]")
+        console.print(f"[red]Error exporting traces: {e}[/red]")
         sys.exit(1)
 
 
 def export_single_project(
     client: opik.Opik,
-    project: ProjectPublic,
-    output_dir: Path,
+    project_name: str,
+    project_dir: Path,
     filter_string: Optional[str],
     max_results: Optional[int],
     force: bool,
@@ -929,7 +942,7 @@ def export_single_project(
     include_attachments: bool = True,
     page_size: int = 500,
 ) -> tuple[int, int, int, bool]:
-    """Export a single project.
+    """Export a single project's traces into ``project_dir``.
 
     Returns:
         A 4-tuple ``(project_exported, traces_exported, traces_skipped, traces_had_errors)``:
@@ -942,8 +955,8 @@ def export_single_project(
           the manifest is left incomplete so the next run resumes from where it left off.
     """
     try:
-        # Create project-specific directory for traces
-        project_traces_dir = output_dir / project.name
+        # Trace files are written directly into the project directory.
+        project_traces_dir = project_dir
         project_traces_dir.mkdir(parents=True, exist_ok=True)
 
         # Record the export start time BEFORE the first API call so that any
@@ -1048,7 +1061,7 @@ def export_single_project(
         # Export related traces for this project
         traces_exported, traces_skipped, traces_had_errors = export_traces(
             client=client,
-            project_name=project.name,
+            project_name=project_name,
             project_dir=project_traces_dir,
             max_results=max_results,  # None means no limit — fetch all pages
             filter_string=effective_filter,
@@ -1073,142 +1086,29 @@ def export_single_project(
         if traces_exported > 0:
             if debug:
                 debug_print(
-                    f"Exported project: {project.name} with {traces_exported} traces",
+                    f"Exported project: {project_name} with {traces_exported} traces",
                     debug,
                 )
         elif traces_skipped > 0:
             if debug:
                 debug_print(
-                    f"Project {project.name} already has {traces_skipped} trace files",
+                    f"Project {project_name} already has {traces_skipped} trace files",
                     debug,
                 )
         else:
             if debug:
                 debug_print(
-                    f"No traces found in project: {project.name}",
+                    f"No traces found in project: {project_name}",
                     debug,
                 )
         return (project_exported, traces_exported, traces_skipped, traces_had_errors)
 
     except Exception as e:
-        console.print(f"[red]Error exporting project {project.name}: {e}[/red]")
+        console.print(f"[red]Error exporting project {project_name}: {e}[/red]")
         return (0, 0, 0, True)
 
 
-def export_project_by_name_or_id(
-    name_or_id: str,
-    workspace: str,
-    output_path: str,
-    filter_string: Optional[str],
-    max_results: Optional[int],
-    force: bool,
-    debug: bool,
-    format: str,
-    api_key: Optional[str] = None,
-    include_attachments: bool = True,
-    page_size: int = 500,
-) -> None:
-    """Export a project by name or ID.
-
-    First tries to get the project by ID. If not found, tries by name.
-    """
-    try:
-        if debug:
-            debug_print(f"Attempting to export project: {name_or_id}", debug)
-
-        # Initialize client
-        if api_key:
-            client = opik.Opik(api_key=api_key, workspace=workspace)
-        else:
-            client = opik.Opik(workspace=workspace)
-
-        # Create output directory
-        output_dir = Path(output_path) / workspace / "projects"
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        if debug:
-            debug_print(f"Target directory: {output_dir}", debug)
-
-        # Try to get project by ID first
-        try:
-            if debug:
-                debug_print(f"Trying to get project by ID: {name_or_id}", debug)
-            project = client.get_project(name_or_id)
-
-            # Successfully found by ID, export it
-            if debug:
-                debug_print(
-                    f"Found project by ID: {project.name} (ID: {project.id})", debug
-                )
-
-            # Export the project
-            exported_count, traces_exported, traces_skipped, had_errors = (
-                export_single_project(
-                    client=client,
-                    project=project,
-                    output_dir=output_dir,
-                    filter_string=filter_string,
-                    max_results=max_results,
-                    force=force,
-                    debug=debug,
-                    format=format,
-                    include_attachments=include_attachments,
-                    page_size=page_size,
-                )
-            )
-
-            # Show export summary
-            stats = {
-                "projects": exported_count,
-                "traces": traces_exported,
-                "traces_skipped": traces_skipped,
-            }
-            print_export_summary(stats, format)
-
-            _print_project_export_status(
-                f"{project.name} (ID: {project.id})",
-                output_dir,
-                exported_count,
-                had_errors,
-            )
-            return
-
-        except ApiError as e:
-            # Check if it's a 404 (not found) error
-            if e.status_code == 404:
-                # Not found by ID, try by name
-                if debug:
-                    debug_print(
-                        f"Project not found by ID, trying by name: {name_or_id}", debug
-                    )
-                # Fall through to name-based export
-                pass
-            else:
-                # Some other API error, re-raise it
-                raise
-
-        # Try by name (either because ID lookup failed or we're explicitly trying name)
-        export_project_by_name(
-            name=name_or_id,
-            workspace=workspace,
-            output_path=output_path,
-            filter_string=filter_string,
-            max_results=max_results,
-            force=force,
-            debug=debug,
-            format=format,
-            api_key=api_key,
-            include_attachments=include_attachments,
-            page_size=page_size,
-        )
-
-    except Exception as e:
-        console.print(f"[red]Error exporting project: {e}[/red]")
-        sys.exit(1)
-
-
-@click.command(name="project")
-@click.argument("name_or_id", type=str)
+@click.command(name="traces")
 @click.option(
     "--filter",
     type=str,
@@ -1251,9 +1151,8 @@ def export_project_by_name_or_id(
     help="Number of traces to fetch per API request. Larger values reduce round-trips but increase memory usage.",
 )
 @click.pass_context
-def export_project_command(
+def export_traces_command(
     ctx: click.Context,
-    name_or_id: str,
     filter: Optional[str],
     max_results: Optional[int],
     path: str,
@@ -1263,15 +1162,13 @@ def export_project_command(
     no_attachments: bool,
     page_size: int,
 ) -> None:
-    """Export a project by name or ID to workspace/projects.
-
-    The command will first try to find the project by ID. If not found, it will try by name.
-    """
-    # Get workspace and API key from context
+    """Export the project's traces to projects/<project>/."""
+    # Get workspace, project, and API key from context
     workspace = ctx.obj["workspace"]
+    project_name = ctx.obj["project_name"]
     api_key = ctx.obj.get("api_key") if ctx.obj else None
-    export_project_by_name_or_id(
-        name_or_id=name_or_id,
+    export_project_traces(
+        project_name=project_name,
         workspace=workspace,
         output_path=path,
         filter_string=filter,

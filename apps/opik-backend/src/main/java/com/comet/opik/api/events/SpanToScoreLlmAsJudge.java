@@ -17,5 +17,5 @@ public record SpanToScoreLlmAsJudge(
         @NotNull String ruleName,
         @NotNull SpanLlmAsJudgeCode llmAsJudgeCode,
         @NotNull String workspaceId,
-        @NotNull String userName) {
+        @NotNull String userName) implements WorkspaceScopedMessage {
 }

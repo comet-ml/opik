@@ -263,6 +263,16 @@ class AgentInsightsResourceTest {
         }
 
         @Test
+        @DisplayName("All clear: an empty report is accepted and persists nothing")
+        void reportIssuesWhenEmptyThenAcceptedAndNothingPersisted() {
+            var projectId = createProject();
+
+            report(projectId, DAY_1, List.of());
+
+            assertThat(findIssues(projectId, DAY_1, DAY_1).content()).isEmpty();
+        }
+
+        @Test
         @DisplayName("Idempotency: re-reporting with the same id replaces metrics instead of duplicating")
         void reportIssuesWhenSameDayReportedTwiceThenMetricsAreReplaced() {
             var projectId = createProject();
@@ -408,9 +418,6 @@ class AgentInsightsResourceTest {
                     AgentInsightsReport.builder().projectId(UUID.randomUUID()).issues(List.of(validIssue)).build(),
                     // missing project_id
                     AgentInsightsReport.builder().reportDay(DAY_1).issues(List.of(validIssue)).build(),
-                    // empty issues
-                    AgentInsightsReport.builder().projectId(UUID.randomUUID()).reportDay(DAY_1).issues(List.of())
-                            .build(),
                     // blank issue name
                     AgentInsightsReport.builder().projectId(UUID.randomUUID()).reportDay(DAY_1)
                             .issues(List.of(validIssue.toBuilder().name(" ").build())).build(),

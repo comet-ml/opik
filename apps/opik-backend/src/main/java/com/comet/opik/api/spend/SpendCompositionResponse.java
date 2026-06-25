@@ -32,8 +32,8 @@ public record SpendCompositionResponse(
             String key,
             String label,
             Long totalTokens,
-            // Per-model cache-tier sums from cc.billing — the FE prices each
-            // model at its own rate and sums (the BE ships data, not dollars).
+            // Per-model cache-tier sums — the FE prices each model at its
+            // own rate and sums (the BE ships data, not dollars).
             List<ModelTiers> byModel,
             boolean hasBreakdown) {
     }

@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.jobs;
 
 import com.comet.opik.domain.AgentInsightsJobService;
+import com.comet.opik.domain.AgentInsightsMetrics;
 import com.comet.opik.domain.AgentInsightsReportPublisher;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -17,6 +18,7 @@ import org.quartz.DisallowConcurrentExecution;
 import org.quartz.JobExecutionContext;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.SignalType;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Instant;
@@ -55,17 +57,29 @@ public class AgentInsightsReportJob extends Job {
         log.info("Agent Insights report job running for previous UTC day ['{}', '{}')", periodStart, periodEnd);
 
         var reportConfig = config.getAgentInsightsReport();
+        // Record duration only when the sweep actually runs (lock acquired), so a lock miss is not counted
+        // as a successful sweep. Timing starts at sweep subscription, excluding the lock-wait.
+        Mono<Void> timedSweep = Mono.defer(() -> {
+            long startMillis = System.currentTimeMillis();
+            return runSweep(periodStart, periodEnd)
+                    .doFinally(signalType -> AgentInsightsMetrics.SWEEP_DURATION_MS.record(
+                            System.currentTimeMillis() - startMillis,
+                            signalType == SignalType.ON_COMPLETE
+                                    ? AgentInsightsMetrics.OUTCOME_SUCCESS
+                                    : AgentInsightsMetrics.OUTCOME_FAILURE));
+        });
         // holdUntilExpiry: only one replica runs the sweep per day (idempotent across replicas).
         lockService.bestEffortLock(
                 JOB_LOCK,
-                runSweep(periodStart, periodEnd),
+                timedSweep,
                 Mono.defer(() -> {
                     log.debug("Could not acquire lock for Agent Insights report job, another instance is running");
                     return Mono.empty();
                 }),
                 reportConfig.getJobTimeout().toJavaDuration(),
                 reportConfig.getLockWaitTime().toJavaDuration(),
-                true).subscribe(
+                true)
+                .subscribe(
                         __ -> log.info("Agent Insights report job completed"),
                         error -> log.error("Agent Insights report job failed", error));
     }
@@ -88,9 +102,13 @@ public class AgentInsightsReportJob extends Job {
                                     .filter(job -> withTraces.contains(job.projectId())))
                             .concatMap(job -> reportPublisher
                                     .enqueue(job.projectId(), job.workspaceId(), periodStart, periodEnd)
+                                    .doOnNext(__ -> AgentInsightsMetrics.REPORTS_ENQUEUED.add(1,
+                                            AgentInsightsMetrics.ENQUEUE_SCHEDULED_SUCCESS))
                                     .then()
                                     .onErrorResume(e -> {
                                         // Per-job isolation: a failed enqueue must not skip the rest.
+                                        AgentInsightsMetrics.REPORTS_ENQUEUED.add(1,
+                                                AgentInsightsMetrics.ENQUEUE_SCHEDULED_FAILURE);
                                         log.error("Failed to enqueue Agent Insights run for project '{}'",
                                                 job.projectId(), e);
                                         return Mono.empty();

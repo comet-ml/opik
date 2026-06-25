@@ -455,8 +455,8 @@ class TestExportSingleProjectReturnValues:
                 mock_export.return_value = (3, 0, False)
                 result = export_single_project(
                     client=mock_client,
-                    project=self._make_project(),
-                    output_dir=projects_dir,
+                    project_name="test-proj",
+                    project_dir=projects_dir,
                     filter_string=None,
                     max_results=None,
                     force=False,
@@ -485,8 +485,8 @@ class TestExportSingleProjectReturnValues:
                 mock_export.return_value = (2, 1, True)
                 result = export_single_project(
                     client=mock_client,
-                    project=self._make_project(),
-                    output_dir=projects_dir,
+                    project_name="test-proj",
+                    project_dir=projects_dir,
                     filter_string=None,
                     max_results=None,
                     force=False,
@@ -515,8 +515,8 @@ class TestExportSingleProjectReturnValues:
                 mock_export.return_value = (0, 0, False)  # nothing exported or skipped
                 result = export_single_project(
                     client=mock_client,
-                    project=self._make_project(),
-                    output_dir=projects_dir,
+                    project_name="test-proj",
+                    project_dir=projects_dir,
                     filter_string=None,
                     max_results=None,
                     force=False,
@@ -542,8 +542,8 @@ class TestExportSingleProjectReturnValues:
                 mock_export.side_effect = RuntimeError("unexpected failure")
                 result = export_single_project(
                     client=mock_client,
-                    project=self._make_project(),
-                    output_dir=projects_dir,
+                    project_name="test-proj",
+                    project_dir=projects_dir,
                     filter_string=None,
                     max_results=None,
                     force=False,

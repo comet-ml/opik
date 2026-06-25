@@ -6,8 +6,8 @@ import typing
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
 from ..types.spend_breakdown_response import SpendBreakdownResponse
+from ..types.spend_breakdowns_response import SpendBreakdownsResponse
 from ..types.spend_composition_response import SpendCompositionResponse
-from ..types.spend_recommendations_response import SpendRecommendationsResponse
 from ..types.spend_summary_response import SpendSummaryResponse
 from ..types.spend_user_page import SpendUserPage
 from .raw_client import AsyncRawAiSpendClient, RawAiSpendClient
@@ -30,6 +30,64 @@ class AiSpendClient:
         RawAiSpendClient
         """
         return self._raw_client
+
+    def get_spend_all_breakdowns(
+        self,
+        *,
+        interval_start: dt.datetime,
+        interval_end: dt.datetime,
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        user_id: typing.Optional[str] = OMIT,
+        start_before_end: typing.Optional[bool] = OMIT,
+        project_provided: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> SpendBreakdownsResponse:
+        """
+        Get the per-item breakdown for every composition lane in one request
+
+        Parameters
+        ----------
+        interval_start : dt.datetime
+
+        interval_end : dt.datetime
+
+        project_id : typing.Optional[str]
+
+        project_name : typing.Optional[str]
+
+        user_id : typing.Optional[str]
+
+        start_before_end : typing.Optional[bool]
+
+        project_provided : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        SpendBreakdownsResponse
+            Lane breakdowns
+
+        Examples
+        --------
+        from Opik import OpikApi
+        import datetime
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.ai_spend.get_spend_all_breakdowns(interval_start=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), interval_end=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )
+        """
+        _response = self._raw_client.get_spend_all_breakdowns(
+            interval_start=interval_start,
+            interval_end=interval_end,
+            project_id=project_id,
+            project_name=project_name,
+            user_id=user_id,
+            start_before_end=start_before_end,
+            project_provided=project_provided,
+            request_options=request_options,
+        )
+        return _response.data
 
     def get_spend_composition(
         self,
@@ -140,64 +198,6 @@ class AiSpendClient:
         """
         _response = self._raw_client.get_spend_lane_breakdown(
             lane_key,
-            interval_start=interval_start,
-            interval_end=interval_end,
-            project_id=project_id,
-            project_name=project_name,
-            user_id=user_id,
-            start_before_end=start_before_end,
-            project_provided=project_provided,
-            request_options=request_options,
-        )
-        return _response.data
-
-    def get_spend_recommendations(
-        self,
-        *,
-        interval_start: dt.datetime,
-        interval_end: dt.datetime,
-        project_id: typing.Optional[str] = OMIT,
-        project_name: typing.Optional[str] = OMIT,
-        user_id: typing.Optional[str] = OMIT,
-        start_before_end: typing.Optional[bool] = OMIT,
-        project_provided: typing.Optional[bool] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> SpendRecommendationsResponse:
-        """
-        Get coding-agent cost-saving recommendations
-
-        Parameters
-        ----------
-        interval_start : dt.datetime
-
-        interval_end : dt.datetime
-
-        project_id : typing.Optional[str]
-
-        project_name : typing.Optional[str]
-
-        user_id : typing.Optional[str]
-
-        start_before_end : typing.Optional[bool]
-
-        project_provided : typing.Optional[bool]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        SpendRecommendationsResponse
-            Recommendations
-
-        Examples
-        --------
-        from Opik import OpikApi
-        import datetime
-        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.ai_spend.get_spend_recommendations(interval_start=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), interval_end=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )
-        """
-        _response = self._raw_client.get_spend_recommendations(
             interval_start=interval_start,
             interval_end=interval_end,
             project_id=project_id,
@@ -357,6 +357,67 @@ class AsyncAiSpendClient:
         """
         return self._raw_client
 
+    async def get_spend_all_breakdowns(
+        self,
+        *,
+        interval_start: dt.datetime,
+        interval_end: dt.datetime,
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        user_id: typing.Optional[str] = OMIT,
+        start_before_end: typing.Optional[bool] = OMIT,
+        project_provided: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> SpendBreakdownsResponse:
+        """
+        Get the per-item breakdown for every composition lane in one request
+
+        Parameters
+        ----------
+        interval_start : dt.datetime
+
+        interval_end : dt.datetime
+
+        project_id : typing.Optional[str]
+
+        project_name : typing.Optional[str]
+
+        user_id : typing.Optional[str]
+
+        start_before_end : typing.Optional[bool]
+
+        project_provided : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        SpendBreakdownsResponse
+            Lane breakdowns
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import datetime
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.ai_spend.get_spend_all_breakdowns(interval_start=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), interval_end=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.get_spend_all_breakdowns(
+            interval_start=interval_start,
+            interval_end=interval_end,
+            project_id=project_id,
+            project_name=project_name,
+            user_id=user_id,
+            start_before_end=start_before_end,
+            project_provided=project_provided,
+            request_options=request_options,
+        )
+        return _response.data
+
     async def get_spend_composition(
         self,
         *,
@@ -472,67 +533,6 @@ class AsyncAiSpendClient:
         """
         _response = await self._raw_client.get_spend_lane_breakdown(
             lane_key,
-            interval_start=interval_start,
-            interval_end=interval_end,
-            project_id=project_id,
-            project_name=project_name,
-            user_id=user_id,
-            start_before_end=start_before_end,
-            project_provided=project_provided,
-            request_options=request_options,
-        )
-        return _response.data
-
-    async def get_spend_recommendations(
-        self,
-        *,
-        interval_start: dt.datetime,
-        interval_end: dt.datetime,
-        project_id: typing.Optional[str] = OMIT,
-        project_name: typing.Optional[str] = OMIT,
-        user_id: typing.Optional[str] = OMIT,
-        start_before_end: typing.Optional[bool] = OMIT,
-        project_provided: typing.Optional[bool] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> SpendRecommendationsResponse:
-        """
-        Get coding-agent cost-saving recommendations
-
-        Parameters
-        ----------
-        interval_start : dt.datetime
-
-        interval_end : dt.datetime
-
-        project_id : typing.Optional[str]
-
-        project_name : typing.Optional[str]
-
-        user_id : typing.Optional[str]
-
-        start_before_end : typing.Optional[bool]
-
-        project_provided : typing.Optional[bool]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        SpendRecommendationsResponse
-            Recommendations
-
-        Examples
-        --------
-        from Opik import AsyncOpikApi
-        import datetime
-        import asyncio
-        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        async def main() -> None:
-            await client.ai_spend.get_spend_recommendations(interval_start=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), interval_end=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )
-        asyncio.run(main())
-        """
-        _response = await self._raw_client.get_spend_recommendations(
             interval_start=interval_start,
             interval_end=interval_end,
             project_id=project_id,

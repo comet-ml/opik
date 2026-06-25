@@ -11,6 +11,7 @@ from ..core.request_options import RequestOptions
 from ..types.bi_information_response import BiInformationResponse
 from ..types.spans_count_response import SpansCountResponse
 from ..types.trace_count_response import TraceCountResponse
+from ..types.usage_by_workspace_project_user_response import UsageByWorkspaceProjectUserResponse
 
 
 class RawSystemUsageClient:
@@ -116,6 +117,42 @@ class RawSystemUsageClient:
                     BiInformationResponse,
                     parse_obj_as(
                         type_=BiInformationResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def get_spans_count_breakdown_for_workspaces(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[UsageByWorkspaceProjectUserResponse]:
+        """
+        Get spans count on previous day grouped by workspace, project and user
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[UsageByWorkspaceProjectUserResponse]
+            UsageByWorkspaceProjectUserResponse resource
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/internal/usage/workspace-span-counts-breakdown",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    UsageByWorkspaceProjectUserResponse,
+                    parse_obj_as(
+                        type_=UsageByWorkspaceProjectUserResponse,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
@@ -337,6 +374,42 @@ class AsyncRawSystemUsageClient:
                     BiInformationResponse,
                     parse_obj_as(
                         type_=BiInformationResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def get_spans_count_breakdown_for_workspaces(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[UsageByWorkspaceProjectUserResponse]:
+        """
+        Get spans count on previous day grouped by workspace, project and user
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[UsageByWorkspaceProjectUserResponse]
+            UsageByWorkspaceProjectUserResponse resource
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/internal/usage/workspace-span-counts-breakdown",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    UsageByWorkspaceProjectUserResponse,
+                    parse_obj_as(
+                        type_=UsageByWorkspaceProjectUserResponse,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
