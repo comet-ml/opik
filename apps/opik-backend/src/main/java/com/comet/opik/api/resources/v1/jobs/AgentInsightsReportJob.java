@@ -79,8 +79,10 @@ public class AgentInsightsReportJob extends Job {
                 reportConfig.getJobTimeout().toJavaDuration(),
                 reportConfig.getLockWaitTime().toJavaDuration(),
                 true)
+                .doOnSuccess(__ -> log.info("Agent Insights report job completed"))
                 .subscribe(
-                        __ -> log.info("Agent Insights report job completed"),
+                        __ -> {
+                        },
                         error -> log.error("Agent Insights report job failed", error));
     }
 
