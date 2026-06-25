@@ -485,10 +485,12 @@ openrouter:
     label: "deepseek/deepseek-v3.2-speciale"
   - id: "deepseek/deepseek-v4-flash"
     label: "deepseek/deepseek-v4-flash"
+    structuredOutput: true
   - id: "deepseek/deepseek-v4-flash:free"
     label: "deepseek/deepseek-v4-flash:free"
   - id: "deepseek/deepseek-v4-pro"
     label: "deepseek/deepseek-v4-pro"
+    structuredOutput: true
   - id: "eleutherai/llemma_7b"
     label: "eleutherai/llemma_7b"
   - id: "essentialai/rnj-1-instruct"
@@ -1271,6 +1273,8 @@ openrouter:
     label: "relace/relace-apply-3"
   - id: "relace/relace-search"
     label: "relace/relace-search"
+  - id: "sakana/fugu-ultra"
+    label: "sakana/fugu-ultra"
   - id: "sao10k/l3-euryale-70b"
     label: "sao10k/l3-euryale-70b"
   - id: "sao10k/l3-lunaris-8b"

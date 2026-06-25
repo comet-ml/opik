@@ -1968,6 +1968,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "relace/relace-search",
     },
     {
+      value: PROVIDER_MODEL_TYPE.SAKANA_FUGU_ULTRA,
+      label: "sakana/fugu-ultra",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.SAO10K_L3_EURYALE_70B,
       label: "sao10k/l3-euryale-70b",
     },
