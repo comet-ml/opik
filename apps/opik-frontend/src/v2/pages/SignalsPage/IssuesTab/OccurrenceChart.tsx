@@ -29,6 +29,8 @@ const OccurrenceChart: React.FC<OccurrenceChartProps> = ({ data }) => {
       xAxisKey="time"
       xTickFormatter={(value) => formatDate(value, { format: "D MMM" })}
       showLegend={false}
+      // Plain line, not a filled area (LineChart fills single-line charts by default).
+      showArea={false}
       className="h-[140px] w-full"
     />
   );

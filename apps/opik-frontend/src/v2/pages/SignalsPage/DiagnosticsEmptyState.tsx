@@ -43,7 +43,7 @@ const DiagnosticsEmptyState: React.FC<DiagnosticsEmptyStateProps> = ({
             Catch issues before your users do
           </h2>
           <p className="comet-body-s text-muted-slate">
-            We'll scan your traces every day and flag anything worth your
+            We&apos;ll scan your traces every day and flag anything worth your
             attention — tool loops, hallucinations, slow retrievals.
           </p>
         </div>

@@ -1,0 +1,25 @@
+import React from "react";
+import { BugPlay } from "lucide-react";
+import { AgentInsightsIssue } from "@/types/signals";
+import { cn } from "@/lib/utils";
+import { SEVERITY_DOT_MAP } from "@/v2/pages/SignalsPage/helpers";
+
+// Small severity-colored square fronting an issue — shared by the detail
+// header and the compact list dropdown trigger. Falls back to a neutral slate
+// when severity is unknown.
+const IssueSeverityBadge: React.FC<{
+  severity?: AgentInsightsIssue["severity"];
+  className?: string;
+}> = ({ severity, className }) => (
+  <span
+    className={cn(
+      "flex size-4 shrink-0 items-center justify-center rounded-[2px]",
+      severity ? SEVERITY_DOT_MAP[severity] : "bg-[#94A3B8]",
+      className,
+    )}
+  >
+    <BugPlay className="size-2 text-white" />
+  </span>
+);
+
+export default IssueSeverityBadge;

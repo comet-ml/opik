@@ -22,7 +22,7 @@ const IssueListItem: React.FC<IssueListItemProps> = ({
       type="button"
       onClick={() => onClick(issue)}
       className={cn(
-        "flex w-full flex-col gap-1.5 border-b border-border px-4 py-3 text-left transition-colors hover:bg-muted/50",
+        "flex w-full flex-col gap-1.5 border-b border-border p-3 text-left transition-colors hover:bg-muted/50",
         isActive && "bg-primary-100 hover:bg-primary-100",
       )}
     >
@@ -37,11 +37,11 @@ const IssueListItem: React.FC<IssueListItemProps> = ({
         )}
       </div>
       {issue.description && (
-        <div className="comet-body-xs line-clamp-2 text-muted-slate">
+        <div className="comet-body-xs line-clamp-2 text-foreground">
           {issue.description}
         </div>
       )}
-      <div className="comet-body-xs flex items-center gap-4 text-muted-slate">
+      <div className="comet-body-xs flex items-center gap-4 text-foreground">
         <span className="flex items-center gap-1">
           <Hash className="size-3" />
           Occurrences: {issue.total_occurrences.toLocaleString()}

@@ -1,6 +1,6 @@
 import * as React from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
-import { Check, ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { usePortalContainer } from "@/lib/portal-container";
@@ -116,7 +116,6 @@ SelectLabel.displayName = SelectPrimitive.Label.displayName;
 
 interface SelectItemProps
   extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item> {
-  withoutCheck?: boolean;
   wrapperAsChild?: boolean;
   description?: React.ReactNode;
 }
@@ -126,33 +125,18 @@ const SelectItem = React.forwardRef<
   SelectItemProps
 >(
   (
-    {
-      className,
-      children,
-      withoutCheck = false,
-      wrapperAsChild = false,
-      description,
-      ...props
-    },
+    { className, children, wrapperAsChild = false, description, ...props },
     ref,
   ) => (
     <SelectPrimitive.Item
       ref={ref}
       className={cn(
-        "relative flex flex-col w-full cursor-default select-none justify-stretch rounded-sm py-1.5 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-        withoutCheck ? "pl-2" : "pl-8",
+        "relative flex flex-col w-full cursor-default select-none justify-stretch rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[state=checked]:bg-primary-100 data-[state=checked]:text-primary data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
         className,
       )}
       {...props}
     >
       <div className="flex items-center">
-        {!withoutCheck && (
-          <span className="absolute left-2 flex size-3.5 items-center justify-center">
-            <SelectPrimitive.ItemIndicator>
-              <Check className="size-4" />
-            </SelectPrimitive.ItemIndicator>
-          </span>
-        )}
         <SelectPrimitive.ItemText asChild={wrapperAsChild}>
           {children}
         </SelectPrimitive.ItemText>
