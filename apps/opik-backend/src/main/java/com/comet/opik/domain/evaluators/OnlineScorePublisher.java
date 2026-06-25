@@ -11,6 +11,10 @@ import com.comet.opik.infrastructure.OnlineScoringStreamConfigurationAdapter;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.redis.RedisStreamUtils;
 import com.google.inject.ImplementedBy;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.LongCounter;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.NotFoundException;
@@ -56,10 +60,15 @@ public interface OnlineScorePublisher {
 @Slf4j
 class OnlineScorePublisherImpl implements OnlineScorePublisher {
 
+    private static final String METRIC_NAMESPACE = "online_scoring";
+    private static final AttributeKey<String> EVALUATOR_TYPE_KEY = AttributeKey.stringKey("evaluator_type");
+    private static final AttributeKey<String> RESULT_KEY = AttributeKey.stringKey("result");
+
     private final RedissonReactiveClient redisClient;
     private final AutomationRuleEvaluatorService automationRuleEvaluatorService;
     private final Map<AutomationRuleEvaluatorType, OnlineScoringStreamConfigurationAdapter> streamConfigurations;
     private final ServiceTogglesConfig serviceTogglesConfig;
+    private final LongCounter enqueueCounter;
 
     @Inject
     public OnlineScorePublisherImpl(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
@@ -69,6 +78,11 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
         this.redisClient = redisClient;
         this.automationRuleEvaluatorService = automationRuleEvaluatorService;
         this.serviceTogglesConfig = serviceTogglesConfig;
+        this.enqueueCounter = GlobalOpenTelemetry.getMeter(METRIC_NAMESPACE)
+                .counterBuilder("%s_enqueue_total".formatted(METRIC_NAMESPACE))
+                .setDescription("Messages pushed to the online-scoring Redis stream, by evaluator type and result "
+                        + "(success|error). result=error counts publish failures that were previously only logged.")
+                .build();
         this.streamConfigurations = config.getStreams().stream()
                 .map(streamConfiguration -> {
                     var evaluatorType = AutomationRuleEvaluatorType.fromString(streamConfiguration.getScorer());
@@ -85,13 +99,20 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
         var config = streamConfigurations.get(type);
         var codec = config.getCodec();
         var stream = redisClient.getStream(config.getStreamName(), codec);
+        var successAttrs = Attributes.of(EVALUATOR_TYPE_KEY, type.getType(), RESULT_KEY, "success");
+        var errorAttrs = Attributes.of(EVALUATOR_TYPE_KEY, type.getType(), RESULT_KEY, "error");
         Flux.fromIterable(messages)
                 .flatMap(message -> {
                     return stream.add(RedisStreamUtils.buildAddArgs(
                             OnlineScoringConfig.PAYLOAD_FIELD, message, config))
-                            .doOnNext(id -> log.debug("Message sent with ID: '{}' into stream '{}'",
-                                    id, config.getStreamName()))
-                            .doOnError(throwable -> log.error("Error sending message", throwable));
+                            .doOnNext(id -> {
+                                enqueueCounter.add(1, successAttrs);
+                                log.debug("Message sent with ID: '{}' into stream '{}'", id, config.getStreamName());
+                            })
+                            .doOnError(throwable -> {
+                                enqueueCounter.add(1, errorAttrs);
+                                log.error("Error sending message", throwable);
+                            });
                 })
                 .subscribe(id -> {
                     // noop
