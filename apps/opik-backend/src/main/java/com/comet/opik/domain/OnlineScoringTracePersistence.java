@@ -12,6 +12,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
@@ -68,8 +69,12 @@ public class OnlineScoringTracePersistence {
     private static final String SPAN_NAME = "llm_call";
     private static final String PREPARE_SPAN_NAME = "prepare_evaluation";
 
-    /** Cap for the evaluated-entity input/output preview captured on the prepare_evaluation span. */
-    private static final int EVALUATED_PREVIEW_CHARS = 2_000;
+    /**
+     * Size cap (chars of serialized JSON) under which the evaluated entity's input/output is kept
+     * structurally intact on the prepare_evaluation span so the UI renders it in pretty mode; larger
+     * payloads fall back to a truncated text node.
+     */
+    private static final int EVALUATED_PREVIEW_CHARS = 8_000;
     private static final String MODE_INLINE = "inline";
     private static final String MODE_AGENTIC_TOOLS = "agentic_tools";
 
@@ -185,8 +190,8 @@ public class OnlineScoringTracePersistence {
         private final UUID evaluatedProjectId;
         private final String projectName;
         private final String evaluatedName;
-        private final String evaluatedInputPreview;
-        private final String evaluatedOutputPreview;
+        private final JsonNode evaluatedInput;
+        private final JsonNode evaluatedOutput;
         private final UUID ruleId;
         private final String ruleName;
         private final String modelName;
@@ -208,8 +213,8 @@ public class OnlineScoringTracePersistence {
             this.evaluatedProjectId = subject.projectId();
             this.projectName = subject.projectName();
             this.evaluatedName = subject.name();
-            this.evaluatedInputPreview = preview(subject.input());
-            this.evaluatedOutputPreview = preview(subject.output());
+            this.evaluatedInput = previewNode(subject.input());
+            this.evaluatedOutput = previewNode(subject.output());
             this.ruleId = ruleId;
             this.ruleName = ruleName;
             this.modelName = modelName;
@@ -393,28 +398,23 @@ public class OnlineScoringTracePersistence {
             eval.markAgentic();
         }
 
-        var input = JsonUtils.createObjectNode();
-        input.put(eval.evaluatedIdKey, eval.evaluatedId);
+        // Put the evaluated entity's own input/output on the span's input/output so the UI renders
+        // them in "pretty" mode exactly as on the source trace (chat, text, etc.) instead of a raw
+        // JSON blob; the evaluation bookkeeping (ids, model, fetch/size/mode) goes to span metadata.
+        var metadata = JsonUtils.createObjectNode();
+        metadata.put(eval.evaluatedIdKey, eval.evaluatedId);
         if (eval.evaluatedProjectId != null) {
-            input.put("evaluated_project_id", eval.evaluatedProjectId.toString());
+            metadata.put("evaluated_project_id", eval.evaluatedProjectId.toString());
         }
         if (eval.evaluatedName != null) {
-            input.put("evaluated_name", eval.evaluatedName);
+            metadata.put("evaluated_name", eval.evaluatedName);
         }
-        if (eval.evaluatedInputPreview != null) {
-            input.put("evaluated_input", eval.evaluatedInputPreview);
-        }
-        if (eval.evaluatedOutputPreview != null) {
-            input.put("evaluated_output", eval.evaluatedOutputPreview);
-        }
-        input.put("model", eval.modelName);
+        metadata.put("model", eval.modelName);
+        metadata.put("fetched_span_count", fetchedSpanCount);
+        metadata.put("estimated_tokens", estimatedTokens);
+        metadata.put("mode", agentic ? MODE_AGENTIC_TOOLS : MODE_INLINE);
 
-        var output = JsonUtils.createObjectNode();
-        output.put("fetched_span_count", fetchedSpanCount);
-        output.put("estimated_tokens", estimatedTokens);
-        output.put("mode", agentic ? MODE_AGENTIC_TOOLS : MODE_INLINE);
-
-        var span = Span.builder()
+        var spanBuilder = Span.builder()
                 .id(idGenerator.generateId())
                 .traceId(eval.traceId)
                 .projectName(eval.projectName)
@@ -422,12 +422,17 @@ public class OnlineScoringTracePersistence {
                 .name(PREPARE_SPAN_NAME)
                 .startTime(eval.startTime)
                 .endTime(Instant.now())
-                .input(input)
-                .output(output)
-                .source(Source.EVALUATOR)
-                .build();
+                .metadata(metadata)
+                .source(Source.EVALUATOR);
 
-        return create(spanService.create(span), eval, "preparation span");
+        if (eval.evaluatedInput != null) {
+            spanBuilder.input(eval.evaluatedInput);
+        }
+        if (eval.evaluatedOutput != null) {
+            spanBuilder.output(eval.evaluatedOutput);
+        }
+
+        return create(spanService.create(spanBuilder.build()), eval, "preparation span");
     }
 
     private Mono<Void> createTrace(EvaluationTrace eval, ObjectNode output, ErrorInfo errorInfo) {
@@ -610,17 +615,21 @@ public class OnlineScoringTracePersistence {
     }
 
     /**
-     * Short text preview of an evaluated entity's input/output for the prepare_evaluation span, so a
-     * viewer can tell what the evaluation is assessing without opening the evaluated trace. Truncated
-     * to {@link #EVALUATED_PREVIEW_CHARS} to keep the monitoring span small.
+     * Preview of an evaluated entity's input/output for the prepare_evaluation span, so a viewer can
+     * tell what the evaluation is assessing without opening the evaluated trace. Small payloads are
+     * kept structurally intact (so the UI renders them in pretty mode just like the source trace);
+     * payloads larger than {@link #EVALUATED_PREVIEW_CHARS} fall back to a truncated text node to keep
+     * the monitoring span small.
      */
-    private static String preview(JsonNode node) {
+    private static JsonNode previewNode(JsonNode node) {
         if (node == null || node.isNull()) {
             return null;
         }
-        String text = node.isTextual() ? node.asText() : node.toString();
-        return text.length() > EVALUATED_PREVIEW_CHARS
-                ? text.substring(0, EVALUATED_PREVIEW_CHARS) + "…[truncated]"
-                : text;
+        String text = node.toString();
+        if (text.length() <= EVALUATED_PREVIEW_CHARS) {
+            return node;
+        }
+        String raw = node.isTextual() ? node.asText() : text;
+        return TextNode.valueOf(raw.substring(0, EVALUATED_PREVIEW_CHARS) + "…[truncated]");
     }
 }

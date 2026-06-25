@@ -9,6 +9,7 @@ import com.comet.opik.domain.OnlineScoringTracePersistence.EvaluatedSubject;
 import com.comet.opik.domain.OnlineScoringTracePersistence.EvaluationRecorder;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderFactory.ResolvedModelInfo;
+import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.anthropic.AnthropicTokenUsage;
@@ -188,6 +189,37 @@ class OnlineScoringTracePersistenceTest {
         assertThat(trace.source()).isEqualTo(Source.EVALUATOR);
         assertThat(trace.visibilityMode()).isEqualTo(VisibilityMode.HIDDEN);
         assertThat(trace.output().toString()).contains("Relevance").contains("relevant");
+    }
+
+    @Test
+    void prepareSpanCarriesEvaluatedInputOutputForPrettyRenderingAndMetadata() {
+        stubSpanWrites();
+        var evaluatedInput = JsonUtils.createObjectNode();
+        evaluatedInput.put("input", "What is 2+2?");
+        var evaluatedOutput = JsonUtils.createObjectNode();
+        evaluatedOutput.put("output", "4");
+        var recorder = persistence.begin(
+                new EvaluatedSubject(EvaluatedSubject.Kind.TRACE, "trace-9", UUID.randomUUID(), "proj", "Q&A",
+                        evaluatedInput, evaluatedOutput),
+                UUID.randomUUID(), "rule", "claude-x", "workspace", "user");
+
+        StepVerifier.create(recorder.recordPreparation(3, 1234, false)).verifyComplete();
+
+        var span = capturedSpan();
+        assertThat(span.name()).isEqualTo("prepare_evaluation");
+        assertThat(span.type()).isEqualTo(SpanType.general);
+        assertThat(span.source()).isEqualTo(Source.EVALUATOR);
+        // Evaluated input/output land on the span's own input/output (so the UI pretty-renders them)
+        // and stay structurally intact, not as an escaped blob.
+        assertThat(span.input()).isEqualTo(evaluatedInput);
+        assertThat(span.output()).isEqualTo(evaluatedOutput);
+        // Bookkeeping lives in metadata, not in input/output.
+        var metadata = span.metadata();
+        assertThat(metadata.get("evaluated_trace_id").asText()).isEqualTo("trace-9");
+        assertThat(metadata.get("model").asText()).isEqualTo("claude-x");
+        assertThat(metadata.get("mode").asText()).isEqualTo("inline");
+        assertThat(metadata.get("fetched_span_count").asInt()).isEqualTo(3);
+        assertThat(metadata.get("estimated_tokens").asInt()).isEqualTo(1234);
     }
 
     @Test
