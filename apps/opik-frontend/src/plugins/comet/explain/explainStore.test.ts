@@ -474,4 +474,45 @@ describe("explainStore", () => {
     expect(entry.error).not.toBe("raw upstream text"); // friendly copy wins
     expect(entry.error).toMatch(/unavailable/i);
   });
+
+  it("recovers an errored cell when a retry streams after the error (error → chunk → done)", () => {
+    // Repro of the sleeping-pod bug: the console emits explain:error on a
+    // transient 503, then its retry succeeds and streams chunks under the SAME
+    // explainId. The cell must resurrect and show the answer, not stay stuck.
+    const emit = vi.fn();
+    reset(emit);
+    useExplainStore.getState().explain(target("e1"));
+    const { explainId } = Object.values(useExplainStore.getState().entries)[0];
+
+    handleConsoleEvent("explain:error", { explainId, message: "boom" });
+    expect(useExplainStore.getState().entries[key("e1")].phase).toBe("error");
+    // The route survives the (recoverable) console error so chunks can route.
+    expect(useExplainStore.getState().routes[explainId]).toBe(key("e1"));
+
+    handleConsoleEvent("explain:chunk", { explainId, delta: "hello " });
+    handleConsoleEvent("explain:chunk", { explainId, delta: "world" });
+    handleConsoleEvent("explain:done", { explainId });
+
+    const entry = useExplainStore.getState().entries[key("e1")];
+    expect(entry.phase).toBe("done");
+    expect(entry.text).toBe("hello world"); // fresh retry stream, not appended
+    expect(entry.error).toBeUndefined(); // stale error cleared on recovery
+    // done is terminal → route retired.
+    expect(useExplainStore.getState().routes[explainId]).toBeUndefined();
+  });
+
+  it("keeps a terminal error (error → done with no chunks) as an error, not a blank done", () => {
+    const emit = vi.fn();
+    reset(emit);
+    useExplainStore.getState().explain(target("e1"));
+    const { explainId } = Object.values(useExplainStore.getState().entries)[0];
+
+    handleConsoleEvent("explain:error", { explainId, message: "boom" });
+    handleConsoleEvent("explain:done", { explainId }); // never recovered
+
+    const entry = useExplainStore.getState().entries[key("e1")];
+    expect(entry.phase).toBe("error"); // not blanked into an empty "done"
+    expect(entry.error).toBe("boom");
+    expect(useExplainStore.getState().routes[explainId]).toBeUndefined();
+  });
 });
