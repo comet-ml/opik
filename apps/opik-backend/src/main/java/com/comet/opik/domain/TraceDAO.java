@@ -814,12 +814,18 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
+    /**
+     * {@code toMonday(id_at) = ...} pins the scan to the single week that can hold {@code :id}: a strict consequence
+     * of {@code id = :id} (never hides the row) that engages partition pruning once {@code traces} is partitioned,
+     * which the planner can't infer from the id filter alone.
+     */
     private static final String SELECT_DETAILS_BY_ID = """
             SELECT DISTINCT
                 workspace_id,
                 project_id
             FROM traces
             WHERE id = :id
+            AND toMonday(id_at) = toMonday(UUIDv7ToDateTime(toUUID(:id), 'UTC'))
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -834,6 +840,10 @@ class TraceDAOImpl implements TraceDAO {
      * picks the right page) and the final ORDER BY (so the page is returned in order); {@code page_wide}'s own order is
      * immaterial since it is id-bounded and {@code LIMIT 1 BY id}. Field exclusion ({@code exclude_fields}) and
      * truncation are layered on top without dropping the sort key.
+     * <p>
+     * Each {@code traces} id-range bound carries a parallel {@code toMonday(id_at)} bound: a strict consequence of
+     * the id-range — and, unlike a {@code created_at} predicate, safe against late-arriving rows since it derives
+     * from {@code id} — that lets the planner prune partitions once {@code traces} is partitioned.
      */
     private static final String SELECT_BY_PROJECT_ID = """
             WITH <if(trace_id_prefilter)>trace_id_prefilter AS (
@@ -841,9 +851,12 @@ class TraceDAOImpl implements TraceDAO {
                 FROM traces
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                <if(last_received_id)> AND id \\< :last_received_id <endif>
-                <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
-                <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                <if(last_received_id)> AND id \\< :last_received_id
+                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC')) <endif>
+                <if(uuid_from_time)> AND id >= :uuid_from_time
+                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time
+                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
             ), <endif><if(!exclude_feedback_scores)>feedback_scores_deduped AS (
@@ -1265,9 +1278,12 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
-                <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
-                <if(last_received_id)> AND id \\< :last_received_id <endif>
+                <if(uuid_from_time)> AND id >= :uuid_from_time
+                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time
+                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                <if(last_received_id)> AND id \\< :last_received_id
+                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC')) <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
@@ -1349,6 +1365,9 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND id IN (SELECT id FROM page_ids)
+                <if(uuid_from_time)> AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                <if(uuid_to_time)> AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                <if(last_received_id)> AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC')) <endif>
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             )
@@ -1663,8 +1682,10 @@ class TraceDAOImpl implements TraceDAO {
                     <endif>
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
-                    <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
-                    <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                    <if(uuid_from_time)> AND id >= :uuid_from_time
+                        AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time
+                        AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
                     <if(filters)> AND <filters> <endif>
                     <if(search_text)> AND <search_text> <endif>
                     <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
@@ -1786,11 +1807,17 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
+    /**
+     * The {@code toMonday(id_at)} bounds mirror the {@code [range_start, range_end)} id-range: a strict consequence
+     * that doesn't change which rows are scanned but engages partition pruning once {@code traces} is partitioned.
+     */
     private static final String SCOUT_FIRST_DAY_WITH_DATA = """
             SELECT toDate(UUIDv7ToDateTime(toUUID(id))) AS day
             FROM traces
             WHERE workspace_id = :workspace_id
             AND id >= :range_start AND id \\< :range_end
+            AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:range_start), 'UTC'))
+            AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:range_end), 'UTC'))
             GROUP BY day
             ORDER BY day
             LIMIT 1
@@ -1954,6 +1981,7 @@ class TraceDAOImpl implements TraceDAO {
                 start_time
             FROM traces
             WHERE id = :id
+            AND toMonday(id_at) = toMonday(UUIDv7ToDateTime(toUUID(:id), 'UTC'))
             AND workspace_id = :workspace_id
             ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
             LIMIT 1
@@ -1987,6 +2015,7 @@ class TraceDAOImpl implements TraceDAO {
                 DISTINCT project_id
             FROM traces
             WHERE id = :id
+            AND toMonday(id_at) = toMonday(UUIDv7ToDateTime(toUUID(:id), 'UTC'))
             AND workspace_id = :workspace_id
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -2344,8 +2373,10 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
-                <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
-                <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
+                <if(uuid_from_time)>AND id >= :uuid_from_time
+                AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
+                <if(uuid_to_time)>AND id \\<= :uuid_to_time
+                AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
@@ -2687,8 +2718,10 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
-                <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
-                <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
+                <if(uuid_from_time)>AND id >= :uuid_from_time
+                AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
+                <if(uuid_to_time)>AND id \\<= :uuid_to_time
+                AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>

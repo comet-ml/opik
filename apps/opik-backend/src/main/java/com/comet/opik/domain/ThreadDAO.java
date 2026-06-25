@@ -83,8 +83,8 @@ class ThreadDAOImpl implements ThreadDAO {
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     AND thread_id \\<> ''
-                    <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
-                    <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                    <if(uuid_from_time)> AND id >= :uuid_from_time AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
                     <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                 )
                 WHERE 1 = 1
@@ -162,9 +162,11 @@ class ThreadDAOImpl implements ThreadDAO {
                       <else>
                           <if(traces_final_ids)>
                               AND id IN (SELECT id FROM traces_final_ids)
+                              <if(uuid_from_time)> AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                              <if(uuid_to_time)> AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
                           <else>
-                              <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
-                              <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                              <if(uuid_from_time)> AND id >= :uuid_from_time AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                              <if(uuid_to_time)> AND id \\<= :uuid_to_time AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
                               <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                           <endif>
                       <endif>
@@ -494,8 +496,8 @@ class ThreadDAOImpl implements ThreadDAO {
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     AND thread_id \\<> ''
-                    <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
-                    <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                    <if(uuid_from_time)> AND id >= :uuid_from_time AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
                     <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                 )
                 WHERE 1 = 1
@@ -523,9 +525,11 @@ class ThreadDAOImpl implements ThreadDAO {
                       AND thread_id \\<> ''
                       <if(traces_final_ids)>
                           AND id IN (SELECT id FROM traces_final_ids)
+                          <if(uuid_from_time)> AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                          <if(uuid_to_time)> AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
                       <else>
-                          <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
-                          <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                          <if(uuid_from_time)> AND id >= :uuid_from_time AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                          <if(uuid_to_time)> AND id \\<= :uuid_to_time AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
                           <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                       <endif>
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
@@ -1035,8 +1039,8 @@ class ThreadDAOImpl implements ThreadDAO {
                         WHERE workspace_id = :workspace_id
                         AND project_id = :project_id
                         AND thread_id \\<> ''
-                        <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
-                        <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                        <if(uuid_from_time)> AND id >= :uuid_from_time AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                        <if(uuid_to_time)> AND id \\<= :uuid_to_time AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
                         <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                     )
                     WHERE 1 = 1
@@ -1064,9 +1068,11 @@ class ThreadDAOImpl implements ThreadDAO {
                           AND thread_id \\<> ''
                           <if(traces_final_ids)>
                               AND id IN (SELECT id FROM traces_final_ids)
+                              <if(uuid_from_time)> AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                              <if(uuid_to_time)> AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
                           <else>
-                              <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
-                              <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                              <if(uuid_from_time)> AND id >= :uuid_from_time AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                              <if(uuid_to_time)> AND id \\<= :uuid_to_time AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
                               <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                           <endif>
                         ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC

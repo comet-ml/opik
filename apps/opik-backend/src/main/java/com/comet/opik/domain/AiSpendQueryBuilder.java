@@ -55,10 +55,21 @@ class AiSpendQueryBuilder {
     private static final String ID_WINDOW = "id BETWEEN :id_prior_start AND :id_end";
     private static final String ID_RANGE = "id BETWEEN :id_start AND :id_end";
 
+    /**
+     * Weekly-partition pruning bounds for the {@code traces} table, appended to the {@code WINDOW} / {@code RANGE}
+     * fragments. {@code toMonday(id_at)} is a strict consequence of the id-range (it can't drop a row the id-range
+     * wouldn't) but lets the planner prune partitions, which it can't infer through {@code UUIDv7ToDateTime}.
+     */
+    private static final String ID_WEEK_WINDOW = "toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:id_prior_start), 'UTC'))"
+            + " AND toMonday(id_at) <= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))";
+    /** Current-range counterpart of {@link #ID_WEEK_WINDOW}. */
+    private static final String ID_WEEK_RANGE = "toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:id_start), 'UTC'))"
+            + " AND toMonday(id_at) <= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))";
+
     private static final String CURRENT = ID_CURRENT + " AND " + TS_CURRENT;
     private static final String PREVIOUS = ID_PREVIOUS + " AND " + TS_PREVIOUS;
-    private static final String WINDOW = ID_WINDOW + " AND " + TS_WINDOW;
-    private static final String RANGE = ID_RANGE + " AND " + TS_RANGE;
+    private static final String WINDOW = ID_WINDOW + " AND " + TS_WINDOW + " AND " + ID_WEEK_WINDOW;
+    private static final String RANGE = ID_RANGE + " AND " + TS_RANGE + " AND " + ID_WEEK_RANGE;
 
     // The spans table is ordered by (workspace_id, project_id, trace_id, parent_span_id, id),
     // so adding trace_id BETWEEN — the per-call span_id and the trace_id are both
