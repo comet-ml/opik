@@ -4,6 +4,7 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.v1.events.tools.ToolExecutor;
 import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
 import com.comet.opik.api.resources.v1.events.tools.TraceToolContext;
+import com.comet.opik.domain.OnlineScoringTracePersistence.EvaluationRecorder;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.AiMessage;
@@ -54,7 +55,7 @@ class ToolCallLoopTest {
                     scoreInvocations.incrementAndGet();
                     return Mono.just(initial);
                 },
-                messages, ctx(), budget, "trace-id", Map.of()).block();
+                messages, ctx(), budget, "trace-id", Map.of(), EvaluationRecorder.NOOP).block();
 
         assertThat(result).isSameAs(initial);
         assertThat(scoreInvocations.get()).isZero();
@@ -85,7 +86,7 @@ class ToolCallLoopTest {
                     scoreInvocations.incrementAndGet();
                     return Mono.just(toolCallingResponse);
                 },
-                messages, ctx(), budget, "trace-id", Map.of()).block();
+                messages, ctx(), budget, "trace-id", Map.of(), EvaluationRecorder.NOOP).block();
 
         assertThat(result).isSameAs(toolCallingResponse);
         // 10 in-loop follow-up scoreTrace calls — one per round before the cap kicks in.
@@ -139,7 +140,7 @@ class ToolCallLoopTest {
         ChatResponse result = ToolCallLoop.run(
                 toolCallingResponse, baseRequest(), followUpParams(), registry(counting),
                 req -> Mono.just(responses.removeFirst()),
-                messages, ctx(), budget, "trace-id", Map.of()).block();
+                messages, ctx(), budget, "trace-id", Map.of(), EvaluationRecorder.NOOP).block();
 
         assertThat(result).isSameAs(finalResponse);
         assertThat(registryDispatches.get()).isEqualTo(1);
@@ -179,7 +180,7 @@ class ToolCallLoopTest {
         };
 
         ToolCallLoop.run(round0, baseRequest(), followUpParams(), registry(stubTool(TOOL_NAME, "res")),
-                scoreTrace, messages, ctx(), budget, "trace-id", Map.of()).block();
+                scoreTrace, messages, ctx(), budget, "trace-id", Map.of(), EvaluationRecorder.NOOP).block();
 
         // Two follow-up calls fired: one after round 0's tools, one after round 1's.
         assertThat(capturedRequests).hasSize(2);
@@ -230,7 +231,7 @@ class ToolCallLoopTest {
         var budget = new ToolCallLoop.Budget();
 
         ToolCallLoop.run(round0, baseRequest(), followUpParams(), new ToolRegistry(tools),
-                req -> Mono.just(done), messages, ctx(), budget, "trace-id", Map.of()).block();
+                req -> Mono.just(done), messages, ctx(), budget, "trace-id", Map.of(), EvaluationRecorder.NOOP).block();
 
         // Expected messages in order: original UserMessage, AiMessage(3 tool calls),
         // ToolResult(a), ToolResult(b), ToolResult(c). Pull the names off the tool results

@@ -51,6 +51,7 @@ import AddEditRuleDialog from "@/v2/pages-shared/automations/AddEditRuleDialog/A
 import RulesActionsPanel from "@/v2/pages-shared/automations/RulesActionsPanel";
 import RuleRowActionsCell from "@/v2/pages-shared/automations/RuleRowActionsCell";
 import RuleLogsCell from "@/v2/pages-shared/automations/RuleLogsCell";
+import RuleTracesCell from "@/v2/pages-shared/automations/RuleTracesCell";
 import { capitalizeFirstLetter } from "@/lib/utils";
 import { getUIRuleScope } from "@/v2/pages-shared/automations/AddEditRuleDialog/helpers";
 import { usePermissions } from "@/contexts/PermissionsContext";
@@ -289,6 +290,15 @@ export const OnlineEvaluationPage: React.FC = () => {
           sortableColumns: sortableBy,
         },
       ),
+      {
+        accessorKey: "rule_traces",
+        header: "",
+        cell: RuleTracesCell,
+        size: 150,
+        enableResizing: false,
+        enableHiding: false,
+        enableSorting: false,
+      } as ColumnDef<EvaluatorsRule>,
       {
         accessorKey: "rule_logs",
         header: "",

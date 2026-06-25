@@ -10,7 +10,10 @@ import {
 import { Tag } from "@/ui/tag";
 import { Button } from "@/ui/button";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import TraceLogsSidebar, { TLS_QUERY_PREFIX } from "./TraceLogsSidebar";
+import TraceLogsSidebar, {
+  TLS_QUERY_PREFIX,
+  TraceLogsViewConfig,
+} from "./TraceLogsSidebar";
 import { LOGS_SOURCE } from "@/types/traces";
 import { Filter } from "@/types/filters";
 
@@ -20,11 +23,21 @@ type TraceLogsSidebarButtonProps = {
   sourceFilters?: Filter[];
   variant?: "tag" | "icon";
   title?: string;
+  label?: string;
+  viewConfig?: TraceLogsViewConfig;
 };
 
 const TraceLogsSidebarButton: React.FunctionComponent<
   TraceLogsSidebarButtonProps
-> = ({ projectId, logsSource, sourceFilters, variant = "tag", title }) => {
+> = ({
+  projectId,
+  logsSource,
+  sourceFilters,
+  variant = "tag",
+  title,
+  label = "Go to logs",
+  viewConfig,
+}) => {
   const [open = false, setOpen] = useQueryParam(
     `${TLS_QUERY_PREFIX}open`,
     BooleanParam,
@@ -60,7 +73,7 @@ const TraceLogsSidebarButton: React.FunctionComponent<
 
   const trigger =
     variant === "icon" ? (
-      <TooltipWrapper content="Go to logs">
+      <TooltipWrapper content={label}>
         <Button
           data-testid="playground-logs-sidebar-button"
           variant="outline"
@@ -71,7 +84,7 @@ const TraceLogsSidebarButton: React.FunctionComponent<
         </Button>
       </TooltipWrapper>
     ) : (
-      <TooltipWrapper content="Go to logs">
+      <TooltipWrapper content={label}>
         <Tag
           size="md"
           variant="transparent"
@@ -83,7 +96,7 @@ const TraceLogsSidebarButton: React.FunctionComponent<
             style={{ color: "var(--color-green)" }}
           />
           <div className="comet-body-s-accented truncate text-muted-slate">
-            Go to logs
+            {label}
           </div>
         </Tag>
       </TooltipWrapper>
@@ -98,6 +111,7 @@ const TraceLogsSidebarButton: React.FunctionComponent<
         projectId={projectId}
         logsSource={logsSource}
         title={title}
+        viewConfig={viewConfig}
       />
     </>
   );
