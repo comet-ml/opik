@@ -10,18 +10,13 @@ export type QuickFilterTarget = {
   value: string;
 };
 
-// Scalar value node names per grammar. JSON keys are a distinct node
-// (PropertyName), so plain String/Number/… are always values; YAML keys are
-// wrapped in a Key node, so we exclude scalars whose parent is Key.
-// Null is intentionally excluded: the dictionary filter has no is-empty
-// operator, so a null attribute can't be filtered — offering "+" on it would
-// seed a dead filter (value "null" never matches a stored JSON null).
+// Scalar value node names per grammar. Null is excluded: the dictionary filter
+// has no is-empty operator, so a null value would seed a dead filter.
+// BlockLiteral (| / > multi-line scalars) is excluded too: its node text keeps
+// the block indicator and indentation, which can't be normalized into a clean
+// filter value.
 const JSON_VALUE_SCALARS = new Set(["String", "Number", "True", "False"]);
-const YAML_VALUE_SCALARS = new Set([
-  "Literal",
-  "QuotedLiteral",
-  "BlockLiteral",
-]);
+const YAML_VALUE_SCALARS = new Set(["Literal", "QuotedLiteral"]);
 // Unquoted YAML scalars that denote null (skipped, like JSON Null).
 const YAML_NULL_TOKENS = new Set(["null", "Null", "NULL", "~"]);
 
@@ -43,6 +38,9 @@ const unquote = (raw: string): string => {
   return s;
 };
 
+// Known limitation (matches the filter autocomplete's getJSONPaths): keys that
+// literally contain "." or "[]" produce a dotted path indistinguishable from a
+// nested/indexed one, so such a key maps to the wrong filter target.
 const buildPath = (parts: Array<{ key?: string; index?: number }>): string => {
   let out = "";
   for (const part of parts) {
@@ -152,12 +150,10 @@ export const collectQuickFilterTargets = (
       }
       const path = mode === "json" ? jsonPath(node, doc) : yamlPath(node, doc);
       if (path === null) return;
-      targets.push({
-        pos: node.to,
-        from: node.from,
-        path,
-        value: unquote(raw),
-      });
+      // Empty value → a "contains" filter on "" is a no-op, so offer nothing.
+      const value = unquote(raw);
+      if (value === "") return;
+      targets.push({ pos: node.to, from: node.from, path, value });
     },
   });
   return targets;

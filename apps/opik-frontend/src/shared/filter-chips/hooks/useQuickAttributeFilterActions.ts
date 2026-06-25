@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { FilterOperator } from "@/types/filters";
 import { JsonValue } from "@/types/shared";
 import { createFilter } from "@/lib/filters";
@@ -15,9 +15,7 @@ const METADATA_CHIP_ID = "metadata";
 const CUSTOM_CHIP_ID = "custom";
 const PROVIDER_CHIP_ID = "provider";
 
-// Quick-filter is a one-click flow: apply directly with "contains" (the operator
-// used in the large majority of filters and valid for every target chip). The
-// chip is pinned and stays editable, so users can refine the operator afterwards.
+// "contains" is valid for every target chip; the pinned chip stays editable.
 const QUICK_FILTER_OPERATOR: FilterOperator = "contains";
 
 // "providers" (trace) is a read-time aggregate with no stored column; "provider"
@@ -35,6 +33,7 @@ const isProviderRootKey = (path: string): boolean => path === PROVIDER_KEY;
 
 interface UseQuickAttributeFilterActionsArgs {
   type: TRACE_DATA_TYPE;
+  tableId: string;
   values: ChipValueMap;
   applyValue: (id: string, value: ChipValue) => void;
   pinChip: (id: string) => void;
@@ -71,18 +70,23 @@ export const resolveQuickFilterTarget = (
 
 export const useQuickAttributeFilterActions = ({
   type,
+  tableId,
   values,
   applyValue,
   pinChip,
 }: UseQuickAttributeFilterActionsArgs): QuickAttributeFilterApi => {
+  // Read chip values through a ref so applying a filter (which mutates `values`)
+  // doesn't change `filter`'s identity — otherwise every chip edit would tear
+  // down and rebuild the CodeMirror quick-filter extension.
+  const valuesRef = useRef(values);
+  valuesRef.current = values;
+
   const canFilter = useCallback(
     (section: QuickFilterSection, path: string) =>
       Boolean(path) && resolveQuickFilterTarget(section, type, path) !== null,
     [type],
   );
 
-  // One-click apply: add a "contains" row for the clicked attribute and pin the
-  // chip (which stays open for refinement). No confirmation dialog.
   const filter = useCallback(
     (section: QuickFilterSection, path: string, value: JsonValue) => {
       const target = resolveQuickFilterTarget(section, type, path);
@@ -91,7 +95,7 @@ export const useQuickAttributeFilterActions = ({
       const { chipId, key } = target;
       const stringValue = stringifyFilterValue(value);
 
-      const existing = getRows(values[chipId]);
+      const existing = getRows(valuesRef.current[chipId]);
       const alreadyApplied = existing.some(
         (row) =>
           (row.key ?? "") === (key ?? "") &&
@@ -114,16 +118,15 @@ export const useQuickAttributeFilterActions = ({
 
       pinChip(chipId);
 
-      // Usage signal: which tab (traces/spans) and Inspect section the
-      // quick-filter was applied from.
       trackEvent(OpikEvent.QUICK_FILTER_APPLIED, {
         data_type: type,
         source: section,
         filter_name: chipId,
         operator: QUICK_FILTER_OPERATOR,
+        table_id: tableId,
       });
     },
-    [type, values, applyValue, pinChip],
+    [type, tableId, applyValue, pinChip],
   );
 
   return useMemo(() => ({ canFilter, filter }), [canFilter, filter]);

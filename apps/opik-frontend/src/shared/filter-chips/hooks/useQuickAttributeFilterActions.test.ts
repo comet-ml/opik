@@ -6,7 +6,10 @@ import {
   useQuickAttributeFilterActions,
 } from "./useQuickAttributeFilterActions";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
-import { QueryBuilderChipValue } from "@/shared/filter-chips/types";
+import {
+  ChipValueMap,
+  QueryBuilderChipValue,
+} from "@/shared/filter-chips/types";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 
 vi.mock("@/lib/analytics/tracking", async (importOriginal) => {
@@ -64,11 +67,18 @@ describe("stringifyFilterValue", () => {
 });
 
 describe("useQuickAttributeFilterActions", () => {
+  const TABLE_ID = "logs.test";
   const setup = (type = SPANS, values = {}) => {
     const applyValue = vi.fn();
     const pinChip = vi.fn();
     const { result } = renderHook(() =>
-      useQuickAttributeFilterActions({ type, values, applyValue, pinChip }),
+      useQuickAttributeFilterActions({
+        type,
+        tableId: TABLE_ID,
+        values,
+        applyValue,
+        pinChip,
+      }),
     );
     return { result, applyValue, pinChip };
   };
@@ -91,6 +101,49 @@ describe("useQuickAttributeFilterActions", () => {
       expect(result.current.canFilter("metadata", "provider")).toBe(false);
       expect(result.current.canFilter("metadata", "providers[0]")).toBe(false);
       expect(result.current.canFilter("metadata", "integration")).toBe(true);
+    });
+  });
+
+  describe("referential stability", () => {
+    it("keeps `filter` stable across values changes and still reads the latest values", () => {
+      const applyValue = vi.fn();
+      const pinChip = vi.fn();
+      const { result, rerender } = renderHook(
+        ({ values }: { values: ChipValueMap }) =>
+          useQuickAttributeFilterActions({
+            type: SPANS,
+            tableId: TABLE_ID,
+            values,
+            applyValue,
+            pinChip,
+          }),
+        { initialProps: { values: {} as ChipValueMap } },
+      );
+
+      const firstFilter = result.current.filter;
+
+      // Applying a filter mutates `values`; `filter` must keep its identity or
+      // the CodeMirror quick-filter extension rebuilds on every chip edit.
+      const existing: QueryBuilderChipValue = {
+        rows: [
+          {
+            id: "1",
+            field: "",
+            type: "",
+            operator: "contains",
+            key: "env",
+            value: "prod",
+          },
+        ],
+      };
+      rerender({ values: { metadata: existing } });
+      expect(result.current.filter).toBe(firstFilter);
+
+      // The ref means the stable callback still sees the latest values: this is
+      // a duplicate of the existing row, so it pins without re-applying.
+      act(() => result.current.filter("metadata", "env", "prod"));
+      expect(applyValue).not.toHaveBeenCalled();
+      expect(pinChip).toHaveBeenCalledWith("metadata");
     });
   });
 
@@ -227,6 +280,7 @@ describe("useQuickAttributeFilterActions", () => {
         source: "input",
         filter_name: "custom",
         operator: "contains",
+        table_id: TABLE_ID,
       });
     });
 
@@ -239,6 +293,7 @@ describe("useQuickAttributeFilterActions", () => {
         source: "metadata",
         filter_name: "metadata",
         operator: "contains",
+        table_id: TABLE_ID,
       });
     });
 

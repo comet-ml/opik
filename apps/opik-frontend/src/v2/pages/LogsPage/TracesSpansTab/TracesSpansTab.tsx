@@ -1078,18 +1078,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     pinChip,
   });
 
-  const { canFilter: quickFilterCanFilter, filter: quickFilterFilter } =
-    useQuickAttributeFilterActions({
-      type,
-      values: chipValues,
-      applyValue: applyChipValue,
-      pinChip,
-    });
-
-  const quickAttributeFilterApi = useMemo(
-    () => ({ canFilter: quickFilterCanFilter, filter: quickFilterFilter }),
-    [quickFilterCanFilter, quickFilterFilter],
-  );
+  const quickAttributeFilterApi = useQuickAttributeFilterActions({
+    type,
+    tableId,
+    values: chipValues,
+    applyValue: applyChipValue,
+    pinChip,
+  });
 
   const effectiveFilters = useMemo(() => {
     if (!environment || envIsValid === false) return chipFilters;

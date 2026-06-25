@@ -16,15 +16,16 @@ import { syntaxTree } from "@codemirror/language";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Check, ListFilter } from "lucide-react";
-import { JsonValue } from "@/types/shared";
 import {
   QuickFilterMode,
   collectQuickFilterTargets,
 } from "@/shared/SyntaxHighlighter/quickFilterPaths";
 
+// The extension only ever resolves a string value (unquoted editor text), so
+// the callback advertises string rather than the broader JsonValue.
 export type QuickFilterCodeConfig = {
   canFilter: (path: string) => boolean;
-  onFilter: (path: string, value: JsonValue) => void;
+  onFilter: (path: string, value: string) => void;
 };
 
 const FILTER_ICON = renderToStaticMarkup(
@@ -37,23 +38,24 @@ const CHECK_ICON = renderToStaticMarkup(
 
 const TOOLTIP_TEXT = "Filter by this attribute";
 const TOOLTIP_APPLIED_TEXT = "Filter applied";
+// How long the "Filter applied" confirmation stays up before reverting.
+const APPLIED_VISIBLE_MS = 1500;
 
-// A single tooltip element portaled to <body> so CodeMirror's overflow never
-// clips it (the same reason the app's React tooltips render through a portal).
-// It uses fixed positioning and flips above/below to stay on-screen. The same
-// element serves both the hover hint and the post-click "Filter applied"
-// confirmation, which reveals a leading success-green check icon.
-let quickFilterTooltip: HTMLElement | null = null;
-let quickFilterTooltipIcon: HTMLElement | null = null;
-let quickFilterTooltipText: HTMLElement | null = null;
+// A tooltip portaled to <body> so CodeMirror's overflow can't clip it. One
+// instance per editor, owned by the ViewPlugin (created in its constructor,
+// removed in destroy()), so there's no shared module node to leak or cross-wire
+// between the input/output/metadata editors mounted side by side. It serves
+// both the hover hint and the post-click "Filter applied" confirmation.
+class QuickFilterTooltip {
+  private readonly el: HTMLElement;
+  private readonly icon: HTMLElement;
+  private readonly text: HTMLElement;
+  private appliedTimer: ReturnType<typeof setTimeout> | null = null;
 
-const getQuickFilterTooltip = (): HTMLElement => {
-  if (!quickFilterTooltip) {
-    quickFilterTooltip = document.createElement("div");
-    // Matches the app's default tooltip (shadcn TooltipContent): light
-    // soft-background, secondary text, border, p-2, rounded-md, text-xs,
-    // shadow-md. Tokens are theme-aware, so it adapts in dark mode too.
-    Object.assign(quickFilterTooltip.style, {
+  constructor() {
+    this.el = document.createElement("div");
+    // Mirrors the app's default shadcn TooltipContent; tokens are theme-aware.
+    Object.assign(this.el.style, {
       position: "fixed",
       display: "none",
       alignItems: "center",
@@ -74,71 +76,81 @@ const getQuickFilterTooltip = (): HTMLElement => {
         "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1)",
     });
 
-    // Success check shown only in the "applied" state.
-    quickFilterTooltipIcon = document.createElement("span");
-    quickFilterTooltipIcon.innerHTML = CHECK_ICON;
-    Object.assign(quickFilterTooltipIcon.style, {
+    this.icon = document.createElement("span");
+    this.icon.innerHTML = CHECK_ICON;
+    Object.assign(this.icon.style, {
       display: "none",
       alignItems: "center",
       color: "hsl(var(--success))",
     });
 
-    quickFilterTooltipText = document.createElement("span");
-    quickFilterTooltipText.textContent = TOOLTIP_TEXT;
+    this.text = document.createElement("span");
+    this.text.textContent = TOOLTIP_TEXT;
 
-    quickFilterTooltip.append(quickFilterTooltipIcon, quickFilterTooltipText);
-    document.body.appendChild(quickFilterTooltip);
+    this.el.append(this.icon, this.text);
+    document.body.appendChild(this.el);
   }
-  return quickFilterTooltip;
-};
 
-const positionQuickFilterTooltip = (anchor: HTMLElement) => {
-  const tooltip = getQuickFilterTooltip();
-  const anchorRect = anchor.getBoundingClientRect();
-  const tooltipRect = tooltip.getBoundingClientRect();
-  // Prefer above the icon; flip below only when too close to the viewport top.
-  const fitsAbove = anchorRect.top > tooltipRect.height + 10;
-  const top = fitsAbove
-    ? anchorRect.top - tooltipRect.height - 6
-    : anchorRect.bottom + 6;
-  const centeredLeft =
-    anchorRect.left + anchorRect.width / 2 - tooltipRect.width / 2;
-  const left = Math.max(
-    6,
-    Math.min(centeredLeft, window.innerWidth - tooltipRect.width - 6),
-  );
-  tooltip.style.top = `${top}px`;
-  tooltip.style.left = `${left}px`;
-};
+  private position(anchor: HTMLElement) {
+    const anchorRect = anchor.getBoundingClientRect();
+    const rect = this.el.getBoundingClientRect();
+    // Prefer above the icon; flip below only when too close to the viewport top.
+    const fitsAbove = anchorRect.top > rect.height + 10;
+    const top = fitsAbove
+      ? anchorRect.top - rect.height - 6
+      : anchorRect.bottom + 6;
+    const centeredLeft =
+      anchorRect.left + anchorRect.width / 2 - rect.width / 2;
+    const left = Math.max(
+      6,
+      Math.min(centeredLeft, window.innerWidth - rect.width - 6),
+    );
+    this.el.style.top = `${top}px`;
+    this.el.style.left = `${left}px`;
+  }
 
-// Hover hint: plain "Filter by this attribute" copy, no icon.
-const showQuickFilterTooltip = (anchor: HTMLElement) => {
-  const tooltip = getQuickFilterTooltip();
-  if (quickFilterTooltipIcon) quickFilterTooltipIcon.style.display = "none";
-  if (quickFilterTooltipText) quickFilterTooltipText.textContent = TOOLTIP_TEXT;
-  tooltip.style.display = "flex";
-  positionQuickFilterTooltip(anchor);
-};
+  showHint(anchor: HTMLElement) {
+    this.clearTimer();
+    this.icon.style.display = "none";
+    this.text.textContent = TOOLTIP_TEXT;
+    this.el.style.display = "flex";
+    this.position(anchor);
+  }
 
-// Post-click confirmation: success check + "Filter applied" copy.
-const markQuickFilterApplied = (anchor: HTMLElement) => {
-  const tooltip = getQuickFilterTooltip();
-  if (quickFilterTooltipIcon)
-    quickFilterTooltipIcon.style.display = "inline-flex";
-  if (quickFilterTooltipText)
-    quickFilterTooltipText.textContent = TOOLTIP_APPLIED_TEXT;
-  tooltip.style.display = "flex";
-  positionQuickFilterTooltip(anchor);
-};
+  showApplied(anchor: HTMLElement) {
+    this.icon.style.display = "inline-flex";
+    this.text.textContent = TOOLTIP_APPLIED_TEXT;
+    this.el.style.display = "flex";
+    this.position(anchor);
+    // Auto-dismiss on a timer, independent of the triggering widget's DOM
+    // lifecycle, so the confirmation survives a decoration rebuild.
+    this.clearTimer();
+    this.appliedTimer = setTimeout(() => this.hide(), APPLIED_VISIBLE_MS);
+  }
 
-const hideQuickFilterTooltip = () => {
-  if (!quickFilterTooltip) return;
-  quickFilterTooltip.style.display = "none";
-  // Reset to the hint baseline so the "applied" confirmation is strictly
-  // transient and never resurfaces stale on a later show / after teardown.
-  if (quickFilterTooltipIcon) quickFilterTooltipIcon.style.display = "none";
-  if (quickFilterTooltipText) quickFilterTooltipText.textContent = TOOLTIP_TEXT;
-};
+  hide() {
+    this.clearTimer();
+    this.el.style.display = "none";
+    this.icon.style.display = "none";
+    this.text.textContent = TOOLTIP_TEXT;
+  }
+
+  destroy() {
+    this.clearTimer();
+    this.el.remove();
+  }
+
+  private clearTimer() {
+    if (this.appliedTimer !== null) {
+      clearTimeout(this.appliedTimer);
+      this.appliedTimer = null;
+    }
+  }
+}
+
+// Per-editor tooltip lookup so a widget can reach its own editor's tooltip from
+// an event handler (the plugin owns creation/teardown).
+const quickFilterTooltips = new WeakMap<EditorView, QuickFilterTooltip>();
 
 // Highlights the attribute value that the hovered/focused filter icon would
 // filter on, so the user sees exactly what will be filtered.
@@ -203,9 +215,7 @@ class QuickFilterWidget extends WidgetType {
       event.preventDefault();
       event.stopPropagation();
       this.onFilter(this.path, this.value);
-      // The icon is still hovered/focused after the click, so swap the live
-      // tooltip to the "Filter applied" confirmation in place.
-      markQuickFilterApplied(button);
+      quickFilterTooltips.get(view)?.showApplied(button);
     };
     button.onmousedown = activate;
     button.onkeydown = (event) => {
@@ -214,18 +224,17 @@ class QuickFilterWidget extends WidgetType {
 
     const setActive = (active: boolean) => {
       try {
-        // The view may already be torn down (e.g. the panel closed while the
-        // icon was hovered/focused), in which case the highlight is moot.
         view.dispatch({
           effects: setQuickFilterHover.of(
             active ? { from: this.from, to: this.to } : null,
           ),
         });
       } catch {
-        // ignore dispatch on a destroyed view
+        // View already torn down; the highlight is moot.
       }
-      if (active) showQuickFilterTooltip(button);
-      else hideQuickFilterTooltip();
+      const tooltip = quickFilterTooltips.get(view);
+      if (active) tooltip?.showHint(button);
+      else tooltip?.hide();
     };
     button.onmouseenter = () => setActive(true);
     button.onmouseleave = () => setActive(false);
@@ -237,12 +246,6 @@ class QuickFilterWidget extends WidgetType {
 
   ignoreEvent() {
     return false;
-  }
-
-  destroy() {
-    // The icon may be removed while hovered/focused (viewport change) without a
-    // matching mouseleave/blur; clear the shared tooltip so it can't get stuck.
-    hideQuickFilterTooltip();
   }
 }
 
@@ -319,8 +322,13 @@ export const createQuickFilterExtension = (
   const plugin = ViewPlugin.fromClass(
     class {
       decorations: DecorationSet;
+      private readonly view: EditorView;
+      private readonly tooltip: QuickFilterTooltip;
 
       constructor(view: EditorView) {
+        this.view = view;
+        this.tooltip = new QuickFilterTooltip();
+        quickFilterTooltips.set(view, this.tooltip);
         this.decorations = build(view);
       }
 
@@ -331,8 +339,8 @@ export const createQuickFilterExtension = (
       }
 
       destroy() {
-        // Editor torn down (panel close / unmount): drop the shared tooltip.
-        hideQuickFilterTooltip();
+        quickFilterTooltips.delete(this.view);
+        this.tooltip.destroy();
       }
     },
     { decorations: (plugin) => plugin.decorations },
