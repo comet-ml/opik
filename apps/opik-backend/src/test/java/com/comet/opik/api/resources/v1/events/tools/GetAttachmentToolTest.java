@@ -18,6 +18,7 @@ import reactor.core.publisher.Mono;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
@@ -97,12 +98,18 @@ class GetAttachmentToolTest {
 
     @Test
     void fetchImageFromS3StagesPresignedUrl() {
+        // Use a non-default TTL to verify the configured value is forwarded, not a hardcoded literal.
+        int customTtlSeconds = 60;
+        OnlineScoringConfig onlineScoringConfig = new OnlineScoringConfig();
+        onlineScoringConfig.setAgenticToolsS3PresignTtlSeconds(customTtlSeconds);
+        when(config.getOnlineScoring()).thenReturn(onlineScoringConfig);
+
         String presignedUrl = "https://s3.example/" + RandomStringUtils.secure().nextAlphanumeric(12) + "?sig="
                 + RandomStringUtils.secure().nextAlphanumeric(16);
         when(s3Config.isMinIO()).thenReturn(false);
         when(attachmentService.getAttachmentInfoByEntity(any(), any(), any()))
                 .thenReturn(Mono.just(List.of(attachment(IMAGE_FILE_NAME, "image/png"))));
-        when(attachmentService.presignDownloadUrl(any(), eq(WORKSPACE_ID), any()))
+        when(attachmentService.presignDownloadUrl(any(), eq(WORKSPACE_ID), eq(Duration.ofSeconds(customTtlSeconds))))
                 .thenReturn(presignedUrl);
 
         String result = run(
