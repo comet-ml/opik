@@ -62,6 +62,7 @@ public class AgentInsightsReportJob extends Job {
         Mono<Void> timedSweep = Mono.defer(() -> {
             long startMillis = System.currentTimeMillis();
             return runSweep(periodStart, periodEnd)
+                    .doOnSuccess(__ -> log.info("Agent Insights report job completed"))
                     .doFinally(signalType -> AgentInsightsMetrics.SWEEP_DURATION_MS.record(
                             System.currentTimeMillis() - startMillis,
                             signalType == SignalType.ON_COMPLETE
@@ -79,7 +80,6 @@ public class AgentInsightsReportJob extends Job {
                 reportConfig.getJobTimeout().toJavaDuration(),
                 reportConfig.getLockWaitTime().toJavaDuration(),
                 true)
-                .doOnSuccess(__ -> log.info("Agent Insights report job completed"))
                 .subscribe(
                         __ -> {
                         },
