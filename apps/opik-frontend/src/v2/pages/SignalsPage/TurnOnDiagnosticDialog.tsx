@@ -9,8 +9,6 @@ import {
 } from "@/ui/dialog";
 import { buildDocsUrl } from "@/v2/lib/utils";
 
-// Default daily cron time (config.yml `agentInsightsReport.schedule` =
-// `0 5 0 * * ?`). Shown for context; the actual time is set per deployment.
 const DAILY_RUN_TIME_LABEL = "00:05 UTC";
 
 // TODO: point at the dedicated Diagnostics docs page once it ships.

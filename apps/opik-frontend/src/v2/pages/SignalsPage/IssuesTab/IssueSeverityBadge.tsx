@@ -4,9 +4,6 @@ import { AgentInsightsIssue } from "@/types/signals";
 import { cn } from "@/lib/utils";
 import { SEVERITY_DOT_MAP } from "@/v2/pages/SignalsPage/helpers";
 
-// Small severity-colored square fronting an issue — shared by the detail
-// header and the compact list dropdown trigger. Falls back to a neutral slate
-// when severity is unknown.
 const IssueSeverityBadge: React.FC<{
   severity?: AgentInsightsIssue["severity"];
   className?: string;

@@ -8,8 +8,6 @@ export const SEVERITY_LABEL_MAP: Record<AGENT_INSIGHTS_ISSUE_SEVERITY, string> =
     [AGENT_INSIGHTS_ISSUE_SEVERITY.low]: "Low",
   };
 
-// Severity → color (Tailwind bg class), shared by the list's SeverityTag dot
-// and the issue-detail header badge so they always match.
 export const SEVERITY_DOT_MAP: Record<AGENT_INSIGHTS_ISSUE_SEVERITY, string> = {
   [AGENT_INSIGHTS_ISSUE_SEVERITY.critical]: "bg-[#DC2626]",
   [AGENT_INSIGHTS_ISSUE_SEVERITY.high]: "bg-[#F43F5E]",
