@@ -2,7 +2,8 @@ import isFinite from "lodash/isFinite";
 import { ExplainKind, ExplainTarget } from "@/types/assistant-sidebar";
 
 /**
- * Coerce a metric value to a JSON-safe `number | null` for an explain payload.
+ * Coerce a metric value to a JSON-safe, backend-acceptable `number | null` for
+ * an explain payload.
  *
  * `JSON.stringify` DROPS object keys whose value is `undefined`, and the console
  * serializes the payload to JSON when it calls the assistant backend. A
@@ -10,11 +11,22 @@ import { ExplainKind, ExplainTarget } from "@/types/assistant-sidebar";
  * therefore reaches the backend as `{}`, which rejects it with "Invalid payload
  * for '<kind>'". Sending an explicit `null` (which survives serialization)
  * keeps the key present so the "why is there no cost/duration here?" explain
- * still runs. Non-finite inputs (undefined, null, NaN, Infinity) → null; a real
- * number (including 0) passes through unchanged.
+ * still runs.
+ *
+ * Returns `null` for anything that isn't a usable, backend-valid metric, so the
+ * backend's `float | None` (with `ge=0`) never 422s on a value it would reject:
+ *  - undefined / null / NaN / Infinity → null (no value);
+ *  - negative numbers → null (backend requires `>= 0`; a negative duration/cost
+ *    is corrupt data — "not recorded" is truer than a 422);
+ *  - numeric strings (a non-conforming API response — the TS type says `number`)
+ *    are coerced, preserving the pre-coercion behaviour where the backend parsed
+ *    `"5"` rather than us collapsing a real value to "not recorded".
+ * A real number `>= 0` (including 0) passes through unchanged.
  */
-export const finiteOrNull = (value: unknown): number | null =>
-  isFinite(value) ? (value as number) : null;
+export const finiteOrNull = (value: unknown): number | null => {
+  const n = typeof value === "string" ? Number(value) : value;
+  return isFinite(n) && (n as number) >= 0 ? (n as number) : null;
+};
 
 /**
  * Shared factory behind every per-cell explain target builder (Traces/Spans in
