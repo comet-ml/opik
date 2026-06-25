@@ -9,7 +9,6 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { AGENT_INSIGHTS_ISSUES_KEY } from "@/api/api";
 import { formatRelativeDateTime } from "@/lib/date";
 import PageBodyScrollContainer from "@/v2/layout/PageBodyScrollContainer/PageBodyScrollContainer";
-import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 import {
@@ -160,24 +159,28 @@ const SignalsPage: React.FC = () => {
     }
 
     return (
-      <div className="flex flex-col gap-4 px-6 pb-6">
-        {/* Stats are only meaningful once a run has produced issues. */}
-        {hasData && (
-          <SignalsStatsCards
-            tracesAffected={stats.tracesAffected}
-            openIssues={stats.openIssues}
-            resolved={stats.resolved}
-            isPending={isStatsPending}
-            hasData={hasData}
-          />
-        )}
+      <div className="flex min-h-0 flex-1 flex-col gap-4 px-6 pb-3">
+        {/* Always shown; the cards render "-" placeholders until a run produces data. */}
+        <SignalsStatsCards
+          tracesAffected={stats.tracesAffected}
+          openIssues={stats.openIssues}
+          resolved={stats.resolved}
+          isPending={isStatsPending}
+          hasData={hasData}
+        />
 
         {!showResolved && (
           <div className="flex items-center gap-2">
-            {lastScan && (
+            {lastScan ? (
               <span className="comet-body-xs text-muted-slate">
                 Last scan: {formatRelativeDateTime(lastScan)}
               </span>
+            ) : (
+              // Only claim "No runs yet" when there's genuinely no data; if issues
+              // exist a run clearly happened (last_scan_at may just be unset).
+              !hasData && (
+                <span className="comet-body-xs text-muted-slate">No runs yet</span>
+              )
             )}
             <div className="ml-auto flex items-center gap-2">
               <Button
@@ -215,11 +218,10 @@ const SignalsPage: React.FC = () => {
   };
 
   return (
-    <PageBodyScrollContainer>
-      <PageBodyStickyContainer
-        className="mb-4 mt-6 flex items-center justify-between"
-        direction="horizontal"
-      >
+    <PageBodyScrollContainer className="flex flex-col overflow-hidden">
+      {/* Chrome stays fixed at the top; the two-pane below fills the remaining
+          height and each column scrolls independently (no page-level scroll). */}
+      <div className="mb-4 mt-6 flex shrink-0 items-center justify-between px-6">
         <h1 className="truncate break-words text-base font-medium tracking-normal text-foreground-secondary">
           Diagnostics
         </h1>
@@ -255,7 +257,7 @@ const SignalsPage: React.FC = () => {
             )}
           </div>
         )}
-      </PageBodyStickyContainer>
+      </div>
       {renderBody()}
       <DiagnosticsSettingsDialog
         open={settingsOpen}
