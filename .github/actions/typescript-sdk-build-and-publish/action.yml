@@ -69,24 +69,47 @@ runs:
       id: version
       shell: bash
       working-directory: ${{ inputs.working_directory }}
+      env:
+        # Read inputs via env, not `${{ }}` substitution, so a malicious dispatch
+        # input can't inject shell tokens (OWASP / GHA security hardening).
+        INPUT_VERSION: ${{ inputs.version }}
       run: |
-        if [ -n "${{ inputs.version }}" ]; then
-          # Use provided version
-          VERSION="${{ inputs.version }}"
+        if [ -n "${INPUT_VERSION}" ]; then
+          # Validate against a permissive semver regex (X.Y.Z + optional
+          # prerelease/build suffix). Anything else fails fast.
+          if ! [[ "${INPUT_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?(\+[A-Za-z0-9.-]+)?$ ]]; then
+            echo "::error title=Generate version::inputs.version='${INPUT_VERSION}' does not match the expected semver shape (X.Y.Z[-pre][+build])."
+            exit 1
+          fi
+          VERSION="${INPUT_VERSION}"
         else
-          # For push/PR: use package.json version with short SHA (not published)
+          # For push/PR: use package.json version with short SHA (not published).
           PACKAGE_VERSION=$(node -p "require('./package.json').version")
           SHORT_SHA=$(git rev-parse --short HEAD)
           VERSION="${PACKAGE_VERSION}-${SHORT_SHA}"
         fi
-        echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+        echo "VERSION=${VERSION}" >> "$GITHUB_OUTPUT"
         echo "Generated version: ${VERSION}"
 
     - name: Update version
       if: ${{ inputs.is_release == 'true' }}
       shell: bash
       working-directory: ${{ inputs.working_directory }}
-      run: npm version ${{ steps.version.outputs.VERSION }} --no-git-tag-version
+      env:
+        # `RELEASE_VERSION` comes via env (not `${{ }}` substitution) so it can't
+        # inject shell tokens into the `npm version` command (OWASP). Even though
+        # the `Generate version` step now regex-validates inputs.version, env+
+        # quoted is the defense-in-depth shape recommended by GHA security docs.
+        RELEASE_VERSION: ${{ steps.version.outputs.VERSION }}
+      # `--allow-same-version` treats "package.json already at this version" as a
+      # successful no-op instead of erroring `Version not changed`. The operator's
+      # intent on dispatch is "publish this version" — package.json already being
+      # at the target value is bookkeeping that npm publish doesn't care about, so
+      # the bump step shouldn't either. Without this, replay/re-dispatch of an
+      # already-released version (where the prior run's commit-version step landed
+      # on the dispatched ref) fails here before reaching the publish step's own
+      # already-published skip.
+      run: npm version "${RELEASE_VERSION}" --no-git-tag-version --allow-same-version
 
     - name: Build package
       shell: bash
@@ -117,6 +140,23 @@ runs:
         npm pack --dry-run
         echo "Package can be installed successfully"
 
+    - name: Resolve npm package name from package.json
+      id: npm_name
+      if: ${{ inputs.is_release == 'true' }}
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        NPM_PACKAGE_NAME=$(node -p "require('./package.json').name")
+        echo "name=${NPM_PACKAGE_NAME}" >> "$GITHUB_OUTPUT"
+        echo "Resolved npm package name: ${NPM_PACKAGE_NAME}"
+
+    - name: NPM token preflight
+      if: ${{ inputs.is_release == 'true' }}
+      uses: ./.github/actions/npm-token-preflight
+      with:
+        npm_token: ${{ inputs.npm_token }}
+        package_name: ${{ steps.npm_name.outputs.name }}
+
     - name: Publish to NPM (with retry)
       id: npm_publish
       if: ${{ inputs.is_release == 'true' }}
@@ -146,37 +186,49 @@ runs:
         while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
           echo "Publish attempt $ATTEMPT of $MAX_ATTEMPTS (timeout: ${TIMEOUT_SECONDS}s)..."
 
-          # Run the publish, streaming output live AND capturing it for inspection.
-          # Capture timeout/npm's exit code via PIPESTATUS[0] directly — don't rely on
-          # the pipeline's overall exit status, since `tee` masks failures when pipefail
-          # is off, and we don't want to depend on the shell's default flags.
-          timeout $TIMEOUT_SECONDS $PUBLISH_CMD 2>&1 | tee "$PUBLISH_LOG"
-          EXIT_CODE=${PIPESTATUS[0]}
-
-          if [ "$EXIT_CODE" -eq 0 ]; then
+          # Run the publish via `if pipeline; then ... else ...; fi`. This shape is
+          # load-bearing for three reasons; do not rewrite to a bare pipeline:
+          #   1. The `if` condition shields the pipeline from `set -e` (GitHub Actions
+          #      `shell: bash` uses `bash --noprofile --norc -eo pipefail`; without
+          #      this shield, a non-zero pipeline kills the step before we evaluate
+          #      the 403-skip below).
+          #   2. PIPESTATUS is preserved inside the `else` branch (a trailing
+          #      `|| true` would clobber PIPESTATUS to reflect only `true`, masking
+          #      every failure as exit-0 and silently turning real publish failures
+          #      into false-green CI).
+          #   3. `tee` streams output live AND captures it to PUBLISH_LOG for the
+          #      grep-based 403-already-published check.
+          if timeout $TIMEOUT_SECONDS $PUBLISH_CMD 2>&1 | tee "$PUBLISH_LOG"; then
             SUCCESS=true
             break
-          fi
-
-          if [ "$EXIT_CODE" -eq 124 ]; then
-            echo "Attempt $ATTEMPT timed out after ${TIMEOUT_SECONDS}s"
           else
-            echo "Attempt $ATTEMPT failed with exit code $EXIT_CODE"
-          fi
+            EXIT_CODE=${PIPESTATUS[0]}
 
-          # Non-retryable: version already published. The desired end state is achieved;
-          # treat as a skip-with-warning so concurrent / replay dispatches don't fail CI.
-          if grep -q "E403" "$PUBLISH_LOG" && grep -qi "cannot publish over" "$PUBLISH_LOG"; then
-            ALREADY_PUBLISHED=true
-            echo "::warning title=NPM publish skipped::${PACKAGE_NAME}@${NEW_VERSION} is already published; treating as success."
-            break
-          fi
+            if [ "$EXIT_CODE" -eq 124 ]; then
+              echo "Attempt $ATTEMPT timed out after ${TIMEOUT_SECONDS}s"
+            else
+              echo "Attempt $ATTEMPT failed with exit code $EXIT_CODE"
+            fi
 
-          if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
-            echo "Retrying in 10 seconds..."
-            sleep 10
+            # Non-retryable: version already published. The desired end state is
+            # achieved; treat as a skip-with-warning so concurrent / replay
+            # dispatches don't fail CI. Match BOTH `E403` and the specific phrase
+            # `cannot publish over` so we don't accidentally treat other 403s
+            # (e.g. `You may not perform that action with these credentials`, which
+            # means the token lacks publish scope on this package) as already-
+            # published — those must still fail loudly.
+            if grep -q "E403" "$PUBLISH_LOG" && grep -qi "cannot publish over" "$PUBLISH_LOG"; then
+              ALREADY_PUBLISHED=true
+              echo "::warning title=NPM publish skipped::${PACKAGE_NAME}@${NEW_VERSION} is already published; treating as success."
+              break
+            fi
+
+            if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+              echo "Retrying in 10 seconds..."
+              sleep 10
+            fi
+            ATTEMPT=$((ATTEMPT + 1))
           fi
-          ATTEMPT=$((ATTEMPT + 1))
         done
 
         if [ "$SUCCESS" = false ] && [ "$ALREADY_PUBLISHED" = false ]; then

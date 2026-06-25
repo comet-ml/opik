@@ -54,6 +54,13 @@ jobs:
           with:
                 python-version: "3.10"
 
+        - name: PyPI token preflight
+          if: inputs.is_release
+          uses: ./.github/actions/pypi-token-preflight
+          with:
+            pypi_token: ${{ secrets.PYPI_API_TOKEN }}
+            package_name: opik
+
         - name: Build pip package
           run: |
                 cd sdks/python
@@ -67,3 +74,8 @@ jobs:
           with:
             password: ${{ secrets.PYPI_API_TOKEN }}
             packages-dir: sdks/python/dist
+            # Symmetric to OPIK-6624's npm publish 403-skip: replays / races where
+            # the version is already on PyPI should not fail the release. PyPI returns
+            # `400 Bad Request` (filename already exists) — `skip-existing: true`
+            # makes twine treat it as a no-op success.
+            skip-existing: true

@@ -96,7 +96,11 @@ class OAuthTokenServiceTest {
                 arguments(null, redirectUri, clientId, codeVerifier),
                 arguments(code, null, clientId, codeVerifier),
                 arguments(code, redirectUri, null, codeVerifier),
-                arguments(code, redirectUri, clientId, null));
+                arguments(code, redirectUri, clientId, null),
+                arguments("", redirectUri, clientId, codeVerifier),
+                arguments(code, "", clientId, codeVerifier),
+                arguments(code, redirectUri, "", codeVerifier),
+                arguments(code, redirectUri, clientId, ""));
     }
 
     @ParameterizedTest
@@ -148,7 +152,9 @@ class OAuthTokenServiceTest {
         String clientId = "client-" + RandomStringUtils.secure().nextAlphanumeric(8);
         return Stream.of(
                 arguments(null, clientId),
-                arguments(refreshToken, null));
+                arguments(refreshToken, null),
+                arguments("", clientId),
+                arguments(refreshToken, ""));
     }
 
     @ParameterizedTest

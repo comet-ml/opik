@@ -2,8 +2,38 @@
 
 import re
 from dataclasses import dataclass
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, NotRequired, Optional, List, TypedDict, Union
 from uuid import UUID
+
+
+class OptimizationRunResult(TypedDict):
+    """Successful result emitted by ``optimizer_runner`` and returned by
+    ``process_optimizer_job``."""
+    success: bool
+    optimization_id: str
+    score: float
+    initial_score: Optional[float]
+    # The optimized prompt's messages (or a string fallback when the optimizer
+    # returns a non-structured prompt); absent if the optimizer produced none.
+    optimized_prompt: NotRequired[Union[List[Dict[str, str]], str]]
+
+
+class OptimizationErrorResult(TypedDict):
+    """Failure result emitted by ``optimizer_runner``. ``process_optimizer_job``
+    raises on it rather than returning it."""
+    success: bool
+    error: str
+    traceback: str
+
+
+class OptimizationCancelledResult(TypedDict):
+    """Returned by ``process_optimizer_job`` when the run was cancelled."""
+    status: str
+    optimization_id: str
+
+
+# What ``process_optimizer_job`` hands back to its caller.
+OptimizationJobResult = Union[OptimizationRunResult, OptimizationCancelledResult]
 
 
 def _convert_template_syntax(text: str) -> str:
@@ -83,7 +113,13 @@ class OptimizationConfig:
     # Optimizer
     optimizer_type: str
     optimizer_params: Dict[str, Any]
-    
+
+    # Optional separate model for the optimizer/algorithm itself (GEPA's
+    # reflection LM, hierarchical's reasoning model). Defaults to the prompt
+    # model when not set.
+    optimizer_model: Optional[str] = None
+    optimizer_model_params: Optional[Dict[str, Any]] = None
+
     @classmethod
     def from_dict(cls, config: Dict[str, Any]) -> "OptimizationConfig":
         """Parse config dict into typed object.
@@ -114,6 +150,13 @@ class OptimizationConfig:
             }
             prompt_messages.append(converted_msg)
         
+        # The optimizer's own model (optional) is carried inside the optimizer
+        # parameters. Pull it out so the remaining params can be passed as
+        # kwargs to the optimizer constructor without colliding with `model`.
+        optimizer_params = dict(config["optimizer"].get("parameters", {}))
+        optimizer_model = optimizer_params.pop("model", None)
+        optimizer_model_params = optimizer_params.pop("model_parameters", None)
+
         return cls(
             dataset_name=config["dataset_name"],
             prompt_messages=prompt_messages,
@@ -122,7 +165,9 @@ class OptimizationConfig:
             metric_type=metric_config["type"],
             metric_params=metric_config.get("parameters", {}),
             optimizer_type=config["optimizer"]["type"],
-            optimizer_params=config["optimizer"].get("parameters", {}),
+            optimizer_params=optimizer_params,
+            optimizer_model=optimizer_model,
+            optimizer_model_params=optimizer_model_params,
         )
 
 

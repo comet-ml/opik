@@ -26,7 +26,6 @@ from opik.rest_api.types.experiment_item import ExperimentItem
 from rich.console import Console
 
 from ..migration_manifest import MigrationManifest
-from ..exports.utils import extract_trace_id_from_filename
 from .utils import (
     handle_trace_reference,
     translate_trace_id,
@@ -90,6 +89,7 @@ def _build_dataset_item_id_map(
     client: opik.Opik,
     experiment_files: List[Path],
     datasets_dir: Path,
+    project_name: str,
     dry_run: bool,
     debug: bool,
     manifest: Optional[MigrationManifest] = None,
@@ -136,10 +136,6 @@ def _build_dataset_item_id_map(
             for item_data in items_data:
                 original_dataset_item_id = item_data.get("dataset_item_id")
                 dataset_item_data = item_data.get("dataset_item_data")
-
-                # Fallback to input for older exports
-                if not dataset_item_data:
-                    dataset_item_data = item_data.get("input")
 
                 if not original_dataset_item_id or not dataset_item_data:
                     continue
@@ -207,7 +203,7 @@ def _build_dataset_item_id_map(
 
     # Import datasets (this will create dataset items with new IDs)
     dataset_import_stats = import_datasets_from_directory(
-        client, datasets_dir, dry_run, None, debug, manifest=manifest
+        client, datasets_dir, project_name, dry_run, None, debug, manifest=manifest
     )
 
     # Update dataset_stats with import results
@@ -268,7 +264,7 @@ def _build_dataset_item_id_map(
 
             # Get the imported dataset
             try:
-                dataset = client.get_dataset(dataset_name)
+                dataset = client.get_dataset(dataset_name, project_name=project_name)
             except Exception:
                 debug_print(
                     f"Warning: Could not get dataset '{dataset_name}' after import",
@@ -402,15 +398,17 @@ def recreate_experiment(
     Args:
         client: Opik client instance
         experiment_data: Experiment data structure from export
-        project_name: Name of the project to create the experiment in
+        project_name: Name of the project to create the experiment (and its dataset) in.
+            The experiment always lands in this project on both the import-from-disk and
+            migrate paths.
         trace_id_map: Mapping from original trace IDs to new trace IDs (required, can be empty dict)
         dataset_item_id_map: Mapping from original dataset_item_id to new dataset_item_id (optional)
         dry_run: If True, only simulate the import without making changes
         debug: If True, print debug messages
-        target_project_name: When set, the experiment is created in this project at the
-            destination (used by ``opik migrate dataset``). When ``None`` (default,
-            import-from-disk path), the experiment lands in the client's default project
-            and ``project_name`` is recorded in metadata only.
+        target_project_name: Migrate-path marker (used by ``opik migrate dataset``). When
+            set it equals ``project_name`` and additionally enables migrate-only fidelity
+            forwarding (evaluation_method/tags/dataset_version_id/optimization_id) and
+            prompt-version stripping. ``None`` selects the plain import-from-disk path.
         target_dataset_name: When set, override the dataset name on the destination
             experiment (used by migrate when the dataset was renamed at the target).
             Defaults to the source experiment's ``dataset_name``.
@@ -446,14 +444,14 @@ def recreate_experiment(
         return True
 
     try:
-        # Get or create the dataset.
+        # Get or create the dataset in the experiment's project.
         # In the migrate path the dataset already exists at the destination (created
         # by Slice 1/2); this call is a no-op fetch and ensures the experiment binds
-        # to the destination-project copy rather than the client's default.
+        # to the destination-project copy.
         _ = client.get_or_create_dataset(
             name=destination_dataset_name,
             description=f"Recreated dataset for experiment {experiment_name}",
-            project_name=target_project_name,
+            project_name=project_name,
         )
 
         debug_print(
@@ -499,11 +497,16 @@ def recreate_experiment(
         # the destination id before this function sees it, so by the
         # time we get here ``experiment_info["optimization_id"]`` is
         # already a destination-valid pointer.
+        # The experiment is always created in its project. ``project_name`` equals
+        # ``target_project_name`` on the migrate path, so this is unchanged for
+        # migrate; on the import-from-disk path it now lands the experiment in the
+        # named project instead of the client's default.
         create_kwargs: Dict[str, Any] = {
             "dataset_name": destination_dataset_name,
             "name": experiment_name,
             "experiment_config": experiment_metadata,
             "type": experiment_info.get("type", "regular"),
+            "project_name": project_name,
         }
         if is_migrate_path:
             create_kwargs["evaluation_method"] = experiment_info.get(
@@ -511,7 +514,6 @@ def recreate_experiment(
             )
             create_kwargs["tags"] = experiment_info.get("tags")
             create_kwargs["dataset_version_id"] = target_dataset_version_id
-            create_kwargs["project_name"] = target_project_name
             optimization_id = experiment_info.get("optimization_id")
             if optimization_id:
                 create_kwargs["optimization_id"] = optimization_id
@@ -758,7 +760,7 @@ def recreate_experiments(
     dataset_item_id_map: Optional[Dict[str, str]] = None,
     debug: bool = False,
     manifest: Optional[MigrationManifest] = None,
-) -> int:
+) -> tuple[int, int]:
     """Recreate experiments from JSON files.
 
     Args:
@@ -767,12 +769,15 @@ def recreate_experiments(
         dataset_item_id_map: Mapping from original dataset_item_id to new dataset_item_id.
                             If None, will be treated as empty dict (all items will be skipped).
         manifest: Optional migration manifest for resumable imports.
+
+    Returns:
+        Tuple of ``(successful, failed)`` experiment counts.
     """
     experiment_files = find_experiment_files(project_dir)
 
     if not experiment_files:
         console.print(f"[yellow]No experiment files found in {project_dir}[/yellow]")
-        return 0
+        return 0, 0
 
     console.print(f"[green]Found {len(experiment_files)} experiment files[/green]")
 
@@ -797,7 +802,7 @@ def recreate_experiments(
             console.print(
                 f"[yellow]No experiments found matching pattern '{name_pattern}'[/yellow]"
             )
-            return 0
+            return 0, 0
 
     successful = 0
     failed = 0
@@ -841,17 +846,21 @@ def recreate_experiments(
             failed += 1
             continue
 
-    return successful
+    return successful, failed
 
 
-def _import_traces_from_projects_directory(
+def _import_traces_for_project(
     client: opik.Opik,
-    workspace_root: Path,
+    project_dir: Path,
+    project_name: str,
     dry_run: bool,
     debug: bool,
     manifest: Optional[MigrationManifest] = None,
 ) -> tuple[Dict[str, str], Dict[str, int]]:
-    """Import traces from projects directory and return trace_id_map and statistics.
+    """Import the project's traces and return trace_id_map and statistics.
+
+    Trace files live directly under ``project_dir`` (``trace_*.json``) and are
+    created in ``project_name``.
 
     Returns:
         Tuple of (trace_id_map, stats_dict) where:
@@ -862,192 +871,166 @@ def _import_traces_from_projects_directory(
     trace_id_map: Dict[str, str] = manifest.get_trace_id_map() if manifest else {}
     traces_imported = 0
     traces_errors = 0
-    projects_dir = workspace_root / "projects"
 
-    if not projects_dir.exists():
-        debug_print(
-            f"No projects directory found at {projects_dir}, skipping trace import",
-            debug,
-        )
-        return trace_id_map, {"traces": 0, "traces_errors": 0}
+    trace_files = list(project_dir.glob("trace_*.json"))
 
-    project_dirs = [d for d in projects_dir.iterdir() if d.is_dir()]
-
-    if not project_dirs:
-        debug_print("No project directories found, skipping trace import", debug)
+    if not trace_files:
+        debug_print(f"No trace files found in {project_dir}", debug)
         return trace_id_map, {"traces": 0, "traces_errors": 0}
 
     debug_print(
-        f"Importing traces from {len(project_dirs)} project(s) to build trace ID mapping...",
+        f"Importing {len(trace_files)} trace(s) into project '{project_name}'...",
         debug,
     )
 
-    for project_dir in project_dirs:
-        project_name = project_dir.name
-        trace_files = list(project_dir.glob("trace_*.json"))
+    for trace_file in trace_files:
+        try:
+            # Skip trace files already imported in a previous run.
+            # Their ID mappings are already in trace_id_map (seeded from manifest).
+            if manifest and not dry_run and manifest.is_file_completed(trace_file):
+                debug_print(
+                    f"Skipping {trace_file.name} (already imported in a previous run)",
+                    debug,
+                )
+                traces_imported += 1
+                continue
 
-        if not trace_files:
-            debug_print(f"No trace files found in project '{project_name}'", debug)
-            continue
+            with open(trace_file, "r", encoding="utf-8") as f:
+                trace_data = json.load(f)
 
-        debug_print(
-            f"Importing {len(trace_files)} trace(s) from project '{project_name}'...",
-            debug,
-        )
+            trace_info = trace_data.get("trace", {})
+            spans_info = trace_data.get("spans", [])
+            original_trace_id = trace_info.get("id")
 
-        for trace_file in trace_files:
-            try:
-                # Skip trace files already imported in a previous run.
-                # Their ID mappings are already in trace_id_map (seeded from manifest).
-                if manifest and not dry_run and manifest.is_file_completed(trace_file):
-                    debug_print(
-                        f"Skipping {trace_file.name} (already imported in a previous run)",
-                        debug,
+            if not original_trace_id:
+                debug_print(
+                    f"Warning: Trace file {trace_file.name} has no trace ID, skipping",
+                    debug,
+                )
+                traces_errors += 1
+                continue
+
+            if dry_run:
+                debug_print(
+                    f"Would import trace {original_trace_id} into project '{project_name}'",
+                    debug,
+                )
+                continue
+
+            # Create trace with full data
+            # Clean feedback scores to remove read-only fields
+            feedback_scores = clean_feedback_scores(trace_info.get("feedback_scores"))
+
+            trace = client.trace(
+                name=trace_info.get("name", "imported_trace"),
+                start_time=(
+                    datetime.fromisoformat(
+                        trace_info["start_time"].replace("Z", "+00:00")
                     )
-                    traces_imported += 1
-                    continue
-
-                with open(trace_file, "r", encoding="utf-8") as f:
-                    trace_data = json.load(f)
-
-                trace_info = trace_data.get("trace", {})
-                spans_info = trace_data.get("spans", [])
-                original_trace_id = trace_info.get("id")
-
-                if not original_trace_id:
-                    debug_print(
-                        f"Warning: Trace file {trace_file.name} has no trace ID, skipping",
-                        debug,
+                    if trace_info.get("start_time")
+                    else None
+                ),
+                end_time=(
+                    datetime.fromisoformat(
+                        trace_info["end_time"].replace("Z", "+00:00")
                     )
-                    traces_errors += 1
-                    continue
+                    if trace_info.get("end_time")
+                    else None
+                ),
+                input=trace_info.get("input", {}),
+                output=trace_info.get("output", {}),
+                metadata=trace_info.get("metadata"),
+                tags=trace_info.get("tags"),
+                feedback_scores=feedback_scores,
+                error_info=trace_info.get("error_info"),
+                thread_id=trace_info.get("thread_id"),
+                project_name=project_name,
+            )
 
-                if dry_run:
-                    debug_print(
-                        f"Would import trace {original_trace_id} from project '{project_name}'",
-                        debug,
-                    )
-                    continue
+            # Map original trace ID to new trace ID
+            trace_id_map[original_trace_id] = trace.id
+            if manifest:
+                manifest.add_trace_mapping(original_trace_id, trace.id)
+            traces_imported += 1
+            debug_print(
+                f"Mapped trace {original_trace_id} -> {trace.id} (project: {project_name})",
+                debug,
+            )
 
-                # Create trace with full data
+            # Create spans with full data, preserving parent-child relationships
+            # Build span_id_map to translate parent_span_id references
+            span_id_map: Dict[str, str] = {}  # Maps original span ID to new span ID
+
+            # Sort spans topologically to ensure parents are processed before children
+            # This handles multi-level hierarchies correctly
+            sorted_spans = sort_spans_topologically(spans_info)
+
+            for span_info in sorted_spans:
                 # Clean feedback scores to remove read-only fields
-                feedback_scores = clean_feedback_scores(
-                    trace_info.get("feedback_scores")
+                span_feedback_scores = clean_feedback_scores(
+                    span_info.get("feedback_scores")
                 )
 
-                trace = client.trace(
-                    name=trace_info.get("name", "imported_trace"),
+                original_span_id = span_info.get("id")
+                original_parent_span_id = span_info.get("parent_span_id")
+
+                # Translate parent_span_id if it exists
+                new_parent_span_id = None
+                if original_parent_span_id and original_parent_span_id in span_id_map:
+                    new_parent_span_id = span_id_map[original_parent_span_id]
+
+                # Create span with parent_span_id if available
+                # Clean usage data to avoid double-prefixing of original_usage keys
+                usage_data = clean_usage_for_import(span_info.get("usage"))
+
+                span = client.span(
+                    name=span_info.get("name", "imported_span"),
+                    type=span_info.get("type", "general"),
                     start_time=(
                         datetime.fromisoformat(
-                            trace_info["start_time"].replace("Z", "+00:00")
+                            span_info["start_time"].replace("Z", "+00:00")
                         )
-                        if trace_info.get("start_time")
+                        if span_info.get("start_time")
                         else None
                     ),
                     end_time=(
                         datetime.fromisoformat(
-                            trace_info["end_time"].replace("Z", "+00:00")
+                            span_info["end_time"].replace("Z", "+00:00")
                         )
-                        if trace_info.get("end_time")
+                        if span_info.get("end_time")
                         else None
                     ),
-                    input=trace_info.get("input", {}),
-                    output=trace_info.get("output", {}),
-                    metadata=trace_info.get("metadata"),
-                    tags=trace_info.get("tags"),
-                    feedback_scores=feedback_scores,
-                    error_info=trace_info.get("error_info"),
-                    thread_id=trace_info.get("thread_id"),
+                    input=span_info.get("input", {}),
+                    output=span_info.get("output", {}),
+                    metadata=span_info.get("metadata"),
+                    tags=span_info.get("tags"),
+                    usage=usage_data,
+                    feedback_scores=span_feedback_scores,
+                    model=span_info.get("model"),
+                    provider=span_info.get("provider"),
+                    error_info=span_info.get("error_info"),
+                    total_cost=span_info.get("total_cost"),
+                    trace_id=trace.id,
+                    parent_span_id=new_parent_span_id,
                     project_name=project_name,
                 )
 
-                # Map original trace ID to new trace ID
-                trace_id_map[original_trace_id] = trace.id
-                if manifest:
-                    manifest.add_trace_mapping(original_trace_id, trace.id)
-                traces_imported += 1
-                debug_print(
-                    f"Mapped trace {original_trace_id} -> {trace.id} (project: {project_name})",
-                    debug,
-                )
+                # Map original span ID to new span ID for parent relationship mapping
+                if original_span_id and span.id:
+                    span_id_map[original_span_id] = span.id
 
-                # Create spans with full data, preserving parent-child relationships
-                # Build span_id_map to translate parent_span_id references
-                span_id_map: Dict[str, str] = {}  # Maps original span ID to new span ID
+            # Mark trace file completed and persist trace mapping to disk
+            if manifest:
+                manifest.mark_file_completed(trace_file)
 
-                # Sort spans topologically to ensure parents are processed before children
-                # This handles multi-level hierarchies correctly
-                sorted_spans = sort_spans_topologically(spans_info)
-
-                for span_info in sorted_spans:
-                    # Clean feedback scores to remove read-only fields
-                    span_feedback_scores = clean_feedback_scores(
-                        span_info.get("feedback_scores")
-                    )
-
-                    original_span_id = span_info.get("id")
-                    original_parent_span_id = span_info.get("parent_span_id")
-
-                    # Translate parent_span_id if it exists
-                    new_parent_span_id = None
-                    if (
-                        original_parent_span_id
-                        and original_parent_span_id in span_id_map
-                    ):
-                        new_parent_span_id = span_id_map[original_parent_span_id]
-
-                    # Create span with parent_span_id if available
-                    # Clean usage data to avoid double-prefixing of original_usage keys
-                    usage_data = clean_usage_for_import(span_info.get("usage"))
-
-                    span = client.span(
-                        name=span_info.get("name", "imported_span"),
-                        type=span_info.get("type", "general"),
-                        start_time=(
-                            datetime.fromisoformat(
-                                span_info["start_time"].replace("Z", "+00:00")
-                            )
-                            if span_info.get("start_time")
-                            else None
-                        ),
-                        end_time=(
-                            datetime.fromisoformat(
-                                span_info["end_time"].replace("Z", "+00:00")
-                            )
-                            if span_info.get("end_time")
-                            else None
-                        ),
-                        input=span_info.get("input", {}),
-                        output=span_info.get("output", {}),
-                        metadata=span_info.get("metadata"),
-                        tags=span_info.get("tags"),
-                        usage=usage_data,
-                        feedback_scores=span_feedback_scores,
-                        model=span_info.get("model"),
-                        provider=span_info.get("provider"),
-                        error_info=span_info.get("error_info"),
-                        total_cost=span_info.get("total_cost"),
-                        trace_id=trace.id,
-                        parent_span_id=new_parent_span_id,
-                        project_name=project_name,
-                    )
-
-                    # Map original span ID to new span ID for parent relationship mapping
-                    if original_span_id and span.id:
-                        span_id_map[original_span_id] = span.id
-
-                # Mark trace file completed and persist trace mapping to disk
-                if manifest:
-                    manifest.mark_file_completed(trace_file)
-
-            except Exception as e:
-                console.print(
-                    f"[yellow]Warning: Failed to import trace from {trace_file}: {e}[/yellow]"
-                )
-                if manifest:
-                    manifest.mark_file_failed(trace_file, str(e))
-                traces_errors += 1
-                continue
+        except Exception as e:
+            console.print(
+                f"[yellow]Warning: Failed to import trace from {trace_file}: {e}[/yellow]"
+            )
+            if manifest:
+                manifest.mark_file_failed(trace_file, str(e))
+            traces_errors += 1
+            continue
 
     if not dry_run and trace_id_map:
         # Flush client to ensure traces are persisted before recreating experiments
@@ -1063,10 +1046,6 @@ def _import_traces_from_projects_directory(
         console.print(
             "[yellow]Warning: No traces were imported. Trace ID map is empty.[/yellow]"
         )
-        if traces_imported == 0 and traces_errors == 0:
-            console.print(
-                f"[yellow]No trace files were found in {projects_dir}[/yellow]"
-            )
 
     return trace_id_map, {"traces": traces_imported, "traces_errors": traces_errors}
 
@@ -1074,12 +1053,13 @@ def _import_traces_from_projects_directory(
 def import_experiments_from_directory(
     client: opik.Opik,
     source_dir: Path,
+    project_name: str,
     dry_run: bool,
     name_pattern: Optional[str],
     debug: bool,
     manifest: Optional[MigrationManifest] = None,
 ) -> Dict[str, int]:
-    """Import experiments from a directory.
+    """Import experiments from a directory into the given project.
 
     This function will first import prompts and traces from their respective directories
     (if they exist) to build a trace_id_map, then use that map when recreating experiments.
@@ -1107,16 +1087,23 @@ def import_experiments_from_directory(
                 "traces_errors": 0,
             }
 
-        # source_dir is typically workspace/experiments, so parent is workspace root
-        workspace_root = source_dir.parent
+        # source_dir is projects/<project>/experiments, so its parent is the
+        # project root that holds datasets/, prompts/, and the trace files.
+        project_root = source_dir.parent
 
         # Import prompts first (they may be referenced by experiments)
         prompts_stats = {"prompts": 0, "prompts_skipped": 0, "prompts_errors": 0}
-        prompts_dir = workspace_root / "prompts"
+        prompts_dir = project_root / "prompts"
         if prompts_dir.exists():
             debug_print("Importing prompts from prompts directory...", debug)
             prompts_stats = import_prompts_from_directory(
-                client, prompts_dir, dry_run, name_pattern, debug, manifest=manifest
+                client,
+                prompts_dir,
+                project_name,
+                dry_run,
+                name_pattern,
+                debug,
+                manifest=manifest,
             )
             if prompts_stats.get("prompts", 0) > 0 and not dry_run:
                 # Flush client to ensure prompts are persisted
@@ -1129,7 +1116,7 @@ def import_experiments_from_directory(
             debug_print("No prompts directory found, skipping prompt import", debug)
 
         # Import datasets first to build dataset_item_id_map
-        datasets_dir = workspace_root / "datasets"
+        datasets_dir = project_root / "datasets"
         dataset_item_id_map: Dict[str, str] = {}
         datasets_stats: Dict[str, int] = {
             "datasets": 0,
@@ -1145,6 +1132,7 @@ def import_experiments_from_directory(
                 client,
                 experiment_files,
                 datasets_dir,
+                project_name,
                 dry_run,
                 debug,
                 manifest=manifest,
@@ -1155,34 +1143,15 @@ def import_experiments_from_directory(
                 debug,
             )
 
-        # Import traces first to build trace_id_map
-        trace_id_map, traces_stats = _import_traces_from_projects_directory(
-            client, workspace_root, dry_run, debug, manifest=manifest
+        # Import the project's traces first to build trace_id_map
+        trace_id_map, traces_stats = _import_traces_for_project(
+            client, project_root, project_name, dry_run, debug, manifest=manifest
         )
 
         if not trace_id_map and not dry_run:
             console.print(
                 "[yellow]Warning: No traces were imported. Experiment items may be skipped if they reference traces.[/yellow]"
             )
-            # Try to diagnose why traces weren't imported
-            projects_dir = workspace_root / "projects"
-            if projects_dir.exists():
-                project_dirs = [d for d in projects_dir.iterdir() if d.is_dir()]
-                debug_print(
-                    f"Found {len(project_dirs)} project directory(ies): {[d.name for d in project_dirs]}",
-                    debug,
-                )
-                for project_dir in project_dirs:
-                    trace_files = list(project_dir.glob("trace_*.json"))
-                    debug_print(
-                        f"Project '{project_dir.name}' has {len(trace_files)} trace file(s)",
-                        debug,
-                    )
-            else:
-                debug_print(
-                    f"Projects directory not found at {projects_dir}",
-                    debug,
-                )
         elif trace_id_map:
             debug_print(
                 f"Built trace ID mapping with {len(trace_id_map)} trace(s)",
@@ -1193,21 +1162,6 @@ def import_experiments_from_directory(
             debug_print(
                 f"Sample original trace IDs in map: {sample_original_ids}", debug
             )
-
-        # Build a map of trace_id -> project_name from trace filenames for project inference.
-        # The original trace ID is encoded in the filename (trace_{id}.json), so there is
-        # no need to open the files.
-        trace_to_project_map: Dict[str, str] = {}
-        projects_dir = workspace_root / "projects"
-        if projects_dir.exists():
-            for project_dir in projects_dir.iterdir():
-                if not project_dir.is_dir():
-                    continue
-                project_name = project_dir.name
-                for trace_file in project_dir.glob("trace_*.json"):
-                    original_trace_id = extract_trace_id_from_filename(trace_file)
-                    if original_trace_id:
-                        trace_to_project_map[original_trace_id] = project_name
 
         imported_count = 0
         skipped_count = 0
@@ -1281,39 +1235,13 @@ def import_experiments_from_directory(
 
                 debug_print(f"Importing experiment: {experiment_name}", debug)
 
-                # Determine project name: try metadata first, then infer from trace files
-                project_for_logs = (experiment_info.get("metadata") or {}).get(
-                    "project_name"
-                )
-
-                # If no project in metadata, try to infer from trace files
-                if not project_for_logs and trace_to_project_map:
-                    items_data = experiment_data.items
-                    # Find the first trace_id in items and use its project
-                    for item_data in items_data:
-                        trace_id = handle_trace_reference(item_data)
-                        if trace_id and trace_id in trace_to_project_map:
-                            project_for_logs = trace_to_project_map[trace_id]
-                            debug_print(
-                                f"Inferred project name '{project_for_logs}' from trace files",
-                                debug,
-                            )
-                            break
-
-                # Default to "default" if still not found
-                if not project_for_logs:
-                    project_for_logs = "default"
-                    debug_print(
-                        "Using default project name (no project found in metadata or trace files)",
-                        debug,
-                    )
-
+                # The experiment is created in the project named on the command line.
                 # Use trace_id_map and dataset_item_id_map to translate IDs (empty dicts if None)
                 # Note: dataset_item_id_map is already a dict (not None) from _build_dataset_item_id_map
                 success = recreate_experiment(
                     client,
                     experiment_data,
-                    project_for_logs,
+                    project_name,
                     trace_id_map or {},
                     dataset_item_id_map,
                     dry_run,

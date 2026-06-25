@@ -1,0 +1,78 @@
+import type { Page, Locator } from '@playwright/test';
+import { test } from '@playwright/test';
+import { loadEnvConfig } from '../config/env.config';
+
+export class AgentPlaygroundPage {
+  constructor(
+    private readonly page: Page,
+    private readonly projectId: string,
+  ) {}
+
+  async goto(): Promise<void> {
+    return test.step('open the Agent Playground page', async () => {
+      const env = loadEnvConfig();
+      const url = `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/agent-playground`;
+      // Don't wait for networkidle: the page embeds the Ollie assistant iframe,
+      // which holds a long-lived streaming connection, so the network never goes
+      // idle and the goto hangs to the test timeout. Readiness is asserted by
+      // waitForHeading() + the Connected badge instead.
+      await this.page.goto(url);
+      await this.page.waitForURL(new RegExp('/agent-playground'));
+    });
+  }
+
+  async waitForHeading(): Promise<void> {
+    return test.step('wait for the Agent playground heading', async () => {
+      await this.page.getByRole('heading', { name: 'Agent playground', level: 1 }).waitFor();
+    });
+  }
+
+  connectionBadge(): Locator {
+    return this.page.getByText('Connected', { exact: true });
+  }
+
+  async isConnected(): Promise<boolean> {
+    return (await this.connectionBadge().count()) > 0;
+  }
+
+  testInputPanel(): Locator {
+    return this.page.getByText('Test input');
+  }
+
+  /**
+   * The entrypoint param's input control. The "Test input" panel label and the
+   * Connected badge render before the runner's introspected form mounts, so wait
+   * on the actual field (not the panel label) before driving a run.
+   */
+  inputField(fieldName: string): Locator {
+    return this.page.getByPlaceholder(`Enter ${fieldName}...`);
+  }
+
+  async fillInput(fieldName: string, value: string): Promise<void> {
+    return test.step(`fill input "${fieldName}"`, async () => {
+      await this.inputField(fieldName).fill(value);
+    });
+  }
+
+  async clickRun(): Promise<void> {
+    return test.step('click Run', async () => {
+      await this.page.getByRole('button', { name: /^Run/ }).first().click();
+    });
+  }
+
+  runningIndicator(): Locator {
+    return this.page.getByText('Running your agent...');
+  }
+
+  resultPanel(): Locator {
+    return this.page.locator('span').filter({ hasText: 'Result' });
+  }
+
+  resultText(query: string): Locator {
+    return this.page.getByText(`Answer for: ${query}`);
+  }
+
+  viewTraceButton(): Locator {
+    return this.page.getByRole('button', { name: 'View trace' });
+  }
+}

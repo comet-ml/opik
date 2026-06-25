@@ -52,7 +52,7 @@ const EnvironmentFilterSelect: React.FC<EnvironmentFilterSelectProps> = ({
       <DropdownMenuTrigger asChild>
         <Button
           variant="outline"
-          size="sm"
+          size="xs"
           className="min-w-40 justify-between gap-2 font-normal focus-visible:border-primary focus-visible:ring-0"
         >
           <span className="flex min-w-0 items-center gap-1.5 truncate">

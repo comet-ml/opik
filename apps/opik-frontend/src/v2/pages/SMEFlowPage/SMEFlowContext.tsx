@@ -15,7 +15,6 @@ import useAnnotationQueueLocks from "@/api/annotation-queues/useAnnotationQueueL
 import { useAnnotationQueueItemLockMutation } from "@/api/annotation-queues/useAnnotationQueueItemLockMutation";
 import useTracesList from "@/api/traces/useTracesList";
 import useThreadsList from "@/api/traces/useThreadsList";
-import { generateAnnotationQueueIdFilter } from "@/lib/filters";
 import {
   AnnotationQueue,
   ANNOTATION_QUEUE_SCOPE,
@@ -130,11 +129,6 @@ export const SMEFlowProvider: React.FunctionComponent<{
     { enabled: !!queueId },
   );
 
-  const annotationQueueFilter = useMemo(
-    () => generateAnnotationQueueIdFilter(annotationQueue?.id),
-    [annotationQueue?.id],
-  );
-
   const ascendingSort = [{ id: "created_at", desc: false }];
 
   const {
@@ -147,10 +141,10 @@ export const SMEFlowProvider: React.FunctionComponent<{
       page: 1,
       size: MAX_QUEUE_ITEMS,
       sorting: ascendingSort,
-      filters: annotationQueueFilter,
       search: "",
       truncate: true,
       stripAttachments: true,
+      annotationQueueId: annotationQueue?.id,
     },
     {
       enabled:
@@ -172,9 +166,9 @@ export const SMEFlowProvider: React.FunctionComponent<{
       page: 1,
       size: MAX_QUEUE_ITEMS,
       sorting: ascendingSort,
-      filters: annotationQueueFilter,
       search: "",
       truncate: true,
+      annotationQueueId: annotationQueue?.id,
     },
     {
       enabled:

@@ -8,6 +8,7 @@ export interface FeedbackScoreExperimentItemBulkWriteView {
     value: number;
     reason?: string;
     source: OpikApi.FeedbackScoreExperimentItemBulkWriteViewSource;
+    sourceQueueId?: string;
     createdAt?: Date;
     lastUpdatedAt?: Date;
     createdBy?: string;

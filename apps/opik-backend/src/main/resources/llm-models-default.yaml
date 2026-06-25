@@ -158,9 +158,7 @@ anthropic:
     structuredOutput: true
   - id: "claude-3-7-sonnet-20250219"
   - id: "claude-opus-4-20250514"
-    structuredOutput: true
   - id: "claude-sonnet-4-20250514"
-    structuredOutput: true
   - id: "claude-sonnet-4-5-20250929"
     structuredOutput: true
 gemini:
@@ -421,6 +419,8 @@ openrouter:
   - id: "cohere/command-r7b-12-2024"
     label: "cohere/command-r7b-12-2024"
     structuredOutput: true
+  - id: "cohere/north-mini-code:free"
+    label: "cohere/north-mini-code:free"
   - id: "deepcogito/cogito-v2-preview-deepseek-671b"
     label: "deepcogito/cogito-v2-preview-deepseek-671b"
   - id: "deepcogito/cogito-v2-preview-llama-109b-moe"
@@ -485,10 +485,12 @@ openrouter:
     label: "deepseek/deepseek-v3.2-speciale"
   - id: "deepseek/deepseek-v4-flash"
     label: "deepseek/deepseek-v4-flash"
+    structuredOutput: true
   - id: "deepseek/deepseek-v4-flash:free"
     label: "deepseek/deepseek-v4-flash:free"
   - id: "deepseek/deepseek-v4-pro"
     label: "deepseek/deepseek-v4-pro"
+    structuredOutput: true
   - id: "eleutherai/llemma_7b"
     label: "eleutherai/llemma_7b"
   - id: "essentialai/rnj-1-instruct"
@@ -521,11 +523,15 @@ openrouter:
   - id: "google/gemini-3-flash-preview"
     label: "google/gemini-3-flash-preview"
     structuredOutput: true
+  - id: "google/gemini-3-pro-image"
+    label: "google/gemini-3-pro-image"
   - id: "google/gemini-3-pro-image-preview"
     label: "google/gemini-3-pro-image-preview"
   - id: "google/gemini-3-pro-preview"
     label: "google/gemini-3-pro-preview"
     structuredOutput: true
+  - id: "google/gemini-3.1-flash-image"
+    label: "google/gemini-3.1-flash-image"
   - id: "google/gemini-3.1-flash-image-preview"
     label: "google/gemini-3.1-flash-image-preview"
   - id: "google/gemini-3.1-flash-lite"
@@ -850,6 +856,8 @@ openrouter:
     label: "neversleep/noromaid-20b"
   - id: "nex-agi/deepseek-v3.1-nex-n1"
     label: "nex-agi/deepseek-v3.1-nex-n1"
+  - id: "nex-agi/nex-n2-pro"
+    label: "nex-agi/nex-n2-pro"
   - id: "nex-agi/nex-n2-pro:free"
     label: "nex-agi/nex-n2-pro:free"
   - id: "nousresearch/deephermes-3-mistral-24b-preview"
@@ -1099,8 +1107,12 @@ openrouter:
     label: "perplexity/sonar-reasoning"
   - id: "perplexity/sonar-reasoning-pro"
     label: "perplexity/sonar-reasoning-pro"
+  - id: "poolside/laguna-m.1"
+    label: "poolside/laguna-m.1"
   - id: "poolside/laguna-m.1:free"
     label: "poolside/laguna-m.1:free"
+  - id: "poolside/laguna-xs.2"
+    label: "poolside/laguna-xs.2"
   - id: "poolside/laguna-xs.2:free"
     label: "poolside/laguna-xs.2:free"
   - id: "prime-intellect/intellect-3"
@@ -1261,6 +1273,8 @@ openrouter:
     label: "relace/relace-apply-3"
   - id: "relace/relace-search"
     label: "relace/relace-search"
+  - id: "sakana/fugu-ultra"
+    label: "sakana/fugu-ultra"
   - id: "sao10k/l3-euryale-70b"
     label: "sao10k/l3-euryale-70b"
   - id: "sao10k/l3-lunaris-8b"
@@ -1386,6 +1400,8 @@ openrouter:
     label: "z-ai/glm-5-turbo"
   - id: "z-ai/glm-5.1"
     label: "z-ai/glm-5.1"
+  - id: "z-ai/glm-5.2"
+    label: "z-ai/glm-5.2"
   - id: "z-ai/glm-5v-turbo"
     label: "z-ai/glm-5v-turbo"
   - id: "~anthropic/claude-fable-latest"

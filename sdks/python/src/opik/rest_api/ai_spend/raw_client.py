@@ -12,8 +12,8 @@ from ..core.pydantic_utilities import parse_obj_as
 from ..core.request_options import RequestOptions
 from ..errors.bad_request_error import BadRequestError
 from ..types.spend_breakdown_response import SpendBreakdownResponse
+from ..types.spend_breakdowns_response import SpendBreakdownsResponse
 from ..types.spend_composition_response import SpendCompositionResponse
-from ..types.spend_recommendations_response import SpendRecommendationsResponse
 from ..types.spend_summary_response import SpendSummaryResponse
 from ..types.spend_user_page import SpendUserPage
 
@@ -24,6 +24,89 @@ OMIT = typing.cast(typing.Any, ...)
 class RawAiSpendClient:
     def __init__(self, *, client_wrapper: SyncClientWrapper):
         self._client_wrapper = client_wrapper
+
+    def get_spend_all_breakdowns(
+        self,
+        *,
+        interval_start: dt.datetime,
+        interval_end: dt.datetime,
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        user_id: typing.Optional[str] = OMIT,
+        start_before_end: typing.Optional[bool] = OMIT,
+        project_provided: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[SpendBreakdownsResponse]:
+        """
+        Get the per-item breakdown for every composition lane in one request
+
+        Parameters
+        ----------
+        interval_start : dt.datetime
+
+        interval_end : dt.datetime
+
+        project_id : typing.Optional[str]
+
+        project_name : typing.Optional[str]
+
+        user_id : typing.Optional[str]
+
+        start_before_end : typing.Optional[bool]
+
+        project_provided : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[SpendBreakdownsResponse]
+            Lane breakdowns
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/ai-spend/composition/breakdowns",
+            method="POST",
+            json={
+                "project_id": project_id,
+                "project_name": project_name,
+                "interval_start": interval_start,
+                "interval_end": interval_end,
+                "user_id": user_id,
+                "start_before_end": start_before_end,
+                "project_provided": project_provided,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    SpendBreakdownsResponse,
+                    parse_obj_as(
+                        type_=SpendBreakdownsResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def get_spend_composition(
         self,
@@ -174,89 +257,6 @@ class RawAiSpendClient:
                     SpendBreakdownResponse,
                     parse_obj_as(
                         type_=SpendBreakdownResponse,  # type: ignore
-                        object_=_response.json(),
-                    ),
-                )
-                return HttpResponse(response=_response, data=_data)
-            if _response.status_code == 400:
-                raise BadRequestError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
-
-    def get_spend_recommendations(
-        self,
-        *,
-        interval_start: dt.datetime,
-        interval_end: dt.datetime,
-        project_id: typing.Optional[str] = OMIT,
-        project_name: typing.Optional[str] = OMIT,
-        user_id: typing.Optional[str] = OMIT,
-        start_before_end: typing.Optional[bool] = OMIT,
-        project_provided: typing.Optional[bool] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> HttpResponse[SpendRecommendationsResponse]:
-        """
-        Get coding-agent cost-saving recommendations
-
-        Parameters
-        ----------
-        interval_start : dt.datetime
-
-        interval_end : dt.datetime
-
-        project_id : typing.Optional[str]
-
-        project_name : typing.Optional[str]
-
-        user_id : typing.Optional[str]
-
-        start_before_end : typing.Optional[bool]
-
-        project_provided : typing.Optional[bool]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        HttpResponse[SpendRecommendationsResponse]
-            Recommendations
-        """
-        _response = self._client_wrapper.httpx_client.request(
-            "v1/private/ai-spend/recommendations",
-            method="POST",
-            json={
-                "project_id": project_id,
-                "project_name": project_name,
-                "interval_start": interval_start,
-                "interval_end": interval_end,
-                "user_id": user_id,
-                "start_before_end": start_before_end,
-                "project_provided": project_provided,
-            },
-            headers={
-                "content-type": "application/json",
-            },
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                _data = typing.cast(
-                    SpendRecommendationsResponse,
-                    parse_obj_as(
-                        type_=SpendRecommendationsResponse,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
@@ -466,6 +466,89 @@ class AsyncRawAiSpendClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
         self._client_wrapper = client_wrapper
 
+    async def get_spend_all_breakdowns(
+        self,
+        *,
+        interval_start: dt.datetime,
+        interval_end: dt.datetime,
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        user_id: typing.Optional[str] = OMIT,
+        start_before_end: typing.Optional[bool] = OMIT,
+        project_provided: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[SpendBreakdownsResponse]:
+        """
+        Get the per-item breakdown for every composition lane in one request
+
+        Parameters
+        ----------
+        interval_start : dt.datetime
+
+        interval_end : dt.datetime
+
+        project_id : typing.Optional[str]
+
+        project_name : typing.Optional[str]
+
+        user_id : typing.Optional[str]
+
+        start_before_end : typing.Optional[bool]
+
+        project_provided : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[SpendBreakdownsResponse]
+            Lane breakdowns
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/ai-spend/composition/breakdowns",
+            method="POST",
+            json={
+                "project_id": project_id,
+                "project_name": project_name,
+                "interval_start": interval_start,
+                "interval_end": interval_end,
+                "user_id": user_id,
+                "start_before_end": start_before_end,
+                "project_provided": project_provided,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    SpendBreakdownsResponse,
+                    parse_obj_as(
+                        type_=SpendBreakdownsResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     async def get_spend_composition(
         self,
         *,
@@ -615,89 +698,6 @@ class AsyncRawAiSpendClient:
                     SpendBreakdownResponse,
                     parse_obj_as(
                         type_=SpendBreakdownResponse,  # type: ignore
-                        object_=_response.json(),
-                    ),
-                )
-                return AsyncHttpResponse(response=_response, data=_data)
-            if _response.status_code == 400:
-                raise BadRequestError(
-                    headers=dict(_response.headers),
-                    body=typing.cast(
-                        typing.Optional[typing.Any],
-                        parse_obj_as(
-                            type_=typing.Optional[typing.Any],  # type: ignore
-                            object_=_response.json(),
-                        ),
-                    ),
-                )
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
-
-    async def get_spend_recommendations(
-        self,
-        *,
-        interval_start: dt.datetime,
-        interval_end: dt.datetime,
-        project_id: typing.Optional[str] = OMIT,
-        project_name: typing.Optional[str] = OMIT,
-        user_id: typing.Optional[str] = OMIT,
-        start_before_end: typing.Optional[bool] = OMIT,
-        project_provided: typing.Optional[bool] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> AsyncHttpResponse[SpendRecommendationsResponse]:
-        """
-        Get coding-agent cost-saving recommendations
-
-        Parameters
-        ----------
-        interval_start : dt.datetime
-
-        interval_end : dt.datetime
-
-        project_id : typing.Optional[str]
-
-        project_name : typing.Optional[str]
-
-        user_id : typing.Optional[str]
-
-        start_before_end : typing.Optional[bool]
-
-        project_provided : typing.Optional[bool]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        AsyncHttpResponse[SpendRecommendationsResponse]
-            Recommendations
-        """
-        _response = await self._client_wrapper.httpx_client.request(
-            "v1/private/ai-spend/recommendations",
-            method="POST",
-            json={
-                "project_id": project_id,
-                "project_name": project_name,
-                "interval_start": interval_start,
-                "interval_end": interval_end,
-                "user_id": user_id,
-                "start_before_end": start_before_end,
-                "project_provided": project_provided,
-            },
-            headers={
-                "content-type": "application/json",
-            },
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                _data = typing.cast(
-                    SpendRecommendationsResponse,
-                    parse_obj_as(
-                        type_=SpendRecommendationsResponse,  # type: ignore
                         object_=_response.json(),
                     ),
                 )

@@ -16,10 +16,17 @@ public final class GeneralMappingRules {
     public static final String OPIK_TRACE_ID_ATTR = "opik.trace_id";
     public static final String OPIK_PARENT_SPAN_ID_ATTR = "opik.parent_span_id";
     public static final String OPIK_SPAN_ID_ATTR = "opik.span_id";
+    public static final String SERVER_ADDRESS_ATTR = "server.address";
 
     private static final List<OpenTelemetryMappingRule> RULES = List.of(
             OpenTelemetryMappingRule.builder()
                     .rule("input").isPrefix(true).source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.INPUT)
+                    .build(),
+            // Network host of the LLM endpoint (OTel semantic convention). Kept in metadata so
+            // GoogleProviderResolver can disambiguate the generic 'google' provider into the
+            // Vertex AI vs Gemini API pricing variant.
+            OpenTelemetryMappingRule.builder()
+                    .rule(SERVER_ADDRESS_ATTR).source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA)
                     .build(),
             OpenTelemetryMappingRule.builder()
                     .rule("output").isPrefix(true).source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.OUTPUT)

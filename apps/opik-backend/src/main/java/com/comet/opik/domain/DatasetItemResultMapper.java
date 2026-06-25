@@ -13,12 +13,14 @@ import com.fasterxml.jackson.databind.JsonNode;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Row;
 import io.r2dbc.spi.RowMetadata;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
 
+import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
@@ -37,6 +39,7 @@ import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_
 import static java.util.function.Predicate.not;
 import static java.util.stream.Collectors.toMap;
 
+@Slf4j
 public class DatasetItemResultMapper {
 
     private static final int COMMENT_INDEX = 11;
@@ -216,8 +219,23 @@ public class DatasetItemResultMapper {
         }
         return Optional.ofNullable(row.get("evaluators", String.class))
                 .filter(s -> !s.isBlank() && !EvaluatorItem.EMPTY_LIST_JSON.equals(s))
-                .map(s -> JsonUtils.readValue(s, EVALUATOR_LIST_TYPE))
+                .map(value -> parseEvaluators(value, row.get("id", String.class),
+                        row.get("dataset_id", String.class)))
                 .orElse(null);
+    }
+
+    // A row whose mapping function throws is silently dropped by the ClickHouse r2dbc driver,
+    // making the whole item vanish from the list. Degrade to null only on unparseable JSON
+    // (UncheckedIOException is what JsonUtils.readValue throws) so the item stays visible without
+    // its assertions; any other exception propagates instead of masking an unrelated bug.
+    private static List<EvaluatorItem> parseEvaluators(String value, String datasetItemId, String datasetId) {
+        try {
+            return JsonUtils.readValue(value, EVALUATOR_LIST_TYPE);
+        } catch (UncheckedIOException e) {
+            log.warn("Failed to parse stored evaluators JSON for dataset item '{}' (dataset '{}'); "
+                    + "returning null evaluators", datasetItemId, datasetId, e);
+            return null;
+        }
     }
 
     static String getDescription(Row row, RowMetadata rowMetadata) {

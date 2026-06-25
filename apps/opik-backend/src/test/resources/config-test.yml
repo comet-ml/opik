@@ -13,9 +13,9 @@ logging:
 # Description: state database configuration
 # https://www.dropwizard.io/en/stable/manual/configuration.html#database
 database:
-  #  Default: jdbc:mysql://localhost:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true
+  #  Default: jdbc:mysql://localhost:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
   #  Description: The URL of the server
-  url: jdbc:mysql://localhost:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true
+  url: jdbc:mysql://localhost:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
   #  Default: opik
   #  Description: The username used to connect to the server
   user: opik
@@ -74,11 +74,25 @@ databaseAnalytics:
   #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
   healthCheckTimeout: 1s
 
-# Description: credentials for the Agent Insights read-only free-form SQL user. The connection params are reused from
-#   databaseAnalytics (overridden to the test container), so only the user/password live here. The restricted
-#   comet_readonly_freeform_sql_user does not exist in the container, so these point at the standard test user.
+# Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
+#   window, protecting data quality.
+uuidValidation:
+  #  Default: true for tests
+  #  Description: Operational kill-switch. When false, ids are not checked against the window (the
+  #   window is still validated to be a sane value).
+  enabled: true
+  #  Default: 24h
+  #  Description: Validation window (between 12h and 45d). Writes whose `id` is a UUIDv7 with an
+  #   embedded timestamp more than this far in the past or future are rejected.
+  window: 24h
+
+# Description: credentials for the Agent Insights read-only free-form SQL user. The connection params are reused
+#   from databaseAnalytics (overridden to the test container). The username/password match the production-shape user
+#   provisioned globally on the test ClickHouse container via src/test/resources/users.xml (mirrors
+#   provision_agent_insights_readonly_user.sh) — so any test enabling serviceToggles.agentInsightsEnabled exercises
+#   the real readonly=1 profile (max_execution_time pinned, only SQL_workspace_id/SQL_project_id changeable in readonly).
 databaseAnalyticsReadOnlyFreeFormSql:
-  username: opik
+  username: comet_readonly_freeform_sql_user
   password: opik
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
@@ -88,25 +102,46 @@ health:
   healthCheckUrlPaths: [ "/health-check" ]
   # Options around a particular health check which is registered in an Application
   # https://www.dropwizard.io/en/stable/manual/configuration.html#man-configuration-health-checks
+  # initialState=false + 100ms schedule with single-attempt thresholds force /health-check's
+  # cached state to reflect the real probe result within a few hundred milliseconds. The defaults
+  # (initialState=true, 5s interval, 3 failures to flip) would let a broken probe report
+  # healthy for the entire test window.
   healthChecks:
     - name: deadlocks
       critical: true
       type: alive
+      initialState: false
+      schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
+    - name: shared_http_client
+      critical: true
+      type: alive
+      initialState: false
+      schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
     - name: db
       critical: true
       type: ready
+      initialState: false
+      schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
     - name: redis
       critical: true
       type: ready
+      initialState: false
+      schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
     - name: clickhouse
       critical: true
       type: ready
+      initialState: false
+      schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
     - name: clickhouse-readonly-freeform-sql
       critical: false
       type: ready
+      initialState: false
+      schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
     - name: mysql
       critical: true
       type: ready
+      initialState: false
+      schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
 
 # Configuration for distributed locking using redis
 distributedLock:
@@ -148,6 +183,9 @@ authentication:
   reactService:
     url: ''
 
+sharedHttpClientHealthCheck:
+  timeout: 1s
+
 # OAuth 2.1 Authorization Server for hosted/local Opik MCP
 mcpOAuth:
   # Default: false
@@ -171,6 +209,12 @@ mcpOAuth:
   # Default: PT30S
   # Description: Grace window during which a just-rotated refresh token is still accepted
   refreshRotationGrace: PT30S
+  # Default: PT5M
+  # Description: TTL of the Redis lock held by the scrub job. The lock is held until expiry (not released after the scrub), so keeping it close to the 5-minute schedule prevents staggered replicas from re-scrubbing within the same cycle.
+  scrubLockTimeout: PT5M
+  # Default: PT0.1S
+  # Description: Maximum time the scrub job waits to acquire the Redis lock before giving up for this cycle
+  scrubLockWaitTime: PT0.1S
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#servers
 server:
@@ -624,9 +668,6 @@ serviceToggles:
   # Description: Whether the deployment is expected to produce demo project data on signup
   demoDataEnabled: "true"
   # Default: false
-  # Description: Whether or not Optimization Studio feature is enabled
-  optimizationStudioEnabled: "false"
-  # Default: false
   # Description: Whether or not the Cost Intelligence (AI Spend) feature is enabled
   costIntelligenceEnabled: "false"
   # Default: true
@@ -695,6 +736,15 @@ localRunner:
   reaperLockDuration: 10s
   reaperLockWait: 2s
   nextJobAsyncTimeoutBuffer: 2s
+
+# Orphaned Redis stream-consumer reaper (OPIK-6982).
+# Disabled by default in tests so it does not auto-schedule when the app context boots; enable per-test if needed.
+streamConsumerReaper:
+  enabled: false
+  jobInterval: 1h
+  startupDelay: 0s
+  idleThreshold: 1d
+  lockDuration: 10m
 
 # Trace Thread configuration
 traceThreadConfig:

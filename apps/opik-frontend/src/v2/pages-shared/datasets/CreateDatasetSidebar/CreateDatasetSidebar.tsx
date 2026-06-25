@@ -14,9 +14,8 @@ import {
   AccordionItem,
   CustomAccordionTrigger,
 } from "@/ui/accordion";
-import CodeHighlighter, {
-  SUPPORTED_LANGUAGE,
-} from "@/shared/CodeHighlighter/CodeHighlighter";
+import CodeHighlighter from "@/shared/CodeHighlighter/CodeHighlighter";
+import { SUPPORTED_LANGUAGE } from "@/constants/codeLanguage";
 
 import { Spinner } from "@/ui/spinner";
 import { useToast } from "@/ui/use-toast";

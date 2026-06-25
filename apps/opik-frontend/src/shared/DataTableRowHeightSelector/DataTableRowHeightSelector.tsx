@@ -25,7 +25,7 @@ const OPTIONS: DropdownOption<ROW_HEIGHT>[] = [
 
 const DataTableRowHeightSelector: React.FunctionComponent<
   DataTableRowHeightSelectorProps
-> = ({ type, setType, layout = "icon", size = "sm" }) => {
+> = ({ type, setType, layout = "icon", size = "icon-sm" }) => {
   const handleSelect = useCallback(
     (value: ROW_HEIGHT) => {
       setType(value);
@@ -35,7 +35,7 @@ const DataTableRowHeightSelector: React.FunctionComponent<
 
   return (
     <DropdownMenu>
-      <TooltipWrapper content="Rows">
+      <TooltipWrapper content="Row size">
         <DropdownMenuTrigger asChild>
           {layout === "labeled" ? (
             <Button variant="outline" size={size}>
@@ -43,8 +43,12 @@ const DataTableRowHeightSelector: React.FunctionComponent<
               Row size
             </Button>
           ) : (
-            <Button variant="outline" size="icon-sm">
-              <Rows3 className="size-3.5" />
+            <Button
+              variant="outline"
+              size={size}
+              className="focus-visible:border-primary focus-visible:ring-0"
+            >
+              <Rows3 />
             </Button>
           )}
         </DropdownMenuTrigger>

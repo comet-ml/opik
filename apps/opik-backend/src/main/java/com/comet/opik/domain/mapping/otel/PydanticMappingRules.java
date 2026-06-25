@@ -22,6 +22,11 @@ public final class PydanticMappingRules {
             OpenTelemetryMappingRule.builder()
                     .rule("logfire.json_schema").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.DROP)
                     .build(),
+            // logfire's internal log severity (e.g. 17 on warning/error spans); not user data,
+            // it would otherwise leak into the span input.
+            OpenTelemetryMappingRule.builder()
+                    .rule("logfire.level_num").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.DROP)
+                    .build(),
             OpenTelemetryMappingRule.builder()
                     .rule("code.").isPrefix(true).source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA)
                     .build());

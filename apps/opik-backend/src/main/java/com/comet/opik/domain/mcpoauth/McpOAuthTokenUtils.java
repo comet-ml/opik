@@ -1,8 +1,8 @@
 package com.comet.opik.domain.mcpoauth;
 
+import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.codec.digest.DigestUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Strings;
 
 import java.security.NoSuchAlgorithmException;
@@ -52,29 +52,25 @@ public class McpOAuthTokenUtils {
     }
 
     public static boolean isMcpOAuthToken(String authHeader) {
-        if (!Strings.CI.startsWith(authHeader, BEARER_PREFIX)) {
+        if (!containsBearerPrefix(authHeader)) {
             return false;
         }
-        return isAccessToken(authHeader.substring(BEARER_PREFIX.length()).trim());
-    }
-
-    public static String hash(String token) {
-        return DigestUtils.sha256Hex(token);
+        return isAccessToken(extractBearerToken(authHeader));
     }
 
     /**
-     * Masks a token for safe logging. Never emits token fragments: a SHA-256 prefix is non-reversible
-     * yet stable enough to correlate the same token across log lines.
-     *
-     * @param token the raw token; may be {@code null} or empty
-     * @return an empty string for null/empty input, otherwise {@code "sha256:"} followed by the first
-     *         12 hex characters of the token's SHA-256 hash
+     * Strips the {@code Bearer } scheme prefix from an {@code Authorization} header.
+     * @throws IllegalArgumentException if Bearer header missing
      */
-    public static String maskToken(String token) {
-        if (StringUtils.isEmpty(token)) {
-            return "";
+    public static String extractBearerToken(String authHeader) {
+        if (!containsBearerPrefix(authHeader)) {
+            throw new IllegalArgumentException("Authorization header is not a Bearer token");
         }
-        return "sha256:" + hash(token).substring(0, 12);
+        return authHeader.substring(BEARER_PREFIX.length()).strip();
+    }
+
+    public static String hash(@NonNull String token) {
+        return DigestUtils.sha256Hex(token);
     }
 
     private static SecureRandom getSecureRandom() {
@@ -83,6 +79,10 @@ public class McpOAuthTokenUtils {
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("Strong SecureRandom not available", e);
         }
+    }
+
+    private static boolean containsBearerPrefix(String authHeader) {
+        return Strings.CI.startsWith(authHeader, BEARER_PREFIX);
     }
 
 }

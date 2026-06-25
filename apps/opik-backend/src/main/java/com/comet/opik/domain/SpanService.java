@@ -9,6 +9,7 @@ import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.SpanBatchUpdate;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.SpansCountResponse;
+import com.comet.opik.api.UsageByWorkspaceProjectUserResponse;
 import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
@@ -145,8 +146,8 @@ public class SpanService {
     public Mono<UUID> create(@NonNull Span span) {
         var id = span.id() == null ? idGenerator.generateId() : span.id();
         var projectName = WorkspaceUtils.getProjectName(span.projectName());
-        return IdGenerator
-                .validateVersionAsync(id, SPAN_KEY)
+        return idGenerator
+                .validateIdAsync(id, SPAN_KEY)
                 .then(projectService.getOrCreate(projectName))
                 .flatMap(project -> lockService.executeWithLock(
                         new LockService.Lock(id, SPAN_KEY),
@@ -206,8 +207,8 @@ public class SpanService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            return IdGenerator
-                    .validateVersionAsync(id, SPAN_KEY)
+            return idGenerator
+                    .validateIdForUpdateAsync(id, SPAN_KEY)
                     .then(Mono.defer(() -> getProjectById(spanUpdate)
                             .switchIfEmpty(Mono.defer(() -> projectService.getOrCreate(projectName)))
                             .subscribeOn(Schedulers.boundedElastic()))
@@ -245,18 +246,16 @@ public class SpanService {
     }
 
     private Mono<Long> insertUpdate(Project project, SpanUpdate spanUpdate, UUID id) {
-        return IdGenerator
-                .validateVersionAsync(id, SPAN_KEY)
-                .then(Mono.deferContextual(ctx -> {
-                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-                    String userName = ctx.get(RequestContext.USER_NAME);
-                    String projectName = project.name();
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+            String projectName = project.name();
 
-                    // Strip attachments OUTSIDE the database transaction
-                    return attachmentStripperService.stripAttachments(
-                            spanUpdate, id, workspaceId, userName, projectName)
-                            .flatMap(processedUpdate -> spanDAO.partialInsert(id, project.id(), processedUpdate));
-                }));
+            // Strip attachments OUTSIDE the database transaction
+            return attachmentStripperService.stripAttachments(
+                    spanUpdate, id, workspaceId, userName, projectName)
+                    .flatMap(processedUpdate -> spanDAO.partialInsert(id, project.id(), processedUpdate));
+        });
     }
 
     private Mono<Project> getProjectById(SpanUpdate spanUpdate) {
@@ -448,7 +447,7 @@ public class SpanService {
                     }
 
                     UUID id = span.id() == null ? idGenerator.generateId() : span.id();
-                    IdGenerator.validateVersion(id, SPAN_KEY);
+                    idGenerator.validateId(id, SPAN_KEY);
 
                     return span.toBuilder().id(id).projectId(project.id()).build();
                 })
@@ -528,5 +527,15 @@ public class SpanService {
                         .biInformation(items)
                         .build())
                 .switchIfEmpty(Mono.just(BiInformationResponse.empty()));
+    }
+
+    @WithSpan
+    public Mono<UsageByWorkspaceProjectUserResponse> getSpanBreakdownPerWorkspace() {
+        log.info("Getting span usage breakdown by workspace, project and user");
+        return projectService.getDemoProjectIdsWithTimestamps()
+                .switchIfEmpty(Mono.just(Map.of()))
+                .flatMapMany(spanDAO::countSpansBreakdownPerWorkspace)
+                .collectList()
+                .map(rows -> UsageByWorkspaceProjectUserResponse.builder().breakdown(rows).build());
     }
 }

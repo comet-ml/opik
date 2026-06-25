@@ -30,6 +30,7 @@ target/
 # Test suite reports
 opik_evaluation_suite_reports/
 opik_test_suite_reports/
+allure-results/
 
 # Opik opimizer related
 /sdks/opik_optimizer/artifacts

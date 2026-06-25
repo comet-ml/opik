@@ -11,8 +11,12 @@ import click
 from rich.console import Console
 from rich.table import Table
 
+import opik
 import opik.dict_utils as dict_utils
+from opik.api_objects import rest_helpers
 from opik.api_objects.experiment.experiment_item import ExperimentItemContent
+
+PROJECT_METADATA_FILENAME = "project.json"
 
 
 def no_attachments_option() -> Callable:
@@ -25,6 +29,42 @@ def no_attachments_option() -> Callable:
 
 
 console = Console()
+
+
+def write_project_metadata(
+    project_dir: Path, project_id: str, project_name: str
+) -> None:
+    """Write ``project.json`` so the id-named folder is self-describing.
+
+    The on-disk layout is keyed by project ID (UUIDs avoid the ``/``, ``:`` and
+    whitespace problems of human names); the human name lives here as data so
+    ``opik import`` can locate the folder by name.
+    """
+    write_json_data(
+        {"id": project_id, "name": project_name},
+        project_dir / PROJECT_METADATA_FILENAME,
+    )
+
+
+def prepare_project_export_dir(
+    client: "opik.Opik", output_path: str, workspace: str, project_name: str
+) -> tuple[str, Path]:
+    """Resolve ``project_name`` to its ID and prepare ``projects/<id>/``.
+
+    Creates the project directory, writes ``project.json``, and returns
+    ``(project_id, project_dir)``. Raises ``ValueError`` if the project does not
+    exist in the workspace.
+    """
+    project_id = rest_helpers.resolve_project_id_by_name_optional(
+        client.rest_client, project_name=project_name
+    )
+    if project_id is None:
+        raise ValueError(f"Project '{project_name}' not found")
+    project_dir = Path(output_path) / workspace / "projects" / project_id
+    project_dir.mkdir(parents=True, exist_ok=True)
+    write_project_metadata(project_dir, project_id, project_name)
+    return project_id, project_dir
+
 
 _TRACE_FILE_PREFIX = "trace_"
 

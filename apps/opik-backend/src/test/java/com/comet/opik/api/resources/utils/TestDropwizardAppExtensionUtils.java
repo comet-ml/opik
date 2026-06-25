@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static com.comet.opik.TestConfigUtils.CONFIG_TEST_YML_PATH;
 import static com.comet.opik.infrastructure.RateLimitConfig.LimitConfig;
 
 @UtilityClass
@@ -241,13 +242,11 @@ public class TestDropwizardAppExtensionUtils {
                     .customConfigs()
                     .stream()
                     .filter(customConfig -> configs.stream().noneMatch(s -> s.contains(customConfig.key())))
-                    .forEach(customConfig -> {
-                        configs.add("%s: %s".formatted(customConfig.key(), customConfig.value()));
-                    });
+                    .forEach(customConfig -> configs.add("%s: %s".formatted(customConfig.key(), customConfig.value())));
         }
 
         return TestDropwizardAppExtension.forApp(OpikApplication.class)
-                .config("src/test/resources/config-test.yml")
+                .config(CONFIG_TEST_YML_PATH)
                 .configOverrides(configs.toArray(new String[0]))
                 .randomPorts()
                 .hooks(hook)

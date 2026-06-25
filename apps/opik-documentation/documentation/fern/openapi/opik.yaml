@@ -36,10 +36,16 @@ servers:
 tags:
 - name: MCP OAuth
   description: MCP OAuth 2.1 Authorization Server resources
+- name: System analytics queries
+  description: Internal endpoint to run Agent Insights free-form SQL
 - name: System usage
   description: System usage related resource
 - name: Agent Configs
   description: Agent configuration management
+- name: Agent Insights Jobs
+  description: "Per-(workspace, project) Agent Insights report configuration"
+- name: Agent Insights
+  description: Agent Insights report results
 - name: AI Spend
   description: Coding-agent spend analytics
 - name: Alerts
@@ -232,6 +238,7 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/ClientRegistrationRequest"
+        required: true
       responses:
         "201":
           description: Registered client metadata
@@ -301,6 +308,69 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OAuthError"
+  /opik/auth-oauth:
+    post:
+      tags:
+      - MCP OAuth
+      summary: Validate OAuth Access Token
+      description: Introspects a bearer access token and returns the identity it resolves
+        to
+      operationId: validateOAuthToken
+      parameters:
+      - name: Authorization
+        in: header
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Validated token identity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidatedToken"
+        "401":
+          description: "Missing, malformed, or unknown access token"
+  /v1/internal/analytics-queries/projects/{projectId}:
+    post:
+      tags:
+      - System analytics queries
+      summary: Execute Agent Insights free-form SQL
+      description: Runs Ollie-generated read-only SQL bounded to the caller's workspace
+        and the requested project. Returns 501 when the Agent Insights toggle is off.
+      operationId: executeAnalyticsQuery
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnalyticsQueryRequest"
+      responses:
+        "200":
+          description: Query results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsQueryResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "501":
+          description: Agent Insights queries are not enabled
   /v1/internal/usage/bi-datasets:
     get:
       tags:
@@ -343,6 +413,22 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BiInformationResponse"
+  /v1/internal/usage/workspace-span-counts-breakdown:
+    get:
+      tags:
+      - System usage
+      summary: "Get spans count on previous day grouped by workspace, project and\
+        \ user"
+      description: "Get spans count on previous day grouped by workspace, project\
+        \ and user"
+      operationId: getSpansCountBreakdownForWorkspaces
+      responses:
+        "200":
+          description: UsageByWorkspaceProjectUserResponse resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsageByWorkspaceProjectUserResponse"
   /v1/internal/usage/workspace-span-counts:
     get:
       tags:
@@ -868,6 +954,344 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/agent-insights/jobs/{projectId}:
+    get:
+      tags:
+      - Agent Insights Jobs
+      summary: Get Agent Insights job
+      description: "Returns the Agent Insights job for the (workspace, project), or\
+        \ 404 if none exists."
+      operationId: getAgentInsightsJob
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentInsightsJob"
+        "404":
+          description: Job not found
+    post:
+      tags:
+      - Agent Insights Jobs
+      summary: Create Agent Insights job
+      description: Creates the Agent Insights job for a project. 409 if one already
+        exists.
+      operationId: createAgentInsightsJob
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "201":
+          description: Job created
+          headers:
+            Location:
+              description: URI of the created job
+              style: simple
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentInsightsJob"
+        "404":
+          description: Project not found
+        "409":
+          description: Job already exists
+    patch:
+      tags:
+      - Agent Insights Jobs
+      summary: Update Agent Insights job
+      description: "Partially updates the Agent Insights job for a project (e.g. status;\
+        \ never deletes). Returns the updated job, or 404 if none exists."
+      operationId: updateAgentInsightsJob
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentInsightsJobUpdate"
+        required: true
+      responses:
+        "200":
+          description: Job updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentInsightsJob"
+        "404":
+          description: Job not found
+  /v1/private/agent-insights/jobs/{projectId}/trigger:
+    post:
+      tags:
+      - Agent Insights Jobs
+      summary: Trigger Agent Insights job
+      description: Triggers an immediate report run for an existing job (over the
+        last 24h). Fire-and-forget; returns 202. 404 if none exists.
+      operationId: triggerAgentInsightsJob
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "202":
+          description: Run accepted
+        "404":
+          description: Job not found
+  /v1/private/agent-insights/issues:
+    get:
+      tags:
+      - Agent Insights
+      summary: Find agent insights issues
+      description: "Returns a paginated list of issues that have at least one detail\
+        \ row within the requested time window, with metrics aggregated over the window"
+      operationId: findAgentInsightsIssues
+      parameters:
+      - name: project_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: from_date
+        in: query
+        schema:
+          type: string
+          format: date
+      - name: to_date
+        in: query
+        schema:
+          type: string
+          format: date
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - open
+          - resolved
+          - closed
+      - name: severity
+        in: query
+        schema:
+          type: string
+          enum:
+          - critical
+          - high
+          - medium
+          - low
+      - name: sorting
+        in: query
+        schema:
+          type: string
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      responses:
+        "200":
+          description: Issues page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentInsightsIssuePage"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    post:
+      tags:
+      - Agent Insights
+      summary: Store agent insights report results
+      description: Upserts the detected issues and their per-day metrics for the given
+        report day in a single transaction. Issue status is never modified by this
+        endpoint.
+      operationId: reportAgentInsightsIssues
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentInsightsReport"
+      responses:
+        "204":
+          description: Report stored
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/agent-insights/issues/{issue_id}:
+    get:
+      tags:
+      - Agent Insights
+      summary: Get agent insights issue by id
+      description: Returns the issue together with its per-day breakdown within the
+        requested time window
+      operationId: getAgentInsightsIssueById
+      parameters:
+      - name: issue_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: project_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: from_date
+        in: query
+        schema:
+          type: string
+          format: date
+      - name: to_date
+        in: query
+        schema:
+          type: string
+          format: date
+      responses:
+        "200":
+          description: Issue with details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentInsightsIssueWithDetails"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    patch:
+      tags:
+      - Agent Insights
+      summary: Update agent insights issue status
+      description: "Moves an issue through its lifecycle: open, resolved or closed"
+      operationId: updateAgentInsightsIssue
+      parameters:
+      - name: issue_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentInsightsIssueUpdate"
+      responses:
+        "204":
+          description: Issue updated
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/ai-spend/composition/breakdowns:
+    post:
+      tags:
+      - AI Spend
+      summary: Get all spend lane breakdowns
+      description: Get the per-item breakdown for every composition lane in one request
+      operationId: getSpendAllBreakdowns
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpendMetricRequest"
+      responses:
+        "200":
+          description: Lane breakdowns
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpendBreakdownsResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/ai-spend/composition:
     post:
       tags:
@@ -918,31 +1342,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SpendBreakdownResponse"
-        "400":
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/ai-spend/recommendations:
-    post:
-      tags:
-      - AI Spend
-      summary: Get spend recommendations
-      description: Get coding-agent cost-saving recommendations
-      operationId: getSpendRecommendations
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SpendMetricRequest"
-      responses:
-        "200":
-          description: Recommendations
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SpendRecommendationsResponse"
         "400":
           description: Bad Request
           content:
@@ -7935,6 +8334,13 @@ paths:
           description: "Filter traces created up to this time (ISO-8601 format). If\
             \ not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
+      - name: annotation_queue_id
+        in: query
+        schema:
+          type: string
+          description: Filter traces belonging to this annotation queue and scope
+            feedback scores/comments to it
+          format: uuid
       responses:
         "200":
           description: Trace resource
@@ -8419,6 +8825,13 @@ paths:
           description: "Filter trace threads created up to this time (ISO-8601 format).\
             \ If not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
+      - name: annotation_queue_id
+        in: query
+        schema:
+          type: string
+          description: Filter threads belonging to this annotation queue and scope
+            feedback scores/comments to it
+          format: uuid
       responses:
         "200":
           description: Trace threads resource
@@ -9201,6 +9614,46 @@ components:
           type: string
         error_description:
           type: string
+    ValidatedToken:
+      type: object
+      properties:
+        user_name:
+          type: string
+        workspace_id:
+          type: string
+        workspace_name:
+          type: string
+        resource:
+          type: string
+    AnalyticsQueryResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/JsonNode"
+    JsonNode:
+      type: object
+    ErrorMessage:
+      type: object
+      properties:
+        code:
+          type: integer
+          format: int32
+        message:
+          type: string
+        details:
+          type: string
+    AnalyticsQueryRequest:
+      required:
+      - query
+      type: object
+      properties:
+        query:
+          minLength: 1
+          type: string
+          description: Read-only ClickHouse SQL. Must return exactly one column named
+            `result` produced via toJSONString(...)
     BiInformation:
       type: object
       properties:
@@ -9218,6 +9671,26 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/BiInformation"
+    UsageByWorkspaceProjectUserResponse:
+      type: object
+      properties:
+        breakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkspaceProjectUserCount"
+    WorkspaceProjectUserCount:
+      type: object
+      properties:
+        workspace_id:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        user:
+          type: string
+        count:
+          type: integer
+          format: int64
     SpansCountResponse:
       type: object
       properties:
@@ -9320,16 +9793,6 @@ components:
           - prompt
           - prompt_commit
         description:
-          type: string
-    ErrorMessage:
-      type: object
-      properties:
-        code:
-          type: integer
-          format: int32
-        message:
-          type: string
-        details:
           type: string
     AgentConfigEnv:
       required:
@@ -9579,29 +10042,303 @@ components:
       properties:
         blueprint_name:
           type: string
-    HarnessEntry:
+    AgentInsightsJob:
+      required:
+      - project_id
       type: object
       properties:
-        key:
+        id:
           type: string
-        label:
+          format: uuid
+          readOnly: true
+        project_id:
           type: string
-    Lane:
+          format: uuid
+          readOnly: true
+        status:
+          type: string
+          readOnly: true
+          enum:
+          - enabled
+          - disabled
+        last_scan_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+    AgentInsightsJobUpdate:
+      required:
+      - status
       type: object
       properties:
-        key:
+        status:
           type: string
+          description: New status for the job
+          enum:
+          - enabled
+          - disabled
+    AgentInsightsIssue:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        cause:
+          type: string
+        suggested_fix:
+          type: string
+        status:
+          type: string
+          enum:
+          - open
+          - resolved
+          - closed
+        severity:
+          type: string
+          enum:
+          - critical
+          - high
+          - medium
+          - low
+        traces_query:
+          type: string
+        total_occurrences:
+          type: integer
+          description: SUM(count) over the requested window
+          format: int64
+        total:
+          type: integer
+          description: SUM(total_count) over the requested window
+          format: int64
+        users_impacted:
+          type: integer
+          description: SUM(users_impacted) over the requested window
+          format: int64
+        total_users:
+          type: integer
+          description: SUM(total_users) over the requested window
+          format: int64
+        first_seen:
+          type: string
+          description: MIN(report_day) in the requested window
+          format: date
+        last_seen:
+          type: string
+          description: MAX(report_day) in the requested window
+          format: date
+        days_reported:
+          type: integer
+          description: COUNT(DISTINCT report_day) in the requested window
+          format: int64
+        created_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        last_updated_by:
+          type: string
+        last_updated_at:
+          type: string
+          format: date-time
+    AgentInsightsIssuePage:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentInsightsIssue"
+    AgentInsightsIssueDetail:
+      type: object
+      properties:
+        report_day:
+          type: string
+          format: date
+        count:
+          type: integer
+          format: int64
+        total_count:
+          type: integer
+          format: int64
+        users_impacted:
+          type: integer
+          format: int64
+        total_users:
+          type: integer
+          format: int64
+        metadata:
+          $ref: "#/components/schemas/JsonNode"
+      description: "Per-day breakdown within the requested window, ordered by report_day\
+        \ ascending"
+    AgentInsightsIssueWithDetails:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        cause:
+          type: string
+        suggested_fix:
+          type: string
+        status:
+          type: string
+          enum:
+          - open
+          - resolved
+          - closed
+        severity:
+          type: string
+          enum:
+          - critical
+          - high
+          - medium
+          - low
+        traces_query:
+          type: string
+        created_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        last_updated_by:
+          type: string
+        last_updated_at:
+          type: string
+          format: date-time
+        details:
+          type: array
+          description: "Per-day breakdown within the requested window, ordered by\
+            \ report_day ascending"
+          items:
+            $ref: "#/components/schemas/AgentInsightsIssueDetail"
+    AgentInsightsReport:
+      required:
+      - issues
+      - project_id
+      - report_day
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        report_day:
+          type: string
+          format: date
+        issues:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReportedIssue"
+    ReportedIssue:
+      required:
+      - count
+      - name
+      - severity
+      - total_count
+      - total_users
+      - users_impacted
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          maxLength: 255
+          minLength: 0
+          type: string
+        description:
+          type: string
+        cause:
+          type: string
+        suggested_fix:
+          type: string
+        traces_query:
+          type: string
+        severity:
+          type: string
+          enum:
+          - critical
+          - high
+          - medium
+          - low
+        count:
+          type: integer
+          format: int64
+        total_count:
+          type: integer
+          format: int64
+        users_impacted:
+          type: integer
+          format: int64
+        total_users:
+          type: integer
+          format: int64
+        metadata:
+          $ref: "#/components/schemas/JsonNode"
+    AgentInsightsIssueUpdate:
+      required:
+      - project_id
+      - status
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - open
+          - resolved
+          - closed
+    Item:
+      type: object
+      properties:
         label:
           type: string
         total_tokens:
+          type: integer
+          format: int64
+        definition_tokens:
+          type: integer
+          format: int64
+        usage_tokens:
           type: integer
           format: int64
         by_model:
           type: array
           items:
             $ref: "#/components/schemas/ModelTiers"
-        has_breakdown:
-          type: boolean
+        count:
+          type: integer
+          format: int64
     ModelTiers:
       type: object
       properties:
@@ -9619,73 +10356,6 @@ components:
         output_tokens:
           type: integer
           format: int64
-    Side:
-      type: object
-      properties:
-        total_tokens:
-          type: integer
-          format: int64
-        lanes:
-          type: array
-          items:
-            $ref: "#/components/schemas/Lane"
-    SpendCompositionResponse:
-      type: object
-      properties:
-        input:
-          $ref: "#/components/schemas/Side"
-        harness:
-          type: array
-          items:
-            $ref: "#/components/schemas/HarnessEntry"
-        output:
-          $ref: "#/components/schemas/Side"
-    SpendMetricRequest:
-      required:
-      - interval_end
-      - interval_start
-      type: object
-      properties:
-        project_id:
-          type: string
-          format: uuid
-        project_name:
-          type: string
-        interval_start:
-          type: string
-          format: date-time
-        interval_end:
-          type: string
-          format: date-time
-        user_id:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
-          type: string
-        start_before_end:
-          type: boolean
-        project_provided:
-          type: boolean
-    Item:
-      type: object
-      properties:
-        id:
-          type: string
-        title:
-          type: string
-        body:
-          type: string
-        impact:
-          type: string
-          enum:
-          - high
-          - medium
-          - low
-        estimated_savings_tokens:
-          type: integer
-          format: int64
-        docs_url:
-          type: string
-        related_lane_key:
-          type: string
     SpendBreakdownResponse:
       type: object
       properties:
@@ -9711,16 +10381,81 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Item"
-    SpendRecommendationsResponse:
+    SpendBreakdownsResponse:
       type: object
       properties:
-        total_savings_tokens:
-          type: integer
-          format: int64
-        items:
+        breakdowns:
           type: array
           items:
-            $ref: "#/components/schemas/Item"
+            $ref: "#/components/schemas/SpendBreakdownResponse"
+    SpendMetricRequest:
+      required:
+      - interval_end
+      - interval_start
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        project_name:
+          type: string
+        interval_start:
+          type: string
+          format: date-time
+        interval_end:
+          type: string
+          format: date-time
+        user_id:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        start_before_end:
+          type: boolean
+        project_provided:
+          type: boolean
+    HarnessEntry:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+    Lane:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        total_tokens:
+          type: integer
+          format: int64
+        by_model:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModelTiers"
+        has_breakdown:
+          type: boolean
+    Side:
+      type: object
+      properties:
+        total_tokens:
+          type: integer
+          format: int64
+        lanes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Lane"
+    SpendCompositionResponse:
+      type: object
+      properties:
+        input:
+          $ref: "#/components/schemas/Side"
+        harness:
+          type: array
+          items:
+            $ref: "#/components/schemas/HarnessEntry"
+        output:
+          $ref: "#/components/schemas/Side"
     Result:
       type: object
       properties:
@@ -11071,8 +11806,6 @@ components:
           type: string
         detail:
           type: string
-    JsonNode:
-      type: object
     LlmAsJudgeCode:
       required:
       - messages
@@ -13361,6 +14094,9 @@ components:
         text:
           minLength: 1
           type: string
+        source_queue_id:
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -13633,6 +14369,9 @@ components:
           - ui
           - sdk
           - online_scoring
+        source_queue_id:
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -14077,6 +14816,9 @@ components:
         text:
           minLength: 1
           type: string
+        source_queue_id:
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -14358,6 +15100,9 @@ components:
           - ui
           - sdk
           - online_scoring
+        source_queue_id:
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -16118,6 +16863,9 @@ components:
           - ui
           - sdk
           - online_scoring
+        source_queue_id:
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -16321,6 +17069,9 @@ components:
         text:
           minLength: 1
           type: string
+        source_queue_id:
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -19259,6 +20010,8 @@ components:
         name:
           minLength: 1
           type: string
+        includeStats:
+          type: boolean
     ProjectUpdate:
       type: object
       properties:
@@ -20165,7 +20918,6 @@ components:
       - openaiProviderEnabled
       - openrouterProviderEnabled
       - opikAIEnabled
-      - optimizationStudioEnabled
       - projectHomepageEnabled
       - pythonEvaluatorEnabled
       - spanLlmAsJudgeEnabled
@@ -20194,8 +20946,6 @@ components:
         welcomeWizardEnabled:
           type: boolean
         exportEnabled:
-          type: boolean
-        optimizationStudioEnabled:
           type: boolean
         costIntelligenceEnabled:
           type: boolean
@@ -20503,6 +21253,9 @@ components:
           type: string
         author:
           type: string
+        source_queue_id:
+          type: string
+          format: uuid
     ErrorInfo_Public:
       required:
       - exception_type
@@ -20543,6 +21296,9 @@ components:
           - ui
           - sdk
           - online_scoring
+        source_queue_id:
+          type: string
+          format: uuid
         created_at:
           type: string
           format: date-time
@@ -20764,6 +21520,9 @@ components:
           - online_scoring
         author:
           type: string
+        source_queue_id:
+          type: string
+          format: uuid
         id:
           type: string
           format: uuid
@@ -21109,6 +21868,9 @@ components:
             type: string
         author:
           type: string
+        source_queue_id:
+          type: string
+          format: uuid
     DeleteTraceThreads:
       required:
       - thread_ids
@@ -21480,6 +22242,9 @@ components:
           - online_scoring
         author:
           type: string
+        source_queue_id:
+          type: string
+          format: uuid
         thread_id:
           minLength: 1
           type: string

@@ -4,7 +4,19 @@ run-name: "Release from ${{github.ref_name}} by @${{ github.actor }}"
 
 on:
   workflow_dispatch:
+    inputs:
+      reuse_existing_tag:
+        type: boolean
+        required: false
+        default: false
+        description: "Reuse an existing git tag for this version instead of creating + pushing a new one. Use to replay a release whose tag was already created (e.g. by a prior failed run)."
   workflow_call: #  in order to make this action been called from outside
+    inputs:
+      reuse_existing_tag:
+        type: boolean
+        required: false
+        default: false
+        description: "Reuse an existing git tag for this version instead of creating + pushing a new one."
     outputs:
       version:
         description: 'The release version'
@@ -35,12 +47,35 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Create git tag
+        env:
+          RELEASE_VERSION: ${{ needs.set-version.outputs.version }}
+          REUSE_EXISTING_TAG: ${{ inputs.reuse_existing_tag }}
         run: |
           set -x
           git config --local user.email "github-actions@comet.com"
           git config --local user.name "github-actions"
-          git tag ${{needs.set-version.outputs.version}}
-          git push --no-verify origin ${{needs.set-version.outputs.version}}
+
+          if [ "${REUSE_EXISTING_TAG}" = "true" ]; then
+            # Resolve the SHA the remote tag points to and surface it in the
+            # warning. `reuse_existing_tag=true` is an operator trust statement
+            # ("I trust this tag"). Printing the SHA lets the operator sanity-
+            # check from the Actions log that the tag points to the commit they
+            # expect — and cancel the run if it doesn't — without us having to
+            # take a stance on what 'correct' means here (e.g., an ancestor
+            # check would falsely reject legitimate replays after a main
+            # rebase). See PR #7124 review thread for the threat-model
+            # discussion.
+            TAG_SHA=$(git ls-remote --tags origin "${RELEASE_VERSION}" | awk '{print $1}')
+            if [ -n "${TAG_SHA}" ]; then
+              echo "::warning title=create-git-tag::reuse_existing_tag=true and origin already has tag ${RELEASE_VERSION} (commit ${TAG_SHA}); skipping create+push. Build will pin to this commit — verify it's the source you intend to release."
+              exit 0
+            fi
+            echo "::error title=create-git-tag::reuse_existing_tag=true but origin does not have tag ${RELEASE_VERSION}. Refusing to silently create a new one."
+            exit 1
+          fi
+
+          git tag "${RELEASE_VERSION}"
+          git push --no-verify origin "${RELEASE_VERSION}"
 
   release-apps:
     needs:
@@ -167,7 +202,7 @@ jobs:
           sed -i "s/^version:.*/version: ${{ needs.set-version.outputs.version }}/" Chart.yaml
           sed -i "s/^appVersion:.*/appVersion: ${{ needs.set-version.outputs.version }}/" Chart.yaml
           echo "Updated Chart.yaml version and appVersion to: ${{ needs.set-version.outputs.version }}"
-          cat Chart.yaml | grep -E "^version:|^appVersion:"
+          grep -E "^version:|^appVersion:" Chart.yaml
           cd -
 
       - name: Bump version.txt for next release

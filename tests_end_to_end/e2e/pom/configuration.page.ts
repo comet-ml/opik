@@ -27,6 +27,19 @@ const PROVIDER_TYPE_MAP: Record<ProviderName, string> = {
   Ollama: 'ollama',
 };
 
+/** data-provider value for the Custom (vLLM / OpenAI-compatible) option. */
+const CUSTOM_PROVIDER_TYPE = 'custom-llm';
+
+export interface CustomProviderConfig {
+  /** Unique provider_name (e.g. "openrouter"). Used to dedupe in the providers table. */
+  providerName: string;
+  /** Base URL of the OpenAI-compatible endpoint (e.g. "https://openrouter.ai/api/v1"). */
+  baseUrl: string;
+  apiKey: string;
+  /** Comma-separated model ids the gateway exposes (e.g. "openai/gpt-4o-mini"). */
+  models: string;
+}
+
 /**
  * Workspace Configuration → AI Providers tab. Used by provider-sanity tests
  * for UI self-provisioning of provider keys: read the key from env, navigate
@@ -112,5 +125,69 @@ export class ConfigurationPage {
         intervals: [500, 1000],
       })
       .toBe(true);
+  }
+
+  /**
+   * Add a Custom (vLLM / OpenAI-compatible) provider via the UI. Distinct from
+   * `ensureProviderConfigured` because Custom providers carry a user-defined
+   * provider_name and require URL + Models list fields. Idempotent: if a row
+   * matching the same provider_name is already present, no-ops.
+   */
+  async ensureCustomProviderConfigured(config: CustomProviderConfig): Promise<void> {
+    if (await this.hasCustomProvider(config.providerName)) return;
+
+    const tabpanel = this.page.getByTestId('ai-providers-tabpanel');
+    const toolbarButton = tabpanel
+      .getByRole('button', { name: 'Add configuration', exact: true })
+      .first();
+    await toolbarButton.click();
+    const dialog = this.page.getByTestId('add-provider-dialog');
+    await dialog.waitFor({ state: 'visible' });
+
+    const providerButton = dialog
+      .getByTestId('add-provider-dialog-option')
+      .and(this.page.locator(`[data-provider="${CUSTOM_PROVIDER_TYPE}"]`));
+    await providerButton.first().click();
+
+    await dialog.getByRole('textbox', { name: 'Provider name' }).fill(config.providerName);
+    await dialog.getByRole('textbox', { name: 'URL' }).fill(config.baseUrl);
+    await dialog.getByRole('textbox', { name: 'API key' }).fill(config.apiKey);
+    await dialog.getByRole('textbox', { name: 'Models list' }).fill(config.models);
+
+    await dialog.getByRole('button', { name: 'Add provider', exact: true }).click();
+    await dialog.waitFor({ state: 'hidden' });
+
+    await expect
+      .poll(async () => this.hasCustomProvider(config.providerName), {
+        timeout: 15_000,
+        intervals: [500, 1000],
+      })
+      .toBe(true);
+  }
+
+  /**
+   * Idempotency check for Custom providers — a Custom row is identified by
+   * (data-provider=custom-llm, name cell text === providerName). The first
+   * cell in each row contains the provider_name.
+   */
+  private async hasCustomProvider(providerName: string): Promise<boolean> {
+    const tabpanel = this.page.getByTestId('ai-providers-tabpanel');
+    const firstRowCell = this.page.getByTestId('ai-provider-row-cell').first();
+    const emptyState = tabpanel.getByText('No AI providers yet');
+    await Promise.race([
+      firstRowCell.waitFor({ state: 'visible', timeout: 10_000 }).catch(() => undefined),
+      emptyState.waitFor({ state: 'visible', timeout: 10_000 }).catch(() => undefined),
+    ]);
+    const customCells = this.page
+      .getByTestId('ai-provider-row-cell')
+      .and(this.page.locator(`[data-provider="${CUSTOM_PROVIDER_TYPE}"]`));
+    const count = await customCells.count();
+    for (let i = 0; i < count; i++) {
+      const row = customCells.nth(i).locator('xpath=ancestor::tr');
+      if ((await row.getByText(providerName, { exact: true }).count()) > 0) {
+        return true;
+      }
+    }
+    return false;
   }
 }

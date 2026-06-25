@@ -43,7 +43,7 @@ services:
         chown -R 1000:1000 /config
       "
   clickhouse:
-    image: clickhouse/clickhouse-server:25.3.6.56-alpine
+    image: clickhouse/clickhouse-server:25.8.16.34-alpine
     pull_policy: always
     hostname: clickhouse
     environment:
@@ -57,6 +57,7 @@ services:
       - clickhouse:/var/lib/clickhouse/:type=volume,source=~/opik/clickhouse/data
       - clickhouse-server:/var/log/clickhouse-server/:type=volume,source=~/opik/clickhouse/logs
       - clickhouse-config:/etc/clickhouse-server/config.d
+      - ./clickhouse_config/users.d/enable_time_type.xml:/etc/clickhouse-server/users.d/enable_time_type.xml
     healthcheck:
       test: [ "CMD", "wget", "--spider", "-q", "http://127.0.0.1:8123/ping" ]
       interval: 1s
@@ -136,7 +137,7 @@ services:
 
   backend:
     image: ghcr.io/comet-ml/opik/opik-backend:${OPIK_VERSION:-latest}
-    pull_policy: always
+    pull_policy: ${OPIK_BACKEND_PULL_POLICY:-always}
     profiles:
       - backend
       - opik
@@ -154,7 +155,7 @@ services:
       # Persistent anonymous installation ID passed from launcher script
       OPIK_ANONYMOUS_ID: ${OPIK_ANONYMOUS_ID:-}
       STATE_DB_PROTOCOL: "jdbc:mysql://"
-      STATE_DB_URL: "mysql:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true"
+      STATE_DB_URL: "mysql:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true"
       STATE_DB_DATABASE_NAME: opik
       STATE_DB_USER: opik
       STATE_DB_PASS: opik
@@ -193,7 +194,6 @@ services:
       PYTHON_EVALUATOR_URL: ${PYTHON_EVALUATOR_URL:-http://python-backend:${PYTHON_BACKEND_PORT:-8000}}
       TOGGLE_OPIK_AI_ENABLED: ${TOGGLE_OPIK_AI_ENABLED:-"false"}
       TOGGLE_GUARDRAILS_ENABLED: ${TOGGLE_GUARDRAILS_ENABLED:-"false"}
-      TOGGLE_OPTIMIZATION_STUDIO_ENABLED: ${TOGGLE_OPTIMIZATION_STUDIO_ENABLED:-"false"}
       TOGGLE_WELCOME_WIZARD_ENABLED: ${TOGGLE_WELCOME_WIZARD_ENABLED:-"true"}
       TOGGLE_FORCE_WORKSPACE_VERSION: ${TOGGLE_FORCE_WORKSPACE_VERSION:-"version_2"}
       LLM_MODEL_REGISTRY_DEFAULT_RESOURCE: ${LLM_MODEL_REGISTRY_DEFAULT_RESOURCE:-llm-models-default.yaml}
@@ -276,7 +276,7 @@ services:
 
   guardrails-backend:
     image: ghcr.io/comet-ml/opik/opik-guardrails-backend:${OPIK_VERSION:-latest}
-    pull_policy: always
+    pull_policy: ${OPIK_GUARDRAILS_BACKEND_PULL_POLICY:-always}
     profiles:
       - guardrails
     build:

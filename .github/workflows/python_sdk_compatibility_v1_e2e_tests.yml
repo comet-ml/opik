@@ -4,6 +4,7 @@ permissions:
   contents: read
   checks: write
   pull-requests: write
+  packages: write
 on:
     workflow_dispatch:
     pull_request:
@@ -48,8 +49,13 @@ jobs:
                   match-regex: '^sdks/python/|^\.github/workflows/python_sdk_compatibility_v1_e2e_tests\.yml$'
                   github-token: ${{ secrets.GITHUB_TOKEN }}
 
+    build-opik:
+        uses: ./.github/workflows/build_e2e_docker.yaml
+        with:
+          include_guardrails: true
+
     run-compatibility-v1-e2e:
-        needs: select-matrix
+        needs: [select-matrix, build-opik]
         name: Python SDK Compatibility V1.x E2E Tests ${{matrix.python_version}}
         runs-on: ubuntu-latest
         timeout-minutes: 30
@@ -60,7 +66,25 @@ jobs:
 
         steps:
         - name: Checkout
-          uses: actions/checkout@v4.1.1
+          uses: actions/checkout@v6
+
+        - name: Login to GHCR
+          uses: docker/login-action@v3
+          with:
+            registry: ghcr.io
+            username: ${{ github.actor }}
+            password: ${{ secrets.GITHUB_TOKEN }}
+
+        - name: Pull Docker images from GHCR
+          env:
+            TAG: ${{ needs.build-opik.outputs.image_tag }}
+          run: |
+            docker pull "ghcr.io/comet-ml/opik/opik-backend:$TAG"
+            docker pull "ghcr.io/comet-ml/opik/opik-python-backend:$TAG"
+            docker pull "ghcr.io/comet-ml/opik/opik-guardrails-backend:$TAG"
+            docker tag "ghcr.io/comet-ml/opik/opik-backend:$TAG" ghcr.io/comet-ml/opik/opik-backend:latest
+            docker tag "ghcr.io/comet-ml/opik/opik-python-backend:$TAG" ghcr.io/comet-ml/opik/opik-python-backend:latest
+            docker tag "ghcr.io/comet-ml/opik/opik-guardrails-backend:$TAG" ghcr.io/comet-ml/opik/opik-guardrails-backend:latest
 
         - name: Setup Python ${{matrix.python_version}}
           uses: actions/setup-python@v5
@@ -74,9 +98,12 @@ jobs:
             COMPOSE_BAKE: false
             TOGGLE_RUNNERS_ENABLED: "true"
             TOGGLE_AGENT_CONFIGURATION_ENABLED: "true"
+            OPIK_BACKEND_PULL_POLICY: never
+            PYTHON_BACKEND_PULL_POLICY: never
+            OPIK_GUARDRAILS_BACKEND_PULL_POLICY: never
           run: |
             cd ${{ github.workspace }}
-            ./opik.sh --backend --port-mapping --build
+            ./opik.sh --backend --port-mapping --guardrails
 
         - name: Check Opik server availability
           shell: bash
@@ -120,7 +147,7 @@ jobs:
 
         - name: Attach BE log
           if: failure()
-          uses: actions/upload-artifact@v4
+          uses: actions/upload-artifact@v7
           with:
               name: opik-backend-log-compat-v1-p${{matrix.python_version}}
               path: ${{ github.workspace }}/opik-backend_compat_v1_p${{matrix.python_version}}.log
@@ -129,4 +156,4 @@ jobs:
           if: always()
           run: |
             cd ${{ github.workspace }}
-            ./opik.sh --stop
+            ./opik.sh --stop --guardrails

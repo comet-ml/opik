@@ -1,6 +1,5 @@
 package com.comet.opik.domain;
 
-import com.clickhouse.client.ClickHouseException;
 import com.clickhouse.client.api.Client;
 import com.clickhouse.client.api.query.QuerySettings;
 import com.comet.opik.api.Column;
@@ -26,6 +25,7 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.db.ZeroRowsRetryPolicy;
+import com.comet.opik.utils.ErrorUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -45,8 +45,10 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -1863,13 +1865,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 {targetDatasetId:String} as dataset_id,
                 {newVersionId:String} as dataset_version_id,
                 <if(data)> mapFromArrays({data_keys:Array(String)}, {data_values:Array(String)}) <else> src.data <endif> as data,
-                <if(description)> {description:String} <else> src.description <endif> as description,
+                <if(description)> base64Decode({description:String}) <else> src.description <endif> as description,
                 src.metadata,
                 src.source,
                 src.trace_id,
                 src.span_id,
                 <if(tags)> {tags:Array(String)} <else> src.tags <endif> as tags,
-                <if(evaluators)> {evaluators:String} <else> src.evaluators <endif> as evaluators,
+                <if(evaluators)> base64Decode({evaluators:String}) <else> src.evaluators <endif> as evaluators,
                 <if(clear_execution_policy)> '' <else><if(execution_policy)> {execution_policy:String} <else> src.execution_policy <endif><endif> as execution_policy,
                 src.item_created_at,
                 now64(9) as item_last_updated_at,
@@ -2878,7 +2880,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     }
 
     private <T> Mono<T> handleSqlError(Throwable e, T defaultValue) {
-        if (e instanceof ClickHouseException && e.getMessage().contains("Unable to parse JSONPath. (BAD_ARGUMENTS)")) {
+        // A user-supplied malformed JSON path is rejected by ClickHouse; treat it as an empty result.
+        if (ErrorUtils.isMalformedJsonPath(e)) {
             return Mono.just(defaultValue);
         }
         return Mono.error(e);
@@ -3296,14 +3299,19 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             params.put("data_keys", FilterQueryBuilder.formatStringArrayLiteral(dataAsStrings.keySet()));
             params.put("data_values", FilterQueryBuilder.formatStringArrayLiteral(dataAsStrings.values()));
         }
+        // Free-text / JSON params bound via the v2-client {:String} substitution must be base64'd:
+        // ClickHouse processes backslash escapes in the substituted value, so a raw '\n' is turned
+        // into a literal newline — corrupting JSON (evaluators) or the stored text and even failing
+        // the write (description). base64Decode in the SQL restores the exact bytes. Add the same
+        // treatment to any new free-text/JSON {:String} param added here.
         if (edit.description() != null) {
-            params.put("description", edit.description());
+            params.put("description", base64Encode(edit.description()));
         }
         if (edit.tags() != null) {
             params.put("tags", FilterQueryBuilder.formatStringArrayLiteral(edit.tags()));
         }
         if (edit.evaluators() != null) {
-            params.put("evaluators", serializeEvaluators(edit.evaluators()));
+            params.put("evaluators", base64Encode(serializeEvaluators(edit.evaluators())));
         }
         if (!Boolean.TRUE.equals(edit.clearExecutionPolicy()) && edit.executionPolicy() != null) {
             params.put("execution_policy", serializeExecutionPolicy(edit.executionPolicy()));
@@ -3750,6 +3758,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             return Instant.now().toString().replace("Z", "");
         }
         return timestamp.toString().replace("Z", "");
+    }
+
+    private static String base64Encode(String value) {
+        return Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8));
     }
 
     private static String serializeEvaluators(List<EvaluatorItem> evaluators) {

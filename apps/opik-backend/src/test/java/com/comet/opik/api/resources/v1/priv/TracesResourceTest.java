@@ -34,6 +34,7 @@ import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.attachment.Attachment;
 import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.error.InvalidUUIDException.Reason;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.TraceField;
@@ -189,6 +190,8 @@ class TracesResourceTest {
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
+    private static final TimeBasedEpochGenerator generator = Generators.timeBasedEpochGenerator();
+
     private final RedisContainer redisContainer = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer mysqlContainer = MySQLContainerUtils.newMySQLContainer();
     private final GenericContainer<?> zookeeperContainer = ClickHouseContainerUtils.newZookeeperContainer();
@@ -227,7 +230,6 @@ class TracesResourceTest {
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
-    private final TimeBasedEpochGenerator generator = Generators.timeBasedEpochGenerator();
 
     private String baseURI;
     private ClientSupport client;
@@ -271,6 +273,43 @@ class TracesResourceTest {
 
     private UUID getProjectId(String projectName, String workspaceName, String apiKey) {
         return projectResourceClient.getByName(projectName, apiKey, workspaceName).id();
+    }
+
+    static Stream<Arguments> invalidIds() {
+        var now = Instant.now();
+        var old = now.minus(Duration.ofHours(25)).toEpochMilli();
+        var future = now.plus(Duration.ofHours(25)).toEpochMilli();
+        var expectedDetails = "id with timestamp '%s' must be in the allowed ingestion window of '%s' around now, reason '%s'";
+        var expectedWindow = Duration.ofHours(24);
+        return Stream.of(
+                arguments(UUID.randomUUID(),
+                        "Trace id must be a version 7 UUID",
+                        "UUID not v7"),
+                arguments(
+                        generator.construct(old),
+                        expectedDetails.formatted(
+                                Instant.ofEpochMilli(old), expectedWindow, Reason.TOO_OLD.getValue()),
+                        "UUID before window"),
+                arguments(
+                        generator.construct(future),
+                        expectedDetails.formatted(
+                                Instant.ofEpochMilli(future), expectedWindow, Reason.TOO_FAR_FUTURE.getValue()),
+                        "UUID after window"));
+    }
+
+    static Stream<Arguments> invalidIdsForUpdate() {
+        var future = Instant.now().plus(Duration.ofHours(25)).toEpochMilli();
+        var expectedDetails = "id with timestamp '%s' must be in the allowed ingestion window of '%s' around now, reason '%s'";
+        var expectedWindow = Duration.ofHours(24);
+        return Stream.of(
+                arguments(UUID.randomUUID(),
+                        "Trace id must be a version 7 UUID",
+                        "UUID not v7"),
+                arguments(
+                        generator.construct(future),
+                        expectedDetails.formatted(
+                                Instant.ofEpochMilli(future), expectedWindow, Reason.TOO_FAR_FUTURE.getValue()),
+                        "UUID after window"));
     }
 
     @Nested
@@ -2469,6 +2508,19 @@ class TracesResourceTest {
             assertThat(attachmentNames).anyMatch(name -> name.matches("input-attachment-2-\\d+\\.gif"));
         }
 
+        @MethodSource("com.comet.opik.api.resources.v1.priv.TracesResourceTest#invalidIds")
+        @ParameterizedTest(name = "Create trace with invalid id throws bad request: {2}")
+        void createWithInvalidIdThrowsBadRequest(UUID id, String expectedDetails, String testName) {
+            var expectedEntity = new io.dropwizard.jersey.errors.ErrorMessage(
+                    HttpStatus.SC_BAD_REQUEST, "Invalid UUID for id", expectedDetails);
+            var trace = factory.manufacturePojo(Trace.class).toBuilder().id(id).build();
+            try (var response = traceResourceClient.callCreateTrace(trace, API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                var actualEntity = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                assertThat(actualEntity).isEqualTo(expectedEntity);
+            }
+        }
+
         @Test
         @DisplayName("when trace is fetched with truncate flag, then attachments are handled accordingly")
         void getById__whenFetchedWithTruncateFlag__thenAttachmentsAreHandledAccordingly() throws Exception {
@@ -3289,6 +3341,19 @@ class TracesResourceTest {
                     .isZero();
         }
 
+        @MethodSource("com.comet.opik.api.resources.v1.priv.TracesResourceTest#invalidIds")
+        @ParameterizedTest(name = "Batch create trace with invalid id throws bad request: {2}")
+        void batchCreateWithInvalidIdThrowsBadRequest(UUID id, String expectedDetails, String testName) {
+            var expectedEntity = new io.dropwizard.jersey.errors.ErrorMessage(
+                    HttpStatus.SC_BAD_REQUEST, "Invalid UUID for id", expectedDetails);
+            var trace = factory.manufacturePojo(Trace.class).toBuilder().id(id).build();
+            try (var response = traceResourceClient.callBatchCreateTraces(List.of(trace), API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                var actualEntity = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                assertThat(actualEntity).isEqualTo(expectedEntity);
+            }
+        }
+
         private long readClickHouseErrorCount(TransactionTemplateAsync templateAsync, int errorCode) {
             return templateAsync.nonTransaction(connection -> {
                 var statement = connection.createStatement(
@@ -3731,16 +3796,27 @@ class TracesResourceTest {
         }
 
         @Test
-        @DisplayName("when trace does not exist and id is invalid, then return 400")
-        void when__traceDoesNotExistAndIdIsInvalid__thenReturn400() {
-            var id = UUID.randomUUID();
+        void updateAllowsOutOfWindowOldId() {
+            var id = generator.construct(Instant.now().minus(Duration.ofHours(25)).toEpochMilli());
             var traceUpdate = factory.manufacturePojo(TraceUpdate.class).toBuilder()
                     .projectId(null)
                     .build();
-            try (var actualResponse = traceResourceClient.updateTrace(
+
+            traceResourceClient.updateTrace(id, traceUpdate, API_KEY, TEST_WORKSPACE);
+        }
+
+        @MethodSource("com.comet.opik.api.resources.v1.priv.TracesResourceTest#invalidIdsForUpdate")
+        @ParameterizedTest(name = "Update trace with invalid id throws bad request: {2}")
+        void updateWithInvalidIdThrowsBadRequest(UUID id, String expectedDetails, String testName) {
+            var expectedEntity = new io.dropwizard.jersey.errors.ErrorMessage(
+                    HttpStatus.SC_BAD_REQUEST, "Invalid UUID for id", expectedDetails);
+            var traceUpdate = factory.manufacturePojo(TraceUpdate.class).toBuilder()
+                    .projectId(null)
+                    .build();
+            try (var response = traceResourceClient.updateTrace(
                     id, traceUpdate, API_KEY, TEST_WORKSPACE, HttpStatus.SC_BAD_REQUEST)) {
-                assertErrorResponse(
-                        actualResponse, "Trace id must be a version 7 UUID", HttpStatus.SC_BAD_REQUEST);
+                var actualEntity = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                assertThat(actualEntity).isEqualTo(expectedEntity);
             }
         }
 
@@ -5217,7 +5293,9 @@ class TracesResourceTest {
                     .build();
 
             try (var actualResponse = traceResourceClient.callFeedbackScores(List.of(score), API_KEY, TEST_WORKSPACE)) {
-                assertErrorResponse(actualResponse, "trace id must be a version 7 UUID", 400);
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(400);
+                assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class).getDetails())
+                        .isEqualTo("trace id must be a version 7 UUID");
             }
         }
 
@@ -6433,6 +6511,79 @@ class TracesResourceTest {
                             .getFirst());
 
             TraceAssertions.assertThreads(expectedClosedThreads, closedThreadPage.content());
+        }
+
+        @Test
+        @DisplayName("open thread: when projectId belongs to another workspace, then return not found")
+        void openTraceThread__whenProjectBelongsToAnotherWorkspace__thenReturnNotFound() {
+            // Workspace A owns the project
+            var workspaceNameA = RandomStringUtils.secure().nextAlphanumeric(10);
+            var apiKeyA = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKeyA, workspaceNameA, UUID.randomUUID().toString());
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            UUID projectId = projectResourceClient.createProject(projectName, apiKeyA, workspaceNameA);
+
+            // Workspace B does not own it
+            var workspaceNameB = RandomStringUtils.secure().nextAlphanumeric(10);
+            var apiKeyB = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKeyB, workspaceNameB, UUID.randomUUID().toString());
+
+            traceResourceClient.openTraceThread(randomUUID().toString(), projectId, projectName, apiKeyB,
+                    workspaceNameB, HttpStatus.SC_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("close threads: when projectId belongs to another workspace, then return not found")
+        void closeTraceThreads__whenProjectBelongsToAnotherWorkspace__thenReturnNotFound() {
+            // Workspace A owns the project
+            var workspaceNameA = RandomStringUtils.secure().nextAlphanumeric(10);
+            var apiKeyA = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKeyA, workspaceNameA, UUID.randomUUID().toString());
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            UUID projectId = projectResourceClient.createProject(projectName, apiKeyA, workspaceNameA);
+
+            // Workspace B does not own it
+            var workspaceNameB = RandomStringUtils.secure().nextAlphanumeric(10);
+            var apiKeyB = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKeyB, workspaceNameB, UUID.randomUUID().toString());
+
+            traceResourceClient.closeTraceThreads(Set.of(randomUUID().toString()), projectId, projectName, apiKeyB,
+                    workspaceNameB, HttpStatus.SC_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("close threads: when thread belongs to a different project in the same workspace, then return not found")
+        void closeTraceThreads__whenThreadBelongsToAnotherProject__thenReturnNotFound() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            // Project A owns the thread
+            var projectNameA = RandomStringUtils.secure().nextAlphanumeric(10);
+            UUID projectIdA = projectResourceClient.createProject(projectNameA, apiKey, workspaceName);
+            var threadId = randomUUID().toString();
+
+            Trace trace = createTrace().toBuilder()
+                    .threadId(threadId)
+                    .projectId(projectIdA)
+                    .projectName(projectNameA)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                var page = traceResourceClient.getTraceThreads(projectIdA, projectNameA, apiKey, workspaceName,
+                        List.of(), List.of(), Map.of());
+                assertThat(page.content()).hasSize(1);
+            });
+
+            // Project B (same workspace) does not contain the thread
+            var projectNameB = RandomStringUtils.secure().nextAlphanumeric(10);
+            UUID projectIdB = projectResourceClient.createProject(projectNameB, apiKey, workspaceName);
+
+            traceResourceClient.closeTraceThreads(Set.of(threadId), projectIdB, projectNameB, apiKey, workspaceName,
+                    HttpStatus.SC_NOT_FOUND);
         }
     }
 

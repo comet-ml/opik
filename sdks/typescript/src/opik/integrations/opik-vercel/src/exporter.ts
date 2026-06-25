@@ -2,8 +2,17 @@ import type { AttributeValue, Tracer } from "@opentelemetry/api";
 import { SpanStatusCode } from "@opentelemetry/api";
 import type { ExportResultCode } from "@opentelemetry/core";
 import type { NodeSDKConfiguration } from "@opentelemetry/sdk-node";
-import type { Span, Trace } from "opik";
-import { Opik, logger } from "opik";
+import { Opik, generateId, logger } from "opik";
+import {
+  getModel,
+  getProvider,
+  getSpanInput,
+  getSpanMetadata,
+  getSpanOutput,
+  getSpanType,
+  getSpanUsage,
+  getThreadId,
+} from "./attributes";
 
 /** Shape used for error_info when creating traces/spans; matches Opik API ErrorInfo. */
 type ErrorInfo = {
@@ -34,155 +43,107 @@ type OpikExporterOptions = {
   tags?: string[];
   metadata?: Record<string, AttributeValue>;
   threadId?: string;
+  /**
+   * How long (ms) to retain a trace's accumulated spans/ids after its last
+   * activity before pruning them, to bound memory in long-running processes.
+   * A trace idle longer than this is assumed complete. Defaults to 10 minutes.
+   */
+  traceTtlMs?: number;
 };
 
 const aiSDKClient = new Opik();
 
+// A turn's spans arrive across export batches; we keep accumulating until a
+// trace has been idle this long, then prune it. Generous enough not to drop
+// in-flight turns (durable eve sessions can pause between turns).
+const DEFAULT_TRACE_TTL_MS = 10 * 60 * 1000;
+
+// Instrumentation scopes we ingest. AI SDK v4/v5/v6 emit scope "ai"; AI SDK v7
+// (and frameworks built on it, such as Vercel eve) emit the OpenTelemetry GenAI
+// scope "gen_ai" plus an "eve"-scoped turn root span. Everything else (e.g.
+// "workflow", "@vercel/otel/fetch") is framework noise and stays excluded.
+const SUPPORTED_SCOPES = new Set(["ai", "gen_ai", "eve"]);
+
+type SpanTiming = { id: string; start: number; end: number; duration: number };
+
 export class OpikExporter implements SpanExporter {
-  // <otelTraceId, opikTrace>
-  private readonly traces = new Map<string, Trace>();
-  // <otelSpanId, opikSpan>
-  private readonly spans = new Map<string, Span>();
+  // <otelTraceId, <otelSpanId, ReadableSpan>>. A turn's spans arrive across
+  // several export batches (the BatchSpanProcessor flushes as spans finish), so
+  // we accumulate them and re-derive the whole trace on every batch.
+  private readonly otelSpansByTrace = new Map<
+    string,
+    Map<string, ReadableSpan>
+  >();
+  // Stable Opik ids keyed by OTel id. Re-sending an entity with the same id is
+  // an upsert, so revising a trace/span never needs an update() call.
+  private readonly traceIds = new Map<string, string>();
+  private readonly spanIds = new Map<string, string>();
+  // Wall-clock of the last export that touched each otelTraceId, for TTL pruning.
+  private readonly lastSeenByTrace = new Map<string, number>();
+
   private readonly client: Opik;
   private readonly tags: string[];
   private readonly metadata: Record<string, AttributeValue>;
   private readonly threadId?: string;
+  private readonly traceTtlMs: number;
 
   constructor({
     client = aiSDKClient,
     tags = [],
     metadata = {},
     threadId,
+    traceTtlMs = DEFAULT_TRACE_TTL_MS,
   }: OpikExporterOptions = {}) {
     this.client = client;
     this.tags = [...tags];
     this.metadata = { ...metadata };
     this.threadId = threadId;
+    this.traceTtlMs = traceTtlMs;
   }
 
-  private getSpanInput = (otelSpan: ReadableSpan): Record<string, unknown> => {
-    let input: Record<string, unknown> = {};
-    const { attributes } = otelSpan;
-    const attributeKeys = Object.keys(attributes);
+  private opikTraceId = (otelTraceId: string): string => {
+    let id = this.traceIds.get(otelTraceId);
 
-    attributeKeys.forEach((key) => {
-      if (key === "ai.prompt" || key === "gen_ai.request") {
-        const parsedValue = tryParseJSON(attributes[key]);
+    if (!id) {
+      id = generateId();
+      this.traceIds.set(otelTraceId, id);
+    }
 
-        if (parsedValue) {
-          input = { ...input, ...parsedValue };
+    return id;
+  };
+
+  private opikSpanId = (otelSpanId: string): string => {
+    let id = this.spanIds.get(otelSpanId);
+
+    if (!id) {
+      id = generateId();
+      this.spanIds.set(otelSpanId, id);
+    }
+
+    return id;
+  };
+
+  // Drop accumulated spans and id mappings for traces idle longer than the TTL,
+  // so a long-running exporter doesn't retain every trace for the process'
+  // lifetime. A trace re-derives from all its spans on each batch, so we only
+  // prune once it has been quiet long enough to be considered complete.
+  private pruneStaleTraces = (now: number): void => {
+    for (const [otelTraceId, lastSeen] of this.lastSeenByTrace) {
+      if (now - lastSeen <= this.traceTtlMs) {
+        continue;
+      }
+
+      const spans = this.otelSpansByTrace.get(otelTraceId);
+      if (spans) {
+        for (const otelSpanId of spans.keys()) {
+          this.spanIds.delete(otelSpanId);
         }
       }
 
-      if (key.startsWith("ai.prompt.")) {
-        const promptKey = key.replace("ai.prompt.", "");
-
-        input[promptKey] = safeParseJson(attributes[key]);
-      }
-
-      if (key.startsWith("gen_ai.request.")) {
-        const promptKey = key.replace("gen_ai.request.", "");
-
-        input[promptKey] = safeParseJson(attributes[key]);
-      }
-    });
-
-    if (Object.keys(input).length > 0) {
-      return input;
+      this.otelSpansByTrace.delete(otelTraceId);
+      this.traceIds.delete(otelTraceId);
+      this.lastSeenByTrace.delete(otelTraceId);
     }
-
-    if ("ai.toolCall.name" in attributes) {
-      input.toolName = attributes["ai.toolCall.name"];
-    }
-
-    if ("ai.toolCall.args" in attributes) {
-      input.args = attributes["ai.toolCall.args"];
-    }
-
-    return input;
-  };
-
-  private getSpanOutput = (otelSpan: ReadableSpan): Record<string, unknown> => {
-    const { attributes } = otelSpan;
-
-    if (attributes["ai.response.text"]) {
-      return { text: attributes["ai.response.text"] };
-    }
-
-    if (attributes["ai.response.object"]) {
-      return { object: safeParseJson(attributes["ai.response.object"]) };
-    }
-
-    if (attributes["ai.toolCall.result"]) {
-      return { result: attributes["ai.toolCall.result"] };
-    }
-
-    if (attributes["ai.response.toolCalls"]) {
-      return { toolCalls: safeParseJson(attributes["ai.response.toolCalls"]) };
-    }
-
-    return {};
-  };
-
-  private getSpanMetadata = (
-    otelSpan: ReadableSpan
-  ): Record<string, unknown> => {
-    const { attributes } = otelSpan;
-    const metadata: Record<string, unknown> = {};
-
-    if (attributes["gen_ai.response.model"]) {
-      metadata.model = attributes["gen_ai.response.model"];
-    }
-
-    if (attributes["gen_ai.system"]) {
-      metadata.system = attributes["gen_ai.system"];
-    }
-
-    return metadata;
-  };
-
-  private getSpanUsage = (otelSpan: ReadableSpan): Record<string, number> => {
-    const { attributes } = otelSpan;
-    const usage: Record<string, number> = {};
-
-    // prompt tokens
-    if ("ai.usage.promptTokens" in attributes) {
-      usage.prompt_tokens = attributes["ai.usage.promptTokens"] as number;
-    }
-    if ("gen_ai.usage.input_tokens" in attributes) {
-      usage.prompt_tokens = attributes["gen_ai.usage.input_tokens"] as number;
-    }
-
-    // completion tokens
-    if ("ai.usage.completionTokens" in attributes) {
-      usage.completion_tokens = attributes[
-        "ai.usage.completionTokens"
-      ] as number;
-    }
-    if ("gen_ai.usage.output_tokens" in attributes) {
-      usage.completion_tokens = attributes[
-        "gen_ai.usage.output_tokens"
-      ] as number;
-    }
-
-    if ("prompt_tokens" in usage || "completion_tokens" in usage) {
-      usage.total_tokens =
-        (usage.prompt_tokens || 0) + (usage.completion_tokens || 0);
-    }
-
-    return usage;
-  };
-
-  private getThreadId = (otelSpan: ReadableSpan): string | undefined => {
-    const { attributes } = otelSpan;
-
-    // Check for threadId in telemetry metadata
-    if (attributes["ai.telemetry.metadata.threadId"] != null) {
-      return attributes["ai.telemetry.metadata.threadId"]?.toString();
-    }
-
-    // Fallback to constructor-provided threadId
-    return this.threadId;
   };
 
   private getErrorInfo = (otelSpan: ReadableSpan): ErrorInfo | undefined => {
@@ -207,36 +168,23 @@ export class OpikExporter implements SpanExporter {
     const message = attributes?.["exception.message"]?.toString();
     const traceback = attributes?.["exception.stacktrace"]?.toString() || "";
 
-    return {
-      exceptionType,
-      message,
-      traceback,
-    };
+    return { exceptionType, message, traceback };
   };
 
-  processSpan = ({
-    otelSpan,
-    parentSpan,
-    trace,
-  }: {
-    otelSpan: ReadableSpan;
-    parentSpan?: Span;
-    trace: Trace;
-  }): Span => {
-    const errorInfo = this.getErrorInfo(otelSpan);
+  // eve groups multi-turn conversations under a session id that may live on any
+  // span of the turn, so scan the whole group before the constructor fallback.
+  private resolveThreadId = (
+    otelSpans: ReadableSpan[]
+  ): string | undefined => {
+    for (const otelSpan of otelSpans) {
+      const threadId = getThreadId(otelSpan.attributes);
 
-    return trace.span({
-      name: otelSpan.name,
-      startTime: new Date(hrTimeToMilliseconds(otelSpan.startTime)),
-      endTime: new Date(hrTimeToMilliseconds(otelSpan.endTime)),
-      parentSpanId: parentSpan?.data.id,
-      input: this.getSpanInput(otelSpan),
-      output: this.getSpanOutput(otelSpan),
-      metadata: this.getSpanMetadata(otelSpan),
-      usage: this.getSpanUsage(otelSpan),
-      type: "llm",
-      ...(errorInfo && { errorInfo }),
-    });
+      if (threadId != null) {
+        return threadId;
+      }
+    }
+
+    return this.threadId;
   };
 
   shutdown = async (): Promise<void> => {
@@ -248,8 +196,8 @@ export class OpikExporter implements SpanExporter {
   };
 
   export: ExportFunction = async (allOtelSpans, resultCallback) => {
-    const aiSDKOtelSpans = allOtelSpans.filter(
-      (span) => getInstrumentationScopeName(span) === "ai"
+    const aiSDKOtelSpans = allOtelSpans.filter((span: ReadableSpan) =>
+      SUPPORTED_SCOPES.has(getInstrumentationScopeName(span) ?? "")
     );
     const diffCount = allOtelSpans.length - aiSDKOtelSpans.length;
 
@@ -266,42 +214,31 @@ export class OpikExporter implements SpanExporter {
       return;
     }
 
-    const spanGroups = groupAndSortOtelSpans(aiSDKOtelSpans);
-
     logger.debug("Exporting spans", aiSDKOtelSpans);
 
-    Object.entries(spanGroups).forEach(([otelTraceId, otelSpans]) => {
-      const [rootOtelSpan, ...otherOtelSpans] = otelSpans;
+    const affectedTraceIds = new Set<string>();
 
-      const errorInfo = this.getErrorInfo(rootOtelSpan);
+    for (const otelSpan of aiSDKOtelSpans) {
+      const otelTraceId = otelSpan.spanContext().traceId;
+      affectedTraceIds.add(otelTraceId);
 
-      const trace = this.client.trace({
-        startTime: new Date(hrTimeToMilliseconds(rootOtelSpan.startTime)),
-        endTime: new Date(hrTimeToMilliseconds(rootOtelSpan.endTime)),
-        name:
-          rootOtelSpan.attributes[
-            "ai.telemetry.metadata.traceName"
-          ]?.toString() ?? rootOtelSpan.name,
-        input: this.getSpanInput(rootOtelSpan),
-        output: this.getSpanOutput(rootOtelSpan),
-        metadata: { ...this.getSpanMetadata(rootOtelSpan), ...this.metadata },
-        tags: this.tags,
-        usage: this.getSpanUsage(rootOtelSpan),
-        threadId: this.getThreadId(rootOtelSpan),
-        ...(errorInfo && { errorInfo }),
-      });
+      let spans = this.otelSpansByTrace.get(otelTraceId);
 
-      this.traces.set(otelTraceId, trace);
+      if (!spans) {
+        spans = new Map();
+        this.otelSpansByTrace.set(otelTraceId, spans);
+      }
 
-      otherOtelSpans.forEach((otelSpan) => {
-        const parentSpan = this.spans.get(
-          otelSpan.parentSpanContext?.spanId ?? ""
-        );
-        const span = this.processSpan({ parentSpan, otelSpan, trace });
+      spans.set(otelSpan.spanContext().spanId, otelSpan);
+    }
 
-        this.spans.set(otelSpan.spanContext().spanId, span);
-      });
-    });
+    const now = Date.now();
+    for (const otelTraceId of affectedTraceIds) {
+      this.lastSeenByTrace.set(otelTraceId, now);
+      this.exportTrace(otelTraceId);
+    }
+
+    this.pruneStaleTraces(now);
 
     try {
       await this.client.flush();
@@ -321,6 +258,105 @@ export class OpikExporter implements SpanExporter {
     }
   };
 
+  // Re-derive and (re)send a whole trace and its spans from every span seen for
+  // it so far. Uses create-only operations: the Opik ids are stable, so each
+  // send upserts the previous one — no update()/end() calls.
+  private exportTrace(otelTraceId: string): void {
+    const otelSpans = [...(this.otelSpansByTrace.get(otelTraceId)?.values() ?? [])];
+
+    if (otelSpans.length === 0) {
+      return;
+    }
+
+    const traceId = this.opikTraceId(otelTraceId);
+    const projectName = this.client.config.projectName;
+    const parentOf = resolveParents(otelSpans);
+
+    // The root span becomes the Opik trace itself; every other span is a child.
+    const rootOtelSpan = pickRootSpan(otelSpans, parentOf);
+    const rootOtelSpanId = rootOtelSpan.spanContext().spanId;
+
+    // Prefer the root span's own input/output — this preserves AI SDK v4/v5/v6,
+    // where the root model call carries them. Fall back to the model-call spans
+    // when the root is an orchestration span that carries none (e.g. eve's
+    // `ai.eve.turn`). Token usage is intentionally NOT set on the trace: it
+    // lives only on LLM spans, and the trace total is aggregated from them.
+    const llmSpans = sortByStart(
+      otelSpans.filter((otelSpan) => getSpanType(otelSpan.attributes) === "llm")
+    );
+
+    const input = preferRoot(getSpanInput(rootOtelSpan.attributes), () =>
+      firstNonEmpty(llmSpans, getSpanInput)
+    );
+    const output = preferRoot(getSpanOutput(rootOtelSpan.attributes), () =>
+      lastNonEmpty(llmSpans, getSpanOutput)
+    );
+
+    const errorInfo =
+      this.getErrorInfo(rootOtelSpan) ?? firstError(otelSpans, this.getErrorInfo);
+
+    this.client.traceBatchQueue.create({
+      id: traceId,
+      name:
+        rootOtelSpan.attributes["ai.telemetry.metadata.traceName"]?.toString() ??
+        rootOtelSpan.name,
+      // Span the whole turn even when the root span's own window is shorter.
+      startTime: new Date(Math.min(...otelSpans.map(startMs))),
+      endTime: new Date(Math.max(...otelSpans.map(endMs))),
+      input,
+      output,
+      metadata: { ...mergeMetadata(otelSpans), ...this.metadata },
+      tags: this.tags,
+      threadId: this.resolveThreadId(otelSpans),
+      projectName,
+      ...(errorInfo && { errorInfo }),
+    });
+
+    for (const otelSpan of otelSpans) {
+      const otelSpanId = otelSpan.spanContext().spanId;
+
+      if (otelSpanId === rootOtelSpanId) {
+        continue;
+      }
+
+      // Spans whose parent is the root attach directly to the trace.
+      const parentOtelSpanId = parentOf.get(otelSpanId);
+      const parentSpanId =
+        parentOtelSpanId != null && parentOtelSpanId !== rootOtelSpanId
+          ? this.opikSpanId(parentOtelSpanId)
+          : undefined;
+      const spanErrorInfo = this.getErrorInfo(otelSpan);
+      const spanType = getSpanType(otelSpan.attributes);
+      // Only LLM spans carry model/provider and token usage. The backend prices
+      // a span from its model + provider + usage; eve also repeats the model
+      // call's usage on the agent/step wrapper spans, so keeping any of these on
+      // non-LLM spans would mislabel them and double-count the trace total.
+      const llmFields =
+        spanType === "llm"
+          ? {
+              ...withModelProvider(otelSpan.attributes),
+              usage: getSpanUsage(otelSpan.attributes),
+            }
+          : {};
+
+      this.client.spanBatchQueue.create({
+        id: this.opikSpanId(otelSpanId),
+        traceId,
+        ...(parentSpanId ? { parentSpanId } : {}),
+        name: otelSpan.name,
+        type: spanType,
+        startTime: new Date(startMs(otelSpan)),
+        endTime: new Date(endMs(otelSpan)),
+        input: getSpanInput(otelSpan.attributes),
+        output: getSpanOutput(otelSpan.attributes),
+        metadata: getSpanMetadata(otelSpan.attributes),
+        ...llmFields,
+        projectName,
+        ...(spanErrorInfo && { errorInfo: spanErrorInfo }),
+      });
+    }
+  }
+
   static getSettings(settings: OpikExporterSettings): TelemetrySettings {
     const metadata = { ...settings.metadata };
 
@@ -338,29 +374,6 @@ export class OpikExporter implements SpanExporter {
   }
 }
 
-function groupAndSortOtelSpans(
-  otelSpans: ReadableSpan[]
-): Record<string, ReadableSpan[]> {
-  const spanGroupsByTraceId: Record<string, ReadableSpan[]> = {};
-
-  otelSpans.forEach((otelSpan) => {
-    const context = otelSpan.spanContext();
-
-    if (!spanGroupsByTraceId[context.traceId]) {
-      spanGroupsByTraceId[context.traceId] = [];
-    }
-
-    spanGroupsByTraceId[context.traceId].push(otelSpan);
-  });
-
-  Object.entries(spanGroupsByTraceId).forEach(([traceId, otelSpans]) => {
-    spanGroupsByTraceId[traceId] = sortSpansLevelOrder(otelSpans);
-  });
-
-  return spanGroupsByTraceId;
-}
-
-
 // Get instrumentation scope name with fallback for OpenTelemetry v1 compatibility.
 // OTel v1 (used by @vercel/otel) uses `instrumentationLibrary` while
 // OTel v2 uses `instrumentationScope`.
@@ -372,76 +385,171 @@ function getInstrumentationScopeName(span: ReadableSpan): string | undefined {
   );
 }
 
-// Convert hrTime ([seconds, nanoseconds]) to milliseconds
-function hrTimeToMilliseconds(hrTime: [number, number]) {
+// Convert hrTime ([seconds, nanoseconds]) to milliseconds.
+function hrTimeToMilliseconds(hrTime: [number, number]): number {
   return hrTime[0] * 1e3 + hrTime[1] / 1e6;
 }
 
-function safeParseJson(value: unknown): unknown {
-  try {
-    return JSON.parse(value as string) as Record<string, unknown>;
-  } catch {
-    return value;
-  }
+function startMs(otelSpan: ReadableSpan): number {
+  return hrTimeToMilliseconds(otelSpan.startTime);
 }
 
-function tryParseJSON(input: unknown): Record<string, unknown> | undefined {
-  if (typeof input !== "string") {
-    return undefined;
+function endMs(otelSpan: ReadableSpan): number {
+  return hrTimeToMilliseconds(otelSpan.endTime);
+}
+
+function sortByStart(otelSpans: ReadableSpan[]): ReadableSpan[] {
+  return [...otelSpans].sort((a, b) => startMs(a) - startMs(b));
+}
+
+// Frameworks built on the AI SDK (eve, Vercel Workflow) do not emit OTel
+// parent-child links, so reconstruct the hierarchy from time containment: a
+// span's parent is the smallest span that fully contains its time window.
+// Requiring a strictly longer parent keeps the relation acyclic.
+function computeParentsByContainment(
+  otelSpans: ReadableSpan[]
+): Map<string, string | undefined> {
+  const timings: SpanTiming[] = otelSpans.map((otelSpan) => {
+    const start = startMs(otelSpan);
+    const end = endMs(otelSpan);
+
+    return { id: otelSpan.spanContext().spanId, start, end, duration: end - start };
+  });
+
+  const parentOf = new Map<string, string | undefined>();
+
+  for (const span of timings) {
+    let parent: SpanTiming | undefined;
+
+    for (const candidate of timings) {
+      if (candidate.id === span.id) {
+        continue;
+      }
+
+      const contains =
+        candidate.start <= span.start &&
+        candidate.end >= span.end &&
+        candidate.duration > span.duration;
+
+      if (contains && (!parent || candidate.duration < parent.duration)) {
+        parent = candidate;
+      }
+    }
+
+    parentOf.set(span.id, parent?.id);
   }
 
-  try {
-    const parsed = JSON.parse(input);
+  return parentOf;
+}
 
-    if (
-      parsed !== null &&
-      typeof parsed === "object" &&
-      !Array.isArray(parsed)
-    ) {
-      return parsed as Record<string, unknown>;
+function firstNonEmpty<T extends object>(
+  otelSpans: ReadableSpan[],
+  extract: (attributes: ReadableSpan["attributes"]) => T
+): T {
+  for (const otelSpan of otelSpans) {
+    const value = extract(otelSpan.attributes);
+
+    if (Object.keys(value).length > 0) {
+      return value;
     }
-  } catch {
-    return undefined;
+  }
+
+  return {} as T;
+}
+
+function lastNonEmpty<T extends object>(
+  otelSpans: ReadableSpan[],
+  extract: (attributes: ReadableSpan["attributes"]) => T
+): T {
+  for (let index = otelSpans.length - 1; index >= 0; index--) {
+    const value = extract(otelSpans[index].attributes);
+
+    if (Object.keys(value).length > 0) {
+      return value;
+    }
+  }
+
+  return {} as T;
+}
+
+function mergeMetadata(otelSpans: ReadableSpan[]): Record<string, unknown> {
+  let metadata: Record<string, unknown> = {};
+
+  for (const otelSpan of otelSpans) {
+    metadata = { ...metadata, ...getSpanMetadata(otelSpan.attributes) };
+  }
+
+  return metadata;
+}
+
+// The model/provider span fields the backend uses to price a span, omitting
+// either when unknown.
+function withModelProvider(
+  attributes: ReadableSpan["attributes"]
+): { model?: string; provider?: string } {
+  const model = getModel(attributes);
+  const provider = getProvider(attributes);
+
+  return {
+    ...(model ? { model } : {}),
+    ...(provider ? { provider } : {}),
+  };
+}
+
+// Each span's parent: a real OTel parent link when the parent is one of our
+// spans (AI SDK v4/v5/v6), otherwise the time-containment parent (eve, which
+// emits no parent links). The result is acyclic.
+function resolveParents(
+  otelSpans: ReadableSpan[]
+): Map<string, string | undefined> {
+  const keptIds = new Set(
+    otelSpans.map((otelSpan) => otelSpan.spanContext().spanId)
+  );
+  const containment = computeParentsByContainment(otelSpans);
+  const parentOf = new Map<string, string | undefined>();
+
+  for (const otelSpan of otelSpans) {
+    const spanId = otelSpan.spanContext().spanId;
+    const realParentId = otelSpan.parentSpanContext?.spanId;
+
+    parentOf.set(
+      spanId,
+      realParentId != null && keptIds.has(realParentId)
+        ? realParentId
+        : containment.get(spanId)
+    );
+  }
+
+  return parentOf;
+}
+
+// The trace's root span: an outermost (parent-less) span, earliest by start.
+function pickRootSpan(
+  otelSpans: ReadableSpan[],
+  parentOf: Map<string, string | undefined>
+): ReadableSpan {
+  const topLevel = otelSpans.filter(
+    (otelSpan) => parentOf.get(otelSpan.spanContext().spanId) == null
+  );
+
+  return sortByStart(topLevel.length > 0 ? topLevel : otelSpans)[0];
+}
+
+function preferRoot<T extends object>(rootValue: T, fallback: () => T): T {
+  return Object.keys(rootValue).length > 0 ? rootValue : fallback();
+}
+
+function firstError(
+  otelSpans: ReadableSpan[],
+  getErrorInfo: (otelSpan: ReadableSpan) => ErrorInfo | undefined
+): ErrorInfo | undefined {
+  for (const otelSpan of sortByStart(otelSpans)) {
+    const errorInfo = getErrorInfo(otelSpan);
+
+    if (errorInfo) {
+      return errorInfo;
+    }
   }
 
   return undefined;
-}
-
-function sortSpansLevelOrder(otelSpans: ReadableSpan[]): ReadableSpan[] {
-  // (spanId, otelSpan)
-  const idMap = new Map<string, ReadableSpan>();
-  // (parentSpanId, [childrenOtelSpans])
-  const childrenMap = new Map<string, ReadableSpan[]>();
-
-  for (const otelSpan of otelSpans) {
-    const { spanId } = otelSpan.spanContext();
-    const parentSpanId = otelSpan.parentSpanContext?.spanId ?? "";
-    idMap.set(spanId, otelSpan);
-
-    if (parentSpanId) {
-      if (!childrenMap.has(parentSpanId)) {
-        childrenMap.set(parentSpanId, []);
-      }
-      childrenMap.get(parentSpanId)!.push(otelSpan);
-    }
-  }
-
-  const roots = otelSpans.filter(
-    (span) =>
-      !span.parentSpanContext?.spanId ||
-      !idMap.has(span.parentSpanContext.spanId)
-  );
-
-  const result: ReadableSpan[] = [];
-  const queue: ReadableSpan[] = [...roots];
-
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    result.push(current);
-    const currentId = current.spanContext().spanId;
-    const children = childrenMap.get(currentId) || [];
-    queue.push(...children);
-  }
-
-  return result;
 }

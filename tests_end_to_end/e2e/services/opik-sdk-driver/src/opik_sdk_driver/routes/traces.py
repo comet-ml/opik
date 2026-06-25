@@ -29,6 +29,12 @@ def create_trace(
 
     @opik.track(name=body.name, project_name=body.project_name)
     def _emit(_input_value: str) -> str:
+        # thread_id is set on the live trace from within the tracked function so
+        # the decorator code path (the one users invoke) still owns trace
+        # creation; @opik.track itself takes no thread_id argument. A blank value
+        # is treated as absent so empty strings don't collapse into one thread.
+        if body.thread_id:
+            opik.opik_context.update_current_trace(thread_id=body.thread_id)
         return body.output
 
     try:

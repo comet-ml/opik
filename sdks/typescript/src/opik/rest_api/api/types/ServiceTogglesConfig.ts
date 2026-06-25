@@ -10,7 +10,6 @@ export interface ServiceTogglesConfig {
     alertsEnabled: boolean;
     welcomeWizardEnabled: boolean;
     exportEnabled: boolean;
-    optimizationStudioEnabled: boolean;
     costIntelligenceEnabled: boolean;
     datasetVersioningEnabled: boolean;
     datasetExportEnabled: boolean;

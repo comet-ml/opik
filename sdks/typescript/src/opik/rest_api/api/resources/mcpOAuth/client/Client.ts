@@ -553,4 +553,76 @@ export class McpOAuthClient {
 
         return handleNonStatusCodeError(_response.error, _response.rawResponse, "POST", "/oauth/token");
     }
+
+    /**
+     * Introspects a bearer access token and returns the identity it resolves to
+     *
+     * @param {McpOAuthClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.UnauthorizedError}
+     *
+     * @example
+     *     await client.mcpOAuth.validateOAuthToken()
+     */
+    public validateOAuthToken(
+        requestOptions?: McpOAuthClient.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.ValidatedToken> {
+        return core.HttpResponsePromise.fromPromise(this.__validateOAuthToken(requestOptions));
+    }
+
+    private async __validateOAuthToken(
+        requestOptions?: McpOAuthClient.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.ValidatedToken>> {
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "opik/auth-oauth",
+            ),
+            method: "POST",
+            headers: _headers,
+            queryParameters: requestOptions?.queryParams,
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.ValidatedToken.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    skipValidation: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 401:
+                    throw new OpikApi.UnauthorizedError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        return handleNonStatusCodeError(_response.error, _response.rawResponse, "POST", "/opik/auth-oauth");
+    }
 }

@@ -13,6 +13,9 @@ import {
   convertOptimizationStudioToFormData,
 } from "@/v2/pages-shared/optimizations/OptimizationConfigForm/schema";
 import { OPTIMIZATION_DEMO_TEMPLATES } from "@/constants/optimizations";
+import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
+import useProviderKeys from "@/api/provider-keys/useProviderKeys";
+import { useModelOptions } from "@/v2/pages-shared/llm/PromptModelSelect/useModelOptions";
 import OptimizationsNewPageContent from "./OptimizationsNewPageContent";
 import Loader from "@/shared/Loader/Loader";
 
@@ -54,21 +57,54 @@ const OptimizationsNewPage: React.FC = () => {
     [rerunOptimization],
   );
 
+  // Resolve the models the workspace can actually run, so the default model is
+  // picked from real options instead of a hardcoded guess that gets reconciled
+  // by an effect afterwards.
+  const { providerModels } = useLLMProviderModelsData();
+  const { data: providerKeysData } = useProviderKeys(
+    { workspaceName },
+    { staleTime: 1000 },
+  );
+  const configuredProvidersList = useMemo(
+    () => providerKeysData?.content ?? [],
+    [providerKeysData?.content],
+  );
+  const { freeModelOption, groupOptions } = useModelOptions(
+    configuredProvidersList,
+    providerModels,
+    "",
+  );
+  const availableModels = useMemo(
+    () => [
+      ...(freeModelOption ? [freeModelOption.value] : []),
+      ...groupOptions.flatMap((group) => group.options.map((o) => o.value)),
+    ],
+    [freeModelOption, groupOptions],
+  );
+
+  // Only resolve the default once providers are genuinely known: the keys query
+  // has settled AND (no providers configured OR their models have loaded).
+  // Otherwise "configured providers, models still loading" would briefly look
+  // like "no models" and seed an empty model.
+  const providersReady =
+    Boolean(providerKeysData) &&
+    (configuredProvidersList.length === 0 || availableModels.length > 0);
+
   const defaultValues = useMemo(() => {
-    return convertOptimizationStudioToFormData(rerunData || templateData);
-  }, [rerunData, templateData]);
+    return convertOptimizationStudioToFormData(
+      rerunData || templateData,
+      providersReady ? availableModels : [],
+    );
+  }, [rerunData, templateData, providersReady, availableModels]);
 
   const form = useForm<OptimizationConfigFormType>({
     resolver: zodResolver(OptimizationConfigSchema),
-    defaultValues,
+    // `values` (not `defaultValues`) re-seeds the form when the resolved model
+    // lands; `keepDirtyValues` preserves a model the user already picked.
+    values: defaultValues,
+    resetOptions: { keepDirtyValues: true },
     mode: "onChange",
   });
-
-  // Reset form when template changes
-  useEffect(() => {
-    form.reset(convertOptimizationStudioToFormData(rerunData || templateData));
-    datasetCreationRef.current = null;
-  }, [rerunData, templateData, form]);
 
   // Create demo dataset when template with dataset_items is selected
   useEffect(() => {

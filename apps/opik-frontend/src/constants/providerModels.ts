@@ -439,6 +439,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "cohere/command-r7b-12-2024",
     },
     {
+      value: PROVIDER_MODEL_TYPE.COHERE_NORTH_MINI_CODE_FREE,
+      label: "cohere/north-mini-code:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.DEEPCOGITO_COGITO_V2_PREVIEW_DEEPSEEK_671B,
       label: "deepcogito/cogito-v2-preview-deepseek-671b",
     },
@@ -607,12 +611,20 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "google/gemini-3-flash-preview",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_PRO_IMAGE,
+      label: "google/gemini-3-pro-image",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_PRO_IMAGE_PREVIEW,
       label: "google/gemini-3-pro-image-preview",
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_PRO_PREVIEW,
       label: "google/gemini-3-pro-preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_1_FLASH_IMAGE,
+      label: "google/gemini-3.1-flash-image",
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_1_FLASH_IMAGE_PREVIEW,
@@ -1199,6 +1211,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "nex-agi/deepseek-v3.1-nex-n1",
     },
     {
+      value: PROVIDER_MODEL_TYPE.NEX_AGI_NEX_N2_PRO,
+      label: "nex-agi/nex-n2-pro",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.NEX_AGI_NEX_N2_PRO_FREE,
       label: "nex-agi/nex-n2-pro:free",
     },
@@ -1640,8 +1656,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "perplexity/sonar-reasoning-pro",
     },
     {
+      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_M_1,
+      label: "poolside/laguna-m.1",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_M_1_FREE,
       label: "poolside/laguna-m.1:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_XS_2,
+      label: "poolside/laguna-xs.2",
     },
     {
       value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_XS_2_FREE,
@@ -1944,6 +1968,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "relace/relace-search",
     },
     {
+      value: PROVIDER_MODEL_TYPE.SAKANA_FUGU_ULTRA,
+      label: "sakana/fugu-ultra",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.SAO10K_L3_EURYALE_70B,
       label: "sao10k/l3-euryale-70b",
     },
@@ -2178,6 +2206,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5_1,
       label: "z-ai/glm-5.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5_2,
+      label: "z-ai/glm-5.2",
     },
     {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5V_TURBO,

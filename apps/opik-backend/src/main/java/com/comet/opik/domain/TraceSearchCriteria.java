@@ -21,5 +21,6 @@ public record TraceSearchCriteria(
         Set<Trace.TraceField> exclude,
         UUID uuidFromTime,
         UUID uuidToTime,
-        String searchText) {
+        String searchText,
+        UUID annotationQueueId) {
 }

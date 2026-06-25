@@ -13,4 +13,5 @@ export interface DeleteThreadFeedbackScores {
     threadId: string;
     names: string[];
     author?: string;
+    sourceQueueId?: string;
 }

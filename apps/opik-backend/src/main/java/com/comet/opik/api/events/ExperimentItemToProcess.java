@@ -20,6 +20,7 @@ public record ExperimentItemToProcess(
         String versionHash,
         @NonNull String projectName,
         @NonNull String workspaceId,
+        String workspaceName,
         @NonNull String userName,
         @NonNull List<UUID> allExperimentIds,
         List<OpikPromptEntry> opikPrompts) {

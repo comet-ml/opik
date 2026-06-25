@@ -49,6 +49,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
@@ -58,12 +59,14 @@ import reactor.core.publisher.SignalType;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.api.ErrorInfo.ERROR_INFO_TYPE;
 import static com.comet.opik.api.Trace.TracePage;
@@ -113,6 +116,9 @@ public interface TraceDAO {
     Flux<WorkspaceTraceCount> countTracesPerWorkspace(Map<UUID, Instant> excludedProjectIds);
 
     Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(Set<UUID> projectIds, String workspaceId, Connection connection);
+
+    Mono<Set<UUID>> getProjectsWithTracesInRange(Collection<Pair<String, UUID>> workspaceProjectPairs, Instant from,
+            Instant to, Connection connection);
 
     Mono<UUID> getProjectIdFromTrace(UUID traceId);
 
@@ -180,6 +186,7 @@ public interface TraceDAO {
 @Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
+// TODO: after v1 drop, remove annotation_queue_filters conditions and keep only annotation_queue_id
 class TraceDAOImpl implements TraceDAO {
 
     private static final String TRACE_SEARCH_CLAUSE = """
@@ -807,12 +814,18 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
+    /**
+     * {@code toMonday(id_at) = ...} pins the scan to the single week that can hold {@code :id}: a strict consequence
+     * of {@code id = :id} (never hides the row) that engages partition pruning once {@code traces} is partitioned,
+     * which the planner can't infer from the id filter alone.
+     */
     private static final String SELECT_DETAILS_BY_ID = """
             SELECT DISTINCT
                 workspace_id,
                 project_id
             FROM traces
             WHERE id = :id
+            AND toMonday(id_at) = toMonday(UUIDv7ToDateTime(toUUID(:id), 'UTC'))
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -827,6 +840,10 @@ class TraceDAOImpl implements TraceDAO {
      * picks the right page) and the final ORDER BY (so the page is returned in order); {@code page_wide}'s own order is
      * immaterial since it is id-bounded and {@code LIMIT 1 BY id}. Field exclusion ({@code exclude_fields}) and
      * truncation are layered on top without dropping the sort key.
+     * <p>
+     * Each {@code traces} id-range bound carries a parallel {@code toMonday(id_at)} bound: a strict consequence of
+     * the id-range — and, unlike a {@code created_at} predicate, safe against late-arriving rows since it derives
+     * from {@code id} — that lets the planner prune partitions once {@code traces} is partitioned.
      */
     private static final String SELECT_BY_PROJECT_ID = """
             WITH <if(trace_id_prefilter)>trace_id_prefilter AS (
@@ -834,9 +851,12 @@ class TraceDAOImpl implements TraceDAO {
                 FROM traces
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                <if(last_received_id)> AND id \\< :last_received_id <endif>
-                <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
-                <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                <if(last_received_id)> AND id \\< :last_received_id
+                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC')) <endif>
+                <if(uuid_from_time)> AND id >= :uuid_from_time
+                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time
+                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
             ), <endif><if(!exclude_feedback_scores)>feedback_scores_deduped AS (
@@ -894,6 +914,7 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
+                      <if(annotation_queue_id)>AND source_queue_id = :annotation_queue_id<endif>
                       <if(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
                       <else>
                       <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
@@ -1153,6 +1174,7 @@ class TraceDAOImpl implements TraceDAO {
                     FROM comments
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
+                    <if(annotation_queue_id)>AND source_queue_id = :annotation_queue_id<endif>
                     <if(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
                     <else>
                     <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
@@ -1251,17 +1273,21 @@ class TraceDAOImpl implements TraceDAO {
                 <if(span_feedback_scores_empty_filters)>
                 LEFT JOIN sfsc ON sfsc.trace_id = t.id
                 <endif>
-                <if(annotation_queue_filters)>
+                <if(annotation_queue_filters || annotation_queue_id)>
                 LEFT JOIN trace_annotation_queue_ids as taqi ON taqi.trace_id = t.id
                 <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
-                <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
-                <if(last_received_id)> AND id \\< :last_received_id <endif>
+                <if(uuid_from_time)> AND id >= :uuid_from_time
+                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time
+                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                <if(last_received_id)> AND id \\< :last_received_id
+                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC')) <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
+                <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id) <endif>
                 <if(feedback_scores_filters)>
                  AND id IN (
                     SELECT entity_id
@@ -1339,6 +1365,9 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND id IN (SELECT id FROM page_ids)
+                <if(uuid_from_time)> AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                <if(uuid_to_time)> AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                <if(last_received_id)> AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:last_received_id), 'UTC')) <endif>
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             )
@@ -1440,6 +1469,7 @@ class TraceDAOImpl implements TraceDAO {
                      WHERE entity_type = 'trace'
                        AND workspace_id = :workspace_id
                        AND project_id = :project_id
+                       <if(annotation_queue_id)>AND source_queue_id = :annotation_queue_id<endif>
                        <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                        <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
                 )
@@ -1647,16 +1677,19 @@ class TraceDAOImpl implements TraceDAO {
                     <if(span_feedback_scores_empty_filters)>
                     LEFT JOIN sfsc ON sfsc.trace_id = traces.id
                     <endif>
-                    <if(annotation_queue_filters)>
+                    <if(annotation_queue_filters || annotation_queue_id)>
                     LEFT JOIN trace_annotation_queue_ids as taqi ON taqi.trace_id = traces.id
                     <endif>
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
-                    <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
-                    <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                    <if(uuid_from_time)> AND id >= :uuid_from_time
+                        AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time
+                        AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
                     <if(filters)> AND <filters> <endif>
                     <if(search_text)> AND <search_text> <endif>
                     <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
+                    <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id) <endif>
                     <if(feedback_scores_filters)>
                     AND id IN (
                         SELECT entity_id
@@ -1730,11 +1763,22 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
+    /**
+     * Retention sweep for the applyToPast=true window {@code [lower_bound, cutoff_id)}.
+     * <p>
+     * {@code toMonday(id_at)} is the future weekly partition expression ({@code id_at} is MATERIALIZED from
+     * the UUIDv7 id as UTC). Bounding it to the cutoff's week range never excludes a row the id-range would
+     * delete, so it does not change which rows are deleted; once {@code traces} is partitioned (OPIK-6900) it
+     * lets the sweep prune to the partitions in range. The bounds use UTC to match {@code id_at}, and the
+     * upper bound advances one week so rows sharing the cutoff's week stay in scope.
+     */
     private static final String DELETE_FOR_RETENTION = """
             DELETE FROM traces
             WHERE workspace_id IN :workspace_ids
             AND id >= :lower_bound
             AND id \\< :cutoff_id
+            AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:lower_bound), 'UTC'))
+            AND toMonday(id_at) \\< addWeeks(toMonday(UUIDv7ToDateTime(toUUID(:cutoff_id), 'UTC')), 1)
             AND id NOT IN (
                 SELECT trace_id FROM experiment_items
                 WHERE workspace_id IN :workspace_ids
@@ -1745,23 +1789,35 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
-    // Lightweight pre-delete count for observability. Omits the experiment_items exclusion subquery
-    // to avoid the join cost; this makes it an upper-bound ceiling with >99% precision in practice
-    // (very few traces are linked to experiments).
+    /**
+     * Lightweight pre-delete count for observability. Omits the {@code experiment_items} exclusion subquery
+     * to avoid the join cost, making it an upper-bound ceiling with &gt;99% precision in practice (very few
+     * traces are linked to experiments). Carries the same {@code toMonday(id_at)} week bounds as
+     * {@code DELETE_FOR_RETENTION} so the count prunes to the same partitions post-cutover rather than
+     * scanning (and loading cold-tier marks for) every partition each cycle.
+     */
     private static final String COUNT_FOR_RETENTION = """
             SELECT count() FROM traces
             WHERE workspace_id IN :workspace_ids
             AND id >= :lower_bound
             AND id \\< :cutoff_id
+            AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:lower_bound), 'UTC'))
+            AND toMonday(id_at) \\< addWeeks(toMonday(UUIDv7ToDateTime(toUUID(:cutoff_id), 'UTC')), 1)
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
+    /**
+     * The {@code toMonday(id_at)} bounds mirror the {@code [range_start, range_end)} id-range: a strict consequence
+     * that doesn't change which rows are scanned but engages partition pruning once {@code traces} is partitioned.
+     */
     private static final String SCOUT_FIRST_DAY_WITH_DATA = """
             SELECT toDate(UUIDv7ToDateTime(toUUID(id))) AS day
             FROM traces
             WHERE workspace_id = :workspace_id
             AND id >= :range_start AND id \\< :range_end
+            AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:range_start), 'UTC'))
+            AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:range_end), 'UTC'))
             GROUP BY day
             ORDER BY day
             LIMIT 1
@@ -1925,6 +1981,7 @@ class TraceDAOImpl implements TraceDAO {
                 start_time
             FROM traces
             WHERE id = :id
+            AND toMonday(id_at) = toMonday(UUIDv7ToDateTime(toUUID(:id), 'UTC'))
             AND workspace_id = :workspace_id
             ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
             LIMIT 1
@@ -1943,11 +2000,22 @@ class TraceDAOImpl implements TraceDAO {
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
+
+    private static final String SELECT_PROJECTS_WITH_TRACES_IN_RANGE = """
+            SELECT DISTINCT project_id
+            FROM traces
+            WHERE (workspace_id, project_id) IN (<workspace_project_pairs>)
+            AND created_at >= parseDateTime64BestEffort(:from_time, 9)
+            AND created_at \\< parseDateTime64BestEffort(:to_time, 9)
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
     private static final String SELECT_PROJECT_ID_FROM_TRACE = """
             SELECT
                 DISTINCT project_id
             FROM traces
             WHERE id = :id
+            AND toMonday(id_at) = toMonday(UUIDv7ToDateTime(toUUID(:id), 'UTC'))
             AND workspace_id = :workspace_id
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -2053,6 +2121,7 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'trace'
                        AND workspace_id = :workspace_id
                        AND project_id IN :project_ids
+                       <if(annotation_queue_id)>AND source_queue_id = :annotation_queue_id<endif>
                        <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                        <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
                 )
@@ -2299,16 +2368,19 @@ class TraceDAOImpl implements TraceDAO {
                 <if(span_feedback_scores_empty_filters)>
                 LEFT JOIN sfsc ON sfsc.trace_id = traces.id
                 <endif>
-                <if(annotation_queue_filters)>
+                <if(annotation_queue_filters || annotation_queue_id)>
                 LEFT JOIN trace_annotation_queue_ids as taqi ON taqi.trace_id = traces.id
                 <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
-                <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
-                <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
+                <if(uuid_from_time)>AND id >= :uuid_from_time
+                AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
+                <if(uuid_to_time)>AND id \\<= :uuid_to_time
+                AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
+                <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id) <endif>
                 <if(feedback_scores_filters)>
                 AND id IN (
                     SELECT entity_id
@@ -2480,6 +2552,7 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'trace'
                        AND workspace_id = :workspace_id
                        AND project_id IN :project_ids
+                       <if(annotation_queue_id)>AND source_queue_id = :annotation_queue_id<endif>
                        <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                        <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
                 )
@@ -2640,16 +2713,19 @@ class TraceDAOImpl implements TraceDAO {
                 <if(span_feedback_scores_empty_filters)>
                 LEFT JOIN sfsc ON sfsc.trace_id = traces.id
                 <endif>
-                <if(annotation_queue_filters)>
+                <if(annotation_queue_filters || annotation_queue_id)>
                 LEFT JOIN trace_annotation_queue_ids as taqi ON taqi.trace_id = traces.id
                 <endif>
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
-                <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
-                <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
+                <if(uuid_from_time)>AND id >= :uuid_from_time
+                AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
+                <if(uuid_to_time)>AND id \\<= :uuid_to_time
+                AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
+                <if(annotation_queue_id)> AND has(taqi.annotation_queue_ids, :annotation_queue_id) <endif>
                 <if(feedback_scores_filters)>
                 AND id IN (
                     SELECT entity_id
@@ -2833,7 +2909,13 @@ class TraceDAOImpl implements TraceDAO {
                 ) inner_t
                 GROUP BY inner_t.workspace_id, inner_t.project_id, inner_t.thread_id
             ) t
-            LEFT JOIN trace_threads tt ON t.workspace_id = tt.workspace_id
+            LEFT JOIN (
+                SELECT workspace_id, project_id, thread_id, id, status
+                FROM trace_threads
+                WHERE workspace_id = :workspace_id
+                  AND project_id = :project_id
+                  AND thread_id IN :thread_ids
+            ) tt ON t.workspace_id = tt.workspace_id
               AND t.project_id = tt.project_id
               AND t.id = tt.thread_id
             SETTINGS log_comment = '<log_comment>'
@@ -3939,6 +4021,7 @@ class TraceDAOImpl implements TraceDAO {
         return template.getAttribute("filters") != null
                 || template.getAttribute("search_text") != null
                 || template.getAttribute("annotation_queue_filters") != null
+                || template.getAttribute("annotation_queue_id") != null
                 || template.getAttribute("feedback_scores_filters") != null
                 || template.getAttribute("span_feedback_scores_filters") != null
                 || template.getAttribute("trace_aggregation_filters") != null
@@ -4103,6 +4186,34 @@ class TraceDAOImpl implements TraceDAO {
                         log.info("Got last updated trace at for projectIds, size '{}'", projectIds.size());
                     }
                 });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Set<UUID>> getProjectsWithTracesInRange(@NonNull Collection<Pair<String, UUID>> workspaceProjectPairs,
+            @NonNull Instant from, @NonNull Instant to, @NonNull Connection connection) {
+
+        var template = getSTWithLogComment(SELECT_PROJECTS_WITH_TRACES_IN_RANGE, "projects_with_traces_in_range",
+                "", "", workspaceProjectPairs.size());
+        // Exact (workspace_id, project_id) tuple match in one query for the whole sweep.
+        template.add("workspace_project_pairs", toPairsLiteral(workspaceProjectPairs));
+
+        var statement = connection.createStatement(template.render())
+                .bind("from_time", from.toString())
+                .bind("to_time", to.toString());
+
+        return Mono.from(statement.execute())
+                .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("project_id", UUID.class)))
+                .collect(Collectors.toSet());
+    }
+
+    // Renders the (workspace_id, project_id) tuples as a ClickHouse IN list, e.g. ('ws','proj'),('ws2','proj2').
+    // Single quotes are escaped (doubled) so a value can't reshape the literal; project_id is a UUID.
+    private static String toPairsLiteral(Collection<Pair<String, UUID>> pairs) {
+        return pairs.stream()
+                .map(pair -> "('%s','%s')".formatted(
+                        pair.getLeft().replace("'", "''"), pair.getRight().toString().replace("'", "''")))
+                .collect(Collectors.joining(","));
     }
 
     @Override
@@ -4438,7 +4549,12 @@ class TraceDAOImpl implements TraceDAO {
                     .append(" AND id >= :lb_").append(i)
                     .append(" AND id < :cutoff_id)");
         }
-        sb.append(") AND id NOT IN (")
+        // toMonday(id_at) week bounds, the bounded counterpart of DELETE_FOR_RETENTION. The single floor
+        // uses the global :min_lower_bound, which is <= every per-workspace :lb_i, so it never excludes a row
+        // that any per-workspace id-range would delete. UTC matches id_at.
+        sb.append(") AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:min_lower_bound), 'UTC'))")
+                .append(" AND toMonday(id_at) < addWeeks(toMonday(UUIDv7ToDateTime(toUUID(:cutoff_id), 'UTC')), 1)")
+                .append(" AND id NOT IN (")
                 .append("SELECT trace_id FROM experiment_items")
                 .append(" WHERE workspace_id IN :workspace_ids_flat")
                 .append(" AND trace_id >= :min_lower_bound")

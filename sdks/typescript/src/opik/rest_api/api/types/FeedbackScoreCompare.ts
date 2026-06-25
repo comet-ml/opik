@@ -8,6 +8,7 @@ export interface FeedbackScoreCompare {
     value: number;
     reason?: string;
     source: OpikApi.FeedbackScoreCompareSource;
+    sourceQueueId?: string;
     createdAt?: Date;
     lastUpdatedAt?: Date;
     createdBy?: string;

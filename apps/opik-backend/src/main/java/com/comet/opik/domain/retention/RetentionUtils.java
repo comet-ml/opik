@@ -1,5 +1,6 @@
 package com.comet.opik.domain.retention;
 
+import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
 import java.time.Instant;
@@ -30,12 +31,17 @@ public class RetentionUtils {
     }
 
     /**
-     * Extract the timestamp from a UUID v7's MSB (top 48 bits = epoch millis).
+     * Extracts the Unix epoch timestamp in milliseconds from a UUIDv7's MSB (top 48 bits = epoch millis).
+     *
+     * @param uuid the UUIDv7 instance
+     * @return the extracted timestamp as Instant
      */
-    public static Instant extractInstant(UUID uuid) {
-        long msb = uuid.getMostSignificantBits();
-        long epochMilli = msb >>> 16;
-        return Instant.ofEpochMilli(epochMilli);
+    public static Instant extractInstant(@NonNull UUID uuid) {
+        // Get the 64 most significant bits.
+        var msb = uuid.getMostSignificantBits();
+        // The top 48 bits represent the timestamp.
+        var timestampMillis = msb >>> 16;
+        return Instant.ofEpochMilli(timestampMillis);
     }
 
     /**

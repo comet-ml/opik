@@ -11,7 +11,16 @@ set -euo pipefail
 # prefix must already be registered in the ClickHouse server config (additional_config.xml locally; OPIK-6846 in prod),
 # otherwise the settings profile DDL is rejected.
 
-if [ "${TOGGLE_AGENT_INSIGHTS_ENABLED:-false}" != "true" ]; then
+# Mirror Dropwizard's YAML-boolean truthy semantics: docker-compose substitution of `${VAR:-"true"}`
+# passes the literal quote chars through, and on the Java side YAML re-parse coerces
+# "true"/"True"/"TRUE" to boolean true — a strict `[ "$VAR" != "true" ]` would silently skip
+# provisioning while the backend boots with the feature armed. `tr` rather than bash 4 `${var,,}`
+# keeps this runnable on macOS bash 3.2 for scripts/dev-runner.sh.
+toggle="${TOGGLE_AGENT_INSIGHTS_ENABLED:-false}"
+toggle="${toggle#\"}"
+toggle="${toggle%\"}"
+toggle=$(printf '%s' "$toggle" | tr '[:upper:]' '[:lower:]')
+if [ "$toggle" != "true" ]; then
     echo "Agent Insights disabled; skipping read-only ClickHouse user provisioning."
     exit 0
 fi

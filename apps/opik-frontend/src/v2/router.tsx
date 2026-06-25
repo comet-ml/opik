@@ -43,6 +43,7 @@ import AnnotationQueuePage from "@/v2/pages/AnnotationQueuePage/AnnotationQueueP
 import AgentRunnerPage from "@/v2/pages/AgentRunnerPage/AgentRunnerPage";
 import PairingPage from "@/v2/pages/PairingPage/PairingPage";
 import PairRouteVersionGuard from "@/shared/WorkspaceVersionResolver/PairRouteVersionGuard";
+import { createOAuthConsentRoute } from "@/shared/OAuthConsentPage/createOAuthConsentRoute";
 import OptimizationsPage from "@/v2/pages/OptimizationsPage/OptimizationsPage";
 import OptimizationsNewPage from "@/v2/pages/OptimizationsPage/OptimizationsNewPage/OptimizationsNewPage";
 import OptimizationPage from "@/v2/pages/OptimizationPage/OptimizationPage";
@@ -136,6 +137,11 @@ const pairingRouteOssAlias = createRoute({
   path: "/opik/pair/v1",
   component: PairRouteComponent,
 });
+
+// ----------- MCP OAuth consent (root-level, no workspace guard, no layout)
+// Browser lands here after the backend's GET /oauth/authorize 302-redirects with the OAuth
+// request parameters preserved. The page reads them from window.location.search.
+const oauthConsentRoute = createOAuthConsentRoute(rootRoute);
 
 // ----------- base redirect
 const baseRoute = createRoute({
@@ -403,7 +409,7 @@ const optimizationsRoute = createRoute({
   getParentRoute: () => projectScopedRoute,
   component: OptimizationsPageGuard,
   staticData: {
-    title: "Optimization studio",
+    title: "Optimization runs",
   },
 });
 
@@ -628,6 +634,7 @@ const pluginWorkspaceGuardRoutes = usePluginsStore
 const routeTree = rootRoute.addChildren([
   pairingRoute,
   pairingRouteOssAlias,
+  oauthConsentRoute,
   workspaceGuardEmptyLayoutRoute.addChildren([automationLogsRoute]),
   workspaceGuardPartialLayoutRoute.addChildren([
     quickstartRoute,

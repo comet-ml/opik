@@ -40,6 +40,12 @@ public class ClosingTraceThreadSubscriber extends BaseRedisSubscriber<ProjectWit
     }
 
     @Override
+    protected MessageContext messageContext(ProjectWithPendingClosureTraceThreads message) {
+        // built from a ClickHouse row that has no workspace name
+        return new MessageContext(message.workspaceId(), null, DEFAULT_USER);
+    }
+
+    @Override
     protected Mono<Void> processEvent(ProjectWithPendingClosureTraceThreads message) {
         Instant now = Instant.now();
         Duration defaultTimeoutToMarkThreadAsInactive = config.getTimeoutToMarkThreadAsInactive().toJavaDuration();

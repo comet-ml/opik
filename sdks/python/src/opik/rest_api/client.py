@@ -4,6 +4,8 @@ import typing
 
 import httpx
 from .agent_configs.client import AgentConfigsClient, AsyncAgentConfigsClient
+from .agent_insights.client import AgentInsightsClient, AsyncAgentInsightsClient
+from .agent_insights_jobs.client import AgentInsightsJobsClient, AsyncAgentInsightsJobsClient
 from .ai_spend.client import AiSpendClient, AsyncAiSpendClient
 from .alerts.client import AlertsClient, AsyncAlertsClient
 from .annotation_queues.client import AnnotationQueuesClient, AsyncAnnotationQueuesClient
@@ -40,6 +42,7 @@ from .retention_rules.client import AsyncRetentionRulesClient, RetentionRulesCli
 from .runners.client import AsyncRunnersClient, RunnersClient
 from .service_toggles.client import AsyncServiceTogglesClient, ServiceTogglesClient
 from .spans.client import AsyncSpansClient, SpansClient
+from .system_analytics_queries.client import AsyncSystemAnalyticsQueriesClient, SystemAnalyticsQueriesClient
 from .system_usage.client import AsyncSystemUsageClient, SystemUsageClient
 from .traces.client import AsyncTracesClient, TracesClient
 from .welcome_wizard.client import AsyncWelcomeWizardClient, WelcomeWizardClient
@@ -107,8 +110,11 @@ class OpikApi:
         )
         self._raw_client = RawOpikApi(client_wrapper=self._client_wrapper)
         self.mcp_o_auth = McpOAuthClient(client_wrapper=self._client_wrapper)
+        self.system_analytics_queries = SystemAnalyticsQueriesClient(client_wrapper=self._client_wrapper)
         self.system_usage = SystemUsageClient(client_wrapper=self._client_wrapper)
         self.agent_configs = AgentConfigsClient(client_wrapper=self._client_wrapper)
+        self.agent_insights_jobs = AgentInsightsJobsClient(client_wrapper=self._client_wrapper)
+        self.agent_insights = AgentInsightsClient(client_wrapper=self._client_wrapper)
         self.ai_spend = AiSpendClient(client_wrapper=self._client_wrapper)
         self.alerts = AlertsClient(client_wrapper=self._client_wrapper)
         self.annotation_queues = AnnotationQueuesClient(client_wrapper=self._client_wrapper)
@@ -259,8 +265,11 @@ class AsyncOpikApi:
         )
         self._raw_client = AsyncRawOpikApi(client_wrapper=self._client_wrapper)
         self.mcp_o_auth = AsyncMcpOAuthClient(client_wrapper=self._client_wrapper)
+        self.system_analytics_queries = AsyncSystemAnalyticsQueriesClient(client_wrapper=self._client_wrapper)
         self.system_usage = AsyncSystemUsageClient(client_wrapper=self._client_wrapper)
         self.agent_configs = AsyncAgentConfigsClient(client_wrapper=self._client_wrapper)
+        self.agent_insights_jobs = AsyncAgentInsightsJobsClient(client_wrapper=self._client_wrapper)
+        self.agent_insights = AsyncAgentInsightsClient(client_wrapper=self._client_wrapper)
         self.ai_spend = AsyncAiSpendClient(client_wrapper=self._client_wrapper)
         self.alerts = AsyncAlertsClient(client_wrapper=self._client_wrapper)
         self.annotation_queues = AsyncAnnotationQueuesClient(client_wrapper=self._client_wrapper)

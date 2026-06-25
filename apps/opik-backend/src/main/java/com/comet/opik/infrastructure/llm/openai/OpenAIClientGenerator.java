@@ -43,6 +43,9 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
     public OpenAiClient newOpenAiClient(@NonNull LlmProviderClientApiConfig config) {
         var openAiClientBuilder = OpenAiClient.builder()
                 .baseUrl(DEFAULT_OPENAI_URL)
+                // Treat insufficient_quota (429, out-of-credits) as non-retryable, so the outer retry
+                // policy in ChatCompletionService does not keep hitting an exhausted key.
+                .httpClientBuilder(QuotaAwareHttpClient.builder())
                 .logRequests(llmProviderClientConfig.getLogRequests())
                 .logResponses(llmProviderClientConfig.getLogResponses());
 
@@ -109,6 +112,9 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
         var builder = OpenAiChatModel.builder()
                 .modelName(modelParameters.name())
                 .apiKey(config.apiKey())
+                // Treat insufficient_quota (429, out-of-credits) as non-retryable so neither the model's
+                // internal retry nor the outer retry policy keeps hitting an exhausted key.
+                .httpClientBuilder(QuotaAwareHttpClient.builder())
                 .logRequests(true)
                 .logResponses(true);
 

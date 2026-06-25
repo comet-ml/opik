@@ -6,6 +6,7 @@ import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.SpansCountResponse;
+import com.comet.opik.api.UsageByWorkspaceProjectUserResponse;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.api.sorting.SpanSortingFactory;
@@ -22,6 +23,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TruncationUtils;
+import com.comet.opik.utils.UsageUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Preconditions;
@@ -46,7 +48,6 @@ import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -398,7 +399,7 @@ public class SpanDAO {
             	<if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> total_estimated_cost <endif> as total_estimated_cost,
             	<if(total_estimated_cost_version)> :total_estimated_cost_version <else> total_estimated_cost_version <endif> as total_estimated_cost_version,
             	<if(tags)> :tags <else> tags <endif> as tags,
-            	<if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else> usage <endif> as usage,
+            	<if(usage)> CAST((:usage_keys, :usage_values), 'Map(String, Int64)') <else> usage <endif> as usage,
             	<if(error_info)> :error_info <else> error_info <endif> as error_info,
             	created_at,
             	created_by,
@@ -573,7 +574,7 @@ public class SpanDAO {
                     <if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> toDecimal128(0, 12) <endif> as total_estimated_cost,
                     <if(total_estimated_cost_version)> :total_estimated_cost_version <else> '' <endif> as total_estimated_cost_version,
                     <if(tags)> :tags <else> [] <endif> as tags,
-                    <if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else>  mapFromArrays([], []) <endif> as usage,
+                    <if(usage)> CAST((:usage_keys, :usage_values), 'Map(String, Int64)') <else>  mapFromArrays([], []) <endif> as usage,
                     <if(error_info)> :error_info <else> '' <endif> as error_info,
                     now64(9) as created_at,
                     :user_name as created_by,
@@ -1583,6 +1584,22 @@ public class SpanDAO {
             ;
             """;
 
+    private static final String SPAN_DAILY_COUNT_BY_WORKSPACE_PROJECT_USER = """
+            SELECT
+                 workspace_id,
+                 project_id,
+                 created_by AS user,
+                 COUNT(DISTINCT id) AS span_count
+             FROM spans
+             WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
+             <if(excluded_project_ids)>AND (project_id NOT IN :excluded_project_ids
+                <if(demo_data_created_at)>OR created_at > parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>)
+            <endif>
+             GROUP BY workspace_id, project_id, created_by
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
     private static final String BULK_UPDATE = """
             INSERT INTO spans (
                 id,
@@ -1635,7 +1652,7 @@ public class SpanDAO {
             + TagOperations.tagUpdateFragment("s.tags")
             + """
                         as tags,
-                        <if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else> s.usage <endif> as usage,
+                        <if(usage)> CAST((:usage_keys, :usage_values), 'Map(String, Int64)') <else> s.usage <endif> as usage,
                         <if(error_info)> :error_info <else> s.error_info <endif> as error_info,
                         s.created_at,
                         s.created_by,
@@ -1728,12 +1745,7 @@ public class SpanDAO {
                     statement.bindNull("end_time" + i, String.class);
                 }
 
-                Map<String, Integer> usageMap = span.usage() == null
-                        ? Map.of()
-                        : span.usage().entrySet().stream()
-                                .filter(e -> e.getValue() != null)
-                                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-                statement.bind("usage" + i, usageMap);
+                statement.bind("usage" + i, UsageUtils.sanitizeUsage(span.usage()));
 
                 // Format the timestamp client-side so the SQL contains a plain string literal in the
                 // last_updated_at cell. Fall back to "now" when the client did not provide a value —
@@ -1969,17 +1981,7 @@ public class SpanDAO {
         Optional.ofNullable(spanUpdate.tags())
                 .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
         Optional.ofNullable(spanUpdate.usage())
-                .ifPresent(usage -> {
-                    // Need to convert the map to two arrays to bind to the statement
-                    var usageKeys = new ArrayList<String>();
-                    var usageValues = new ArrayList<Integer>();
-                    for (var entry : usage.entrySet()) {
-                        usageKeys.add(entry.getKey());
-                        usageValues.add(entry.getValue());
-                    }
-                    statement.bind("usageKeys", usageKeys.toArray(String[]::new));
-                    statement.bind("usageValues", usageValues.toArray(Integer[]::new));
-                });
+                .ifPresent(usage -> bindUsage(statement, usage));
         Optional.ofNullable(spanUpdate.endTime())
                 .ifPresent(endTime -> statement.bind("end_time", endTime.toString()));
         Optional.ofNullable(spanUpdate.metadata())
@@ -2811,6 +2813,44 @@ public class SpanDAO {
                         .build()));
     }
 
+    /**
+     * Counts previous-day spans grouped by workspace, project and user.
+     */
+    @WithSpan
+    public Flux<UsageByWorkspaceProjectUserResponse.WorkspaceProjectUserCount> countSpansBreakdownPerWorkspace(
+            @NonNull Map<UUID, Instant> excludedProjectIds) {
+
+        var template = getSTWithLogComment(SPAN_DAILY_COUNT_BY_WORKSPACE_PROJECT_USER,
+                "count_spans_by_workspace_project_user", "", "", "");
+
+        if (!excludedProjectIds.isEmpty()) {
+            template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
+        }
+
+        Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
+        demoDataCreatedAt.ifPresent(instant -> template.add("demo_data_created_at", instant.toString()));
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(template.render());
+
+                    if (!excludedProjectIds.isEmpty()) {
+                        statement.bind("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
+                    }
+
+                    demoDataCreatedAt.ifPresent(instant -> statement.bind("demo_data_created_at", instant.toString()));
+
+                    return statement.execute();
+                })
+                .flatMap(result -> result.map(
+                        (row, rowMetadata) -> UsageByWorkspaceProjectUserResponse.WorkspaceProjectUserCount.builder()
+                                .workspaceId(row.get("workspace_id", String.class))
+                                .projectId(row.get("project_id", UUID.class))
+                                .user(row.get("user", String.class))
+                                .count(row.get("span_count", Long.class))
+                                .build()));
+    }
+
     private boolean isManualCost(Span span) {
         return span.totalEstimatedCost() != null && StringUtils.isBlank(span.totalEstimatedCostVersion());
     }
@@ -2818,6 +2858,14 @@ public class SpanDAO {
     private boolean isUpdateCostRecalculationAvailable(SpanUpdate spanUpdate) {
         return CostService.calculateCost(spanUpdate.model(), spanUpdate.provider(), spanUpdate.usage(),
                 spanUpdate.metadata()).compareTo(BigDecimal.ZERO) > 0;
+    }
+
+    // Bind the usage map as parallel key/value arrays for the Map(String, Int64) CAST. UsageUtils
+    // drops null token counts (a null value would fail the CAST with CANNOT_CONVERT_TYPE, code 70).
+    private static void bindUsage(Statement statement, Map<String, Integer> usage) {
+        var sanitized = UsageUtils.sanitizeUsage(usage);
+        statement.bind("usage_keys", sanitized.keySet().toArray(String[]::new));
+        statement.bind("usage_values", sanitized.values().toArray(Integer[]::new));
     }
 
     private void bindCost(Span span, Statement statement, String index) {
@@ -2923,16 +2971,7 @@ public class SpanDAO {
         TagOperations.bindTagParams(statement, spanUpdate);
 
         Optional.ofNullable(spanUpdate.usage())
-                .ifPresent(usage -> {
-                    var usageKeys = new ArrayList<String>();
-                    var usageValues = new ArrayList<Integer>();
-                    for (var entry : usage.entrySet()) {
-                        usageKeys.add(entry.getKey());
-                        usageValues.add(entry.getValue());
-                    }
-                    statement.bind("usageKeys", usageKeys.toArray(String[]::new));
-                    statement.bind("usageValues", usageValues.toArray(Integer[]::new));
-                });
+                .ifPresent(usage -> bindUsage(statement, usage));
         Optional.ofNullable(spanUpdate.endTime())
                 .ifPresent(endTime -> statement.bind("end_time", endTime.toString()));
         Optional.ofNullable(spanUpdate.metadata())

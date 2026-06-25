@@ -6,6 +6,8 @@ import org.apache.commons.lang3.StringUtils;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.UUID;
 
 public class ValidationUtils {
@@ -58,6 +60,20 @@ public class ValidationUtils {
         if (startTime != null && endTime != null && !startTime.isBefore(endTime)) {
             throw new BadRequestException(
                     "Parameter 'from_time' must be before 'to_time'");
+        }
+    }
+
+    public static void validateDateRangeParameters(LocalDate fromDate, LocalDate toDate) {
+        // both are optional, but if both are provided, from_date must not be after to_date (equal is a single-day window)
+        if (fromDate != null && toDate != null && fromDate.isAfter(toDate)) {
+            throw new BadRequestException(
+                    "Parameter 'from_date' must not be after 'to_date'");
+        }
+        // when to_date is omitted it defaults to the current day, so a future from_date describes an empty window;
+        // reject it explicitly (an explicit future to_date is a valid forward-looking window)
+        if (fromDate != null && toDate == null && fromDate.isAfter(LocalDate.now(ZoneOffset.UTC))) {
+            throw new BadRequestException(
+                    "Parameter 'from_date' must not be in the future");
         }
     }
 

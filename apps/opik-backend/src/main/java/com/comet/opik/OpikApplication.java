@@ -1,5 +1,6 @@
 package com.comet.opik;
 
+import com.comet.opik.api.error.InvalidUUIDExceptionMapper;
 import com.comet.opik.api.error.JsonProcessingExceptionMapper;
 import com.comet.opik.api.resources.oauth.McpOAuthBundle;
 import com.comet.opik.api.resources.oauth.OAuthExceptionMapper;
@@ -14,7 +15,6 @@ import com.comet.opik.infrastructure.bi.OpikGuiceyLifecycleEventListener;
 import com.comet.opik.infrastructure.bundle.LiquibaseBundle;
 import com.comet.opik.infrastructure.cache.CacheModule;
 import com.comet.opik.infrastructure.db.DatabaseAnalyticsModule;
-import com.comet.opik.infrastructure.db.IdGeneratorModule;
 import com.comet.opik.infrastructure.db.NameGeneratorModule;
 import com.comet.opik.infrastructure.events.EventListenerRegistrar;
 import com.comet.opik.infrastructure.events.EventModule;
@@ -35,6 +35,7 @@ import com.comet.opik.infrastructure.redis.RedisModule;
 import com.comet.opik.infrastructure.usagelimit.UsageLimitModule;
 import com.comet.opik.infrastructure.web.InstantParamConverter;
 import com.comet.opik.infrastructure.web.JsonUploadFormatMessageBodyReader;
+import com.comet.opik.infrastructure.web.LocalDateParamConverter;
 import com.comet.opik.utils.JsonBigDecimalDeserializer;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.OpenAiMessageJsonDeserializer;
@@ -99,7 +100,7 @@ public class OpikApplication extends Application<OpikConfiguration> {
                                 (conf, env) -> FilterUtils.filterProperties(conf.getDatabase()))
                         .withPlugins(new SqlObjectPlugin(), new Jackson2Plugin()),
                         new McpOAuthBundle())
-                .modules(new DatabaseAnalyticsModule(), new IdGeneratorModule(), new AuthModule(), new RedisModule(),
+                .modules(new DatabaseAnalyticsModule(), new AuthModule(), new RedisModule(),
                         new RateLimitModule(), new NameGeneratorModule(), new HttpModule(), new EventModule(),
                         new ConfigurationModule(), new CacheModule(), new JobModule(), new AnthropicModule(),
                         new GeminiModule(), new OpenAIModule(), new OpenRouterModule(), new LlmModule(),
@@ -148,7 +149,9 @@ public class OpikApplication extends Application<OpikConfiguration> {
 
         jersey.register(JsonProcessingExceptionMapper.class);
         jersey.register(OAuthExceptionMapper.class);
+        jersey.register(InvalidUUIDExceptionMapper.class);
         jersey.register(InstantParamConverter.class);
+        jersey.register(LocalDateParamConverter.class);
         jersey.register(JsonUploadFormatMessageBodyReader.class);
     }
 }

@@ -70,10 +70,6 @@ class AnnotationQueueItemLockServiceImpl implements AnnotationQueueItemLockServi
         long now = System.currentTimeMillis();
         long expiryMs = now + (long) lockTimeoutSeconds * 1000;
 
-        if (scoredCount >= annotatorsPerItem) {
-            return Mono.just(buildResponse(false, itemId, userName, expiryMs));
-        }
-
         var slotLock = new LockService.Lock(buildSlotKey(workspaceId, queueId, itemId));
         Duration lease = Duration.ofSeconds(lockTimeoutSeconds);
         String field = field(itemId, userName);
@@ -100,15 +96,19 @@ class AnnotationQueueItemLockServiceImpl implements AnnotationQueueItemLockServi
                 });
 
         return heartbeat
-                .switchIfEmpty(Mono.defer(() ->
-                // Fresh acquire: atomic semaphore tryAcquire, then store permitId in map
-                lockService.tryAcquireSlot(slotLock, effectiveCapacity, lease)
-                        .flatMap(newPermitId -> userMap
-                                .fastPutIfAbsent(field, packValue(newPermitId, expiryMs))
-                                .flatMap(stored -> stored
-                                        ? userMap.expire(lease).thenReturn(true)
-                                        : lockService.releaseSlot(slotLock, newPermitId).thenReturn(true)))
-                        .defaultIfEmpty(false)))
+                .switchIfEmpty(Mono.defer(() -> {
+                    if (scoredCount >= annotatorsPerItem) {
+                        return Mono.just(false);
+                    }
+                    // Fresh acquire: atomic semaphore tryAcquire, then store permitId in map
+                    return lockService.tryAcquireSlot(slotLock, effectiveCapacity, lease)
+                            .flatMap(newPermitId -> userMap
+                                    .fastPutIfAbsent(field, packValue(newPermitId, expiryMs))
+                                    .flatMap(stored -> stored
+                                            ? userMap.expire(lease).thenReturn(true)
+                                            : lockService.releaseSlot(slotLock, newPermitId).thenReturn(true)))
+                            .defaultIfEmpty(false);
+                }))
                 .map(acquired -> buildResponse(acquired, itemId, userName, expiryMs));
     }
 
