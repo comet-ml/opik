@@ -616,6 +616,7 @@ from .span_write_source import SpanWriteSource
 from .span_write_type import SpanWriteType
 from .spans_count_response import SpansCountResponse
 from .spend_breakdown_response import SpendBreakdownResponse
+from .spend_breakdowns_response import SpendBreakdownsResponse
 from .spend_composition_response import SpendCompositionResponse
 from .spend_metric_request import SpendMetricRequest
 from .spend_summary_response import SpendSummaryResponse
@@ -1294,6 +1295,7 @@ __all__ = [
     "SpanWriteType",
     "SpansCountResponse",
     "SpendBreakdownResponse",
+    "SpendBreakdownsResponse",
     "SpendCompositionResponse",
     "SpendMetricRequest",
     "SpendSummaryResponse",

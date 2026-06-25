@@ -1134,7 +1134,11 @@ class RawProjectsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def retrieve_project(
-        self, *, name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        name: str,
+        include_stats: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[ProjectDetailed]:
         """
         Retrieve project
@@ -1142,6 +1146,8 @@ class RawProjectsClient:
         Parameters
         ----------
         name : str
+
+        include_stats : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1156,6 +1162,7 @@ class RawProjectsClient:
             method="POST",
             json={
                 "name": name,
+                "includeStats": include_stats,
             },
             headers={
                 "content-type": "application/json",
@@ -2374,7 +2381,11 @@ class AsyncRawProjectsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def retrieve_project(
-        self, *, name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        name: str,
+        include_stats: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[ProjectDetailed]:
         """
         Retrieve project
@@ -2382,6 +2393,8 @@ class AsyncRawProjectsClient:
         Parameters
         ----------
         name : str
+
+        include_stats : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2396,6 +2409,7 @@ class AsyncRawProjectsClient:
             method="POST",
             json={
                 "name": name,
+                "includeStats": include_stats,
             },
             headers={
                 "content-type": "application/json",
