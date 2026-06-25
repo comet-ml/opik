@@ -136,7 +136,7 @@ export type ResourceLinkProps = {
   resource: RESOURCE_TYPE;
   search?: Record<string, string | number | string[] | Filter[]>;
   params?: Record<string, string | number | string[]>;
-  tooltipContent?: string;
+  tooltipContent?: string | false;
   asTag?: boolean;
   isSmall?: boolean;
   isDeleted?: boolean;
@@ -196,7 +196,10 @@ function ResourceLink({
       disabled={deleted}
     >
       {asTag ? (
-        <TooltipWrapper content={tooltipContent || text} stopClickPropagation>
+        <TooltipWrapper
+          content={tooltipContent === false ? "" : tooltipContent || text}
+          stopClickPropagation
+        >
           <Tag
             size="md"
             variant="transparent"

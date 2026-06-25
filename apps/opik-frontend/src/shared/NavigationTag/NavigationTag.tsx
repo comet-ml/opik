@@ -11,7 +11,7 @@ type NavigationTagProps = {
   name: string;
   resource: RESOURCE_TYPE;
   search?: Record<string, string | number | string[] | Filter[]>;
-  tooltipContent?: string;
+  tooltipContent?: string | false;
   className?: string;
   isSmall?: boolean;
   prefix?: string;

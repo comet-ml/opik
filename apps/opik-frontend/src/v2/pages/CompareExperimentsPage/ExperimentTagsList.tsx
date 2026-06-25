@@ -42,7 +42,7 @@ const ExperimentTagsList: React.FC<ExperimentTagsListProps> = ({
       onAddTag={handleAddTag}
       onDeleteTag={handleDeleteTag}
       align="start"
-      className={cn("min-h-7", className)}
+      className={cn("[&>:first-child]:-mr-1", className)}
       tagVariant="purple"
     />
   );

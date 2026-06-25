@@ -215,15 +215,6 @@ const ExperimentFeedbackScoresTab: React.FunctionComponent<
 
   return (
     <>
-      <PageBodyStickyContainer
-        className="-mt-4 flex items-center justify-end gap-8 pb-6 pt-4"
-        direction="bidirectional"
-        limitWidth
-      >
-        <div className="flex items-center gap-2">
-          <CompareExperimentsActionsPanel />
-        </div>
-      </PageBodyStickyContainer>
       <DataTable
         columns={columns}
         data={rows}

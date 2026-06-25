@@ -84,7 +84,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
         );
 
       return (
-        <div className="flex h-11 items-center gap-2">
+        <div className="mt-1 flex items-center gap-2">
           <span className="text-nowrap">Baseline of</span>
           <ExperimentTag experimentName={experiment?.name} />
           <span className="text-nowrap">compared against</span>
@@ -93,7 +93,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
       );
     }
 
-    return <FeedbackScoresList scores={experimentScores} />;
+    return <FeedbackScoresList className="mt-1" scores={experimentScores} />;
   };
 
   return (
@@ -119,6 +119,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
           <NavigationTag
             id={experiment.dataset_id}
             name={experiment.dataset_name}
+            tooltipContent={false}
             resource={
               isTestSuiteExperiment(experiment)
                 ? RESOURCE_TYPE.testSuite
