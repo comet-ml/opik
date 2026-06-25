@@ -130,11 +130,94 @@ Prefer to wire it up yourself, or your host wasn't detected? Configure any host
 by hand below.
 
 <Note>
-These snippets configure the **local server** (`uvx opik-mcp`). If your
-deployment offers a **hosted server**, set it up with
-[`opik mcp configure`](#quick-setup-with-the-opik-cli) instead — it registers the
-HTTP endpoint and handles the browser-based OAuth sign-in for you.
+There are two servers you can add by hand. [`opik mcp configure`](#quick-setup-with-the-opik-cli)
+picks the right one for you, but you can also add either directly in your AI
+host's MCP settings:
 
+- **Hosted server** (HTTP + OAuth) — available on Opik Cloud and any deployment
+  that provides it. No API key is stored; your host signs in through the browser.
+- **Local server** (`uvx opik-mcp`, stdio) — runs on your machine with your
+  credentials in the host's `env` block.
+</Note>
+
+### Hosted server (Opik Cloud)
+
+The hosted server connects over HTTP and signs in with a browser-based OAuth
+flow on first connect — no API key is stored in the host config. Point your host
+at your deployment's MCP endpoint, which is your Opik API base plus `/v1/mcp`. On
+Opik Cloud that is `https://www.comet.com/opik/api/v1/mcp`.
+
+<Tabs>
+    <Tab title="Claude Code">
+
+    Add the server with one command:
+
+    ```bash
+    claude mcp add --transport http opik-mcp https://www.comet.com/opik/api/v1/mcp
+    ```
+
+    Or edit `~/.claude.json` directly:
+
+    ```json
+    {
+      "mcpServers": {
+        "opik-mcp": {
+          "type": "http",
+          "url": "https://www.comet.com/opik/api/v1/mcp"
+        }
+      }
+    }
+    ```
+
+    Restart Claude Code and complete the browser sign-in when prompted, then ask
+    in the chat: **"list my Opik projects"**.
+
+    </Tab>
+    <Tab title="Cursor">
+
+    Edit `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (project):
+
+    ```json
+    {
+      "mcpServers": {
+        "opik-mcp": {
+          "type": "http",
+          "url": "https://www.comet.com/opik/api/v1/mcp"
+        }
+      }
+    }
+    ```
+
+    Reload Cursor and complete the browser sign-in when prompted.
+
+    </Tab>
+    <Tab title="VS Code Copilot">
+
+    Create or open `.vscode/mcp.json` in your workspace:
+
+    ```json
+    {
+      "servers": {
+        "opik-mcp": {
+          "type": "http",
+          "url": "https://www.comet.com/opik/api/v1/mcp"
+        }
+      }
+    }
+    ```
+
+    Reload the window and complete the browser sign-in when prompted.
+
+    </Tab>
+</Tabs>
+
+### Local server (uvx)
+
+The local server runs on demand via `uvx opik-mcp` (requires
+[`uv`](https://docs.astral.sh/uv/)), with your credentials passed through the
+host's `env` block.
+
+<Note>
 `opik-mcp` is now a Python package. If you previously ran the npx-based
 JavaScript server, use the `uvx opik-mcp` commands below in place of
 `npx -y opik-mcp`.
