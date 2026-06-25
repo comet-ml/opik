@@ -52,7 +52,6 @@ public class GetAttachmentTool implements ToolExecutor {
     public static final String NAME = "get_attachment";
 
     private static final Tika TIKA = new Tika();
-    private static final Duration S3_PRESIGN_TTL = Duration.ofSeconds(120);
 
     private static final ToolSpecification SPEC = ToolSpecification.builder()
             .name(NAME)
@@ -61,8 +60,8 @@ public class GetAttachmentTool implements ToolExecutor {
                     + " attachments in an `attachments` field (file names + media types); pass one of those"
                     + " file names here to load it into the conversation as viewable media. Only image,"
                     + " audio, and video files can be loaded."
-                    + " Loaded media links are valid for 2 minutes; if a link has expired, call this tool"
-                    + " again with the same arguments to obtain a fresh one.")
+                    + " Loaded media links are time-limited; if a link has expired, call this tool again"
+                    + " with the same arguments to obtain a fresh one.")
             .parameters(JsonObjectSchema.builder()
                     .addStringProperty("type", "Entity type that owns the attachment: trace or span.")
                     .addStringProperty("id",
@@ -185,7 +184,8 @@ public class GetAttachmentTool implements ToolExecutor {
                     + " injected attachments in this evaluation has been reached.").formatted(info.fileName())));
         }
         return Mono.fromCallable(() -> {
-            String url = attachmentService.presignDownloadUrl(info, ctx.getWorkspaceId(), S3_PRESIGN_TTL);
+            Duration ttl = Duration.ofSeconds(config.getOnlineScoring().getAgenticToolsS3PresignTtlSeconds());
+            String url = attachmentService.presignDownloadUrl(info, ctx.getWorkspaceId(), ttl);
             ctx.stageMedia(MediaPayload.ofUrl(info.fileName(), mime, category, info.fileSize(), url));
             return confirmation(info.fileName(), category);
         });

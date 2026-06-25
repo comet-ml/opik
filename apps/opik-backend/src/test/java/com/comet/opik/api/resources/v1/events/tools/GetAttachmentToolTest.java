@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.events.tools;
 import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.domain.attachment.AttachmentService;
+import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.S3Config;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -55,6 +56,7 @@ class GetAttachmentToolTest {
         // The project id is carried on the eval context, so the tool never fetches the entity.
         ctx = TraceToolContext.forThread(WORKSPACE_ID, USER, projectId);
         when(config.getS3Config()).thenReturn(s3Config);
+        when(config.getOnlineScoring()).thenReturn(new OnlineScoringConfig());
     }
 
     private AttachmentInfo attachment(String fileName, String mimeType) {
