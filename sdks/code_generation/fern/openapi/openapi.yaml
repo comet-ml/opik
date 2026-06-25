@@ -1267,6 +1267,31 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/ai-spend/composition/breakdowns:
+    post:
+      tags:
+      - AI Spend
+      summary: Get all spend lane breakdowns
+      description: Get the per-item breakdown for every composition lane in one request
+      operationId: getSpendAllBreakdowns
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpendMetricRequest"
+      responses:
+        "200":
+          description: Lane breakdowns
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpendBreakdownsResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/ai-spend/composition:
     post:
       tags:
@@ -10293,91 +10318,6 @@ components:
           - open
           - resolved
           - closed
-    HarnessEntry:
-      type: object
-      properties:
-        key:
-          type: string
-        label:
-          type: string
-    Lane:
-      type: object
-      properties:
-        key:
-          type: string
-        label:
-          type: string
-        total_tokens:
-          type: integer
-          format: int64
-        by_model:
-          type: array
-          items:
-            $ref: "#/components/schemas/ModelTiers"
-        has_breakdown:
-          type: boolean
-    ModelTiers:
-      type: object
-      properties:
-        model:
-          type: string
-        input_tokens:
-          type: integer
-          format: int64
-        cache_read_tokens:
-          type: integer
-          format: int64
-        cache_creation_tokens:
-          type: integer
-          format: int64
-        output_tokens:
-          type: integer
-          format: int64
-    Side:
-      type: object
-      properties:
-        total_tokens:
-          type: integer
-          format: int64
-        lanes:
-          type: array
-          items:
-            $ref: "#/components/schemas/Lane"
-    SpendCompositionResponse:
-      type: object
-      properties:
-        input:
-          $ref: "#/components/schemas/Side"
-        harness:
-          type: array
-          items:
-            $ref: "#/components/schemas/HarnessEntry"
-        output:
-          $ref: "#/components/schemas/Side"
-    SpendMetricRequest:
-      required:
-      - interval_end
-      - interval_start
-      type: object
-      properties:
-        project_id:
-          type: string
-          format: uuid
-        project_name:
-          type: string
-        interval_start:
-          type: string
-          format: date-time
-        interval_end:
-          type: string
-          format: date-time
-        user_id:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
-          type: string
-        start_before_end:
-          type: boolean
-        project_provided:
-          type: boolean
     Item:
       type: object
       properties:
@@ -10397,6 +10337,23 @@ components:
           items:
             $ref: "#/components/schemas/ModelTiers"
         count:
+          type: integer
+          format: int64
+    ModelTiers:
+      type: object
+      properties:
+        model:
+          type: string
+        input_tokens:
+          type: integer
+          format: int64
+        cache_read_tokens:
+          type: integer
+          format: int64
+        cache_creation_tokens:
+          type: integer
+          format: int64
+        output_tokens:
           type: integer
           format: int64
     SpendBreakdownResponse:
@@ -10424,6 +10381,81 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Item"
+    SpendBreakdownsResponse:
+      type: object
+      properties:
+        breakdowns:
+          type: array
+          items:
+            $ref: "#/components/schemas/SpendBreakdownResponse"
+    SpendMetricRequest:
+      required:
+      - interval_end
+      - interval_start
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        project_name:
+          type: string
+        interval_start:
+          type: string
+          format: date-time
+        interval_end:
+          type: string
+          format: date-time
+        user_id:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        start_before_end:
+          type: boolean
+        project_provided:
+          type: boolean
+    HarnessEntry:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+    Lane:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        total_tokens:
+          type: integer
+          format: int64
+        by_model:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModelTiers"
+        has_breakdown:
+          type: boolean
+    Side:
+      type: object
+      properties:
+        total_tokens:
+          type: integer
+          format: int64
+        lanes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Lane"
+    SpendCompositionResponse:
+      type: object
+      properties:
+        input:
+          $ref: "#/components/schemas/Side"
+        harness:
+          type: array
+          items:
+            $ref: "#/components/schemas/HarnessEntry"
+        output:
+          $ref: "#/components/schemas/Side"
     Result:
       type: object
       properties:
@@ -19978,6 +20010,8 @@ components:
         name:
           minLength: 1
           type: string
+        includeStats:
+          type: boolean
     ProjectUpdate:
       type: object
       properties:
