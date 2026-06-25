@@ -128,28 +128,21 @@ Done! All traces that contain AI SDK spans are automatically captured in Opik.
 
 ## AI SDK versions and Vercel eve
 
-`OpikExporter` works across AI SDK versions with no extra setup — it detects the
-telemetry format each span emits and ingests it automatically:
-
-- **AI SDK v4, v5, and v6** — the original `ai.*` telemetry.
-- **AI SDK v7** — the OpenTelemetry GenAI (`gen_ai.*`) conventions.
-- **Vercel eve** — the agent framework built on AI SDK v7. Its multi-turn runs
-  are captured as nested LLM and tool spans.
-
-The `OpikExporter` setup shown above covers all of these, and existing v4–v6
-code keeps working unchanged.
+`OpikExporter` works with all current AI SDK versions — **v4, v5, v6, and v7** —
+with no extra setup. It also supports **Vercel eve**, the agent framework built
+on AI SDK v7, capturing each run as nested LLM and tool spans. The setup shown
+above is all you need, and your code keeps working as you upgrade.
 
 ### Multi-turn eve conversations
 
-When you run Vercel eve, a multi-turn conversation is grouped under a single
-session. The exporter maps that session to an Opik thread, so every turn lands
-in the same thread automatically — you don't need to set `threadId` yourself.
+When you run Vercel eve, a multi-turn conversation is grouped into a single Opik
+thread automatically, so every turn shows up together — you don't need to set
+`threadId` yourself.
 
 ### Cached token usage
 
-For models that report prompt caching, cache-read and cache-creation token
-counts are captured alongside the standard input and output usage, keeping token
-and cost metrics accurate for cached requests.
+If your model reports prompt caching, cached tokens are tracked alongside the
+usual input and output tokens, so your token and cost metrics stay accurate.
 
 ## Configuration
 
