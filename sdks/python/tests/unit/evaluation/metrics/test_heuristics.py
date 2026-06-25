@@ -1,5 +1,4 @@
 import re
-from unittest import mock
 
 import pytest
 
@@ -494,23 +493,36 @@ def test_chrf_metric_uses_custom_fn():
     assert result.value == pytest.approx(0.72)
 
 
-def test_chrf_metric_forwards_config_to_nltk_backend(monkeypatch):
-    # The NLTK backend must receive char_order (as max_len) and ignore_whitespace,
-    # not just beta. Before the fix only beta was forwarded, so char_order and
-    # ignore_whitespace were silently ignored.
-    fake_nltk = mock.MagicMock()
-    fake_nltk.sentence_chrf.return_value = 0.5
-    monkeypatch.setattr(
-        "opik.evaluation.metrics.heuristics.chrf.nltk_chrf_score", fake_nltk
+def test_chrf_metric__char_order_and_ignore_whitespace_vary__change_score():
+    # char_order and ignore_whitespace must reach the scorer and affect the score.
+    # Before the fix only `beta` was forwarded to NLTK, so varying these had no
+    # effect. Exercised through the public ChrF.score API on the default NLTK
+    # backend (skipped when the optional `nltk` dependency is unavailable).
+    pytest.importorskip("nltk")
+
+    ws_ignored = (
+        ChrF(ignore_whitespace=True, track=False)
+        .score(output="ab cd", reference="abcd")
+        .value
     )
+    ws_kept = (
+        ChrF(ignore_whitespace=False, track=False)
+        .score(output="ab cd", reference="abcd")
+        .value
+    )
+    assert ws_ignored > ws_kept
 
-    metric = ChrF(beta=2.0, char_order=4, ignore_whitespace=True, track=False)
-    metric.score(output="hello world", reference="hello world")
-
-    _, kwargs = fake_nltk.sentence_chrf.call_args
-    assert kwargs["max_len"] == 4
-    assert kwargs["ignore_whitespace"] is True
-    assert kwargs["beta"] == 2.0
+    order_1 = (
+        ChrF(char_order=1, track=False)
+        .score(output="the cat", reference="the dog")
+        .value
+    )
+    order_6 = (
+        ChrF(char_order=6, track=False)
+        .score(output="the cat", reference="the dog")
+        .value
+    )
+    assert order_1 != order_6
 
 
 def test_spearman_ranking_metric():
