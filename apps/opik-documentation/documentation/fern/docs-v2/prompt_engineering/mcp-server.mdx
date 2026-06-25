@@ -124,12 +124,6 @@ If no hosted server is available for your environment, the CLI sets up the
 [`uv`](https://docs.astral.sh/uv/) — install it with `brew install uv` (macOS)
 or `curl -LsSf https://astral.sh/uv/install.sh | sh`.
 
-<Note>
-`opik-mcp` has been rewritten in Python. If you previously installed the
-npx-based JavaScript server, replace `npx -y opik-mcp` with `uvx opik-mcp` in
-the local-server snippets.
-</Note>
-
 ## Manual setup
 
 Prefer to wire it up yourself, or your host wasn't detected? Configure any host
@@ -140,6 +134,10 @@ These snippets configure the **local server** (`uvx opik-mcp`). If your
 deployment offers a **hosted server**, set it up with
 [`opik mcp configure`](#quick-setup-with-the-opik-cli) instead — it registers the
 HTTP endpoint and handles the browser-based OAuth sign-in for you.
+
+`opik-mcp` is now a Python package. If you previously ran the npx-based
+JavaScript server, use the `uvx opik-mcp` commands below in place of
+`npx -y opik-mcp`.
 </Note>
 
 <Tip>
