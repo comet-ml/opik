@@ -13,39 +13,45 @@ investigative questions, all from the chat.
 
 ## Quick setup with the Opik CLI
 
-The Opik CLI ships with the `opik` Python package. The `opik mcp` commands
-require **version 2.1.3 or later** — install or upgrade with pip:
-
-```bash
-pip install --upgrade "opik>=2.1.3"
-```
-
 The fastest way to connect the MCP server is the Opik CLI. It detects your AI
 host (Claude Code, Cursor, VS Code Copilot), picks the right server for your
-Opik deployment, and configures it for you:
-
-```bash
-opik mcp configure
-```
+Opik deployment, and configures it for you.
 
 <Tip>
 Prefer not to use the CLI? You can wire up any host by hand — skip to
 [Manual setup](#manual-setup).
 </Tip>
 
-`opik configure` also offers to run this for you at the end of its wizard:
+<Steps>
+  <Step title="Install the Opik CLI">
+    The CLI ships with the `opik` Python package. The `opik mcp` commands require
+    **version 2.1.3 or later**:
 
-> Set up the Opik MCP server for an AI assistant (Claude Code, Cursor, VS Code)? (y/N)
+    ```bash
+    pip install --upgrade "opik>=2.1.3"
+    ```
+  </Step>
+  <Step title="Configure the MCP server">
+    ```bash
+    opik mcp configure
+    ```
 
-`opik mcp configure` reuses your existing Opik configuration (`~/.opik.config`).
-If you haven't configured Opik yet, the wizard offers to do it for you first.
+    This reuses your existing Opik configuration (`~/.opik.config`). If you
+    haven't configured Opik yet, the wizard offers to do it for you first.
 
-That's it — restart your AI host and ask **"list my Opik projects"** to confirm
-it works.
+    `opik configure` also offers to run this for you at the end of its setup:
 
-<Note>
-If your host isn't detected, use [Manual setup](#manual-setup) below.
-</Note>
+    > Set up the Opik MCP server for an AI assistant (Claude Code, Cursor, VS Code)? (y/N)
+  </Step>
+  <Step title="Restart your AI host and verify">
+    Restart your AI host, then ask **"list my Opik projects"** in the chat to
+    confirm it works.
+
+    <Note>
+    If your host isn't detected, use [Manual setup](#manual-setup) below.
+    </Note>
+  </Step>
+</Steps>
 
 ## Check your setup
 
