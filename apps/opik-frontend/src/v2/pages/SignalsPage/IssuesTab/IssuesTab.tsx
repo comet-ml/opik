@@ -7,6 +7,9 @@ import {
 } from "@/types/signals";
 import { ArrowLeft, Inbox, PartyPopper, Radar, Undo2 } from "lucide-react";
 import EmptyIssueDetailsIcon from "@/icons/empty-issue-details.svg?react";
+import EmptyIssueDetailsDarkIcon from "@/icons/empty-issue-details-dark.svg?react";
+import { useTheme } from "@/contexts/theme-provider";
+import { THEME_MODE } from "@/constants/theme";
 import { Sorting } from "@/types/sorting";
 import useAgentInsightsIssuesList from "@/api/signals/useAgentInsightsIssuesList";
 import Loader from "@/shared/Loader/Loader";
@@ -65,17 +68,25 @@ const DETAIL_SUBTITLE =
   "You'll see a summary, affected traces, and Ollie's suggested fix.";
 
 // Empty detail pane shown alongside the running / all-clear list states.
-const DetailPlaceholder: React.FC = () => (
-  <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-3 rounded-md border bg-background p-6 text-center">
-    <EmptyIssueDetailsIcon className="h-[68px] w-[63px]" />
-    <div className="flex flex-col gap-1">
-      <span className="comet-body-s-accented text-foreground">
-        Your issue details will appear here
-      </span>
-      <span className="comet-body-xs text-muted-slate">{DETAIL_SUBTITLE}</span>
+const DetailPlaceholder: React.FC = () => {
+  const { themeMode } = useTheme();
+  const Icon =
+    themeMode === THEME_MODE.DARK
+      ? EmptyIssueDetailsDarkIcon
+      : EmptyIssueDetailsIcon;
+  return (
+    <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-3 rounded-md border bg-background p-6 text-center">
+      {/* Light icon's pedestal is currentColor; the dark variant is self-colored. */}
+      <Icon className="h-[68px] w-[63px] text-[#F3F4FE]" />
+      <div className="flex flex-col gap-1">
+        <span className="comet-body-s-accented text-foreground">
+          Your issue details will appear here
+        </span>
+        <span className="comet-body-xs text-muted-slate">{DETAIL_SUBTITLE}</span>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 type IssuesTabProps = {
   projectId: string;
@@ -189,9 +200,9 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
     // A diagnostic is in flight and nothing is reported yet → first-run progress.
     if (isRunning) {
       return (
-        <div className="flex min-h-[500px] gap-2">
+        <div className="flex min-h-0 flex-1 gap-2">
           <div className="flex w-[360px] shrink-0 flex-col overflow-hidden rounded-md border bg-background">
-            <div className="flex h-10 items-center border-b border-border bg-[#F8FAFC] px-4">
+            <div className="flex h-10 shrink-0 items-center border-b border-border bg-muted px-4">
               <span className="comet-body-xs-accented">Issues</span>
             </div>
             <div className="flex flex-1 flex-col justify-center gap-3 bg-[#C4B5FD1A] p-5">
@@ -215,14 +226,14 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
     // Resolved tab with nothing resolved yet.
     if (showResolved) {
       return (
-        <div className="flex min-h-[500px] gap-2">
+        <div className="flex min-h-0 flex-1 gap-2">
           <div className="flex w-[360px] shrink-0 flex-col overflow-hidden rounded-md border bg-background">
-            <div className="flex h-10 items-center justify-between border-b border-border bg-[#F8FAFC] pl-4 pr-2">
+            <div className="flex h-10 shrink-0 items-center justify-between border-b border-border bg-muted pl-4 pr-2">
               {titleNode}
               {sortSelect}
             </div>
             <div className="flex flex-1 flex-col justify-center gap-3 p-5">
-              <div className="flex size-7 items-center justify-center rounded-lg bg-[#89DEFF]">
+              <div className="flex size-7 items-center justify-center rounded-lg bg-[#89DEFF] dark:bg-[#1E3A47]">
                 <Inbox className="size-3.5 text-black dark:text-white" />
               </div>
               <div className="flex flex-col gap-1">
@@ -253,13 +264,13 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
 
     // Diagnostics ran but found no open issues → all clear.
     return (
-      <div className="flex min-h-[500px] gap-2">
+      <div className="flex min-h-0 flex-1 gap-2">
         <div className="flex w-[360px] shrink-0 flex-col overflow-hidden rounded-md border bg-background">
-          <div className="flex h-10 items-center border-b border-border bg-[#FCFCFD] px-4">
+          <div className="flex h-10 shrink-0 items-center border-b border-border bg-muted px-4">
             <span className="comet-body-xs-accented">Issues</span>
           </div>
           <div className="flex flex-1 flex-col justify-center gap-3 p-5">
-            <div className="flex size-7 items-center justify-center rounded-lg bg-[#89DEFF]">
+            <div className="flex size-7 items-center justify-center rounded-lg bg-[#89DEFF] dark:bg-[#1E3A47]">
               <PartyPopper className="size-3.5 text-black dark:text-white" />
             </div>
             <div className="-mt-1.5 flex flex-col gap-1">
@@ -289,14 +300,14 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
   }
 
   return (
-    <div className="flex min-h-[500px] gap-2">
+    <div className="flex min-h-0 flex-1 gap-2">
       {/* Issue list */}
-      <div className="flex w-[360px] shrink-0 flex-col overflow-hidden rounded-md border bg-background">
-        <div className="flex h-10 items-center justify-between border-b border-border bg-[#F8FAFC] pl-4 pr-2">
+      <div className="flex h-full w-[360px] shrink-0 flex-col overflow-hidden rounded-md border bg-background">
+        <div className="flex h-10 shrink-0 items-center justify-between border-b border-border bg-muted pl-4 pr-2">
           {titleNode}
           {sortSelect}
         </div>
-        <div className="flex flex-col overflow-y-auto">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {isRunning && (
             <div className="flex items-start gap-3 border-b border-border bg-primary-50 px-4 py-3">
               <RunningIcon />
@@ -325,7 +336,7 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
       </div>
 
       {/* Issue detail */}
-      <div className="min-w-0 flex-1 overflow-hidden rounded-md border bg-background">
+      <div className="h-full min-w-0 flex-1 overflow-hidden rounded-md border bg-background">
         {activeIssue && (
           <IssueDetail issue={activeIssue} projectId={projectId} />
         )}
