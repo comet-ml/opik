@@ -1,4 +1,4 @@
-export { test, expect } from './traced-agent.fixture';
+export { test, expect } from './conversation.fixture';
 export type { ProjectFixtures } from './project.fixture';
 export type { ScratchDir, ScratchDirFixtures } from './scratch-dir.fixture';
 export type {
@@ -29,4 +29,9 @@ export type {
   TracedAgentSpanRef,
   TracedAgentFixtures,
 } from './traced-agent.fixture';
+export type {
+  ConversationRef,
+  ConversationTurnRef,
+  ConversationFixtures,
+} from './conversation.fixture';
 export type { ProjectRef } from '../core/backend';
