@@ -396,22 +396,20 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
 
   const detail = <DetailColumn issue={activeIssue} projectId={projectId} />;
 
-  // Empty states render as one full-width card at every width: there's no list
-  // to collapse and no report to show, so the two-pane / dropdown split would
-  // only look unbalanced. Keeps the resolved (and open) empty states responsive
-  // and identical across breakpoints.
-  if (!hasIssues) {
-    return (
-      <div className="flex min-h-0 flex-1">
-        <ListColumn className="w-full" title={titleNode}>
-          {renderListBody()}
-        </ListColumn>
-      </div>
-    );
-  }
-
-  // Compact (< lg): collapse the list into a dropdown above the report.
+  // Compact (< lg): an empty state is a single full-width card (no list to
+  // collapse, no issue selected); otherwise the list collapses into a dropdown
+  // above the report.
   if (!isWide) {
+    if (!hasIssues) {
+      return (
+        <div className="flex min-h-0 flex-1">
+          <ListColumn className="w-full" title={titleNode}>
+            {renderListBody()}
+          </ListColumn>
+        </div>
+      );
+    }
+
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-2">
         <DropdownMenu open={listOpen} onOpenChange={setListOpen} modal={false}>
@@ -468,8 +466,9 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
     );
   }
 
-  // Wide (xl+): persistent two-pane. Sorting shows only in the open view, and
-  // only once there are issues to sort.
+  // Wide (lg+): persistent two-pane. Handles empty states too — the list shows
+  // the empty message and the report column shows its placeholder. Sorting
+  // shows only in the open view, once there are issues to sort.
   return (
     <div className="flex min-h-0 flex-1 gap-2">
       <ListColumn
