@@ -16,8 +16,10 @@ import java.util.stream.Collectors;
 @Accessors(fluent = true)
 public class SpansCreated extends BaseEvent {
     private final @NonNull List<Span> spans;
-    // Resolved from RequestContext.WORKSPACE_NAME at publish time (SpanService). May be null/blank
-    // for callers that don't carry it; consumers fall back to workspaceId.
+    /**
+     * Resolved from {@code RequestContext.WORKSPACE_NAME} at publish time ({@code SpanService}). May be
+     * null/blank for callers that don't carry it; consumers fall back to {@code workspaceId}.
+     */
     private final @Nullable String workspaceName;
 
     public SpansCreated(@NonNull List<Span> spans, @NonNull String workspaceId, @NonNull String userName) {

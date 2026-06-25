@@ -149,7 +149,10 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
                                 enqueueCounter.add(1, errorAttrs);
                                 log.error("Error sending message", throwable);
                             }));
-        }).then();
+        }).then()
+                // Run the enqueue (Redis stream writes) off the caller's thread — e.g. the EventBus thread for
+                // the samplers — on a bounded worker pool.
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
     public Mono<Void> enqueueThreadMessage(@NonNull List<String> threadIds, @NonNull UUID ruleId,

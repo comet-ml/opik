@@ -150,7 +150,8 @@ public class TestSuiteAssertionSampler {
                     log.info("Enqueuing '{}' test suite assertion messages", messages.size());
                     return onlineScorePublisher.enqueueMessage(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE)
                             .onErrorResume(error -> {
-                                log.error("Error enqueueing test suite assertion messages into redis", error);
+                                log.error("Error enqueueing '{}' test suite assertion messages into redis",
+                                        messages.size(), error);
                                 return Mono.empty();
                             });
                 })
