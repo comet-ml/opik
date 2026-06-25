@@ -29,7 +29,8 @@ class OnlineScoringSamplerSupport {
                         .put(RequestContext.WORKSPACE_ID, workspaceId)
                         .put(RequestContext.WORKSPACE_NAME, StringUtils.defaultIfBlank(workspaceName, workspaceId)))
                 .subscribe(unused -> {
-                }, error -> log.error("Error enqueueing sampled online-scoring messages for evaluator='{}' "
-                        + "workspaceId='{}' workspaceName='{}'", type, workspaceId, workspaceName, error));
+                }, error -> log.error("Error enqueueing '{}' sampled online-scoring messages for evaluator='{}' "
+                        + "workspaceId='{}' workspaceName='{}'", messages.size(), type, workspaceId, workspaceName,
+                        error));
     }
 }
