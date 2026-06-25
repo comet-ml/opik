@@ -409,7 +409,7 @@ const optimizationsRoute = createRoute({
   getParentRoute: () => projectScopedRoute,
   component: OptimizationsPageGuard,
   staticData: {
-    title: "Optimization studio",
+    title: "Optimization runs",
   },
 });
 
