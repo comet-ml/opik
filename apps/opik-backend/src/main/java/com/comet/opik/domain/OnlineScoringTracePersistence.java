@@ -27,6 +27,7 @@ import dev.langchain4j.model.openai.OpenAiTokenUsage;
 import dev.langchain4j.model.output.TokenUsage;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -143,6 +144,7 @@ public class OnlineScoringTracePersistence {
      * be created the same way from all three scorers; the {@link Kind} drives the evaluated-id key on
      * the monitoring trace (e.g. {@code evaluated_span_id}).
      */
+    @Builder(toBuilder = true)
     public record EvaluatedSubject(Kind kind, String id, UUID projectId, String projectName, String name,
             JsonNode input, JsonNode output) {
 
@@ -163,18 +165,37 @@ public class OnlineScoringTracePersistence {
         }
 
         public static EvaluatedSubject ofTrace(@NonNull Trace trace) {
-            return new EvaluatedSubject(Kind.TRACE, trace.id().toString(), trace.projectId(),
-                    trace.projectName(), trace.name(), trace.input(), trace.output());
+            return EvaluatedSubject.builder()
+                    .kind(Kind.TRACE)
+                    .id(trace.id().toString())
+                    .projectId(trace.projectId())
+                    .projectName(trace.projectName())
+                    .name(trace.name())
+                    .input(trace.input())
+                    .output(trace.output())
+                    .build();
         }
 
         public static EvaluatedSubject ofSpan(@NonNull Span span) {
-            return new EvaluatedSubject(Kind.SPAN, span.id().toString(), span.projectId(),
-                    span.projectName(), span.name(), span.input(), span.output());
+            return EvaluatedSubject.builder()
+                    .kind(Kind.SPAN)
+                    .id(span.id().toString())
+                    .projectId(span.projectId())
+                    .projectName(span.projectName())
+                    .name(span.name())
+                    .input(span.input())
+                    .output(span.output())
+                    .build();
         }
 
         public static EvaluatedSubject ofThread(@NonNull String threadId, UUID projectId, String projectName) {
             // Threads have no single input/output; the prepare span carries the thread id only.
-            return new EvaluatedSubject(Kind.THREAD, threadId, projectId, projectName, null, null, null);
+            return EvaluatedSubject.builder()
+                    .kind(Kind.THREAD)
+                    .id(threadId)
+                    .projectId(projectId)
+                    .projectName(projectName)
+                    .build();
         }
     }
 
@@ -482,7 +503,7 @@ public class OnlineScoringTracePersistence {
                         .put(RequestContext.USER_NAME, eval.userName)
                         .put(RequestContext.WORKSPACE_ID, eval.workspaceId))
                 .doOnError(throwable -> log.warn(
-                        "Failed to persist online-evaluation monitoring {} for rule '{}', evaluated traceId '{}'",
+                        "Failed to persist online-evaluation monitoring '{}' for rule '{}', evaluated traceId '{}'",
                         entity, eval.ruleId, eval.evaluatedId, throwable))
                 .onErrorComplete()
                 .then();
@@ -625,11 +646,13 @@ public class OnlineScoringTracePersistence {
         if (node == null || node.isNull()) {
             return null;
         }
-        String text = node.toString();
+        // Measure and slice the SAME representation: the raw text for string nodes (no JSON quoting),
+        // the serialized JSON otherwise. Using toString() to measure but asText() to slice could slice
+        // a string shorter than the cap and throw IndexOutOfBounds.
+        String text = node.isTextual() ? node.asText() : node.toString();
         if (text.length() <= EVALUATED_PREVIEW_CHARS) {
             return node;
         }
-        String raw = node.isTextual() ? node.asText() : text;
-        return TextNode.valueOf(raw.substring(0, EVALUATED_PREVIEW_CHARS) + "…[truncated]");
+        return TextNode.valueOf(text.substring(0, EVALUATED_PREVIEW_CHARS) + "…[truncated]");
     }
 }
