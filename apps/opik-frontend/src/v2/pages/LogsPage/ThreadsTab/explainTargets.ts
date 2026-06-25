@@ -1,38 +1,38 @@
 import isFinite from "lodash/isFinite";
-import { ExplainKind, ExplainTarget } from "@/types/assistant-sidebar";
 import { Thread } from "@/types/traces";
+import {
+  createExplainTargetBuilder,
+  finiteOrNull,
+} from "@/v2/pages/LogsPage/createExplainTargetBuilder";
 
-// Visibility rule mirrors the Traces/Spans builders: show the Explain button
-// whenever the row is structurally explainable (it has a project_id). The
-// displayed value is not gated — N/A or 0 duration/cost is still explainable.
 // Threads have no per-row error, so only duration and cost are explainable
-// here. entityId is the thread id; projectId scopes it.
-//
-// Duration and cost share the same guard/scaffold and both attach
-// number_of_messages — only the value field differs — so they're built from a
-// single factory (mirrors the Traces/Spans builders) to keep them in lockstep.
-const threadTargetBuilder =
-  (kind: ExplainKind, base: (row: Thread) => Record<string, unknown>) =>
-  (row: Thread): ExplainTarget | null => {
-    if (!row.project_id) return null;
-    const payload = base(row);
-    if (isFinite(row.number_of_messages)) {
-      payload.number_of_messages = row.number_of_messages;
-    }
-    return {
-      kind,
-      entityId: row.id,
-      projectId: row.project_id,
-      payload,
-    };
-  };
+// here. entityId is the thread id; projectId scopes it. Both builders share the
+// project_id guard + target envelope via `createExplainTargetBuilder` (see that
+// helper for the visibility rule — N/A or 0 duration/cost is still explainable)
+// and differ only in their value field, so they can't drift from each other or
+// from the Traces/Spans builders.
 
-export const buildThreadDurationTarget = threadTargetBuilder(
+// Thread targets additionally attach number_of_messages when present; kept in
+// one place so duration and cost stay in lockstep.
+const withMessageCount = (
+  row: Thread,
+  payload: Record<string, unknown>,
+): Record<string, unknown> => {
+  if (isFinite(row.number_of_messages)) {
+    payload.number_of_messages = row.number_of_messages;
+  }
+  return payload;
+};
+
+export const buildThreadDurationTarget = createExplainTargetBuilder<Thread>(
   "thread.duration",
-  (row) => ({ duration: row.duration }),
+  (row) => withMessageCount(row, { duration: finiteOrNull(row.duration) }),
 );
 
-export const buildThreadCostTarget = threadTargetBuilder(
+export const buildThreadCostTarget = createExplainTargetBuilder<Thread>(
   "thread.cost",
-  (row) => ({ total_estimated_cost: row.total_estimated_cost }),
+  (row) =>
+    withMessageCount(row, {
+      total_estimated_cost: finiteOrNull(row.total_estimated_cost),
+    }),
 );

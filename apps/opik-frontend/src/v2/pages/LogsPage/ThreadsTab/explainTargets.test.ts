@@ -40,6 +40,19 @@ describe("buildThreadDurationTarget", () => {
       projectId: "p1",
       payload: { duration: 0, number_of_messages: 6 },
     });
+    // N/A duration → explicit `null` (survives JSON.stringify; `undefined`
+    // would be stripped and rejected by the backend payload validator).
+    expect(
+      buildThreadDurationTarget({
+        ...base,
+        duration: undefined,
+      } as unknown as Thread),
+    ).toEqual({
+      kind: "thread.duration",
+      entityId: "t1",
+      projectId: "p1",
+      payload: { duration: null, number_of_messages: 6 },
+    });
   });
   it("returns null without project_id", () => {
     expect(
@@ -78,11 +91,14 @@ describe("buildThreadCostTarget", () => {
       projectId: "p1",
       payload: { total_estimated_cost: 0, number_of_messages: 6 },
     });
+    // An absent cost is sent as explicit `null`, not `undefined`: the latter is
+    // stripped by JSON.stringify at the console's HTTP boundary, leaving the
+    // backend with no `total_estimated_cost` key ("Invalid payload").
     expect(buildThreadCostTarget(base)).toEqual({
       kind: "thread.cost",
       entityId: "t1",
       projectId: "p1",
-      payload: { total_estimated_cost: undefined, number_of_messages: 6 },
+      payload: { total_estimated_cost: null, number_of_messages: 6 },
     });
   });
   it("returns null without project_id", () => {

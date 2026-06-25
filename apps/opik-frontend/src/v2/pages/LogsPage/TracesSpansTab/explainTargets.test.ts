@@ -59,11 +59,13 @@ describe("buildDurationTarget", () => {
       projectId: "p1",
       payload: { duration: 0 },
     });
+    // N/A → explicit `null` (JSON.stringify strips `undefined`, so the backend
+    // would otherwise get no `duration` key and reject the payload).
     expect(buildDurationTarget(base)).toEqual({
       kind: "trace.duration",
       entityId: "e1",
       projectId: "p1",
-      payload: { duration: undefined },
+      payload: { duration: null },
     });
   });
   it("returns null without project_id", () => {
@@ -112,11 +114,13 @@ describe("buildCostTarget", () => {
       projectId: "p1",
       payload: { total_estimated_cost: 0 },
     });
+    // N/A → explicit `null` (see the duration case: `undefined` is stripped by
+    // JSON.stringify and the backend rejects the missing key).
     expect(buildCostTarget(base)).toEqual({
       kind: "trace.cost",
       entityId: "e1",
       projectId: "p1",
-      payload: { total_estimated_cost: undefined },
+      payload: { total_estimated_cost: null },
     });
   });
   it("returns null without project_id", () => {
