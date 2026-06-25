@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { Blocks, ChevronDown, Code2 } from "lucide-react";
+import { Blocks, Code2, Play } from "lucide-react";
 import { Button } from "@/ui/button";
 import {
   DropdownMenu,
@@ -99,8 +99,8 @@ function UseDatasetDropdown({
                 size="sm"
                 disabled={disabled || isEmpty}
               >
-                Use {entityName}
-                <ChevronDown className="ml-2 size-4" />
+                <Play className="mr-1.5 size-3.5" />
+                Run in
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-80">

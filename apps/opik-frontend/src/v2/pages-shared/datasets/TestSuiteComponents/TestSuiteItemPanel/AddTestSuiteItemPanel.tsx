@@ -112,6 +112,7 @@ const AddTestSuiteItemPanel: React.FC<AddTestSuiteItemPanelProps> = ({
   <AddItemPanelWrapper
     panelId="test-suite-item-panel"
     formId={ADD_SUITE_ITEM_FORM_ID}
+    title="Add test case"
     open={open}
     onClose={onClose}
     initialWidth={0.4}
