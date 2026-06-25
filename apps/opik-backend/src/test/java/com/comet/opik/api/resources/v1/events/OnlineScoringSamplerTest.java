@@ -40,6 +40,7 @@ import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.Logger;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.security.NoSuchAlgorithmException;
@@ -53,8 +54,10 @@ import static com.comet.opik.api.resources.utils.AutomationRuleEvaluatorTestUtil
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -101,6 +104,9 @@ class OnlineScoringSamplerTest {
                 traceService,
                 projectService);
 
+        // enqueueMessage is reactive now; the sampler chains .contextWrite(...).subscribe() on the result.
+        lenient().when(onlineScorePublisher.enqueueMessage(any(), any())).thenReturn(Mono.empty());
+
         projectId = UUID.randomUUID();
         workspaceId = UUID.randomUUID().toString();
         userName = "user-" + RandomStringUtils.secure().nextAlphanumeric(32);
@@ -146,7 +152,7 @@ class OnlineScoringSamplerTest {
 
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
-            verifyNoInteractions(onlineScorePublisher);
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
         }
     }
 
@@ -175,7 +181,7 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
             verifyNoInteractions(ruleEvaluatorService);
-            verifyNoInteractions(onlineScorePublisher);
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
         }
     }
 
@@ -289,7 +295,7 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
             verifyNoInteractions(ruleEvaluatorService);
-            verifyNoInteractions(onlineScorePublisher);
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
         }
 
         @Test
@@ -301,7 +307,7 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
             verifyNoInteractions(ruleEvaluatorService);
-            verifyNoInteractions(onlineScorePublisher);
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
         }
 
         @Test
@@ -332,7 +338,7 @@ class OnlineScoringSamplerTest {
 
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
-            verifyNoInteractions(onlineScorePublisher);
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
         }
 
         @Test
@@ -348,7 +354,7 @@ class OnlineScoringSamplerTest {
 
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
-            verifyNoInteractions(onlineScorePublisher);
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
         }
 
         @Test
@@ -380,7 +386,7 @@ class OnlineScoringSamplerTest {
 
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
-            verifyNoInteractions(onlineScorePublisher);
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
         }
 
         @Test
@@ -392,7 +398,7 @@ class OnlineScoringSamplerTest {
 
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
-            verifyNoInteractions(onlineScorePublisher);
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
         }
 
         @Test
@@ -446,7 +452,7 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(), workspaceId, userName));
 
             verifyNoInteractions(ruleEvaluatorService);
-            verifyNoInteractions(onlineScorePublisher);
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
         }
 
         @Test
@@ -470,7 +476,7 @@ class OnlineScoringSamplerTest {
 
             onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
 
-            verifyNoInteractions(onlineScorePublisher);
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
         }
     }
 
@@ -506,7 +512,7 @@ class OnlineScoringSamplerTest {
 
             verifyNoInteractions(traceService);
             verifyNoInteractions(ruleEvaluatorService);
-            verifyNoInteractions(onlineScorePublisher);
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
         }
 
         @Test
@@ -521,7 +527,7 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesUpdated(event);
 
             verifyNoInteractions(ruleEvaluatorService);
-            verifyNoInteractions(onlineScorePublisher);
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
         }
 
         @ParameterizedTest
@@ -537,7 +543,7 @@ class OnlineScoringSamplerTest {
             onlineScoringSampler.onTracesUpdated(event);
 
             verifyNoInteractions(ruleEvaluatorService);
-            verifyNoInteractions(onlineScorePublisher);
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
         }
     }
 
