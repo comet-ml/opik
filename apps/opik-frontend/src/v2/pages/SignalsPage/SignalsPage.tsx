@@ -6,7 +6,7 @@ import { useActiveProjectId } from "@/store/AppStore";
 import usePluginsStore from "@/store/PluginsStore";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { AGENT_INSIGHTS_ISSUES_KEY } from "@/api/api";
+import { AGENT_INSIGHTS_ISSUES_KEY, AGENT_INSIGHTS_JOB_KEY } from "@/api/api";
 import { formatDate } from "@/lib/date";
 import PageBodyScrollContainer from "@/v2/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
@@ -22,16 +22,15 @@ import useAgentInsightsJob from "@/api/signals/useAgentInsightsJob";
 import useTriggerAgentInsightsJobMutation from "@/api/signals/useTriggerAgentInsightsJobMutation";
 import useUpdateAgentInsightsJobMutation from "@/api/signals/useUpdateAgentInsightsJobMutation";
 import useDiagnosticsRunState from "@/v2/pages/SignalsPage/useDiagnosticsRunState";
+import useDiagnosticsSeen from "@/v2/pages/SignalsPage/useDiagnosticsSeen";
 import SignalsStatsCards from "@/v2/pages/SignalsPage/SignalsStatsCards";
 import IssuesTab from "@/v2/pages/SignalsPage/IssuesTab/IssuesTab";
 import DiagnosticsEmptyState from "@/v2/pages/SignalsPage/DiagnosticsEmptyState";
 import DiagnosticsSettingsDialog from "@/v2/pages/SignalsPage/DiagnosticsSettingsDialog";
 import SignalsPageSkeleton from "@/v2/pages/SignalsPage/SignalsPageSkeleton";
 
-// While a run is in flight we poll the issues queries on this cadence.
 const RUN_POLL_INTERVAL_MS = 8000;
 
-// Newest issue update time (server epoch ms) across the list; 0 when empty.
 const maxUpdatedAt = (issues: AgentInsightsIssue[]): number =>
   issues.reduce((max, issue) => {
     const t = issue.last_updated_at ? Date.parse(issue.last_updated_at) : 0;
@@ -45,23 +44,17 @@ const SignalsPage: React.FC = () => {
   };
   const queryClient = useQueryClient();
 
-  // Diagnostics is powered by the Ollie assistant and surfaces Agent Insights,
-  // so it requires both the Ollie plugin/toggle and the Agent Insights toggle.
   const AssistantSidebar = usePluginsStore((state) => state.AssistantSidebar);
   const ollieEnabled = useIsFeatureEnabled(FeatureToggleKeys.OLLIE_ENABLED);
   const agentInsightsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.AGENT_INSIGHTS_ENABLED,
   );
 
-  // The per-project job drives onboarding: no job (404 → null) or a disabled
-  // job shows the empty state; an enabled job shows the issues view.
   const { data: job, isPending: isJobPending } = useAgentInsightsJob({
     projectId,
   });
   const isJobEnabled = job?.status === AGENT_INSIGHTS_JOB_STATUS.enabled;
 
-  // No dedicated stats endpoint yet — derive the header metrics from the issues
-  // list (all statuses) until the backend exposes aggregates.
   const { data: issuesData, isPending: isStatsPending } =
     useAgentInsightsIssuesList({ projectId, page: 1, size: 100 });
 
@@ -78,11 +71,6 @@ const SignalsPage: React.FC = () => {
     };
   }, [issuesData]);
 
-  // Last scan = when the diagnostic last produced a report (server-stamped on
-  // every run, incl. all-clear; not bumped by resolving/reopening issues).
-  // Fall back to the newest issue update when last_scan_at is unset but issues
-  // exist — a scan clearly ran, so we still surface a timestamp (e.g. once all
-  // issues are resolved) instead of dropping the line.
   const latestIssueUpdate = useMemo(
     () => maxUpdatedAt(issuesData?.content ?? []),
     [issuesData],
@@ -97,23 +85,24 @@ const SignalsPage: React.FC = () => {
   const updateJobMutation = useUpdateAgentInsightsJobMutation();
   const { isRunning, baseline, startRun, endRun } =
     useDiagnosticsRunState(projectId);
+  const { markSeen } = useDiagnosticsSeen(projectId);
 
-  // Default view shows open issues; toggling shows resolved ones.
   const [showResolved, setShowResolved] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // While running, refresh the issues queries (stats here + the IssuesTab list)
-  // so freshly persisted results surface without a manual reload.
+  useEffect(() => {
+    if (job?.last_scan_at) markSeen(job.last_scan_at);
+  }, [job?.last_scan_at, markSeen]);
+
   useEffect(() => {
     if (!isRunning) return;
     const id = window.setInterval(() => {
       queryClient.invalidateQueries({ queryKey: [AGENT_INSIGHTS_ISSUES_KEY] });
+      queryClient.invalidateQueries({ queryKey: [AGENT_INSIGHTS_JOB_KEY] });
     }, RUN_POLL_INTERVAL_MS);
     return () => window.clearInterval(id);
   }, [isRunning, queryClient]);
 
-  // The run reports by upserting issues, which bumps their `last_updated_at`.
-  // Once the newest update passes the baseline captured at trigger, it's done.
   useEffect(() => {
     if (!isRunning) return;
     if (maxUpdatedAt(issuesData?.content ?? []) > baseline) {
@@ -121,8 +110,6 @@ const SignalsPage: React.FC = () => {
     }
   }, [issuesData, isRunning, baseline, endRun]);
 
-  // hasData = a prior diagnostic has produced issues. isActive = the daily run
-  // is on (or currently running) vs. paused.
   const hasData = (issuesData?.content?.length ?? 0) > 0;
   const isActive = isJobEnabled || isRunning;
 
@@ -152,15 +139,10 @@ const SignalsPage: React.FC = () => {
   };
 
   const renderBody = () => {
-    // A persisted in-flight run takes precedence so we land straight on the
-    // issues view (with the running banner) instead of flashing the empty state.
     if (!isRunning && (isJobPending || (!isJobEnabled && isStatsPending))) {
       return <SignalsPageSkeleton />;
     }
 
-    // Onboarding shows only when diagnostics is off AND nothing has been
-    // diagnosed yet. A disabled job with prior results keeps the issues view,
-    // so past findings stay browsable while the daily run is paused.
     if (!isRunning && !isJobEnabled && !hasData) {
       return (
         <DiagnosticsEmptyState
@@ -172,9 +154,6 @@ const SignalsPage: React.FC = () => {
 
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-4 px-6 pb-3">
-        {/* Stats summarize open findings, so they're hidden in the resolved
-            view and skipped on compact screens (the list collapses there).
-            Otherwise shown; cards render "-" until a run produces data. */}
         {!showResolved && (
           <div className="hidden lg:block">
             <SignalsStatsCards
@@ -194,8 +173,6 @@ const SignalsPage: React.FC = () => {
                 Last scan: {formatDate(lastScan)}
               </span>
             ) : (
-              // Only claim "No runs yet" when there's genuinely no data; if issues
-              // exist a run clearly happened (last_scan_at may just be unset).
               !hasData && (
                 <span className="comet-body-xs text-muted-slate">
                   No runs yet
@@ -213,7 +190,6 @@ const SignalsPage: React.FC = () => {
                 Run diagnostic
               </Button>
               <Separator orientation="vertical" className="h-5" />
-              {/* Compact screens: icon-only with the label on hover. */}
               <TooltipWrapper content="Resolved issues">
                 <Button
                   variant="outline"
@@ -242,12 +218,8 @@ const SignalsPage: React.FC = () => {
 
   return (
     <PageBodyScrollContainer className="flex flex-col overflow-hidden">
-      {/* Chrome stays fixed at the top; the two-pane below fills the remaining
-          height and each column scrolls independently (no page-level scroll). */}
       <div className="mb-4 mt-6 flex shrink-0 items-center justify-between px-6">
         {showResolved ? (
-          // Resolved view: the back arrow returns to the open-issues view, and
-          // the title names the view (status chrome is hidden here).
           <Button
             variant="ghost"
             onClick={() => setShowResolved(false)}

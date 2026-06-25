@@ -13,8 +13,6 @@ const DIAGNOSTICS_DOCS_URL = buildDocsUrl();
 const CARD_CLASS =
   "flex h-[88px] w-full items-center rounded-lg border border-border bg-background px-4 text-left transition-colors hover:border-primary hover:bg-toggle-outline-active";
 
-// Inner row keeps the icon aligned with the top (title) text line while the
-// outer card centers the whole block vertically.
 const CARD_CONTENT_CLASS = "flex items-start gap-2";
 
 type DiagnosticsEmptyStateProps = {

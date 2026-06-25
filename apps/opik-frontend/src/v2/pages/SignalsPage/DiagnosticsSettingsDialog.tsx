@@ -16,7 +16,6 @@ type DiagnosticsSettingsDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
   projectId: string;
-  // Whether the daily diagnostic is currently enabled.
   enabled: boolean;
 };
 
@@ -29,7 +28,6 @@ const DiagnosticsSettingsDialog: React.FC<DiagnosticsSettingsDialogProps> = ({
   const [on, setOn] = useState(enabled);
   const updateMutation = useUpdateAgentInsightsJobMutation();
 
-  // Sync the toggle to the current state each time the dialog opens.
   useEffect(() => {
     if (open) setOn(enabled);
   }, [open, enabled]);

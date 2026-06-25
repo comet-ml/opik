@@ -30,8 +30,6 @@ type IssueDetailProps = {
   projectId: string;
 };
 
-// Status transitions offered in the header — only those that change the
-// current status are rendered, so a resolved issue shows Reopen.
 const STATUS_ACTIONS: {
   status: AGENT_INSIGHTS_ISSUE_STATUS;
   label: string;
@@ -86,8 +84,6 @@ const IssueDetail: React.FC<IssueDetailProps> = ({ issue, projectId }) => {
   const setStatus = (status: AGENT_INSIGHTS_ISSUE_STATUS) =>
     updateMutation.mutate({ issueId: issue.id, projectId, status });
 
-  // Hand the diagnosis off to the Ollie assistant (the global sidebar bridge is
-  // mounted on every non-Ollie page) so the user can continue applying the fix.
   const handleContinueWithOllie = () => {
     const message = [
       `Help me fix the "${issue.name}" issue detected in this project.`,
@@ -104,7 +100,6 @@ const IssueDetail: React.FC<IssueDetailProps> = ({ issue, projectId }) => {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
       <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-border bg-soft-background px-3">
         <div className="flex min-w-0 items-center gap-2">
           <IssueSeverityBadge severity={issue.severity} />
@@ -136,9 +131,7 @@ const IssueDetail: React.FC<IssueDetailProps> = ({ issue, projectId }) => {
         </div>
       </div>
 
-      {/* Body */}
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3">
-        {/* Meta row */}
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
           {issue.first_seen && (
             <MetaItem
@@ -166,14 +159,12 @@ const IssueDetail: React.FC<IssueDetailProps> = ({ issue, projectId }) => {
           />
         </div>
 
-        {/* Summary */}
         {issue.description && (
           <SectionCard title="Summary">
             <p className="comet-body-xs text-foreground">{issue.description}</p>
           </SectionCard>
         )}
 
-        {/* Ollie fix */}
         {(issue.cause || issue.suggested_fix) && (
           <SectionCard
             style={{ borderColor: "var(--color-ollie)" }}
@@ -199,14 +190,12 @@ const IssueDetail: React.FC<IssueDetailProps> = ({ issue, projectId }) => {
           </SectionCard>
         )}
 
-        {/* Occurrence over time */}
         {details.length > 0 && (
           <SectionCard title="Occurrence over time">
             <OccurrenceChart data={details} />
           </SectionCard>
         )}
 
-        {/* Affected traces sample */}
         <SectionCard title="Affected traces sample">
           <AffectedTracesSample projectId={projectId} />
         </SectionCard>
