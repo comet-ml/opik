@@ -1,7 +1,6 @@
 import React from "react";
 import {
   ArrowUpRight,
-  BugPlay,
   CircleCheck,
   Eye,
   EyeOff,
@@ -20,6 +19,7 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Separator } from "@/ui/separator";
 import { formatDate } from "@/lib/date";
 import { cn } from "@/lib/utils";
+import IssueSeverityBadge from "@/v2/pages/SignalsPage/IssuesTab/IssueSeverityBadge";
 import OccurrenceChart from "@/v2/pages/SignalsPage/IssuesTab/OccurrenceChart";
 import AffectedTracesSample from "@/v2/pages/SignalsPage/IssuesTab/AffectedTracesSample";
 import useAgentInsightsIssue from "@/api/signals/useAgentInsightsIssue";
@@ -66,7 +66,10 @@ const SectionCard: React.FC<{
   className?: string;
   style?: React.CSSProperties;
 }> = ({ title, children, className, style }) => (
-  <Card className={cn("flex flex-col gap-2 p-3", className)} style={style}>
+  <Card
+    className={cn("flex flex-col gap-2 p-3 shadow-none", className)}
+    style={style}
+  >
     <div className="comet-body-xs-accented text-muted-slate">{title}</div>
     {children}
   </Card>
@@ -102,14 +105,9 @@ const IssueDetail: React.FC<IssueDetailProps> = ({ issue, projectId }) => {
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-border bg-muted px-3">
+      <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-border bg-soft-background px-3">
         <div className="flex min-w-0 items-center gap-2">
-          <span
-            className="flex size-4 shrink-0 items-center justify-center rounded-md"
-            style={{ backgroundColor: "hsl(var(--destructive))" }}
-          >
-            <BugPlay className="size-2 text-white" />
-          </span>
+          <IssueSeverityBadge severity={issue.severity} />
           <TooltipWrapper content={issue.name}>
             <span className="comet-body-xs-accented truncate">
               {issue.name}
@@ -139,7 +137,7 @@ const IssueDetail: React.FC<IssueDetailProps> = ({ issue, projectId }) => {
       </div>
 
       {/* Body */}
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3">
         {/* Meta row */}
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
           {issue.first_seen && (

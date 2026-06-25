@@ -1,14 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Navigate, useParams } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { BookCheck, Radar, Settings2 } from "lucide-react";
+import { ArrowLeft, BookOpenCheck, Radar, Settings2 } from "lucide-react";
 import { useActiveProjectId } from "@/store/AppStore";
 import usePluginsStore from "@/store/PluginsStore";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { AGENT_INSIGHTS_ISSUES_KEY } from "@/api/api";
-import { formatRelativeDateTime } from "@/lib/date";
+import { formatDate } from "@/lib/date";
 import PageBodyScrollContainer from "@/v2/layout/PageBodyScrollContainer/PageBodyScrollContainer";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 import {
@@ -25,7 +26,7 @@ import SignalsStatsCards from "@/v2/pages/SignalsPage/SignalsStatsCards";
 import IssuesTab from "@/v2/pages/SignalsPage/IssuesTab/IssuesTab";
 import DiagnosticsEmptyState from "@/v2/pages/SignalsPage/DiagnosticsEmptyState";
 import DiagnosticsSettingsDialog from "@/v2/pages/SignalsPage/DiagnosticsSettingsDialog";
-import Loader from "@/shared/Loader/Loader";
+import SignalsPageSkeleton from "@/v2/pages/SignalsPage/SignalsPageSkeleton";
 
 // While a run is in flight we poll the issues queries on this cadence.
 const RUN_POLL_INTERVAL_MS = 8000;
@@ -79,7 +80,18 @@ const SignalsPage: React.FC = () => {
 
   // Last scan = when the diagnostic last produced a report (server-stamped on
   // every run, incl. all-clear; not bumped by resolving/reopening issues).
-  const lastScan = job?.last_scan_at;
+  // Fall back to the newest issue update when last_scan_at is unset but issues
+  // exist — a scan clearly ran, so we still surface a timestamp (e.g. once all
+  // issues are resolved) instead of dropping the line.
+  const latestIssueUpdate = useMemo(
+    () => maxUpdatedAt(issuesData?.content ?? []),
+    [issuesData],
+  );
+  const lastScan =
+    job?.last_scan_at ??
+    (latestIssueUpdate > 0
+      ? new Date(latestIssueUpdate).toISOString()
+      : undefined);
 
   const triggerMutation = useTriggerAgentInsightsJobMutation();
   const updateJobMutation = useUpdateAgentInsightsJobMutation();
@@ -143,7 +155,7 @@ const SignalsPage: React.FC = () => {
     // A persisted in-flight run takes precedence so we land straight on the
     // issues view (with the running banner) instead of flashing the empty state.
     if (!isRunning && (isJobPending || (!isJobEnabled && isStatsPending))) {
-      return <Loader />;
+      return <SignalsPageSkeleton />;
     }
 
     // Onboarding shows only when diagnostics is off AND nothing has been
@@ -160,26 +172,34 @@ const SignalsPage: React.FC = () => {
 
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-4 px-6 pb-3">
-        {/* Always shown; the cards render "-" placeholders until a run produces data. */}
-        <SignalsStatsCards
-          tracesAffected={stats.tracesAffected}
-          openIssues={stats.openIssues}
-          resolved={stats.resolved}
-          isPending={isStatsPending}
-          hasData={hasData}
-        />
+        {/* Stats summarize open findings, so they're hidden in the resolved
+            view and skipped on compact screens (the list collapses there).
+            Otherwise shown; cards render "-" until a run produces data. */}
+        {!showResolved && (
+          <div className="hidden lg:block">
+            <SignalsStatsCards
+              tracesAffected={stats.tracesAffected}
+              openIssues={stats.openIssues}
+              resolved={stats.resolved}
+              isPending={isStatsPending}
+              hasData={hasData}
+            />
+          </div>
+        )}
 
         {!showResolved && (
           <div className="flex items-center gap-2">
             {lastScan ? (
               <span className="comet-body-xs text-muted-slate">
-                Last scan: {formatRelativeDateTime(lastScan)}
+                Last scan: {formatDate(lastScan)}
               </span>
             ) : (
               // Only claim "No runs yet" when there's genuinely no data; if issues
               // exist a run clearly happened (last_scan_at may just be unset).
               !hasData && (
-                <span className="comet-body-xs text-muted-slate">No runs yet</span>
+                <span className="comet-body-xs text-muted-slate">
+                  No runs yet
+                </span>
               )
             )}
             <div className="ml-auto flex items-center gap-2">
@@ -193,15 +213,18 @@ const SignalsPage: React.FC = () => {
                 Run diagnostic
               </Button>
               <Separator orientation="vertical" className="h-5" />
-              <Button
-                variant="outline"
-                size="xs"
-                disabled={!hasData}
-                onClick={() => setShowResolved(true)}
-              >
-                <BookCheck className="mr-1.5 size-3.5" />
-                Resolved issues
-              </Button>
+              {/* Compact screens: icon-only with the label on hover. */}
+              <TooltipWrapper content="Resolved issues">
+                <Button
+                  variant="outline"
+                  size="xs"
+                  onClick={() => setShowResolved(true)}
+                  aria-label="Resolved issues"
+                >
+                  <BookOpenCheck className="size-3.5 lg:mr-1.5" />
+                  <span className="hidden lg:inline">Resolved issues</span>
+                </Button>
+              </TooltipWrapper>
             </div>
           </div>
         )}
@@ -222,10 +245,26 @@ const SignalsPage: React.FC = () => {
       {/* Chrome stays fixed at the top; the two-pane below fills the remaining
           height and each column scrolls independently (no page-level scroll). */}
       <div className="mb-4 mt-6 flex shrink-0 items-center justify-between px-6">
-        <h1 className="truncate break-words text-base font-medium tracking-normal text-foreground-secondary">
-          Diagnostics
-        </h1>
-        {(isActive || hasData) && (
+        {showResolved ? (
+          // Resolved view: the back arrow returns to the open-issues view, and
+          // the title names the view (status chrome is hidden here).
+          <Button
+            variant="ghost"
+            onClick={() => setShowResolved(false)}
+            aria-label="Back to diagnostics"
+            className="h-auto min-w-0 gap-2 px-0 text-foreground-secondary"
+          >
+            <ArrowLeft className="size-4 shrink-0" />
+            <h1 className="truncate break-words text-base font-medium tracking-normal">
+              Resolved issues
+            </h1>
+          </Button>
+        ) : (
+          <h1 className="truncate break-words text-base font-medium tracking-normal text-foreground-secondary">
+            Diagnostics
+          </h1>
+        )}
+        {!showResolved && (isActive || hasData) && (
           <div className="flex items-center gap-1.5">
             <span className="comet-body-xs flex items-center gap-1.5 text-foreground-secondary">
               <span
@@ -236,15 +275,17 @@ const SignalsPage: React.FC = () => {
               {isJobEnabled ? "Auto • Daily" : "Manual"}
             </span>
             {isJobEnabled ? (
-              <Button
-                variant="ghost"
-                size="icon-2xs"
-                onClick={() => setSettingsOpen(true)}
-                aria-label="Diagnostics settings"
-                className="text-foreground"
-              >
-                <Settings2 className="size-3" />
-              </Button>
+              <TooltipWrapper content="Settings">
+                <Button
+                  variant="ghost"
+                  size="icon-2xs"
+                  onClick={() => setSettingsOpen(true)}
+                  aria-label="Diagnostics settings"
+                  className="text-foreground"
+                >
+                  <Settings2 className="size-3" />
+                </Button>
+              </TooltipWrapper>
             ) : (
               <Button
                 size="xs"

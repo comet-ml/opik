@@ -25,12 +25,7 @@ export const getSpanTypeOptions = (isGuardrailsEnabled: boolean) => [
 
 const renderSpanTypeOption = (option: DropdownOption<SPAN_TYPE>) => {
   return (
-    <SelectItem
-      key={option.value}
-      value={option.value}
-      withoutCheck
-      wrapperAsChild={true}
-    >
+    <SelectItem key={option.value} value={option.value} wrapperAsChild={true}>
       <div className="flex w-full items-center gap-1.5">
         <BaseTraceDataTypeIcon type={option.value} />
         {option.label}
