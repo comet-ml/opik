@@ -38,7 +38,8 @@ class ChrF(BaseMetric):
         track: Whether to automatically track metric results. Defaults to ``True``.
         project_name: Optional tracking project name. Defaults to ``None``.
         beta: Weighting between precision and recall (``beta = 2`` is standard).
-        ignore_whitespace: Whether whitespace is ignored before scoring.
+        ignore_whitespace: Whether whitespace is ignored before scoring. Defaults
+            to ``True`` to match chrF's historical (implicit) behaviour.
         char_order: Maximum character n-gram order.
         word_order: Maximum word n-gram order for chrF++. Not supported by the
             default NLTK backend; provide ``chrf_fn`` to use it.
@@ -62,7 +63,7 @@ class ChrF(BaseMetric):
         track: bool = True,
         project_name: Optional[str] = None,
         beta: float = 2.0,
-        ignore_whitespace: bool = False,
+        ignore_whitespace: bool = True,
         char_order: int = 6,
         word_order: int = 0,
         lowercase: bool = False,
