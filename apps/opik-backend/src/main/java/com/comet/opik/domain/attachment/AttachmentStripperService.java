@@ -76,10 +76,14 @@ public class AttachmentStripperService {
     // Apache Tika for MIME type detection
     private static final Tika tika = new Tika();
 
-    private final Tracer tracer;
+    // Maximal run of base64 alphabet chars (RFC 4648), matched POSSESSIVELY so each run is consumed
+    // once with no backtracking. The size threshold is applied in code (see processTextNode), not in
+    // the pattern: the old {minBase64Size,} regex kept it inside, so a long sub-threshold run made
+    // find() retry from every offset -- an O(n*runlen) re-scan that pinned CPU on large payloads
+    // (OPIK-7118). Matching the run possessively and checking its length afterwards is linear.
+    private static final Pattern BASE64_RUN = Pattern.compile("[A-Za-z0-9+/]++");
 
-    // Base64 pattern compiled once during construction
-    private final Pattern base64Pattern;
+    private final Tracer tracer;
 
     // Minimum base64 size to look for
     private final long minBase64Size;
@@ -115,9 +119,7 @@ public class AttachmentStripperService {
                 .ofLongs()
                 .build();
 
-        // Compile the regex pattern once during construction based on configuration
         this.minBase64Size = attachmentsConfig.getStripMinSize();
-        this.base64Pattern = Pattern.compile("([A-Za-z0-9+/]{" + minBase64Size + ",}={0,2})");
 
         log.info("AttachmentStripperService initialized with minBase64Length: {}", minBase64Size);
     }
@@ -472,27 +474,35 @@ public class AttachmentStripperService {
             return node;
         }
 
-        // Search for base64 patterns within the text (not just exact matches)
-        Matcher matcher = wrapWithSpan("regex.match", () -> base64Pattern.matcher(text));
+        // Find each maximal base64 run, then apply the size threshold and collect up to two trailing
+        // '=' padding chars in code -- identical detection to the old {minBase64Size,}={0,2} regex, but
+        // linear instead of a CPU-pinning re-scan (see BASE64_RUN, OPIK-7118). Any non-alphabet char
+        // (including line-wrapping whitespace) ends a run, so MIME/data-URI base64 is left intact.
         StringBuilder result = new StringBuilder();
         int lastEnd = 0;
         boolean foundAttachment = false;
+        int length = text.length();
 
-        while (wrapWithSpan("regex.find", matcher::find)) {
-            String base64Data = matcher.group(1);
+        Matcher matcher = BASE64_RUN.matcher(text);
+        while (matcher.find()) {
+            int start = matcher.start();
+            int runEnd = matcher.end();
+            if ((long) runEnd - start < minBase64Size) {
+                continue;
+            }
 
-            // Increment counter first (starts at 0, so first attachment becomes 1)
+            int end = runEnd;
+            while (end < length && end - runEnd < 2 && text.charAt(end) == '=') {
+                end++;
+            }
+
+            String base64Data = text.substring(start, end);
             int currentAttachmentNumber = attachmentCounter.incrementAndGet();
-
-            // Try to process as attachment
             String attachmentReference = processBase64Attachment(base64Data, currentAttachmentNumber, ctx);
-
             if (attachmentReference != null) {
-                // Append text before the match
-                result.append(text, lastEnd, matcher.start());
-                // Append the attachment reference
+                result.append(text, lastEnd, start);
                 result.append(attachmentReference);
-                lastEnd = matcher.end();
+                lastEnd = end;
                 foundAttachment = true;
             }
         }
