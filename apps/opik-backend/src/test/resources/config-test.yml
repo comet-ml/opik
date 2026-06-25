@@ -70,6 +70,12 @@ databaseAnalytics:
   #   - custom_http_params=max_query_size=100000000
   #  Description: query parameters that will be added to the connection string
   queryParameters: health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=60,async_insert_busy_timeout_min_ms=50,async_insert=1,wait_for_async_insert=1,async_insert_use_adaptive_busy_timeout=1,async_insert_deduplicate=1,use_skip_indexes_if_final=1
+  #  Default: unset (inherits the async_insert_busy_timeout_max_ms=60 carried by queryParameters above)
+  #  Description: Optional override (ms) for async_insert_busy_timeout_max_ms in the custom_http_params chain of
+  #   queryParameters above; only applied when that setting is already present there, otherwise it is not injected.
+  #   Leave unset to keep the queryParameters value untouched. With async_insert_use_adaptive_busy_timeout=1 this is
+  #   a ceiling: the adaptive scheduler widens the buffer only while rows are queued.
+  asyncInsertBusyTimeoutMaxMs: # Empty - inherits the queryParameters value above
   #  Default: 1s
   #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
   healthCheckTimeout: 1s
