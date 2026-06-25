@@ -73,29 +73,29 @@ const AffectedTracesSample: React.FC<AffectedTracesSampleProps> = ({
                 activeRowId === trace.id && "border-primary bg-primary-100",
               )}
             >
-              <span className="flex items-center gap-1.5 font-mono text-foreground">
-                <ListTree className="size-3.5 text-[var(--chart-violet)]" />
+              <span className="comet-body-xs-accented flex items-center gap-1 text-foreground">
+                <ListTree className="size-3 shrink-0 text-[var(--chart-violet)]" />
                 {trace.id.slice(0, 4)}...{trace.id.slice(-3)}
               </span>
-              <span className="flex items-center gap-1 text-muted-slate">
-                <Timer className="size-3.5" />
+              <span className="flex items-center gap-1 text-foreground">
+                <Timer className="size-3 shrink-0 text-muted-slate" />
                 {formatDuration(trace.duration)}
               </span>
-              <span className="flex items-center gap-1 text-muted-slate">
-                <Hash className="size-3.5" />
+              <span className="flex items-center gap-1 text-foreground">
+                <Hash className="size-3 shrink-0 text-muted-slate" />
                 {(trace.span_count ?? 0).toLocaleString()}
               </span>
-              <span className="flex items-center gap-1 text-muted-slate">
-                <Coins className="size-3.5" />
+              <span className="flex items-center gap-1 text-foreground">
+                <Coins className="size-3 shrink-0 text-muted-slate" />
                 {formatCost(trace.total_estimated_cost)}
               </span>
               {providerConfig && ProviderIcon && (
-                <span className="flex items-center gap-1.5 text-muted-slate">
-                  <ProviderIcon className="size-3.5 shrink-0" />
+                <span className="flex items-center gap-1 text-foreground">
+                  <ProviderIcon className="size-3 shrink-0 text-muted-slate" />
                   {providerConfig.label}
                 </span>
               )}
-              <span className="ml-auto whitespace-nowrap text-light-slate">
+              <span className="ml-auto whitespace-nowrap text-muted-slate">
                 {formatDate(trace.last_updated_at)}
               </span>
             </button>
