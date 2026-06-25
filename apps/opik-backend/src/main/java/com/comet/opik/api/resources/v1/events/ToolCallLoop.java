@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
 import com.comet.opik.api.resources.v1.events.tools.TraceToolContext;
+import com.comet.opik.domain.OnlineScoringTracePersistence.EvaluationRecorder;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
@@ -123,9 +124,10 @@ final class ToolCallLoop {
             @NonNull TraceToolContext ctx,
             @NonNull Budget budget,
             @NonNull String logIdValue,
-            @NonNull Map<String, String> mdc) {
+            @NonNull Map<String, String> mdc,
+            @NonNull EvaluationRecorder recorder) {
         return toolCallLoop(0, initialResponse, toolRequest, followUpParameters, toolRegistry,
-                scoreTrace, messages, ctx, budget, logIdValue, mdc);
+                scoreTrace, messages, ctx, budget, logIdValue, mdc, recorder);
     }
 
     /**
@@ -149,9 +151,10 @@ final class ToolCallLoop {
             @NonNull TraceToolContext ctx,
             @NonNull Budget budget,
             @NonNull String logIdValue,
-            @NonNull Map<String, String> mdc) {
+            @NonNull Map<String, String> mdc,
+            @NonNull EvaluationRecorder recorder) {
         return run(initialResponse, toolRequest, followUpParameters, toolRegistry, scoreTrace,
-                messages, ctx, budget, logIdValue, mdc)
+                messages, ctx, budget, logIdValue, mdc, recorder)
                 .flatMap(loopFinalResponse -> {
                     messages.add(UserMessage.from(WRAP_UP_USER_MESSAGE));
                     var finalRequest = structuredRequest.toBuilder()
@@ -165,7 +168,7 @@ final class ToolCallLoop {
             ChatRequest toolRequest, ChatRequestParameters followUpParameters,
             ToolRegistry toolRegistry, Function<ChatRequest, Mono<ChatResponse>> scoreTrace,
             ArrayList<ChatMessage> messages, TraceToolContext ctx, Budget budget,
-            String logIdValue, Map<String, String> mdc) {
+            String logIdValue, Map<String, String> mdc, EvaluationRecorder recorder) {
         if (round >= MAX_TOOL_CALL_ROUNDS) {
             // Don't append: the cap-round response may carry unfulfilled tool_executions_requests
             // (we're abandoning them by hitting the cap). An AiMessage with tool_calls but no
@@ -193,7 +196,7 @@ final class ToolCallLoop {
             Flux<ToolExecutionResultMessage> roundResults = Flux
                     .fromIterable(currentResponse.aiMessage().toolExecutionRequests())
                     .concatMap(toolExecRequest -> executeToolOrBudgetExhausted(round, toolExecRequest,
-                            toolRegistry, ctx, budget, logIdValue, mdc));
+                            toolRegistry, ctx, budget, logIdValue, mdc, recorder));
 
             return roundResults
                     .doOnNext(messages::add)
@@ -209,13 +212,13 @@ final class ToolCallLoop {
                     }))
                     .flatMap(nextResponse -> toolCallLoop(round + 1, nextResponse, toolRequest,
                             followUpParameters, toolRegistry, scoreTrace, messages, ctx, budget,
-                            logIdValue, mdc));
+                            logIdValue, mdc, recorder));
         });
     }
 
     private static Mono<ToolExecutionResultMessage> executeToolOrBudgetExhausted(int round,
             ToolExecutionRequest toolExecRequest, ToolRegistry toolRegistry, TraceToolContext ctx,
-            Budget budget, String logIdValue, Map<String, String> mdc) {
+            Budget budget, String logIdValue, Map<String, String> mdc, EvaluationRecorder recorder) {
         // Re-apply MDC so the slf4j tags (workspace_id, trace/thread id, rule_id) follow the
         // tool-loop log lines — the reactive chain may have hopped threads since the scorer's
         // sync prep step set MDC. The toolRegistry.execute() call lives INSIDE this scope so
@@ -235,7 +238,11 @@ final class ToolCallLoop {
                 return Mono.just(ToolExecutionResultMessage.from(toolExecRequest,
                         BUDGET_EXHAUSTED_MESSAGE.formatted(CUMULATIVE_TOOL_OUTPUT_BUDGET_CHARS)));
             }
-            return toolRegistry.execute(toolExecRequest.name(), toolExecRequest.arguments(), ctx)
+            // Record the execution as a monitoring tool span (OPIK-6994); NOOP when tracing is off.
+            // Wraps execution so the span captures arguments/result/timing without altering the
+            // budget accounting below.
+            return recorder.recordToolCall(toolExecRequest.name(), toolExecRequest.arguments(),
+                    toolRegistry.execute(toolExecRequest.name(), toolExecRequest.arguments(), ctx))
                     .map(result -> {
                         budget.cumulative += result.length();
                         return ToolExecutionResultMessage.from(toolExecRequest, result);
