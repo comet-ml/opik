@@ -26,6 +26,7 @@ import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -142,7 +143,7 @@ public class OnlineScoringSpanSampler {
                         logSampledSpan(evaluator, messages, scorableSpans.size());
                         if (!messages.isEmpty()) {
                             publishSampled(messages, AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE,
-                                    spansBatch.workspaceId());
+                                    spansBatch.workspaceId(), spansBatch.workspaceName());
                         }
                     }
                     case AutomationRuleEvaluatorLlmAsJudge rule -> logUnsupportedEvaluatorType(rule);
@@ -167,7 +168,7 @@ public class OnlineScoringSpanSampler {
                         logSampledSpan(evaluator, messages, scorableSpans.size());
                         if (!messages.isEmpty()) {
                             publishSampled(messages, AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON,
-                                    spansBatch.workspaceId());
+                                    spansBatch.workspaceId(), spansBatch.workspaceName());
                         }
                     }
                 }
@@ -181,14 +182,18 @@ public class OnlineScoringSpanSampler {
     }
 
     /**
-     * Subscribes the reactive enqueue, seeding the reactive context with the workspace so the publisher's
-     * enqueue metric is labelled with it. SpansCreated carries no workspace name, so the publisher falls back
-     * to the id for the name label. Fire-and-forget.
+     * Subscribes the reactive enqueue, seeding the reactive context with the workspace (id + name) so the
+     * publisher's enqueue metric is labelled with it. Falls back to the id when the name is absent.
+     * Fire-and-forget: enqueueing is a side effect of sampling and must not block the sampler.
      */
-    private void publishSampled(List<?> messages, AutomationRuleEvaluatorType type, String workspaceId) {
+    private void publishSampled(List<?> messages, AutomationRuleEvaluatorType type, String workspaceId,
+            String workspaceName) {
         onlineScorePublisher.enqueueMessage(messages, type)
-                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId))
-                .subscribe();
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.WORKSPACE_NAME, StringUtils.defaultIfBlank(workspaceName, workspaceId)))
+                .subscribe(unused -> {
+                }, error -> log.error("Error enqueueing sampled online-scoring messages into redis", error));
     }
 
     private boolean shouldSampleSpan(AutomationRuleEvaluator<?, SpanFilter> evaluator,
