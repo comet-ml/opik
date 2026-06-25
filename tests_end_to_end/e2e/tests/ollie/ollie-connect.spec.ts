@@ -145,9 +145,12 @@ test.describe('Ollie — Local Runner', { tag: ['@t3-nightly', '@ollie'] }, () =
       await test.step('Open Ollie and run /improve to completion', async () => {
         await ollie.goto();
         await ollie.waitForReady();
-        // The seeded traces are eventually consistent; wait for /improve to be
-        // offered before clicking it.
-        await expect(ollie.improveButton()).toBeVisible({ timeout: 60_000 });
+        // The seeded traces are eventually consistent and the assistant pod can
+        // be cold on production, so the greeting action buttons render well
+        // after the input is ready. Wait on the same generous budget the POM
+        // uses for pod provisioning rather than a tight 60s, which flaked when
+        // the pod was slow to warm.
+        await expect(ollie.improveButton()).toBeVisible({ timeout: 150_000 });
         await ollie.startImprove();
         // Analyse phase: approve tool calls while Ollie reads the traces + code.
         await ollie.approveUntilSettled();
