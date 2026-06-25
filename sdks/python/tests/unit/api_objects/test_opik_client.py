@@ -63,6 +63,27 @@ def test_opik_client__explicit_end__connection_monitor_thread_released():
     )
 
 
+def test_shutdown_streamer__no_configured_timeout__flush_is_bounded():
+    # The finalizer can run on the thread that dropped the client, so with the
+    # default unbounded flush timeout (None) it must still close with a finite
+    # timeout instead of blocking forever.
+    mock_streamer = Mock()
+
+    opik_client._shutdown_streamer(mock_streamer, flush_timeout=None)
+
+    mock_streamer.close.assert_called_once_with(
+        opik_client._FINALIZER_FLUSH_TIMEOUT_SECONDS
+    )
+
+
+def test_shutdown_streamer__configured_timeout__is_respected():
+    mock_streamer = Mock()
+
+    opik_client._shutdown_streamer(mock_streamer, flush_timeout=3)
+
+    mock_streamer.close.assert_called_once_with(3)
+
+
 def test_get_global_client__concurrent_first_callers__return_single_shared_client():
     opik_client.reset_global_client(end_client=True)
 

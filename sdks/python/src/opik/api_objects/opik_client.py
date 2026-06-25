@@ -111,6 +111,14 @@ T = TypeVar("T")
 _ConfigT = TypeVar("_ConfigT", bound=Config)
 QueueT = TypeVar("QueueT", TracesAnnotationQueue, ThreadsAnnotationQueue)
 
+# Upper bound for the flush performed by the garbage-collection/exit finalizer
+# when the client has no explicitly configured flush timeout (the default is
+# None == wait indefinitely). The finalizer can run on the thread that dropped
+# the last reference to the client, so it must never block forever; a healthy
+# backend drains well within this window, and an unreachable one would not
+# deliver the data no matter how long we waited.
+_FINALIZER_FLUSH_TIMEOUT_SECONDS = 10
+
 
 def _shutdown_streamer(
     message_streamer: streamer.Streamer, flush_timeout: Optional[int]
@@ -122,8 +130,15 @@ def _shutdown_streamer(
     than the client: holding a reference to the client would keep it alive and
     defeat the garbage-collection-based cleanup. ``streamer.close()`` is
     idempotent, so an explicit ``Opik.end()`` followed by this finalizer is safe.
+
+    The flush is always bounded: the finalizer may run on the thread that
+    dropped the client, so an unbounded wait (the default ``flush_timeout`` is
+    ``None``) could hang it indefinitely against a slow/unreachable backend.
     """
-    message_streamer.close(flush_timeout)
+    bounded_timeout = (
+        flush_timeout if flush_timeout is not None else _FINALIZER_FLUSH_TIMEOUT_SECONDS
+    )
+    message_streamer.close(bounded_timeout)
 
 
 class Opik:
