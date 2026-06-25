@@ -1,14 +1,17 @@
 import React, { useState } from "react";
 import { FileText, ToggleRight } from "lucide-react";
 import { buildDocsUrl } from "@/v2/lib/utils";
+import { useTheme } from "@/contexts/theme-provider";
+import { THEME_MODE } from "@/constants/theme";
 import TurnOnDiagnosticDialog from "@/v2/pages/SignalsPage/TurnOnDiagnosticDialog";
 import RobotLamp from "@/icons/robot-lamp.svg?react";
+import RobotLampDark from "@/icons/robot-lamp-dark.svg?react";
 
 // TODO: point at the dedicated Diagnostics docs page once it ships.
 const DIAGNOSTICS_DOCS_URL = buildDocsUrl();
 
 const CARD_CLASS =
-  "flex h-[88px] w-full items-center rounded-lg border border-border bg-background px-4 text-left transition-colors hover:border-primary";
+  "flex h-[88px] w-full items-center rounded-lg border border-border bg-background px-4 text-left transition-colors hover:border-primary hover:bg-toggle-outline-active";
 
 // Inner row keeps the icon aligned with the top (title) text line while the
 // outer card centers the whole block vertically.
@@ -24,6 +27,8 @@ const DiagnosticsEmptyState: React.FC<DiagnosticsEmptyStateProps> = ({
   isPending,
 }) => {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const { themeMode } = useTheme();
+  const Lamp = themeMode === THEME_MODE.DARK ? RobotLampDark : RobotLamp;
 
   const handleConfirm = () => {
     onRun();
@@ -38,8 +43,8 @@ const DiagnosticsEmptyState: React.FC<DiagnosticsEmptyStateProps> = ({
             Catch issues before your users do
           </h2>
           <p className="comet-body-s text-muted-slate">
-            Diagnostics scans your traces daily and surfaces non-error issues —
-            tool loops, hallucinations, slow retrievals.
+            We'll scan your traces every day and flag anything worth your
+            attention — tool loops, hallucinations, slow retrievals.
           </p>
         </div>
 
@@ -56,7 +61,7 @@ const DiagnosticsEmptyState: React.FC<DiagnosticsEmptyStateProps> = ({
                   Turn on diagnostics
                 </span>
                 <span className="comet-body-xs text-light-slate">
-                  Best with 100+ traces logged over the last 7 days
+                  Works best with 100+ traces from the past 7 days.
                 </span>
               </span>
             </span>
@@ -83,7 +88,7 @@ const DiagnosticsEmptyState: React.FC<DiagnosticsEmptyStateProps> = ({
         </div>
       </div>
 
-      <RobotLamp className="hidden size-52 shrink-0 lg:block" />
+      <Lamp className="hidden size-52 shrink-0 lg:block" />
 
       <TurnOnDiagnosticDialog
         open={dialogOpen}

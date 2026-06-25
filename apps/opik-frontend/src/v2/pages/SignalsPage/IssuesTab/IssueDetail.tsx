@@ -100,9 +100,9 @@ const IssueDetail: React.FC<IssueDetailProps> = ({ issue, projectId }) => {
   const details = detail?.details ?? [];
 
   return (
-    <div className="flex flex-col">
+    <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex h-10 items-center justify-between gap-2 border-b border-border bg-[#F8FAFC] px-3">
+      <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-border bg-muted px-3">
         <div className="flex min-w-0 items-center gap-2">
           <span
             className="flex size-4 shrink-0 items-center justify-center rounded-md"
@@ -139,7 +139,7 @@ const IssueDetail: React.FC<IssueDetailProps> = ({ issue, projectId }) => {
       </div>
 
       {/* Body */}
-      <div className="flex flex-col gap-4 p-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3">
         {/* Meta row */}
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
           {issue.first_seen && (
