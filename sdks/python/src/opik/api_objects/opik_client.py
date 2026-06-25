@@ -4,6 +4,7 @@ import datetime
 import functools
 import json
 import logging
+import threading
 import weakref
 from typing import (
     Any,
@@ -3346,6 +3347,7 @@ _context_client_var: contextvars.ContextVar[Optional[Opik]] = contextvars.Contex
     "_context_client_var", default=None
 )
 _global_singleton: Optional[Opik] = None
+_global_singleton_lock = threading.Lock()
 
 
 def get_current_client_raw() -> Optional[Opik]:
@@ -3376,8 +3378,17 @@ def get_global_client() -> Opik:
         return client
 
     global _global_singleton
-    _global_singleton = Opik()
-    return _global_singleton
+    # Double-checked locking: without the lock, concurrent first-callers each
+    # create their own Opik(), and all but one become orphans. Each orphan still
+    # spawns a connection-monitor thread, which is exactly the leak OPIK-7127
+    # targets — and once orphaned clients become GC-eligible their finalizer
+    # tears down their streamer.
+    with _global_singleton_lock:
+        client = get_current_client_raw()
+        if client is not None:
+            return client
+        _global_singleton = Opik()
+        return _global_singleton
 
 
 def set_global_client(client: Opik, context_wise: bool = False) -> None:

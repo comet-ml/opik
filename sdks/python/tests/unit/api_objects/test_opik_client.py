@@ -63,6 +63,31 @@ def test_opik_client__explicit_end__connection_monitor_thread_released():
     )
 
 
+def test_get_global_client__concurrent_first_callers__return_single_shared_client():
+    opik_client.reset_global_client(end_client=True)
+
+    barrier = threading.Barrier(8)
+    results: List = []
+    results_lock = threading.Lock()
+
+    def worker():
+        barrier.wait()
+        client = opik_client.get_global_client()
+        with results_lock:
+            results.append(client)
+
+    threads = [threading.Thread(target=worker) for _ in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert len(results) == 8
+    assert len({id(client) for client in results}) == 1, (
+        "Concurrent get_global_client() first-callers created more than one client"
+    )
+
+
 @pytest.mark.parametrize(
     "trace_id,project_name",
     [
