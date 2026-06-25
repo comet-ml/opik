@@ -67,6 +67,20 @@ public interface OnlineScorePublisher {
      */
     Mono<Void> enqueueThreadMessage(List<String> threadIds, UUID ruleId, UUID projectId, String workspaceId,
             String userName);
+
+    /**
+     * Enqueues a thread message for an already-resolved rule, avoiding the blocking rule lookup that the
+     * {@code ruleId} overload performs. Prefer this when the caller already holds the {@link AutomationRuleEvaluator}.
+     *
+     * @param threadIds   the IDs of the threads to score
+     * @param rule        the already-resolved automation rule evaluator
+     * @param projectId   the ID of the project
+     * @param workspaceId the ID of the workspace
+     * @param userName    the name of the user who initiated the scoring
+     * @return a {@link Mono} that completes once the message is enqueued
+     */
+    Mono<Void> enqueueThreadMessage(List<String> threadIds, AutomationRuleEvaluator<?, ?> rule, UUID projectId,
+            String workspaceId, String userName);
 }
 
 @Singleton
@@ -113,13 +127,13 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
         var codec = config.getCodec();
         var stream = redisClient.getStream(config.getStreamName(), codec);
         // Resolve the workspace from the reactive context — populated upstream from RequestContext at the
-        // trace/span ingest endpoint and carried down through the sampler/manual-eval chains. Falls back to
-        // "unknown" (then to the id) so the metric label is always present.
+        // trace/span ingest endpoint and carried down through the sampler/manual-eval chains. workspace_id
+        // falls back to "unknown"; workspace_name falls back to the id (so it's never the literal "unknown").
         return Flux.deferContextual(ctx -> {
             var workspaceId = StringUtils.defaultIfBlank(ctx.getOrDefault(RequestContext.WORKSPACE_ID, UNKNOWN),
                     UNKNOWN);
             var workspaceName = StringUtils.defaultIfBlank(
-                    ctx.getOrDefault(RequestContext.WORKSPACE_NAME, UNKNOWN), workspaceId);
+                    ctx.getOrDefault(RequestContext.WORKSPACE_NAME, workspaceId), workspaceId);
             var successAttrs = Attributes.of(EVALUATOR_TYPE_KEY, type.getType(),
                     WORKSPACE_ID_KEY, workspaceId, WORKSPACE_NAME_KEY, workspaceName, RESULT_KEY, "success");
             var errorAttrs = Attributes.of(EVALUATOR_TYPE_KEY, type.getType(),
@@ -141,31 +155,40 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
     public Mono<Void> enqueueThreadMessage(@NonNull List<String> threadIds, @NonNull UUID ruleId,
             @NonNull UUID projectId, @NonNull String workspaceId, @NonNull String userName) {
 
-        // findById is a blocking JDBC lookup, so resolve it lazily on a worker thread; the rest is reactive.
+        // Only the id is known here, so resolve the rule first. findById is a blocking JDBC lookup, so do it
+        // lazily on a worker thread, then delegate to the rule-based overload (which holds all enqueue logic).
         return Mono.<AutomationRuleEvaluator<?, ?>>fromCallable(
                 () -> automationRuleEvaluatorService.findById(ruleId, Set.of(projectId), workspaceId))
                 .subscribeOn(Schedulers.boundedElastic())
-                .flatMap(rule -> switch (rule) {
-                    case AutomationRuleEvaluatorTraceThreadLlmAsJudge llmAsJudge -> enqueueMessage(
-                            List.of(toLlmAsJudgeMessage(threadIds, ruleId, projectId, workspaceId, userName,
-                                    llmAsJudge.getCode())),
-                            rule.getType());
-                    case AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython definedMetricPython -> {
-                        if (serviceTogglesConfig.isTraceThreadPythonEvaluatorEnabled()) {
-                            yield enqueueMessage(List.of(toDefinedMetricPython(threadIds, ruleId, projectId,
-                                    workspaceId, userName, definedMetricPython.getCode())), rule.getType());
-                        }
-                        log.warn("Trace Thread online scoring python evaluator is disabled, skipping enqueueing "
-                                + "for ruleId: '{}'", ruleId);
-                        yield Mono.<Void>empty();
-                    }
-                    default -> Mono.<Void>error(new IllegalStateException("Unknown rule evaluator type: " + rule));
-                })
+                .flatMap(rule -> enqueueThreadMessage(threadIds, rule, projectId, workspaceId, userName))
                 .onErrorResume(NotFoundException.class, ex -> {
                     log.warn("Rule with ID '{}' not found for projectId '{}' and workspaceId '{}'", ruleId, projectId,
                             workspaceId, ex);
                     return Mono.empty();
                 });
+    }
+
+    public Mono<Void> enqueueThreadMessage(@NonNull List<String> threadIds,
+            @NonNull AutomationRuleEvaluator<?, ?> rule, @NonNull UUID projectId, @NonNull String workspaceId,
+            @NonNull String userName) {
+
+        // Caller already holds the resolved rule — no findById needed.
+        return switch (rule) {
+            case AutomationRuleEvaluatorTraceThreadLlmAsJudge llmAsJudge -> enqueueMessage(
+                    List.of(toLlmAsJudgeMessage(threadIds, rule.getId(), projectId, workspaceId, userName,
+                            llmAsJudge.getCode())),
+                    rule.getType());
+            case AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython definedMetricPython -> {
+                if (serviceTogglesConfig.isTraceThreadPythonEvaluatorEnabled()) {
+                    yield enqueueMessage(List.of(toDefinedMetricPython(threadIds, rule.getId(), projectId,
+                            workspaceId, userName, definedMetricPython.getCode())), rule.getType());
+                }
+                log.warn("Trace Thread online scoring python evaluator is disabled, skipping enqueueing "
+                        + "for ruleId: '{}'", rule.getId());
+                yield Mono.<Void>empty();
+            }
+            default -> Mono.<Void>error(new IllegalStateException("Unknown rule evaluator type: " + rule));
+        };
     }
 
     private TraceThreadToScoreLlmAsJudge toLlmAsJudgeMessage(List<String> threadIds, UUID ruleId, UUID projectId,

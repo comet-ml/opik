@@ -187,8 +187,8 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                 .flatMap(rule -> {
                     log.info("Enqueueing trace-thread evaluation for rule '{}' with '{}' trace IDs", rule.getId(),
                             traceIdStrings.size());
-                    return onlineScorePublisher.enqueueThreadMessage(traceIdStrings, rule.getId(), projectId,
-                            workspaceId, userName);
+                    return onlineScorePublisher.enqueueThreadMessage(traceIdStrings, rule, projectId, workspaceId,
+                            userName);
                 })
                 .then();
 
@@ -386,7 +386,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                             .flatMap(rule -> {
                                 log.info("Enqueueing evaluation for rule '{}' with '{}' thread IDs", rule.getId(),
                                         threadIds.size());
-                                return onlineScorePublisher.enqueueThreadMessage(threadIds, rule.getId(), projectId,
+                                return onlineScorePublisher.enqueueThreadMessage(threadIds, rule, projectId,
                                         workspaceId, userName);
                             })
                             .then(Mono.just(threadModelIds.size()));
