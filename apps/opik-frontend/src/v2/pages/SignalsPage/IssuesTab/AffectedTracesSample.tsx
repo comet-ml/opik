@@ -14,10 +14,6 @@ type AffectedTracesSampleProps = {
   projectId: string;
 };
 
-// NOTE: the issue API exposes a `traces_query` string but not resolved example
-// traces, and that string isn't the Filter[] shape the traces API consumes —
-// so until the backend returns example trace ids (or a compatible filter), this
-// shows the project's most recent traces as a representative sample.
 const AffectedTracesSample: React.FC<AffectedTracesSampleProps> = ({
   projectId,
 }) => {
@@ -31,8 +27,6 @@ const AffectedTracesSample: React.FC<AffectedTracesSampleProps> = ({
 
   const traces = data?.content ?? [];
 
-  // Open the trace in an in-place side panel (deep-linked via ?trace/?span)
-  // instead of navigating away to the Logs page.
   const { handleRowClick, activeRowId, panels } = useTraceThreadPanelsState({
     rows: traces,
     type: "trace",

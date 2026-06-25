@@ -6,7 +6,6 @@ import {
   SEVERITY_LABEL_MAP,
 } from "@/v2/pages/SignalsPage/helpers";
 
-// Neutral pill with a leading severity-colored dot.
 type SeverityTagProps = {
   severity: AGENT_INSIGHTS_ISSUE_SEVERITY;
   className?: string;
