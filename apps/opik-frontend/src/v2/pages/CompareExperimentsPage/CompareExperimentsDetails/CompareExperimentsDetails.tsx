@@ -104,7 +104,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
             to="/$workspaceName/projects/$projectId/experiments"
             tooltip="Back to experiments"
           />
-          <h1 className="comet-title-xs truncate break-words">{title}</h1>
+          <h1 className="comet-body-accented truncate break-words">{title}</h1>
         </div>
         <CompareExperimentsButton />
       </div>
