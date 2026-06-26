@@ -33,7 +33,8 @@ export const withExplain = <TData,>(
     const target = buildTarget(context.row.original);
     // Resolve alignment from the SAME source the cell body uses, so the owl
     // positions itself against the value without knowing about column types.
-    const align = resolveHorizontalAlignment(context.column.columnDef.meta);
+    // Optional chaining: a minimal/synthetic CellContext may omit `column`.
+    const align = resolveHorizontalAlignment(context.column?.columnDef?.meta);
 
     return (
       <div className="group/cell relative flex size-full items-center">
