@@ -2,6 +2,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/ui/hover-card";
 import { FeedbackScoreValueByAuthorMap } from "@/types/traces";
 import ColorIndicator from "@/shared/ColorIndicator/ColorIndicator";
 import React from "react";
+import { Loader2 } from "lucide-react";
 import isNumber from "lodash/isNumber";
 import { Separator } from "@/ui/separator";
 
@@ -9,12 +10,9 @@ import {
   getCategoricFeedbackScoreValuesMap,
   getIsCategoricFeedbackScore,
 } from "./utils";
-import {
-  FEEDBACK_SCORE_SOURCE_MAP,
-  formatScoreDisplay,
-} from "@/lib/feedback-scores";
+import { formatScoreDisplay } from "@/lib/feedback-scores";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import useAnnotationQueueById from "@/api/annotation-queues/useAnnotationQueueById";
+import useFeedbackScoreSourceLabel from "@/hooks/useFeedbackScoreSourceLabel";
 
 const Header = ({ color, label }: { color: string; label: string }) => {
   return (
@@ -34,15 +32,12 @@ const AuthorLabel = ({
   mapKey: string;
   entry: FeedbackScoreValueByAuthorMap[string];
 }) => {
-  const { data: queue } = useAnnotationQueueById(
-    { annotationQueueId: entry.source_queue_id ?? "" },
-    { enabled: !!entry.source_queue_id },
+  const { isLoading, label } = useFeedbackScoreSourceLabel(
+    entry.source_queue_id,
+    entry.source,
   );
 
   const authorName = entry.author ?? mapKey;
-  const sourceLabel = entry.source_queue_id
-    ? queue?.name ?? "<deleted queue>"
-    : FEEDBACK_SCORE_SOURCE_MAP[entry.source];
 
   return (
     <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
@@ -50,7 +45,11 @@ const AuthorLabel = ({
         {authorName}
       </span>
       <span className="comet-body-xs shrink-0 text-light-slate">
-        {sourceLabel}
+        {isLoading ? (
+          <Loader2 className="size-3.5 animate-spin text-light-slate" />
+        ) : (
+          label
+        )}
       </span>
     </div>
   );

@@ -279,11 +279,17 @@ export const mapFeedbackScoresToRowsWithExpanded = (
       ? extractSpanMetadataFromValueByAuthor(feedbackScore.value_by_author)
       : {};
 
+    // source_queue_id lives on the entry, not the top-level score; multi-value rows
+    // get it via createChildRow, so lift it here too or single-reviewer queue scores
+    // lose their queue attribution in the Source column (and the delete key).
+    const singleEntry = Object.values(feedbackScore.value_by_author ?? {})[0];
+
     rows.push({
       id: feedbackScore.name,
       author: feedbackScore.created_by,
       ...feedbackScore,
       ...spanMetadata,
+      source_queue_id: singleEntry?.source_queue_id,
     });
   });
 

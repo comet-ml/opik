@@ -1,10 +1,11 @@
+import { ReactNode } from "react";
 import { CellContext } from "@tanstack/react-table";
+import { Loader2 } from "lucide-react";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import { ExpandingFeedbackScoreRow } from "../types";
-import { FEEDBACK_SCORE_SOURCE_MAP } from "@/lib/feedback-scores";
 import { getIsParentFeedbackScoreRow } from "../utils";
 import { cn } from "@/lib/utils";
-import useAnnotationQueueById from "@/api/annotation-queues/useAnnotationQueueById";
+import useFeedbackScoreSourceLabel from "@/hooks/useFeedbackScoreSourceLabel";
 import ResourceLink, {
   RESOURCE_TYPE,
 } from "@/shared/ResourceLink/ResourceLink";
@@ -15,33 +16,40 @@ const SourceCell = (
   const row = context.row.original;
   const isParentFeedbackScoreRow = getIsParentFeedbackScoreRow(row);
 
-  const { data: queue } = useAnnotationQueueById(
-    { annotationQueueId: row.source_queue_id ?? "" },
-    { enabled: !!row.source_queue_id },
+  const { isLoading, queueId, label } = useFeedbackScoreSourceLabel(
+    row.source_queue_id,
+    row.source,
   );
+
+  let content: ReactNode;
+  if (isLoading) {
+    content = <Loader2 className="size-3.5 animate-spin text-light-slate" />;
+  } else if (queueId) {
+    content = (
+      <ResourceLink
+        id={queueId}
+        name={label}
+        resource={RESOURCE_TYPE.annotationQueue}
+      />
+    );
+  } else {
+    content = (
+      <span
+        className={cn("truncate", {
+          "text-light-slate": isParentFeedbackScoreRow,
+        })}
+      >
+        {label}
+      </span>
+    );
+  }
 
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      {row.source_queue_id && queue?.name ? (
-        <ResourceLink
-          id={row.source_queue_id}
-          name={queue.name}
-          resource={RESOURCE_TYPE.annotationQueue}
-        />
-      ) : (
-        <span
-          className={cn("truncate", {
-            "text-light-slate": isParentFeedbackScoreRow,
-          })}
-        >
-          {row.source_queue_id
-            ? "<deleted queue>"
-            : FEEDBACK_SCORE_SOURCE_MAP[row.source]}
-        </span>
-      )}
+      {content}
     </CellWrapper>
   );
 };
