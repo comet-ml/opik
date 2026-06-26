@@ -17,7 +17,6 @@ import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import TextCell from "@/shared/DataTableCells/TextCell";
 import FeedbackScoreNameCell from "@/shared/DataTableCells/FeedbackScoreNameCell";
 import CompareExperimentsHeader from "@/v2/pages-shared/experiments/CompareExperimentsHeader/CompareExperimentsHeader";
-import CompareExperimentsActionsPanel from "@/v2/pages/CompareExperimentsPage/CompareExperimentsActionsPanel";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import { convertColumnDataToColumn } from "@/lib/table";
