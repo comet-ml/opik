@@ -73,6 +73,32 @@ export const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
       | Set<typeof callback>
       | undefined;
     if (!set) return () => {};
+
+    // explain:run / explain:cancel are SINGLE-subscriber events: exactly one
+    // live console runner ever handles them. A second subscription means a
+    // previous iframe generation never tore down — e.g. a pod readiness flap
+    // toggled `isBackendReady`, which remounts the <iframe> into a fresh JS
+    // realm, but the old iframe's document is destroyed WITHOUT running the
+    // console's React cleanup, so its subscription closure stays parked in this
+    // Set (which the host component, still mounted, never recreated). Left in
+    // place, the host fans every explain:run out to BOTH the live runner AND
+    // that orphaned dead-realm closure; the orphan fails fast against its
+    // torn-down fetch context and emits a spurious "Couldn't load the
+    // explanation." that flashes before the live runner's chunks recover the
+    // cell. Evict the orphan(s) before adding the freshest runner so only one
+    // subscriber is ever wired. (Scoped to these two events only — context /
+    // visibility / runner-state replays must NOT be cleared here.)
+    if (
+      (event === "explain:run" || event === "explain:cancel") &&
+      set.size > 0
+    ) {
+      explainLog(
+        "bridge",
+        `evicting ${set.size} stale "${event}" subscriber(s) (orphaned iframe realm) before re-subscribe`,
+      );
+      set.clear();
+    }
+
     set.add(callback);
     // Subscriber count per host→shell event. For "explain:run" a size ≥2 means
     // more than one console runner is subscribed (the duplicate-runner bug).
