@@ -58,7 +58,7 @@ const DatasetItemEditorAutosaveLayout: React.FC<
 
   const handleCopyId = useCallback(() => {
     toast({
-      description: "Item ID successfully copied to clipboard",
+      description: "Record ID successfully copied to clipboard",
     });
     copy(datasetItemId);
   }, [datasetItemId, toast]);
@@ -81,7 +81,7 @@ const DatasetItemEditorAutosaveLayout: React.FC<
           title={
             <TooltipWrapper content={datasetItemId}>
               <span>
-                Dataset item{" "}
+                Record{" "}
                 <span className="comet-body-s text-muted-slate">
                   {truncateId(datasetItemId)}
                 </span>
@@ -92,6 +92,7 @@ const DatasetItemEditorAutosaveLayout: React.FC<
         >
           <DatasetItemActionsDropdown
             datasetItemId={datasetItemId}
+            itemName="record"
             onShare={handleShare}
             onCopyId={handleCopyId}
             onDelete={handleDeleteItemConfirm}

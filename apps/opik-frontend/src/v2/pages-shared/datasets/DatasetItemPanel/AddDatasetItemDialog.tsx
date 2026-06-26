@@ -75,7 +75,7 @@ const AddDatasetItemDialog: React.FC<AddDatasetItemDialogProps> = ({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-lg sm:max-w-[560px]">
         <DialogHeader>
-          <DialogTitle>Add dataset item</DialogTitle>
+          <DialogTitle>Add record</DialogTitle>
         </DialogHeader>
         <div className="max-h-[70vh] overflow-y-auto">
           <div className="flex flex-col gap-2 pb-4">
@@ -107,7 +107,7 @@ const AddDatasetItemDialog: React.FC<AddDatasetItemDialogProps> = ({
             <Button variant="outline">Cancel</Button>
           </DialogClose>
           <Button type="submit" disabled={!isValid} onClick={submitHandler}>
-            Add dataset item
+            Add record
           </Button>
         </DialogFooter>
       </DialogContent>

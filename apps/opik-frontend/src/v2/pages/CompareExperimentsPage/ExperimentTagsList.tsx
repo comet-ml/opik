@@ -1,6 +1,7 @@
 import TagListRenderer from "@/shared/TagListRenderer/TagListRenderer";
 import useExperimentUpdateMutation from "@/api/datasets/useExperimentUpdate";
 import { Experiment } from "@/types/datasets";
+import { cn } from "@/lib/utils";
 
 type ExperimentTagsListProps = {
   tags: string[];
@@ -41,7 +42,8 @@ const ExperimentTagsList: React.FC<ExperimentTagsListProps> = ({
       onAddTag={handleAddTag}
       onDeleteTag={handleDeleteTag}
       align="start"
-      className={className}
+      className={cn("[&>:first-child]:-mr-1", className)}
+      tagVariant="purple"
     />
   );
 };
