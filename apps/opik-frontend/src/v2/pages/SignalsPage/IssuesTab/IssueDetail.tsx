@@ -28,6 +28,7 @@ import useUpdateAgentInsightsIssueMutation from "@/api/signals/useUpdateAgentIns
 type IssueDetailProps = {
   issue: AgentInsightsIssue;
   projectId: string;
+  canConfigure: boolean;
 };
 
 const STATUS_ACTIONS: {
@@ -73,7 +74,11 @@ const SectionCard: React.FC<{
   </Card>
 );
 
-const IssueDetail: React.FC<IssueDetailProps> = ({ issue, projectId }) => {
+const IssueDetail: React.FC<IssueDetailProps> = ({
+  issue,
+  projectId,
+  canConfigure,
+}) => {
   const { data: detail } = useAgentInsightsIssue({
     issueId: issue.id,
     projectId,
@@ -109,26 +114,28 @@ const IssueDetail: React.FC<IssueDetailProps> = ({ issue, projectId }) => {
             </span>
           </TooltipWrapper>
         </div>
-        <div className="flex shrink-0 items-center gap-1">
-          {STATUS_ACTIONS.filter(
-            (action) => action.status !== issue.status,
-          ).map(({ status, label, icon: Icon }, index) => (
-            <React.Fragment key={status}>
-              {index > 0 && (
-                <Separator orientation="vertical" className="h-4" />
-              )}
-              <Button
-                variant="ghost"
-                size="2xs"
-                disabled={updateMutation.isPending}
-                onClick={() => setStatus(status)}
-              >
-                <Icon className="mr-1 size-3" />
-                {label}
-              </Button>
-            </React.Fragment>
-          ))}
-        </div>
+        {canConfigure && (
+          <div className="flex shrink-0 items-center gap-1">
+            {STATUS_ACTIONS.filter(
+              (action) => action.status !== issue.status,
+            ).map(({ status, label, icon: Icon }, index) => (
+              <React.Fragment key={status}>
+                {index > 0 && (
+                  <Separator orientation="vertical" className="h-4" />
+                )}
+                <Button
+                  variant="ghost"
+                  size="2xs"
+                  disabled={updateMutation.isPending}
+                  onClick={() => setStatus(status)}
+                >
+                  <Icon className="mr-1 size-3" />
+                  {label}
+                </Button>
+              </React.Fragment>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3">
