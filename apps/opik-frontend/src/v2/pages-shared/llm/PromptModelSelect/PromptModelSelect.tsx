@@ -188,7 +188,6 @@ const PromptModelSelect = ({
           {filteredFreeModel && (
             <SelectItem
               value={filteredFreeModel.value}
-              withoutCheck
               className="comet-body-s h-10 justify-center hover:bg-primary-foreground"
             >
               <div className="flex w-full items-center gap-2">
@@ -224,7 +223,6 @@ const PromptModelSelect = ({
         {freeModelOption && (
           <SelectItem
             value={freeModelOption.value}
-            withoutCheck
             className="comet-body-s h-10 justify-center hover:bg-primary-foreground"
           >
             <div className="flex w-full items-center gap-2">
