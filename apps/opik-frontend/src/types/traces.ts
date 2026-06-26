@@ -24,6 +24,7 @@ export enum LOGS_SOURCE {
   experiment = "experiment",
   playground = "playground",
   optimization = "optimization",
+  evaluator = "evaluator",
 }
 
 export type FeedbackScoreValueByAuthorMap = Record<
