@@ -18,11 +18,13 @@ const CARD_CONTENT_CLASS = "flex items-start gap-2";
 type DiagnosticsEmptyStateProps = {
   onRun: () => void;
   isPending: boolean;
+  canConfigure: boolean;
 };
 
 const DiagnosticsEmptyState: React.FC<DiagnosticsEmptyStateProps> = ({
   onRun,
   isPending,
+  canConfigure,
 }) => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const { themeMode } = useTheme();
@@ -47,23 +49,25 @@ const DiagnosticsEmptyState: React.FC<DiagnosticsEmptyStateProps> = ({
         </div>
 
         <div className="flex flex-col gap-3">
-          <button
-            type="button"
-            onClick={() => setDialogOpen(true)}
-            className={CARD_CLASS}
-          >
-            <span className={CARD_CONTENT_CLASS}>
-              <ToggleRight className="mt-1 size-4 shrink-0 text-fuchsia-500" />
-              <span className="flex flex-col gap-0.5">
-                <span className="comet-body-s-accented text-foreground">
-                  Turn on diagnostics
-                </span>
-                <span className="comet-body-xs text-light-slate">
-                  Works best with 100+ traces from the past 7 days.
+          {canConfigure && (
+            <button
+              type="button"
+              onClick={() => setDialogOpen(true)}
+              className={CARD_CLASS}
+            >
+              <span className={CARD_CONTENT_CLASS}>
+                <ToggleRight className="mt-1 size-4 shrink-0 text-[var(--color-fuchsia)]" />
+                <span className="flex flex-col gap-0.5">
+                  <span className="comet-body-s-accented text-foreground">
+                    Turn on diagnostics
+                  </span>
+                  <span className="comet-body-xs text-light-slate">
+                    Works best with 100+ traces from the past 7 days.
+                  </span>
                 </span>
               </span>
-            </span>
-          </button>
+            </button>
+          )}
 
           <a
             href={DIAGNOSTICS_DOCS_URL}

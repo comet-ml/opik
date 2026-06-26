@@ -5,6 +5,7 @@ import { ArrowLeft, BookOpenCheck, Radar, Settings2 } from "lucide-react";
 import { useActiveProjectId } from "@/store/AppStore";
 import usePluginsStore from "@/store/PluginsStore";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { AGENT_INSIGHTS_ISSUES_KEY, AGENT_INSIGHTS_JOB_KEY } from "@/api/api";
 import { formatDate } from "@/lib/date";
@@ -49,6 +50,12 @@ const SignalsPage: React.FC = () => {
   const agentInsightsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.AGENT_INSIGHTS_ENABLED,
   );
+
+  // Running / enabling / configuring diagnostics are write actions gated on
+  // workspace-settings permission; viewing issues stays open to all.
+  const {
+    permissions: { canConfigureWorkspaceSettings: canConfigure },
+  } = usePermissions();
 
   const { data: job, isPending: isJobPending } = useAgentInsightsJob({
     projectId,
@@ -148,6 +155,7 @@ const SignalsPage: React.FC = () => {
         <DiagnosticsEmptyState
           onRun={handleRunDiagnostic}
           isPending={triggerMutation.isPending}
+          canConfigure={canConfigure}
         />
       );
     }
@@ -180,16 +188,20 @@ const SignalsPage: React.FC = () => {
               )
             )}
             <div className="ml-auto flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="xs"
-                disabled={isRunning || triggerMutation.isPending}
-                onClick={handleRunDiagnostic}
-              >
-                <Radar className="mr-1.5 size-3.5" />
-                Run diagnostic
-              </Button>
-              <Separator orientation="vertical" className="h-5" />
+              {canConfigure && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    disabled={isRunning || triggerMutation.isPending}
+                    onClick={handleRunDiagnostic}
+                  >
+                    <Radar className="mr-1.5 size-3.5" />
+                    Run diagnostic
+                  </Button>
+                  <Separator orientation="vertical" className="h-5" />
+                </>
+              )}
               <TooltipWrapper content="Resolved issues">
                 <Button
                   variant="outline"
@@ -209,7 +221,7 @@ const SignalsPage: React.FC = () => {
           projectId={projectId}
           showResolved={showResolved}
           isRunning={isRunning}
-          onRunDiagnostic={handleRunDiagnostic}
+          onRunDiagnostic={canConfigure ? handleRunDiagnostic : undefined}
           onShowOpenIssues={() => setShowResolved(false)}
         />
       </div>
@@ -241,33 +253,34 @@ const SignalsPage: React.FC = () => {
             <span className="comet-body-xs flex items-center gap-1.5 text-foreground-secondary">
               <span
                 className={`size-2 rounded-full ${
-                  isJobEnabled ? "bg-emerald-400" : "bg-chart-red"
+                  isJobEnabled ? "bg-[var(--color-emerald)]" : "bg-chart-red"
                 }`}
               />
               {isJobEnabled ? "Auto • Daily" : "Manual"}
             </span>
-            {isJobEnabled ? (
-              <TooltipWrapper content="Settings">
+            {canConfigure &&
+              (isJobEnabled ? (
+                <TooltipWrapper content="Settings">
+                  <Button
+                    variant="ghost"
+                    size="icon-2xs"
+                    onClick={() => setSettingsOpen(true)}
+                    aria-label="Diagnostics settings"
+                    className="text-foreground"
+                  >
+                    <Settings2 className="size-3" />
+                  </Button>
+                </TooltipWrapper>
+              ) : (
                 <Button
-                  variant="ghost"
-                  size="icon-2xs"
-                  onClick={() => setSettingsOpen(true)}
-                  aria-label="Diagnostics settings"
-                  className="text-foreground"
+                  size="xs"
+                  onClick={handleTurnOnAuto}
+                  disabled={updateJobMutation.isPending}
+                  className="ml-1.5"
                 >
-                  <Settings2 className="size-3" />
+                  Turn on auto-diagnostic
                 </Button>
-              </TooltipWrapper>
-            ) : (
-              <Button
-                size="xs"
-                onClick={handleTurnOnAuto}
-                disabled={updateJobMutation.isPending}
-                className="ml-1.5"
-              >
-                Turn on auto-diagnostic
-              </Button>
-            )}
+              ))}
           </div>
         )}
       </div>

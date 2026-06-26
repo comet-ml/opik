@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
-import get from "lodash/get";
 
 import api, {
   AGENT_INSIGHTS_ISSUES_KEY,
@@ -8,6 +7,7 @@ import api, {
   AGENT_INSIGHTS_REST_ENDPOINT,
 } from "@/api/api";
 import { useToast } from "@/ui/use-toast";
+import { handleMutationError } from "@/api/signals/handleMutationError";
 
 type UseTriggerAgentInsightsJobMutationParams = {
   projectId: string;
@@ -48,19 +48,7 @@ const useTriggerAgentInsightsJobMutation = () => {
           "We're analysing the last 24h of traces. New issues will appear here once the run completes.",
       });
     },
-    onError: (error: AxiosError) => {
-      const message = get(
-        error,
-        ["response", "data", "message"],
-        error.message,
-      );
-
-      toast({
-        title: "Error",
-        description: message,
-        variant: "destructive",
-      });
-    },
+    onError: (error: AxiosError) => handleMutationError(toast, error),
   });
 };
 
