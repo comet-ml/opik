@@ -119,6 +119,10 @@ databaseAnalyticsReadOnlyFreeFormSql:
   #  Default: opik
   #  Description: The read-only user password used to connect to the server
   password: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_PASS:-opik}
+  #  Default: 200s
+  #  Description: Socket read timeout for the read-only client (client-v2 default is 0/none). Kept
+  #   above the read-only profile's max_execution_time (180s) so the server-side cap fires first.
+  socketTimeout: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_SOCKET_TIMEOUT:-200s}
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:

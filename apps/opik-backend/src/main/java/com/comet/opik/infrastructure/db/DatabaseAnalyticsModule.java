@@ -61,14 +61,15 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
     // credentials. No queryParameters: the user runs under readonly=1 and would reject per-query server settings.
     private Client buildReadOnlyFreeFormSqlClient() {
         var main = configuration().getDatabaseAnalytics();
-        var credentials = configuration().getDatabaseAnalyticsReadOnlyFreeFormSql();
+        var freeFormSqlConfig = configuration().getDatabaseAnalyticsReadOnlyFreeFormSql();
         var factory = new DatabaseAnalyticsFactory();
         factory.setProtocol(main.getProtocol());
         factory.setHost(main.getHost());
         factory.setPort(main.getPort());
         factory.setDatabaseName(main.getDatabaseName());
-        factory.setUsername(credentials.getUsername());
-        factory.setPassword(credentials.getPassword());
+        factory.setUsername(freeFormSqlConfig.getUsername());
+        factory.setPassword(freeFormSqlConfig.getPassword());
+        factory.setClientSocketTimeout(freeFormSqlConfig.getSocketTimeout());
         return factory.buildClient();
     }
 
