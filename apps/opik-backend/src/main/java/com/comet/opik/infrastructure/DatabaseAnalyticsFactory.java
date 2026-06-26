@@ -13,6 +13,7 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -51,6 +52,9 @@ public class DatabaseAnalyticsFactory {
     private @Min(1) Integer asyncInsertBusyTimeoutMaxMs;
 
     private Duration healthCheckTimeout = Duration.seconds(1);
+
+    // Optional socket timeout, applied in buildClient() only when set (null = library default of 0/no timeout).
+    private Duration clientSocketTimeout;
 
     public ConnectionFactory build() {
         var queryParametersOverrides = getQueryParametersOverrides(queryParameters);
@@ -96,6 +100,11 @@ public class DatabaseAnalyticsFactory {
         // are still returned by parseQueryParameters() for tests/observability.
         var parsed = parseQueryParameters(getQueryParametersOverrides(queryParameters));
         parsed.serverSettings().forEach(builder::serverSetting);
+
+        if (clientSocketTimeout != null) {
+            builder.setSocketTimeout(clientSocketTimeout.toMilliseconds(), ChronoUnit.MILLIS);
+        }
+
         return builder.build();
     }
 
