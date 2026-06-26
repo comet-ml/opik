@@ -116,7 +116,12 @@ const DatasetItemsPageHeader: React.FunctionComponent<
             </>
           )}
           {canEditDatasets && (
-            <Button variant="outline" size="sm" onClick={onExpand}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onExpand}
+              disabled={!dataset}
+            >
               <Sparkles className="mr-1.5 size-3.5" />
               Expand with AI
             </Button>
@@ -142,7 +147,12 @@ const DatasetItemsPageHeader: React.FunctionComponent<
             </Button>
           )}
           {canEditDatasets && (
-            <Button variant="default" size="sm" onClick={onAddItem}>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={onAddItem}
+              disabled={!dataset}
+            >
               <Plus className="mr-1.5 size-3.5" />
               {isTestSuite ? "Test case" : "Record"}
             </Button>
