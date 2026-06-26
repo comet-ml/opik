@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
+import { keepPreviousData } from "@tanstack/react-query";
 import {
   JsonParam,
   NumberParam,
@@ -600,6 +601,7 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
       {
         enabled: open,
         refetchOnMount: false,
+        placeholderData: keepPreviousData,
       },
     );
 

@@ -3,30 +3,9 @@ import { CellContext } from "@tanstack/react-table";
 
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import { EvaluatorsRule } from "@/types/automations";
-import { LOGS_SOURCE, TRACE_VISIBILITY_MODE } from "@/types/traces";
 import { COLUMN_TYPE } from "@/types/shared";
 import { Filter } from "@/types/filters";
 import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton";
-import { TraceLogsViewConfig } from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebar";
-
-// Evaluation-traces variant of the logs sidebar: a KPI dashboard on top, hidden-visibility
-// monitoring traces, isolated column state, and a trimmed default column set (tags / comments /
-// feedback-score columns add no signal for LLM-judge monitoring traces, but stay selectable).
-const EVALUATION_TRACES_VIEW_CONFIG: TraceLogsViewConfig = {
-  storageNamespace: "eval-",
-  defaultColumns: [
-    "start_time",
-    "input",
-    "output",
-    "error_info",
-    "duration",
-    "usage.total_tokens",
-    "total_estimated_cost",
-  ],
-  autoSelectScoreColumns: false,
-  showMetricsSummary: true,
-  visibilityMode: TRACE_VISIBILITY_MODE.hidden,
-};
 
 const RuleTracesCell = (context: CellContext<EvaluatorsRule, string>) => {
   const rule = context.row.original;
@@ -42,8 +21,10 @@ const RuleTracesCell = (context: CellContext<EvaluatorsRule, string>) => {
     return <CellWrapper {...wrapperProps} />;
   }
 
-  // Scope the evaluator traces to this rule via metadata.rule_id; logsSource=evaluator adds the
-  // source filter and the view config requests hidden-visibility traces.
+  // Scope the evaluator traces to this rule via metadata.rule_id. This is a trigger only — the
+  // sidebar itself is mounted once at the page level (see EvaluationTracesSidebar), so all rows
+  // share a single instance instead of mounting one sidebar per row (which raced on the shared
+  // tls_* query params and broke pagination/controls).
   const ruleFilters: Filter[] = [
     {
       id: `rule-traces-${rule.id}`,
@@ -59,11 +40,9 @@ const RuleTracesCell = (context: CellContext<EvaluatorsRule, string>) => {
     <CellWrapper {...wrapperProps}>
       <TraceLogsSidebarButton
         projectId={projectId}
-        logsSource={LOGS_SOURCE.evaluator}
         sourceFilters={ruleFilters}
-        title="Evaluation traces"
         label="Go to traces"
-        viewConfig={EVALUATION_TRACES_VIEW_CONFIG}
+        renderSidebar={false}
       />
     </CellWrapper>
   );
