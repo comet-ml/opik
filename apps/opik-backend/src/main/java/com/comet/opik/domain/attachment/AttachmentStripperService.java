@@ -15,6 +15,7 @@ import com.google.inject.Singleton;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongHistogram;
+import io.opentelemetry.api.metrics.LongUpDownCounter;
 import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.Scope;
@@ -72,6 +73,19 @@ public class AttachmentStripperService {
     private final LongCounter attachmentsSkipped;
     private final LongCounter attachmentErrors;
     private final LongHistogram processingTimer;
+    /**
+     * Number of payloads (trace/span input/output/metadata) currently being stripped — each strip
+     * operation handles one such payload. Unlike the throughput counters above (which only move when
+     * a unit of work completes), this gauge stays elevated while work is in flight, so it surfaces a
+     * stuck or saturated scan in real time.
+     */
+    private final LongUpDownCounter stripInProgress;
+    /**
+     * Length distribution of candidate fields entering detection, in characters (UTF-16 code units).
+     * Recorded before scanning, so it is captured even when a field is slow to process — a leading
+     * indicator for oversized payloads.
+     */
+    private final LongHistogram inputSizeChars;
 
     // Apache Tika for MIME type detection
     private static final Tika tika = new Tika();
@@ -116,6 +130,16 @@ public class AttachmentStripperService {
         this.processingTimer = meter
                 .histogramBuilder("opik.attachments.processing.duration.ms")
                 .setDescription("Time spent detecting and processing attachments in milliseconds")
+                .ofLongs()
+                .build();
+        this.stripInProgress = meter
+                .upDownCounterBuilder("opik.attachments.strip.in_progress")
+                .setDescription("Number of payloads (trace/span input/output/metadata) currently being stripped")
+                .build();
+        this.inputSizeChars = meter
+                .histogramBuilder("opik.attachments.input.size.chars")
+                .setDescription(
+                        "Length in characters (UTF-16 code units) of candidate fields entering attachment detection")
                 .ofLongs()
                 .build();
 
@@ -328,6 +352,7 @@ public class AttachmentStripperService {
         }
 
         long startTime = System.currentTimeMillis();
+        stripInProgress.add(1);
 
         try {
             // Start at 0, will be incremented to 1 for first attachment (using incrementAndGet pattern)
@@ -343,6 +368,7 @@ public class AttachmentStripperService {
             // We cannot return the original large payload to ClickHouse
             throw new InternalServerErrorException("Failed to process attachments in payload", e);
         } finally {
+            stripInProgress.add(-1);
             long duration = System.currentTimeMillis() - startTime;
             processingTimer.record(duration);
         }
@@ -473,6 +499,10 @@ public class AttachmentStripperService {
         if (text.length() < minBase64Size) {
             return node;
         }
+
+        // Record the field length up front, before scanning, so an oversized payload still contributes
+        // to the metric even if the scan that follows is slow to complete.
+        inputSizeChars.record(text.length());
 
         // Find each maximal base64 run, then apply the size threshold and collect up to two trailing
         // '=' padding chars in code -- identical detection to the old {minBase64Size,}={0,2} regex, but
