@@ -17,5 +17,6 @@ public class ToolsModule extends AbstractModule {
         tools.addBinding().to(ReadTool.class);
         tools.addBinding().to(JqTool.class);
         tools.addBinding().to(SearchTool.class);
+        tools.addBinding().to(GetAttachmentTool.class);
     }
 }

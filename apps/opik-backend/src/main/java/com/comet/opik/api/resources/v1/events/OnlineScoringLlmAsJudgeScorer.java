@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.Span;
+import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.api.resources.v1.events.tools.EntityRef;
 import com.comet.opik.api.resources.v1.events.tools.EntityType;
@@ -15,6 +16,7 @@ import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TestSuiteAssertionCounterService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.WorkspaceNameService;
+import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
@@ -78,6 +80,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     private final OnlineScoringConfig onlineScoringConfig;
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final OnlineScoringTracePersistence tracePersistence;
+    private final AttachmentService attachmentService;
 
     @Inject
     public OnlineScoringLlmAsJudgeScorer(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
@@ -93,7 +96,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             @NonNull TraceCompressor traceCompressor,
             @NonNull WorkspaceNameService workspaceNameService,
             @NonNull OpikConfiguration opikConfiguration,
-            @NonNull OnlineScoringTracePersistence tracePersistence) {
+            @NonNull OnlineScoringTracePersistence tracePersistence,
+            @NonNull AttachmentService attachmentService) {
         super(config, redisson, feedbackScoreService, traceService,
                 LLM_AS_JUDGE, Constants.LLM_AS_JUDGE);
         this.aiProxyService = aiProxyService;
@@ -108,6 +112,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         this.onlineScoringConfig = config;
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.tracePersistence = tracePersistence;
+        this.attachmentService = attachmentService;
     }
 
     /**
@@ -181,16 +186,30 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                                 .put(RequestContext.USER_NAME, message.userName()))
                 : Mono.just(List.of());
 
-        // Monitoring trace for the evaluation loop (OPIK-6994): one trace per evaluation, one llm
-        // span per LLM round, tagged MONITORING_TAG so the samplers never re-score it. NOOP when the
-        // toggle is off — the evaluation then runs exactly as before with no extra writes.
+        // Monitoring trace for the evaluation loop (OPIK-6994): one hidden source=evaluator trace per
+        // evaluation, one llm span per LLM round. NOOP when the toggle is off — the evaluation then
+        // runs exactly as before with no extra writes.
         EvaluationRecorder recorder = serviceTogglesConfig.isOnlineScoringTracingEnabled()
                 ? tracePersistence.begin(EvaluatedSubject.ofTrace(trace), message.ruleId(), message.ruleName(),
                         message.llmAsJudgeCode().model().name(), message.workspaceId(), message.userName())
                 : EvaluationRecorder.NOOP;
 
-        return spansMono
-                .flatMap(spans -> evaluate(message, spans, mdc, recorder))
+        // Fetch the trace's attachments up front (toggle-gated, best-effort) so the routing decision
+        // can force the agentic-tools path when media is present. The judge discovers them by calling
+        // read(type=trace), which is guaranteed because the first tool call uses ToolChoice.REQUIRED.
+        // A transient listing failure degrades to an empty list and falls back to normal size-based
+        // routing; it never blocks scoring.
+        Mono<List<AttachmentInfo>> attachmentsMono = serviceTogglesConfig.isAgenticToolsEnabled()
+                ? attachmentService.getAttachmentInfoByEntity(trace.id(),
+                        com.comet.opik.api.attachment.EntityType.TRACE, trace.projectId())
+                        .onErrorReturn(List.of())
+                        .contextWrite(ctx -> ctx
+                                .put(RequestContext.WORKSPACE_ID, message.workspaceId())
+                                .put(RequestContext.USER_NAME, message.userName()))
+                : Mono.just(List.of());
+
+        return Mono.zip(spansMono, attachmentsMono)
+                .flatMap(tuple -> evaluate(message, tuple.getT1(), tuple.getT2(), mdc, recorder))
                 .flatMap(scores -> recorder.complete(scores).thenReturn(scores))
                 .onErrorResume(error -> recorder.fail(error).then(Mono.error(error)))
                 .flatMap(scores -> storeScores(scores, trace, message.userName(), message.workspaceId()))
@@ -205,7 +224,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     }
 
     private Mono<List<FeedbackScoreBatchItem>> evaluate(TraceToScoreLlmAsJudge message, List<Span> spans,
-            Map<String, String> mdc, EvaluationRecorder recorder) {
+            List<AttachmentInfo> attachments, Map<String, String> mdc, EvaluationRecorder recorder) {
         var trace = message.trace();
         // Sync prep is CPU-bound (JSON serialization for the size estimate + prompt rendering)
         // — schedule on Schedulers.parallel() so we don't tax the R2DBC scheduler that emits
@@ -213,7 +232,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         // MDC is applied inside prepareEvaluation via try-with-resources; reactive operators
         // below re-apply MDC via withMdc() because they may run on a different thread than the
         // boundedElastic worker that emitted the chat response.
-        return Mono.fromCallable(() -> prepareEvaluation(message, spans, mdc))
+        return Mono.fromCallable(() -> prepareEvaluation(message, spans, attachments, mdc))
                 .subscribeOn(Schedulers.parallel())
                 .flatMap(prepared -> {
                     // Record the upfront retrieval + context assembly (span fetch, size estimate,
@@ -259,7 +278,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     }
 
     private PreparedEvaluation prepareEvaluation(TraceToScoreLlmAsJudge message, List<Span> spans,
-            Map<String, String> mdc) {
+            List<AttachmentInfo> attachments, Map<String, String> mdc) {
         var trace = message.trace();
         // Logging tags for the rule + trace; covers every userFacingLogger call in this sync prep.
         try (var logContext = wrapWithMdc(mdc)) {
@@ -278,7 +297,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             JsonNode fullJson = traceCompressor.buildFullJson(trace, spans);
             int estimatedContextTokens = OnlineScoringEngine.estimateTokensFromJson(
                     fullJson, onlineScoringConfig.getAgenticToolsCharsPerToken());
-            boolean useTools = shouldUseAgenticTools(message, estimatedContextTokens, modelName);
+            boolean useTools = shouldUseAgenticTools(message, estimatedContextTokens, modelName,
+                    !attachments.isEmpty());
 
             ChatRequest scoreRequest;
             ChatRequest structuredRequest;
@@ -428,13 +448,17 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
      * so operators can correlate the routing with the trace.
      */
     // Package-private for unit tests.
-    boolean shouldUseAgenticTools(TraceToScoreLlmAsJudge message, int estimatedContextTokens, String modelName) {
+    boolean shouldUseAgenticTools(TraceToScoreLlmAsJudge message, int estimatedContextTokens, String modelName,
+            boolean hasAttachments) {
         boolean experimentIdPath = LlmAsJudgeToolsMode.shouldUseTools(message);
         boolean providerSupportsTools = OnlineScoringEngine.supportsToolCalling(
                 llmProviderFactory.getLlmProvider(modelName));
         boolean overSizeThreshold = serviceTogglesConfig.isAgenticToolsEnabled()
                 && estimatedContextTokens >= onlineScoringConfig.getAgenticToolsThresholdTokens();
-        boolean wantsTools = experimentIdPath || overSizeThreshold;
+        // Attachments force the agentic-tools path regardless of context size (OPIK-6555): the judge
+        // needs the get_attachment tool to load the media. Gated by the same toggle as the size path.
+        boolean attachmentsPath = serviceTogglesConfig.isAgenticToolsEnabled() && hasAttachments;
+        boolean wantsTools = experimentIdPath || overSizeThreshold || attachmentsPath;
         boolean useTools = wantsTools && providerSupportsTools;
 
         if (experimentIdPath && !providerSupportsTools) {
@@ -453,6 +477,18 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             userFacingLogger.info(
                     "Trace context exceeds '{}' tokens; switching to agentic-tools mode for traceId '{}'",
                     onlineScoringConfig.getAgenticToolsThresholdTokens(), message.trace().id());
+        } else if (!experimentIdPath && !overSizeThreshold && attachmentsPath && !providerSupportsTools) {
+            // Surface to the user: their trace has attachments that cannot be scored because the
+            // chosen model's provider can't call tools — an actionable misconfiguration, unlike the
+            // purely-internal routing decisions which stay on the internal log.
+            userFacingLogger.warn(
+                    "Trace '{}' has attachments but provider for model '{}' does not support tool calling;"
+                            + " falling back to inline path — attachments cannot be loaded for scoring."
+                            + " Pick a tool-calling provider (OpenAI / Anthropic / Gemini / OpenRouter /"
+                            + " Vertex / Bedrock) to score attachments.",
+                    message.trace().id(), modelName);
+        } else if (!experimentIdPath && !overSizeThreshold && attachmentsPath && useTools) {
+            log.debug("Trace '{}' has attachments; switching to agentic-tools mode", message.trace().id());
         }
         return useTools;
     }
@@ -472,7 +508,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         // cold and pure, so it doesn't need to be inside the defer.
         return Mono.defer(() -> {
             var trace = message.trace();
-            var ctx = TraceToolContext.forActiveTrace(trace, spans, message.workspaceId(), message.userName());
+            var ctx = TraceToolContext.forActiveTrace(trace, spans, message.workspaceId(), message.userName(),
+                    onlineScoringConfig.getAgenticToolsMaxInjectedBytes());
             // Pre-seed the active trace into the cache using the JSON that prepareEvaluation
             // already built for the size estimate — saves a redundant traceCompressor.buildFullJson
             // call on big-trace evaluations. Fall back to rebuilding if the caller didn't supply
@@ -497,7 +534,9 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             return ToolCallLoop.runWithWrapUp(
                     chatResponse, toolRequest, structuredRequest, followUpParameters, toolRegistry,
                     request -> scoreTraceReactive(request, message, recorder),
-                    messages, ctx, budget, trace.id().toString(), mdc, recorder);
+                    messages, ctx, budget, trace.id().toString(), mdc, recorder)
+                    .onErrorResume(error -> surfaceInjectedMediaFailure(error, ctx,
+                            message.llmAsJudgeCode().model().name(), userFacingLogger, mdc));
         });
     }
 

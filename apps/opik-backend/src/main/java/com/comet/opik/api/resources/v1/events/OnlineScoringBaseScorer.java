@@ -7,6 +7,7 @@ import com.comet.opik.api.events.WorkspaceScopedMessage;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.api.resources.v1.events.tools.TraceToolContext;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.domain.TraceService;
@@ -30,12 +31,14 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
+import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 
 /**
  * Base online scorer for all particular implementations to extend. It listens to a Redis stream for
@@ -88,10 +91,38 @@ public abstract class OnlineScoringBaseScorer<M extends WorkspaceScopedMessage> 
     }
 
     /**
-     * Records the per-workspace processed count only after the FULL processing chain succeeds.
-     * The counter wraps {@link #doScore(Object)} (which subclasses may extend with post-scoring
-     * work), so a failure anywhere in the chain leaves the message unacked/retried and does NOT
-     * count as processed. Failures are attributed via {@link #messageContext(Object)}.
+     * Shared error surfacing for the agentic-tools path: when the tool-call loop fails after at
+     * least one attachment was injected as multimodal content, the most likely cause is the judge
+     * model rejecting that media type (we attempt all types rather than pre-gating). Emit a clear,
+     * attachment-attributed user-facing message before propagating, so a vision-incapable model
+     * produces an understandable error rather than a raw provider stack trace. With no injected
+     * media the failure passes through untouched.
+     *
+     * <p>Static + parameterized on {@code userFacingLogger} / {@code modelName} so the trace-, span-
+     * and thread-level scorers can all reuse it despite each owning its own logger and model accessor.
+     */
+    protected static <T> Mono<T> surfaceInjectedMediaFailure(@NonNull Throwable error,
+            @NonNull TraceToolContext ctx, String modelName, @NonNull Logger userFacingLogger,
+            @NonNull Map<String, String> mdc) {
+        if (ctx.hasInjectedMedia()) {
+            String attachments = ctx.getInjectedAttachments().stream()
+                    .map(a -> "'%s' (%s)".formatted(a.fileName(), a.category().name().toLowerCase()))
+                    .collect(Collectors.joining(", "));
+            String detail = Optional.ofNullable(error.getCause()).map(Throwable::getMessage)
+                    .orElse(error.getMessage());
+            try (var logContext = wrapWithMdc(mdc)) {
+                userFacingLogger.error(
+                        "Scoring failed after loading attachment(s) {}; the judge model '{}' may not support this"
+                                + " attachment type. Use a model that supports the attachment's media type. Details: {}",
+                        attachments, modelName, detail);
+            }
+        }
+        return Mono.error(error);
+    }
+
+    /**
+     * Defers the subscription of {@link #score(Object)} so any synchronous work in implementations
+     * runs at subscription time on the per-stream worker scheduler.
      */
     @Override
     protected final Mono<Void> processEvent(M message) {

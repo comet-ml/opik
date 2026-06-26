@@ -175,6 +175,7 @@ public class SpanService {
     private Mono<UUID> create(Span span, Project project, UUID id) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "");
             String userName = ctx.get(RequestContext.USER_NAME);
             String projectName = project.name();
 
@@ -191,7 +192,7 @@ public class SpanService {
                                 .build();
                         return spanDAO.insert(processedSpan)
                                 .doOnSuccess(__ -> eventBus.post(
-                                        new SpansCreated(List.of(savedSpan), workspaceId, userName)))
+                                        new SpansCreated(List.of(savedSpan), workspaceId, userName, workspaceName)))
                                 .thenReturn(processedSpan.id());
                     });
         });
@@ -376,6 +377,7 @@ public class SpanService {
         return attachmentService.deleteAutoStrippedAttachments(SPAN, spanIds)
                 .then(Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "");
                     String userName = ctx.get(RequestContext.USER_NAME);
 
                     Mono<List<Span>> resolveProjects = Flux.fromIterable(projectNames)
@@ -387,7 +389,7 @@ public class SpanService {
                             .flatMap(this::stripAttachmentsFromSpanBatch)
                             .flatMap(spans -> spanDAO.batchInsert(spans)
                                     .doOnSuccess(__ -> eventBus.post(
-                                            new SpansCreated(spans, workspaceId, userName))));
+                                            new SpansCreated(spans, workspaceId, userName, workspaceName))));
                 }));
     }
 
