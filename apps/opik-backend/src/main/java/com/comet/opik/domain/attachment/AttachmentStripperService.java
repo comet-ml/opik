@@ -508,43 +508,47 @@ public class AttachmentStripperService {
         // '=' padding chars in code -- identical detection to the old {minBase64Size,}={0,2} regex, but
         // linear instead of a CPU-pinning re-scan (see BASE64_RUN, OPIK-7118). Any non-alphabet char
         // (including line-wrapping whitespace) ends a run, so MIME/data-URI base64 is left intact.
-        StringBuilder result = new StringBuilder();
-        int lastEnd = 0;
-        boolean foundAttachment = false;
-        int length = text.length();
+        // Wrapped in a single span per text node (not per find()) so trace latency stays attributable
+        // to detection vs the child base64.decode / tika.detect / eventBus.post spans.
+        return wrapWithSpan("base64.detect", () -> {
+            StringBuilder result = new StringBuilder();
+            int lastEnd = 0;
+            boolean foundAttachment = false;
+            int length = text.length();
 
-        Matcher matcher = BASE64_RUN.matcher(text);
-        while (matcher.find()) {
-            int start = matcher.start();
-            int runEnd = matcher.end();
-            if ((long) runEnd - start < minBase64Size) {
-                continue;
+            Matcher matcher = BASE64_RUN.matcher(text);
+            while (matcher.find()) {
+                int start = matcher.start();
+                int runEnd = matcher.end();
+                if ((long) runEnd - start < minBase64Size) {
+                    continue;
+                }
+
+                int end = runEnd;
+                while (end < length && end - runEnd < 2 && text.charAt(end) == '=') {
+                    end++;
+                }
+
+                String base64Data = text.substring(start, end);
+                int currentAttachmentNumber = attachmentCounter.incrementAndGet();
+                String attachmentReference = processBase64Attachment(base64Data, currentAttachmentNumber, ctx);
+                if (attachmentReference != null) {
+                    result.append(text, lastEnd, start);
+                    result.append(attachmentReference);
+                    lastEnd = end;
+                    foundAttachment = true;
+                }
             }
 
-            int end = runEnd;
-            while (end < length && end - runEnd < 2 && text.charAt(end) == '=') {
-                end++;
+            // If we found and replaced attachments, return new node with modified text
+            if (foundAttachment) {
+                result.append(text, lastEnd, text.length());
+                return objectMapper.getNodeFactory().textNode(result.toString());
             }
 
-            String base64Data = text.substring(start, end);
-            int currentAttachmentNumber = attachmentCounter.incrementAndGet();
-            String attachmentReference = processBase64Attachment(base64Data, currentAttachmentNumber, ctx);
-            if (attachmentReference != null) {
-                result.append(text, lastEnd, start);
-                result.append(attachmentReference);
-                lastEnd = end;
-                foundAttachment = true;
-            }
-        }
-
-        // If we found and replaced attachments, return new node with modified text
-        if (foundAttachment) {
-            result.append(text, lastEnd, text.length());
-            return objectMapper.getNodeFactory().textNode(result.toString());
-        }
-
-        // No attachments found, return original node
-        return node;
+            // No attachments found, return original node
+            return node;
+        });
     }
 
     /**
