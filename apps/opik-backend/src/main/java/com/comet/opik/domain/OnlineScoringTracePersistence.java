@@ -646,13 +646,15 @@ public class OnlineScoringTracePersistence {
         if (node == null || node.isNull()) {
             return null;
         }
-        // Measure and slice the SAME representation: the raw text for string nodes (no JSON quoting),
-        // the serialized JSON otherwise. Using toString() to measure but asText() to slice could slice
-        // a string shorter than the cap and throw IndexOutOfBounds.
-        String text = node.isTextual() ? node.asText() : node.toString();
-        if (text.length() <= EVALUATED_PREVIEW_CHARS) {
+        // Measure against the SERIALIZED form so a heavily-escaped string (quotes/backslashes) can't slip
+        // past the cap once rendered as JSON. Slice the raw text for string nodes and clamp the index to
+        // its length, so we never slice past a string shorter than the cap (which would throw IOOBE).
+        String serialized = node.toString();
+        if (serialized.length() <= EVALUATED_PREVIEW_CHARS) {
             return node;
         }
-        return TextNode.valueOf(text.substring(0, EVALUATED_PREVIEW_CHARS) + "…[truncated]");
+        String raw = node.isTextual() ? node.asText() : serialized;
+        int end = Math.min(EVALUATED_PREVIEW_CHARS, raw.length());
+        return TextNode.valueOf(raw.substring(0, end) + "…[truncated]");
     }
 }

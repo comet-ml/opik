@@ -247,7 +247,14 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                                 rule.getId(), rule.getName(), message.code().model().name(),
                                 message.workspaceId(), message.userName())
                         : EvaluationRecorder.NOOP)
-                .subscribeOn(Schedulers.boundedElastic());
+                .subscribeOn(Schedulers.boundedElastic())
+                // Monitoring is best-effort: a project-name lookup failure (e.g. missing project) must
+                // not abort the actual thread scoring, so degrade to NOOP instead of failing the zip.
+                .onErrorResume(error -> {
+                    log.warn("Failed to start online-evaluation monitoring for thread '{}', "
+                            + "proceeding without it", threadId, error);
+                    return Mono.just(EvaluationRecorder.NOOP);
+                });
 
         // Check whether any trace in the thread has attachments — if so, force the agentic-tools
         // path regardless of context size (the judge needs get_attachment to fetch them). Best-effort:

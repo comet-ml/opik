@@ -39,9 +39,9 @@ export const useTraceLogsSidebarControls = () => {
 
   const openSidebar = useCallback(
     (sourceFilters?: Filter[]) => {
-      if (sourceFilters?.length) {
-        setTlsFilters(sourceFilters);
-      }
+      // Always (re)write the filter param on open, clearing it when no source filters are given, so an
+      // unfiltered trigger can't reuse the previous open's stale tls_filters.
+      setTlsFilters(sourceFilters?.length ? sourceFilters : undefined);
       setOpen(true);
     },
     [setTlsFilters, setOpen],
