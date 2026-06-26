@@ -81,10 +81,15 @@ const ListColumn: React.FC<{
 const DetailColumn: React.FC<{
   issue?: AgentInsightsIssue;
   projectId: string;
-}> = ({ issue, projectId }) => (
+  canConfigure: boolean;
+}> = ({ issue, projectId, canConfigure }) => (
   <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border bg-background">
     {issue ? (
-      <IssueDetail issue={issue} projectId={projectId} />
+      <IssueDetail
+        issue={issue}
+        projectId={projectId}
+        canConfigure={canConfigure}
+      />
     ) : (
       <DetailPlaceholder />
     )}
@@ -155,6 +160,7 @@ type IssuesTabProps = {
   projectId: string;
   showResolved?: boolean;
   isRunning?: boolean;
+  canConfigure?: boolean;
   onRunDiagnostic?: () => void;
   onShowOpenIssues?: () => void;
 };
@@ -163,6 +169,7 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
   projectId,
   showResolved = false,
   isRunning = false,
+  canConfigure = false,
   onRunDiagnostic,
   onShowOpenIssues,
 }) => {
@@ -353,7 +360,13 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
     );
   };
 
-  const detail = <DetailColumn issue={activeIssue} projectId={projectId} />;
+  const detail = (
+    <DetailColumn
+      issue={activeIssue}
+      projectId={projectId}
+      canConfigure={canConfigure}
+    />
+  );
 
   if (!isWide) {
     if (!hasIssues) {
