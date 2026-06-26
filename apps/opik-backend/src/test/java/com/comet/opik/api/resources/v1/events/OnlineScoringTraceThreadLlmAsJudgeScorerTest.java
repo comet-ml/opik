@@ -92,6 +92,8 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
     private com.comet.opik.api.resources.v1.events.tools.ToolRegistry toolRegistry;
     @Mock
     private com.comet.opik.domain.SpanService spanService;
+    @Mock
+    private com.comet.opik.domain.attachment.AttachmentService attachmentService;
 
     private OnlineScoringTraceThreadLlmAsJudgeScorer scorer;
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
@@ -144,7 +146,8 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
                 projectService,
                 automationRuleEvaluatorService,
                 toolRegistry,
-                spanService);
+                spanService,
+                attachmentService);
 
         projectId = UUID.randomUUID();
         ruleId = UUID.randomUUID();
@@ -166,32 +169,38 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
     class RoutingGateTests {
 
         // Threads don't have an experimentId-driven branch (no test-suite-assertion equivalent),
-        // so the truth table is just toggle × tokens-vs-threshold × provider-supports-tools.
+        // so the truth table is toggle × tokens-vs-threshold × provider-supports-tools × hasAttachments.
         // Rows mirror the trace-side gate's design for symmetry.
-        @org.junit.jupiter.params.ParameterizedTest(name = "toggle={0}, tokens={1}, threshold={2}, provider={3} → expected useTools={4}")
+        @org.junit.jupiter.params.ParameterizedTest(name = "toggle={0}, tokens={1}, threshold={2}, provider={3}, hasAttachments={4} → expected useTools={5}")
         @org.junit.jupiter.params.provider.CsvSource({
                 // size-based path — all three preconditions must hold
-                "true,  60000, 50000, OPEN_AI, true",
-                "true,  50000, 50000, OPEN_AI, true",
+                "true,  60000, 50000, OPEN_AI, false, true",
+                "true,  50000, 50000, OPEN_AI, false, true",
                 // below threshold → inline
-                "true,  49999, 50000, OPEN_AI, false",
+                "true,  49999, 50000, OPEN_AI, false, false",
                 // toggle off → inline even on huge contexts
-                "false, 60000, 50000, OPEN_AI, false",
+                "false, 60000, 50000, OPEN_AI, false, false",
                 // provider doesn't support tool calling → inline + warn
-                "true,  60000, 50000, OLLAMA,  false",
+                "true,  60000, 50000, OLLAMA,  false, false",
                 // no preconditions met
-                "false, 0,     50000, OPEN_AI, false",
+                "false, 0,     50000, OPEN_AI, false, false",
+                // attachment-driven path (OPIK-6555): toggle on + attachments + below size threshold → tools
+                "true,  0,     50000, OPEN_AI, true,  true",
+                // attachments but toggle off → inline (whole agentic feature is gated by the toggle)
+                "false, 0,     50000, OPEN_AI, true,  false",
+                // attachments but provider can't do tools → inline + warn
+                "true,  0,     50000, OLLAMA,  true,  false",
         })
         void gateMatchesTruthTable(
                 boolean toggleEnabled, int estimatedTokens, int thresholdTokens,
-                com.comet.opik.api.LlmProvider provider, boolean expectedUseTools) {
+                com.comet.opik.api.LlmProvider provider, boolean hasAttachments, boolean expectedUseTools) {
             String modelName = "gpt-test";
             org.mockito.Mockito.when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(toggleEnabled);
             org.mockito.Mockito.lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens())
                     .thenReturn(thresholdTokens);
             org.mockito.Mockito.lenient().when(llmProviderFactory.getLlmProvider(modelName)).thenReturn(provider);
 
-            boolean useTools = scorer.shouldUseAgenticTools(estimatedTokens, modelName, "thread-x",
+            boolean useTools = scorer.shouldUseAgenticTools(estimatedTokens, hasAttachments, modelName, "thread-x",
                     java.util.List.of(stringContentMessage()));
 
             org.assertj.core.api.Assertions.assertThat(useTools).isEqualTo(expectedUseTools);
@@ -210,7 +219,7 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
             org.mockito.Mockito.lenient().when(llmProviderFactory.getLlmProvider(modelName))
                     .thenReturn(com.comet.opik.api.LlmProvider.OPEN_AI);
 
-            boolean useTools = scorer.shouldUseAgenticTools(60_000, modelName, "thread-x",
+            boolean useTools = scorer.shouldUseAgenticTools(60_000, false, modelName, "thread-x",
                     java.util.List.of(multimodalContentMessage()));
 
             org.assertj.core.api.Assertions.assertThat(useTools).isFalse();
@@ -251,6 +260,8 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
             org.mockito.Mockito.lenient().when(msg.workspaceId()).thenReturn("ws-1");
             org.mockito.Mockito.lenient().when(msg.userName()).thenReturn("user-1");
             org.mockito.Mockito.lenient().when(msg.ruleId()).thenReturn(UUID.randomUUID());
+            // Required by TraceToolContext.forThread, which handleToolCalls builds before the loop.
+            org.mockito.Mockito.lenient().when(msg.projectId()).thenReturn(UUID.randomUUID());
             return msg;
         }
 
@@ -562,6 +573,7 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
             scorer.score(message).block();
 
             verifyNoInteractions(spanService);
+            verifyNoInteractions(attachmentService);
         }
 
         @Test

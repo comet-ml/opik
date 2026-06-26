@@ -140,8 +140,9 @@ public class OnlineScoringSpanSampler {
                                 .toList();
                         logSampledSpan(evaluator, messages, scorableSpans.size());
                         if (!messages.isEmpty()) {
-                            onlineScorePublisher.enqueueMessage(messages,
-                                    AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE);
+                            OnlineScoringSamplerSupport.publishSampled(onlineScorePublisher, log, messages,
+                                    AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE, spansBatch.workspaceId(),
+                                    spansBatch.workspaceName());
                         }
                     }
                     case AutomationRuleEvaluatorLlmAsJudge rule -> logUnsupportedEvaluatorType(rule);
@@ -165,8 +166,9 @@ public class OnlineScoringSpanSampler {
                                 .toList();
                         logSampledSpan(evaluator, messages, scorableSpans.size());
                         if (!messages.isEmpty()) {
-                            onlineScorePublisher.enqueueMessage(messages,
-                                    AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON);
+                            OnlineScoringSamplerSupport.publishSampled(onlineScorePublisher, log, messages,
+                                    AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON,
+                                    spansBatch.workspaceId(), spansBatch.workspaceName());
                         }
                     }
                 }
