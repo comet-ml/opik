@@ -30,6 +30,7 @@ import org.apache.tika.mime.MimeTypes;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Iterator;
 import java.util.Map;
@@ -81,11 +82,11 @@ public class AttachmentStripperService {
      */
     private final LongUpDownCounter stripInProgress;
     /**
-     * Length distribution of candidate fields entering detection, in characters (UTF-16 code units).
-     * Recorded before scanning, so it is captured even when a field is slow to process — a leading
-     * indicator for oversized payloads.
+     * Size distribution of candidate fields entering detection, in UTF-8 bytes (the size the payload
+     * occupies on the wire and in storage). Recorded before scanning, so it is captured even when a
+     * field is slow to process — a leading indicator for oversized payloads.
      */
-    private final LongHistogram inputSizeChars;
+    private final LongHistogram inputSizeBytes;
 
     // Apache Tika for MIME type detection
     private static final Tika tika = new Tika();
@@ -138,10 +139,9 @@ public class AttachmentStripperService {
                 .upDownCounterBuilder("opik.attachments.strip.in_progress")
                 .setDescription("Number of payloads (trace/span input/output/metadata) currently being stripped")
                 .build();
-        this.inputSizeChars = meter
-                .histogramBuilder("opik.attachments.input.size.chars")
-                .setDescription(
-                        "Length in characters (UTF-16 code units) of candidate fields entering attachment detection")
+        this.inputSizeBytes = meter
+                .histogramBuilder("opik.attachments.input.size.bytes")
+                .setDescription("Size in bytes of candidate fields entering attachment detection")
                 .ofLongs()
                 .build();
 
@@ -502,9 +502,9 @@ public class AttachmentStripperService {
             return node;
         }
 
-        // Record the field length up front, before scanning, so an oversized payload still contributes
+        // Record the field size up front, before scanning, so an oversized payload still contributes
         // to the metric even if the scan that follows is slow to complete.
-        inputSizeChars.record(text.length());
+        inputSizeBytes.record(text.getBytes(StandardCharsets.UTF_8).length);
 
         // Find each maximal base64 run, then apply the size threshold and collect up to two trailing
         // '=' padding chars in code -- identical detection to the old {minBase64Size,}={0,2} regex, but
