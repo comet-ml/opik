@@ -15,8 +15,14 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.Random;
 import java.util.UUID;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import static com.comet.opik.utils.AttachmentPayloadUtilsTest.createLargeGifBase64;
 import static com.comet.opik.utils.AttachmentPayloadUtilsTest.createLargePdfBase64;
@@ -424,25 +430,28 @@ class AttachmentStripperServiceTest {
         verify(eventBus, times(1)).post(any());
     }
 
-    private static byte[] minimalOoxmlPackage() throws java.io.IOException {
-        var bos = new java.io.ByteArrayOutputStream();
-        try (var zip = new java.util.zip.ZipOutputStream(bos)) {
-            zip.putNextEntry(new java.util.zip.ZipEntry("[Content_Types].xml"));
-            zip.write(("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
-                    + "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">"
-                    + "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>"
-                    + "<Default Extension=\"xml\" ContentType=\"application/xml\"/></Types>")
-                    .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    private static byte[] minimalOoxmlPackage() throws IOException {
+        var bos = new ByteArrayOutputStream();
+        try (var zip = new ZipOutputStream(bos)) {
+            zip.putNextEntry(new ZipEntry("[Content_Types].xml"));
+            // Trailing '\' on each line keeps the XML on a single line (no inserted newlines).
+            zip.write("""
+                    <?xml version="1.0" encoding="UTF-8" standalone="yes"?>\
+                    <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">\
+                    <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>\
+                    <Default Extension="xml" ContentType="application/xml"/></Types>"""
+                    .getBytes(StandardCharsets.UTF_8));
             zip.closeEntry();
-            zip.putNextEntry(new java.util.zip.ZipEntry("_rels/.rels"));
-            zip.write(("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
-                    + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"/>")
-                    .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            zip.putNextEntry(new ZipEntry("_rels/.rels"));
+            zip.write("""
+                    <?xml version="1.0" encoding="UTF-8" standalone="yes"?>\
+                    <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>"""
+                    .getBytes(StandardCharsets.UTF_8));
             zip.closeEntry();
             // incompressible padding so the base64 clears the strip threshold
-            zip.putNextEntry(new java.util.zip.ZipEntry("docProps/pad.bin"));
+            zip.putNextEntry(new ZipEntry("docProps/pad.bin"));
             byte[] pad = new byte[6000];
-            new java.util.Random(7).nextBytes(pad);
+            new Random(7).nextBytes(pad);
             zip.write(pad);
             zip.closeEntry();
         }

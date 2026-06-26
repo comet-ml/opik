@@ -90,11 +90,13 @@ public class AttachmentStripperService {
     // Apache Tika for MIME type detection
     private static final Tika tika = new Tika();
 
-    // Maximal run of base64 alphabet chars (RFC 4648), matched POSSESSIVELY so each run is consumed
-    // once with no backtracking. The size threshold is applied in code (see processTextNode), not in
-    // the pattern: the old {minBase64Size,} regex kept it inside, so a long sub-threshold run made
-    // find() retry from every offset -- an O(n*runlen) re-scan that pinned CPU on large payloads
-    // (OPIK-7118). Matching the run possessively and checking its length afterwards is linear.
+    /**
+     * Maximal run of base64 alphabet chars (RFC 4648), matched POSSESSIVELY so each run is consumed
+     * once with no backtracking. The size threshold is applied in code (see processTextNode), not in
+     * the pattern: the old {@code {minBase64Size,}} regex kept it inside, so a long sub-threshold run
+     * made find() retry from every offset -- an O(n*runlen) re-scan that pinned CPU on large payloads
+     * (OPIK-7118). Matching the run possessively and checking its length afterwards is linear.
+     */
     private static final Pattern BASE64_RUN = Pattern.compile("[A-Za-z0-9+/]++");
 
     private final Tracer tracer;
@@ -508,47 +510,48 @@ public class AttachmentStripperService {
         // '=' padding chars in code -- identical detection to the old {minBase64Size,}={0,2} regex, but
         // linear instead of a CPU-pinning re-scan (see BASE64_RUN, OPIK-7118). Any non-alphabet char
         // (including line-wrapping whitespace) ends a run, so MIME/data-URI base64 is left intact.
-        // Wrapped in a single span per text node (not per find()) so trace latency stays attributable
-        // to detection vs the child base64.decode / tika.detect / eventBus.post spans.
-        return wrapWithSpan("base64.detect", () -> {
-            StringBuilder result = new StringBuilder();
-            int lastEnd = 0;
-            boolean foundAttachment = false;
-            int length = text.length();
+        final int length = text.length();
+        StringBuilder result = new StringBuilder();
+        int lastEnd = 0;
+        boolean foundAttachment = false;
 
-            Matcher matcher = BASE64_RUN.matcher(text);
-            while (matcher.find()) {
-                int start = matcher.start();
-                int runEnd = matcher.end();
-                if ((long) runEnd - start < minBase64Size) {
-                    continue;
-                }
-
-                int end = runEnd;
-                while (end < length && end - runEnd < 2 && text.charAt(end) == '=') {
-                    end++;
-                }
-
-                String base64Data = text.substring(start, end);
-                int currentAttachmentNumber = attachmentCounter.incrementAndGet();
-                String attachmentReference = processBase64Attachment(base64Data, currentAttachmentNumber, ctx);
-                if (attachmentReference != null) {
-                    result.append(text, lastEnd, start);
-                    result.append(attachmentReference);
-                    lastEnd = end;
-                    foundAttachment = true;
-                }
+        // Keep the original regex.match / regex.find span names so detection latency stays comparable
+        // before and after the linearization fix.
+        Matcher matcher = wrapWithSpan("regex.match", () -> BASE64_RUN.matcher(text));
+        while (wrapWithSpan("regex.find", matcher::find)) {
+            int start = matcher.start();
+            int runEnd = matcher.end();
+            if ((long) runEnd - start < minBase64Size) {
+                continue;
             }
 
-            // If we found and replaced attachments, return new node with modified text
-            if (foundAttachment) {
-                result.append(text, lastEnd, text.length());
-                return objectMapper.getNodeFactory().textNode(result.toString());
+            // Capture up to two trailing '=' padding chars: base64 pads the final group to a 4-char
+            // boundary, so 0, 1, or 2 '=' are valid. A third '=' is never valid padding and is left in
+            // the surrounding text.
+            int end = runEnd;
+            while (end < length && end - runEnd < 2 && text.charAt(end) == '=') {
+                end++;
             }
 
-            // No attachments found, return original node
-            return node;
-        });
+            String base64Data = text.substring(start, end);
+            int currentAttachmentNumber = attachmentCounter.incrementAndGet();
+            String attachmentReference = processBase64Attachment(base64Data, currentAttachmentNumber, ctx);
+            if (attachmentReference != null) {
+                result.append(text, lastEnd, start);
+                result.append(attachmentReference);
+                lastEnd = end;
+                foundAttachment = true;
+            }
+        }
+
+        // If we found and replaced attachments, return new node with modified text
+        if (foundAttachment) {
+            result.append(text, lastEnd, length);
+            return objectMapper.getNodeFactory().textNode(result.toString());
+        }
+
+        // No attachments found, return original node
+        return node;
     }
 
     /**
