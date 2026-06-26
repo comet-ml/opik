@@ -1,0 +1,44 @@
+name: Outrider
+
+# Manually triggered. Uncomment the schedule block below to enable a
+# weekly cron.
+#
+# Secrets needed (set as repo secrets):
+#   REMYX_API_KEY     — engine.remyx.ai token
+#   ANTHROPIC_API_KEY — model-provider token
+
+on:
+  # schedule:
+  #   - cron: '0 14 * * 1'
+  workflow_dispatch:
+
+jobs:
+  recommend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    env:
+      REMYX_API_KEY: ${{ secrets.REMYX_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - name: Mint Remyx bot token
+        id: remyx-bot
+        shell: bash
+        run: |
+          token="$(curl -sf -X POST \
+            -H "Authorization: Bearer ${{ secrets.REMYX_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"repo\": \"${{ github.repository }}\"}" \
+            "https://engine.remyx.ai/api/v1.0/github/installation-token" \
+            | python3 -c "import sys, json; print(json.load(sys.stdin).get('token', ''))")" || token=""
+          echo "::add-mask::$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+      - uses: remyxai/outrider@v1
+        with:
+          interest-id: bb1f2f50-21fd-490a-92e5-cc0e67658f19
+          github-token: ${{ steps.remyx-bot.outputs.token }}
+          # Disable cadence guard so manual dispatches always evaluate latest recommendation.
+          rate-limit-days: '0'
