@@ -38,10 +38,10 @@ import useAppStore from "@/store/AppStore";
 import ConfigurationPage from "@/v2/pages/ConfigurationPage/ConfigurationPage";
 import NewQuickstart from "@/v2/pages/GetStartedPage/NewQuickstart";
 import AutomationLogsPage from "@/v2/pages/AutomationLogsPage/AutomationLogsPage";
-import OnlineEvaluationPage from "@/v2/pages/OnlineEvaluationPage/OnlineEvaluationPage";
+import OnlineEvaluationPageGuard from "@/v2/layout/OnlineEvaluationPageGuard";
 import AnnotationQueuesPage from "@/v2/pages/AnnotationQueuesPage/AnnotationQueuesPage";
 import AnnotationQueuePage from "@/v2/pages/AnnotationQueuePage/AnnotationQueuePage";
-import AgentRunnerPage from "@/v2/pages/AgentRunnerPage/AgentRunnerPage";
+import AgentPlaygroundPageGuard from "@/v2/layout/AgentPlaygroundPageGuard";
 import PairingPage from "@/v2/pages/PairingPage/PairingPage";
 import PairRouteVersionGuard from "@/shared/WorkspaceVersionResolver/PairRouteVersionGuard";
 import { createOAuthConsentRoute } from "@/shared/OAuthConsentPage/createOAuthConsentRoute";
@@ -50,10 +50,8 @@ import OptimizationsNewPage from "@/v2/pages/OptimizationsPage/OptimizationsNewP
 import OptimizationPage from "@/v2/pages/OptimizationPage/OptimizationPage";
 import OptimizationCompareRedirect from "@/v2/pages/OptimizationPage/OptimizationCompareRedirect";
 import TrialPage from "@/v2/pages/TrialPage/TrialPage";
-const AlertsRouteWrapper = lazy(
-  () => import("@/v2/pages/AlertsPage/AlertsRouteWrapper"),
-);
 import AlertEditPageGuard from "@/v2/layout/AlertEditPageGuard/AlertEditPageGuard";
+import AlertsPageGuard from "@/v2/layout/AlertsPageGuard";
 import DashboardPage from "@/v2/pages/DashboardPage/DashboardPage";
 import DashboardsPage from "@/v2/pages/DashboardsPage/DashboardsPage";
 import DatasetsPage from "@/v2/pages/DatasetsPage/DatasetsPage";
@@ -492,7 +490,7 @@ const agentRunnerRoute = createRoute({
   staticData: {
     title: "Agent playground",
   },
-  component: AgentRunnerPage,
+  component: AgentPlaygroundPageGuard,
 });
 
 // ----------- online evaluation (project-scoped)
@@ -502,7 +500,7 @@ const onlineEvaluationRoute = createRoute({
   staticData: {
     title: "Online evaluation",
   },
-  component: OnlineEvaluationPage,
+  component: OnlineEvaluationPageGuard,
 });
 
 // ----------- annotation queues (project-scoped)
@@ -536,7 +534,7 @@ const alertsRoute = createRoute({
   staticData: {
     title: "Alerts",
   },
-  component: AlertsRouteWrapper,
+  component: AlertsPageGuard,
 });
 
 const alertNewRoute = createRoute({

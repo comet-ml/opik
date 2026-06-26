@@ -29,7 +29,10 @@ const getMenuItems = ({
   canViewDatasets,
   canViewDashboards,
   canUsePlayground,
+  canViewAgentPlayground,
   canViewOptimizationRuns,
+  canViewOnlineEvaluationRules,
+  canViewAlerts,
   showHomePage,
   showOlliePage,
   showDiagnostics,
@@ -39,7 +42,10 @@ const getMenuItems = ({
   canViewDatasets: boolean;
   canViewDashboards: boolean;
   canUsePlayground: boolean;
+  canViewAgentPlayground: boolean;
   canViewOptimizationRuns: boolean;
+  canViewOnlineEvaluationRules: boolean;
+  canViewAlerts: boolean;
   showHomePage: boolean;
   showOlliePage: boolean;
   showDiagnostics: boolean;
@@ -132,14 +138,18 @@ const getMenuItems = ({
           label: "Prompt library",
           disabled: !projectPrefix,
         },
-        {
-          id: "agent_runner",
-          path: projectPath("/agent-playground"),
-          type: MENU_ITEM_TYPE.router,
-          icon: GitBranch,
-          label: "Agent playground",
-          disabled: !projectPrefix,
-        },
+        ...(canViewAgentPlayground
+          ? [
+              {
+                id: "agent_runner",
+                path: projectPath("/agent-playground"),
+                type: MENU_ITEM_TYPE.router as const,
+                icon: GitBranch,
+                label: "Agent playground",
+                disabled: !projectPrefix,
+              },
+            ]
+          : []),
         ...(canUsePlayground
           ? [
               {
@@ -216,22 +226,30 @@ const getMenuItems = ({
       id: "production",
       label: "Production",
       items: [
-        {
-          id: "online_evaluation",
-          path: projectPath("/online-evaluation"),
-          type: MENU_ITEM_TYPE.router,
-          icon: Brain,
-          label: "Online evaluation",
-          disabled: !projectPrefix,
-        },
-        {
-          id: "alerts",
-          path: projectPath("/alerts"),
-          type: MENU_ITEM_TYPE.router,
-          icon: Bell,
-          label: "Alerts",
-          disabled: !projectPrefix,
-        },
+        ...(canViewOnlineEvaluationRules
+          ? [
+              {
+                id: "online_evaluation",
+                path: projectPath("/online-evaluation"),
+                type: MENU_ITEM_TYPE.router as const,
+                icon: Brain,
+                label: "Online evaluation",
+                disabled: !projectPrefix,
+              },
+            ]
+          : []),
+        ...(canViewAlerts
+          ? [
+              {
+                id: "alerts",
+                path: projectPath("/alerts"),
+                type: MENU_ITEM_TYPE.router as const,
+                icon: Bell,
+                label: "Alerts",
+                disabled: !projectPrefix,
+              },
+            ]
+          : []),
       ],
     },
   ].filter((group) => group.items.length > 0);
