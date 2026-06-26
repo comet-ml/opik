@@ -9,7 +9,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 import java.util.List;
 import java.util.Map;
@@ -45,8 +44,7 @@ class TraceThreadOnlineScorerPublisher {
                             Collectors.mapping(Map.Entry::getValue, Collectors.toSet())));
 
             return Flux.fromIterable(sampledThreadByRule.entrySet())
-                    .flatMap(ruleIdToThreadIds -> Mono.fromCallable(() -> {
-
+                    .flatMap(ruleIdToThreadIds -> {
                         UUID ruleId = ruleIdToThreadIds.getKey();
                         Set<String> threadIds = ruleIdToThreadIds.getValue();
 
@@ -54,19 +52,13 @@ class TraceThreadOnlineScorerPublisher {
                                 "Enqueuing threads: '{}' trace threads for ruleId: '{}' in projectId '{}' for workspaceId '{}'",
                                 threadIds, ruleId, projectId, workspaceId);
 
-                        onlineScorePublisher.enqueueThreadMessage(
-                                List.copyOf(threadIds),
-                                ruleId,
-                                projectId,
-                                workspaceId,
-                                userName);
-
-                        log.info(
-                                "Enqueued threads: '{}' trace threads for ruleId: '{}' in projectId '{}' for workspaceId '{}'",
-                                threadIds, ruleId, projectId, workspaceId);
-
-                        return ruleId;
-                    }).subscribeOn(Schedulers.boundedElastic()))
+                        // Composed into the deferContextual chain so the enqueue inherits this workspace context.
+                        return onlineScorePublisher.enqueueThreadMessage(List.copyOf(threadIds), ruleId, projectId,
+                                workspaceId, userName)
+                                .doOnSuccess(unused -> log.info(
+                                        "Enqueued threads: '{}' trace threads for ruleId: '{}' in projectId '{}' for workspaceId '{}'",
+                                        threadIds, ruleId, projectId, workspaceId));
+                    })
                     .then();
         });
     }

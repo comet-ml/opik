@@ -8,9 +8,12 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudg
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.api.resources.v1.events.tools.GetTraceSpansTool;
+import com.comet.opik.api.resources.v1.events.tools.MediaCategory;
+import com.comet.opik.api.resources.v1.events.tools.MediaPayload;
 import com.comet.opik.api.resources.v1.events.tools.ReadTool;
 import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
 import com.comet.opik.api.resources.v1.events.tools.TraceCompressor;
+import com.comet.opik.api.resources.v1.events.tools.TraceToolContext;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TestSuiteAssertionCounterService;
@@ -18,10 +21,12 @@ import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
+import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.AiMessage;
@@ -45,6 +50,8 @@ import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.redisson.api.RedissonReactiveClient;
+import org.slf4j.Logger;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
@@ -54,7 +61,9 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
@@ -88,6 +97,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
     private WorkspaceNameService workspaceNameService;
     @Mock
     private OpikConfiguration opikConfiguration;
+    @Mock
+    private com.comet.opik.domain.attachment.AttachmentService attachmentService;
 
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
     private OnlineScoringLlmAsJudgeScorer scorer;
@@ -117,6 +128,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
         lenient().when(onlineScoringConfig.getClaimIntervalRatio()).thenReturn(10);
         lenient().when(onlineScoringConfig.getPendingMessageDuration()).thenReturn(Duration.minutes(10));
         lenient().when(onlineScoringConfig.getMaxRetries()).thenReturn(3);
+        lenient().when(onlineScoringConfig.getAgenticToolsCharsPerToken()).thenReturn(4);
 
         ToolRegistry toolRegistry = new ToolRegistry(Set.of(
                 stubTool(GetTraceSpansTool.NAME, "{}"),
@@ -136,7 +148,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 toolRegistry,
                 traceCompressor,
                 workspaceNameService,
-                opikConfiguration);
+                opikConfiguration,
+                attachmentService);
     }
 
     @AfterEach
@@ -243,30 +256,37 @@ class OnlineScoringLlmAsJudgeScorerTest {
         // AND the provider supports tool-calling. Without the provider check, a non-tool-calling
         // model selected via test_suite_model metadata would crash inside the chat call when the
         // request carries tool specs (Logical bug surfaced by review of the experimentId path).
-        @ParameterizedTest(name = "expId={0}, toggle={1}, tokens={2}, threshold={3}, provider={4} → expected useTools={5}")
+        @ParameterizedTest(name = "expId={0}, toggle={1}, tokens={2}, threshold={3}, provider={4}, attachments={5} → expected useTools={6}")
         @CsvSource({
                 // experimentId path → tools when provider supports them
-                "true,  false, 0,     50000, OPEN_AI, true",
-                "true,  true,  60000, 50000, OPEN_AI, true",
+                "true,  false, 0,     50000, OPEN_AI, false, true",
+                "true,  true,  60000, 50000, OPEN_AI, false, true",
                 // experimentId set BUT provider doesn't support tools → fall back to inline with a warn
                 // (assertions that depend on tool-driven span inspection won't be reliable for this model;
                 // we surface the misconfig loudly rather than crash inside the chat call).
-                "true,  true,  60000, 50000, OLLAMA,  false",
+                "true,  true,  60000, 50000, OLLAMA,  false, false",
                 // size-based path — all three preconditions must hold
-                "false, true,  60000, 50000, OPEN_AI, true",
-                "false, true,  50000, 50000, OPEN_AI, true",
+                "false, true,  60000, 50000, OPEN_AI, false, true",
+                "false, true,  50000, 50000, OPEN_AI, false, true",
                 // below threshold → inline
-                "false, true,  49999, 50000, OPEN_AI, false",
+                "false, true,  49999, 50000, OPEN_AI, false, false",
                 // toggle off → inline even on huge contexts
-                "false, false, 60000, 50000, OPEN_AI, false",
+                "false, false, 60000, 50000, OPEN_AI, false, false",
                 // provider doesn't support tool calling → inline (operator must pick a different model)
-                "false, true,  60000, 50000, OLLAMA,  false",
+                "false, true,  60000, 50000, OLLAMA,  false, false",
                 // no preconditions met
-                "false, false, 0,     50000, OPEN_AI, false",
+                "false, false, 0,     50000, OPEN_AI, false, false",
+                // attachment-driven path (OPIK-6555): toggle on + provider supports tools + below size
+                // threshold → tools fire so the judge can call get_attachment
+                "false, true,  0,     50000, OPEN_AI, true,  true",
+                // attachments but toggle off → inline (whole agentic feature is gated by the toggle)
+                "false, false, 0,     50000, OPEN_AI, true,  false",
+                // attachments but provider can't do tools → inline (internal warn, attachments unusable)
+                "false, true,  0,     50000, OLLAMA,  true,  false",
         })
         void gateMatchesTruthTable(
                 boolean hasExperimentId, boolean toggleEnabled, int estimatedTokens,
-                int thresholdTokens, LlmProvider provider, boolean expectedUseTools) {
+                int thresholdTokens, LlmProvider provider, boolean hasAttachments, boolean expectedUseTools) {
             String modelName = "gpt-test";
             TraceToScoreLlmAsJudge message = hasExperimentId
                     ? newMessage(UUID.randomUUID())
@@ -275,7 +295,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
             lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(thresholdTokens);
             lenient().when(llmProviderFactory.getLlmProvider(modelName)).thenReturn(provider);
 
-            boolean useTools = scorer.shouldUseAgenticTools(message, estimatedTokens, modelName);
+            boolean useTools = scorer.shouldUseAgenticTools(message, estimatedTokens, modelName, hasAttachments);
 
             assertThat(useTools).isEqualTo(expectedUseTools);
         }
@@ -517,6 +537,119 @@ class OnlineScoringLlmAsJudgeScorerTest {
         assertThat(lastMessage).isInstanceOf(UserMessage.class);
         assertThat(((UserMessage) lastMessage).singleText())
                 .contains("Now respond with ONLY the JSON object");
+    }
+
+    @Nested
+    class SurfaceInjectedMediaFailureTests {
+
+        @Test
+        void passesErrorThroughWithoutLoggingWhenNoMediaWasInjected() {
+            Trace trace = Trace.builder()
+                    .id(UUID.randomUUID()).projectId(UUID.randomUUID())
+                    .name(UUID.randomUUID().toString()).startTime(Instant.now()).build();
+            TraceToolContext ctx = TraceToolContext.forActiveTrace(
+                    trace, List.of(), UUID.randomUUID().toString(), UUID.randomUUID().toString());
+            var error = new RuntimeException("original error");
+            var logger = mock(Logger.class);
+
+            assertThatThrownBy(() -> OnlineScoringBaseScorer.surfaceInjectedMediaFailure(
+                    error, ctx, UUID.randomUUID().toString(), logger, Map.of()).block())
+                    .isSameAs(error);
+            verifyNoInteractions(logger);
+        }
+
+        @Test
+        void logsUserFacingErrorAndPassesThroughWhenMediaWasInjected() {
+            Trace trace = Trace.builder()
+                    .id(UUID.randomUUID()).projectId(UUID.randomUUID())
+                    .name(UUID.randomUUID().toString()).startTime(Instant.now()).build();
+            TraceToolContext ctx = TraceToolContext.forActiveTrace(
+                    trace, List.of(), UUID.randomUUID().toString(), UUID.randomUUID().toString());
+            ctx.stageMedia(MediaPayload.ofBase64(
+                    UUID.randomUUID() + ".png", "image/png", MediaCategory.IMAGE, 0L, "dGVzdA=="));
+            var error = new RuntimeException("model rejected media");
+            var logger = mock(Logger.class);
+
+            assertThatThrownBy(() -> OnlineScoringBaseScorer.surfaceInjectedMediaFailure(
+                    error, ctx, UUID.randomUUID().toString(), logger, Map.of()).block())
+                    .isSameAs(error);
+            verify(logger, times(1)).error(anyString(), any(), any(), any());
+        }
+    }
+
+    @Nested
+    class ScoringTests {
+
+        // Minimal evaluator JSON with one scored field — valid for OnlineScoringEngine parsing.
+        private static final String EVALUATOR_JSON = """
+                {
+                  "model": { "name": "gpt-test", "temperature": 0.3 },
+                  "messages": [
+                    { "role": "USER", "content": "Score this trace: {{context}}" }
+                  ],
+                  "schema": [
+                    { "name": "Quality", "type": "DOUBLE", "description": "Quality score" }
+                  ],
+                  "variables": {}
+                }
+                """;
+
+        private static final String LLM_RESPONSE = """
+                {"Quality": {"score": 4.5, "reason": "good"}}
+                """;
+
+        @Test
+        void skipsAttachmentFetchWhenToggleIsOff() {
+            var code = JsonUtils.readValue(EVALUATOR_JSON, LlmAsJudgeCode.class);
+            var message = buildScoringMessage(code);
+
+            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(false);
+            lenient().when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
+            when(llmProviderFactory.getStructuredOutputStrategy("gpt-test"))
+                    .thenReturn(new ToolCallingStrategy());
+            when(aiProxyService.scoreTrace(any(), any(), any()))
+                    .thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage(LLM_RESPONSE)).build());
+            when(feedbackScoreService.scoreBatchOfTraces(any())).thenReturn(Mono.empty());
+
+            scorer.score(message).block();
+
+            verifyNoInteractions(attachmentService);
+        }
+
+        @Test
+        void attachmentFetchErrorFallsBackToEmptyListAndScoringProceeds() {
+            var code = JsonUtils.readValue(EVALUATOR_JSON, LlmAsJudgeCode.class);
+            var message = buildScoringMessage(code);
+
+            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
+            when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
+            when(llmProviderFactory.getStructuredOutputStrategy("gpt-test"))
+                    .thenReturn(new ToolCallingStrategy());
+            when(spanService.getByTraceIds(any())).thenReturn(Flux.empty());
+            when(attachmentService.getAttachmentInfoByEntity(any(), any(), any()))
+                    .thenReturn(Mono.error(new RuntimeException("DB unavailable")));
+            when(aiProxyService.scoreTrace(any(), any(), any()))
+                    .thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage(LLM_RESPONSE)).build());
+            when(feedbackScoreService.scoreBatchOfTraces(any())).thenReturn(Mono.empty());
+
+            // onErrorReturn(List.of()) swallows the attachment error; scoring proceeds normally.
+            scorer.score(message).block();
+
+            verify(aiProxyService, times(1)).scoreTrace(any(), any(), any());
+        }
+
+        private TraceToScoreLlmAsJudge buildScoringMessage(LlmAsJudgeCode code) {
+            Trace trace = Trace.builder()
+                    .id(UUID.randomUUID())
+                    .projectId(UUID.randomUUID())
+                    .name(UUID.randomUUID().toString())
+                    .startTime(Instant.now())
+                    .build();
+            return new TraceToScoreLlmAsJudge(
+                    trace, UUID.randomUUID(), UUID.randomUUID().toString(), code,
+                    UUID.randomUUID().toString(), UUID.randomUUID().toString(), null, Map.of(),
+                    PromptType.MUSTACHE, null, null);
+        }
     }
 
     private static ToolSpecification stubSpec(String name) {

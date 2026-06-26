@@ -34,6 +34,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
+import reactor.core.publisher.Mono;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.security.NoSuchAlgorithmException;
@@ -94,6 +95,9 @@ class OnlineScoringSpanSamplerTest {
                 ruleEvaluatorService,
                 filterEvaluationService,
                 onlineScorePublisher);
+
+        // enqueueMessage is reactive now; the sampler chains .contextWrite(...).subscribe() on the result.
+        lenient().when(onlineScorePublisher.enqueueMessage(any(), any())).thenReturn(Mono.empty());
 
         projectId = UUID.randomUUID();
         workspaceId = "workspace-123";
