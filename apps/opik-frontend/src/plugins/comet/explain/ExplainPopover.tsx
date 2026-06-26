@@ -14,13 +14,15 @@ interface Props {
 
 // Persistent-underline + arrow link affordance (Figma LinkButton). The shared
 // <Button variant="tableLink"> gives foreground color + focus ring + disabled
-// handling; we keep the underline as a border (not text-decoration) because the
-// button is inline-flex and text-decoration won't render under the arrow row.
-// <Button> defaults to size="default" (h-10 px-4 py-2); we strip all of it
-// (h-auto px-0 py-0) so the border-b hugs the text like Figma's LinkButton,
-// instead of sitting 8px below it on the default vertical padding.
+// handling, plus its hover/active primary color (we no longer override that to
+// foreground, so the link visibly responds on hover — the border tracks the text
+// via hover:border-primary). We keep the underline as a border (not
+// text-decoration) because the button is inline-flex and text-decoration won't
+// render under the arrow row. <Button> defaults to size="default" (h-10 px-4
+// py-2); we strip all of it (h-auto px-0 py-0) so the border-b hugs the text like
+// Figma's LinkButton, instead of sitting 8px below it on the default padding.
 const linkClass =
-  "h-auto rounded-none px-0 py-0 text-xs font-normal leading-4 no-underline border-b border-foreground hover:text-foreground active:text-foreground";
+  "h-auto rounded-none px-0 py-0 text-xs font-normal leading-4 no-underline border-b border-foreground transition-colors hover:border-primary";
 
 const ExplainPopover = ({ target, onContinue }: Props) => {
   const entry = useExplainEntry(target);
@@ -89,8 +91,11 @@ const ExplainPopover = ({ target, onContinue }: Props) => {
             <div className="relative">
               {/* Reuse the shared markdown renderer (as every other Ollie
                   output surface does) so bold/lists/inline-code aren't shown
-                  raw. The streaming caret sits outside ReactMarkdown's subtree. */}
-              <MarkdownPreview className="!text-xs leading-4 text-foreground">
+                  raw. The streaming caret sits outside ReactMarkdown's subtree.
+                  The [&_…] overrides force bold + inline code to the body color
+                  (the prose plugin renders them darker) — scoped here so other
+                  .comet-markdown surfaces are untouched. */}
+              <MarkdownPreview className="!text-xs leading-4 text-foreground [&_b]:text-foreground [&_code]:text-foreground [&_strong]:text-foreground">
                 {entry.text}
               </MarkdownPreview>
               {entry.phase === "loading" && (
@@ -123,7 +128,7 @@ const ExplainPopover = ({ target, onContinue }: Props) => {
           <Button
             type="button"
             variant="tableLink"
-            className={`mt-1 gap-0.5 ${linkClass}`}
+            className={`mt-3 gap-0.5 ${linkClass}`}
             onClick={() => {
               trackEvent(OpikEvent.EXPLAIN_CONTINUE_CLICKED, {
                 kind: target.kind,

@@ -2,13 +2,16 @@ import { ReactNode } from "react";
 import { CellContext, flexRender } from "@tanstack/react-table";
 import usePluginsStore from "@/store/PluginsStore";
 import { ExplainTarget } from "@/types/assistant-sidebar";
+import { resolveHorizontalAlignment } from "@/constants/shared";
 
 type BaseCell<TData> = (context: CellContext<TData, never>) => ReactNode;
 type BuildTarget<TData> = (row: TData) => ExplainTarget | null;
 
 /**
  * Wrap a data-table cell so the Ollie Explain button appears (on cell-content
- * hover) at the cell's right edge. `buildTarget` derives the explain payload
+ * hover) on the side of the cell opposite its value (resolved from column
+ * alignment, so it never covers the value). `buildTarget` derives the explain
+ * payload
  * from the row; when it returns null (the row isn't explainable — e.g. no
  * project_id, or an empty error cell — or OSS without the plugin button) only
  * the base cell renders. The button positions/reveals itself against this
@@ -28,6 +31,9 @@ export const withExplain = <TData,>(
     // mutates, so read it directly rather than subscribing per rendered row.
     const ExplainButton = usePluginsStore.getState().ExplainButton;
     const target = buildTarget(context.row.original);
+    // Resolve alignment from the SAME source the cell body uses, so the owl
+    // positions itself against the value without knowing about column types.
+    const align = resolveHorizontalAlignment(context.column.columnDef.meta);
 
     return (
       <div className="group/cell relative flex size-full items-center">
@@ -35,7 +41,9 @@ export const withExplain = <TData,>(
             fiber — keeps any hooks a base cell may use inside ITS component, not
             ExplainableCell's. */}
         {flexRender(BaseCell, context)}
-        {ExplainButton && target ? <ExplainButton target={target} /> : null}
+        {ExplainButton && target ? (
+          <ExplainButton target={target} align={align} />
+        ) : null}
       </div>
     );
   };

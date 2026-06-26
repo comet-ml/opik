@@ -1,4 +1,5 @@
 import { RunnerConnectionStatus } from "@/types/agent-sandbox";
+import { CELL_HORIZONTAL_ALIGNMENT } from "@/types/shared";
 
 export type BridgeTheme = "light" | "dark";
 export type BridgeSurface = "sidebar" | "page";
@@ -67,6 +68,11 @@ export interface ExplainTarget {
 /** Props for the plugin-provided ExplainButton, surfaced via PluginsStore. */
 export interface ExplainButtonProps {
   target: ExplainTarget;
+  // The host cell's resolved horizontal alignment. The owl anchors itself on the
+  // side opposite the value (so it never covers it) and grows away from it:
+  // left-aligned cells → owl on the right, grows left; right-aligned cells → owl
+  // on the left, grows right. Defaults to `start` when omitted.
+  align?: CELL_HORIZONTAL_ALIGNMENT;
 }
 
 /**
