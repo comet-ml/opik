@@ -1,7 +1,5 @@
 package com.comet.opik.api.events;
 
-import com.comet.opik.infrastructure.auth.RequestContext;
-
 /**
  * Common type for every {@code BaseRedisSubscriber} stream message, carrying the workspace and user
  * the message belongs to.
@@ -20,11 +18,13 @@ public interface RedisSubscriberMessage {
     String workspaceId();
 
     /**
-     * User the message is attributed to. Defaults to {@link RequestContext#SYSTEM_USER} for
-     * system-initiated streams (no end user); messages produced from a user request override it.
+     * User the message is attributed to, or {@code null} for system-initiated streams that carry no end
+     * user. {@code BaseRedisSubscriber} attributes those to {@code RequestContext.SYSTEM_USER}; keeping
+     * that fallback out of this api-layer marker avoids leaking an auth-layer dependency onto every
+     * implementor. Messages produced from a user request override this with the real user.
      */
     default String userName() {
-        return RequestContext.SYSTEM_USER;
+        return null;
     }
 
     /**

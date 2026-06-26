@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.events.RedisSubscriberMessage;
 import com.comet.opik.infrastructure.StreamConfiguration;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import io.dropwizard.lifecycle.Managed;
 import io.opentelemetry.api.GlobalOpenTelemetry;
@@ -710,7 +711,9 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
             return MessageContext.builder()
                     .workspaceId(workspaceId)
                     .workspaceName(StringUtils.defaultIfBlank(scoped.workspaceName(), workspaceId))
-                    .userName(StringUtils.defaultIfBlank(scoped.userName(), ErrorMetricsResolver.UNKNOWN))
+                    // System-initiated streams carry no user; attribute them to the system user here so the
+                    // api-layer message marker needn't depend on the auth layer.
+                    .userName(StringUtils.defaultIfBlank(scoped.userName(), RequestContext.SYSTEM_USER))
                     .build();
         }
         return MessageContext.UNKNOWN;
