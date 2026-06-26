@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
-import get from "lodash/get";
 
 import api, {
   AGENT_INSIGHTS_ISSUE_KEY,
@@ -9,6 +8,7 @@ import api, {
 } from "@/api/api";
 import { AGENT_INSIGHTS_ISSUE_STATUS } from "@/types/signals";
 import { useToast } from "@/ui/use-toast";
+import { handleMutationError } from "@/api/signals/handleMutationError";
 
 type UseUpdateAgentInsightsIssueMutationParams = {
   issueId: string;
@@ -32,19 +32,7 @@ const useUpdateAgentInsightsIssueMutation = () => {
       );
       return data;
     },
-    onError: (error: AxiosError) => {
-      const message = get(
-        error,
-        ["response", "data", "message"],
-        error.message,
-      );
-
-      toast({
-        title: "Error",
-        description: message,
-        variant: "destructive",
-      });
-    },
+    onError: (error: AxiosError) => handleMutationError(toast, error),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [AGENT_INSIGHTS_ISSUES_KEY] });
       queryClient.invalidateQueries({ queryKey: [AGENT_INSIGHTS_ISSUE_KEY] });

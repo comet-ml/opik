@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
-import get from "lodash/get";
 
 import api, {
   AGENT_INSIGHTS_JOB_KEY,
@@ -8,13 +7,13 @@ import api, {
 } from "@/api/api";
 import { AGENT_INSIGHTS_JOB_STATUS } from "@/types/signals";
 import { useToast } from "@/ui/use-toast";
+import { handleMutationError } from "@/api/signals/handleMutationError";
 
 type UseUpdateAgentInsightsJobMutationParams = {
   projectId: string;
   status: AGENT_INSIGHTS_JOB_STATUS;
 };
 
-// PATCH the per-project job status (enable/disable the daily diagnostic).
 const useUpdateAgentInsightsJobMutation = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -24,23 +23,24 @@ const useUpdateAgentInsightsJobMutation = () => {
       projectId,
       status,
     }: UseUpdateAgentInsightsJobMutationParams) => {
-      const { data } = await api.patch(
-        `${AGENT_INSIGHTS_REST_ENDPOINT}jobs/${projectId}`,
-        { status },
-      );
-      return data;
+      const url = `${AGENT_INSIGHTS_REST_ENDPOINT}jobs/${projectId}`;
+      try {
+        const { data } = await api.patch(url, { status });
+        return data;
+      } catch (error) {
+        // No job row yet (404) → create it (backend creates it enabled), then
+        // apply the requested status if it isn't already enabled.
+        if ((error as AxiosError)?.response?.status !== 404) throw error;
+        await api.post(url);
+        if (status === AGENT_INSIGHTS_JOB_STATUS.enabled) return undefined;
+        const { data } = await api.patch(url, { status });
+        return data;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [AGENT_INSIGHTS_JOB_KEY] });
     },
-    onError: (error: AxiosError) => {
-      const message = get(
-        error,
-        ["response", "data", "message"],
-        error.message,
-      );
-      toast({ title: "Error", description: message, variant: "destructive" });
-    },
+    onError: (error: AxiosError) => handleMutationError(toast, error),
   });
 };
 

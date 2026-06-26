@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { StringParam, useQueryParam } from "use-query-params";
+import { ChevronDown, Inbox, PartyPopper, Radar, Undo2 } from "lucide-react";
 import {
   AGENT_INSIGHTS_ISSUE_STATUS,
   AgentInsightsIssue,
 } from "@/types/signals";
-import { ChevronDown, Inbox, PartyPopper, Radar, Undo2 } from "lucide-react";
 import EmptyIssueDetailsIcon from "@/icons/empty-issue-details.svg?react";
 import EmptyIssueDetailsDarkIcon from "@/icons/empty-issue-details-dark.svg?react";
 import { useTheme } from "@/contexts/theme-provider";
