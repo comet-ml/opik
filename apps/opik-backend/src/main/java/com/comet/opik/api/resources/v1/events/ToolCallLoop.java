@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.resources.v1.events.tools.MediaMessageBuilder;
 import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
 import com.comet.opik.api.resources.v1.events.tools.TraceToolContext;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
@@ -197,6 +198,17 @@ final class ToolCallLoop {
 
             return roundResults
                     .doOnNext(messages::add)
+                    // After every ToolExecutionResultMessage for this round is in place (so no
+                    // tool_call is left unanswered), append any media the tools staged as ONE
+                    // multimodal UserMessage. Ordering — assistant(tool_calls) → tool results →
+                    // user(media) — is valid for OpenAI/Anthropic and mirrors the wrap-up user
+                    // message. Runs inside the executed branch only, so the MAX_TOOL_CALL_ROUNDS
+                    // early-return never leaves staged media dangling.
+                    .then(Mono.fromRunnable(() -> {
+                        if (ctx.hasPendingMedia()) {
+                            messages.add(MediaMessageBuilder.build(ctx.drainPendingMedia()));
+                        }
+                    }))
                     .then(Mono.defer(() -> {
                         // Defensive copy: ChatRequestBuilder stores the list by reference, so a later
                         // iteration mutating `messages` would retroactively change what an async chat

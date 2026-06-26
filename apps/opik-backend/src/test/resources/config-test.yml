@@ -365,6 +365,8 @@ onlineScoring:
   # Default: 4
   # Description: Characters-per-token ratio used to estimate trace size from serialized JSON length.
   agenticToolsCharsPerToken: 4
+  agenticToolsMaxInjectedBytes: 52428800
+  agenticToolsS3PresignTtlSeconds: 120
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
