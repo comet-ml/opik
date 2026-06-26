@@ -15,6 +15,8 @@ import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
 import com.comet.opik.api.resources.v1.events.tools.TraceCompressor;
 import com.comet.opik.api.resources.v1.events.tools.TraceToolContext;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.OnlineScoringTracePersistence;
+import com.comet.opik.domain.OnlineScoringTracePersistence.EvaluationRecorder;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TestSuiteAssertionCounterService;
 import com.comet.opik.domain.TraceService;
@@ -98,6 +100,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
     @Mock
     private OpikConfiguration opikConfiguration;
     @Mock
+    private OnlineScoringTracePersistence tracePersistence;
+    @Mock
     private com.comet.opik.domain.attachment.AttachmentService attachmentService;
 
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
@@ -149,6 +153,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 traceCompressor,
                 workspaceNameService,
                 opikConfiguration,
+                tracePersistence,
                 attachmentService);
     }
 
@@ -347,7 +352,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
         TraceToScoreLlmAsJudge message = newMessage(UUID.randomUUID());
 
         ChatResponse result = scorer
-                .handleToolCalls(plainResponse, toolRequest, structuredRequest, message, List.of(), null, Map.of())
+                .handleToolCalls(plainResponse, toolRequest, structuredRequest, message, List.of(), null, Map.of(),
+                        EvaluationRecorder.NOOP)
                 .block();
 
         assertThat(result).isSameAs(plainResponse);
@@ -390,7 +396,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 .build();
 
         ChatResponse result = scorer.handleToolCalls(initialResponse, toolRequest, structuredRequest, message,
-                List.of(), null, Map.of()).block();
+                List.of(), null, Map.of(), EvaluationRecorder.NOOP).block();
 
         assertThat(result).isSameAs(finalResponse);
 
@@ -466,7 +472,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
 
         org.assertj.core.api.Assertions
                 .assertThatThrownBy(() -> scorer.handleToolCalls(
-                        initialResponse, toolRequest, structuredRequest, message, List.of(), null, Map.of()).block())
+                        initialResponse, toolRequest, structuredRequest, message, List.of(), null, Map.of(),
+                        EvaluationRecorder.NOOP).block())
                 .isSameAs(providerFailure);
 
         // Exactly one provider call attempted; the loop did not swallow + continue.
@@ -519,7 +526,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 .build();
 
         ChatResponse result = scorer.handleToolCalls(
-                toolCallingResponse, toolRequest, structuredRequest, message, List.of(), null, Map.of()).block();
+                toolCallingResponse, toolRequest, structuredRequest, message, List.of(), null, Map.of(),
+                EvaluationRecorder.NOOP).block();
 
         // Result is the wrap-up structured response — wrap-up still fires when the cap is hit.
         assertThat(result).isSameAs(finalResponse);

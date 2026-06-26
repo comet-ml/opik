@@ -1,16 +1,11 @@
 import React, { useCallback } from "react";
 import { ListTree } from "lucide-react";
-import {
-  BooleanParam,
-  JsonParam,
-  StringParam,
-  useQueryParam,
-} from "use-query-params";
 
 import { Tag } from "@/ui/tag";
 import { Button } from "@/ui/button";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import TraceLogsSidebar, { TLS_QUERY_PREFIX } from "./TraceLogsSidebar";
+import TraceLogsSidebar, { TraceLogsViewConfig } from "./TraceLogsSidebar";
+import { useTraceLogsSidebarControls } from "./useTraceLogsSidebarControls";
 import { LOGS_SOURCE } from "@/types/traces";
 import { Filter } from "@/types/filters";
 
@@ -20,47 +15,36 @@ type TraceLogsSidebarButtonProps = {
   sourceFilters?: Filter[];
   variant?: "tag" | "icon";
   title?: string;
+  label?: string;
+  viewConfig?: TraceLogsViewConfig;
+  // When false, render only the trigger and let a single page-level <TraceLogsSidebar /> handle
+  // display. Used by per-row triggers (e.g. the online-evaluation rules table) so the sidebar is
+  // mounted once for the page instead of once per row (which would race on the shared tls_* state).
+  renderSidebar?: boolean;
 };
 
 const TraceLogsSidebarButton: React.FunctionComponent<
   TraceLogsSidebarButtonProps
-> = ({ projectId, logsSource, sourceFilters, variant = "tag", title }) => {
-  const [open = false, setOpen] = useQueryParam(
-    `${TLS_QUERY_PREFIX}open`,
-    BooleanParam,
-    { updateType: "replaceIn" },
-  );
-  const [, setTlsFilters] = useQueryParam(
-    `${TLS_QUERY_PREFIX}filters`,
-    JsonParam,
-    { updateType: "replaceIn" },
-  );
-  const [, setTlsTrace] = useQueryParam(
-    `${TLS_QUERY_PREFIX}trace`,
-    StringParam,
-    { updateType: "replaceIn" },
-  );
-  const [, setTlsSpan] = useQueryParam(`${TLS_QUERY_PREFIX}span`, StringParam, {
-    updateType: "replaceIn",
-  });
+> = ({
+  projectId,
+  logsSource,
+  sourceFilters,
+  variant = "tag",
+  title,
+  label = "Go to logs",
+  viewConfig,
+  renderSidebar = true,
+}) => {
+  const { open, openSidebar, closeSidebar } = useTraceLogsSidebarControls();
 
-  const handleOpen = useCallback(() => {
-    if (sourceFilters?.length) {
-      setTlsFilters(sourceFilters);
-    }
-    setOpen(true);
-  }, [sourceFilters, setTlsFilters, setOpen]);
-
-  const handleClose = useCallback(() => {
-    setOpen(undefined);
-    setTlsFilters(undefined);
-    setTlsTrace(undefined);
-    setTlsSpan(undefined);
-  }, [setOpen, setTlsFilters, setTlsTrace, setTlsSpan]);
+  const handleOpen = useCallback(
+    () => openSidebar(sourceFilters),
+    [openSidebar, sourceFilters],
+  );
 
   const trigger =
     variant === "icon" ? (
-      <TooltipWrapper content="Go to logs">
+      <TooltipWrapper content={label}>
         <Button
           data-testid="playground-logs-sidebar-button"
           variant="outline"
@@ -71,7 +55,7 @@ const TraceLogsSidebarButton: React.FunctionComponent<
         </Button>
       </TooltipWrapper>
     ) : (
-      <TooltipWrapper content="Go to logs">
+      <TooltipWrapper content={label}>
         <Tag
           size="md"
           variant="transparent"
@@ -83,7 +67,7 @@ const TraceLogsSidebarButton: React.FunctionComponent<
             style={{ color: "var(--color-green)" }}
           />
           <div className="comet-body-s-accented truncate text-muted-slate">
-            Go to logs
+            {label}
           </div>
         </Tag>
       </TooltipWrapper>
@@ -92,13 +76,16 @@ const TraceLogsSidebarButton: React.FunctionComponent<
   return (
     <>
       {trigger}
-      <TraceLogsSidebar
-        open={Boolean(open)}
-        onClose={handleClose}
-        projectId={projectId}
-        logsSource={logsSource}
-        title={title}
-      />
+      {renderSidebar && (
+        <TraceLogsSidebar
+          open={open}
+          onClose={closeSidebar}
+          projectId={projectId}
+          logsSource={logsSource}
+          title={title}
+          viewConfig={viewConfig}
+        />
+      )}
     </>
   );
 };

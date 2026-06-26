@@ -12,6 +12,8 @@ import com.comet.opik.api.events.TraceThreadToScoreLlmAsJudge;
 import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
 import com.comet.opik.api.resources.v1.events.tools.TraceToolContext;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.OnlineScoringTracePersistence;
+import com.comet.opik.domain.OnlineScoringTracePersistence.EvaluationRecorder;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
@@ -73,6 +75,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
     private final OnlineScoringConfig onlineScoringConfig;
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final SpanService spanService;
+    private final OnlineScoringTracePersistence tracePersistence;
     private final AttachmentService attachmentService;
 
     @Inject
@@ -88,6 +91,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
             @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService,
             @NonNull ToolRegistry toolRegistry,
             @NonNull SpanService spanService,
+            @NonNull OnlineScoringTracePersistence tracePersistence,
             @NonNull AttachmentService attachmentService) {
         super(config, redisson, feedbackScoreService, traceService, TRACE_THREAD_LLM_AS_JUDGE,
                 Constants.TRACE_THREAD_LLM_AS_JUDGE);
@@ -100,6 +104,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
         this.onlineScoringConfig = config;
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.spanService = spanService;
+        this.tracePersistence = tracePersistence;
         this.attachmentService = attachmentService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringTraceThreadLlmAsJudgeScorer.class);
     }
@@ -231,6 +236,26 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                                 .put(RequestContext.WORKSPACE_ID, message.workspaceId())
                                 .put(RequestContext.USER_NAME, message.userName()))
                 : Mono.just(List.of());
+        // Monitoring recorder (OPIK-6994): one hidden evaluator trace per thread evaluation, with an
+        // llm span per LLM round and tool spans for the agentic loop. NOOP when the toggle is off.
+        // Resolved reactively because the project-name lookup is blocking.
+        Mono<EvaluationRecorder> recorderMono = Mono.fromCallable(
+                () -> serviceTogglesConfig.isOnlineScoringTracingEnabled()
+                        ? tracePersistence.begin(
+                                OnlineScoringTracePersistence.EvaluatedSubject.ofThread(threadId, message.projectId(),
+                                        projectService.get(message.projectId(), message.workspaceId()).name()),
+                                rule.getId(), rule.getName(), message.code().model().name(),
+                                message.workspaceId(), message.userName())
+                        : EvaluationRecorder.NOOP)
+                .subscribeOn(Schedulers.boundedElastic())
+                // Monitoring is best-effort: a project-name lookup failure (e.g. missing project) must
+                // not abort the actual thread scoring, so degrade to NOOP instead of failing the zip.
+                .onErrorResume(error -> {
+                    log.warn("Failed to start online-evaluation monitoring for thread '{}', "
+                            + "proceeding without it", threadId, error);
+                    return Mono.just(EvaluationRecorder.NOOP);
+                });
+
         // Check whether any trace in the thread has attachments — if so, force the agentic-tools
         // path regardless of context size (the judge needs get_attachment to fetch them). Best-effort:
         // a transient listing error returns false and falls back to the normal size-based routing.
@@ -243,10 +268,17 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                                 .put(RequestContext.WORKSPACE_ID, message.workspaceId())
                                 .put(RequestContext.USER_NAME, message.userName()))
                 : Mono.just(false);
-        return Mono.zip(spansMono, hasAttachmentsMono)
-                .flatMap(tuple -> evaluate(message, traces, tuple.getT1(), tuple.getT2(),
-                        threadModelId, threadId, rule, mdc))
-                .flatMap(scores -> storeThreadScores(scores, threadId, message.userName(), message.workspaceId()))
+
+        return Mono.zip(recorderMono, spansMono, hasAttachmentsMono)
+                .flatMap(tuple -> {
+                    EvaluationRecorder recorder = tuple.getT1();
+                    return evaluate(message, traces, tuple.getT2(), tuple.getT3(), threadModelId, threadId, rule, mdc,
+                            recorder)
+                            .flatMap(scores -> recorder.complete(scores).thenReturn(scores))
+                            .onErrorResume(error -> recorder.fail(error).then(Mono.error(error)))
+                            .flatMap(scores -> storeThreadScores(scores, threadId, message.userName(),
+                                    message.workspaceId()));
+                })
                 .doOnNext(withMdc(mdc, loggedScores -> userFacingLogger
                         .info("Scores for threadId '{}' stored successfully:\n\n{}", threadId, loggedScores)))
                 .doOnError(withMdc(mdc, error -> userFacingLogger
@@ -266,20 +298,26 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
      */
     private Mono<List<FeedbackScoreBatchItemThread>> evaluate(TraceThreadToScoreLlmAsJudge message,
             List<Trace> traces, List<Span> spans, boolean hasAttachments, UUID threadModelId, String threadId,
-            AutomationRuleEvaluator<?, ?> rule, Map<String, String> mdc) {
+            AutomationRuleEvaluator<?, ?> rule, Map<String, String> mdc, EvaluationRecorder recorder) {
         return Mono.fromCallable(() -> prepareEvaluation(message, traces, spans, hasAttachments, threadId, rule, mdc))
                 .subscribeOn(Schedulers.parallel())
-                .flatMap(prepared -> scoreTraceReactive(prepared.scoreRequest(), message)
-                        .doOnNext(withMdc(mdc, chatResponse -> {
-                            if (userFacingLogger.isInfoEnabled()) {
-                                userFacingLogger.info("Received response for threadId '{}': '{}'",
-                                        threadId, OnlineScoringEngine.summarizeResponse(chatResponse));
-                            }
-                        }))
-                        .flatMap(initialResponse -> prepared.useTools()
-                                ? handleToolCalls(initialResponse, prepared.scoreRequest(),
-                                        prepared.structuredRequest(), message, mdc)
-                                : Mono.just(initialResponse)))
+                .flatMap(prepared -> {
+                    // Uniform structure with trace evals: prepare_evaluation span (fetched spans,
+                    // size estimate, mode) before the first LLM round. The agentic flag also sets
+                    // the parent trace's mode.
+                    return recorder.recordPreparation(spans.size(), prepared.estimatedTokens(), prepared.useTools())
+                            .then(scoreTraceReactive(prepared.scoreRequest(), message, recorder)
+                                    .doOnNext(withMdc(mdc, chatResponse -> {
+                                        if (userFacingLogger.isInfoEnabled()) {
+                                            userFacingLogger.info("Received response for threadId '{}': '{}'",
+                                                    threadId, OnlineScoringEngine.summarizeResponse(chatResponse));
+                                        }
+                                    }))
+                                    .flatMap(initialResponse -> prepared.useTools()
+                                            ? handleToolCalls(initialResponse, prepared.scoreRequest(),
+                                                    prepared.structuredRequest(), message, mdc, recorder)
+                                            : Mono.just(initialResponse)));
+                })
                 .map(chatResponse -> {
                     try (var logContext = wrapWithMdc(mdc)) {
                         Project project = projectService.get(message.projectId(), message.workspaceId());
@@ -365,7 +403,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
             // the trace scorer's symmetric Evaluating / Sending / Received chain.
             userFacingLogger.info("Sending threadId '{}' to LLM: {}",
                     threadId, OnlineScoringEngine.summarizeRequest(scoreRequest, modelName, useTools));
-            return new PreparedEvaluation(scoreRequest, structuredRequest, useTools);
+            return new PreparedEvaluation(scoreRequest, structuredRequest, useTools, estimatedContextTokens);
         }
     }
 
@@ -425,15 +463,18 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
      * {@link Schedulers#boundedElastic()} so the blocking Jersey-client I/O doesn't pin the
      * per-stream worker scheduler thread (OPIK-6308). Mirrors the trace scorer.
      */
-    private Mono<ChatResponse> scoreTraceReactive(ChatRequest request, TraceThreadToScoreLlmAsJudge message) {
-        return Mono.fromCallable(() -> aiProxyService.scoreTrace(
+    private Mono<ChatResponse> scoreTraceReactive(ChatRequest request, TraceThreadToScoreLlmAsJudge message,
+            EvaluationRecorder recorder) {
+        var call = Mono.fromCallable(() -> aiProxyService.scoreTrace(
                 request, message.code().model(), message.workspaceId()))
                 .subscribeOn(Schedulers.boundedElastic());
+        return recorder.recordLlmCall(request, call);
     }
 
     // Package-private for unit tests.
     Mono<ChatResponse> handleToolCalls(ChatResponse chatResponse, ChatRequest toolRequest,
-            ChatRequest structuredRequest, TraceThreadToScoreLlmAsJudge message, Map<String, String> mdc) {
+            ChatRequest structuredRequest, TraceThreadToScoreLlmAsJudge message, Map<String, String> mdc,
+            EvaluationRecorder recorder) {
 
         AiMessage aiMessage = chatResponse.aiMessage();
         if (!aiMessage.hasToolExecutionRequests()) {
@@ -459,13 +500,15 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
 
             return ToolCallLoop.runWithWrapUp(
                     chatResponse, toolRequest, structuredRequest, followUpParameters, toolRegistry,
-                    request -> scoreTraceReactive(request, message),
-                    messages, ctx, budget, "threadId/ruleId=" + message.ruleId(), mdc)
+                    request -> scoreTraceReactive(request, message, recorder),
+                    messages, ctx, budget, "threadId/ruleId=" + message.ruleId(), mdc,
+                    recorder)
                     .onErrorResume(error -> surfaceInjectedMediaFailure(error, ctx,
                             message.code().model().name(), userFacingLogger, mdc));
         });
     }
 
-    private record PreparedEvaluation(ChatRequest scoreRequest, ChatRequest structuredRequest, boolean useTools) {
+    private record PreparedEvaluation(ChatRequest scoreRequest, ChatRequest structuredRequest, boolean useTools,
+            int estimatedTokens) {
     }
 }
