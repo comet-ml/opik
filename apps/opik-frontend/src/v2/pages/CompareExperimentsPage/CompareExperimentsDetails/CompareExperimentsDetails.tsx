@@ -115,7 +115,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
             resource={RESOURCE_TYPE.experiment}
           />
         )}
-        {experiment?.dataset_id && experiment?.dataset_name && (
+        {experiment?.dataset_id && (
           <NavigationTag
             id={experiment.dataset_id}
             name={experiment.dataset_name}
