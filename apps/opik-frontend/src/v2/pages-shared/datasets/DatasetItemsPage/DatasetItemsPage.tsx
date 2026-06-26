@@ -271,13 +271,14 @@ function DatasetItemsPage(): React.ReactElement {
   const resetDialogKeyRef = useRef(0);
 
   const handleAddItem = useCallback(() => {
-    if (renderAddDialog && (dataset?.dataset_items_count ?? 0) === 0) {
+    if (!dataset) return;
+    if (renderAddDialog && dataset.dataset_items_count === 0) {
       setOpenDialog(true);
       resetDialogKeyRef.current += 1;
     } else {
       setOpenCreatePanel(true);
     }
-  }, [renderAddDialog, dataset?.dataset_items_count]);
+  }, [renderAddDialog, dataset]);
 
   const handleExpand = useCallback(() => setOpenExpansion(true), []);
 
