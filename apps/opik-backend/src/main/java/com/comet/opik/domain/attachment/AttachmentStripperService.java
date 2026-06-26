@@ -15,6 +15,7 @@ import com.google.inject.Singleton;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongHistogram;
+import io.opentelemetry.api.metrics.LongUpDownCounter;
 import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.Scope;
@@ -72,14 +73,33 @@ public class AttachmentStripperService {
     private final LongCounter attachmentsSkipped;
     private final LongCounter attachmentErrors;
     private final LongHistogram processingTimer;
+    /**
+     * Number of payloads (trace/span input/output/metadata) currently being stripped — each strip
+     * operation handles one such payload. Unlike the throughput counters above (which only move when
+     * a unit of work completes), this gauge stays elevated while work is in flight, so it surfaces a
+     * stuck or saturated scan in real time.
+     */
+    private final LongUpDownCounter stripInProgress;
+    /**
+     * Length distribution of candidate fields entering detection, in characters (UTF-16 code units).
+     * Recorded before scanning, so it is captured even when a field is slow to process — a leading
+     * indicator for oversized payloads.
+     */
+    private final LongHistogram inputSizeChars;
 
     // Apache Tika for MIME type detection
     private static final Tika tika = new Tika();
 
-    private final Tracer tracer;
+    /**
+     * Maximal run of base64 alphabet chars (RFC 4648), matched POSSESSIVELY so each run is consumed
+     * once with no backtracking. The size threshold is applied in code (see processTextNode), not in
+     * the pattern: the old {@code {minBase64Size,}} regex kept it inside, so a long sub-threshold run
+     * made find() retry from every offset -- an O(n*runlen) re-scan that pinned CPU on large payloads
+     * (OPIK-7118). Matching the run possessively and checking its length afterwards is linear.
+     */
+    private static final Pattern BASE64_RUN = Pattern.compile("[A-Za-z0-9+/]++");
 
-    // Base64 pattern compiled once during construction
-    private final Pattern base64Pattern;
+    private final Tracer tracer;
 
     // Minimum base64 size to look for
     private final long minBase64Size;
@@ -114,10 +134,18 @@ public class AttachmentStripperService {
                 .setDescription("Time spent detecting and processing attachments in milliseconds")
                 .ofLongs()
                 .build();
+        this.stripInProgress = meter
+                .upDownCounterBuilder("opik.attachments.strip.in_progress")
+                .setDescription("Number of payloads (trace/span input/output/metadata) currently being stripped")
+                .build();
+        this.inputSizeChars = meter
+                .histogramBuilder("opik.attachments.input.size.chars")
+                .setDescription(
+                        "Length in characters (UTF-16 code units) of candidate fields entering attachment detection")
+                .ofLongs()
+                .build();
 
-        // Compile the regex pattern once during construction based on configuration
         this.minBase64Size = attachmentsConfig.getStripMinSize();
-        this.base64Pattern = Pattern.compile("([A-Za-z0-9+/]{" + minBase64Size + ",}={0,2})");
 
         log.info("AttachmentStripperService initialized with minBase64Length: {}", minBase64Size);
     }
@@ -326,6 +354,7 @@ public class AttachmentStripperService {
         }
 
         long startTime = System.currentTimeMillis();
+        stripInProgress.add(1);
 
         try {
             // Start at 0, will be incremented to 1 for first attachment (using incrementAndGet pattern)
@@ -341,6 +370,7 @@ public class AttachmentStripperService {
             // We cannot return the original large payload to ClickHouse
             throw new InternalServerErrorException("Failed to process attachments in payload", e);
         } finally {
+            stripInProgress.add(-1);
             long duration = System.currentTimeMillis() - startTime;
             processingTimer.record(duration);
         }
@@ -472,34 +502,51 @@ public class AttachmentStripperService {
             return node;
         }
 
-        // Search for base64 patterns within the text (not just exact matches)
-        Matcher matcher = wrapWithSpan("regex.match", () -> base64Pattern.matcher(text));
+        // Record the field length up front, before scanning, so an oversized payload still contributes
+        // to the metric even if the scan that follows is slow to complete.
+        inputSizeChars.record(text.length());
+
+        // Find each maximal base64 run, then apply the size threshold and collect up to two trailing
+        // '=' padding chars in code -- identical detection to the old {minBase64Size,}={0,2} regex, but
+        // linear instead of a CPU-pinning re-scan (see BASE64_RUN, OPIK-7118). Any non-alphabet char
+        // (including line-wrapping whitespace) ends a run, so MIME/data-URI base64 is left intact.
+        final int length = text.length();
         StringBuilder result = new StringBuilder();
         int lastEnd = 0;
         boolean foundAttachment = false;
 
+        // Keep the original regex.match / regex.find span names so detection latency stays comparable
+        // before and after the linearization fix.
+        Matcher matcher = wrapWithSpan("regex.match", () -> BASE64_RUN.matcher(text));
         while (wrapWithSpan("regex.find", matcher::find)) {
-            String base64Data = matcher.group(1);
+            int start = matcher.start();
+            int runEnd = matcher.end();
+            if ((long) runEnd - start < minBase64Size) {
+                continue;
+            }
 
-            // Increment counter first (starts at 0, so first attachment becomes 1)
+            // Capture up to two trailing '=' padding chars: base64 pads the final group to a 4-char
+            // boundary, so 0, 1, or 2 '=' are valid. A third '=' is never valid padding and is left in
+            // the surrounding text.
+            int end = runEnd;
+            while (end < length && end - runEnd < 2 && text.charAt(end) == '=') {
+                end++;
+            }
+
+            String base64Data = text.substring(start, end);
             int currentAttachmentNumber = attachmentCounter.incrementAndGet();
-
-            // Try to process as attachment
             String attachmentReference = processBase64Attachment(base64Data, currentAttachmentNumber, ctx);
-
             if (attachmentReference != null) {
-                // Append text before the match
-                result.append(text, lastEnd, matcher.start());
-                // Append the attachment reference
+                result.append(text, lastEnd, start);
                 result.append(attachmentReference);
-                lastEnd = matcher.end();
+                lastEnd = end;
                 foundAttachment = true;
             }
         }
 
         // If we found and replaced attachments, return new node with modified text
         if (foundAttachment) {
-            result.append(text, lastEnd, text.length());
+            result.append(text, lastEnd, length);
             return objectMapper.getNodeFactory().textNode(result.toString());
         }
 
