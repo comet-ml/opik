@@ -221,6 +221,7 @@ const SignalsPage: React.FC = () => {
           projectId={projectId}
           showResolved={showResolved}
           isRunning={isRunning}
+          canConfigure={canConfigure}
           onRunDiagnostic={canConfigure ? handleRunDiagnostic : undefined}
           onShowOpenIssues={() => setShowResolved(false)}
         />
