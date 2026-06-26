@@ -33,8 +33,8 @@ const owlTriggerClass = (open: boolean, growsLeft: boolean) =>
     // Anchor + growth direction. flex-row-reverse keeps the icon on the anchored
     // (right) edge so the label slides out to the left.
     growsLeft
-      ? "right-0.5 flex-row-reverse group-hover/explain:pl-1.5"
-      : "left-0.5 group-hover/explain:pr-1.5",
+      ? "right-1.5 flex-row-reverse group-hover/explain:pl-1.5"
+      : "left-1.5 group-hover/explain:pr-1.5",
     // Hover → pill: gradient rotates to -18deg.
     `group-hover/explain:${PILL_GRADIENT}`,
     // Revealed when the cell content is hovered.
@@ -113,7 +113,10 @@ const ExplainButton = ({
           onMouseDown={stop}
           className={owlTriggerClass(open, growsLeft)}
         >
-          <OllieOwl className="size-3 shrink-0" />
+          {/* The owl's eye-circles sit below its viewBox centre, so it reads as
+              low against the label; lift ~1px to optically centre them (mirrors
+              the popover header). */}
+          <OllieOwl className="relative -top-px size-3 shrink-0" />
           <span className={owlLabelClass(open, growsLeft)}>Explain</span>
         </button>
       </PopoverTrigger>
@@ -122,7 +125,7 @@ const ExplainButton = ({
         // Open beneath the owl, hugging its anchored edge so it never spills off
         // the side the owl sits against.
         align={growsLeft ? "end" : "start"}
-        className="w-72 px-1 py-2 font-mono text-xs"
+        className="w-80 px-1 pb-3 pt-2 font-mono text-xs"
         onClick={stop}
         // The owl trigger is only visible on cell hover / while open, so don't
         // hand focus back to it on close (it would be focused-but-invisible and
