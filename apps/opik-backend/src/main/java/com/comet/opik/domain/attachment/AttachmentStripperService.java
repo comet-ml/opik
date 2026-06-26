@@ -30,6 +30,7 @@ import org.apache.tika.mime.MimeTypes;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Iterator;
 import java.util.Map;
@@ -81,9 +82,9 @@ public class AttachmentStripperService {
      */
     private final LongUpDownCounter stripInProgress;
     /**
-     * Size distribution of candidate fields entering detection, in bytes (approximated by character
-     * count — exact for the base64/ASCII payloads this targets). Recorded before scanning, so it is
-     * captured even when a field is slow to process — a leading indicator for oversized payloads.
+     * Size distribution of candidate fields entering detection, in UTF-8 bytes (the size the payload
+     * occupies on the wire and in storage). Recorded before scanning, so it is captured even when a
+     * field is slow to process — a leading indicator for oversized payloads.
      */
     private final LongHistogram inputSizeBytes;
 
@@ -502,10 +503,8 @@ public class AttachmentStripperService {
         }
 
         // Record the field size up front, before scanning, so an oversized payload still contributes
-        // to the metric even if the scan that follows is slow to complete. Approximated by character
-        // count (1 byte/char holds for the base64/ASCII payloads this targets) to avoid a byte[] copy
-        // of the potentially large field.
-        inputSizeBytes.record(text.length());
+        // to the metric even if the scan that follows is slow to complete.
+        inputSizeBytes.record(text.getBytes(StandardCharsets.UTF_8).length);
 
         // Find each maximal base64 run, then apply the size threshold and collect up to two trailing
         // '=' padding chars in code -- identical detection to the old {minBase64Size,}={0,2} regex, but
