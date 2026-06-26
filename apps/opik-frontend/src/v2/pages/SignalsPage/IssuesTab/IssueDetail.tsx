@@ -103,6 +103,12 @@ const IssueDetail: React.FC<IssueDetailProps> = ({
 
   const details = detail?.details ?? [];
 
+  // Traces the backend resolved as exhibiting this issue, deduped across the
+  // per-day detail rows.
+  const exampleTraceIds = Array.from(
+    new Set(details.flatMap((d) => d.metadata?.example_trace_ids ?? [])),
+  );
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-border bg-soft-background px-3">
@@ -204,7 +210,10 @@ const IssueDetail: React.FC<IssueDetailProps> = ({
         )}
 
         <SectionCard title="Affected traces sample">
-          <AffectedTracesSample projectId={projectId} />
+          <AffectedTracesSample
+            projectId={projectId}
+            traceIds={exampleTraceIds}
+          />
         </SectionCard>
       </div>
     </div>

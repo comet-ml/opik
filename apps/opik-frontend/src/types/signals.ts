@@ -15,6 +15,14 @@ export enum AGENT_INSIGHTS_ISSUE_SEVERITY {
   low = "low",
 }
 
+export interface AgentInsightsIssueDetailMetadata {
+  // Resolved ids of traces that exhibit the issue, used for the affected-traces sample.
+  example_trace_ids?: string[];
+  percent?: number;
+  confidence?: number;
+  confidence_justification?: string;
+}
+
 // Per-day breakdown row, used for the occurrence-over-time chart.
 export interface AgentInsightsIssueDetail {
   report_day: string;
@@ -22,7 +30,7 @@ export interface AgentInsightsIssueDetail {
   total_count: number;
   users_impacted: number;
   total_users: number;
-  metadata?: unknown;
+  metadata?: AgentInsightsIssueDetailMetadata;
 }
 
 // List item — metrics are aggregated over the requested time window.
