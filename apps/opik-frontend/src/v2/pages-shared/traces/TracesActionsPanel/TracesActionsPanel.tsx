@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from "react";
-import { Tag, Trash } from "lucide-react";
+import { PenLine, Tag, Trash } from "lucide-react";
 import slugify from "slugify";
 import { cn } from "@/lib/utils";
 import { Button, ButtonProps } from "@/ui/button";
@@ -12,6 +12,7 @@ import useTracesBatchDeleteMutation from "@/api/traces/useTraceBatchDeleteMutati
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ExportToButton from "@/shared/ExportToButton/ExportToButton";
 import AddTagDialog from "@/v2/pages-shared/traces/AddTagDialog/AddTagDialog";
+import AddAnnotationDialog from "@/v2/pages-shared/traces/AddAnnotationDialog/AddAnnotationDialog";
 import EvaluateButton from "@/v2/pages-shared/automations/EvaluateButton/EvaluateButton";
 import RunEvaluationDialog from "@/v2/pages-shared/automations/RunEvaluationDialog/RunEvaluationDialog";
 import useFilteredRulesList from "@/api/automations/useFilteredRulesList";
@@ -70,7 +71,11 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
 
   const {
-    permissions: { canDeleteTraces, canLogTraceSpanThread },
+    permissions: {
+      canAnnotateTraceSpanThread,
+      canDeleteTraces,
+      canLogTraceSpanThread,
+    },
   } = usePermissions();
 
   const showEvaluate =
@@ -143,6 +148,16 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
           isLoading={isRulesLoading}
         />
       )}
+      {canAnnotateTraceSpanThread && (
+        <AddAnnotationDialog
+          key={`annotate-${resetKeyRef.current}`}
+          rows={selectedRows}
+          open={open === 5}
+          setOpen={setOpen}
+          projectId={projectId}
+          type={type}
+        />
+      )}
       <AddToDropdown
         getDataForExport={getDataForExport}
         selectedRows={selectedRows}
@@ -164,6 +179,22 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
           >
             <Tag className={leadIconClassName} />
             <span>Manage tags</span>
+          </Button>
+        </TooltipWrapper>
+      )}
+      {canAnnotateTraceSpanThread && (
+        <TooltipWrapper content="Annotate">
+          <Button
+            variant={buttonVariant}
+            size={buttonSize}
+            onClick={() => {
+              setOpen(5);
+              resetKeyRef.current = resetKeyRef.current + 1;
+            }}
+            disabled={disabled}
+          >
+            <PenLine className={leadIconClassName} />
+            <span>Annotate</span>
           </Button>
         </TooltipWrapper>
       )}
