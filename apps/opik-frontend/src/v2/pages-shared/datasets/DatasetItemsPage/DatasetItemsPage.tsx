@@ -1,13 +1,15 @@
-import React, { useCallback, useEffect, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { StringParam, useQueryParam } from "use-query-params";
 
 import useDatasetById from "@/api/datasets/useDatasetById";
 import useDatasetUpdateMutation from "@/api/datasets/useDatasetUpdateMutation";
 import useDatasetVersionsList from "@/api/datasets/useDatasetVersionsList";
+import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import DatasetItemsTab, {
   EditPanelRenderProps,
   AddPanelRenderProps,
   AddDialogRenderProps,
+  ExpansionDialogRenderProps,
 } from "@/v2/pages-shared/datasets/DatasetItemsTab/DatasetItemsTab";
 import EditTestSuiteSettingsDialog from "@/v2/pages-shared/datasets/TestSuiteComponents/EditTestSuiteSettingsDialog";
 import TestSuiteItemPanel from "@/v2/pages-shared/datasets/TestSuiteComponents/TestSuiteItemPanel/TestSuiteItemPanel";
@@ -19,15 +21,22 @@ import AddVersionDialog from "@/v2/pages-shared/datasets/VersionHistoryTab/AddVe
 import VersionHistoryTab from "@/v2/pages-shared/datasets/VersionHistoryTab/VersionHistoryTab";
 import OverrideVersionDialog from "@/v2/pages-shared/datasets/OverrideVersionDialog";
 import DatasetExpansionDialog from "@/v2/pages-shared/datasets/DatasetExpansionDialog";
-import { ExpansionDialogRenderProps } from "@/v2/pages-shared/datasets/DatasetItemsActionsPanel";
+import GeneratedSamplesDialog from "@/v2/pages-shared/datasets/GeneratedSamplesDialog";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import useNavigationBlocker from "@/hooks/useNavigationBlocker";
 import { useTestSuiteSavePayload } from "@/hooks/useTestSuiteSavePayload";
 import { useDatasetEntityIdFromURL } from "@/v2/hooks/useDatasetEntityIdFromURL";
-import { useClearDraft, useHasDraft } from "@/store/TestSuiteDraftStore";
 import {
+  useClearDraft,
+  useHasDraft,
+  useBulkAddItems,
+} from "@/store/TestSuiteDraftStore";
+import { buildDraftItemFromSample } from "@/lib/dataset-item-utils";
+import { useToast } from "@/ui/use-toast";
+import {
+  DatasetItem,
   DatasetItemColumn,
   DATASET_STATUS,
   DATASET_TYPE,
@@ -81,6 +90,7 @@ function DatasetItemsPage(): React.ReactElement {
   const datasetType = dataset?.type;
   const isTestSuite = datasetType === DATASET_TYPE.TEST_SUITE;
   const entityName = isTestSuite ? "test suite" : "dataset";
+  const itemName = isTestSuite ? "test case" : "record";
 
   const { data: versionsData } = useDatasetVersionsList(
     { datasetId, page: 1, size: 1 },
@@ -203,19 +213,73 @@ function DatasetItemsPage(): React.ReactElement {
     [isTestSuite],
   );
 
+  const bulkAddItems = useBulkAddItems();
+  const { toast } = useToast();
+  const [generatedSamples, setGeneratedSamples] = useState<DatasetItem[]>([]);
+  const [generatedSamplesDialogOpen, setGeneratedSamplesDialogOpen] =
+    useState(false);
+  const samplesResetKeyRef = useRef(0);
+
+  const handleSamplesGenerated = useCallback((samples: DatasetItem[]) => {
+    setGeneratedSamples(samples);
+    samplesResetKeyRef.current += 1;
+    setGeneratedSamplesDialogOpen(true);
+  }, []);
+
+  const handleAddGeneratedItems = useCallback(
+    (items: DatasetItem[]) => {
+      const now = new Date().toISOString();
+      bulkAddItems(items.map((item) => buildDraftItemFromSample(item, now)));
+      const plural = items.length !== 1 ? "s" : "";
+      toast({
+        title: "Samples added to draft",
+        description: `${items.length} sample${plural} added to your draft changes`,
+      });
+    },
+    [bulkAddItems, toast],
+  );
+
   const renderExpansionDialog = useCallback(
-    ({ open, setOpen, onSamplesGenerated }: ExpansionDialogRenderProps) => (
+    ({ open, setOpen }: ExpansionDialogRenderProps) => (
       <DatasetExpansionDialog
         datasetId={datasetId}
         open={open}
         setOpen={setOpen}
-        onSamplesGenerated={onSamplesGenerated}
+        onSamplesGenerated={handleSamplesGenerated}
         datasetType={datasetType}
         suiteAssertions={isTestSuite ? effectiveAssertions : undefined}
       />
     ),
-    [datasetId, datasetType, isTestSuite, effectiveAssertions],
+    [
+      datasetId,
+      datasetType,
+      isTestSuite,
+      effectiveAssertions,
+      handleSamplesGenerated,
+    ],
   );
+
+  const { data: addItemsMeta } = useDatasetItemsList(
+    { datasetId, page: 1, size: 1 },
+    { enabled: canEditDatasets && !!datasetId },
+  );
+  const addItemColumns = addItemsMeta?.columns ?? [];
+
+  const [openCreatePanel, setOpenCreatePanel] = useState(false);
+  const [openDialog, setOpenDialog] = useState(false);
+  const [openExpansion, setOpenExpansion] = useState(false);
+  const resetDialogKeyRef = useRef(0);
+
+  const handleAddItem = useCallback(() => {
+    if (renderAddDialog && (dataset?.dataset_items_count ?? 0) === 0) {
+      setOpenDialog(true);
+      resetDialogKeyRef.current += 1;
+    } else {
+      setOpenCreatePanel(true);
+    }
+  }, [renderAddDialog, dataset?.dataset_items_count]);
+
+  const handleExpand = useCallback(() => setOpenExpansion(true), []);
 
   return (
     <div className="pt-4">
@@ -243,6 +307,14 @@ function DatasetItemsPage(): React.ReactElement {
         open={settingsDialogOpen}
         setOpen={setSettingsDialogOpen}
       />
+      <GeneratedSamplesDialog
+        key={`generate-samples-${samplesResetKeyRef.current}`}
+        samples={generatedSamples}
+        open={generatedSamplesDialogOpen}
+        setOpen={setGeneratedSamplesDialogOpen}
+        onAddItems={handleAddGeneratedItems}
+        entityName={entityName}
+      />
       {DialogComponent}
       <DatasetItemsPageHeader
         dataset={dataset}
@@ -258,13 +330,30 @@ function DatasetItemsPage(): React.ReactElement {
         onDiscardClick={() => setDiscardDialogOpen(true)}
         onSaveClick={() => setAddVersionDialogOpen(true)}
         onSettingsClick={() => setSettingsDialogOpen(true)}
+        onAddItem={handleAddItem}
+        onExpand={handleExpand}
       />
+      {renderAddPanel({
+        open: openCreatePanel,
+        onClose: () => setOpenCreatePanel(false),
+        columns: addItemColumns,
+      })}
+      {renderAddDialog?.({
+        key: resetDialogKeyRef.current,
+        datasetId,
+        open: openDialog,
+        setOpen: setOpenDialog,
+      })}
+      {renderExpansionDialog({
+        open: openExpansion,
+        setOpen: setOpenExpansion,
+      })}
       <Tabs value={tab ?? "items"} onValueChange={setTab}>
-        <TabsList variant="underline">
-          <TabsTrigger variant="underline" value="items">
-            Items
+        <TabsList variant="segmented-primary">
+          <TabsTrigger variant="segmented-primary" value="items">
+            {isTestSuite ? "Test cases" : "Records"}
           </TabsTrigger>
-          <TabsTrigger variant="underline" value="version-history">
+          <TabsTrigger variant="segmented-primary" value="version-history">
             Version history
           </TabsTrigger>
         </TabsList>
@@ -284,9 +373,8 @@ function DatasetItemsPage(): React.ReactElement {
             entityName={entityName}
             buildColumns={buildColumns}
             renderEditPanel={renderEditPanel}
-            renderAddPanel={renderAddPanel}
-            renderAddDialog={renderAddDialog}
-            renderExpansionDialog={renderExpansionDialog}
+            onAddItem={handleAddItem}
+            itemName={itemName}
           />
         </TabsContent>
         <TabsContent value="version-history">

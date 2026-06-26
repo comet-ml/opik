@@ -1,22 +1,12 @@
 import React from "react";
 import { Link } from "@tanstack/react-router";
-import {
-  ChartLine,
-  Database,
-  FileTerminal,
-  FlaskConical,
-  LayoutGrid,
-  ListTree,
-  MessagesSquare,
-  SparklesIcon,
-  UserPen,
-} from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import isUndefined from "lodash/isUndefined";
 
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
-import { Tag, TagProps } from "@/ui/tag";
+import { Tag } from "@/ui/tag";
 import { Button } from "@/ui/button";
 import { Filter } from "@/types/filters";
 import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
@@ -41,105 +31,83 @@ export const RESOURCE_MAP = {
   [RESOURCE_TYPE.project]: {
     url: "/$workspaceName/projects/$projectId/traces",
     projectUrl: "/$workspaceName/projects/$projectId/home",
-    icon: LayoutGrid,
     param: "projectId",
     deleted: "Deleted project",
     label: "project",
-    color: "var(--color-green)",
   },
   [RESOURCE_TYPE.dataset]: {
     url: "/$workspaceName/datasets/$datasetId/items",
     projectUrl: "/$workspaceName/projects/$projectId/datasets/$datasetId/items",
-    icon: Database,
     param: "datasetId",
     deleted: "Deleted dataset",
     label: "dataset",
-    color: "var(--color-yellow)",
   },
   [RESOURCE_TYPE.datasetItem]: {
     url: "/$workspaceName/datasets/$datasetId/items",
     projectUrl: "/$workspaceName/projects/$projectId/datasets/$datasetId/items",
-    icon: Database,
     param: "datasetId",
     deleted: "Deleted dataset item",
     label: "dataset item",
-    color: "var(--color-yellow)",
   },
   [RESOURCE_TYPE.prompt]: {
     url: "/$workspaceName/prompts/$promptId",
     projectUrl: "/$workspaceName/projects/$projectId/prompts/$promptId",
-    icon: FileTerminal,
     param: "promptId",
     deleted: "Deleted prompt",
     label: "prompt",
-    color: "var(--color-purple)",
   },
   [RESOURCE_TYPE.experiment]: {
     url: "/$workspaceName/experiments/$datasetId/compare",
     projectUrl:
       "/$workspaceName/projects/$projectId/experiments/$datasetId/compare",
-    icon: FlaskConical,
     param: "datasetId",
     deleted: "Deleted experiment",
     label: "experiment",
-    color: "var(--color-burgundy)",
   },
   [RESOURCE_TYPE.experimentItem]: {
     url: "/$workspaceName/experiments/$datasetId/compare",
     projectUrl:
       "/$workspaceName/projects/$projectId/experiments/$datasetId/compare",
-    icon: FlaskConical,
     param: "datasetId",
     deleted: "Deleted experiment item",
     label: "experiment item",
-    color: "var(--color-burgundy)",
   },
   [RESOURCE_TYPE.optimization]: {
     url: "/$workspaceName/optimizations/$optimizationId",
     projectUrl:
       "/$workspaceName/projects/$projectId/optimizations/$optimizationId",
-    icon: SparklesIcon,
     param: "optimizationId",
     deleted: "Deleted optimization",
     label: "optimization run",
-    color: "var(--color-orange)",
   },
   [RESOURCE_TYPE.trial]: {
     url: "/$workspaceName/optimizations/$optimizationId/trials",
     projectUrl:
       "/$workspaceName/projects/$projectId/optimizations/$optimizationId/trials",
-    icon: SparklesIcon,
     param: "optimizationId",
     deleted: "Deleted optimization",
     label: "trial",
-    color: "var(--color-orange)",
   },
   [RESOURCE_TYPE.annotationQueue]: {
     url: "/$workspaceName/annotation-queues/$annotationQueueId",
     projectUrl:
       "/$workspaceName/projects/$projectId/annotation-queues/$annotationQueueId",
-    icon: UserPen,
     param: "annotationQueueId",
     deleted: "Deleted annotation queue",
     label: "annotation queue",
-    color: "var(--color-pink)",
   },
   [RESOURCE_TYPE.dashboard]: {
     url: "/$workspaceName/dashboards/$dashboardId",
-    icon: ChartLine,
     param: "dashboardId",
     deleted: "Deleted dashboard",
     label: "dashboard",
-    color: "var(--color-blue)",
   },
   [RESOURCE_TYPE.traces]: {
     url: "/$workspaceName/projects/$projectId/traces",
     projectUrl: "/$workspaceName/projects/$projectId/logs",
-    icon: ListTree,
     param: "projectId",
     deleted: "Deleted traces",
     label: "traces",
-    color: "var(--color-green)",
     search: { tab: PROJECT_TAB.logs, logsType: LOGS_TYPE.traces },
     projectSearch: { logsType: LOGS_TYPE.traces },
   },
@@ -147,20 +115,16 @@ export const RESOURCE_MAP = {
     url: "/$workspaceName/test-suites/$suiteId/items",
     projectUrl:
       "/$workspaceName/projects/$projectId/test-suites/$suiteId/items",
-    icon: Database,
     param: "suiteId",
     deleted: "Deleted test suite",
     label: "test suite",
-    color: "var(--color-yellow)",
   },
   [RESOURCE_TYPE.threads]: {
     url: "/$workspaceName/projects/$projectId/traces",
     projectUrl: "/$workspaceName/projects/$projectId/logs",
-    icon: MessagesSquare,
     param: "projectId",
     deleted: "Deleted threads",
     label: "threads",
-    color: "var(--thread-icon-text)",
     search: { tab: PROJECT_TAB.logs, logsType: LOGS_TYPE.threads },
     projectSearch: { logsType: LOGS_TYPE.threads },
   },
@@ -172,14 +136,12 @@ export type ResourceLinkProps = {
   resource: RESOURCE_TYPE;
   search?: Record<string, string | number | string[] | Filter[]>;
   params?: Record<string, string | number | string[]>;
-  variant?: TagProps["variant"];
-  size?: TagProps["size"];
-  iconSize?: 3 | 3.5 | 4 | 5;
-  gapSize?: number;
-  tooltipContent?: string;
+  tooltipContent?: string | false;
   asTag?: boolean;
   isSmall?: boolean;
   isDeleted?: boolean;
+  prefix?: string;
+  suffix?: React.ReactNode;
   className?: string;
 };
 
@@ -189,14 +151,12 @@ function ResourceLink({
   id,
   search,
   params,
-  variant = "gray",
-  size = "md",
-  iconSize = 4,
-  gapSize = 2,
   tooltipContent = "",
   asTag = false,
   isSmall = false,
   isDeleted = false,
+  prefix,
+  suffix,
   className,
 }: ResourceLinkProps): React.ReactElement {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -236,16 +196,15 @@ function ResourceLink({
       disabled={deleted}
     >
       {asTag ? (
-        <TooltipWrapper content={tooltipContent || text} stopClickPropagation>
+        <TooltipWrapper
+          content={tooltipContent === false ? "" : tooltipContent || text}
+          stopClickPropagation
+        >
           <Tag
-            size={size}
-            variant={variant}
+            size="md"
+            variant="transparent"
             className={cn(
-              "flex items-center",
-              gapSize === 1 && "gap-1",
-              gapSize === 2 && "gap-2",
-              gapSize === 3 && "gap-3",
-              gapSize === 4 && "gap-4",
+              "flex items-center gap-1",
               deleted && "opacity-50 cursor-default",
               !deleted &&
                 "hover:bg-primary-foreground hover:text-foreground active:bg-primary-100 active:text-foreground",
@@ -253,29 +212,19 @@ function ResourceLink({
               className,
             )}
           >
-            <props.icon
-              className={cn(
-                "shrink-0",
-                iconSize === 3 && "size-3",
-                iconSize === 3.5 && "size-3.5",
-                iconSize === 4 && "size-4",
-                iconSize === 5 && "size-5",
-              )}
-              style={{ color: props.color }}
-            />
-            {!isSmall && (
-              <div
-                className={cn(
-                  "truncate",
-                  variant === "transparent" && [
-                    "text-muted-slate",
-                    "comet-body-s-accented",
-                  ],
-                )}
-              >
-                {text}
-              </div>
-            )}
+            {!isSmall &&
+              (deleted ? (
+                <div className="comet-body-s-accented truncate text-foreground">
+                  {text}
+                </div>
+              ) : (
+                <div className="comet-body-s truncate text-foreground">
+                  {prefix ? `${prefix}: ` : ""}
+                  <span className="comet-body-s-accented">{text}</span>
+                </div>
+              ))}
+            {!isSmall && !deleted && suffix}
+            <ArrowUpRight className="size-3 shrink-0 text-foreground" />
           </Tag>
         </TooltipWrapper>
       ) : (

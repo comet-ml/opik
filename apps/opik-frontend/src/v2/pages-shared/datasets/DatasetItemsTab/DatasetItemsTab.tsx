@@ -9,7 +9,7 @@ import {
 } from "use-query-params";
 import useLocalStorageState from "use-local-storage-state";
 import { keepPreviousData } from "@tanstack/react-query";
-import { Check, Loader2, Plus } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
@@ -35,13 +35,10 @@ import {
   ColumnData,
   ROW_HEIGHT,
 } from "@/types/shared";
-import DatasetItemsActionsPanel, {
-  ExpansionDialogRenderProps,
-} from "@/v2/pages-shared/datasets/DatasetItemsActionsPanel";
+import DatasetItemsActionsPanel from "@/v2/pages-shared/datasets/DatasetItemsActionsPanel";
 import { DatasetItemRowActionsCell } from "@/v2/pages-shared/datasets/DatasetItemRowActionsCell";
 import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import SelectAllBanner from "@/shared/SelectAllBanner/SelectAllBanner";
-import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
@@ -113,6 +110,11 @@ export interface AddDialogRenderProps {
   setOpen: (open: boolean) => void;
 }
 
+export interface ExpansionDialogRenderProps {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+}
+
 interface DatasetItemsTabProps {
   datasetId: string;
   datasetName?: string;
@@ -125,9 +127,8 @@ interface DatasetItemsTabProps {
     dynamicDatasetColumns: DynamicColumn[],
   ) => ColumnData<DatasetItem>[];
   renderEditPanel: (props: EditPanelRenderProps) => React.ReactNode;
-  renderAddPanel: (props: AddPanelRenderProps) => React.ReactNode;
-  renderAddDialog?: (props: AddDialogRenderProps) => React.ReactNode;
-  renderExpansionDialog: (props: ExpansionDialogRenderProps) => React.ReactNode;
+  onAddItem: () => void;
+  itemName: string;
 }
 
 const POLLING_INTERVAL_MS = 3000;
@@ -147,9 +148,8 @@ function DatasetItemsTab({
   entityName,
   buildColumns,
   renderEditPanel,
-  renderAddPanel,
-  renderAddDialog,
-  renderExpansionDialog,
+  onAddItem,
+  itemName,
 }: DatasetItemsTabProps): React.ReactElement | null {
   const {
     permissions: { canEditDatasets },
@@ -202,10 +202,6 @@ function DatasetItemsTab({
     queryParamConfig: StringParam,
     syncQueryWithLocalStorageOnInit: true,
   });
-
-  const [openCreatePanel, setOpenCreatePanel] = useState<boolean>(false);
-  const [openDialog, setOpenDialog] = useState<boolean>(false);
-  const resetDialogKeyRef = useRef(0);
 
   const [isCompactToolbar, setIsCompactToolbar] = useState(false);
   const [isSearchExpanded, setIsSearchExpanded] = useState(Boolean(search));
@@ -331,10 +327,10 @@ function DatasetItemsTab({
 
   const noDataText = useMemo(() => {
     if (isDraftMode && deletedIds.size > 0) {
-      return `All ${entityName} items on this page have been deleted`;
+      return `All ${itemName}s on this page have been deleted`;
     }
-    return `No ${entityName} items yet`;
-  }, [isDraftMode, deletedIds.size, entityName]);
+    return `No ${itemName}s yet`;
+  }, [isDraftMode, deletedIds.size, itemName]);
 
   const handleSearchChange = useCallback(
     (newSearch: string | null) => {
@@ -503,15 +499,6 @@ function DatasetItemsTab({
     [columns, selectedColumns],
   );
 
-  const handleNewDatasetItemClick = useCallback(() => {
-    if (renderAddDialog && totalCount === 0) {
-      setOpenDialog(true);
-      resetDialogKeyRef.current += 1;
-    } else {
-      setOpenCreatePanel(true);
-    }
-  }, [renderAddDialog, totalCount]);
-
   const handleClose = useCallback(() => setActiveRowId(""), [setActiveRowId]);
 
   const resizeConfig = useMemo(
@@ -601,8 +588,6 @@ function DatasetItemsTab({
             totalCount={totalCount}
             isDraftMode={isDraftMode}
             entityName={entityName}
-            renderExpansionDialog={renderExpansionDialog}
-            compact={isCompactToolbar}
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
           <DataTableRowHeightSelector
@@ -616,18 +601,6 @@ function DatasetItemsTab({
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           />
-          {canEditDatasets && (
-            <TooltipWrapper content={isCompactToolbar ? "Add item" : undefined}>
-              <Button
-                variant="default"
-                size={isCompactToolbar ? "icon-sm" : "sm"}
-                onClick={handleNewDatasetItemClick}
-                data-testid="dataset-items-add-button"
-              >
-                {isCompactToolbar ? <Plus /> : "Add item"}
-              </Button>
-            </TooltipWrapper>
-          )}
         </div>
       </div>
       {isProcessing && (
@@ -676,15 +649,15 @@ function DatasetItemsTab({
             description={
               isDraftMode && deletedIds.size > 0
                 ? ""
-                : "Add test cases to run evaluations and measure performance."
+                : `Add ${itemName}s to run evaluations and measure performance.`
             }
           >
             {!(isDraftMode && deletedIds.size > 0) && (
               <button
-                onClick={handleNewDatasetItemClick}
+                onClick={onAddItem}
                 className="comet-body-s underline underline-offset-4 hover:text-primary"
               >
-                Add new item
+                Add new {itemName}
               </button>
             )}
           </DataTableEmptyContent>
@@ -715,17 +688,6 @@ function DatasetItemsTab({
         isOpen: Boolean(activeRowId),
         rows,
         setActiveRowId,
-      })}
-      {renderAddPanel({
-        open: openCreatePanel,
-        onClose: () => setOpenCreatePanel(false),
-        columns: datasetColumns,
-      })}
-      {renderAddDialog?.({
-        key: resetDialogKeyRef.current,
-        datasetId,
-        open: openDialog,
-        setOpen: setOpenDialog,
       })}
     </>
   );

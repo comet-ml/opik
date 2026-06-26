@@ -1,5 +1,5 @@
 import React, { useCallback } from "react";
-import { ListTree } from "lucide-react";
+import { ArrowUpRight, ListTree } from "lucide-react";
 import {
   BooleanParam,
   JsonParam,
@@ -71,22 +71,17 @@ const TraceLogsSidebarButton: React.FunctionComponent<
         </Button>
       </TooltipWrapper>
     ) : (
-      <TooltipWrapper content="Go to logs">
-        <Tag
-          size="md"
-          variant="transparent"
-          className="flex shrink-0 cursor-pointer items-center gap-1 hover:bg-primary-foreground hover:text-foreground active:bg-primary-100 active:text-foreground"
-          onClick={handleOpen}
-        >
-          <ListTree
-            className="size-3 shrink-0"
-            style={{ color: "var(--color-green)" }}
-          />
-          <div className="comet-body-s-accented truncate text-muted-slate">
-            Go to logs
-          </div>
-        </Tag>
-      </TooltipWrapper>
+      <Tag
+        size="md"
+        variant="transparent"
+        className="flex shrink-0 cursor-pointer items-center gap-1 hover:bg-primary-foreground hover:text-foreground active:bg-primary-100 active:text-foreground"
+        onClick={handleOpen}
+      >
+        <div className="comet-body-s-accented truncate text-foreground">
+          Logs
+        </div>
+        <ArrowUpRight className="size-3 shrink-0 text-foreground" />
+      </Tag>
     );
 
   return (
