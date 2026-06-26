@@ -84,10 +84,14 @@ def toggle_local_emulator_message_processor(
         LOGGER.warning("Local emulator message processor not found in the chain.")
         return
 
-    if reset:
-        local.reset()
-
-    local.set_active(active=active)
+    # Ref-counted: the first acquire activates (and, with reset, clears stale
+    # state); the last release deactivates. This lets concurrent users of a
+    # shared processing chain coordinate instead of toggling it off under each
+    # other.
+    if active:
+        local.acquire(reset=reset)
+    else:
+        local.release(reset=reset)
 
 
 def get_local_emulator_message_processor(

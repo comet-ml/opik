@@ -1,10 +1,10 @@
-import atexit
 import contextvars
 import copy
 import datetime
 import functools
 import json
 import logging
+import weakref
 from typing import (
     Any,
     Dict,
@@ -17,9 +17,8 @@ from typing import (
     overload,
 )
 
-import httpx
-
 from . import (
+    connection_resources,
     constants,
     dashboard,
     dataset,
@@ -66,19 +65,12 @@ from .. import (
     httpx_client,
     id_helpers,
     llm_usage,
-    rest_client_configurator,
     url_helpers,
 )
-from ..healthcheck import connection_monitor, connection_probe
 from ..message_processing import (
     messages,
-    streamer_constructors,
-    message_queue,
-    permissions,
 )
 from ..message_processing.batching import sequence_splitter
-from ..message_processing.processors import message_processors_chain
-from ..message_processing.replay import replay_manager
 from ..rest_api import client as rest_api_client
 from ..rest_api import errors as rest_api_errors
 from ..rest_api.core.api_error import ApiError
@@ -101,7 +93,6 @@ from ..types import (
     TraceSource,
 )
 from .. import context_storage
-from ..file_upload import upload_manager
 
 LOGGER = logging.getLogger(__name__)
 
@@ -159,10 +150,7 @@ class Opik:
         self._project_name_most_recent_trace: Optional[str] = None
         self._use_batching = batching or _use_batching
 
-        self._initialize_streamer(
-            use_batching=self._use_batching,
-        )
-        atexit.register(self.end, timeout=self._flush_timeout)
+        self._acquire_shared_resources()
 
     @property
     def config(self) -> opik_config.OpikConfig:
@@ -197,77 +185,30 @@ class Opik:
         """
         return self._project_name
 
-    def _initialize_streamer(
-        self,
-        use_batching: bool,
-    ) -> None:
-        self._httpx_client = httpx_client.get(
-            workspace=self._workspace,
-            api_key=self._config.api_key,
-            check_tls_certificate=self._config.check_tls_certificate,
-            compress_json_requests=self._config.enable_json_request_compression,
+    def _acquire_shared_resources(self) -> None:
+        self._lease = connection_resources.MANAGER.acquire(
+            self._config,
+            use_batching=self._use_batching,
         )
-        self._rest_client = rest_api_client.OpikApi(
-            base_url=self._config.url_override,
-            httpx_client=self._httpx_client,
-        )
-        self._rest_client._client_wrapper._timeout = (
-            httpx.USE_CLIENT_DEFAULT
-        )  # See https://github.com/fern-api/fern/issues/5321
-        rest_client_configurator.configure(self._rest_client)
+        self._resources = self._lease.resources
+        self._bind_resources()
 
-        max_queue_size = message_queue.calculate_max_queue_size(
-            maximal_queue_size=self._config.maximal_queue_size,
-            batch_factor=self._config.maximal_queue_size_batch_factor,
+        # ``self._lease.release`` is a bound method of the lease, so the finalizer
+        # captures the lease (and through it the manager), never ``self``. A
+        # dropped handle therefore releases its reference on GC without the
+        # atexit strong-ref pin that caused OPIK-7127.
+        self._finalizer = weakref.finalize(
+            self, self._lease.release, self._flush_timeout
         )
 
-        file_uploader = upload_manager.FileUploadManager(
-            rest_client=self._rest_client,
-            httpx_client=self._httpx_client,
-            worker_count=self._config.file_upload_background_workers,
-        )
-
-        fallback_replay = self._create_replay_manager()
-
-        self.__internal_api__message_processor__ = message_processors_chain.create_message_processors_chain(
-            rest_client=self._rest_client,
-            file_upload_manager=file_uploader,
-            fallback_replay_manager=fallback_replay,
-            unauthorized_message_types_registry=permissions.UnauthorizedMessageTypeRegistry(
-                retry_interval_seconds=self._config.unauthorized_message_type_retry_interval,
-                max_retry_count=self._config.unauthorized_message_type_max_retry_count,
-            ),
-        )
-        self._streamer = streamer_constructors.construct_online_streamer(
-            file_uploader=file_uploader,
-            n_consumers=self._config.background_workers,
-            use_batching=use_batching,
-            use_attachment_extraction=self._config.is_attachment_extraction_active,
-            min_base64_embedded_attachment_size=self._config.min_base64_embedded_attachment_size,
-            max_queue_size=max_queue_size,
-            message_processor=self.__internal_api__message_processor__,
-            url_override=self._config.url_override,
-            fallback_replay_manager=fallback_replay,
-        )
-
-    def _create_replay_manager(self) -> replay_manager.ReplayManager:
-        probe = connection_probe.ConnectionProbe(
-            base_url=self._config.url_override,
-            client=self._httpx_client,
-        )
-        monitor = connection_monitor.OpikConnectionMonitor(
-            ping_interval=self._config.connection_monitor_ping_interval,
-            check_timeout=self._config.connection_monitor_check_timeout,
-            probe=probe,
-        )
-
-        fallback_replay = replay_manager.ReplayManager(
-            monitor=monitor,
-            batch_size=self._config.replay_batch_size,
-            batch_replay_delay=self._config.replay_batch_replay_delay,
-            tick_interval_seconds=self._config.replay_tick_interval,
-        )
-        return fallback_replay
+    def _bind_resources(self) -> None:
+        # Expose the bundle's objects as attributes so the rest of the client
+        # (and external callers of ``__internal_api__message_processor__``)
+        # delegate to the shared connection resources unchanged.
+        self._httpx_client = self._resources.httpx_client
+        self._rest_client = self._resources.rest_client
+        self.__internal_api__message_processor__ = self._resources.message_processor
+        self._streamer = self._resources.streamer
 
     def _display_trace_url(self, trace_id: str, project_name: str) -> None:
         project_url = url_helpers.get_project_url_by_trace_id(
@@ -1930,6 +1871,13 @@ class Opik:
         """
         End the Opik session and submit all pending messages.
 
+        Connection resources are shared and ref-counted across clients with a
+        matching configuration: this releases the current client's reference.
+        The underlying streamer/threads are torn down only when the last client
+        sharing them is ended (or garbage-collected). When ``flush`` is True the
+        flush drains the *shared* queue, so pending data from other clients on
+        the same connection is delivered too.
+
         Args:
             timeout (Optional[int]): The timeout for closing the streamer. Once
                 the timeout is reached, the streamer will be closed regardless
@@ -1943,11 +1891,21 @@ class Opik:
                 flight — useful in per-test teardown where assertions have
                 already polled the backend during the test body.
 
+        After ``end()`` the client must not be used again. Calling ``trace()``,
+        ``span()``, ``flush()``, etc. on an ended client is unsupported and its
+        behavior is undefined: it may silently no-op, or — because the transport
+        is shared — it may still succeed by riding another live client's
+        resources. Do not rely on either outcome; create a new client instead.
+
         Returns:
             None
         """
         timeout = timeout if timeout is not None else self._flush_timeout
-        self._streamer.close(timeout, flush=flush)
+        # Drop this handle's reference. The bundle is closed only on the last
+        # release; releasing is idempotent, so a later GC finalizer cannot
+        # double-decrement.
+        self._lease.release(timeout, flush=flush)
+        self._finalizer.detach()
 
     def flush(self, timeout: Optional[int] = None) -> bool:
         """

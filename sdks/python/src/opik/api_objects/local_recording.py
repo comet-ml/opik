@@ -52,30 +52,32 @@ def record_traces_locally(
     if client is None:
         client = opik_client.get_global_client()
 
-    # Disallow nested/local concurrent recordings in the same process
-    existing_local = message_processors_chain.get_local_emulator_message_processor(
-        chain=client.__internal_api__message_processor__
-    )
-    if existing_local is not None and existing_local.is_active():
-        raise RuntimeError(
-            "record_traces_locally() is already active in the current context; nested usage is not allowed."
-        )
-
-    message_processors_chain.toggle_local_emulator_message_processor(
-        active=True, chain=client.__internal_api__message_processor__, reset=True
-    )
-    local = message_processors_chain.get_local_emulator_message_processor(
-        chain=client.__internal_api__message_processor__
-    )
+    chain = client.__internal_api__message_processor__
+    local = message_processors_chain.get_local_emulator_message_processor(chain)
     if local is None:
         # Should not happen given the default chain, but guard just in case
         raise RuntimeError("Local emulator message processor not available")
 
+    # Only one recording context per emulator. Under connection-resource
+    # sharing the emulator is connection-scoped (it captures everything logged
+    # on this connection), so a second recording on the same connection — even
+    # from another client sharing it — is refused. This slot is independent of
+    # evaluate()'s ref-counted activation, so a concurrent evaluation does not
+    # spuriously block recording.
+    if not local.begin_recording_context():
+        raise RuntimeError(
+            "record_traces_locally() is already active on this connection; nested usage is not allowed."
+        )
+
+    message_processors_chain.toggle_local_emulator_message_processor(
+        active=True, chain=chain, reset=True
+    )
     handle = _LocalRecordingHandle(client=client, local_processor=local)
     try:
         yield handle
     finally:
         client.flush()
         message_processors_chain.toggle_local_emulator_message_processor(
-            active=False, chain=client.__internal_api__message_processor__, reset=True
+            active=False, chain=chain, reset=True
         )
+        local.end_recording_context()
