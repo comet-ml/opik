@@ -33,7 +33,7 @@ export class LogsPage extends BasePage {
   }
 
   async waitForEmptyTraces(): Promise<void> {
-    await this.page.getByRole('radio', { name: 'Traces' }).waitFor({ state: 'visible', timeout: 10000 });
+    await this.page.getByRole('radio', { name: 'Thraces' }).waitFor({ state: 'visible', timeout: 10000 });
     await this.page.getByRole('heading', { name: /no traces yet/i }).waitFor({ state: 'visible', timeout: 20000 });
   }
 
