@@ -705,9 +705,11 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
      */
     protected MessageContext messageContext(M message) {
         if (message instanceof RedisSubscriberMessage scoped) {
+            // Normalize the id once so the name falls back to the same value (never blank/unknown mismatch).
+            var workspaceId = StringUtils.defaultIfBlank(scoped.workspaceId(), ErrorMetricsResolver.UNKNOWN);
             return MessageContext.builder()
-                    .workspaceId(StringUtils.defaultIfBlank(scoped.workspaceId(), ErrorMetricsResolver.UNKNOWN))
-                    .workspaceName(StringUtils.defaultIfBlank(scoped.workspaceName(), scoped.workspaceId()))
+                    .workspaceId(workspaceId)
+                    .workspaceName(StringUtils.defaultIfBlank(scoped.workspaceName(), workspaceId))
                     .userName(StringUtils.defaultIfBlank(scoped.userName(), ErrorMetricsResolver.UNKNOWN))
                     .build();
         }
