@@ -10,10 +10,11 @@ import {
   getIsCategoricFeedbackScore,
 } from "./utils";
 import {
+  FEEDBACK_SCORE_SOURCE_MAP,
   formatScoreDisplay,
-  getIsMultiValueFeedbackScore,
 } from "@/lib/feedback-scores";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import useAnnotationQueueById from "@/api/annotation-queues/useAnnotationQueueById";
 
 const Header = ({ color, label }: { color: string; label: string }) => {
   return (
@@ -22,6 +23,35 @@ const Header = ({ color, label }: { color: string; label: string }) => {
       <div className="comet-body-xs-accented truncate text-foreground">
         {label}
       </div>
+    </div>
+  );
+};
+
+const AuthorLabel = ({
+  mapKey,
+  entry,
+}: {
+  mapKey: string;
+  entry: FeedbackScoreValueByAuthorMap[string];
+}) => {
+  const { data: queue } = useAnnotationQueueById(
+    { annotationQueueId: entry.source_queue_id ?? "" },
+    { enabled: !!entry.source_queue_id },
+  );
+
+  const authorName = entry.author ?? mapKey;
+  const sourceLabel = entry.source_queue_id
+    ? queue?.name ?? "<deleted queue>"
+    : FEEDBACK_SCORE_SOURCE_MAP[entry.source];
+
+  return (
+    <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
+      <span className="comet-body-xs truncate text-muted-slate">
+        {authorName}
+      </span>
+      <span className="comet-body-xs shrink-0 text-light-slate">
+        {sourceLabel}
+      </span>
     </div>
   );
 };
@@ -42,10 +72,25 @@ const NumericScoreContent = ({
       <Header color={color} label={label} />
       <Separator />
       <div className="flex flex-col">
-        {Object.entries(valueByAuthor).map(([author, { value }]) => (
-          <div key={author} className="flex h-6 items-center gap-1.5 px-2">
+        {Object.entries(valueByAuthor).map(([key, entry]) => (
+          <div key={key} className="flex h-6 items-center gap-1.5 px-2">
+            <AuthorLabel mapKey={key} entry={entry} />
+            <TooltipWrapper
+              content={isNumber(entry.value) ? String(entry.value) : undefined}
+            >
+              <span className="comet-body-xs-accented text-foreground">
+                {formatScoreDisplay(entry.value)}
+              </span>
+            </TooltipWrapper>
+          </div>
+        ))}
+      </div>
+      {Object.keys(valueByAuthor).length > 1 && (
+        <>
+          <Separator />
+          <div className="flex h-6 items-center gap-1.5 px-2">
             <span className="comet-body-xs min-w-0 flex-1 truncate text-muted-slate">
-              {author}
+              Average
             </span>
             <TooltipWrapper
               content={isNumber(value) ? String(value) : undefined}
@@ -55,19 +100,8 @@ const NumericScoreContent = ({
               </span>
             </TooltipWrapper>
           </div>
-        ))}
-      </div>
-      <Separator />
-      <div className="flex h-6 items-center gap-1.5 px-2">
-        <span className="comet-body-xs min-w-0 flex-1 truncate text-muted-slate">
-          Average
-        </span>
-        <TooltipWrapper content={isNumber(value) ? String(value) : undefined}>
-          <span className="comet-body-xs-accented text-foreground">
-            {formatScoreDisplay(value)}
-          </span>
-        </TooltipWrapper>
-      </div>
+        </>
+      )}
     </div>
   );
 };
@@ -101,10 +135,8 @@ const CategoricalScoreContent = ({
               </div>
               <div className="flex flex-col pl-2">
                 {users.map((user) => (
-                  <div key={user} className="flex h-6 items-center">
-                    <span className="comet-body-xs text-muted-slate">
-                      {user}
-                    </span>
+                  <div key={user.mapKey} className="flex h-6 items-center">
+                    <AuthorLabel mapKey={user.mapKey} entry={user.entry} />
                   </div>
                 ))}
               </div>
@@ -123,6 +155,7 @@ type MultiValueFeedbackScoreHoverCardProps = {
   label: string;
   value: number | string;
   category?: string;
+  footer?: string;
   children: React.ReactNode;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -136,14 +169,18 @@ const MultiValueFeedbackScoreHoverCard: React.FC<
   label,
   value,
   category = "",
+  footer,
   children,
   open,
   onOpenChange,
 }) => {
   const isCategoricFeedbackScore = getIsCategoricFeedbackScore(category);
-  const isMultiValueFeedbackScore = getIsMultiValueFeedbackScore(valueByAuthor);
+  const hasEntries =
+    valueByAuthor &&
+    typeof valueByAuthor === "object" &&
+    Object.keys(valueByAuthor).length > 0;
 
-  if (!isMultiValueFeedbackScore) {
+  if (!hasEntries) {
     return children;
   }
 
@@ -170,6 +207,14 @@ const MultiValueFeedbackScoreHoverCard: React.FC<
             label={label}
             value={value}
           />
+        )}
+        {footer && (
+          <>
+            <Separator />
+            <div className="px-2 py-1">
+              <span className="comet-body-xs text-light-slate">{footer}</span>
+            </div>
+          </>
         )}
       </HoverCardContent>
     </HoverCard>

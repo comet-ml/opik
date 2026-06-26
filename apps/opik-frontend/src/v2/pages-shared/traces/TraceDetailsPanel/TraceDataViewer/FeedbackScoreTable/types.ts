@@ -6,4 +6,5 @@ export type ExpandingFeedbackScoreRow = TraceFeedbackScore & {
   author?: string;
   span_type?: string;
   span_id?: string; // Single span ID for child rows grouped by type
+  source_queue_id?: string;
 };

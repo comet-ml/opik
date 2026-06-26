@@ -57,13 +57,19 @@ const ThreadAnnotatePanel: React.FC<ThreadAnnotatePanelProps> = ({
   );
 
   const onDeleteFeedbackScore = useCallback(
-    (name: string, author?: string) => {
+    (
+      name: string,
+      author?: string,
+      _spanId?: string,
+      sourceQueueId?: string,
+    ) => {
       threadFeedbackScoreDelete({
         names: [name],
         threadId,
         projectName,
         projectId,
         author,
+        sourceQueueId,
       });
     },
     [threadFeedbackScoreDelete, threadId, projectName, projectId],
