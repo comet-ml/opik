@@ -100,6 +100,8 @@ uuidValidation:
 databaseAnalyticsReadOnlyFreeFormSql:
   username: comet_readonly_freeform_sql_user
   password: opik
+  # Plain value (no env var).
+  socketTimeout: 200s
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
