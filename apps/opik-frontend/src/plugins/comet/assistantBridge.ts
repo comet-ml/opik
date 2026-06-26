@@ -12,6 +12,7 @@ import useExplainStore, {
   ConsoleEmit,
   handleConsoleEvent,
 } from "@/plugins/comet/explain/explainStore";
+import { explainLog, shortId } from "@/plugins/comet/explain/explainDebug";
 
 /**
  * Host side of the assistant bridge: the in-page channel the Ollie console
@@ -73,6 +74,9 @@ export const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
       | undefined;
     if (!set) return () => {};
     set.add(callback);
+    // Subscriber count per host→shell event. For "explain:run" a size ≥2 means
+    // more than one console runner is subscribed (the duplicate-runner bug).
+    explainLog("bridge", `subscribe "${event}" → set.size=${set.size}`);
 
     // Replay latest runner state to late subscribers (e.g. Ollie iframe loaded after FE)
     if (event === "runner:state-changed" && refs.lastRunnerState.current) {
@@ -83,9 +87,30 @@ export const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
 
     return () => {
       set.delete(callback);
+      explainLog("bridge", `unsubscribe "${event}" → set.size=${set.size}`);
     };
   },
   emit: (event, data) => {
+    // INBOUND (shell → host). The explain relay (console:ready / explain:chunk
+    // / explain:done / explain:error) flows through the `default` branch into
+    // the store; logging it here is the raw wire, before any interpretation.
+    if (typeof event === "string" && event.startsWith("explain:")) {
+      const d = (data ?? {}) as {
+        explainId?: string;
+        code?: string;
+        message?: string;
+        delta?: string;
+      };
+      explainLog(
+        "bridge",
+        `◀ IN  "${event}" id=${shortId(d.explainId)}` +
+          (d.code !== undefined ? ` code=${d.code}` : "") +
+          (d.message !== undefined ? ` msg=${JSON.stringify(d.message)}` : "") +
+          (d.delta !== undefined ? ` deltaLen=${d.delta.length}` : ""),
+      );
+    } else if (event === "console:ready") {
+      explainLog("bridge", `◀ IN  "console:ready"`, data);
+    }
     switch (event) {
       case "navigate": {
         const { path, search } = data as SidebarEventMap["navigate"];
@@ -133,7 +158,23 @@ export function emitHostEvent<E extends keyof HostEventMap>(
   event: E,
   data: HostEventMap[E],
 ) {
-  for (const listener of listenersRef.current[event]) {
+  const set = listenersRef.current[event];
+  // OUTBOUND (host → shell). For explain:run/cancel, a set.size of 0 means the
+  // event reaches NO console runner (false timeout); ≥2 means a duplicate
+  // runner will double-handle it (the spurious-error suspect).
+  if (typeof event === "string" && event.startsWith("explain:")) {
+    const d = (data ?? {}) as {
+      explainId?: string;
+      target?: { kind?: string };
+    };
+    explainLog(
+      "bridge",
+      `▶ OUT "${event}" id=${shortId(d.explainId)}` +
+        (d.target?.kind ? ` kind=${d.target.kind}` : "") +
+        ` → listeners=${set.size}`,
+    );
+  }
+  for (const listener of set) {
     (listener as (d: HostEventMap[E]) => void)(data);
   }
 }
@@ -149,7 +190,11 @@ export function useRegisterExplainEmitter(
   useEffect(() => {
     const emit: ConsoleEmit = (event, data) =>
       emitHostEvent(listenersRef, event, data);
+    explainLog("sidebar", "register explain emitter (setEmit)");
     useExplainStore.getState().setEmit(emit);
-    return () => useExplainStore.getState().clearEmit(emit);
+    return () => {
+      explainLog("sidebar", "unregister explain emitter (clearEmit)");
+      useExplainStore.getState().clearEmit(emit);
+    };
   }, [listenersRef]);
 }
