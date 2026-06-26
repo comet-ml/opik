@@ -2,6 +2,8 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.events.SpanToScoreLlmAsJudge;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.OnlineScoringTracePersistence;
+import com.comet.opik.domain.OnlineScoringTracePersistence.EvaluationRecorder;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.llm.ChatCompletionService;
@@ -10,6 +12,7 @@ import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -42,6 +45,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
     private final ChatCompletionService aiProxyService;
     private final Logger userFacingLogger;
     private final LlmProviderFactory llmProviderFactory;
+    private final OnlineScoringTracePersistence tracePersistence;
 
     @Inject
     public OnlineScoringSpanLlmAsJudgeScorer(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
@@ -50,12 +54,14 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
             @NonNull FeedbackScoreService feedbackScoreService,
             @NonNull ChatCompletionService aiProxyService,
             @NonNull TraceService traceService,
-            @NonNull LlmProviderFactory llmProviderFactory) {
+            @NonNull LlmProviderFactory llmProviderFactory,
+            @NonNull OnlineScoringTracePersistence tracePersistence) {
         super(config, redisson, feedbackScoreService, traceService, SPAN_LLM_AS_JUDGE, Constants.SPAN_LLM_AS_JUDGE);
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.aiProxyService = aiProxyService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringSpanLlmAsJudgeScorer.class);
         this.llmProviderFactory = llmProviderFactory;
+        this.tracePersistence = tracePersistence;
     }
 
     @Override
@@ -85,8 +91,27 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
                 UserLog.SPAN_ID, span.id().toString(),
                 UserLog.RULE_ID, message.ruleId().toString());
 
-        return Mono.fromCallable(() -> evaluate(message, mdc))
+        // Monitoring recorder (OPIK-6994): one hidden evaluator trace per span evaluation with an llm
+        // span for the scoring call. NOOP when the toggle is off.
+        EvaluationRecorder recorder = serviceTogglesConfig.isOnlineScoringTracingEnabled()
+                ? tracePersistence.begin(OnlineScoringTracePersistence.EvaluatedSubject.ofSpan(span),
+                        message.ruleId(), message.ruleName(), message.llmAsJudgeCode().model().name(),
+                        message.workspaceId(), message.userName())
+                : EvaluationRecorder.NOOP;
+
+        return Mono.fromCallable(() -> prepareSpanRequest(message, mdc))
                 .subscribeOn(Schedulers.boundedElastic())
+                // Uniform structure with trace/thread evals: a prepare_evaluation span carrying the
+                // evaluated span's preview. Span evals never fetch context or go agentic (inline,
+                // single call), hence 0 fetched spans / 0 estimate.
+                .flatMap(scoreRequest -> recorder.recordPreparation(0, 0, false)
+                        .then(recorder.recordLlmCall(scoreRequest,
+                                Mono.fromCallable(() -> aiProxyService.scoreTrace(scoreRequest,
+                                        message.llmAsJudgeCode().model(), message.workspaceId()))
+                                        .subscribeOn(Schedulers.boundedElastic()))))
+                .map(response -> parseSpanScores(response, message, mdc))
+                .flatMap(scores -> recorder.complete(scores).thenReturn(scores))
+                .onErrorResume(error -> recorder.fail(error).then(Mono.error(error)))
                 .flatMap(scores -> storeSpanScores(scores, span, message.userName(), message.workspaceId()))
                 .doOnNext(withMdc(mdc, loggedScores -> userFacingLogger
                         .info("Scores for spanId '{}' stored successfully:\n\n{}", span.id(), loggedScores)))
@@ -98,31 +123,31 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
                 .then();
     }
 
-    private List<FeedbackScoreBatchItem> evaluate(SpanToScoreLlmAsJudge message, Map<String, String> mdc) {
+    private ChatRequest prepareSpanRequest(SpanToScoreLlmAsJudge message, Map<String, String> mdc) {
         var span = message.span();
-        // This is crucial for logging purposes to identify the rule and span
         try (var logContext = wrapWithMdc(mdc)) {
             userFacingLogger.info("Evaluating spanId '{}' sampled by rule '{}'", span.id(), message.ruleName());
-
             ChatRequest scoreRequest;
             try {
                 String modelName = message.llmAsJudgeCode().model().name();
                 var strategy = llmProviderFactory.getStructuredOutputStrategy(modelName);
-                scoreRequest = OnlineScoringEngine.prepareSpanLlmRequest(
-                        message.llmAsJudgeCode(), span, strategy);
+                scoreRequest = OnlineScoringEngine.prepareSpanLlmRequest(message.llmAsJudgeCode(), span, strategy);
             } catch (Exception exception) {
                 userFacingLogger.error("Error preparing LLM request for spanId '{}': \n\n{}",
                         span.id(), exception.getMessage());
                 throw exception;
             }
-
             userFacingLogger.info("Sending spanId '{}' to LLM using the following input:\n\n{}",
                     span.id(), scoreRequest);
+            return scoreRequest;
+        }
+    }
 
-            var score = aiProxyService.scoreTrace(
-                    scoreRequest, message.llmAsJudgeCode().model(), message.workspaceId());
+    private List<FeedbackScoreBatchItem> parseSpanScores(ChatResponse score, SpanToScoreLlmAsJudge message,
+            Map<String, String> mdc) {
+        var span = message.span();
+        try (var logContext = wrapWithMdc(mdc)) {
             userFacingLogger.info("Received response for spanId '{}':\n\n{}", span.id(), score);
-
             var parsed = OnlineScoringEngine.toFeedbackScores(score);
             OnlineScoringEngine.logSkippedNullScores(userFacingLogger, parsed, "spanId", span.id());
             return parsed.scores().stream()
