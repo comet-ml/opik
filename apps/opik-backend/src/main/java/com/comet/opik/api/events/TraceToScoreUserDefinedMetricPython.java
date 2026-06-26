@@ -19,4 +19,9 @@ public record TraceToScoreUserDefinedMetricPython(
         @NotNull String workspaceId,
         @NotNull String userName,
         @Nullable String workspaceName) implements RedisSubscriberMessage {
+
+    @Override
+    public RedisSubscriberMessage withWorkspaceName(String workspaceName) {
+        return toBuilder().workspaceName(workspaceName).build();
+    }
 }

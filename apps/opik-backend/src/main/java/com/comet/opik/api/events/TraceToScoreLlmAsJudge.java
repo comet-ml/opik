@@ -26,4 +26,9 @@ public record TraceToScoreLlmAsJudge(
         @NotNull PromptType promptType,
         @Nullable UUID experimentId,
         @Nullable String workspaceName) implements RedisSubscriberMessage {
+
+    @Override
+    public RedisSubscriberMessage withWorkspaceName(String workspaceName) {
+        return toBuilder().workspaceName(workspaceName).build();
+    }
 }

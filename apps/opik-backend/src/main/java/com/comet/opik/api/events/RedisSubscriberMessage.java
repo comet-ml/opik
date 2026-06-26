@@ -39,4 +39,14 @@ public interface RedisSubscriberMessage {
     default String workspaceName() {
         return workspaceId();
     }
+
+    /**
+     * Returns a copy of this message carrying the given workspace name, or {@code this} for message types
+     * that don't carry a separate name field. {@code OnlineScorePublisher} calls this at enqueue time to
+     * stamp the resolved name onto the message, so async consumers and their metrics get a real workspace
+     * name (resolved from the reactive context or the workspace-name service) rather than the id fallback.
+     */
+    default RedisSubscriberMessage withWorkspaceName(String workspaceName) {
+        return this;
+    }
 }

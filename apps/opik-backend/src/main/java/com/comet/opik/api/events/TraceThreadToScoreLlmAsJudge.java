@@ -1,6 +1,7 @@
 package com.comet.opik.api.events;
 
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import jakarta.annotation.Nullable;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
@@ -18,5 +19,11 @@ public record TraceThreadToScoreLlmAsJudge(
         @NotNull UUID projectId,
         @NotNull TraceThreadLlmAsJudgeCode code,
         @NotNull String workspaceId,
-        @NotNull String userName) implements RedisSubscriberMessage {
+        @NotNull String userName,
+        @Nullable String workspaceName) implements RedisSubscriberMessage {
+
+    @Override
+    public RedisSubscriberMessage withWorkspaceName(String workspaceName) {
+        return toBuilder().workspaceName(workspaceName).build();
+    }
 }
