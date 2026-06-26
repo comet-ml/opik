@@ -65,6 +65,23 @@ export interface BridgeRefs {
   lastRunnerState: MutableRefObject<RunnerBridgeState | null>;
 }
 
+/**
+ * Host→shell events handled by exactly ONE live console subscriber. A second
+ * subscription to any of these is never legitimate: it means a previous iframe
+ * generation never tore down (see the eviction note in `subscribe`).
+ *
+ * Deliberately EXCLUDES context:changed / runner:state-changed /
+ * visibility:changed — those legitimately fan out to several subscribers within
+ * a single console, and runner-state relies on the late-subscriber replay, so a
+ * count >1 there is normal and must not be cleared.
+ */
+const SINGLE_SUBSCRIBER_EVENTS: ReadonlySet<keyof HostEventMap> = new Set([
+  "explain:run",
+  "explain:cancel",
+  "chat:continue",
+  "conversation:start",
+]);
+
 export const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
   version: BRIDGE_PROTOCOL_VERSION,
   getContext: () => refs.context.current,
@@ -74,22 +91,20 @@ export const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
       | undefined;
     if (!set) return () => {};
 
-    // explain:run / explain:cancel are SINGLE-subscriber events: exactly one
-    // live console runner ever handles them. A second subscription means a
-    // previous iframe generation never tore down — e.g. a pod readiness flap
-    // toggled `isBackendReady`, which remounts the <iframe> into a fresh JS
-    // realm, but the old iframe's document is destroyed WITHOUT running the
-    // console's React cleanup, so its subscription closure stays parked in this
-    // Set (which the host component, still mounted, never recreated). Left in
-    // place, the host fans every explain:run out to BOTH the live runner AND
-    // that orphaned dead-realm closure; the orphan fails fast against its
-    // torn-down fetch context and emits a spurious "Couldn't load the
-    // explanation." that flashes before the live runner's chunks recover the
-    // cell. Evict the orphan(s) before adding the freshest runner so only one
-    // subscriber is ever wired. (Scoped to these two events only — context /
-    // visibility / runner-state replays must NOT be cleared here.)
+    // SINGLE_SUBSCRIBER_EVENTS are handled by exactly one live console handler.
+    // A second subscription means a previous iframe generation never tore down:
+    // a pod readiness flap toggles `isBackendReady`, which remounts the <iframe>
+    // into a fresh JS realm, but the old iframe's document is destroyed WITHOUT
+    // running the console's React cleanup, so its subscription closures stay
+    // parked in these Sets (the host component, still mounted, never recreated
+    // them). Left in place, the host fans each event out to BOTH the live
+    // handler AND the orphaned dead-realm closure, which fails fast against its
+    // torn-down fetch context — surfacing as a spurious "Couldn't load the
+    // explanation." (explain:run) or a "Couldn't continue the conversation."
+    // toast (chat:continue), even though the live handler succeeded. Evict the
+    // orphan(s) before adding the freshest handler so only one is ever wired.
     if (
-      (event === "explain:run" || event === "explain:cancel") &&
+      SINGLE_SUBSCRIBER_EVENTS.has(event as keyof HostEventMap) &&
       set.size > 0
     ) {
       explainLog(
@@ -185,10 +200,11 @@ export function emitHostEvent<E extends keyof HostEventMap>(
   data: HostEventMap[E],
 ) {
   const set = listenersRef.current[event];
-  // OUTBOUND (host → shell). For explain:run/cancel, a set.size of 0 means the
-  // event reaches NO console runner (false timeout); ≥2 means a duplicate
-  // runner will double-handle it (the spurious-error suspect).
-  if (typeof event === "string" && event.startsWith("explain:")) {
+  // OUTBOUND (host → shell) for the single-subscriber action events. A set.size
+  // of 0 means the event reaches NO console handler (false timeout); ≥2 means a
+  // duplicate (orphaned-realm) handler will double-handle it — the spurious
+  // "Couldn't load…" / "Couldn't continue…" suspect.
+  if (SINGLE_SUBSCRIBER_EVENTS.has(event)) {
     const d = (data ?? {}) as {
       explainId?: string;
       target?: { kind?: string };

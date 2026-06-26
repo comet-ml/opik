@@ -30,7 +30,12 @@ describe("assistantBridge — single-subscriber invariant", () => {
   // Set. The host then fanned explain:run out to BOTH runners and the orphan
   // emitted a spurious "Couldn't load the explanation." Subscribing a new
   // explain:run/explain:cancel handler must evict the orphan(s) first.
-  it.each(["explain:run", "explain:cancel"] as const)(
+  it.each([
+    "explain:run",
+    "explain:cancel",
+    "chat:continue",
+    "conversation:start",
+  ] as const)(
     "evicts a stale %s subscriber when a new one subscribes",
     (event) => {
       const listeners = createHostListeners();
