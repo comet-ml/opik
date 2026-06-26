@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.events.RedisSubscriberMessage;
 import com.comet.opik.infrastructure.StreamConfiguration;
 import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import io.dropwizard.lifecycle.Managed;
@@ -471,6 +472,12 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                     .build());
         }
         var startMillis = System.currentTimeMillis();
+        // Resolve the workspace/user once: the processing-time histogram is tagged with it for every
+        // message (success or failure), and the failure path reuses it for error attribution.
+        var context = messageContext(message);
+        var workspaceAttributes = Attributes.of(
+                ErrorMetricsResolver.WORKSPACE_ID_KEY, context.workspaceId(),
+                ErrorMetricsResolver.WORKSPACE_NAME_KEY, context.workspaceName());
         // Deferring as processEvent is out of our control, it might not return a cold Mono
         return Mono.defer(() -> processEvent(message))
                 .subscribeOn(workersScheduler)
@@ -479,16 +486,14 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                         .status(MessageStatus.SUCCESS)
                         .build())
                 .doOnSuccess(r -> log.info("Successfully processed message messageId '{}'", entry.getKey()))
-                // The context is only read on the failure path, so resolve it lazily here rather than for
-                // every processed message.
                 .onErrorResume(throwable -> Mono.just(ProcessingResult.builder()
                         .messageId(messageId)
                         .status(MessageStatus.FAILURE)
                         .error(throwable)
-                        .context(message != null ? messageContext(message) : MessageContext.UNKNOWN)
+                        .context(context)
                         .build()))
                 .doFinally(signalType -> {
-                    messageProcessingTime.record(System.currentTimeMillis() - startMillis);
+                    messageProcessingTime.record(System.currentTimeMillis() - startMillis, workspaceAttributes);
                     extractTimeFromMessageId(messageId)
                             .ifPresent(messageMillis -> messageQueueDelay
                                     .record(System.currentTimeMillis() - messageMillis));
@@ -691,11 +696,21 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     }
 
     /**
-     * Hook for subclasses to expose the workspace/user a message belongs to, so processing-error
-     * metrics can be attributed. Defaults to {@link MessageContext#UNKNOWN}; override to return the
-     * same values fed to {@code contextWrite} in {@link #processEvent(Object)}.
+     * Workspace/user a message belongs to, used to attribute the per-message metrics (the
+     * {@code *_processing_time} histogram and {@code *_processing_errors_total}). Messages that implement
+     * {@link RedisSubscriberMessage} (all production subscribers do) are attributed automatically, so a
+     * subscriber rarely needs its own override; anything else (including {@code null}) falls back to
+     * {@link MessageContext#UNKNOWN}. Blank values fall back to {@link ErrorMetricsResolver#UNKNOWN}
+     * (id/user) or to the workspace id (name).
      */
     protected MessageContext messageContext(M message) {
+        if (message instanceof RedisSubscriberMessage scoped) {
+            return MessageContext.builder()
+                    .workspaceId(StringUtils.defaultIfBlank(scoped.workspaceId(), ErrorMetricsResolver.UNKNOWN))
+                    .workspaceName(StringUtils.defaultIfBlank(scoped.workspaceName(), scoped.workspaceId()))
+                    .userName(StringUtils.defaultIfBlank(scoped.userName(), ErrorMetricsResolver.UNKNOWN))
+                    .build();
+        }
         return MessageContext.UNKNOWN;
     }
 

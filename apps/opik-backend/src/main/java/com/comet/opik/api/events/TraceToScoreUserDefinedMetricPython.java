@@ -18,5 +18,5 @@ public record TraceToScoreUserDefinedMetricPython(
         @NotNull AutomationRuleEvaluatorUserDefinedMetricPython.UserDefinedMetricPythonCode code,
         @NotNull String workspaceId,
         @NotNull String userName,
-        @Nullable String workspaceName) implements WorkspaceScopedMessage {
+        @Nullable String workspaceName) implements RedisSubscriberMessage {
 }

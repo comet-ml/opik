@@ -18,5 +18,5 @@ public record TraceThreadToScoreUserDefinedMetricPython(
         @NotNull @NotEmpty List<String> threadIds,
         @NotNull TraceThreadUserDefinedMetricPythonCode code,
         @NotNull String workspaceId,
-        @NotNull String userName) implements WorkspaceScopedMessage {
+        @NotNull String userName) implements RedisSubscriberMessage {
 }

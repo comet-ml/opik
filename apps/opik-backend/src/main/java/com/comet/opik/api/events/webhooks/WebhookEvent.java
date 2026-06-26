@@ -2,6 +2,7 @@ package com.comet.opik.api.events.webhooks;
 
 import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.AlertType;
+import com.comet.opik.api.events.RedisSubscriberMessage;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
@@ -26,7 +27,7 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @Getter
-public class WebhookEvent<T> {
+public class WebhookEvent<T> implements RedisSubscriberMessage {
 
     @NotBlank private String id;
 
@@ -63,4 +64,21 @@ public class WebhookEvent<T> {
     private String secret;
 
     private Map<String, String> headers;
+
+    // RedisSubscriberMessage accessors — bridge the Lombok getters so BaseRedisSubscriber can attribute
+    // this event's metrics to the originating workspace/user.
+    @Override
+    public String workspaceId() {
+        return workspaceId;
+    }
+
+    @Override
+    public String workspaceName() {
+        return workspaceName;
+    }
+
+    @Override
+    public String userName() {
+        return userName;
+    }
 }

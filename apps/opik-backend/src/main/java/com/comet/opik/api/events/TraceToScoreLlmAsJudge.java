@@ -25,5 +25,5 @@ public record TraceToScoreLlmAsJudge(
         @NotNull Map<String, String> scoreNameMapping,
         @NotNull PromptType promptType,
         @Nullable UUID experimentId,
-        @Nullable String workspaceName) implements WorkspaceScopedMessage {
+        @Nullable String workspaceName) implements RedisSubscriberMessage {
 }

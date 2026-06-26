@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.events.RedisSubscriberMessage;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
@@ -12,5 +13,5 @@ public record DatasetExportMessage(
         @NotNull UUID jobId,
         @NotNull UUID datasetId,
         @NotNull String workspaceId,
-        String workspaceName) {
+        String workspaceName) implements RedisSubscriberMessage {
 }
