@@ -20,11 +20,14 @@ export interface Permissions {
   canConfigureWorkspaceSettings: boolean;
   canUpdateAIProviders: boolean;
   canCreateProjects: boolean;
+  canViewOnlineEvaluationRules: boolean;
   canUpdateOnlineEvaluationRules: boolean;
+  canViewAlerts: boolean;
   canUpdateAlerts: boolean;
   canAnnotateTraceSpanThread: boolean;
   canLogTraceSpanThread: boolean;
   canUsePlayground: boolean;
+  canViewAgentPlayground: boolean;
   canUseOptimizationStudio: boolean;
   canViewOptimizationRuns: boolean;
 }
@@ -57,11 +60,14 @@ export const DEFAULT_PERMISSIONS: PermissionsContextValue = {
     canConfigureWorkspaceSettings: true,
     canUpdateAIProviders: true,
     canCreateProjects: true,
+    canViewOnlineEvaluationRules: true,
     canUpdateOnlineEvaluationRules: true,
+    canViewAlerts: true,
     canUpdateAlerts: true,
     canAnnotateTraceSpanThread: true,
     canLogTraceSpanThread: true,
     canUsePlayground: true,
+    canViewAgentPlayground: true,
     canUseOptimizationStudio: true,
     canViewOptimizationRuns: true,
   },

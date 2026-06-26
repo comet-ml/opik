@@ -197,11 +197,24 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canViewOnlineEvaluationRules = useMemo(
+    () =>
+      checkNullablePermission(
+        ManagementPermissionsNames.ONLINE_EVALUATION_RULE_VIEW,
+      ),
+    [checkNullablePermission],
+  );
+
   const canUpdateOnlineEvaluationRules = useMemo(
     () =>
       checkNullablePermission(
         ManagementPermissionsNames.ONLINE_EVALUATION_RULE_UPDATE,
       ),
+    [checkNullablePermission],
+  );
+
+  const canViewAlerts = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.ALERT_VIEW),
     [checkNullablePermission],
   );
 
@@ -227,6 +240,14 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
   const canUsePlayground = useMemo(
     () => checkNullablePermission(ManagementPermissionsNames.PLAYGROUND_USE),
     [checkNullablePermission],
+  );
+
+  const canViewAgentPlayground = useMemo(
+    () =>
+      canLogTraceSpanThread &&
+      checkNullablePermission(ManagementPermissionsNames.EXPERIMENT_CREATE) &&
+      checkNullablePermission(ManagementPermissionsNames.AGENT_PLAYGROUND_USE),
+    [canLogTraceSpanThread, checkNullablePermission],
   );
 
   const canViewOptimizationRuns = useMemo(
@@ -268,11 +289,14 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canDeleteOptimizationRuns,
     canConfigureWorkspaceSettings,
     canUpdateAIProviders,
+    canViewOnlineEvaluationRules,
     canUpdateOnlineEvaluationRules,
+    canViewAlerts,
     canUpdateAlerts,
     canAnnotateTraceSpanThread,
     canLogTraceSpanThread,
     canUsePlayground,
+    canViewAgentPlayground,
     canUseOptimizationStudio,
     canViewOptimizationRuns,
     isPending: isEnabled && isPending,
