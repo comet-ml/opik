@@ -1,15 +1,20 @@
 name: Outrider
 
-# Manually triggered. Uncomment the schedule block below to enable a
-# weekly cron.
+# Daily cron that uses remyxai/outrider to pick a paper from
+# engine.remyx.ai for this research interest and open a draft PR with a
+# Claude-Code-scaffolded integration.
 #
-# Secrets needed (set as repo secrets):
-#   REMYX_API_KEY     — engine.remyx.ai token
-#   ANTHROPIC_API_KEY — model-provider token
+# Secrets needed (set in Settings → Secrets and variables → Actions):
+#   REMYX_API_KEY        — engine.remyx.ai token
+#   ANTHROPIC_API_KEY — model-provider token (e.g. Anthropic, for the agent)
+#
+# The workflow's built-in GITHUB_TOKEN handles PR / Issue creation on
+# this repo — no PAT required since the action runs in the target.
 
 on:
-  # schedule:
-  #   - cron: '0 14 * * 1'
+  schedule:
+    # Daily at 14:00 UTC
+    - cron: '0 14 * * *'
   workflow_dispatch:
 
 jobs:
@@ -24,21 +29,26 @@ jobs:
       REMYX_API_KEY: ${{ secrets.REMYX_API_KEY }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     steps:
+      # Mint a remyx[bot] token from Remyx so the PR / Issue is authored by
+      # the Remyx GitHub App (not github-actions[bot]). The App private key
+      # stays on Remyx's side; this uses the REMYX_API_KEY already in secrets.
+      # If it can't be minted (e.g. App not installed), the token is empty and
+      # the action falls back to the workflow's built-in GITHUB_TOKEN.
       - name: Mint Remyx bot token
         id: remyx-bot
         shell: bash
         run: |
-          token="$(curl -sf -X POST \
-            -H "Authorization: Bearer ${{ secrets.REMYX_API_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d "{\"repo\": \"${{ github.repository }}\"}" \
-            "https://engine.remyx.ai/api/v1.0/github/installation-token" \
-            | python3 -c "import sys, json; print(json.load(sys.stdin).get('token', ''))")" || token=""
+          token="$(curl -sf -X POST             -H "Authorization: Bearer ${{ secrets.REMYX_API_KEY }}"             -H "Content-Type: application/json"             -d "{\"repo\": \"${{ github.repository }}\"}"             "https://engine.remyx.ai/api/v1.0/github/installation-token"             | python3 -c "import sys, json; print(json.load(sys.stdin).get('token', ''))")" || token=""
           echo "::add-mask::$token"
           echo "token=$token" >> "$GITHUB_OUTPUT"
       - uses: remyxai/outrider@v1
         with:
           interest-id: bb1f2f50-21fd-490a-92e5-cc0e67658f19
+          # remyx[bot] token (empty → action falls back to GITHUB_TOKEN).
           github-token: ${{ steps.remyx-bot.outputs.token }}
-          # Disable cadence guard so manual dispatches always evaluate latest recommendation.
+          # Disable the per-repo rate-limit window so manual and scheduled
+          # runs always evaluate the latest recommendation. Without this the
+          # default 7-day floor short-circuits runs at skipped_rate_limit
+          # (e.g. a manual re-run after the first auto-PR). Per-paper dedup
+          # (open PR / Issue for the same arxiv_id) still prevents duplicates.
           rate-limit-days: '0'
