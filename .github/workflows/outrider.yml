@@ -12,9 +12,9 @@ name: Outrider
 # this repo — no PAT required since the action runs in the target.
 
 on:
-  schedule:
-    # Daily at 14:00 UTC
-    - cron: '0 14 * * *'
+  # schedule:  # cron disabled — manual dispatch only
+    # # Daily at 14:00 UTC
+    # - cron: '0 14 * * *'
   workflow_dispatch:
 
 jobs:
