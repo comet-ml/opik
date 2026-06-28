@@ -12,7 +12,8 @@ These tests exercise ``after_agent_callback`` directly, without a live model, by
 simulating interleaved invocations. They target the modern ``OpikTracer``, which
 is only used on ADK >= 1.3.0 (older ADK resolves ``OpikTracer`` to
 ``LegacyOpikTracer``, which manages its own trace/span lifecycle), so they are
-skipped for older ADK.
+skipped for older ADK. The autouse ``clear_context_storage`` fixture
+(tests/conftest.py) resets context storage between tests.
 """
 
 import types
@@ -32,18 +33,12 @@ def _callback_context(invocation_id: str) -> types.SimpleNamespace:
 
 
 @pytest.fixture
-def clean_context_storage():
-    context_storage.clear_all()
-    yield
-    context_storage.clear_all()
+def tracer() -> OpikTracer:
+    return OpikTracer(project_name="adk-test")
 
 
 @helpers.pytest_skip_for_adk_older_than_1_3_0
-def test_after_agent_callback__concurrent_invocations__output_is_not_mixed(
-    clean_context_storage,
-):
-    tracer = OpikTracer(project_name="adk-test")
-
+def test_after_agent_callback__concurrent_invocations__output_is_not_mixed(tracer):
     # Two single-agent invocations sharing this tracer have each recorded their
     # final model output (as after_model_callback does), interleaved.
     tracer._last_model_output = {
@@ -73,12 +68,9 @@ def test_after_agent_callback__concurrent_invocations__output_is_not_mixed(
 
 
 @helpers.pytest_skip_for_adk_older_than_1_3_0
-def test_after_agent_callback__nested_agent__keeps_output_until_root_finishes(
-    clean_context_storage,
-):
+def test_after_agent_callback__nested_agent__keeps_output_until_root_finishes(tracer):
     # A multi-agent invocation: a sub-agent finishes on the span path and must
     # NOT consume the output, because the root agent still needs it.
-    tracer = OpikTracer(project_name="adk-test")
     tracer._last_model_output = {"inv": {"text": "NESTED"}}
     tracer._open_agents = {"inv": 2}  # root + one sub-agent open
 
@@ -102,13 +94,10 @@ def test_after_agent_callback__nested_agent__keeps_output_until_root_finishes(
 
 
 @helpers.pytest_skip_for_adk_older_than_1_3_0
-def test_after_agent_callback__distributed_root_is_a_span__output_is_dropped(
-    clean_context_storage,
-):
+def test_after_agent_callback__distributed_root_is_a_span__output_is_dropped(tracer):
     # Under distributed_headers the root agent is itself a span (not a trace), so
     # cleanup must not rely on the trace path — otherwise the cached output would
     # leak. Here the root finishes on the span path and the entry is still dropped.
-    tracer = OpikTracer(project_name="adk-test")
     tracer._last_model_output = {"inv": {"text": "DIST"}}
     tracer._open_agents = {"inv": 1}
 

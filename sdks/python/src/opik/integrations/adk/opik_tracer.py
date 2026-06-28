@@ -68,15 +68,11 @@ class OpikTracer:
         return opik.get_global_client()
 
     def _init_internal_attributes(self) -> None:
-        # Keyed by ADK ``invocation_id``. A single OpikTracer instance is shared
-        # across all invocations that use the same agent (and the documented
-        # ``track_adk_agent_recursive`` pattern), so a plain attribute here would
-        # let concurrent invocations overwrite each other's output. Keying by
-        # invocation isolates them.
+        # Keyed by ADK ``invocation_id`` so concurrent invocations that share a
+        # single tracer instance don't overwrite each other's output.
         self._last_model_output: Dict[str, Optional[Dict[str, Any]]] = {}
-        # Open ADK agents per invocation_id (incremented in before_agent_callback,
-        # decremented in after_agent_callback) so the cached output above is
-        # dropped exactly when an invocation's outermost agent finishes.
+        # Open ADK agents per invocation_id, used to drop the cached output above
+        # once an invocation's outermost agent finishes.
         self._open_agents: Dict[str, int] = {}
         # Track time-to-first-token: map span_id -> (request_start_time, first_token_time)
         self._ttft_tracking: Dict[str, Tuple[float, Optional[float]]] = {}
@@ -153,7 +149,7 @@ class OpikTracer:
             )
 
             agent_metadata = self.metadata.copy()
-            agent_metadata["adk_invocation_id"] = callback_context.invocation_id
+            agent_metadata["adk_invocation_id"] = invocation_id
             agent_metadata.update(session_metadata)
 
             _try_add_agent_graph_to_metadata(agent_metadata, callback_context)
@@ -198,8 +194,8 @@ class OpikTracer:
         *args: Any,
         **kwargs: Any,
     ) -> None:
+        invocation_id = callback_context.invocation_id
         try:
-            invocation_id = callback_context.invocation_id
             output = self._last_model_output.get(invocation_id)
             current_span = context_storage.top_span_data()
             current_trace = context_storage.get_trace_data()
@@ -217,14 +213,13 @@ class OpikTracer:
                 LOGGER.warning(
                     "No current span or trace found in context for agent output update"
                 )
-            # Drop the cached output once this invocation's outermost agent has
-            # finished. This is decoupled from span-vs-trace so it stays correct
-            # under ``distributed_headers``, where the root agent is itself a span.
+        except Exception as e:
+            LOGGER.error(f"Failed during after_agent_callback(): {e}", exc_info=True)
+        finally:
+            # Drop the cached output once this invocation's outermost agent finishes.
             adk_helpers.drop_invocation_output_if_finished(
                 self._open_agents, self._last_model_output, invocation_id
             )
-        except Exception as e:
-            LOGGER.error(f"Failed during after_agent_callback(): {e}", exc_info=True)
 
     def before_model_callback(
         self,

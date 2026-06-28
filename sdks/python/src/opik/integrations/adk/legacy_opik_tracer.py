@@ -137,7 +137,7 @@ class LegacyOpikTracer:
             )
 
             trace_metadata = self.metadata.copy()
-            trace_metadata["adk_invocation_id"] = callback_context.invocation_id
+            trace_metadata["adk_invocation_id"] = invocation_id
             trace_metadata.update(session_metadata)
 
             _try_add_agent_graph_to_metadata(trace_metadata, callback_context)
@@ -187,8 +187,8 @@ class LegacyOpikTracer:
         *args: Any,
         **kwargs: Any,
     ) -> None:
+        invocation_id = callback_context.invocation_id
         try:
-            invocation_id = callback_context.invocation_id
             output = self._last_model_output.get(invocation_id)
 
             if (span_data := self._context_storage.top_span_data()) is not None:
@@ -207,15 +207,13 @@ class LegacyOpikTracer:
                     trace_data.update(output=output)
                     self._end_current_trace()
                     self._current_trace_created_by_opik_tracer.set(None)
-
-            # Drop the cached output once this invocation's outermost agent has
-            # finished (decoupled from span-vs-trace, correct under distributed
-            # tracing where the root agent is itself a span).
+        except Exception as e:
+            LOGGER.error(f"Failed during after_agent_callback(): {e}", exc_info=True)
+        finally:
+            # Drop the cached output once this invocation's outermost agent finishes.
             adk_helpers.drop_invocation_output_if_finished(
                 self._open_agents, self._last_model_output, invocation_id
             )
-        except Exception as e:
-            LOGGER.error(f"Failed during after_agent_callback(): {e}", exc_info=True)
 
     def before_model_callback(
         self,
