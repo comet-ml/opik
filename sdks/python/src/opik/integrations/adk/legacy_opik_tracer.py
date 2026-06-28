@@ -17,6 +17,7 @@ from opik.types import DistributedTraceHeadersDict
 from . import (
     helpers as adk_helpers,
     callback_context_info_extractors,
+    output_cache,
     patchers,
 )
 
@@ -53,12 +54,10 @@ class LegacyOpikTracer:
         self._init_internal_attributes()
 
     def _init_internal_attributes(self) -> None:
-        # Keyed by ADK ``invocation_id`` so concurrent invocations that share a
-        # single tracer instance don't overwrite each other's output.
-        self._last_model_output: Dict[str, Optional[Dict[str, Any]]] = {}
-        # Open ADK agents per invocation_id, used to drop the cached output above
-        # once an invocation's outermost agent finishes.
-        self._open_agents: Dict[str, int] = {}
+        # Cache the last model output per ADK ``invocation_id`` (bounded, so a
+        # shared tracer can't grow without bound) to isolate concurrent
+        # invocations' output.
+        self._last_model_output = output_cache.LastModelOutputCache()
 
         # Use OpikContextStorage instance instead of global context storage module
         # in case we need to use different context storage for ADK in the future
@@ -129,15 +128,13 @@ class LegacyOpikTracer:
         *args: Any,
         **kwargs: Any,
     ) -> None:
-        invocation_id = callback_context.invocation_id
-        self._open_agents[invocation_id] = self._open_agents.get(invocation_id, 0) + 1
         try:
             thread_id, session_metadata = (
                 callback_context_info_extractors.try_get_session_info(callback_context)
             )
 
             trace_metadata = self.metadata.copy()
-            trace_metadata["adk_invocation_id"] = invocation_id
+            trace_metadata["adk_invocation_id"] = callback_context.invocation_id
             trace_metadata.update(session_metadata)
 
             _try_add_agent_graph_to_metadata(trace_metadata, callback_context)
@@ -187,9 +184,8 @@ class LegacyOpikTracer:
         *args: Any,
         **kwargs: Any,
     ) -> None:
-        invocation_id = callback_context.invocation_id
         try:
-            output = self._last_model_output.get(invocation_id)
+            output = self._last_model_output.get(callback_context.invocation_id)
 
             if (span_data := self._context_storage.top_span_data()) is not None:
                 if span_data.id in self._opik_created_spans:
@@ -209,11 +205,6 @@ class LegacyOpikTracer:
                     self._current_trace_created_by_opik_tracer.set(None)
         except Exception as e:
             LOGGER.error(f"Failed during after_agent_callback(): {e}", exc_info=True)
-        finally:
-            # Drop the cached output once this invocation's outermost agent finishes.
-            adk_helpers.drop_invocation_output_if_finished(
-                self._open_agents, self._last_model_output, invocation_id
-            )
 
     def before_model_callback(
         self,
@@ -276,7 +267,6 @@ class LegacyOpikTracer:
         try:
             span_data = self._context_storage.top_span_data()
             if span_data is None:
-                self._last_model_output.pop(callback_context.invocation_id, None)
                 LOGGER.warning(
                     "No current span found in context for model output update"
                 )
@@ -284,7 +274,7 @@ class LegacyOpikTracer:
 
             try:
                 output = adk_helpers.convert_adk_base_model_to_dict(llm_response)
-                self._last_model_output[callback_context.invocation_id] = output
+                self._last_model_output.set(callback_context.invocation_id, output)
 
                 usage_data = llm_response_wrapper.pop_llm_usage_data(
                     output, span_data.provider

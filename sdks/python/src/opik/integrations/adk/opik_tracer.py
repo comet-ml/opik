@@ -17,6 +17,7 @@ from opik.decorator import span_creation_handler, arguments_helpers
 from . import (
     helpers as adk_helpers,
     callback_context_info_extractors,
+    output_cache,
     patchers,
 )
 from .patchers import (
@@ -68,12 +69,11 @@ class OpikTracer:
         return opik.get_global_client()
 
     def _init_internal_attributes(self) -> None:
-        # Keyed by ADK ``invocation_id`` so concurrent invocations that share a
-        # single tracer instance don't overwrite each other's output.
-        self._last_model_output: Dict[str, Optional[Dict[str, Any]]] = {}
-        # Open ADK agents per invocation_id, used to drop the cached output above
-        # once an invocation's outermost agent finishes.
-        self._open_agents: Dict[str, int] = {}
+        # Cache the last model output per ADK ``invocation_id``. A single tracer
+        # instance is shared across concurrent invocations (the
+        # ``track_adk_agent_recursive`` pattern), so keying by invocation isolates
+        # their output; the cache is bounded so it can't grow without bound.
+        self._last_model_output = output_cache.LastModelOutputCache()
         # Track time-to-first-token: map span_id -> (request_start_time, first_token_time)
         self._ttft_tracking: Dict[str, Tuple[float, Optional[float]]] = {}
 
@@ -138,8 +138,6 @@ class OpikTracer:
         *args: Any,
         **kwargs: Any,
     ) -> None:
-        invocation_id = callback_context.invocation_id
-        self._open_agents[invocation_id] = self._open_agents.get(invocation_id, 0) + 1
         try:
             current_trace = context_storage.get_trace_data()
             current_span = context_storage.top_span_data()
@@ -149,7 +147,7 @@ class OpikTracer:
             )
 
             agent_metadata = self.metadata.copy()
-            agent_metadata["adk_invocation_id"] = invocation_id
+            agent_metadata["adk_invocation_id"] = callback_context.invocation_id
             agent_metadata.update(session_metadata)
 
             _try_add_agent_graph_to_metadata(agent_metadata, callback_context)
@@ -194,9 +192,8 @@ class OpikTracer:
         *args: Any,
         **kwargs: Any,
     ) -> None:
-        invocation_id = callback_context.invocation_id
         try:
-            output = self._last_model_output.get(invocation_id)
+            output = self._last_model_output.get(callback_context.invocation_id)
             current_span = context_storage.top_span_data()
             current_trace = context_storage.get_trace_data()
             if current_span is not None:
@@ -215,11 +212,6 @@ class OpikTracer:
                 )
         except Exception as e:
             LOGGER.error(f"Failed during after_agent_callback(): {e}", exc_info=True)
-        finally:
-            # Drop the cached output once this invocation's outermost agent finishes.
-            adk_helpers.drop_invocation_output_if_finished(
-                self._open_agents, self._last_model_output, invocation_id
-            )
 
     def before_model_callback(
         self,
@@ -375,7 +367,8 @@ class OpikTracer:
             # and it will also add tool spans inside of it, which we want to avoid.
             if opik.is_tracing_active():
                 self._opik_client.__internal_api__span__(**current_span.as_parameters)
-            self._last_model_output[callback_context.invocation_id] = output
+            if output is not None:
+                self._last_model_output.set(callback_context.invocation_id, output)
 
         except Exception as e:
             exception_occurred = True
@@ -460,6 +453,9 @@ class OpikTracer:
         state.pop("_opik_client", None)
         # Don't serialize TTFT tracking as it's runtime state
         state.pop("_ttft_tracking", None)
+        # The output cache holds a threading.Lock (unpicklable) and is per-process
+        # runtime state; __setstate__ recreates a fresh one.
+        state.pop("_last_model_output", None)
         return state
 
     def __setstate__(self, state: Dict[str, Any]) -> None:
