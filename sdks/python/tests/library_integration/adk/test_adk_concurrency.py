@@ -52,6 +52,17 @@ def test_last_model_output_cache__evicts_oldest_when_full():
     assert cache.get("inv-3") == {"n": 3}
 
 
+def test_last_model_output_cache__discard_removes_entry():
+    cache = LastModelOutputCache()
+    cache.set("inv", {"text": "OLD"})
+
+    cache.discard("inv")
+
+    assert cache.get("inv") is None
+    cache.discard("inv")  # idempotent
+    cache.discard("missing")  # missing key is a no-op
+
+
 @helpers.pytest_skip_for_adk_older_than_1_3_0
 def test_after_agent_callback__stamps_only_its_own_invocations_output():
     tracer = OpikTracer(project_name="adk-test")
@@ -72,3 +83,16 @@ def test_after_agent_callback__stamps_only_its_own_invocations_output():
     context_storage.set_trace_data(trace_b)
     tracer.after_agent_callback(_callback_context("invocation-B"))
     assert trace_b.output == {"text": "BRAVO"}
+
+
+@helpers.pytest_skip_for_adk_older_than_1_3_0
+def test_after_agent_callback__no_cached_output__stamps_none():
+    # No model output cached for this invocation (e.g. a failed conversion
+    # cleared it): after_agent_callback must stamp None, never a stale value.
+    tracer = OpikTracer(project_name="adk-test")
+
+    trace = TraceData(name="agent")
+    context_storage.set_trace_data(trace)
+    tracer.after_agent_callback(_callback_context("invocation-without-output"))
+
+    assert trace.output is None

@@ -264,6 +264,12 @@ class LegacyOpikTracer:
         usage = None
         output = None
 
+        # Final (non-partial) response for this call: clear any output cached for
+        # this invocation up front, so a missing span or failed conversion below
+        # leaves no stale value for after_agent_callback to stamp. It is re-set
+        # only if conversion succeeds.
+        self._last_model_output.discard(callback_context.invocation_id)
+
         try:
             span_data = self._context_storage.top_span_data()
             if span_data is None:

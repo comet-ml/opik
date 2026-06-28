@@ -285,6 +285,7 @@ class OpikTracer:
 
             current_span = context_storage.top_span_data()
             if current_span is None:
+                self._last_model_output.discard(callback_context.invocation_id)
                 LOGGER.warning(
                     "No current span found in context for model output update"
                 )
@@ -319,6 +320,12 @@ class OpikTracer:
             # this method again with the final non-partial response, where we'll properly clean it up
             if is_partial:
                 return
+
+            # Final (non-partial) response for this call: clear any output cached
+            # for this invocation up front, so a failed conversion (or a later
+            # error) below leaves no stale value for after_agent_callback to
+            # stamp. It is re-set only if conversion succeeds.
+            self._last_model_output.discard(callback_context.invocation_id)
 
             try:
                 output = adk_helpers.convert_adk_base_model_to_dict(llm_response)

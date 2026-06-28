@@ -44,3 +44,13 @@ class LastModelOutputCache:
     def get(self, invocation_id: str) -> Optional[Dict[str, Any]]:
         with self._lock:
             return self._entries.get(invocation_id)
+
+    def discard(self, invocation_id: str) -> None:
+        """Drop the cached output for ``invocation_id`` if present.
+
+        Used when a model call produces no usable output so a stale value from
+        an earlier call in the same invocation isn't later stamped onto a span
+        or trace.
+        """
+        with self._lock:
+            self._entries.pop(invocation_id, None)
