@@ -68,7 +68,12 @@ class OpikTracer:
         return opik.get_global_client()
 
     def _init_internal_attributes(self) -> None:
-        self._last_model_output: Optional[Dict[str, Any]] = None
+        # Keyed by ADK ``invocation_id``. A single OpikTracer instance is shared
+        # across all invocations that use the same agent (and the documented
+        # ``track_adk_agent_recursive`` pattern), so a plain attribute here would
+        # let concurrent invocations overwrite each other's output. Keying by
+        # invocation isolates them.
+        self._last_model_output: Dict[str, Optional[Dict[str, Any]]] = {}
         # Track time-to-first-token: map span_id -> (request_start_time, first_token_time)
         self._ttft_tracking: Dict[str, Tuple[float, Optional[float]]] = {}
 
@@ -188,21 +193,26 @@ class OpikTracer:
         **kwargs: Any,
     ) -> None:
         try:
-            output = self._last_model_output
+            invocation_id = callback_context.invocation_id
+            output = self._last_model_output.get(invocation_id)
             current_span = context_storage.top_span_data()
             current_trace = context_storage.get_trace_data()
             if current_span is not None:
+                # A nested (sub-)agent finished: stamp the output on its span but
+                # keep the entry, since the outer/root agent still consumes it.
                 current_span.update(
                     output=output,
                     project_name=self.project_name,
                 )
             elif current_trace is not None:
+                # The root agent finished: stamp the output and drop the entry.
                 current_trace.update(
                     output=output,
                     project_name=self.project_name,
                 )
-                self._last_model_output = None
+                self._last_model_output.pop(invocation_id, None)
             else:
+                self._last_model_output.pop(invocation_id, None)
                 LOGGER.warning(
                     "No current span or trace found in context for agent output update"
                 )
@@ -363,7 +373,7 @@ class OpikTracer:
             # and it will also add tool spans inside of it, which we want to avoid.
             if opik.is_tracing_active():
                 self._opik_client.__internal_api__span__(**current_span.as_parameters)
-            self._last_model_output = output
+            self._last_model_output[callback_context.invocation_id] = output
 
         except Exception as e:
             exception_occurred = True
