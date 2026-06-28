@@ -56,6 +56,9 @@ class LegacyOpikTracer:
         # Keyed by ADK ``invocation_id`` so concurrent invocations that share a
         # single tracer instance don't overwrite each other's output.
         self._last_model_output: Dict[str, Optional[Dict[str, Any]]] = {}
+        # Open ADK agents per invocation_id, used to drop the cached output above
+        # once an invocation's outermost agent finishes.
+        self._open_agents: Dict[str, int] = {}
 
         # Use OpikContextStorage instance instead of global context storage module
         # in case we need to use different context storage for ADK in the future
@@ -126,6 +129,8 @@ class LegacyOpikTracer:
         *args: Any,
         **kwargs: Any,
     ) -> None:
+        invocation_id = callback_context.invocation_id
+        self._open_agents[invocation_id] = self._open_agents.get(invocation_id, 0) + 1
         try:
             thread_id, session_metadata = (
                 callback_context_info_extractors.try_get_session_info(callback_context)
@@ -188,7 +193,6 @@ class LegacyOpikTracer:
 
             if (span_data := self._context_storage.top_span_data()) is not None:
                 if span_data.id in self._opik_created_spans:
-                    # Nested (sub-)agent finished: keep the entry for the root.
                     span_data.update(output=output)
                     self._end_current_span()
                     self._opik_created_spans.discard(span_data.id)
@@ -199,15 +203,17 @@ class LegacyOpikTracer:
                         "No current trace found in context for agent output update"
                     )
                     self._current_trace_created_by_opik_tracer.set(None)
-                    self._last_model_output.pop(invocation_id, None)
-                    return
-
-                if trace_data.id == self._current_trace_created_by_opik_tracer.get():
-                    # Root agent finished: drop the entry.
+                elif trace_data.id == self._current_trace_created_by_opik_tracer.get():
                     trace_data.update(output=output)
                     self._end_current_trace()
                     self._current_trace_created_by_opik_tracer.set(None)
-                    self._last_model_output.pop(invocation_id, None)
+
+            # Drop the cached output once this invocation's outermost agent has
+            # finished (decoupled from span-vs-trace, correct under distributed
+            # tracing where the root agent is itself a span).
+            adk_helpers.drop_invocation_output_if_finished(
+                self._open_agents, self._last_model_output, invocation_id
+            )
         except Exception as e:
             LOGGER.error(f"Failed during after_agent_callback(): {e}", exc_info=True)
 

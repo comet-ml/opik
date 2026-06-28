@@ -34,6 +34,28 @@ def get_adk_provider() -> opik_types.LLMProvider:
     )
 
 
+def drop_invocation_output_if_finished(
+    open_agents: Dict[str, int],
+    last_model_output: Dict[str, Any],
+    invocation_id: str,
+) -> None:
+    """Decrement the open-agent count for ``invocation_id`` and, once the
+    invocation's outermost agent has finished (the count reaches zero), drop its
+    cached model output.
+
+    A single tracer instance is shared across concurrent invocations, so the
+    cached output is keyed by ``invocation_id``. Counting open agents (rather
+    than keying cleanup off span-vs-trace) keeps it correct under
+    ``distributed_headers``, where the root agent is itself a span.
+    """
+    remaining = open_agents.get(invocation_id, 1) - 1
+    if remaining > 0:
+        open_agents[invocation_id] = remaining
+    else:
+        open_agents.pop(invocation_id, None)
+        last_model_output.pop(invocation_id, None)
+
+
 def has_empty_text_part_content(llm_response: LlmResponse) -> bool:
     try:
         if llm_response.content is None:

@@ -74,6 +74,10 @@ class OpikTracer:
         # let concurrent invocations overwrite each other's output. Keying by
         # invocation isolates them.
         self._last_model_output: Dict[str, Optional[Dict[str, Any]]] = {}
+        # Open ADK agents per invocation_id (incremented in before_agent_callback,
+        # decremented in after_agent_callback) so the cached output above is
+        # dropped exactly when an invocation's outermost agent finishes.
+        self._open_agents: Dict[str, int] = {}
         # Track time-to-first-token: map span_id -> (request_start_time, first_token_time)
         self._ttft_tracking: Dict[str, Tuple[float, Optional[float]]] = {}
 
@@ -138,6 +142,8 @@ class OpikTracer:
         *args: Any,
         **kwargs: Any,
     ) -> None:
+        invocation_id = callback_context.invocation_id
+        self._open_agents[invocation_id] = self._open_agents.get(invocation_id, 0) + 1
         try:
             current_trace = context_storage.get_trace_data()
             current_span = context_storage.top_span_data()
@@ -198,24 +204,25 @@ class OpikTracer:
             current_span = context_storage.top_span_data()
             current_trace = context_storage.get_trace_data()
             if current_span is not None:
-                # A nested (sub-)agent finished: stamp the output on its span but
-                # keep the entry, since the outer/root agent still consumes it.
                 current_span.update(
                     output=output,
                     project_name=self.project_name,
                 )
             elif current_trace is not None:
-                # The root agent finished: stamp the output and drop the entry.
                 current_trace.update(
                     output=output,
                     project_name=self.project_name,
                 )
-                self._last_model_output.pop(invocation_id, None)
             else:
-                self._last_model_output.pop(invocation_id, None)
                 LOGGER.warning(
                     "No current span or trace found in context for agent output update"
                 )
+            # Drop the cached output once this invocation's outermost agent has
+            # finished. This is decoupled from span-vs-trace so it stays correct
+            # under ``distributed_headers``, where the root agent is itself a span.
+            adk_helpers.drop_invocation_output_if_finished(
+                self._open_agents, self._last_model_output, invocation_id
+            )
         except Exception as e:
             LOGGER.error(f"Failed during after_agent_callback(): {e}", exc_info=True)
 
