@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
         - 'apps/opik-documentation/documentation/**'
+        - '.github/workflows/documentation_preview_link.yml'
 
 
 concurrency:
@@ -39,10 +40,17 @@ jobs:
               working-directory: apps/opik-documentation/documentation
               run: |
                 echo -e "\n\n" >> preview_url.txt
-                
+
                 # Use JSON output for reliable parsing (CSV breaks with URLs containing commas/brackets)
+                # --concurrency 500: the preview CDN serves bursts without rate-limiting
+                # (no 429s observed), and the recurse over thousands of pages otherwise
+                # brushes the job's 15-minute timeout. Higher concurrency shortens the crawl.
+                # linkinator exits non-zero both when it finds broken links AND when it
+                # crashes mid-crawl (e.g. an unhandled ECONNRESET on a response stream),
+                # so the exit code alone can't be trusted — we validate the JSON below.
                 npx linkinator ${{ steps.generate-docs.outputs.URL }} \
                   --recurse \
+                  --concurrency 500 \
                   --skip "search\/v2\/key" \
                   --skip "https://ai.google.dev/gemini-api" \
                   --skip "https://ai.google.dev/aistudio" \
@@ -52,20 +60,65 @@ jobs:
                   --skip "googletagmanager.com" \
                   --skip "insights/script.js" \
                   --format json > linkinator_results.json || true
-                
-                # Parse JSON and filter broken links (excluding 403s)
-                BROKEN_LINKS=$(jq -r '
-                  .links[]
-                  | select(.state != "OK" and .status != 403)
-                  | "Page: \(.parent)\n❌ Broken link: \(.url) (\(.status))\n"
+
+                # A crashed crawl leaves missing/truncated output. Don't trust it: if the
+                # result isn't valid JSON with a .links array, the crawl crashed/timed out.
+                # Post a warning AND fail the check (via the flag) so the red status forces
+                # a re-run rather than silently posting "No broken links found".
+                if ! jq -e 'type == "object" and (.links | type == "array")' linkinator_results.json > /dev/null 2>&1; then
+                  {
+                    echo "⚠️ The link check did not complete (linkinator produced no usable results — likely a crawl crash or timeout). Please re-run this check."
+                    echo ""
+                    echo "---"
+                    echo "📌 Results for commit ${{ github.sha }}"
+                  } >> preview_url.txt
+                  echo "true" > check_failed.flag
+                  exit 0
+                fi
+
+                # The preview host is ephemeral (torn down after the run), so strip it
+                # from the "on page" pointer — the stable relative doc path is what you
+                # grep for to find the source .mdx to fix.
+                PREVIEW_ORIGIN=$(echo "${{ steps.generate-docs.outputs.URL }}" | grep -oE '^https?://[^/]+')
+
+                # Parse JSON and filter broken links (excluding 403s).
+                # Dedup by URL: a single broken page linked from the sidebar can
+                # appear on hundreds of parent pages, which previously multiplied
+                # the report past GitHub's 65,536-char comment limit.
+                # Status 0 (crawl timeout/abort) is handled separately below — it
+                # is not an HTTP error, just "linkinator gave up mid-crawl", which
+                # produces false positives for healthy-but-slow pages.
+                BROKEN_LINKS=$(jq -r --arg origin "$PREVIEW_ORIGIN" '
+                  [.links[] | select(.state != "OK" and .status != 403 and .status != 0)]
+                  | group_by(.url)
+                  | map(.[0])
+                  | .[]
+                  | "❌ Broken link: \(.url) (\(.status))\n   ↳ on page: \((.parent // "") | sub("^" + $origin; ""))"
                 ' linkinator_results.json)
-                
+
+                # Re-verify each unique status-0 URL with a direct request: many are
+                # transient crawl timeouts on healthy pages (return 200 on recheck).
+                # Keep only those that are genuinely unreachable (non-2xx/3xx).
+                while IFS= read -r url; do
+                  [ -z "$url" ] && continue
+                  code=$(curl -s -L -o /dev/null -w "%{http_code}" --max-time 20 "$url" 2>/dev/null)
+                  [ -z "$code" ] && code=000
+                  if [ "$code" -lt 200 ] || [ "$code" -ge 400 ]; then
+                    parent=$(jq -r --arg u "$url" --arg origin "$PREVIEW_ORIGIN" '(first(.links[] | select(.url == $u)).parent // "") | sub("^" + $origin; "")' linkinator_results.json)
+                    entry=$(printf '❌ Broken link: %s (timeout, recheck %s)\n   ↳ on page: %s' "$url" "$code" "$parent")
+                    BROKEN_LINKS=$(printf '%s\n%s' "$BROKEN_LINKS" "$entry")
+                  fi
+                done <<< "$(jq -r '[.links[] | select(.status == 0) | .url] | unique | .[]' linkinator_results.json)"
+
                 if [ -n "$BROKEN_LINKS" ]; then
                   {
                     echo "**The following broken links were found:**"
                     echo ""
                     echo "$BROKEN_LINKS"
                   } >> preview_url.txt
+                  # Record the failure so the job goes red AFTER the comment is posted,
+                  # so reviewers see the list and the check blocks until the links are fixed.
+                  echo "true" > check_failed.flag
                 else
                   echo "No broken links found" >> preview_url.txt
                 fi
@@ -79,7 +132,17 @@ jobs:
                 } >> preview_url.txt
 
             - name: Comment URL in PR
+              if: always()
               uses: thollander/actions-comment-pull-request@v3
               with:
                   file-path: apps/opik-documentation/documentation/preview_url.txt
                   comment-tag: docs-preview
+
+            - name: Fail if the link check failed
+              if: always()
+              working-directory: apps/opik-documentation/documentation
+              run: |
+                if [ -f check_failed.flag ]; then
+                  echo "Link check failed — broken links were found, or the crawl did not complete. See the PR comment."
+                  exit 1
+                fi
