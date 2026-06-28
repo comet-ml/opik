@@ -35,5 +35,14 @@ if [ "$ENABLE_VIRTUAL_THREADS" = "true" ]; then
     JAVA_OPTS="$JAVA_OPTS -Dreactor.schedulers.defaultBoundedElasticOnVirtualThreads=true"
 fi
 
+# Check if HEAP_DUMP_ON_OOM is set to true.
+# Off by default: a heap dump contains the workspace's data, so self-hosted deployments must opt
+# in explicitly. Comet-managed deployments (our staging/prod and managed-for-customer) set this to
+# true with HEAP_DUMP_PATH pointing at a mounted volume, so an OOM leaves a post-mortem dump.
+if [ "$HEAP_DUMP_ON_OOM" = "true" ]; then
+    echo "Enabling heap dump on OutOfMemoryError (path: ${HEAP_DUMP_PATH:-/tmp})"
+    JAVA_OPTS="$JAVA_OPTS -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=${HEAP_DUMP_PATH:-/tmp}"
+fi
+
 echo "Starting opik-backend service..."
 java $JAVA_OPTS -jar opik-backend-$OPIK_VERSION.jar server config.yml
