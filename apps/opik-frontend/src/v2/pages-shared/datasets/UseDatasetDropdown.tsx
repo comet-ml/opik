@@ -104,7 +104,11 @@ function UseDatasetDropdown({
         <DropdownMenu>
           <TooltipWrapper content="Run in">
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon-sm">
+              <Button
+                variant="outline"
+                size="icon-sm"
+                data-testid="dataset-header-run-in-trigger"
+              >
                 <Play />
               </Button>
             </DropdownMenuTrigger>

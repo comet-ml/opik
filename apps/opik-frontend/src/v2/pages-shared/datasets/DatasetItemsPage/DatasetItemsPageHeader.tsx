@@ -125,6 +125,7 @@ const DatasetItemsPageHeader: React.FunctionComponent<
                 size="icon-sm"
                 onClick={onExpand}
                 disabled={!dataset}
+                data-testid="dataset-header-expand-button"
               >
                 <Sparkles />
               </Button>
@@ -145,6 +146,7 @@ const DatasetItemsPageHeader: React.FunctionComponent<
                 variant="outline"
                 size="icon-sm"
                 onClick={onSettingsClick}
+                data-testid="dataset-header-settings-button"
               >
                 <Settings2 />
               </Button>
@@ -156,6 +158,7 @@ const DatasetItemsPageHeader: React.FunctionComponent<
               size="sm"
               onClick={onAddItem}
               disabled={!dataset}
+              data-testid="dataset-header-add-button"
             >
               <Plus className="mr-1.5 size-3.5" />
               {isTestSuite ? "Test case" : "Record"}
