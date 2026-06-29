@@ -20,6 +20,7 @@ from .utils import (
     resolve_import_project_root,
     setup_import_manifest,
     to_project_option,
+    to_workspace_option,
 )
 from ..include_validation import validate_include
 
@@ -52,13 +53,15 @@ def import_all(
     api_key: Optional[str] = None,
     include_attachments: bool = True,
     to_project: Optional[str] = None,
+    to_workspace: Optional[str] = None,
 ) -> None:
     """Import all data types from the project export directory."""
     try:
+        dest_workspace = to_workspace or workspace
         if api_key:
-            client = opik.Opik(api_key=api_key, workspace=workspace)
+            client = opik.Opik(api_key=api_key, workspace=dest_workspace)
         else:
-            client = opik.Opik(workspace=workspace)
+            client = opik.Opik(workspace=dest_workspace)
 
         # Locate the exported project folder by its recorded name and resolve
         # the destination project (shared with _import_by_type). Folders are
@@ -243,6 +246,7 @@ def import_all(
 )
 @no_attachments_option()
 @to_project_option()
+@to_workspace_option()
 @click.pass_context
 def import_all_command(
     ctx: click.Context,
@@ -253,6 +257,7 @@ def import_all_command(
     include: List[str],
     no_attachments: bool,
     to_project: Optional[str],
+    to_workspace: Optional[str],
 ) -> None:
     """Import all datasets, prompts, traces, and experiments into the project.
 
@@ -275,6 +280,12 @@ def import_all_command(
         # Import only datasets and prompts
         opik import my-workspace my-project all --include datasets,prompts
 
+        # Import into a different workspace
+        opik import src-workspace my-project all --to-workspace dest-workspace
+
+        # Import into a different workspace and project
+        opik import src-workspace my-project all --to-workspace dest-workspace --to-project new-project
+
         # Restart from scratch, discarding previous progress
         opik import my-workspace my-project all --force
 
@@ -295,4 +306,5 @@ def import_all_command(
         api_key,
         include_attachments=not no_attachments,
         to_project=to_project,
+        to_workspace=to_workspace,
     )

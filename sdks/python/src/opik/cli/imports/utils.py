@@ -42,6 +42,25 @@ def to_project_option() -> Callable:
     )
 
 
+def to_workspace_option() -> Callable:
+    """Shared Click decorator for the ``--to-workspace`` flag.
+
+    Overrides the destination workspace. When omitted, data is imported into
+    the same workspace named on the command line (which is also used to locate
+    the exported files on disk under ``<path>/WORKSPACE/projects/``).
+    """
+    return click.option(
+        "--to-workspace",
+        "to_workspace",
+        type=str,
+        default=None,
+        help=(
+            "Import data into this workspace instead of WORKSPACE. "
+            "WORKSPACE is still used to locate the exported files on disk."
+        ),
+    )
+
+
 console = Console()
 
 

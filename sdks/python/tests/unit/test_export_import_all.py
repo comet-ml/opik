@@ -1100,6 +1100,47 @@ class TestImportAll:
         assert kwargs.get("api_key") == "secret-key"
         assert kwargs.get("workspace") == _WORKSPACE
 
+    def test_to_workspace_used_for_client_not_for_path_resolution(self, tmp_path):
+        """--to-workspace overrides the workspace passed to opik.Opik() while
+        leaving the on-disk path lookup (which uses the source workspace) unchanged.
+
+        Scenario: data exported from 'src-ws', imported into 'dest-ws'.
+        The exported files live under <path>/src-ws/projects/. The Opik client
+        must be constructed with workspace='dest-ws'.
+        """
+        # Seed export layout under the SOURCE workspace directory.
+        _seed_project_meta(tmp_path)
+        client = _make_import_client()
+
+        with (
+            patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client) as mock_opik,
+            patch(f"{_IMPORT_MODULE}.import_datasets_from_directory", return_value={}),
+            patch(
+                f"{_IMPORT_MODULE}.import_prompts_from_directory",
+                return_value={"prompts": 0},
+            ),
+            patch(f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}),
+            patch(
+                f"{_IMPORT_MODULE}.import_experiments_from_directory", return_value={}
+            ),
+        ):
+            from opik.cli.imports.all import import_all
+
+            import_all(
+                workspace=_WORKSPACE,  # source workspace: used for file lookup
+                project_name=_PROJECT,
+                path=str(tmp_path),
+                include=[],
+                dry_run=False,
+                force=False,
+                debug=False,
+                to_workspace="dest-ws",  # destination workspace: used for Opik client
+            )
+
+        mock_opik.assert_called_once()
+        kwargs = mock_opik.call_args[1]
+        assert kwargs.get("workspace") == "dest-ws"
+
 
 # ---------------------------------------------------------------------------
 # export_all
