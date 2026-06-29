@@ -15,8 +15,9 @@ type StudioTemplatesProps = {
 
 type StudioCard = {
   icon: LucideIcon;
-  // CSS color token driving the icon, its chip tint, the card tint and the link
-  color: string;
+  chipColor: string; // solid icon-chip background
+  tintBg: string; // card background tint
+  tintBorder: string; // card border tint
   title: string;
   description: string;
   actionLabel: string;
@@ -28,11 +29,15 @@ const StudioTemplates: React.FC<StudioTemplatesProps> = ({
 }) => {
   const navigateToStudio = useNavigateToOptimizationStudio();
 
-  // Three onboarding cards, matching the Figma runs-list (562:37189).
+  // Three onboarding cards, matching the Figma runs-list (562:37189 / 686:35206):
+  // a solid colored icon chip + title/description + a primary-blue link, on a
+  // lightly-tinted card.
   const cards: StudioCard[] = [
     {
       icon: BotMessageSquare,
-      color: "var(--chart-blue)",
+      chipColor: "#89deff",
+      tintBg: "rgba(186, 230, 253, 0.1)",
+      tintBorder: "rgba(186, 230, 253, 0.6)",
       title: "Run a demo example",
       description:
         "Start with a pre-configured optimization example for a support chatbot.",
@@ -41,7 +46,9 @@ const StudioTemplates: React.FC<StudioTemplatesProps> = ({
     },
     {
       icon: SquareDashedMousePointer,
-      color: "var(--chart-purple)",
+      chipColor: "#a78bfa",
+      tintBg: "rgba(196, 181, 253, 0.1)",
+      tintBorder: "rgba(196, 181, 253, 0.4)",
       title: "Use the Optimization studio",
       description:
         "Create a custom optimization workflow to test and improve your prompts.",
@@ -50,7 +57,9 @@ const StudioTemplates: React.FC<StudioTemplatesProps> = ({
     },
     {
       icon: FileSliders,
-      color: "var(--chart-burgundy)",
+      chipColor: "#e25af6",
+      tintBg: "rgba(240, 171, 252, 0.1)",
+      tintBorder: "rgba(240, 171, 252, 0.5)",
       title: "Optimize via SDK",
       description:
         "Generate starter code for running a custom optimization programmatically.",
@@ -64,38 +73,42 @@ const StudioTemplates: React.FC<StudioTemplatesProps> = ({
       <h2 className="comet-title-s sticky top-0 z-10 truncate break-words bg-soft-background pb-3 pt-2">
         Run an optimization
       </h2>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         {cards.map(
-          ({ icon: Icon, color, title, description, actionLabel, onClick }) => (
+          ({
+            icon: Icon,
+            chipColor,
+            tintBg,
+            tintBorder,
+            title,
+            description,
+            actionLabel,
+            onClick,
+          }) => (
             <button
               key={title}
               type="button"
               onClick={onClick}
-              className="flex flex-col items-start gap-2 rounded-md border border-border p-4 text-left transition-colors hover:border-primary"
-              style={{
-                backgroundColor: `color-mix(in srgb, ${color} 5%, transparent)`,
-              }}
+              className="flex items-start gap-2 rounded-md border px-3 pb-2 pt-3 text-left shadow-sm transition-shadow hover:shadow-md"
+              style={{ backgroundColor: tintBg, borderColor: tintBorder }}
             >
               <span
-                className="flex size-7 shrink-0 items-center justify-center rounded-md"
-                style={{
-                  backgroundColor: `color-mix(in srgb, ${color} 14%, transparent)`,
-                }}
+                className="flex shrink-0 items-center justify-center rounded-md p-[7px]"
+                style={{ backgroundColor: chipColor }}
               >
-                <Icon className="size-4" style={{ color }} />
+                <Icon className="size-3.5 text-white" />
               </span>
-              <span className="comet-body-s-accented text-foreground">
-                {title}
-              </span>
-              <span className="comet-body-xs text-muted-slate">
-                {description}
-              </span>
-              <span
-                className="comet-body-xs mt-1 inline-flex items-center gap-1 font-medium"
-                style={{ color }}
-              >
-                {actionLabel}
-                <ArrowRight className="size-3" />
+              <span className="flex min-w-0 flex-1 flex-col items-start gap-px">
+                <span className="comet-body-s-accented w-full truncate text-foreground">
+                  {title}
+                </span>
+                <span className="comet-body-xs text-muted-slate">
+                  {description}
+                </span>
+                <span className="comet-body-xs mt-1 inline-flex items-center gap-0.5 text-primary">
+                  {actionLabel}
+                  <ArrowRight className="size-3" />
+                </span>
               </span>
             </button>
           ),
