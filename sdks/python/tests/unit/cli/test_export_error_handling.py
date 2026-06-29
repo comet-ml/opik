@@ -2,8 +2,10 @@
 
 Covers three HIGH-priority fixes to prevent silent data loss during export:
 
-  HIGH-1  experiment._fetch_trace_data: 429/5xx must be retried, not silently
-          dropped as a None result. Only genuine 404s should return None.
+  HIGH-1  experiment.export_traces_by_ids: when get_trace_content raises 429,
+          the internal _fetch_trace_data retry decorator must kick in so the
+          trace is eventually exported, not silently dropped. Only genuine 404s
+          should be skipped without retrying.
 
   HIGH-2  experiment.export_experiment_by_id: must re-raise on error so that
           the all.py caller can set had_errors=True (previously it swallowed
@@ -27,19 +29,20 @@ _ALL_MODULE = "opik.cli.exports.all"
 
 
 # ---------------------------------------------------------------------------
-# HIGH-1: _fetch_trace_data retries 429 rather than returning None
+# HIGH-1: export_traces_by_ids retries 429 rather than dropping the trace
 # ---------------------------------------------------------------------------
 
 
-class TestFetchTraceDataRetry:
+class TestExportTracesByIdsRetry:
     def _make_mock_trace(self, trace_id: str) -> MagicMock:
         t = MagicMock()
         t.model_dump.return_value = {"id": trace_id}
         return t
 
-    def test_fetch_trace_data__429_is_retried_not_returned_as_none(self):
-        """A 429 ApiError must trigger the retry decorator, not silently return None."""
-        from opik.cli.exports.experiment import _fetch_trace_data
+    def test_export_traces_by_ids__429_is_retried_not_dropped(self, tmp_path):
+        """A 429 ApiError must trigger the retry decorator so the trace is
+        exported, not silently dropped."""
+        from opik.cli.exports.experiment import export_traces_by_ids
 
         call_count = 0
 
@@ -55,14 +58,16 @@ class TestFetchTraceDataRetry:
         client.search_spans.return_value = []
 
         with patch(f"{_EXPERIMENT_MODULE}._fetch_trace_data.retry.sleep"):
-            result = _fetch_trace_data(client, "t1", "proj", False)
+            exported, skipped = export_traces_by_ids(
+                client, ["t1"], tmp_path, "proj", None, "json", False, False
+            )
 
-        assert result is not None, "429 must not be silently dropped as None"
+        assert exported == 1, "429 must not silently drop the trace"
         assert call_count == 2, "429 must trigger a retry"
 
-    def test_fetch_trace_data__rate_limited_exception_is_retried(self):
+    def test_export_traces_by_ids__rate_limited_exception_is_retried(self, tmp_path):
         """OpikCloudRequestsRateLimited must also be retried."""
-        from opik.cli.exports.experiment import _fetch_trace_data
+        from opik.cli.exports.experiment import export_traces_by_ids
 
         call_count = 0
 
@@ -80,14 +85,16 @@ class TestFetchTraceDataRetry:
         client.search_spans.return_value = []
 
         with patch(f"{_EXPERIMENT_MODULE}._fetch_trace_data.retry.sleep"):
-            result = _fetch_trace_data(client, "t2", "proj", False)
+            exported, skipped = export_traces_by_ids(
+                client, ["t2"], tmp_path, "proj", None, "json", False, False
+            )
 
-        assert result is not None, "rate-limit exception must not be silently dropped"
+        assert exported == 1, "rate-limit exception must not silently drop the trace"
         assert call_count == 2
 
-    def test_fetch_trace_data__404_returns_none(self):
-        """A genuine 404 (trace not found) should return None without retrying."""
-        from opik.cli.exports.experiment import _fetch_trace_data
+    def test_export_traces_by_ids__404_is_skipped_not_retried(self, tmp_path):
+        """A genuine 404 (trace not found) should be skipped cleanly without retrying."""
+        from opik.cli.exports.experiment import export_traces_by_ids
 
         call_count = 0
 
@@ -99,23 +106,26 @@ class TestFetchTraceDataRetry:
         client = MagicMock()
         client.get_trace_content.side_effect = get_trace_side_effect
 
-        result = _fetch_trace_data(client, "missing-id", "proj", False)
+        exported, skipped = export_traces_by_ids(
+            client, ["missing-id"], tmp_path, "proj", None, "json", False, False
+        )
 
-        assert result is None, "404 should return None (trace genuinely not found)"
-        assert call_count == 1, "404 should not be retried"
+        assert exported == 0, "404 trace must not be exported"
+        assert call_count == 1, "404 must not trigger a retry"
 
-    def test_fetch_trace_data__success__returns_tuple(self):
-        """Happy path: returns (trace_id, trace_data) on success."""
-        from opik.cli.exports.experiment import _fetch_trace_data
+    def test_export_traces_by_ids__success__exports_trace(self, tmp_path):
+        """Happy path: trace is written to disk and counted as exported."""
+        from opik.cli.exports.experiment import export_traces_by_ids
 
         client = MagicMock()
         client.get_trace_content.return_value = self._make_mock_trace("t3")
         client.search_spans.return_value = []
 
-        result = _fetch_trace_data(client, "t3", "proj", False)
+        exported, skipped = export_traces_by_ids(
+            client, ["t3"], tmp_path, "proj", None, "json", False, False
+        )
 
-        assert result is not None
-        assert result[0] == "t3"
+        assert exported == 1
 
 
 # ---------------------------------------------------------------------------

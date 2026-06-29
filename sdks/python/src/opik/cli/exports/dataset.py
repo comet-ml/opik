@@ -169,7 +169,7 @@ def export_experiment_datasets(
         force: Re-download datasets even if they already exist locally
 
     Returns:
-        Tuple of (exported_count, skipped_count)
+        Tuple of (exported_count, skipped_count, error_count)
     """
     exported_count = 0
     skipped_count = 0

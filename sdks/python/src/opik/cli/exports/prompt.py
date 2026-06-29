@@ -79,6 +79,25 @@ def _get_prompt_type_string(prompt: Any) -> Optional[str]:
     return str(prompt_type).upper()
 
 
+def _safe_prompt_history(
+    client: opik.Opik,
+    prompt: Union[Prompt, ChatPrompt],
+    project_name: str,
+) -> List[Union[Prompt, ChatPrompt]]:
+    try:
+        if isinstance(prompt, ChatPrompt):
+            return list(
+                client.get_chat_prompt_history(prompt.name, project_name=project_name)
+            )
+        return list(client.get_prompt_history(prompt.name, project_name=project_name))
+    except Exception as e:
+        console.print(
+            f"[yellow]Warning: Could not fetch history for prompt '{prompt.name}': {e}. "
+            "Exporting current version only.[/yellow]"
+        )
+        return []
+
+
 def export_single_prompt(
     client: opik.Opik,
     prompt: Union[Prompt, ChatPrompt],
@@ -103,24 +122,7 @@ def export_single_prompt(
             return 0
 
         # Get prompt history (scoped to the prompt's project)
-        prompt_history: List[Union[Prompt, ChatPrompt]]
-        try:
-            if isinstance(prompt, ChatPrompt):
-                prompt_history = list(
-                    client.get_chat_prompt_history(
-                        prompt.name, project_name=project_name
-                    )
-                )
-            else:
-                prompt_history = list(
-                    client.get_prompt_history(prompt.name, project_name=project_name)
-                )
-        except (ValueError, Exception) as e:
-            console.print(
-                f"[yellow]Warning: Could not fetch history for prompt '{prompt.name}': {e}. "
-                "Exporting current version only.[/yellow]"
-            )
-            prompt_history = []
+        prompt_history = _safe_prompt_history(client, prompt, project_name)
 
         # Create prompt data structure
         prompt_data = {
@@ -477,26 +479,7 @@ def export_related_prompts_by_name(
                     continue
 
                 # Get prompt history - use appropriate method based on prompt type
-                prompt_history: List[Union[Prompt, ChatPrompt]]
-                try:
-                    if isinstance(prompt, ChatPrompt):
-                        prompt_history = list(
-                            client.get_chat_prompt_history(
-                                prompt.name, project_name=project_name
-                            )
-                        )
-                    else:
-                        prompt_history = list(
-                            client.get_prompt_history(
-                                prompt.name, project_name=project_name
-                            )
-                        )
-                except (ValueError, Exception) as e:
-                    console.print(
-                        f"[yellow]Warning: Could not fetch history for prompt '{prompt.name}': {e}. "
-                        "Exporting current version only.[/yellow]"
-                    )
-                    prompt_history = []
+                prompt_history = _safe_prompt_history(client, prompt, project_name)
 
                 # Create prompt data structure
                 prompt_data = {

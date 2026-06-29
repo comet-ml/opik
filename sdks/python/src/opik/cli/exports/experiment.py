@@ -1,6 +1,7 @@
 """Experiment export functionality."""
 
 import json
+import logging
 import sys
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
@@ -39,6 +40,8 @@ from .prompt import (
     export_related_prompts_by_name,
     export_prompts_by_ids,
 )
+
+LOGGER = logging.getLogger(__name__)
 
 # Batch size for parallel trace fetching
 BATCH_SIZE = 100
@@ -87,6 +90,9 @@ def _fetch_trace_data(
             if debug:
                 debug_print(f"Trace {trace_id} not found (404), skipping", debug)
             return None
+        LOGGER.error(
+            "API error fetching trace %s (status %s): %s", trace_id, e.status_code, e
+        )
         raise  # 429/5xx are retried by @_export_rest_retry; others propagate
 
 
@@ -670,6 +676,7 @@ def export_experiment_by_name(
                         unique_prompt_ids.add(prompt_version.prompt_id)
 
         # Export all unique datasets once before processing experiments
+        had_errors = False
         datasets_exported = 0
         datasets_skipped = 0
         if unique_datasets:
@@ -677,7 +684,7 @@ def export_experiment_by_name(
                 console.print(
                     f"[blue]Exporting {len(unique_datasets)} unique dataset(s) used by these experiments...[/blue]"
                 )
-            datasets_exported, datasets_skipped, _datasets_errors = (
+            datasets_exported, datasets_skipped, datasets_errors = (
                 export_experiment_datasets(
                     client,
                     unique_datasets,
@@ -688,6 +695,8 @@ def export_experiment_by_name(
                     force,
                 )
             )
+            if datasets_errors:
+                had_errors = True
 
         # Export all unique prompts once before processing experiments
         prompts_dir = output_dir.parent / "prompts"
@@ -699,7 +708,7 @@ def export_experiment_by_name(
                 console.print(
                     f"[blue]Exporting {len(unique_prompt_ids)} unique prompt(s) used by these experiments...[/blue]"
                 )
-            prompts_exported, prompts_skipped, _prompts_errors = export_prompts_by_ids(
+            prompts_exported, prompts_skipped, prompts_errors = export_prompts_by_ids(
                 client,
                 unique_prompt_ids,
                 prompts_dir,
@@ -708,6 +717,8 @@ def export_experiment_by_name(
                 debug,
                 force,
             )
+            if prompts_errors:
+                had_errors = True
 
         # Collect all unique trace IDs from all experiments as we process them
         # We'll collect them during the first pass, then export once
@@ -810,6 +821,12 @@ def export_experiment_by_name(
                 f"[yellow]All {len(experiments)} experiment(s) with name '{name}' already exist (use --force to re-download)[/yellow]"
             )
 
+        if had_errors:
+            console.print(
+                "[bold yellow]Export completed with errors — some datasets or prompts could not be exported.[/bold yellow]"
+            )
+            sys.exit(1)
+
     except Exception as e:
         console.print(f"[red]Error exporting experiment: {e}[/red]")
         sys.exit(1)
@@ -889,8 +906,9 @@ def export_experiment_by_name_or_id(
 
             datasets_exported = 0
             datasets_skipped = 0
+            had_ds_errors = False
             if unique_datasets:
-                datasets_exported, datasets_skipped, _ds_errors = (
+                datasets_exported, datasets_skipped, ds_errors = (
                     export_experiment_datasets(
                         client,
                         unique_datasets,
@@ -901,6 +919,8 @@ def export_experiment_by_name_or_id(
                         force,
                     )
                 )
+                if ds_errors:
+                    had_ds_errors = True
 
             # Export traces collected from experiment items, passing the manifest
             # so already-downloaded traces are skipped before any API call.
@@ -947,6 +967,12 @@ def export_experiment_by_name_or_id(
                 console.print(
                     f"[yellow]Experiment '{experiment.name}' (ID: {experiment.id}) already exists (use --force to re-download)[/yellow]"
                 )
+
+            if had_ds_errors:
+                console.print(
+                    "[bold yellow]Export completed with errors — some datasets could not be exported.[/bold yellow]"
+                )
+                sys.exit(1)
             return
 
         except exceptions.ExperimentNotFound:

@@ -209,7 +209,7 @@ def _export_all_prompts(
         )
     except Exception as e:
         console.print(f"[red]Error listing prompts: {e}[/red]")
-        return 0, 0, 0
+        return 0, 0, 1
 
     if not all_prompts:
         console.print("[yellow]No prompts found.[/yellow]")
