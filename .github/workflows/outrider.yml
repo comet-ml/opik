@@ -46,7 +46,7 @@ jobs:
       REMYX_API_KEY: ${{ secrets.REMYX_API_KEY }}
       # Backend-conditional secret: when backend=glm, route Claude Code's
       # auth at the z.ai key (z.ai exposes an Anthropic-Messages endpoint).
-      ANTHROPIC_API_KEY: ${{ inputs.backend == 'glm' && secrets.Z_AI_KEY || secrets.ANTHROPIC_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ inputs.backend == 'glm' && secrets.ZAI_API_KEY || secrets.ANTHROPIC_API_KEY }}
     steps:
       # Mint a remyx[bot] token from Remyx so the PR / Issue is authored by
       # the Remyx GitHub App (not github-actions[bot]). The App private key
