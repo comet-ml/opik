@@ -1,27 +1,53 @@
 import MultiValueFeedbackScoreHoverCard from "../FeedbackScoreTag/MultiValueFeedbackScoreHoverCard";
-import { TraceFeedbackScore } from "@/types/traces";
+import {
+  FeedbackScoreValueByAuthorMap,
+  TraceFeedbackScore,
+} from "@/types/traces";
 import { useState } from "react";
 import FeedbackScoreEditDropdown from "./FeedbackScoreEditDropdown";
 import {
   formatScoreDisplay,
   getIsMultiValueFeedbackScore,
 } from "@/lib/feedback-scores";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import {
+  getCategoricFeedbackScoreValuesMap,
+  getIsCategoricFeedbackScore,
+} from "@/shared/FeedbackScoreTag/utils";
 import useWorkspaceColorMap from "@/hooks/useWorkspaceColorMap";
+
+const MAX_DISPLAY_CATEGORIES = 2;
+
+const formatMultiValueDisplay = (
+  valueByAuthor: FeedbackScoreValueByAuthorMap,
+  category: string | undefined,
+  avgValue: number | string,
+): string => {
+  if (getIsCategoricFeedbackScore(category)) {
+    const scoreMap = getCategoricFeedbackScoreValuesMap(valueByAuthor);
+    const entries = Array.from(scoreMap.values());
+    const displayed = entries
+      .slice(0, MAX_DISPLAY_CATEGORIES)
+      .map(({ users, value }) => `${users.length}x ${value}`)
+      .join(", ");
+    const remaining = entries.length - MAX_DISPLAY_CATEGORIES;
+    return remaining > 0 ? `${displayed}, +${remaining}` : displayed;
+  }
+  return `avg ${formatScoreDisplay(avgValue)}`;
+};
 
 const FeedbackScoreCellValue = ({
   isUserFeedbackColumn = false,
   feedbackScore,
   color: customColor,
   onValueChange,
-  tooltipSuffix,
+  footer,
   size = "md",
 }: {
   isUserFeedbackColumn?: boolean;
   feedbackScore?: TraceFeedbackScore;
   color?: string;
   onValueChange?: (name: string, value: number) => void;
-  tooltipSuffix?: string;
+  footer?: string;
   size?: "sm" | "md";
 }) => {
   const { getColor } = useWorkspaceColorMap();
@@ -55,15 +81,15 @@ const FeedbackScoreCellValue = ({
   const value = feedbackScore.value;
   const category = feedbackScore.category_name;
 
+  const isMultiValue = getIsMultiValueFeedbackScore(valueByAuthor);
   const formattedValue = formatScoreDisplay(value);
-  const displayText = category
-    ? `${category} (${formattedValue})`
-    : String(formattedValue);
-  const fullPrecisionText = category ? `${category} (${value})` : String(value);
-  const tooltipContent = tooltipSuffix
-    ? `${fullPrecisionText} | ${tooltipSuffix}`
-    : fullPrecisionText;
-  const showTooltip = !getIsMultiValueFeedbackScore(valueByAuthor);
+
+  const displayText =
+    isMultiValue && valueByAuthor
+      ? formatMultiValueDisplay(valueByAuthor, category, value)
+      : category
+        ? `${category} (${formattedValue})`
+        : String(formattedValue);
 
   return (
     <div className="flex min-w-0 shrink-0 items-center gap-1 overflow-hidden">
@@ -80,18 +106,13 @@ const FeedbackScoreCellValue = ({
         label={label}
         value={value}
         category={category}
+        footer={footer}
         open={openHoverCard}
         onOpenChange={setOpenHoverCard}
       >
-        {showTooltip && size === "sm" ? (
-          <TooltipWrapper content={tooltipContent}>
-            <div className="truncate">{displayText}</div>
-          </TooltipWrapper>
-        ) : (
-          <div className={size === "sm" ? "truncate" : "break-words"}>
-            {displayText}
-          </div>
-        )}
+        <div className={size === "sm" ? "truncate" : "break-words"}>
+          {displayText}
+        </div>
       </MultiValueFeedbackScoreHoverCard>
     </div>
   );

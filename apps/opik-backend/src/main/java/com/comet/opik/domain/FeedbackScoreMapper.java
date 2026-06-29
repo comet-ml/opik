@@ -141,6 +141,18 @@ public interface FeedbackScoreMapper {
             if (tuple.size() > 6 && tuple.get(6) != null) {
                 builder.spanId((String) tuple.get(6));
             }
+            // source_queue_id is the 8th element (index 7)
+            if (tuple.size() > 7 && tuple.get(7) != null) {
+                String sourceQueueId = tuple.get(7).toString();
+                if (StringUtils.isNotBlank(sourceQueueId)
+                        && !CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(sourceQueueId)) {
+                    builder.sourceQueueId(sourceQueueId);
+                }
+            }
+            // author is the 9th element (index 8)
+            if (tuple.size() > 8 && tuple.get(8) != null) {
+                builder.author(getIfNotEmpty(tuple.get(8)));
+            }
 
             ValueEntry valueEntry = builder.build();
 
@@ -213,6 +225,7 @@ public interface FeedbackScoreMapper {
 
             if (tuple.isArray() && !tuple.isEmpty()) {
                 ValueEntry.ValueEntryBuilder builder = ValueEntry.builder()
+                        .author(author)
                         .value(tuple.get(0).decimalValue())
                         .reason(getJsonTextOrNull(tuple.get(1)))
                         .categoryName(getJsonTextOrNull(tuple.get(2)))
@@ -225,10 +238,21 @@ public interface FeedbackScoreMapper {
                 if (tuple.size() > 6 && tuple.get(6) != null && !tuple.get(6).isNull()) {
                     builder.spanId(tuple.get(6).asText());
                 }
+                if (tuple.size() > 7 && tuple.get(7) != null && !tuple.get(7).isNull()) {
+                    String sourceQueueId = tuple.get(7).asText();
+                    if (StringUtils.isNotBlank(sourceQueueId)
+                            && !CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(sourceQueueId)) {
+                        builder.sourceQueueId(sourceQueueId);
+                    }
+                }
+                if (tuple.size() > 8 && tuple.get(8) != null && !tuple.get(8).isNull()) {
+                    builder.author(tuple.get(8).asText());
+                }
 
                 result.put(author, builder.build());
             } else if (tuple.isObject() && !tuple.isEmpty()) {
                 ValueEntry.ValueEntryBuilder builder = ValueEntry.builder()
+                        .author(author)
                         .value(tuple.get("value").decimalValue())
                         .reason(getJsonTextOrNull(tuple.get("reason")))
                         .categoryName(getJsonTextOrNull(tuple.get("category_name")))
@@ -240,6 +264,16 @@ public interface FeedbackScoreMapper {
                 }
                 if (tuple.has("span_id") && !tuple.get("span_id").isNull()) {
                     builder.spanId(tuple.get("span_id").asText());
+                }
+                if (tuple.has("source_queue_id") && !tuple.get("source_queue_id").isNull()) {
+                    String sourceQueueId = tuple.get("source_queue_id").asText();
+                    if (StringUtils.isNotBlank(sourceQueueId)
+                            && !CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(sourceQueueId)) {
+                        builder.sourceQueueId(sourceQueueId);
+                    }
+                }
+                if (tuple.has("author") && !tuple.get("author").isNull()) {
+                    builder.author(tuple.get("author").asText());
                 }
 
                 result.put(author, builder.build());
