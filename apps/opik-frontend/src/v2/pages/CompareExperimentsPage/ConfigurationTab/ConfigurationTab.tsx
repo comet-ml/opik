@@ -19,7 +19,6 @@ import CompareExperimentsConfigCell, {
 } from "@/v2/pages-shared/experiments/CompareExperimentsConfigCell/CompareExperimentsConfigCell";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
-import ExplainerCallout from "@/shared/ExplainerCallout/ExplainerCallout";
 import { convertColumnDataToColumn } from "@/lib/table";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import NavigationTag from "@/shared/NavigationTag";
@@ -29,7 +28,6 @@ import { formatPromptVersionLabel } from "@/lib/experiments";
 import { Switch } from "@/ui/switch";
 import { Label } from "@/ui/label";
 import { Separator } from "@/ui/separator";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 
 const COLUMNS_WIDTH_KEY = "compare-experiments-config-columns-width";
 
@@ -170,12 +168,6 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
 
   return (
     <>
-      <PageBodyStickyContainer direction="horizontal" limitWidth>
-        <ExplainerCallout
-          className="mb-4"
-          {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_experiment_configuration]}
-        />
-      </PageBodyStickyContainer>
       <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-6 pt-4"
         direction="bidirectional"

@@ -17,6 +17,7 @@ from opik.decorator import span_creation_handler, arguments_helpers
 from . import (
     helpers as adk_helpers,
     callback_context_info_extractors,
+    output_cache,
     patchers,
 )
 from .patchers import (
@@ -68,7 +69,11 @@ class OpikTracer:
         return opik.get_global_client()
 
     def _init_internal_attributes(self) -> None:
-        self._last_model_output: Optional[Dict[str, Any]] = None
+        # Cache the last model output per ADK ``invocation_id``. A single tracer
+        # instance is shared across concurrent invocations (the
+        # ``track_adk_agent_recursive`` pattern), so keying by invocation isolates
+        # their output; the cache is bounded so it can't grow without bound.
+        self._last_model_output = output_cache.LastModelOutputCache()
         # Track time-to-first-token: map span_id -> (request_start_time, first_token_time)
         self._ttft_tracking: Dict[str, Tuple[float, Optional[float]]] = {}
 
@@ -188,7 +193,7 @@ class OpikTracer:
         **kwargs: Any,
     ) -> None:
         try:
-            output = self._last_model_output
+            output = self._last_model_output.get(callback_context.invocation_id)
             current_span = context_storage.top_span_data()
             current_trace = context_storage.get_trace_data()
             if current_span is not None:
@@ -201,7 +206,6 @@ class OpikTracer:
                     output=output,
                     project_name=self.project_name,
                 )
-                self._last_model_output = None
             else:
                 LOGGER.warning(
                     "No current span or trace found in context for agent output update"
@@ -281,6 +285,7 @@ class OpikTracer:
 
             current_span = context_storage.top_span_data()
             if current_span is None:
+                self._last_model_output.discard(callback_context.invocation_id)
                 LOGGER.warning(
                     "No current span found in context for model output update"
                 )
@@ -315,6 +320,12 @@ class OpikTracer:
             # this method again with the final non-partial response, where we'll properly clean it up
             if is_partial:
                 return
+
+            # Final (non-partial) response for this call: clear any output cached
+            # for this invocation up front, so a failed conversion (or a later
+            # error) below leaves no stale value for after_agent_callback to
+            # stamp. It is re-set only if conversion succeeds.
+            self._last_model_output.discard(callback_context.invocation_id)
 
             try:
                 output = adk_helpers.convert_adk_base_model_to_dict(llm_response)
@@ -363,7 +374,8 @@ class OpikTracer:
             # and it will also add tool spans inside of it, which we want to avoid.
             if opik.is_tracing_active():
                 self._opik_client.__internal_api__span__(**current_span.as_parameters)
-            self._last_model_output = output
+            if output is not None:
+                self._last_model_output.set(callback_context.invocation_id, output)
 
         except Exception as e:
             exception_occurred = True
@@ -448,6 +460,9 @@ class OpikTracer:
         state.pop("_opik_client", None)
         # Don't serialize TTFT tracking as it's runtime state
         state.pop("_ttft_tracking", None)
+        # The output cache holds a threading.Lock (unpicklable) and is per-process
+        # runtime state; __setstate__ recreates a fresh one.
+        state.pop("_last_model_output", None)
         return state
 
     def __setstate__(self, state: Dict[str, Any]) -> None:

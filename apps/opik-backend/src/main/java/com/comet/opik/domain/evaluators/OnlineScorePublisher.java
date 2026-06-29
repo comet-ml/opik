@@ -4,6 +4,7 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
+import com.comet.opik.api.events.RedisSubscriberMessage;
 import com.comet.opik.api.events.TraceThreadToScoreLlmAsJudge;
 import com.comet.opik.api.events.TraceThreadToScoreUserDefinedMetricPython;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
@@ -132,13 +133,22 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
         return Flux.deferContextual(ctx -> {
             var workspaceId = StringUtils.defaultIfBlank(ctx.getOrDefault(RequestContext.WORKSPACE_ID, UNKNOWN),
                     UNKNOWN);
-            var workspaceName = StringUtils.defaultIfBlank(
-                    ctx.getOrDefault(RequestContext.WORKSPACE_NAME, workspaceId), workspaceId);
+            String ctxWorkspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, null);
+            var workspaceName = StringUtils.defaultIfBlank(ctxWorkspaceName, workspaceId);
             var successAttrs = Attributes.of(EVALUATOR_TYPE_KEY, type.getType(),
                     WORKSPACE_ID_KEY, workspaceId, WORKSPACE_NAME_KEY, workspaceName, RESULT_KEY, "success");
             var errorAttrs = Attributes.of(EVALUATOR_TYPE_KEY, type.getType(),
                     WORKSPACE_ID_KEY, workspaceId, WORKSPACE_NAME_KEY, workspaceName, RESULT_KEY, "error");
             return Flux.fromIterable(messages)
+                    // Stamp the workspace name resolved from the reactive context onto messages that don't
+                    // already carry one, so async consumers and their per-workspace metrics get a real name.
+                    // Context-less producers (e.g. the closing-thread job) have no name to stamp; those
+                    // messages keep falling back to the workspace id downstream.
+                    .map(message -> message instanceof RedisSubscriberMessage scoped
+                            && StringUtils.isBlank(scoped.workspaceName())
+                            && StringUtils.isNotBlank(ctxWorkspaceName)
+                                    ? scoped.withWorkspaceName(ctxWorkspaceName)
+                                    : message)
                     .flatMap(message -> stream.add(RedisStreamUtils.buildAddArgs(
                             OnlineScoringConfig.PAYLOAD_FIELD, message, config))
                             .doOnNext(id -> {

@@ -23,7 +23,6 @@ import java.util.Set;
 import java.util.UUID;
 
 @RegisterConstructorMapper(Project.class)
-@RegisterConstructorMapper(ProjectIdLastUpdated.class)
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 interface ProjectDAO {
 
@@ -79,16 +78,6 @@ interface ProjectDAO {
             @Define("name") @Bind("name") String name,
             @Define("visibility") @Bind("visibility") Visibility visibility,
             @Define("sort_fields") @Bind("sort_fields") String sortingFields);
-
-    @SqlQuery("SELECT id, last_updated_at FROM projects" +
-            " WHERE workspace_id = :workspaceId" +
-            " <if(name)> AND name like concat('%', :name, '%') <endif>" +
-            " <if(visibility)> AND visibility = :visibility <endif> ")
-    @UseStringTemplateEngine
-    @AllowUnusedBindings
-    List<ProjectIdLastUpdated> getAllProjectIdsLastUpdated(@Bind("workspaceId") String workspaceId,
-            @Define("name") @Bind("name") String name,
-            @Define("visibility") @Bind("visibility") Visibility visibility);
 
     default Optional<Project> fetch(UUID id, String workspaceId) {
         return Optional.ofNullable(findById(id, workspaceId));
