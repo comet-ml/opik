@@ -183,6 +183,19 @@ class OnlineScoringSamplerTest {
             verifyNoInteractions(ruleEvaluatorService);
             verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
         }
+
+        @Test
+        void skipsEvaluatorSourceMonitoringTraces() {
+            // The engine's own monitoring traces (OPIK-6994) carry Source.EVALUATOR (a non-logging
+            // source) and no selected_rule_ids, so the sampler never scores them — the engine cannot
+            // evaluate its own output.
+            var trace = createTrace(Source.EVALUATOR);
+
+            onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
+
+            verifyNoInteractions(ruleEvaluatorService);
+            verifyNoInteractions(onlineScorePublisher);
+        }
     }
 
     @Nested

@@ -67,7 +67,9 @@ export const generateSearchByIDFilters = (search?: string) => {
   return generateSearchByFieldFilters("id", search);
 };
 
-export const generateVisibilityFilters = () => {
+export const generateVisibilityFilters = (
+  mode: TRACE_VISIBILITY_MODE = TRACE_VISIBILITY_MODE.default,
+) => {
   return [
     {
       id: uniqid(),
@@ -75,7 +77,7 @@ export const generateVisibilityFilters = () => {
       type: COLUMN_TYPE.string,
       operator: "=",
       key: "",
-      value: TRACE_VISIBILITY_MODE.default,
+      value: mode,
     },
   ] as Filter[];
 };
