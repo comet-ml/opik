@@ -52,6 +52,22 @@ jobs:
       ANTHROPIC_API_KEY: ${{ inputs.backend == 'glm' && '' || secrets.ANTHROPIC_API_KEY }}
       ANTHROPIC_AUTH_TOKEN: ${{ inputs.backend == 'glm' && secrets.ZAI_API_KEY || '' }}
     steps:
+      # Configure backend auth — Claude Code uses ANTHROPIC_AUTH_TOKEN
+      # for non-default backends (Bearer header) and ANTHROPIC_API_KEY
+      # for the default (x-api-key header). They're mutually exclusive;
+      # job-level env can't produce empty strings via ternary, so the
+      # step writes whichever is right to $GITHUB_ENV.
+      - name: Configure backend auth
+        shell: bash
+        env:
+          ANTHROPIC_API_KEY_SECRET: ${{ secrets.ANTHROPIC_API_KEY }}
+          ZAI_API_KEY_SECRET: ${{ secrets.ZAI_API_KEY }}
+        run: |
+          if [ "${{ inputs.backend }}" = "glm" ]; then
+            echo "ANTHROPIC_AUTH_TOKEN=$ZAI_API_KEY_SECRET" >> "$GITHUB_ENV"
+          else
+            echo "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY_SECRET" >> "$GITHUB_ENV"
+          fi
       # Diagnostic: confirm the backend-conditional secret resolved correctly.
       # Logs length + first 4 hex chars of the env var so we can tell at a
       # glance whether Anthropic key, z.ai key, or empty was injected.
