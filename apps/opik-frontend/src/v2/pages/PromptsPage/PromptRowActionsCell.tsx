@@ -88,7 +88,7 @@ export const PromptRowActionsCell: React.FunctionComponent<
           )}
           {canDeletePrompts && (
             <>
-              <DropdownMenuSeparator />
+              {canEditPrompts && <DropdownMenuSeparator />}
               <DropdownMenuItem
                 onClick={() => {
                   setOpen(DELETE_KEY);
