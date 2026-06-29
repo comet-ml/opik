@@ -30,6 +30,7 @@ import { buildDocsUrl } from "@/v2/lib/utils";
 import emptyOptStudioLightUrl from "/images/empty-optimization-studio-light.svg";
 import emptyOptStudioDarkUrl from "/images/empty-optimization-studio-dark.svg";
 import StudioTemplates from "@/v2/pages-shared/optimizations/StudioTemplates";
+import { Separator } from "@/ui/separator";
 import { useOptimizationsView } from "@/hooks/useOptimizationsView";
 import useOptimizationsList from "@/api/optimizations/useOptimizationsList";
 import { usePermissions } from "@/contexts/PermissionsContext";
@@ -256,9 +257,12 @@ const OptimizationsPage: React.FunctionComponent = () => {
       ) : (
         <>
           {canUseOptimizationStudio && !isTableLoading && (
-            <StudioTemplates
-              onOptimizeViaSdkClick={handleNewOptimizationClick}
-            />
+            <>
+              <StudioTemplates
+                onOptimizeViaSdkClick={handleNewOptimizationClick}
+              />
+              <Separator className="mt-4" />
+            </>
           )}
           <div className="pt-4">
             <OptimizationsToolbar
