@@ -72,10 +72,14 @@ def import_all(
         )
 
         # Construct + initialize the per-destination manifest (shared with
-        # _import_by_type; keyed by the destination project). Skipped for
-        # --dry-run.
+        # _import_by_type; keyed by destination workspace + project). Skipped
+        # for --dry-run.
         manifest, already_completed = setup_import_manifest(
-            project_root, project_name, dry_run, force
+            project_root,
+            project_name,
+            dry_run,
+            force,
+            destination_workspace=dest_workspace,
         )
         if already_completed:
             return

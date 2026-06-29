@@ -169,21 +169,26 @@ def resolve_import_project_root(
     return project_root, (to_project or project_name)
 
 
-def destination_manifest_dir(project_root: Path, destination_project_name: str) -> Path:
+def destination_manifest_dir(
+    project_root: Path,
+    destination_project_name: str,
+    destination_workspace: Optional[str] = None,
+) -> Path:
     """Return the per-destination import-manifest directory under the source folder.
 
-    The resume/completion manifest must be keyed by the *destination* project, not
-    just the source folder: importing the same exported project into different
-    ``--to-project`` targets must keep independent state (each destination gets its
-    own newly-created trace ids and completion status). Without this, a clean
-    import into A would make a later import into B short-circuit on
-    ``manifest.is_completed`` (and a partially-failed import into A would resume
-    into B, splitting one project's data across two destinations).
+    The resume/completion manifest must be keyed by both the *destination* workspace
+    and project, not just the source folder. Importing the same exported project into
+    different ``--to-project`` or ``--to-workspace`` targets must keep independent
+    state (each destination gets its own newly-created trace ids and completion
+    status). Without this, a clean import into workspace A / project X would make a
+    later import into workspace B / project X short-circuit on
+    ``manifest.is_completed``.
 
     Destination names may contain ``/``, ``:`` or whitespace, so the directory is
-    keyed by a short hash of the name rather than the name itself.
+    keyed by a short hash of the combined destination rather than the names themselves.
     """
-    dest_key = hashlib.sha256(destination_project_name.encode("utf-8")).hexdigest()[:16]
+    dest_str = f"{destination_workspace or ''}:{destination_project_name}"
+    dest_key = hashlib.sha256(dest_str.encode("utf-8")).hexdigest()[:16]
     return project_root / "import_manifests" / dest_key
 
 
@@ -192,6 +197,7 @@ def setup_import_manifest(
     destination_project_name: str,
     dry_run: bool,
     force: bool,
+    destination_workspace: Optional[str] = None,
 ) -> Tuple[Optional[MigrationManifest], bool]:
     """Construct and initialize the per-destination import manifest.
 
@@ -208,7 +214,9 @@ def setup_import_manifest(
         return None, False
 
     manifest_file = (
-        destination_manifest_dir(project_root, destination_project_name)
+        destination_manifest_dir(
+            project_root, destination_project_name, destination_workspace
+        )
         / MANIFEST_FILENAME
     )
     # Capture existence BEFORE constructing — the constructor creates the SQLite

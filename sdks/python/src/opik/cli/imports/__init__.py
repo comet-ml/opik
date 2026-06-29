@@ -87,10 +87,14 @@ def _import_by_type(
         )
 
         # Construct + initialize the per-destination manifest (keyed by the
-        # destination project so different --to-project targets keep independent
-        # resume state). Skipped for --dry-run.
+        # destination workspace + project so different --to-workspace / --to-project
+        # targets keep independent resume state). Skipped for --dry-run.
         manifest, already_completed = setup_import_manifest(
-            project_root, target_project_name, dry_run, force
+            project_root,
+            target_project_name,
+            dry_run,
+            force,
+            destination_workspace=dest_workspace,
         )
         if already_completed:
             return
