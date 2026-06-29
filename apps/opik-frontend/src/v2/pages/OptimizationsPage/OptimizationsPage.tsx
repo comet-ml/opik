@@ -31,6 +31,7 @@ import emptyOptStudioLightUrl from "/images/empty-optimization-studio-light.svg"
 import emptyOptStudioDarkUrl from "/images/empty-optimization-studio-dark.svg";
 import StudioTemplates from "@/v2/pages-shared/optimizations/StudioTemplates";
 import { useOptimizationsView } from "@/hooks/useOptimizationsView";
+import useOptimizationsList from "@/api/optimizations/useOptimizationsList";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import {
   DEFAULT_COLUMNS,
@@ -99,8 +100,6 @@ const OptimizationsPage: React.FunctionComponent = () => {
     [activeProjectId],
   );
 
-  const noData = !search && filters.length === 0;
-
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
     {
@@ -139,6 +138,19 @@ const OptimizationsPage: React.FunctionComponent = () => {
     rowSelection,
     pollWhileInProgress: true,
   });
+
+  // Lightweight, unfiltered existence probe (size=1) that decides the
+  // onboarding empty state independently of the paginated/filtered list, so a
+  // cold load never shows the studio templates + a populated-looking table
+  // before we know the workspace has runs. While it resolves the table renders
+  // its skeleton (see isTableLoading), matching the Experiments page.
+  const { data: existenceData, isPending: isExistencePending } =
+    useOptimizationsList({
+      workspaceName,
+      projectId: activeProjectId ?? undefined,
+      page: 1,
+      size: 1,
+    });
 
   const hasOldTypeOptimizations = useMemo(
     () =>
@@ -200,9 +212,14 @@ const OptimizationsPage: React.FunctionComponent = () => {
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
 
+  // Include the existence probe so we render the table skeleton (matching the
+  // Experiments page) until we know whether the workspace has any runs, rather
+  // than showing the studio templates + table chrome prematurely.
   const isTableLoading =
-    isPending || (isPlaceholderData && optimizations.length === 0);
-  const isEmpty = !isTableLoading && noData && optimizations.length === 0;
+    isExistencePending ||
+    isPending ||
+    (isPlaceholderData && optimizations.length === 0);
+  const isEmpty = !isExistencePending && (existenceData?.total ?? 0) === 0;
 
   const handleClearFilters = useCallback(() => {
     setSearch(undefined);
@@ -234,7 +251,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
         )
       ) : (
         <>
-          {canUseOptimizationStudio && <StudioTemplates />}
+          {canUseOptimizationStudio && !isTableLoading && <StudioTemplates />}
           <div className="pt-4">
             <OptimizationsToolbar
               search={search!}
