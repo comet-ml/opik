@@ -80,7 +80,7 @@ interface VersionWithMaybeAuthor extends PromptVersion {
 
 const PromptTab = ({ prompt }: PromptTabInterface) => {
   const {
-    permissions: { canUsePlayground, canConfigureWorkspaceSettings },
+    permissions: { canUsePlayground, canEditPrompts },
   } = usePermissions();
 
   const [openEditPrompt, setOpenEditPrompt] = useState(false);
@@ -394,7 +394,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                 </>
               )}
 
-              {canConfigureWorkspaceSettings && (
+              {canEditPrompts && (
                 <>
                   <Separator orientation="vertical" className="mx-1 h-4" />
                   <DeployToEnvironmentMenu
@@ -405,20 +405,20 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                     totalVersions={total}
                     activeEnvironments={activeVersionEnvironments}
                   />
+
+                  <Separator orientation="vertical" className="mx-1 h-4" />
+
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="px-0"
+                    onClick={() => setOpenEditPrompt(true)}
+                  >
+                    <Pencil className="mr-1.5 size-3.5" />
+                    Edit
+                  </Button>
                 </>
               )}
-
-              <Separator orientation="vertical" className="mx-1 h-4" />
-
-              <Button
-                variant="ghost"
-                size="sm"
-                className="px-0"
-                onClick={() => setOpenEditPrompt(true)}
-              >
-                <Pencil className="mr-1.5 size-3.5" />
-                Edit
-              </Button>
             </div>
           </div>
 

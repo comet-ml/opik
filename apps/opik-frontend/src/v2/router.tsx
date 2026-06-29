@@ -51,6 +51,7 @@ import OptimizationCompareRedirect from "@/v2/pages/OptimizationPage/Optimizatio
 import TrialPage from "@/v2/pages/TrialPage/TrialPage";
 import AlertEditPageGuard from "@/v2/layout/AlertEditPageGuard/AlertEditPageGuard";
 import AlertsPageGuard from "@/v2/layout/AlertsPageGuard";
+import PromptsPageGuard from "@/v2/layout/PromptsPageGuard";
 import DashboardPage from "@/v2/pages/DashboardPage/DashboardPage";
 import DashboardsPage from "@/v2/pages/DashboardsPage/DashboardsPage";
 import DatasetsPage from "@/v2/pages/DatasetsPage/DatasetsPage";
@@ -368,6 +369,7 @@ const promptsRoute = createRoute({
   staticData: {
     title: "Prompt library",
   },
+  component: PromptsPageGuard,
 });
 
 const promptsListRoute = createRoute({
