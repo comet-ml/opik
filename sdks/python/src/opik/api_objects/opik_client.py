@@ -197,8 +197,13 @@ class Opik:
         # captures the lease (and through it the manager), never ``self``. A
         # dropped handle therefore releases its reference on GC without the
         # atexit strong-ref pin that caused OPIK-7127.
+        #
+        # ``close_on_zero=False``: a finalizer must do nothing risky, so the GC
+        # path only decrements the bundle's refcount. It never closes (thread
+        # joins, network flush) — that is left to an explicit ``end()`` or to the
+        # atexit ``close_all``.
         self._finalizer = weakref.finalize(
-            self, self._lease.release, self._flush_timeout
+            self, self._lease.release, self._flush_timeout, close_on_zero=False
         )
 
     def _bind_resources(self) -> None:
@@ -1901,10 +1906,10 @@ class Opik:
             None
         """
         timeout = timeout if timeout is not None else self._flush_timeout
-        # Drop this handle's reference. The bundle is closed only on the last
-        # release; releasing is idempotent, so a later GC finalizer cannot
-        # double-decrement.
-        self._lease.release(timeout, flush=flush)
+        # Explicit teardown on a user thread, so close on the last reference
+        # (close_on_zero=True). Releasing is idempotent, so the detached GC
+        # finalizer cannot double-decrement.
+        self._lease.release(timeout, flush=flush, close_on_zero=True)
         self._finalizer.detach()
 
     def flush(self, timeout: Optional[int] = None) -> bool:

@@ -84,7 +84,7 @@ def test_release__not_last_reference__keeps_bundle_open():
     lease_a = manager.acquire(config, use_batching=True)
     manager.acquire(config, use_batching=True)
 
-    lease_a.release(timeout=None)
+    lease_a.release(timeout=None, close_on_zero=True)
 
     assert not created[0].closed
     assert manager.reference_count(config, use_batching=True) == 1
@@ -96,8 +96,8 @@ def test_release__last_reference__closes_and_evicts():
     lease_a = manager.acquire(config, use_batching=True)
     lease_b = manager.acquire(config, use_batching=True)
 
-    lease_a.release(timeout=None)
-    lease_b.release(timeout=None)
+    lease_a.release(timeout=None, close_on_zero=True)
+    lease_b.release(timeout=None, close_on_zero=True)
 
     assert created[0].close_calls == [(None, True)]
     assert manager.reference_count(config, use_batching=True) == 0
@@ -108,9 +108,52 @@ def test_release__last_reference__forwards_timeout_and_flush():
     manager, created = _manager()
     lease = manager.acquire(_config(), use_batching=True)
 
-    lease.release(timeout=7, flush=False)
+    lease.release(timeout=7, flush=False, close_on_zero=True)
 
     assert created[0].close_calls == [(7, False)]
+
+
+def test_release__not_close_on_zero__last_reference__decrements_without_closing():
+    # The GC-finalizer path: dropping the last reference must only decrement.
+    # Closing (thread joins, network flush) is never safe inside garbage
+    # collection, so the bundle is left cached instead.
+    manager, created = _manager()
+    config = _config()
+    lease = manager.acquire(config, use_batching=True)
+
+    lease.release(timeout=None, close_on_zero=False)
+
+    assert not created[0].closed
+    assert manager.reference_count(config, use_batching=True) == 0
+    assert manager.active_connection_count() == 1  # still cached, not evicted
+
+
+def test_acquire__after_gc_release__reuses_cached_bundle():
+    # A bundle left cached by a close_on_zero=False release is reused by the
+    # next same-identity acquire rather than rebuilt.
+    manager, created = _manager()
+    config = _config()
+    lease = manager.acquire(config, use_batching=True)
+    lease.release(timeout=None, close_on_zero=False)
+
+    lease_again = manager.acquire(config, use_batching=True)
+
+    assert len(created) == 1
+    assert lease_again.resources is created[0]
+    assert manager.reference_count(config, use_batching=True) == 1
+
+
+def test_close_all__after_gc_release__disposes_cached_bundle():
+    # Whatever a GC release leaves cached is still disposed at process exit.
+    manager, created = _manager()
+    config = _config()
+    lease = manager.acquire(config, use_batching=True)
+    lease.release(timeout=None, close_on_zero=False)
+
+    manager.close_all()
+
+    assert created[0].close_calls == [(None, True)]
+    assert manager.active_connection_count() == 0
 
 
 def test_release__called_twice__decrements_once():
@@ -119,13 +162,15 @@ def test_release__called_twice__decrements_once():
     lease_a = manager.acquire(config, use_batching=True)
     lease_b = manager.acquire(config, use_batching=True)
 
-    lease_a.release(timeout=None)
-    lease_a.release(timeout=None)  # idempotent — must not decrement again
+    lease_a.release(timeout=None, close_on_zero=True)
+    lease_a.release(
+        timeout=None, close_on_zero=True
+    )  # idempotent — must not decrement again
 
     assert not created[0].closed
     assert manager.reference_count(config, use_batching=True) == 1
 
-    lease_b.release(timeout=None)
+    lease_b.release(timeout=None, close_on_zero=True)
     assert created[0].close_calls == [(None, True)]
     assert manager.reference_count(config, use_batching=True) == 0
 
@@ -134,7 +179,7 @@ def test_acquire__after_full_release__builds_fresh_bundle():
     manager, created = _manager()
     config = _config()
     lease = manager.acquire(config, use_batching=True)
-    lease.release(timeout=None)
+    lease.release(timeout=None, close_on_zero=True)
 
     lease_again = manager.acquire(config, use_batching=True)
 
@@ -171,7 +216,7 @@ def test_acquire_release__concurrent_same_config__preserves_invariants():
             # the manager must not hand out a closing bundle.
             if lease.resources.closed:
                 errors.append("acquired a bundle that was already closed")
-            lease.release(timeout=None)
+            lease.release(timeout=None, close_on_zero=True)
 
     threads = [threading.Thread(target=worker) for _ in range(thread_count)]
     for thread in threads:

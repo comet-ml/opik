@@ -213,12 +213,16 @@ class Lease:
         self._released = False
         self._once_lock = threading.Lock()
 
-    def release(self, timeout: Optional[int], *, flush: bool = True) -> None:
+    def release(
+        self, timeout: Optional[int], *, flush: bool = True, close_on_zero: bool
+    ) -> None:
         with self._once_lock:
             if self._released:
                 return
             self._released = True
-        self._manager._release(self._key, timeout, flush=flush)
+        self._manager.release(
+            self._key, timeout, flush=flush, close_on_zero=close_on_zero
+        )
 
 
 class _Entry:
@@ -234,9 +238,13 @@ class ConnectionResourceManager:
 
     Derives the connection identity from a config, builds-or-reuses a bundle
     ref-counted by that identity, and tears a bundle down only when its last
-    lease is released — always after evicting it under the lock, so a concurrent
-    ``acquire`` never receives a closing bundle. Disposal mechanics are delegated
-    to the bundle's ``close``; this class owns *when* it happens.
+    lease is released *explicitly* (``Opik.end()``) — always after evicting it
+    under the lock, so a concurrent ``acquire`` never receives a closing bundle.
+    A reference dropped by a GC finalizer (``close_on_zero=False``) only
+    decrements the count and leaves the bundle cached; closing is never done in
+    garbage collection. Whatever survives to process exit is disposed by
+    ``close_all``. Disposal mechanics are delegated to the bundle's ``close``;
+    this class owns *when* it happens.
     """
 
     def __init__(
@@ -290,12 +298,13 @@ class ConnectionResourceManager:
             )
         return lease
 
-    def _release(
+    def release(
         self,
         key: ConnectionKey,
         timeout: Optional[int],
         *,
         flush: bool = True,
+        close_on_zero: bool,
     ) -> None:
         with self._lock:
             entry = self._entries.get(key)
@@ -303,6 +312,15 @@ class ConnectionResourceManager:
                 return
             entry.refcount -= 1
             if entry.refcount > 0:
+                return
+            if not close_on_zero:
+                # The last reference was dropped by a GC finalizer (see
+                # ``Opik._acquire_shared_resources``). Only the refcount
+                # decrement above is safe to run there; closing — streamer
+                # thread joins, file-upload pool shutdown, network flush — must
+                # never happen inside garbage collection. Leave the bundle
+                # cached so a later same-identity ``acquire`` reuses it, or
+                # ``close_all`` disposes it at process exit.
                 return
             # Evict before close, under the lock, so a concurrent acquire never
             # receives a bundle that is being torn down.
