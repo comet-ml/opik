@@ -60,6 +60,7 @@ jobs:
         run: |
           if [ "${{ inputs.backend }}" = "glm" ]; then
             echo "ANTHROPIC_AUTH_TOKEN=$ZAI_API_KEY_SECRET" >> "$GITHUB_ENV"
+            echo "ANTHROPIC_MODEL=glm-5.2" >> "$GITHUB_ENV"
           else
             echo "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY_SECRET" >> "$GITHUB_ENV"
           fi
