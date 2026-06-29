@@ -14,7 +14,6 @@ import com.comet.opik.domain.TestSuiteAssertionCounterService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.domain.attachment.AttachmentService;
-import com.comet.opik.domain.evaluation.EvaluatedSubject;
 import com.comet.opik.domain.evaluation.EvaluationRecorder;
 import com.comet.opik.domain.evaluation.OnlineEvaluationRecorder;
 import com.comet.opik.domain.evaluators.UserLog;
@@ -190,7 +189,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         // evaluation, one llm span per LLM round. NOOP when the toggle is off — the evaluation then
         // runs exactly as before with no extra writes.
         EvaluationRecorder recorder = serviceTogglesConfig.isOnlineScoringTracingEnabled()
-                ? onlineEvaluationRecorder.begin(EvaluatedSubject.ofTrace(trace), message.ruleId(),
+                ? onlineEvaluationRecorder.begin(trace, message.ruleId(),
                         message.ruleName(), message.llmAsJudgeCode().model().name(), message.workspaceId(),
                         message.userName())
                 : EvaluationRecorder.NOOP;

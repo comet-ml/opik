@@ -55,7 +55,7 @@ class OnlineEvaluationRecorderTest {
     private final ResponseFormattingConfig responseFormattingConfig = new ResponseFormattingConfig();
     private final OnlineEvaluationRecorder onlineEvaluationRecorder = new OnlineEvaluationRecorder(
             new ObservabilityTraceRecorder(traceService, spanService), llmProviderFactory, idGenerator,
-            responseFormattingConfig);
+            new EvaluationEntityFactory(idGenerator, responseFormattingConfig));
 
     @BeforeEach
     void setUp() {
@@ -65,8 +65,8 @@ class OnlineEvaluationRecorderTest {
 
     private EvaluationRecorder recorder() {
         return onlineEvaluationRecorder.begin(
-                new EvaluatedSubject(EvaluatedSubject.Kind.TRACE, "trace-1", UUID.randomUUID(), "proj", "name", null,
-                        null),
+                EvaluatedTrace.builder().id("trace-1").projectId(UUID.randomUUID()).projectName("proj")
+                        .name("name").build(),
                 UUID.randomUUID(), "rule", "model", "workspace", "user");
     }
 
@@ -209,13 +209,14 @@ class OnlineEvaluationRecorderTest {
     @Test
     void prepareSpanCarriesEvaluatedInputOutputForPrettyRenderingAndMetadata() {
         stubSpanWrites();
+        var projectId = UUID.randomUUID();
         var evaluatedInput = JsonUtils.createObjectNode();
         evaluatedInput.put("input", "What is 2+2?");
         var evaluatedOutput = JsonUtils.createObjectNode();
         evaluatedOutput.put("output", "4");
         var recorder = onlineEvaluationRecorder.begin(
-                new EvaluatedSubject(EvaluatedSubject.Kind.TRACE, "trace-9", UUID.randomUUID(), "proj", "Q&A",
-                        evaluatedInput, evaluatedOutput),
+                EvaluatedTrace.builder().id("trace-9").projectId(projectId).projectName("proj").name("Q&A")
+                        .input(evaluatedInput).output(evaluatedOutput).build(),
                 UUID.randomUUID(), "rule", "claude-x", "workspace", "user");
 
         recorder.recordPreparation(3, 1234, false);
@@ -228,13 +229,16 @@ class OnlineEvaluationRecorderTest {
         // and stay structurally intact, not as an escaped blob.
         assertThat(span.input()).isEqualTo(evaluatedInput);
         assertThat(span.output()).isEqualTo(evaluatedOutput);
-        // Bookkeeping lives in metadata, not in input/output.
-        var metadata = span.metadata();
-        assertThat(metadata.get("evaluated_trace_id").asText()).isEqualTo("trace-9");
-        assertThat(metadata.get("model").asText()).isEqualTo("claude-x");
-        assertThat(metadata.get("mode").asText()).isEqualTo("inline");
-        assertThat(metadata.get("fetched_span_count").asInt()).isEqualTo(3);
-        assertThat(metadata.get("estimated_tokens").asInt()).isEqualTo(1234);
+        // Bookkeeping lives in metadata, not in input/output — assert the whole metadata object.
+        var expectedMetadata = JsonUtils.createObjectNode();
+        expectedMetadata.put("evaluated_trace_id", "trace-9");
+        expectedMetadata.put("evaluated_project_id", projectId.toString());
+        expectedMetadata.put("evaluated_name", "Q&A");
+        expectedMetadata.put("model", "claude-x");
+        expectedMetadata.put("fetched_span_count", 3);
+        expectedMetadata.put("estimated_tokens", 1234);
+        expectedMetadata.put("mode", "inline");
+        assertThat(span.metadata()).isEqualTo(expectedMetadata);
     }
 
     @Test

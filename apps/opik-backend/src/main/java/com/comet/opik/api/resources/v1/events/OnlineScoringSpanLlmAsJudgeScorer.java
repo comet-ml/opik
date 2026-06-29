@@ -3,7 +3,6 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.events.SpanToScoreLlmAsJudge;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.TraceService;
-import com.comet.opik.domain.evaluation.EvaluatedSubject;
 import com.comet.opik.domain.evaluation.EvaluationRecorder;
 import com.comet.opik.domain.evaluation.OnlineEvaluationRecorder;
 import com.comet.opik.domain.evaluators.UserLog;
@@ -95,7 +94,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
         // Monitoring recorder (OPIK-6994): one hidden evaluator trace per span evaluation with an llm
         // span for the scoring call. NOOP when the toggle is off.
         EvaluationRecorder recorder = serviceTogglesConfig.isOnlineScoringTracingEnabled()
-                ? onlineEvaluationRecorder.begin(EvaluatedSubject.ofSpan(span),
+                ? onlineEvaluationRecorder.begin(span,
                         message.ruleId(), message.ruleName(), message.llmAsJudgeCode().model().name(),
                         message.workspaceId(), message.userName())
                 : EvaluationRecorder.NOOP;

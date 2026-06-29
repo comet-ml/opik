@@ -16,7 +16,7 @@ import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.attachment.AttachmentService;
-import com.comet.opik.domain.evaluation.EvaluatedSubject;
+import com.comet.opik.domain.evaluation.EvaluatedThread;
 import com.comet.opik.domain.evaluation.EvaluationRecorder;
 import com.comet.opik.domain.evaluation.OnlineEvaluationRecorder;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
@@ -243,8 +243,12 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
         Mono<EvaluationRecorder> recorderMono = Mono.fromCallable(
                 () -> serviceTogglesConfig.isOnlineScoringTracingEnabled()
                         ? onlineEvaluationRecorder.begin(
-                                EvaluatedSubject.ofThread(threadId, message.projectId(),
-                                        projectService.get(message.projectId(), message.workspaceId()).name()),
+                                EvaluatedThread.builder()
+                                        .id(threadId)
+                                        .projectId(message.projectId())
+                                        .projectName(projectService.get(message.projectId(),
+                                                message.workspaceId()).name())
+                                        .build(),
                                 rule.getId(), rule.getName(), message.code().model().name(),
                                 message.workspaceId(), message.userName())
                         : EvaluationRecorder.NOOP)
