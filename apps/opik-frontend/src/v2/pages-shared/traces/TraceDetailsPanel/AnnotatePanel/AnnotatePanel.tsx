@@ -57,7 +57,12 @@ const AnnotatePanel: React.FC<AnnotatePanelProps> = ({
   );
 
   const onDeleteFeedbackScore = useCallback(
-    (name: string, author?: string, spanIdToDelete?: string) => {
+    (
+      name: string,
+      author?: string,
+      spanIdToDelete?: string,
+      sourceQueueId?: string,
+    ) => {
       let targetSpanId = spanIdToDelete ?? spanId;
       if (isTrace && !spanIdToDelete) {
         const score = filteredFeedbackScores.find((s) => s.name === name);
@@ -68,7 +73,13 @@ const AnnotatePanel: React.FC<AnnotatePanelProps> = ({
           targetSpanId = metadata.span_id;
         }
       }
-      feedbackScoreDelete({ name, traceId, spanId: targetSpanId, author });
+      feedbackScoreDelete({
+        name,
+        traceId,
+        spanId: targetSpanId,
+        author,
+        sourceQueueId,
+      });
     },
     [isTrace, spanId, filteredFeedbackScores, feedbackScoreDelete, traceId],
   );

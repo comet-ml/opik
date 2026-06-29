@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { CellContext } from "@tanstack/react-table";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import { ExpandingFeedbackScoreRow } from "../types";
-import { extractAuthorName, getIsParentFeedbackScoreRow } from "../utils";
+import { getAuthorName, getIsParentFeedbackScoreRow } from "../utils";
 import { cn } from "@/lib/utils";
 
 const AuthorCell = (
@@ -20,8 +20,8 @@ const AuthorCell = (
       // For span feedback scores, keys might be composite (author_spanId)
       // Extract unique author names by removing the _spanId suffix
       const authorSet = new Set<string>();
-      Object.keys(row.value_by_author).forEach((key) => {
-        authorSet.add(extractAuthorName(key));
+      Object.entries(row.value_by_author).forEach(([key, entry]) => {
+        authorSet.add(getAuthorName(key, entry));
       });
       authors = Array.from(authorSet);
     } else {
