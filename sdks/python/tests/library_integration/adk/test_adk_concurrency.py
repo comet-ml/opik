@@ -16,6 +16,8 @@ the modern ``OpikTracer`` (skipped on ADK < 1.3.0, which uses
 
 import types
 
+from google.adk.models import LlmResponse
+from google.genai import types as genai_types
 from opik import context_storage
 from opik.api_objects.trace.trace_data import TraceData
 from opik.integrations.adk import OpikTracer
@@ -96,3 +98,52 @@ def test_after_agent_callback__no_cached_output__stamps_none():
     tracer.after_agent_callback(_callback_context("invocation-without-output"))
 
     assert trace.output is None
+
+
+@helpers.pytest_skip_for_adk_older_than_1_3_0
+def test_after_model_callback__recovers_output_when_span_detached():
+    # ContextCacheConfig (issue #5524) wraps the LLM call in its own OTel span,
+    # which forks the async context under SSE streaming — so the span pushed in
+    # before_model_callback is invisible here and top_span_data() is None. The
+    # actual model output must still be recovered and land on the trace output.
+    tracer = OpikTracer(project_name="adk-test")
+    assert context_storage.top_span_data() is None  # detached: no current span
+
+    llm_response = LlmResponse(
+        content=genai_types.Content(
+            role="model", parts=[genai_types.Part(text="RECOVERED ANSWER")]
+        ),
+        partial=False,
+    )
+    tracer.after_model_callback(_callback_context("inv-detached"), llm_response)
+
+    # The real answer is recovered (not just "something" cached) ...
+    recovered = tracer._last_model_output.get("inv-detached")
+    assert recovered is not None
+    assert "RECOVERED ANSWER" in str(recovered)
+
+    # ... and after_agent_callback stamps it on the trace output end-to-end.
+    trace = TraceData(name="agent")
+    context_storage.set_trace_data(trace)
+    tracer.after_agent_callback(_callback_context("inv-detached"))
+    assert "RECOVERED ANSWER" in str(trace.output)
+
+
+@helpers.pytest_skip_for_adk_older_than_1_3_0
+def test_after_model_callback__detached_span__partial_chunk_discards():
+    # Partial streaming chunks must not cache — and they clear any prior value for
+    # the invocation (discard up front), so a stale earlier output can't leak onto
+    # the trace before the final response arrives.
+    tracer = OpikTracer(project_name="adk-test")
+    assert context_storage.top_span_data() is None
+    tracer._last_model_output.set("inv-partial", {"stale": "earlier"})
+
+    partial = LlmResponse(
+        content=genai_types.Content(
+            role="model", parts=[genai_types.Part(text="strea")]
+        ),
+        partial=True,
+    )
+    tracer.after_model_callback(_callback_context("inv-partial"), partial)
+
+    assert tracer._last_model_output.get("inv-partial") is None
