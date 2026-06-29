@@ -160,8 +160,18 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canViewPrompts = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.PROMPT_VIEW),
+    [checkNullablePermission],
+  );
+
   const canCreatePrompts = useMemo(
     () => checkNullablePermission(ManagementPermissionsNames.PROMPT_CREATE),
+    [checkNullablePermission],
+  );
+
+  const canEditPrompts = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.PROMPT_EDIT),
     [checkNullablePermission],
   );
 
@@ -284,7 +294,9 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canEditAnnotationQueues,
     canDeleteAnnotationQueues,
     canDeleteTraces,
+    canViewPrompts,
     canCreatePrompts,
+    canEditPrompts,
     canDeletePrompts,
     canDeleteOptimizationRuns,
     canConfigureWorkspaceSettings,

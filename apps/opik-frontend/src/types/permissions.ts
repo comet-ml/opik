@@ -14,7 +14,9 @@ export interface Permissions {
   canEditAnnotationQueues: boolean;
   canDeleteAnnotationQueues: boolean;
   canDeleteTraces: boolean;
+  canViewPrompts: boolean;
   canCreatePrompts: boolean;
+  canEditPrompts: boolean;
   canDeletePrompts: boolean;
   canDeleteOptimizationRuns: boolean;
   canConfigureWorkspaceSettings: boolean;
@@ -54,7 +56,9 @@ export const DEFAULT_PERMISSIONS: PermissionsContextValue = {
     canEditAnnotationQueues: true,
     canDeleteAnnotationQueues: true,
     canDeleteTraces: true,
+    canViewPrompts: true,
     canCreatePrompts: true,
+    canEditPrompts: true,
     canDeletePrompts: true,
     canDeleteOptimizationRuns: true,
     canConfigureWorkspaceSettings: true,

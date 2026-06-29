@@ -28,6 +28,7 @@ const getMenuItems = ({
   canViewExperiments,
   canViewDatasets,
   canViewDashboards,
+  canViewPrompts,
   canUsePlayground,
   canViewAgentPlayground,
   canViewOptimizationRuns,
@@ -41,6 +42,7 @@ const getMenuItems = ({
   canViewExperiments: boolean;
   canViewDatasets: boolean;
   canViewDashboards: boolean;
+  canViewPrompts: boolean;
   canUsePlayground: boolean;
   canViewAgentPlayground: boolean;
   canViewOptimizationRuns: boolean;
@@ -130,14 +132,18 @@ const getMenuItems = ({
       id: "development",
       label: "Development",
       items: [
-        {
-          id: "prompts",
-          path: projectPath("/prompts"),
-          type: MENU_ITEM_TYPE.router,
-          icon: FileTerminal,
-          label: "Prompt library",
-          disabled: !projectPrefix,
-        },
+        ...(canViewPrompts
+          ? [
+              {
+                id: "prompts",
+                path: projectPath("/prompts"),
+                type: MENU_ITEM_TYPE.router as const,
+                icon: FileTerminal,
+                label: "Prompt library",
+                disabled: !projectPrefix,
+              },
+            ]
+          : []),
         ...(canViewAgentPlayground
           ? [
               {

@@ -27,8 +27,10 @@ export const PromptRowActionsCell: React.FunctionComponent<
   const [open, setOpen] = useState<number | boolean>(false);
 
   const {
-    permissions: { canDeletePrompts },
+    permissions: { canEditPrompts, canDeletePrompts },
   } = usePermissions();
+
+  const hasActions = canEditPrompts || canDeletePrompts;
 
   const promptDeleteMutation = usePromptDeleteMutation();
 
@@ -38,6 +40,8 @@ export const PromptRowActionsCell: React.FunctionComponent<
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prompt.id]);
+
+  if (!hasActions) return null;
 
   return (
     <CellWrapper
@@ -71,15 +75,17 @@ export const PromptRowActionsCell: React.FunctionComponent<
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuItem
-            onClick={() => {
-              setOpen(EDIT_KEY);
-              resetKeyRef.current = resetKeyRef.current + 1;
-            }}
-          >
-            <Pencil className="mr-2 size-4" />
-            Edit
-          </DropdownMenuItem>
+          {canEditPrompts && (
+            <DropdownMenuItem
+              onClick={() => {
+                setOpen(EDIT_KEY);
+                resetKeyRef.current = resetKeyRef.current + 1;
+              }}
+            >
+              <Pencil className="mr-2 size-4" />
+              Edit
+            </DropdownMenuItem>
+          )}
           {canDeletePrompts && (
             <>
               <DropdownMenuSeparator />
