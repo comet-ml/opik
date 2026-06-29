@@ -16,6 +16,23 @@ on:
     # # Daily at 14:00 UTC
     # - cron: '0 14 * * *'
   workflow_dispatch:
+    inputs:
+      backend:
+        description: 'Which model backend to route Claude Code at. anthropic = default api.anthropic.com (Opus); glm = z.ai GLM Coding Plan.'
+        type: choice
+        required: false
+        default: 'anthropic'
+        options:
+          - anthropic
+          - glm
+      pin-method:
+        description: 'Method/technique query or arxiv_id to implement directly. Bypasses selection.'
+        required: false
+        default: ''
+      pin-arxiv:
+        description: 'Pinned arxiv_id (must already be in the candidate pool).'
+        required: false
+        default: ''
 
 jobs:
   recommend:
@@ -27,7 +44,9 @@ jobs:
       issues: write
     env:
       REMYX_API_KEY: ${{ secrets.REMYX_API_KEY }}
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      # Backend-conditional secret: when backend=glm, route Claude Code's
+      # auth at the z.ai key (z.ai exposes an Anthropic-Messages endpoint).
+      ANTHROPIC_API_KEY: ${{ inputs.backend == 'glm' && secrets.Z_AI_KEY || secrets.ANTHROPIC_API_KEY }}
     steps:
       # Mint a remyx[bot] token from Remyx so the PR / Issue is authored by
       # the Remyx GitHub App (not github-actions[bot]). The App private key
@@ -44,6 +63,7 @@ jobs:
       - uses: remyxai/outrider@v1
         with:
           interest-id: bb1f2f50-21fd-490a-92e5-cc0e67658f19
+          model-base-url: ${{ inputs.backend == 'glm' && 'https://api.z.ai/api/anthropic' || '' }}
           # remyx[bot] token (empty → action falls back to GITHUB_TOKEN).
           github-token: ${{ steps.remyx-bot.outputs.token }}
           # Disable the per-repo rate-limit window so manual and scheduled
