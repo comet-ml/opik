@@ -19,6 +19,8 @@ from rich.progress import (
 import opik
 from opik import exceptions
 from opik.cli.export_manifest import ExportManifest
+from opik.rest_api.core.api_error import ApiError
+from .project import _export_rest_retry
 from .utils import (
     console,
     create_experiment_data_structure,
@@ -44,6 +46,7 @@ BATCH_SIZE = 100
 MAX_WORKERS = 20
 
 
+@_export_rest_retry
 def _fetch_trace_data(
     client: opik.Opik,
     trace_id: str,
@@ -56,7 +59,8 @@ def _fetch_trace_data(
     that project without a per-trace project lookup.
 
     Returns:
-        Tuple of (trace_id, trace_data_dict) or None if failed.
+        Tuple of (trace_id, trace_data_dict) or None if trace does not exist (404).
+        Raises on transient errors after retries are exhausted.
     """
     try:
         # Get trace by ID
@@ -78,14 +82,12 @@ def _fetch_trace_data(
         }
 
         return (trace_id, trace_data)
-    except Exception as e:
-        if debug:
-            import traceback
-
-            debug_print(
-                f"Error fetching trace {trace_id}: {e}\n{traceback.format_exc()}", debug
-            )
-        return None
+    except ApiError as e:
+        if e.status_code == 404:
+            if debug:
+                debug_print(f"Trace {trace_id} not found (404), skipping", debug)
+            return None
+        raise  # 429/5xx are retried by @_export_rest_retry; others propagate
 
 
 def _write_trace_file(
@@ -577,8 +579,7 @@ def export_experiment_by_id(
 
     except Exception as e:
         console.print(f"[red]Error exporting experiment {experiment_id}: {e}[/red]")
-        # Return empty stats and 0 for file written on error
-        return ({"datasets": 0, "prompts": 0, "traces": 0}, 0, None)
+        raise
 
 
 def export_experiment_by_name(
@@ -676,14 +677,16 @@ def export_experiment_by_name(
                 console.print(
                     f"[blue]Exporting {len(unique_datasets)} unique dataset(s) used by these experiments...[/blue]"
                 )
-            datasets_exported, datasets_skipped = export_experiment_datasets(
-                client,
-                unique_datasets,
-                datasets_dir,
-                project_name,
-                format,
-                debug,
-                force,
+            datasets_exported, datasets_skipped, _datasets_errors = (
+                export_experiment_datasets(
+                    client,
+                    unique_datasets,
+                    datasets_dir,
+                    project_name,
+                    format,
+                    debug,
+                    force,
+                )
             )
 
         # Export all unique prompts once before processing experiments
@@ -696,7 +699,7 @@ def export_experiment_by_name(
                 console.print(
                     f"[blue]Exporting {len(unique_prompt_ids)} unique prompt(s) used by these experiments...[/blue]"
                 )
-            prompts_exported, prompts_skipped = export_prompts_by_ids(
+            prompts_exported, prompts_skipped, _prompts_errors = export_prompts_by_ids(
                 client,
                 unique_prompt_ids,
                 prompts_dir,
@@ -887,14 +890,16 @@ def export_experiment_by_name_or_id(
             datasets_exported = 0
             datasets_skipped = 0
             if unique_datasets:
-                datasets_exported, datasets_skipped = export_experiment_datasets(
-                    client,
-                    unique_datasets,
-                    datasets_dir,
-                    project_name,
-                    format,
-                    debug,
-                    force,
+                datasets_exported, datasets_skipped, _ds_errors = (
+                    export_experiment_datasets(
+                        client,
+                        unique_datasets,
+                        datasets_dir,
+                        project_name,
+                        format,
+                        debug,
+                        force,
+                    )
                 )
 
             # Export traces collected from experiment items, passing the manifest

@@ -115,13 +115,11 @@ def export_single_prompt(
                 prompt_history = list(
                     client.get_prompt_history(prompt.name, project_name=project_name)
                 )
-        except (ValueError, Exception):
-            # Fall back to empty history so the current version is still exported.
-            if debug:
-                debug_print(
-                    f"Could not fetch history for prompt '{prompt.name}', exporting current version only",
-                    debug,
-                )
+        except (ValueError, Exception) as e:
+            console.print(
+                f"[yellow]Warning: Could not fetch history for prompt '{prompt.name}': {e}. "
+                "Exporting current version only.[/yellow]"
+            )
             prompt_history = []
 
         # Create prompt data structure
@@ -255,7 +253,7 @@ def export_prompts_by_ids(
     format: str,
     debug: bool,
     force: bool,
-) -> tuple[int, int]:
+) -> tuple[int, int, int]:
     """Export prompts by their IDs.
 
     Args:
@@ -268,10 +266,11 @@ def export_prompts_by_ids(
         force: Re-download prompts even if they already exist locally
 
     Returns:
-        Tuple of (exported_count, skipped_count)
+        Tuple of (exported_count, skipped_count, error_count)
     """
     exported_count = 0
     skipped_count = 0
+    error_count = 0
 
     for prompt_id in prompt_ids:
         try:
@@ -369,6 +368,7 @@ def export_prompts_by_ids(
             exported_count += 1
 
         except Exception as e:
+            error_count += 1
             if debug:
                 console.print(
                     f"[yellow]Warning: Could not export prompt {prompt_id}: {e}[/yellow]"
@@ -377,7 +377,7 @@ def export_prompts_by_ids(
                 console.print(f"[red]Error exporting prompt {prompt_id}: {e}[/red]")
             continue
 
-    return exported_count, skipped_count
+    return exported_count, skipped_count, error_count
 
 
 def export_related_prompts_by_name(
@@ -491,7 +491,11 @@ def export_related_prompts_by_name(
                                 prompt.name, project_name=project_name
                             )
                         )
-                except (ValueError, Exception):
+                except (ValueError, Exception) as e:
+                    console.print(
+                        f"[yellow]Warning: Could not fetch history for prompt '{prompt.name}': {e}. "
+                        "Exporting current version only.[/yellow]"
+                    )
                     prompt_history = []
 
                 # Create prompt data structure

@@ -820,7 +820,7 @@ def export_traces(
                             debug_print(f"Wrote JSON file: {file_path}", debug)
                     with manifest_lock:
                         already_downloaded.add(trace_id)
-                        if manifest is not None:
+                        if manifest is not None and attachment_download_ok:
                             manifest.mark_trace_downloaded(trace_id)
                     return True, not attachment_download_ok
                 except Exception as write_error:
