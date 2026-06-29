@@ -70,6 +70,7 @@ const AddDatasetItemPanel: React.FC<AddDatasetItemPanelProps> = ({
   <AddItemPanelWrapper
     panelId="dataset-item-panel"
     formId={ADD_DATASET_ITEM_FORM_ID}
+    title="Add record"
     open={open}
     onClose={onClose}
     initialWidth={0.4}

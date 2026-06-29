@@ -136,14 +136,14 @@ const foldingTheme = EditorView.baseTheme({
     alignItems: "center",
     verticalAlign: "middle",
     marginLeft: "4px",
-    color: "var(--codemirror-gutter)",
+    color: "hsl(var(--muted-slate))",
     cursor: "pointer",
     opacity: "0.5",
     transition: "opacity 0.1s ease-in-out, color 0.1s ease-in-out",
   },
   ".cm-inline-fold-marker:hover": {
     opacity: "1",
-    color: "hsl(var(--text-primary))",
+    color: "hsl(var(--primary))",
   },
   ".cm-inline-fold-placeholder": {
     display: "inline-flex",

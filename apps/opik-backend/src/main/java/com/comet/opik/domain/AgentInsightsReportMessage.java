@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.events.RedisSubscriberMessage;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import lombok.Builder;
 import lombok.NonNull;
@@ -19,5 +20,5 @@ public record AgentInsightsReportMessage(
         @NonNull UUID projectId,
         @NonNull String workspaceId,
         @NonNull Instant periodStart,
-        @NonNull Instant periodEnd) {
+        @NonNull Instant periodEnd) implements RedisSubscriberMessage {
 }

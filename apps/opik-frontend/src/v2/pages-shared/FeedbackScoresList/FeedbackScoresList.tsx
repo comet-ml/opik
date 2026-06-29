@@ -18,11 +18,11 @@ const FeedbackScoresList: React.FunctionComponent<FeedbackScoresListProps> = ({
   if (scores.length === 0) return null;
 
   return (
-    <div className={cn("flex min-h-7 items-center gap-2", className)}>
+    <div className={cn("flex min-h-7 items-center", className)}>
       <TooltipWrapper content="Feedback scores">
-        <PenLine className="mx-1 size-4 shrink-0 text-muted-slate" />
+        <PenLine className="mx-1 size-3.5 shrink-0 text-muted-slate" />
       </TooltipWrapper>
-      <div className="flex gap-1 overflow-x-auto">
+      <div className="flex gap-1.5 overflow-x-auto">
         {scores.map((score) => (
           <FeedbackScoreTag
             key={score.name + score.value}

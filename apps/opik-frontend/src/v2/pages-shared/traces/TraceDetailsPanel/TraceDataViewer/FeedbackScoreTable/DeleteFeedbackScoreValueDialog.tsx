@@ -20,6 +20,7 @@ type SetInactiveConfirmDialogProps = {
     name: string,
     author?: string,
     spanId?: string,
+    sourceQueueId?: string,
   ) => void;
   entityType: "trace" | "thread" | "span" | "experiment";
   row: ExpandingFeedbackScoreRow;
@@ -38,7 +39,12 @@ const DeleteFeedbackScoreValueDialog: React.FunctionComponent<
   const [dontAskAgain, setDontAskAgain] = useFeedbackScoreDeletePreference();
 
   const onConfirm = () => {
-    onDeleteFeedbackScore(row.name, row.author, row.span_id);
+    onDeleteFeedbackScore(
+      row.name,
+      row.author,
+      row.span_id,
+      row.source_queue_id,
+    );
   };
 
   return (
