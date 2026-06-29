@@ -29,15 +29,22 @@ const MetricComparisonCell: React.FunctionComponent<
       <div className="flex items-center gap-1.5">
         {!isUndefined(baseline) && (
           <TooltipWrapper content={String(baseline)}>
-            <span className="comet-body-s text-muted-slate">
+            <span className="comet-body-xs text-muted-slate">
               {formatter(baseline)}
             </span>
           </TooltipWrapper>
         )}
-        <PercentageTrend percentage={percentage} trend={trend} iconOnly />
+        <PercentageTrend
+          percentage={percentage}
+          trend={trend}
+          iconOnly
+          brightPositive
+        />
         {!isUndefined(current) ? (
           <TooltipWrapper content={String(current)}>
-            <span className="comet-body-s-accented">{formatter(current)}</span>
+            <span className="comet-body-xs text-foreground">
+              {formatter(current)}
+            </span>
           </TooltipWrapper>
         ) : (
           <span className="text-muted-slate">-</span>

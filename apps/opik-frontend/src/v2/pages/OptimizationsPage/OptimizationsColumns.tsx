@@ -3,7 +3,7 @@ import IdCell from "@/shared/DataTableCells/IdCell";
 import { COLUMN_DATASET_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { Optimization } from "@/types/optimizations";
 import { getFeedbackScore } from "@/lib/feedback-scores";
-import { getOptimizerLabel } from "@/lib/optimizations";
+import { getOptimizerLabel, getMetricLabel } from "@/lib/optimizations";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import ItemSourceCell, {
   ITEM_SOURCE_LABEL,
@@ -77,7 +77,7 @@ export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
     id: "metric",
     label: "Metric",
     type: COLUMN_TYPE.string,
-    accessorFn: (row) => row.objective_name || "-",
+    accessorFn: (row) => getMetricLabel(row.objective_name),
     size: 160,
   },
   {
