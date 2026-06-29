@@ -37,11 +37,16 @@ const IssueListItem: React.FC<IssueListItemProps> = ({
         )}
       </div>
       {issue.description && (
-        <div className="comet-body-xs line-clamp-2 text-foreground">
+        <div
+          className={cn(
+            "comet-body-xs line-clamp-2",
+            isActive ? "text-foreground" : "text-muted-slate",
+          )}
+        >
           {issue.description}
         </div>
       )}
-      <div className="comet-body-xs flex items-center gap-4 text-foreground">
+      <div className="comet-body-xs flex items-center gap-4 text-muted-slate">
         <span className="flex items-center gap-1">
           <Hash className="size-3" />
           Occurrences: {issue.total_occurrences.toLocaleString()}

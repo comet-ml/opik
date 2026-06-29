@@ -19,6 +19,8 @@ import {
   AgentInsightsIssue,
 } from "@/types/signals";
 import useAgentInsightsIssuesList from "@/api/signals/useAgentInsightsIssuesList";
+import useTracesList from "@/api/traces/useTracesList";
+import { COLUMN_TYPE } from "@/types/shared";
 import useAgentInsightsJob from "@/api/signals/useAgentInsightsJob";
 import useTriggerAgentInsightsJobMutation from "@/api/signals/useTriggerAgentInsightsJobMutation";
 import useUpdateAgentInsightsJobMutation from "@/api/signals/useUpdateAgentInsightsJobMutation";
@@ -33,6 +35,8 @@ import DiagnosticsSettingsDialog from "@/v2/pages/SignalsPage/DiagnosticsSetting
 import SignalsPageSkeleton from "@/v2/pages/SignalsPage/SignalsPageSkeleton";
 
 const RUN_POLL_INTERVAL_MS = 8000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const STALE_AFTER_MS = 3 * DAY_MS;
 
 const maxUpdatedAt = (issues: AgentInsightsIssue[]): number =>
   issues.reduce((max, issue) => {
@@ -103,6 +107,38 @@ const SignalsPage: React.FC = () => {
   // auto-run success. The spinner takes precedence while a run is in flight.
   const failedReason =
     !isRunning && job?.last_failed_at ? job.last_failure_reason : undefined;
+  const failedDetail =
+    !isRunning && job?.last_failed_at ? job.last_failure_detail : undefined;
+
+  // "Results might be outdated": when the last scan is older than the threshold,
+  // count the traces a manual run would analyze (the last-24h trigger window) and
+  // nudge only if there are any. Cutoff memoized to keep the query key stable.
+  const scanAt = job?.last_scan_at ? Date.parse(job.last_scan_at) : 0;
+  const scanIsOld = scanAt > 0 && Date.now() - scanAt > STALE_AFTER_MS;
+  const last24hCutoff = useMemo(
+    () => new Date(Date.now() - DAY_MS).toISOString(),
+    [],
+  );
+  const { data: recentTracesData } = useTracesList(
+    {
+      projectId,
+      page: 1,
+      size: 1,
+      filters: [
+        {
+          id: "stale-recent-traces",
+          field: "last_updated_at",
+          type: COLUMN_TYPE.time,
+          operator: ">",
+          value: last24hCutoff,
+        },
+      ],
+    },
+    { enabled: scanIsOld && !isRunning },
+  );
+  const recentTraceCount = recentTracesData?.total ?? 0;
+  const isStale = scanIsOld && !isRunning && recentTraceCount > 0;
+  const staleDays = scanAt ? Math.floor((Date.now() - scanAt) / DAY_MS) : 0;
 
   const [showResolved, setShowResolved] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -250,6 +286,10 @@ const SignalsPage: React.FC = () => {
           showResolved={showResolved}
           isRunning={isRunning}
           failedReason={failedReason}
+          failedDetail={failedDetail}
+          isStale={isStale}
+          staleTraceCount={recentTraceCount}
+          staleDays={staleDays}
           canConfigure={canConfigure}
           onRunDiagnostic={canConfigure ? handleRunDiagnostic : undefined}
           onShowOpenIssues={() => setShowResolved(false)}

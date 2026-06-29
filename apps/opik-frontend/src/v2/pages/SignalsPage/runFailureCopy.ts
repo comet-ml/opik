@@ -19,8 +19,21 @@ export const getRunFailureCopy = (reason?: string): RunFailureCopy => {
       };
     case "provider_error":
       return {
+        title: "LLM provider error",
+        description:
+          "The LLM provider returned an error mid-run. This is usually temporary — try again.",
+      };
+    case "did_not_start":
+      return {
+        title: "Diagnostics couldn't start",
+        description:
+          "The run was never picked up (the service may have been restarting). Try again.",
+      };
+    case "internal_error":
+      return {
         title: "Diagnostics run failed",
-        description: "An LLM provider error interrupted the run — try again.",
+        description:
+          "An unexpected error stopped the run. Try again; if it keeps failing, contact support.",
       };
     default:
       return {
