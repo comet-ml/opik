@@ -44,9 +44,12 @@ jobs:
       issues: write
     env:
       REMYX_API_KEY: ${{ secrets.REMYX_API_KEY }}
-      # Backend-conditional secret: when backend=glm, route Claude Code's
-      # auth at the z.ai key (z.ai exposes an Anthropic-Messages endpoint).
-      ANTHROPIC_API_KEY: ${{ inputs.backend == 'glm' && secrets.ZAI_API_KEY || secrets.ANTHROPIC_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      # GLM Bearer auth: z.ai's Claude Code integration expects
+      # ANTHROPIC_AUTH_TOKEN (Bearer header), not ANTHROPIC_API_KEY
+      # (x-api-key header). Set only when backend=glm; otherwise empty,
+      # and Claude Code falls back to ANTHROPIC_API_KEY.
+      ANTHROPIC_AUTH_TOKEN: ${{ inputs.backend == 'glm' && secrets.ZAI_API_KEY || '' }}
     steps:
       # Diagnostic: confirm the backend-conditional secret resolved correctly.
       # Logs length + first 4 hex chars of the env var so we can tell at a
