@@ -105,14 +105,13 @@ def _export_wait_duration(retry_state: tenacity.RetryCallState) -> float:
         headers = httpx.Headers(getattr(exc, "headers", {}) or {})
         # Prefer the standard Retry-After header, then fall back to
         # Opik-specific / draft-IETF rate-limit reset headers.
-        seconds = _parse_retry_after(headers)
-        if seconds is None:
-            seconds = _parse_rate_limit_reset(headers)
-        if seconds is None:
-            seconds = _EXPORT_DEFAULT_RETRY_AFTER_SECONDS
-        # Clamp to our maximum: respect the server's intent but never wait longer
-        # than _EXPORT_MAX_RETRY_AFTER_SECONDS.
-        seconds = min(seconds, _EXPORT_MAX_RETRY_AFTER_SECONDS)
+        parsed = _parse_retry_after(headers)
+        if parsed is None:
+            parsed = _parse_rate_limit_reset(headers)
+        seconds = min(
+            parsed if parsed is not None else _EXPORT_DEFAULT_RETRY_AFTER_SECONDS,
+            _EXPORT_MAX_RETRY_AFTER_SECONDS,
+        )
         # Jitter: avoid a thundering-herd if multiple export processes run in parallel.
         jitter = random.uniform(0.0, _EXPORT_JITTER_MAX_SECONDS)
         return seconds + jitter
