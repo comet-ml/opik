@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
+import { keepPreviousData } from "@tanstack/react-query";
 import {
   JsonParam,
   NumberParam,
@@ -44,15 +45,24 @@ import {
   normalizeMetadataPaths,
   buildDynamicMetadataColumns,
 } from "@/lib/metadata";
-import { BaseTraceData, Trace, LOGS_SOURCE } from "@/types/traces";
+import {
+  BaseTraceData,
+  Trace,
+  LOGS_SOURCE,
+  TRACE_VISIBILITY_MODE,
+} from "@/types/traces";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { getJSONPaths } from "@/lib/utils";
 import { generateSelectColumDef } from "@/shared/DataTable/utils";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import TracesActionsPanel from "@/v2/pages-shared/traces/TracesActionsPanel/TracesActionsPanel";
+import MetricsSummary from "@/v2/pages-shared/traces/MetricsSummary/MetricsSummary";
 import { Separator } from "@/ui/separator";
 import { Sheet, SheetContent, SheetTopBar } from "@/ui/sheet";
+import { Tag } from "@/ui/tag";
+import { Lock } from "lucide-react";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
 import RefreshButton from "@/shared/RefreshButton/RefreshButton";
@@ -234,6 +244,29 @@ const DEFAULT_TRACES_COLUMNS: string[] = [
   COLUMN_COMMENTS_ID,
 ];
 
+// Per-view behavior of the sidebar. Defaults reproduce the standard logs view used by experiments,
+// playground, trials and annotation queues; callers that need a variant (e.g. the evaluation-traces
+// view) pass an override so this shared component stays free of scenario-specific branching.
+export type TraceLogsViewConfig = {
+  // Suffix appended to the localStorage key prefix to isolate this view's column state.
+  storageNamespace: string;
+  defaultColumns: string[];
+  autoSelectScoreColumns: boolean;
+  showMetricsSummary: boolean;
+  visibilityMode: TRACE_VISIBILITY_MODE;
+};
+
+export const DEFAULT_TRACE_LOGS_VIEW_CONFIG: TraceLogsViewConfig = {
+  storageNamespace: "",
+  defaultColumns: DEFAULT_TRACES_COLUMNS,
+  autoSelectScoreColumns: true,
+  showMetricsSummary: false,
+  visibilityMode: TRACE_VISIBILITY_MODE.default,
+};
+
+// Stable empty reference for the "don't auto-select score columns" case (keeps hook deps steady).
+const NO_DYNAMIC_COLUMNS: string[] = [];
+
 const DEFAULT_TRACES_COLUMNS_ORDER: string[] = [
   COLUMN_ID_ID,
   "start_time",
@@ -386,6 +419,7 @@ type TraceLogsSidebarProps = {
   projectName?: string;
   logsSource?: LOGS_SOURCE;
   title?: string;
+  viewConfig?: TraceLogsViewConfig;
 };
 
 const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
@@ -395,9 +429,12 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
   projectName = "",
   logsSource,
   title = "Logs",
+  viewConfig = DEFAULT_TRACE_LOGS_VIEW_CONFIG,
 }) => {
   const type = TRACE_DATA_TYPE.traces;
   const truncationEnabled = useTruncationEnabled();
+
+  const storagePrefix = `${TLS_STORAGE_PREFIX}${viewConfig.storageNamespace}`;
 
   const {
     dateRange,
@@ -432,7 +469,7 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
   const [size, setSize] = useQueryParamAndLocalStorageState<
     number | null | undefined
   >({
-    localStorageKey: `${TLS_STORAGE_PREFIX}${PAGINATION_SIZE_KEY_SUFFIX}`,
+    localStorageKey: `${storagePrefix}${PAGINATION_SIZE_KEY_SUFFIX}`,
     queryKey: `${TLS_QUERY_PREFIX}size`,
     defaultValue: 100,
     queryParamConfig: NumberParam,
@@ -442,7 +479,7 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
   const [height, setHeight] = useQueryParamAndLocalStorageState<
     string | null | undefined
   >({
-    localStorageKey: `${TLS_STORAGE_PREFIX}${ROW_HEIGHT_KEY_SUFFIX}`,
+    localStorageKey: `${storagePrefix}${ROW_HEIGHT_KEY_SUFFIX}`,
     queryKey: `${TLS_QUERY_PREFIX}height`,
     defaultValue: ROW_HEIGHT.small,
     queryParamConfig: StringParam,
@@ -457,10 +494,26 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     },
   );
 
+  // Locked scope (e.g. a single evaluator's Evaluation traces): always constrains the query and is
+  // never shown in the editable filter bar, so it can't be changed or removed. User filters layer
+  // on top with AND semantics.
+  const [scopeFilters = []] = useQueryParam(
+    `${TLS_QUERY_PREFIX}scope`,
+    JsonParam,
+  );
+  const [scopeLabel] = useQueryParam(
+    `${TLS_QUERY_PREFIX}scopeLabel`,
+    StringParam,
+  );
+  const effectiveFilters = useMemo(
+    () => [...(scopeFilters ?? []), ...(filters ?? [])],
+    [scopeFilters, filters],
+  );
+
   const [sortedColumns, setSortedColumns] = useQueryParamAndLocalStorageState<
     ColumnSort[]
   >({
-    localStorageKey: `${TLS_STORAGE_PREFIX}${COLUMNS_SORT_KEY_SUFFIX}`,
+    localStorageKey: `${storagePrefix}${COLUMNS_SORT_KEY_SUFFIX}`,
     queryKey: `${TLS_QUERY_PREFIX}sort`,
     defaultValue: [],
     queryParamConfig: JsonParam,
@@ -527,11 +580,11 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    `${TLS_STORAGE_PREFIX}${SELECTED_COLUMNS_KEY_V2_SUFFIX}`,
+    `${storagePrefix}${SELECTED_COLUMNS_KEY_V2_SUFFIX}`,
     {
       defaultValue: migrateSelectedColumns(
-        `${TLS_STORAGE_PREFIX}selected-columns`,
-        DEFAULT_TRACES_COLUMNS,
+        `${storagePrefix}selected-columns`,
+        viewConfig.defaultColumns,
         [COLUMN_ID_ID, "start_time"],
       ),
     },
@@ -552,7 +605,7 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
       {
         projectId,
         sorting: sortedColumns,
-        filters: filters,
+        filters: effectiveFilters,
         page: page as number,
         size: size as number,
         search: trimmedSearch,
@@ -562,10 +615,12 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
         toTime: intervalEnd,
         exclude: excludeFields,
         logsSource,
+        visibilityMode: viewConfig.visibilityMode,
       },
       {
         enabled: open,
         refetchOnMount: false,
+        placeholderData: keepPreviousData,
       },
     );
 
@@ -573,7 +628,7 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     {
       projectId,
       sorting: sortedColumns,
-      filters: filters,
+      filters: effectiveFilters,
       page: page as number,
       size: size as number,
       search: search as string,
@@ -582,6 +637,7 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
       toTime: intervalEnd,
       exclude: excludeFields,
       logsSource,
+      visibilityMode: viewConfig.visibilityMode,
     },
     {
       enabled: false,
@@ -592,7 +648,7 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
   const { data: statisticData, refetch: refetchStatistic } = useTracesStatistic(
     {
       projectId,
-      filters: filters,
+      filters: effectiveFilters,
       search: trimmedSearch,
       fromTime: intervalStart,
       toTime: intervalEnd,
@@ -651,7 +707,7 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
   );
 
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
-    `${TLS_STORAGE_PREFIX}${COLUMNS_ORDER_KEY_SUFFIX}`,
+    `${storagePrefix}${COLUMNS_ORDER_KEY_SUFFIX}`,
     {
       defaultValue: DEFAULT_TRACES_COLUMNS_ORDER,
     },
@@ -659,19 +715,19 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
 
   const [scoresColumnsOrder, setScoresColumnsOrder] = useLocalStorageState<
     string[]
-  >(`${TLS_STORAGE_PREFIX}${COLUMNS_SCORES_ORDER_KEY_SUFFIX}`, {
+  >(`${storagePrefix}${COLUMNS_SCORES_ORDER_KEY_SUFFIX}`, {
     defaultValue: [],
   });
 
   const [metadataColumnsOrder, setMetadataColumnsOrder] = useLocalStorageState<
     string[]
-  >(`${TLS_STORAGE_PREFIX}${COLUMNS_METADATA_ORDER_KEY_SUFFIX}`, {
+  >(`${storagePrefix}${COLUMNS_METADATA_ORDER_KEY_SUFFIX}`, {
     defaultValue: [COLUMN_METADATA_ID],
   });
 
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
-  >(`${TLS_STORAGE_PREFIX}${COLUMNS_WIDTH_KEY_SUFFIX}`, {
+  >(`${storagePrefix}${COLUMNS_WIDTH_KEY_SUFFIX}`, {
     defaultValue: {},
   });
 
@@ -697,8 +753,12 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
   );
 
   useDynamicColumnsCache({
-    dynamicColumnsKey: `${TLS_STORAGE_PREFIX}${DYNAMIC_COLUMNS_KEY_SUFFIX}`,
-    dynamicColumnsIds,
+    dynamicColumnsKey: `${storagePrefix}${DYNAMIC_COLUMNS_KEY_SUFFIX}`,
+    // When autoSelectScoreColumns is off (e.g. evaluation-traces view), feedback-score columns stay
+    // hidden by default; they remain available in the columns menu via columnSections.
+    dynamicColumnsIds: viewConfig.autoSelectScoreColumns
+      ? dynamicColumnsIds
+      : NO_DYNAMIC_COLUMNS,
     setSelectedColumns,
   });
 
@@ -908,6 +968,20 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
         }}
       >
         <div className="flex min-h-0 flex-1 flex-col">
+          {viewConfig.showMetricsSummary && (
+            <div className="px-6 pt-4">
+              <MetricsSummary
+                projectId={projectId}
+                entityType="traces"
+                countLabel="Traces"
+                filters={effectiveFilters}
+                intervalStart={intervalStart}
+                intervalEnd={intervalEnd}
+                dateRange={dateRange}
+                logsSource={logsSource}
+              />
+            </div>
+          )}
           <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 px-6 py-4">
             <div className="flex items-center gap-2">
               <SearchInput
@@ -924,6 +998,18 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
                 onChange={setFilters}
                 layout="icon"
               />
+              {scopeLabel && (
+                <TooltipWrapper content="These traces are locked to this evaluator and can't be changed via filters">
+                  <Tag
+                    size="md"
+                    variant="gray"
+                    className="flex max-w-[260px] items-center gap-1"
+                  >
+                    <Lock className="size-3 shrink-0" />
+                    <span className="truncate">{scopeLabel}</span>
+                  </Tag>
+                </TooltipWrapper>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <TracesActionsPanel
