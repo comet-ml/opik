@@ -433,6 +433,35 @@ def test_meteor_rejects_empty_inputs():
         metric.score(output="hyp", reference="   ")
 
 
+def test_meteor_default_scorer_tokenizes_inputs(monkeypatch):
+    """The built-in scorer must pass pre-tokenized inputs to NLTK.
+
+    NLTK's ``meteor_score`` requires ``references`` as ``Iterable[Iterable[str]]``
+    and ``hypothesis`` as ``Iterable[str]``; passing raw strings raises ``TypeError``.
+    """
+    from opik.evaluation.metrics.heuristics import meteor as meteor_module
+
+    captured = {}
+
+    def fake_meteor_score(references, hypothesis, **kwargs):
+        captured["references"] = references
+        captured["hypothesis"] = hypothesis
+        return 0.5
+
+    # Avoid the WordNet corpora requirement and stub the NLTK scorer so the test
+    # exercises only the default scorer's tokenization (no network/corpora needed).
+    monkeypatch.setattr(meteor_module.wordnet, "ensure_loaded", lambda: None)
+    monkeypatch.setattr(
+        meteor_module.nltk_meteor_score, "meteor_score", fake_meteor_score
+    )
+
+    metric = METEOR(track=False)
+    metric.score(output="the cat sat", reference="the cat sat")
+
+    assert captured["hypothesis"] == ["the", "cat", "sat"]
+    assert captured["references"] == [["the", "cat", "sat"]]
+
+
 def test_gleu_metric_with_custom_fn():
     def gleu_fn(references, hypothesis):
         return 0.5
