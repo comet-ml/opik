@@ -115,7 +115,8 @@ public interface TraceDAO {
 
     Flux<WorkspaceTraceCount> countTracesPerWorkspace(Map<UUID, Instant> excludedProjectIds);
 
-    Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(Set<UUID> projectIds, String workspaceId, Connection connection);
+    Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(Set<UUID> projectIds, String workspaceId,
+            Instant lastUpdatedAfter, Connection connection);
 
     Mono<Set<UUID>> getProjectsWithTracesInRange(Collection<Pair<String, UUID>> workspaceProjectPairs, Instant from,
             Instant to, Connection connection);
@@ -2019,6 +2020,7 @@ class TraceDAOImpl implements TraceDAO {
             FROM traces t
             WHERE t.workspace_id = :workspace_id
             AND t.project_id IN :project_ids
+            <if(last_updated_after)> AND t.last_updated_at > parseDateTime64BestEffort(:last_updated_after, 9) <endif>
             GROUP BY t.project_id
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -4202,7 +4204,8 @@ class TraceDAOImpl implements TraceDAO {
     @Override
     @WithSpan
     public Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(
-            @NonNull Set<UUID> projectIds, @NonNull String workspaceId, @NonNull Connection connection) {
+            @NonNull Set<UUID> projectIds, @NonNull String workspaceId, Instant lastUpdatedAfter,
+            @NonNull Connection connection) {
 
         log.info("Getting last updated trace at for projectIds, size '{}'", projectIds.size());
 
@@ -4210,9 +4213,17 @@ class TraceDAOImpl implements TraceDAO {
                 "",
                 projectIds.size());
 
+        if (lastUpdatedAfter != null) {
+            template.add("last_updated_after", true);
+        }
+
         var statement = connection.createStatement(template.render())
                 .bind("project_ids", projectIds.toArray(UUID[]::new))
                 .bind("workspace_id", workspaceId);
+
+        if (lastUpdatedAfter != null) {
+            statement.bind("last_updated_after", lastUpdatedAfter.toString());
+        }
 
         return Mono.from(statement.execute())
                 .flatMapMany(result -> result.map((row, rowMetadata) -> Map.entry(row.get("project_id", UUID.class),
