@@ -1,4 +1,4 @@
-package com.comet.opik.domain;
+package com.comet.opik.domain.evaluation;
 
 import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.FeedbackScoreItem;
@@ -6,8 +6,10 @@ import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.VisibilityMode;
+import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.llm.LlmProviderFactory;
-import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.domain.observability.ObservabilityTraceRecorder;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -27,7 +29,6 @@ import dev.langchain4j.model.openai.OpenAiTokenUsage;
 import dev.langchain4j.model.output.TokenUsage;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,17 +40,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 /**
- * Persists the LLM-as-judge online-evaluation loop as monitoring traces and spans so the cost and
- * behavior of each evaluation are auditable inside Opik (OPIK-6994).
- * <p>
- * One {@link Trace} is created per evaluation execution and one {@code llm} {@link Span} per LLM
- * round-trip (the initial call plus every agentic-tools round and the wrap-up). Spans carry token
- * usage and the resolved model/provider, so the existing span→trace cost aggregation computes the
- * evaluation's cost with no extra work.
+ * Online-evaluation adapter on top of the {@link ObservabilityTraceRecorder} core: maps the LLM-as-judge
+ * loop into the monitoring trace/span model (OPIK-6994). One {@link Trace} is created per evaluation
+ * and one {@code llm} {@link Span} per LLM round-trip (the initial call plus every agentic-tools round
+ * and the wrap-up). Spans carry token usage and the resolved model/provider, so the existing
+ * span→trace cost aggregation computes the evaluation's cost with no extra work.
  * <p>
  * Traces/spans carry {@link Source#EVALUATOR} and the trace is {@link VisibilityMode#HIDDEN}, so they
  * are kept out of the default traces view and aggregations like other non-SDK/hidden traces, and the
@@ -57,14 +55,15 @@ import java.util.stream.Collectors;
  * so the trace sampler only scores them if they carry {@code selected_rule_ids} (they never do) and
  * the span sampler filters them out. The engine therefore never evaluates its own monitoring traces.
  * <p>
- * Persistence is best-effort: a failure to write a span or trace is logged and swallowed so it can
- * never break the scoring that produced it. The one exception is a failing LLM call, whose error is
- * recorded on the span and then re-propagated so the evaluation fails as it would have before.
+ * This class only builds the trace/span objects; the {@link ObservabilityTraceRecorder} guarantees the
+ * writes never disrupt the scoring flow that produced them. The {@link EvaluationRecorder} contract
+ * therefore exposes the lifecycle as {@code void} fire-and-forget calls and the per-round wrappers as
+ * pass-through taps.
  */
 @Singleton
 @Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-public class OnlineScoringTracePersistence {
+public class OnlineEvaluationRecorder {
 
     private static final String TRACE_NAME = "online_evaluation";
     private static final String SPAN_NAME = "llm_call";
@@ -79,282 +78,75 @@ public class OnlineScoringTracePersistence {
     private static final String MODE_INLINE = "inline";
     private static final String MODE_AGENTIC_TOOLS = "agentic_tools";
 
-    private final @NonNull TraceService traceService;
-    private final @NonNull SpanService spanService;
+    private final @NonNull ObservabilityTraceRecorder observabilityRecorder;
     private final @NonNull LlmProviderFactory llmProviderFactory;
     private final @NonNull IdGenerator idGenerator;
 
-    /**
-     * Sink for the telemetry of one evaluation. The scorer holds a recorder and calls it
-     * unconditionally, so the scoring path carries no {@code if (tracing) ...} branching. When
-     * monitoring is disabled the scorer uses {@link #NOOP}, which writes nothing and passes the LLM
-     * call through unchanged.
-     */
-    public interface EvaluationRecorder {
-
-        /** Writes nothing; passes the LLM call through. Used when monitoring is disabled. */
-        EvaluationRecorder NOOP = new EvaluationRecorder() {
-            @Override
-            public Mono<ChatResponse> recordLlmCall(ChatRequest request, Mono<ChatResponse> call) {
-                return call;
-            }
-
-            @Override
-            public Mono<String> recordToolCall(String toolName, String arguments, Mono<String> execution) {
-                return execution;
-            }
-
-            @Override
-            public Mono<Void> recordPreparation(int fetchedSpanCount, int estimatedTokens, boolean agentic) {
-                return Mono.empty();
-            }
-
-            @Override
-            public Mono<Void> complete(List<? extends FeedbackScoreItem> scores) {
-                return Mono.empty();
-            }
-
-            @Override
-            public Mono<Void> fail(Throwable error) {
-                return Mono.empty();
-            }
-        };
-
-        /** Records one LLM round as a span; returns the response unchanged (or re-propagates the error). */
-        Mono<ChatResponse> recordLlmCall(ChatRequest request, Mono<ChatResponse> call);
-
-        /** Records one agentic tool execution as a {@code tool} span; returns the result unchanged. */
-        Mono<String> recordToolCall(String toolName, String arguments, Mono<String> execution);
-
-        /**
-         * Records the upfront retrieval + context-assembly phase (span fetch, size estimate, mode
-         * decision) as a {@code general} span preceding the first LLM round.
-         */
-        Mono<Void> recordPreparation(int fetchedSpanCount, int estimatedTokens, boolean agentic);
-
-        /** Finalizes the parent trace on success with the produced scores. */
-        Mono<Void> complete(List<? extends FeedbackScoreItem> scores);
-
-        /** Finalizes the parent trace on failure with the error. */
-        Mono<Void> fail(Throwable error);
-    }
-
-    /**
-     * The entity an online evaluation is assessing — a trace, a span, or a thread. Lets the recorder
-     * be created the same way from all three scorers; the {@link Kind} drives the evaluated-id key on
-     * the monitoring trace (e.g. {@code evaluated_span_id}).
-     */
-    @Builder(toBuilder = true)
-    public record EvaluatedSubject(Kind kind, String id, UUID projectId, String projectName, String name,
-            JsonNode input, JsonNode output) {
-
-        public enum Kind {
-            TRACE("evaluated_trace_id"),
-            SPAN("evaluated_span_id"),
-            THREAD("evaluated_thread_id");
-
-            private final String idKey;
-
-            Kind(String idKey) {
-                this.idKey = idKey;
-            }
-
-            private String idKey() {
-                return idKey;
-            }
-        }
-
-        public static EvaluatedSubject ofTrace(@NonNull Trace trace) {
-            return EvaluatedSubject.builder()
-                    .kind(Kind.TRACE)
-                    .id(trace.id().toString())
-                    .projectId(trace.projectId())
-                    .projectName(trace.projectName())
-                    .name(trace.name())
-                    .input(trace.input())
-                    .output(trace.output())
-                    .build();
-        }
-
-        public static EvaluatedSubject ofSpan(@NonNull Span span) {
-            return EvaluatedSubject.builder()
-                    .kind(Kind.SPAN)
-                    .id(span.id().toString())
-                    .projectId(span.projectId())
-                    .projectName(span.projectName())
-                    .name(span.name())
-                    .input(span.input())
-                    .output(span.output())
-                    .build();
-        }
-
-        public static EvaluatedSubject ofThread(@NonNull String threadId, UUID projectId, String projectName) {
-            // Threads have no single input/output; the prepare span carries the thread id only.
-            return EvaluatedSubject.builder()
-                    .kind(Kind.THREAD)
-                    .id(threadId)
-                    .projectId(projectId)
-                    .projectName(projectName)
-                    .build();
-        }
-    }
-
-    /**
-     * Per-evaluation handle. Holds the parent trace id, the evaluated entity references and the
-     * resolved model/provider, and accumulates the LLM-round count. Allocated once per evaluation by
-     * {@link #begin}; mutated only by the sequential reactive chain of a single evaluation.
-     */
-    private static final class EvaluationTrace {
-        private final UUID traceId;
-        private final String evaluatedIdKey;
-        private final String evaluatedId;
-        private final UUID evaluatedProjectId;
-        private final String projectName;
-        private final String evaluatedName;
-        private final JsonNode evaluatedInput;
-        private final JsonNode evaluatedOutput;
-        private final UUID ruleId;
-        private final String ruleName;
-        private final String modelName;
-        private final String actualModel;
-        private final String provider;
-        private final String workspaceId;
-        private final String userName;
-        private final Instant startTime;
-        private final AtomicInteger llmCallCount = new AtomicInteger();
-        private final AtomicInteger toolCallCount = new AtomicInteger();
-        private volatile boolean agentic;
-
-        private EvaluationTrace(UUID traceId, EvaluatedSubject subject, UUID ruleId, String ruleName,
-                String modelName, String actualModel, String provider, String workspaceId, String userName,
-                Instant startTime) {
-            this.traceId = traceId;
-            this.evaluatedIdKey = subject.kind().idKey();
-            this.evaluatedId = subject.id();
-            this.evaluatedProjectId = subject.projectId();
-            this.projectName = subject.projectName();
-            this.evaluatedName = subject.name();
-            this.evaluatedInput = previewNode(subject.input());
-            this.evaluatedOutput = previewNode(subject.output());
-            this.ruleId = ruleId;
-            this.ruleName = ruleName;
-            this.modelName = modelName;
-            this.actualModel = actualModel;
-            this.provider = provider;
-            this.workspaceId = workspaceId;
-            this.userName = userName;
-            this.startTime = startTime;
-        }
-
-        public void markAgentic() {
-            this.agentic = true;
-        }
-
-        private String mode() {
-            return agentic ? MODE_AGENTIC_TOOLS : MODE_INLINE;
-        }
-    }
-
-    /** Real recorder backed by a per-evaluation {@link EvaluationTrace}; writes the trace and spans. */
+    /** Real recorder backed by a per-evaluation {@link EvaluationContext}; writes the trace and spans. */
     private final class RealRecorder implements EvaluationRecorder {
-        private final EvaluationTrace eval;
+        private final EvaluationContext eval;
 
-        private RealRecorder(EvaluationTrace eval) {
+        private RealRecorder(EvaluationContext eval) {
             this.eval = eval;
         }
 
         @Override
         public Mono<ChatResponse> recordLlmCall(ChatRequest request, Mono<ChatResponse> call) {
-            return OnlineScoringTracePersistence.this.recordLlmCall(eval, request, call);
+            return Mono.defer(() -> {
+                var start = Instant.now();
+                return observabilityRecorder.recordSpan(call, eval.observabilityContext(),
+                        response -> buildLlmSpan(eval, request, response, null, start),
+                        error -> buildLlmSpan(eval, request, null, error, start));
+            });
         }
 
         @Override
         public Mono<String> recordToolCall(String toolName, String arguments, Mono<String> execution) {
-            return OnlineScoringTracePersistence.this.recordToolCall(eval, toolName, arguments, execution);
+            return Mono.defer(() -> {
+                var start = Instant.now();
+                return observabilityRecorder.recordSpan(execution, eval.observabilityContext(),
+                        result -> buildToolSpan(eval, toolName, arguments, result, null, start),
+                        error -> buildToolSpan(eval, toolName, arguments, null, error, start));
+            });
         }
 
         @Override
-        public Mono<Void> recordPreparation(int fetchedSpanCount, int estimatedTokens, boolean agentic) {
-            return OnlineScoringTracePersistence.this.createPreparationSpan(eval, fetchedSpanCount,
-                    estimatedTokens, agentic);
+        public void recordPreparation(int fetchedSpanCount, int estimatedTokens, boolean agentic) {
+            // The preparation phase decides inline vs agentic-tools mode; record it once here so the
+            // parent trace's mode metadata matches this span's reported mode.
+            if (agentic) {
+                eval.markAgentic();
+            }
+            observabilityRecorder.recordSpan(eval.observabilityContext(),
+                    () -> buildPreparationSpan(eval, fetchedSpanCount, estimatedTokens, agentic));
         }
 
         @Override
-        public Mono<Void> complete(List<? extends FeedbackScoreItem> scores) {
-            return OnlineScoringTracePersistence.this.complete(eval, scores);
-        }
-
-        @Override
-        public Mono<Void> fail(Throwable error) {
-            return OnlineScoringTracePersistence.this.fail(eval, error);
+        public <T extends FeedbackScoreItem> Mono<List<T>> monitor(Mono<List<T>> scoring) {
+            return scoring
+                    .doOnNext(scores -> observabilityRecorder.recordTrace(eval.observabilityContext(),
+                            () -> buildTrace(eval, buildScoresOutput(scores), null)))
+                    .doOnError(error -> observabilityRecorder.recordTrace(eval.observabilityContext(),
+                            () -> buildTrace(eval, null, toErrorInfo(error))));
         }
     }
 
     /**
      * Opens an evaluation recorder. Pure (no I/O): generates the parent trace id, resolves the
-     * model/provider once and captures the start time. Spans and the parent trace are written later
-     * by {@link RealRecorder#recordLlmCall} and {@link RealRecorder#complete}/{@link RealRecorder#fail}.
+     * model/provider once and captures the start time. Spans and the parent trace are written later,
+     * fire-and-forget, by the {@link RealRecorder}.
      */
     public EvaluationRecorder begin(@NonNull EvaluatedSubject subject, @NonNull UUID ruleId, String ruleName,
             @NonNull String modelName, @NonNull String workspaceId, @NonNull String userName) {
         var resolvedModelInfo = llmProviderFactory.getResolvedModelInfo(modelName);
-        var eval = new EvaluationTrace(idGenerator.generateId(), subject, ruleId, ruleName, modelName,
-                resolvedModelInfo.actualModel(), resolvedModelInfo.provider(), workspaceId, userName, Instant.now());
+        var eval = new EvaluationContext(idGenerator.generateId(), subject, ruleId, ruleName, modelName,
+                resolvedModelInfo.actualModel(), resolvedModelInfo.provider(), previewNode(subject.input()),
+                previewNode(subject.output()), workspaceId, userName, Instant.now());
         return new RealRecorder(eval);
     }
 
-    /**
-     * Wraps a single LLM call so its request/response (or error), token usage and timing are recorded
-     * as one {@code llm} span under the evaluation's trace. On success the response is passed through
-     * unchanged; on failure the error is recorded on the span and re-propagated.
-     */
-    private Mono<ChatResponse> recordLlmCall(@NonNull EvaluationTrace eval, @NonNull ChatRequest request,
-            @NonNull Mono<ChatResponse> call) {
-        return Mono.defer(() -> {
-            var start = Instant.now();
-            return call
-                    .flatMap(response -> createLlmSpan(eval, request, response, null, start).thenReturn(response))
-                    .onErrorResume(error -> createLlmSpan(eval, request, null, error, start)
-                            .then(Mono.error(error)));
-        });
-    }
-
-    /**
-     * Wraps a single agentic tool execution so its arguments, result (or error) and timing are
-     * recorded as one {@code tool} span under the evaluation's trace. The result is passed through
-     * unchanged so the tool-call loop's budget/accounting is unaffected.
-     */
-    private Mono<String> recordToolCall(@NonNull EvaluationTrace eval, @NonNull String toolName,
-            String arguments, @NonNull Mono<String> execution) {
-        return Mono.defer(() -> {
-            var start = Instant.now();
-            return execution
-                    .flatMap(result -> createToolSpan(eval, toolName, arguments, result, null, start)
-                            .thenReturn(result))
-                    .onErrorResume(error -> createToolSpan(eval, toolName, arguments, null, error, start)
-                            .then(Mono.error(error)));
-        });
-    }
-
-    /**
-     * Finalizes the evaluation's parent trace on success, recording the produced feedback scores as
-     * its output.
-     */
-    private Mono<Void> complete(@NonNull EvaluationTrace eval, @NonNull List<? extends FeedbackScoreItem> scores) {
-        return createTrace(eval, buildScoresOutput(scores), null);
-    }
-
-    /**
-     * Finalizes the evaluation's parent trace on failure, recording the error on the trace.
-     */
-    private Mono<Void> fail(@NonNull EvaluationTrace eval, @NonNull Throwable error) {
-        return createTrace(eval, null, toErrorInfo(error));
-    }
-
-    private Mono<Void> createLlmSpan(EvaluationTrace eval, ChatRequest request, ChatResponse response,
-            Throwable error, Instant start) {
-        eval.llmCallCount.incrementAndGet();
-
+    private Span buildLlmSpan(EvaluationContext eval, ChatRequest request, ChatResponse response, Throwable error,
+            Instant start) {
         var spanBuilder = Span.builder()
                 .id(idGenerator.generateId())
                 .traceId(eval.traceId)
@@ -376,13 +168,11 @@ public class OnlineScoringTracePersistence {
             spanBuilder.errorInfo(toErrorInfo(error));
         }
 
-        return create(spanService.create(spanBuilder.build()), eval, "span");
+        return spanBuilder.build();
     }
 
-    private Mono<Void> createToolSpan(EvaluationTrace eval, String toolName, String arguments, String result,
+    private Span buildToolSpan(EvaluationContext eval, String toolName, String arguments, String result,
             Throwable error, Instant start) {
-        eval.toolCallCount.incrementAndGet();
-
         var input = JsonUtils.createObjectNode();
         if (arguments != null) {
             input.put("arguments", arguments);
@@ -408,17 +198,11 @@ public class OnlineScoringTracePersistence {
             spanBuilder.errorInfo(toErrorInfo(error));
         }
 
-        return create(spanService.create(spanBuilder.build()), eval, "tool span");
+        return spanBuilder.build();
     }
 
-    private Mono<Void> createPreparationSpan(EvaluationTrace eval, int fetchedSpanCount, int estimatedTokens,
+    private Span buildPreparationSpan(EvaluationContext eval, int fetchedSpanCount, int estimatedTokens,
             boolean agentic) {
-        // The preparation phase decides inline vs agentic-tools mode; record it once here so the
-        // parent trace's mode metadata matches this span's reported mode.
-        if (agentic) {
-            eval.markAgentic();
-        }
-
         // Put the evaluated entity's own input/output on the span's input/output so the UI renders
         // them in "pretty" mode exactly as on the source trace (chat, text, etc.) instead of a raw
         // JSON blob; the evaluation bookkeeping (ids, model, fetch/size/mode) goes to span metadata.
@@ -453,10 +237,10 @@ public class OnlineScoringTracePersistence {
             spanBuilder.output(eval.evaluatedOutput);
         }
 
-        return create(spanService.create(spanBuilder.build()), eval, "preparation span");
+        return spanBuilder.build();
     }
 
-    private Mono<Void> createTrace(EvaluationTrace eval, ObjectNode output, ErrorInfo errorInfo) {
+    private Trace buildTrace(EvaluationContext eval, ObjectNode output, ErrorInfo errorInfo) {
         var input = JsonUtils.createObjectNode();
         input.put(eval.evaluatedIdKey, eval.evaluatedId);
         if (eval.evaluatedProjectId != null) {
@@ -472,9 +256,7 @@ public class OnlineScoringTracePersistence {
         }
         metadata.put(eval.evaluatedIdKey, eval.evaluatedId);
         metadata.put("model", eval.modelName);
-        metadata.put("mode", eval.mode());
-        metadata.put("llm_call_count", eval.llmCallCount.get());
-        metadata.put("tool_call_count", eval.toolCallCount.get());
+        metadata.put("mode", eval.agentic() ? MODE_AGENTIC_TOOLS : MODE_INLINE);
 
         var traceBuilder = Trace.builder()
                 .id(eval.traceId)
@@ -494,19 +276,7 @@ public class OnlineScoringTracePersistence {
             traceBuilder.errorInfo(errorInfo);
         }
 
-        return create(traceService.create(traceBuilder.build()), eval, "trace");
-    }
-
-    private Mono<Void> create(Mono<UUID> create, EvaluationTrace eval, String entity) {
-        return create
-                .contextWrite(ctx -> ctx
-                        .put(RequestContext.USER_NAME, eval.userName)
-                        .put(RequestContext.WORKSPACE_ID, eval.workspaceId))
-                .doOnError(throwable -> log.warn(
-                        "Failed to persist online-evaluation monitoring '{}' for rule '{}', evaluated traceId '{}'",
-                        entity, eval.ruleId, eval.evaluatedId, throwable))
-                .onErrorComplete()
-                .then();
+        return traceBuilder.build();
     }
 
     private static Map<String, Integer> extractUsage(ChatResponse response) {

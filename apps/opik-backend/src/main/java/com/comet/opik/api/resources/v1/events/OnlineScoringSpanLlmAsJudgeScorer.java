@@ -2,9 +2,10 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.events.SpanToScoreLlmAsJudge;
 import com.comet.opik.domain.FeedbackScoreService;
-import com.comet.opik.domain.OnlineScoringTracePersistence;
-import com.comet.opik.domain.OnlineScoringTracePersistence.EvaluationRecorder;
 import com.comet.opik.domain.TraceService;
+import com.comet.opik.domain.evaluation.EvaluatedSubject;
+import com.comet.opik.domain.evaluation.EvaluationRecorder;
+import com.comet.opik.domain.evaluation.OnlineEvaluationRecorder;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
@@ -45,7 +46,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
     private final ChatCompletionService aiProxyService;
     private final Logger userFacingLogger;
     private final LlmProviderFactory llmProviderFactory;
-    private final OnlineScoringTracePersistence tracePersistence;
+    private final OnlineEvaluationRecorder onlineEvaluationRecorder;
 
     @Inject
     public OnlineScoringSpanLlmAsJudgeScorer(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
@@ -55,13 +56,13 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
             @NonNull ChatCompletionService aiProxyService,
             @NonNull TraceService traceService,
             @NonNull LlmProviderFactory llmProviderFactory,
-            @NonNull OnlineScoringTracePersistence tracePersistence) {
+            @NonNull OnlineEvaluationRecorder onlineEvaluationRecorder) {
         super(config, redisson, feedbackScoreService, traceService, SPAN_LLM_AS_JUDGE, Constants.SPAN_LLM_AS_JUDGE);
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.aiProxyService = aiProxyService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringSpanLlmAsJudgeScorer.class);
         this.llmProviderFactory = llmProviderFactory;
-        this.tracePersistence = tracePersistence;
+        this.onlineEvaluationRecorder = onlineEvaluationRecorder;
     }
 
     @Override
@@ -94,24 +95,26 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
         // Monitoring recorder (OPIK-6994): one hidden evaluator trace per span evaluation with an llm
         // span for the scoring call. NOOP when the toggle is off.
         EvaluationRecorder recorder = serviceTogglesConfig.isOnlineScoringTracingEnabled()
-                ? tracePersistence.begin(OnlineScoringTracePersistence.EvaluatedSubject.ofSpan(span),
+                ? onlineEvaluationRecorder.begin(EvaluatedSubject.ofSpan(span),
                         message.ruleId(), message.ruleName(), message.llmAsJudgeCode().model().name(),
                         message.workspaceId(), message.userName())
                 : EvaluationRecorder.NOOP;
 
-        return Mono.fromCallable(() -> prepareSpanRequest(message, mdc))
+        Mono<List<FeedbackScoreBatchItem>> scoring = Mono.fromCallable(() -> prepareSpanRequest(message, mdc))
                 .subscribeOn(Schedulers.boundedElastic())
                 // Uniform structure with trace/thread evals: a prepare_evaluation span carrying the
                 // evaluated span's preview. Span evals never fetch context or go agentic (inline,
                 // single call), hence 0 fetched spans / 0 estimate.
-                .flatMap(scoreRequest -> recorder.recordPreparation(0, 0, false)
-                        .then(recorder.recordLlmCall(scoreRequest,
-                                Mono.fromCallable(() -> aiProxyService.scoreTrace(scoreRequest,
-                                        message.llmAsJudgeCode().model(), message.workspaceId()))
-                                        .subscribeOn(Schedulers.boundedElastic()))))
-                .map(response -> parseSpanScores(response, message, mdc))
-                .flatMap(scores -> recorder.complete(scores).thenReturn(scores))
-                .onErrorResume(error -> recorder.fail(error).then(Mono.error(error)))
+                .flatMap(scoreRequest -> {
+                    recorder.recordPreparation(0, 0, false);
+                    return recorder.recordLlmCall(scoreRequest,
+                            Mono.fromCallable(() -> aiProxyService.scoreTrace(scoreRequest,
+                                    message.llmAsJudgeCode().model(), message.workspaceId()))
+                                    .subscribeOn(Schedulers.boundedElastic()));
+                })
+                .map(response -> parseSpanScores(response, message, mdc));
+
+        return recorder.monitor(scoring)
                 .flatMap(scores -> storeSpanScores(scores, span, message.userName(), message.workspaceId()))
                 .doOnNext(withMdc(mdc, loggedScores -> userFacingLogger
                         .info("Scores for spanId '{}' stored successfully:\n\n{}", span.id(), loggedScores)))

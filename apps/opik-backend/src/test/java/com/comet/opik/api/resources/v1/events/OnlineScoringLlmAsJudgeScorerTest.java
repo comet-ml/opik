@@ -15,12 +15,12 @@ import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
 import com.comet.opik.api.resources.v1.events.tools.TraceCompressor;
 import com.comet.opik.api.resources.v1.events.tools.TraceToolContext;
 import com.comet.opik.domain.FeedbackScoreService;
-import com.comet.opik.domain.OnlineScoringTracePersistence;
-import com.comet.opik.domain.OnlineScoringTracePersistence.EvaluationRecorder;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TestSuiteAssertionCounterService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.WorkspaceNameService;
+import com.comet.opik.domain.evaluation.EvaluationRecorder;
+import com.comet.opik.domain.evaluation.OnlineEvaluationRecorder;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
@@ -100,7 +100,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
     @Mock
     private OpikConfiguration opikConfiguration;
     @Mock
-    private OnlineScoringTracePersistence tracePersistence;
+    private OnlineEvaluationRecorder onlineEvaluationRecorder;
     @Mock
     private com.comet.opik.domain.attachment.AttachmentService attachmentService;
 
@@ -153,7 +153,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 traceCompressor,
                 workspaceNameService,
                 opikConfiguration,
-                tracePersistence,
+                onlineEvaluationRecorder,
                 attachmentService);
     }
 

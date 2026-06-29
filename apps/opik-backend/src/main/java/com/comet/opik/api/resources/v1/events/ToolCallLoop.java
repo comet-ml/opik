@@ -3,7 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.resources.v1.events.tools.MediaMessageBuilder;
 import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
 import com.comet.opik.api.resources.v1.events.tools.TraceToolContext;
-import com.comet.opik.domain.OnlineScoringTracePersistence.EvaluationRecorder;
+import com.comet.opik.domain.evaluation.EvaluationRecorder;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;

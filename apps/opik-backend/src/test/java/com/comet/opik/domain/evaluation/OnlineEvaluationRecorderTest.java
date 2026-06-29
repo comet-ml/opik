@@ -1,14 +1,17 @@
-package com.comet.opik.domain;
+package com.comet.opik.domain.evaluation;
 
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.VisibilityMode;
-import com.comet.opik.domain.OnlineScoringTracePersistence.EvaluatedSubject;
-import com.comet.opik.domain.OnlineScoringTracePersistence.EvaluationRecorder;
+import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.SpanService;
+import com.comet.opik.domain.SpanType;
+import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderFactory.ResolvedModelInfo;
+import com.comet.opik.domain.observability.ObservabilityTraceRecorder;
 import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.UserMessage;
@@ -31,15 +34,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-class OnlineScoringTracePersistenceTest {
+class OnlineEvaluationRecorderTest {
 
     private TraceService traceService;
     private SpanService spanService;
-    private OnlineScoringTracePersistence persistence;
+    private OnlineEvaluationRecorder onlineEvaluationRecorder;
 
     @BeforeEach
     void setUp() {
@@ -52,11 +56,12 @@ class OnlineScoringTracePersistenceTest {
         when(llmProviderFactory.getResolvedModelInfo(anyString()))
                 .thenReturn(new ResolvedModelInfo("claude-actual", "anthropic"));
 
-        persistence = new OnlineScoringTracePersistence(traceService, spanService, llmProviderFactory, idGenerator);
+        var observabilityRecorder = new ObservabilityTraceRecorder(traceService, spanService);
+        onlineEvaluationRecorder = new OnlineEvaluationRecorder(observabilityRecorder, llmProviderFactory, idGenerator);
     }
 
     private EvaluationRecorder recorder() {
-        return persistence.begin(
+        return onlineEvaluationRecorder.begin(
                 new EvaluatedSubject(EvaluatedSubject.Kind.TRACE, "trace-1", UUID.randomUUID(), "proj", "name", null,
                         null),
                 UUID.randomUUID(), "rule", "model", "workspace", "user");
@@ -70,15 +75,16 @@ class OnlineScoringTracePersistenceTest {
         when(traceService.create(any(Trace.class))).thenReturn(Mono.just(UUID.randomUUID()));
     }
 
+    // Writes are fire-and-forget on a separate scheduler; wait for the create call before capturing.
     private Span capturedSpan() {
         var captor = ArgumentCaptor.forClass(Span.class);
-        verify(spanService).create(captor.capture());
+        verify(spanService, timeout(5_000)).create(captor.capture());
         return captor.getValue();
     }
 
     private Trace capturedTrace() {
         var captor = ArgumentCaptor.forClass(Trace.class);
-        verify(traceService).create(captor.capture());
+        verify(traceService, timeout(5_000)).create(captor.capture());
         return captor.getValue();
     }
 
@@ -168,8 +174,12 @@ class OnlineScoringTracePersistenceTest {
     @Test
     void finalizesHiddenEvaluatorTraceWithErrorOnFail() {
         stubTraceWrites();
+        var boom = new IllegalStateException("bad");
 
-        StepVerifier.create(recorder().fail(new IllegalStateException("bad"))).verifyComplete();
+        // monitor() taps the scoring result: on error it finalizes the trace and re-propagates unchanged.
+        StepVerifier.create(recorder().monitor(Mono.<List<FeedbackScoreBatchItem>>error(boom)))
+                .expectErrorMatches(error -> error == boom)
+                .verify();
 
         var trace = capturedTrace();
         assertThat(trace.errorInfo()).isNotNull();
@@ -183,7 +193,9 @@ class OnlineScoringTracePersistenceTest {
         var scores = List.of(FeedbackScoreBatchItem.builder()
                 .name("Relevance").value(BigDecimal.valueOf(0.8)).reason("relevant").build());
 
-        StepVerifier.create(recorder().complete(scores)).verifyComplete();
+        // monitor() passes the scores through unchanged and finalizes the trace on success.
+        var result = recorder().monitor(Mono.just(scores)).block();
+        assertThat(result).isSameAs(scores);
 
         var trace = capturedTrace();
         assertThat(trace.source()).isEqualTo(Source.EVALUATOR);
@@ -198,12 +210,12 @@ class OnlineScoringTracePersistenceTest {
         evaluatedInput.put("input", "What is 2+2?");
         var evaluatedOutput = JsonUtils.createObjectNode();
         evaluatedOutput.put("output", "4");
-        var recorder = persistence.begin(
+        var recorder = onlineEvaluationRecorder.begin(
                 new EvaluatedSubject(EvaluatedSubject.Kind.TRACE, "trace-9", UUID.randomUUID(), "proj", "Q&A",
                         evaluatedInput, evaluatedOutput),
                 UUID.randomUUID(), "rule", "claude-x", "workspace", "user");
 
-        StepVerifier.create(recorder.recordPreparation(3, 1234, false)).verifyComplete();
+        recorder.recordPreparation(3, 1234, false);
 
         var span = capturedSpan();
         assertThat(span.name()).isEqualTo("prepare_evaluation");
