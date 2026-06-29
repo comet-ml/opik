@@ -99,8 +99,24 @@ jobs:
                 # Re-verify each unique status-0 URL with a direct request: many are
                 # transient crawl timeouts on healthy pages (return 200 on recheck).
                 # Keep only those that are genuinely unreachable (non-2xx/3xx).
+                #
+                # Only re-check URLs on the preview origin: the false positives we are
+                # filtering are preview pages that timed out mid-crawl, and restricting
+                # the curl target to the trusted preview host avoids issuing requests to
+                # arbitrary PR-authored URLs (SSRF). A status-0 URL off the preview origin
+                # is reported as-is without a recheck.
                 while IFS= read -r url; do
                   [ -z "$url" ] && continue
+                  case "$url" in
+                    "$PREVIEW_ORIGIN"/*|"$PREVIEW_ORIGIN") ;;
+                    *)
+                      # Off-origin: don't curl it, report it as a timeout as crawled.
+                      parent=$(jq -r --arg u "$url" --arg origin "$PREVIEW_ORIGIN" '(first(.links[] | select(.url == $u)).parent // "") | sub("^" + $origin; "")' linkinator_results.json)
+                      entry=$(printf '❌ Broken link: %s (timeout)\n   ↳ on page: %s' "$url" "$parent")
+                      BROKEN_LINKS=$(printf '%s\n%s' "$BROKEN_LINKS" "$entry")
+                      continue
+                      ;;
+                  esac
                   code=$(curl -s -L -o /dev/null -w "%{http_code}" --max-time 20 "$url" 2>/dev/null)
                   [ -z "$code" ] && code=000
                   if [ "$code" -lt 200 ] || [ "$code" -ge 400 ]; then
