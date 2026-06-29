@@ -5,6 +5,7 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/date";
 import SeverityTag from "@/v2/pages/SignalsPage/IssuesTab/SeverityTag";
+import { formatOccurrences } from "@/v2/pages/SignalsPage/helpers";
 
 type IssueListItemProps = {
   issue: AgentInsightsIssue;
@@ -49,7 +50,12 @@ const IssueListItem: React.FC<IssueListItemProps> = ({
       <div className="comet-body-xs flex items-center gap-4 text-muted-slate">
         <span className="flex items-center gap-1">
           <Hash className="size-3" />
-          Occurrences: {issue.total_occurrences.toLocaleString()}
+          Occurrences:{" "}
+          {formatOccurrences(
+            issue.total_occurrences,
+            issue.latest_count,
+            issue.days_reported,
+          )}
         </span>
         {issue.last_seen && (
           <span className="flex items-center gap-1">
