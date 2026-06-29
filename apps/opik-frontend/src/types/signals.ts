@@ -93,6 +93,10 @@ export interface AgentInsightsJob {
   // When a diagnostic report was last generated (incl. "all clear"); unaffected
   // by resolving/reopening issues. Used for the "Last scan" header.
   last_scan_at?: string;
+  // Set when a run fails, cleared on the next successful report.
+  last_failure_reason?: string;
+  last_failure_detail?: string;
+  last_failed_at?: string;
   created_at?: string;
   created_by?: string;
   last_updated_at?: string;

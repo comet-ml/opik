@@ -24,6 +24,8 @@ import useTriggerAgentInsightsJobMutation from "@/api/signals/useTriggerAgentIns
 import useUpdateAgentInsightsJobMutation from "@/api/signals/useUpdateAgentInsightsJobMutation";
 import useDiagnosticsRunState from "@/v2/pages/SignalsPage/useDiagnosticsRunState";
 import useDiagnosticsSeen from "@/v2/pages/SignalsPage/useDiagnosticsSeen";
+import { getRunFailureCopy } from "@/v2/pages/SignalsPage/runFailureCopy";
+import { useToast } from "@/ui/use-toast";
 import SignalsStatsCards from "@/v2/pages/SignalsPage/SignalsStatsCards";
 import IssuesTab from "@/v2/pages/SignalsPage/IssuesTab/IssuesTab";
 import DiagnosticsEmptyState from "@/v2/pages/SignalsPage/DiagnosticsEmptyState";
@@ -88,10 +90,19 @@ const SignalsPage: React.FC = () => {
       ? new Date(latestIssueUpdate).toISOString()
       : undefined);
 
+  const { toast } = useToast();
   const triggerMutation = useTriggerAgentInsightsJobMutation();
   const updateJobMutation = useUpdateAgentInsightsJobMutation();
-  const { isRunning, baseline, startRun, endRun } =
-    useDiagnosticsRunState(projectId);
+  const {
+    isRunning,
+    baseline,
+    failBaseline,
+    failedReason,
+    startRun,
+    endRun,
+    failRun,
+    dismissFailure,
+  } = useDiagnosticsRunState(projectId);
   const { markSeen } = useDiagnosticsSeen(projectId);
 
   const [showResolved, setShowResolved] = useState(false);
@@ -117,6 +128,18 @@ const SignalsPage: React.FC = () => {
     }
   }, [issuesData, isRunning, baseline, endRun]);
 
+  useEffect(() => {
+    if (!isRunning) return;
+    const failedAt = job?.last_failed_at ? Date.parse(job.last_failed_at) : 0;
+    if (failedAt > failBaseline) {
+      failRun(job?.last_failure_reason, job?.last_failure_detail);
+      const { title, description } = getRunFailureCopy(
+        job?.last_failure_reason,
+      );
+      toast({ title, description, variant: "destructive" });
+    }
+  }, [job, isRunning, failBaseline, failRun, toast]);
+
   const hasData = (issuesData?.content?.length ?? 0) > 0;
   const isActive = isJobEnabled || isRunning;
 
@@ -132,9 +155,13 @@ const SignalsPage: React.FC = () => {
 
   const handleRunDiagnostic = () => {
     const baselineNow = maxUpdatedAt(issuesData?.content ?? []);
+    const failBaselineNow = job?.last_failed_at
+      ? Date.parse(job.last_failed_at)
+      : 0;
+    dismissFailure();
     triggerMutation.mutate(
       { projectId },
-      { onSuccess: () => startRun(baselineNow) },
+      { onSuccess: () => startRun(baselineNow, failBaselineNow) },
     );
   };
 
@@ -150,7 +177,7 @@ const SignalsPage: React.FC = () => {
       return <SignalsPageSkeleton />;
     }
 
-    if (!isRunning && !isJobEnabled && !hasData) {
+    if (!isRunning && !failedReason && !isJobEnabled && !hasData) {
       return (
         <DiagnosticsEmptyState
           onRun={handleRunDiagnostic}
@@ -221,6 +248,7 @@ const SignalsPage: React.FC = () => {
           projectId={projectId}
           showResolved={showResolved}
           isRunning={isRunning}
+          failedReason={failedReason}
           canConfigure={canConfigure}
           onRunDiagnostic={canConfigure ? handleRunDiagnostic : undefined}
           onShowOpenIssues={() => setShowResolved(false)}
