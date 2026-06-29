@@ -219,7 +219,11 @@ const OptimizationsPage: React.FunctionComponent = () => {
     isExistencePending ||
     isPending ||
     (isPlaceholderData && optimizations.length === 0);
-  const isEmpty = !isExistencePending && (existenceData?.total ?? 0) === 0;
+  // Only treat as empty on a *successful* zero-count probe. While it is pending
+  // or has errored, `existenceData` is undefined, so we fall through to the
+  // table view (which surfaces its own loading/error state) instead of hiding
+  // real runs behind the onboarding screen on a transient probe failure.
+  const isEmpty = existenceData?.total === 0;
 
   const handleClearFilters = useCallback(() => {
     setSearch(undefined);

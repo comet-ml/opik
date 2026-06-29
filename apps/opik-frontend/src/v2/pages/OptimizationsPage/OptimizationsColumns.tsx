@@ -25,7 +25,10 @@ import {
 // tables — out of scope here; tracked separately.
 
 // Bumped from v1: drops the dead `deploy` column id from persisted prefs and
-// adds the new Name / Run ID / Algorithm / Metric columns.
+// adds the new Name / Run ID / Algorithm / Metric columns. The bump
+// intentionally resets to these v2 defaults rather than migrating v1 prefs —
+// carrying the v1 selection forward would hide the new default-visible "Name"
+// column (it never existed in v1) and sort the new columns last.
 export const SELECTED_COLUMNS_KEY = "optimizations-selected-columns-v2";
 export const COLUMNS_WIDTH_KEY = "optimizations-columns-width-v2";
 export const COLUMNS_ORDER_KEY = "optimizations-columns-order-v2";
@@ -65,14 +68,14 @@ export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
     accessorFn: (row) =>
       row.studio_config?.optimizer?.type
         ? getOptimizerLabel(row.studio_config.optimizer.type)
-        : "",
+        : "-",
     size: 180,
   },
   {
     id: "metric",
     label: "Metric",
     type: COLUMN_TYPE.string,
-    accessorFn: (row) => row.objective_name,
+    accessorFn: (row) => row.objective_name || "-",
     size: 160,
   },
   {

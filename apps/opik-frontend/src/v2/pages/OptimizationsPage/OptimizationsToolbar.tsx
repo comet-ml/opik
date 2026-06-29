@@ -9,12 +9,16 @@ import OptimizationsActionsPanel from "@/v2/pages/OptimizationsPage/Optimization
 import { ColumnData } from "@/types/shared";
 import { Optimization } from "@/types/optimizations";
 import { FILTER_COLUMNS } from "@/v2/pages/OptimizationsPage/OptimizationsColumns";
+import { ITEM_SOURCE_LABEL } from "@/v2/pages-shared/experiments/ItemSourceCell";
 
 type OptimizationsToolbarProps = {
   search: string;
   onSearchChange: ComponentProps<typeof SearchInput>["setSearchText"];
   filters: ComponentProps<typeof FiltersButton>["filters"];
   onFiltersChange: ComponentProps<typeof FiltersButton>["onChange"];
+  // Typed loosely + `as never` at the call site, consistent with the codebase
+  // `as never` filter/cell convention; tightening needs the shared Operator
+  // union re-typing that is out of scope here.
   filtersConfig: object;
   canViewDatasets: boolean;
   canDeleteOptimizationRuns: boolean;
@@ -53,7 +57,7 @@ const OptimizationsToolbar: React.FC<OptimizationsToolbarProps> = ({
         <SearchInput
           searchText={search}
           setSearchText={onSearchChange}
-          placeholder="Search by dataset name"
+          placeholder={`Search by ${ITEM_SOURCE_LABEL.toLowerCase()}`}
           className="w-[320px]"
           dimension="sm"
         />
