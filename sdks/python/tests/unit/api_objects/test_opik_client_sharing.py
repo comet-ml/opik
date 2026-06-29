@@ -8,11 +8,56 @@ themselves are covered at the manager level in
 ``test_connection_resource_manager.py``.
 """
 
+import threading
+import time
+from unittest import mock
+
 from opik.api_objects import opik_client
 
 
 def _make_client(**kwargs) -> opik_client.Opik:
     return opik_client.Opik(_show_misconfiguration_message=False, **kwargs)
+
+
+def test_get_global_client__concurrent_cold_start__creates_single_client():
+    # Regression: get_global_client() must create the singleton once under
+    # concurrency. When several threads hit the cold-start path together (e.g. a
+    # tracer's _opik_client property accessed from parallel pipelines), each
+    # building its own client would race the shared connection-resource manager
+    # and, under a streamer-sharing test backend, close a streamer still in use —
+    # hanging a later flush().
+    opik_client.reset_global_client(end_client=False)
+
+    thread_count = 8
+    barrier = threading.Barrier(thread_count)
+    constructed = []
+    results = []
+    results_lock = threading.Lock()
+
+    def slow_construct(*args, **kwargs):
+        time.sleep(0.02)  # widen the window a racy implementation would lose in
+        client = object()
+        constructed.append(client)
+        return client
+
+    def worker() -> None:
+        barrier.wait()  # release all threads into the cold-start path together
+        client = opik_client.get_global_client()
+        with results_lock:
+            results.append(client)
+
+    try:
+        with mock.patch.object(opik_client, "Opik", side_effect=slow_construct):
+            threads = [threading.Thread(target=worker) for _ in range(thread_count)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+
+        assert len(constructed) == 1  # built exactly once despite the race
+        assert {id(client) for client in results} == {id(constructed[0])}
+    finally:
+        opik_client.reset_global_client(end_client=False)
 
 
 def test_opik_clients__matching_connection_config__share_one_rest_client():

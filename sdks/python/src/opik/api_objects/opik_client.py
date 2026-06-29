@@ -4,6 +4,7 @@ import datetime
 import functools
 import json
 import logging
+import threading
 import weakref
 from typing import (
     Any,
@@ -3287,6 +3288,9 @@ _context_client_var: contextvars.ContextVar[Optional[Opik]] = contextvars.Contex
     "_context_client_var", default=None
 )
 _global_singleton: Optional[Opik] = None
+# Serializes lazy creation of the global singleton so concurrent cold-start
+# callers share one client instead of racing to build several.
+_global_singleton_lock = threading.Lock()
 
 
 def get_current_client_raw() -> Optional[Opik]:
@@ -3317,8 +3321,16 @@ def get_global_client() -> Opik:
         return client
 
     global _global_singleton
-    _global_singleton = Opik()
-    return _global_singleton
+    # Re-check under the lock: without it, concurrent cold-start callers (e.g. one
+    # tracer shared by parallel pipelines) each build a client and its full
+    # transport stack, and all but one are immediately discarded — wasteful, and
+    # it races the shared connection-resource manager's build path.
+    with _global_singleton_lock:
+        client = get_current_client_raw()
+        if client is not None:
+            return client
+        _global_singleton = Opik()
+        return _global_singleton
 
 
 def set_global_client(client: Opik, context_wise: bool = False) -> None:
