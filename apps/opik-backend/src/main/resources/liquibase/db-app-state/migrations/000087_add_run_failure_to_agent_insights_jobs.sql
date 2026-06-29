@@ -8,3 +8,4 @@ ALTER TABLE agent_insights_jobs
     ADD COLUMN last_failed_at TIMESTAMP(6) NULL DEFAULT NULL AFTER last_failure_detail;
 
 --rollback ALTER TABLE agent_insights_jobs DROP COLUMN last_failure_reason, DROP COLUMN last_failure_detail, DROP COLUMN last_failed_at;
+
