@@ -53,17 +53,15 @@ jobs:
       # glance whether Anthropic key, z.ai key, or empty was injected.
       - name: Diagnostic — ANTHROPIC_API_KEY shape
         shell: bash
-        env:
-          ACTUAL_KEY: ${{ env.ANTHROPIC_API_KEY }}
         run: |
-          if [ -z "$ACTUAL_KEY" ]; then
-            echo "DIAG: ANTHROPIC_API_KEY is EMPTY (ternary fell through?)"
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "DIAG: ANTHROPIC_API_KEY is EMPTY"
           else
-            len=${#ACTUAL_KEY}
-            sha=$(echo -n "$ACTUAL_KEY" | sha256sum | cut -c1-8)
+            len=${#ANTHROPIC_API_KEY}
+            sha=$(echo -n "$ANTHROPIC_API_KEY" | sha256sum | cut -c1-8)
             echo "DIAG: ANTHROPIC_API_KEY length=$len  sha8=$sha"
-            echo "DIAG: backend input=${{ inputs.backend }}"
           fi
+          echo "DIAG: backend input=${{ inputs.backend }}"
       # Mint a remyx[bot] token from Remyx so the PR / Issue is authored by
       # the Remyx GitHub App (not github-actions[bot]). The App private key
       # stays on Remyx's side; this uses the REMYX_API_KEY already in secrets.
