@@ -3,6 +3,7 @@ from typing import Iterator, List
 from typing import Optional
 
 from . import opik_client
+from .. import exceptions
 from ..message_processing.emulation import local_emulator_message_processor, models
 from ..message_processing.processors import message_processors_chain
 
@@ -48,6 +49,14 @@ def record_traces_locally(
 
     Yields a handle with `span_trees` and `trace_trees` properties that flush
     the client before reading, ensuring all events are captured.
+
+    Note:
+        The local emulator is connection-scoped, so clients sharing a connection
+        share it. If another operation that activates the emulator (e.g. a
+        test-suite ``evaluate()``) runs concurrently on the same connection, its
+        traces may also appear in this handle. Consumers that need a specific
+        trace/span should look it up by id rather than assume the handle holds
+        only their context's data.
     """
     if client is None:
         client = opik_client.get_global_client()
@@ -65,7 +74,7 @@ def record_traces_locally(
     # evaluate()'s ref-counted activation, so a concurrent evaluation does not
     # spuriously block recording.
     if not local.begin_recording_context():
-        raise RuntimeError(
+        raise exceptions.LocalRecordingAlreadyActive(
             "record_traces_locally() is already active on this connection; nested usage is not allowed."
         )
 
