@@ -4,7 +4,9 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.Builder;
+import lombok.Getter;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 
 import java.util.UUID;
 
@@ -17,20 +19,14 @@ import java.util.UUID;
 public record EvaluatedSubject(@NonNull Kind kind, @NonNull String id, UUID projectId, String projectName, String name,
         JsonNode input, JsonNode output) {
 
+    @Getter
+    @RequiredArgsConstructor
     public enum Kind {
         TRACE("evaluated_trace_id"),
         SPAN("evaluated_span_id"),
         THREAD("evaluated_thread_id");
 
         private final String idKey;
-
-        Kind(String idKey) {
-            this.idKey = idKey;
-        }
-
-        String idKey() {
-            return idKey;
-        }
     }
 
     public static EvaluatedSubject ofTrace(@NonNull Trace trace) {

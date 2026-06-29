@@ -9,7 +9,9 @@ import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.observability.ObservabilityContext;
 import com.comet.opik.domain.observability.ObservabilityTraceRecorder;
+import com.comet.opik.infrastructure.ResponseFormattingConfig;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.TextNode;
@@ -32,6 +34,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import reactor.core.publisher.Mono;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -69,18 +72,13 @@ public class OnlineEvaluationRecorder {
     private static final String SPAN_NAME = "llm_call";
     private static final String PREPARE_SPAN_NAME = "prepare_evaluation";
 
-    /**
-     * Size cap (chars of serialized JSON) under which the evaluated entity's input/output is kept
-     * structurally intact on the prepare_evaluation span so the UI renders it in pretty mode; larger
-     * payloads fall back to a truncated text node.
-     */
-    private static final int EVALUATED_PREVIEW_CHARS = 8_000;
     private static final String MODE_INLINE = "inline";
     private static final String MODE_AGENTIC_TOOLS = "agentic_tools";
 
     private final @NonNull ObservabilityTraceRecorder observabilityRecorder;
     private final @NonNull LlmProviderFactory llmProviderFactory;
     private final @NonNull IdGenerator idGenerator;
+    private final @NonNull @Config("responseFormatting") ResponseFormattingConfig responseFormattingConfig;
 
     /** Real recorder backed by a per-evaluation {@link EvaluationContext}; writes the trace and spans. */
     private final class RealRecorder implements EvaluationRecorder {
@@ -135,9 +133,23 @@ public class OnlineEvaluationRecorder {
     public EvaluationRecorder begin(@NonNull EvaluatedSubject subject, @NonNull UUID ruleId, String ruleName,
             @NonNull String modelName, @NonNull String workspaceId, @NonNull String userName) {
         var resolvedModelInfo = llmProviderFactory.getResolvedModelInfo(modelName);
-        var eval = new EvaluationContext(idGenerator.generateId(), subject, ruleId, ruleName, modelName,
-                resolvedModelInfo.actualModel(), resolvedModelInfo.provider(), previewNode(subject.input()),
-                previewNode(subject.output()), workspaceId, userName, Instant.now());
+        var eval = EvaluationContext.builder()
+                .traceId(idGenerator.generateId())
+                .evaluatedIdKey(subject.kind().getIdKey())
+                .evaluatedId(subject.id())
+                .evaluatedProjectId(subject.projectId())
+                .projectName(subject.projectName())
+                .evaluatedName(subject.name())
+                .evaluatedInput(previewNode(subject.input()))
+                .evaluatedOutput(previewNode(subject.output()))
+                .ruleId(ruleId)
+                .ruleName(ruleName)
+                .modelName(modelName)
+                .actualModel(resolvedModelInfo.actualModel())
+                .provider(resolvedModelInfo.provider())
+                .observabilityContext(new ObservabilityContext(workspaceId, userName))
+                .startTime(Instant.now())
+                .build();
         return new RealRecorder(eval);
     }
 
@@ -398,22 +410,23 @@ public class OnlineEvaluationRecorder {
      * Preview of an evaluated entity's input/output for the prepare_evaluation span, so a viewer can
      * tell what the evaluation is assessing without opening the evaluated trace. Small payloads are
      * kept structurally intact (so the UI renders them in pretty mode just like the source trace);
-     * payloads larger than {@link #EVALUATED_PREVIEW_CHARS} fall back to a truncated text node to keep
-     * the monitoring span small.
+     * payloads larger than the Opik-wide {@code responseFormatting.truncationSize} (the same field
+     * truncation limit used for all traces) fall back to a truncated text node.
      */
-    private static JsonNode previewNode(JsonNode node) {
+    private JsonNode previewNode(JsonNode node) {
         if (node == null || node.isNull()) {
             return null;
         }
+        int previewMaxChars = responseFormattingConfig.getTruncationSize();
         // Measure against the SERIALIZED form so a heavily-escaped string (quotes/backslashes) can't slip
         // past the cap once rendered as JSON. Slice the raw text for string nodes and clamp the index to
         // its length, so we never slice past a string shorter than the cap (which would throw IOOBE).
         String serialized = node.toString();
-        if (serialized.length() <= EVALUATED_PREVIEW_CHARS) {
+        if (serialized.length() <= previewMaxChars) {
             return node;
         }
         String raw = node.isTextual() ? node.asText() : serialized;
-        int end = Math.min(EVALUATED_PREVIEW_CHARS, raw.length());
+        int end = Math.min(previewMaxChars, raw.length());
         return TextNode.valueOf(raw.substring(0, end) + "…[truncated]");
     }
 }

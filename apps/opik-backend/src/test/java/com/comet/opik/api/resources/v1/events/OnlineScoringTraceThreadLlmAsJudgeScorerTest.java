@@ -9,6 +9,8 @@ import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.domain.TraceService;
+import com.comet.opik.domain.evaluation.EvaluationRecorder;
+import com.comet.opik.domain.evaluation.OnlineEvaluationRecorder;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
@@ -93,7 +95,7 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
     @Mock
     private com.comet.opik.domain.SpanService spanService;
     @Mock
-    private com.comet.opik.domain.evaluation.OnlineEvaluationRecorder onlineEvaluationRecorder;
+    private OnlineEvaluationRecorder onlineEvaluationRecorder;
     @Mock
     private com.comet.opik.domain.attachment.AttachmentService attachmentService;
 
@@ -290,7 +292,7 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
 
             var result = scorer.handleToolCalls(
                     plainResponse, toolRequest, structuredRequest, message, java.util.Map.of(),
-                    com.comet.opik.domain.evaluation.EvaluationRecorder.NOOP).block();
+                    EvaluationRecorder.NOOP).block();
 
             org.assertj.core.api.Assertions.assertThat(result).isSameAs(plainResponse);
             org.mockito.Mockito.verifyNoInteractions(aiProxyService);
@@ -339,7 +341,7 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
 
             var result = scorer.handleToolCalls(
                     initialResponse, toolRequest, structuredRequest, message, java.util.Map.of(),
-                    com.comet.opik.domain.evaluation.EvaluationRecorder.NOOP).block();
+                    EvaluationRecorder.NOOP).block();
 
             org.assertj.core.api.Assertions.assertThat(result).isSameAs(finalResponse);
 
@@ -410,7 +412,7 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
             org.assertj.core.api.Assertions
                     .assertThatThrownBy(() -> scorer.handleToolCalls(
                             initialResponse, toolRequest, structuredRequest, message, java.util.Map.of(),
-                            com.comet.opik.domain.evaluation.EvaluationRecorder.NOOP).block())
+                            EvaluationRecorder.NOOP).block())
                     .isSameAs(providerFailure);
 
             // Exactly one provider call attempted — the loop didn't swallow + continue.
@@ -463,7 +465,7 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
 
             var result = scorer.handleToolCalls(
                     toolCallingResponse, toolRequest, structuredRequest, message, java.util.Map.of(),
-                    com.comet.opik.domain.evaluation.EvaluationRecorder.NOOP).block();
+                    EvaluationRecorder.NOOP).block();
 
             org.assertj.core.api.Assertions.assertThat(result).isSameAs(finalResponse);
 

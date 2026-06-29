@@ -27,26 +27,7 @@ import java.util.List;
 public interface EvaluationRecorder {
 
     /** Writes nothing; passes calls through. Used when monitoring is disabled. */
-    EvaluationRecorder NOOP = new EvaluationRecorder() {
-        @Override
-        public Mono<ChatResponse> recordLlmCall(ChatRequest request, Mono<ChatResponse> call) {
-            return call;
-        }
-
-        @Override
-        public Mono<String> recordToolCall(String toolName, String arguments, Mono<String> execution) {
-            return execution;
-        }
-
-        @Override
-        public void recordPreparation(int fetchedSpanCount, int estimatedTokens, boolean agentic) {
-        }
-
-        @Override
-        public <T extends FeedbackScoreItem> Mono<List<T>> monitor(Mono<List<T>> scoring) {
-            return scoring;
-        }
-    };
+    EvaluationRecorder NOOP = new NoopEvaluationRecorder();
 
     /** Records one LLM round as a span; returns the response unchanged (or the error, unchanged). */
     Mono<ChatResponse> recordLlmCall(ChatRequest request, Mono<ChatResponse> call);

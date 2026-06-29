@@ -2,14 +2,17 @@ package com.comet.opik.domain.evaluation;
 
 import com.comet.opik.domain.observability.ObservabilityContext;
 import com.fasterxml.jackson.databind.JsonNode;
+import lombok.Builder;
 
 import java.time.Instant;
 import java.util.UUID;
 
 /**
  * Immutable per-evaluation handle. Holds the parent trace id, the evaluated entity references and the
- * resolved model/provider. Allocated once per evaluation by {@link OnlineEvaluationRecorder#begin}.
+ * resolved model/provider. Built once per evaluation by {@link OnlineEvaluationRecorder#begin} via the
+ * Lombok builder, so no construction logic lives in this type.
  */
+@Builder
 final class EvaluationContext {
 
     final UUID traceId;
@@ -27,26 +30,6 @@ final class EvaluationContext {
     final String provider;
     final Instant startTime;
     private final ObservabilityContext observabilityContext;
-
-    EvaluationContext(UUID traceId, EvaluatedSubject subject, UUID ruleId, String ruleName, String modelName,
-            String actualModel, String provider, JsonNode evaluatedInput, JsonNode evaluatedOutput,
-            String workspaceId, String userName, Instant startTime) {
-        this.traceId = traceId;
-        this.evaluatedIdKey = subject.kind().idKey();
-        this.evaluatedId = subject.id();
-        this.evaluatedProjectId = subject.projectId();
-        this.projectName = subject.projectName();
-        this.evaluatedName = subject.name();
-        this.evaluatedInput = evaluatedInput;
-        this.evaluatedOutput = evaluatedOutput;
-        this.ruleId = ruleId;
-        this.ruleName = ruleName;
-        this.modelName = modelName;
-        this.actualModel = actualModel;
-        this.provider = provider;
-        this.observabilityContext = new ObservabilityContext(workspaceId, userName);
-        this.startTime = startTime;
-    }
 
     ObservabilityContext observabilityContext() {
         return observabilityContext;

@@ -11,7 +11,7 @@ ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}'
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans ON CLUSTER '{cluster}'
     MODIFY COLUMN IF EXISTS source Enum8('unknown' = 0, 'sdk' = 1, 'experiment' = 2, 'playground' = 3, 'optimization' = 4, 'evaluator' = 5) DEFAULT 'unknown';
 
--- No-op rollback: narrowing the Enum8 back to drop 'evaluator' fails for any traces/spans already
+-- Empty rollback: narrowing the Enum8 back to drop 'evaluator' fails for any traces/spans already
 -- written with source='evaluator' (ClickHouse rejects an enum that can't represent existing data).
 -- The extra enum value is harmless when unused, so adding it is intentionally not reverted.
---rollback SELECT 1;
+--rollback empty

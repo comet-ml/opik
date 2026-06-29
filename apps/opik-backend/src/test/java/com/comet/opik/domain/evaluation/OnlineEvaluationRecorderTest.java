@@ -8,10 +8,12 @@ import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.SpanType;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderFactory.ResolvedModelInfo;
 import com.comet.opik.domain.observability.ObservabilityTraceRecorder;
+import com.comet.opik.infrastructure.ResponseFormattingConfig;
 import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.UserMessage;
@@ -39,25 +41,26 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+// High-value unit test for the trace/span MAPPING and the fire-and-forget write contract — the only
+// part of the recorder reachable without a live LLM-judge run against a real provider. End-to-end
+// behavior (sampling, real persistence) is covered by the scorer integration tests. TraceService /
+// SpanService / LlmProviderFactory are external collaborators and are mocked; the IdGenerator is the
+// real time-ordered (UUID v7) implementation from the test factory, not a mock, so ids match prod.
 class OnlineEvaluationRecorderTest {
 
-    private TraceService traceService;
-    private SpanService spanService;
-    private OnlineEvaluationRecorder onlineEvaluationRecorder;
+    private final TraceService traceService = mock(TraceService.class);
+    private final SpanService spanService = mock(SpanService.class);
+    private final LlmProviderFactory llmProviderFactory = mock(LlmProviderFactory.class);
+    private final IdGenerator idGenerator = TestIdGeneratorFactory.create();
+    private final ResponseFormattingConfig responseFormattingConfig = new ResponseFormattingConfig();
+    private final OnlineEvaluationRecorder onlineEvaluationRecorder = new OnlineEvaluationRecorder(
+            new ObservabilityTraceRecorder(traceService, spanService), llmProviderFactory, idGenerator,
+            responseFormattingConfig);
 
     @BeforeEach
     void setUp() {
-        traceService = mock(TraceService.class);
-        spanService = mock(SpanService.class);
-        var llmProviderFactory = mock(LlmProviderFactory.class);
-        var idGenerator = mock(IdGenerator.class);
-
-        when(idGenerator.generateId()).thenAnswer(invocation -> UUID.randomUUID());
         when(llmProviderFactory.getResolvedModelInfo(anyString()))
                 .thenReturn(new ResolvedModelInfo("claude-actual", "anthropic"));
-
-        var observabilityRecorder = new ObservabilityTraceRecorder(traceService, spanService);
-        onlineEvaluationRecorder = new OnlineEvaluationRecorder(observabilityRecorder, llmProviderFactory, idGenerator);
     }
 
     private EvaluationRecorder recorder() {
