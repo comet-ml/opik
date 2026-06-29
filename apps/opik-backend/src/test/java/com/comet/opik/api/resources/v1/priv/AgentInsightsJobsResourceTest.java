@@ -34,6 +34,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -47,6 +49,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
@@ -339,6 +342,25 @@ class AgentInsightsJobsResourceTest {
                 .errorCode("internal_error")
                 .build();
         insightsClient.reportRunFailure(failure, API_KEY, WORKSPACE_NAME, HttpStatus.SC_NOT_FOUND);
+    }
+
+    private static final int SC_UNPROCESSABLE_ENTITY = 422;
+
+    Stream<AgentInsightsRunFailure> runFailure__invalidBody__returns422() {
+        return Stream.of(
+                // missing projectId (@NotNull)
+                AgentInsightsRunFailure.builder().errorCode("internal_error").build(),
+                // blank errorCode (@NotBlank)
+                AgentInsightsRunFailure.builder().projectId(UUID.randomUUID()).errorCode("").build(),
+                // missing errorCode (@NotBlank)
+                AgentInsightsRunFailure.builder().projectId(UUID.randomUUID()).build());
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    @DisplayName("Run failure with missing/blank required fields fails validation (422)")
+    void runFailure__invalidBody__returns422(AgentInsightsRunFailure failure) {
+        insightsClient.reportRunFailure(failure, API_KEY, WORKSPACE_NAME, SC_UNPROCESSABLE_ENTITY);
     }
 
     @Test

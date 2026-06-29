@@ -35,7 +35,8 @@ import DiagnosticsSettingsDialog from "@/v2/pages/SignalsPage/DiagnosticsSetting
 import SignalsPageSkeleton from "@/v2/pages/SignalsPage/SignalsPageSkeleton";
 
 const RUN_POLL_INTERVAL_MS = 8000;
-const DAY_MS = 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
 const STALE_AFTER_MS = 3 * DAY_MS;
 
 const maxUpdatedAt = (issues: AgentInsightsIssue[]): number =>
@@ -112,13 +113,15 @@ const SignalsPage: React.FC = () => {
 
   // "Results might be outdated": when the last scan is older than the threshold,
   // count the traces a manual run would analyze (the last-24h trigger window) and
-  // nudge only if there are any. Cutoff memoized to keep the query key stable.
-  const scanAt = job?.last_scan_at ? Date.parse(job.last_scan_at) : 0;
+  // nudge only if there are any. Use the same `lastScan` the header shows (which
+  // falls back to the latest issue update) so records without last_scan_at still
+  // resolve. The cutoff is bucketed to the hour so it tracks the rolling 24h
+  // window without changing the query key on every render.
+  const scanAt = lastScan ? Date.parse(lastScan) : 0;
   const scanIsOld = scanAt > 0 && Date.now() - scanAt > STALE_AFTER_MS;
-  const last24hCutoff = useMemo(
-    () => new Date(Date.now() - DAY_MS).toISOString(),
-    [],
-  );
+  const last24hCutoff = new Date(
+    Math.floor(Date.now() / HOUR_MS) * HOUR_MS - DAY_MS,
+  ).toISOString();
   const { data: recentTracesData } = useTracesList(
     {
       projectId,
