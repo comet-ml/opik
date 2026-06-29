@@ -22,12 +22,16 @@ const readState = (projectId: string): RunState | null => {
     const parsed = JSON.parse(raw) as Partial<RunState>;
     if (typeof parsed?.startedAt !== "number") return null;
     // Tolerate the pre-failBaseline shape ({ startedAt, baseline }) so a run in
-    // flight across a deploy isn't dropped on reload.
+    // flight across a deploy isn't dropped on reload. Backfill the missing
+    // failBaseline to the run's own startedAt — not 0 — so only a failure recorded
+    // *after* the run began counts; a stale prior last_failed_at is ignored.
     return {
       startedAt: parsed.startedAt,
       baseline: typeof parsed.baseline === "number" ? parsed.baseline : 0,
       failBaseline:
-        typeof parsed.failBaseline === "number" ? parsed.failBaseline : 0,
+        typeof parsed.failBaseline === "number"
+          ? parsed.failBaseline
+          : parsed.startedAt,
     };
   } catch {
     return null;
