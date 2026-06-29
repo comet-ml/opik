@@ -39,9 +39,9 @@ type PercentageTrendProps = {
   trend?: PercentageTrendType;
   tooltip?: string;
   iconOnly?: boolean;
-  // Use the vivid Figma "positive" green (#00D14C) for the up/good icon, leaving
-  // the negative/neutral colors untouched.
-  brightPositive?: boolean;
+  // Use the vivid Figma trend colors for the icon — good = green (#00D14C),
+  // bad = red (#EF4444) — leaving the neutral color untouched.
+  vivid?: boolean;
 };
 
 const PercentageTrend: React.FC<PercentageTrendProps> = ({
@@ -50,14 +50,19 @@ const PercentageTrend: React.FC<PercentageTrendProps> = ({
   trend = "direct",
   tooltip,
   iconOnly = false,
-  brightPositive = false,
+  vivid = false,
 }) => {
   if (isUndefined(percentage)) return null;
 
   const { Icon, variant } = getConfig(percentage, trend, precision);
 
-  const iconColorClassName =
-    brightPositive && variant === "green" ? "text-[#00d14c]" : undefined;
+  const iconColorClassName = !vivid
+    ? undefined
+    : variant === "green"
+      ? "text-[#00d14c]"
+      : variant === "red"
+        ? "text-[#ef4444]"
+        : undefined;
 
   const isFinitePercentage = isFinite(percentage);
 

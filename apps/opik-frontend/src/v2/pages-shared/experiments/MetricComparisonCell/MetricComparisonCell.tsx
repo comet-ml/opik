@@ -34,12 +34,7 @@ const MetricComparisonCell: React.FunctionComponent<
             </span>
           </TooltipWrapper>
         )}
-        <PercentageTrend
-          percentage={percentage}
-          trend={trend}
-          iconOnly
-          brightPositive
-        />
+        <PercentageTrend percentage={percentage} trend={trend} iconOnly vivid />
         {!isUndefined(current) ? (
           <TooltipWrapper content={String(current)}>
             <span className="comet-body-xs text-foreground">
