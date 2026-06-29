@@ -228,6 +228,7 @@ public class OnlineScoringSpanSampler {
                 .llmAsJudgeCode(evaluator.getCode())
                 .workspaceId(spansBatch.workspaceId())
                 .userName(spansBatch.userName())
+                .workspaceName(spansBatch.workspaceName())
                 .build();
     }
 
@@ -241,6 +242,7 @@ public class OnlineScoringSpanSampler {
                 .code(evaluator.getCode())
                 .workspaceId(spansBatch.workspaceId())
                 .userName(spansBatch.userName())
+                .workspaceName(spansBatch.workspaceName())
                 .build();
     }
 
