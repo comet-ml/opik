@@ -5,32 +5,37 @@ const RUN_CHANGE_EVENT = "diagnostics-run-change";
 // Fallback for a run the backend never reports on.
 const RUN_TIMEOUT_MS = 5 * 60 * 1000;
 
-type StoredState =
-  | {
-      status: "running";
-      startedAt: number;
-      baseline: number;
-      failBaseline: number;
-    }
-  | { status: "failed"; reason?: string; detail?: string };
+// Only the client-side "running" concept is persisted here; the failed state is
+// derived from the job (the backend owns it and clears it on the next success).
+// `baseline` / `failBaseline` are the issue-update and last_failed_at timestamps
+// captured at trigger, used to recognize when *this* run resolves.
+type RunState = {
+  startedAt: number;
+  baseline: number;
+  failBaseline: number;
+};
 
-const readState = (projectId: string): StoredState | null => {
+const readState = (projectId: string): RunState | null => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY(projectId));
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as StoredState;
-    if (parsed?.status === "running" && typeof parsed.startedAt === "number") {
-      return parsed;
-    }
-    if (parsed?.status === "failed") return parsed;
-    return null;
+    const parsed = JSON.parse(raw) as Partial<RunState>;
+    if (typeof parsed?.startedAt !== "number") return null;
+    // Tolerate the pre-failBaseline shape ({ startedAt, baseline }) so a run in
+    // flight across a deploy isn't dropped on reload.
+    return {
+      startedAt: parsed.startedAt,
+      baseline: typeof parsed.baseline === "number" ? parsed.baseline : 0,
+      failBaseline:
+        typeof parsed.failBaseline === "number" ? parsed.failBaseline : 0,
+    };
   } catch {
     return null;
   }
 };
 
 const useDiagnosticsRunState = (projectId: string) => {
-  const [state, setState] = useState<StoredState | null>(() =>
+  const [state, setState] = useState<RunState | null>(() =>
     readState(projectId),
   );
 
@@ -46,7 +51,7 @@ const useDiagnosticsRunState = (projectId: string) => {
   }, [projectId]);
 
   const write = useCallback(
-    (next: StoredState | null) => {
+    (next: RunState | null) => {
       if (next) {
         localStorage.setItem(STORAGE_KEY(projectId), JSON.stringify(next));
       } else {
@@ -60,31 +65,17 @@ const useDiagnosticsRunState = (projectId: string) => {
 
   const startRun = useCallback(
     (baseline: number, failBaseline: number) => {
-      write({
-        status: "running",
-        startedAt: Date.now(),
-        baseline,
-        failBaseline,
-      });
+      write({ startedAt: Date.now(), baseline, failBaseline });
     },
     [write],
   );
 
   const endRun = useCallback(() => write(null), [write]);
 
-  const failRun = useCallback(
-    (reason?: string, detail?: string) => {
-      write({ status: "failed", reason, detail });
-    },
-    [write],
-  );
-
-  const dismissFailure = useCallback(() => write(null), [write]);
-
-  const isRunning = state?.status === "running";
+  const isRunning = state !== null;
 
   useEffect(() => {
-    if (!isRunning || state?.status !== "running") return;
+    if (!state) return;
     const remaining = state.startedAt + RUN_TIMEOUT_MS - Date.now();
     if (remaining <= 0) {
       endRun();
@@ -92,17 +83,14 @@ const useDiagnosticsRunState = (projectId: string) => {
     }
     const timer = setTimeout(endRun, remaining);
     return () => clearTimeout(timer);
-  }, [isRunning, state, endRun]);
+  }, [state, endRun]);
 
   return {
     isRunning,
-    baseline: state?.status === "running" ? state.baseline : 0,
-    failBaseline: state?.status === "running" ? state.failBaseline : 0,
-    failedReason: state?.status === "failed" ? state.reason : undefined,
+    baseline: state?.baseline ?? 0,
+    failBaseline: state?.failBaseline ?? 0,
     startRun,
     endRun,
-    failRun,
-    dismissFailure,
   };
 };
 

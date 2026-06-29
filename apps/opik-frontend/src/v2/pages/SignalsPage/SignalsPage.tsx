@@ -93,17 +93,16 @@ const SignalsPage: React.FC = () => {
   const { toast } = useToast();
   const triggerMutation = useTriggerAgentInsightsJobMutation();
   const updateJobMutation = useUpdateAgentInsightsJobMutation();
-  const {
-    isRunning,
-    baseline,
-    failBaseline,
-    failedReason,
-    startRun,
-    endRun,
-    failRun,
-    dismissFailure,
-  } = useDiagnosticsRunState(projectId);
+  const { isRunning, baseline, failBaseline, startRun, endRun } =
+    useDiagnosticsRunState(projectId);
   const { markSeen } = useDiagnosticsSeen(projectId);
+
+  // The job is the source of truth for a failure: the backend sets last_failed_at
+  // and clears it on the next successful report, so deriving from it (rather than a
+  // client flag) keeps the banner correct across reloads, other tabs, and a later
+  // auto-run success. The spinner takes precedence while a run is in flight.
+  const failedReason =
+    !isRunning && job?.last_failed_at ? job.last_failure_reason : undefined;
 
   const [showResolved, setShowResolved] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -128,17 +127,20 @@ const SignalsPage: React.FC = () => {
     }
   }, [issuesData, isRunning, baseline, endRun]);
 
+  // While a run is in flight, a last_failed_at advanced past the trigger baseline
+  // means it failed: end the run (the derived failedReason then shows the banner)
+  // and toast once. The isRunning guard keeps this from re-firing on later polls.
   useEffect(() => {
     if (!isRunning) return;
     const failedAt = job?.last_failed_at ? Date.parse(job.last_failed_at) : 0;
     if (failedAt > failBaseline) {
-      failRun(job?.last_failure_reason, job?.last_failure_detail);
+      endRun();
       const { title, description } = getRunFailureCopy(
         job?.last_failure_reason,
       );
       toast({ title, description, variant: "destructive" });
     }
-  }, [job, isRunning, failBaseline, failRun, toast]);
+  }, [job, isRunning, failBaseline, endRun, toast]);
 
   const hasData = (issuesData?.content?.length ?? 0) > 0;
   const isActive = isJobEnabled || isRunning;
@@ -158,7 +160,6 @@ const SignalsPage: React.FC = () => {
     const failBaselineNow = job?.last_failed_at
       ? Date.parse(job.last_failed_at)
       : 0;
-    dismissFailure();
     triggerMutation.mutate(
       { projectId },
       { onSuccess: () => startRun(baselineNow, failBaselineNow) },
