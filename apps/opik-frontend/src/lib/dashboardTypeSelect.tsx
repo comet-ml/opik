@@ -32,12 +32,7 @@ export const DASHBOARD_TYPE_TAG_VARIANT: Record<string, TagProps["variant"]> = {
 export const renderDashboardTypeOption = (option: DropdownOption<string>) => {
   const config = DASHBOARD_TYPE_ICON_MAP[option.value];
   return (
-    <SelectItem
-      key={option.value}
-      value={option.value}
-      withoutCheck
-      wrapperAsChild={true}
-    >
+    <SelectItem key={option.value} value={option.value} wrapperAsChild={true}>
       <div className="flex w-full items-center gap-2">
         {config && (
           <config.icon className={`size-4 shrink-0 ${config.className}`} />

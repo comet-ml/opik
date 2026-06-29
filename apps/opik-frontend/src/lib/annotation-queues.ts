@@ -5,7 +5,11 @@ import isNumber from "lodash/isNumber";
 import omit from "lodash/omit";
 import { isObjectThread } from "@/lib/traces";
 import { CommentItem, CommentItems } from "@/types/comment";
-import { findValueByAuthor, hasValuesByAuthor } from "@/lib/feedback-scores";
+import {
+  findValueByAuthor,
+  hasAnyValueByAuthor,
+  hasValuesByAuthor,
+} from "@/lib/feedback-scores";
 import { formatDate } from "@/lib/date";
 
 export const DEFAULT_LOCK_TIMEOUT_SECONDS = 300;
@@ -52,6 +56,7 @@ export const getFeedbackScoresByUser = (
   feedbackScores: TraceFeedbackScore[],
   userName: string | undefined,
   feedbackDefinitionNames: string[],
+  sourceQueueId?: string,
 ): TraceFeedbackScore[] => {
   if (!userName) return [];
 
@@ -65,6 +70,7 @@ export const getFeedbackScoresByUser = (
         const userValue = findValueByAuthor(
           feedbackScore.value_by_author,
           userName,
+          sourceQueueId,
         );
         if (userValue) {
           const rawValue = userValue.value;
@@ -107,11 +113,15 @@ export const getLastCommentByUser = (
 export const getCommentsByUser = (
   comments: CommentItems | undefined,
   userName: string | undefined,
+  sourceQueueId?: string,
 ): string[] => {
   if (!comments || !userName) return [];
 
   return comments
     .filter((comment) => comment.created_by === userName)
+    .filter(
+      (comment) => !sourceQueueId || comment.source_queue_id === sourceQueueId,
+    )
     .map((comment) => comment.text);
 };
 
@@ -137,7 +147,7 @@ export const isItemProcessedByUser = (
   const hasFeedbackScores = (item.feedback_scores || []).some((score) => {
     if (!feedbackScoreNames.includes(score.name)) return false;
     return hasValuesByAuthor(score)
-      ? Boolean(findValueByAuthor(score.value_by_author, userName))
+      ? hasAnyValueByAuthor(score.value_by_author, userName)
       : score.last_updated_by === userName;
   });
 
