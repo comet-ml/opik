@@ -9,7 +9,6 @@ import {
 } from "@/types/assistant-sidebar";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import { createStreamWatchdog } from "./streamWatchdog";
-import { explainLog, shortId } from "./explainDebug";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -257,21 +256,7 @@ const useExplainStore = create<ExplainState>((set, get) => {
     retire: boolean,
   ) => {
     const entry = cellOf(get(), explainId);
-    if (!entry) {
-      explainLog(
-        "store",
-        `failCell id=${shortId(
-          explainId,
-        )} → NO CELL (route already retired/evicted) code=${code}`,
-      );
-      return;
-    }
-    explainLog(
-      "store",
-      `failCell id=${shortId(explainId)} prevPhase=${
-        entry.phase
-      } code=${code} retire=${retire} msg=${JSON.stringify(message)}`,
-    );
+    if (!entry) return;
     trackEvent(OpikEvent.EXPLAIN_ERRORED, { kind: entry.kind });
     mutate((c) =>
       patchStream(
@@ -288,10 +273,6 @@ const useExplainStore = create<ExplainState>((set, get) => {
     timeoutMs: TIMEOUT_MS,
     onWaking: (explainId) => {
       if (stalledCell(explainId)?.phase === "loading") {
-        explainLog(
-          "watchdog",
-          `WAKING id=${shortId(explainId)} (no chunk after ${WAKING_MS}ms)`,
-        );
         mutate((c) =>
           patchStream(c, explainId, (e) => ({ ...e, phase: "waking" })),
         );
@@ -300,12 +281,6 @@ const useExplainStore = create<ExplainState>((set, get) => {
     onTimeout: (explainId) => {
       const entry = stalledCell(explainId);
       if (entry && isPending(entry.phase)) {
-        explainLog(
-          "watchdog",
-          `TIMEOUT id=${shortId(
-            explainId,
-          )} (no chunk after ${TIMEOUT_MS}ms) → host-generated error`,
-        );
         get().emit?.("explain:cancel", { explainId });
         failCell(explainId, "timeout", ERROR_COPY.timeout, true);
       }
@@ -315,22 +290,11 @@ const useExplainStore = create<ExplainState>((set, get) => {
   // Fail every in-flight cell — used when the pod/bridge goes away so open
   // popovers can't hang on "Thinking…/waking" forever.
   const failAllInFlight = (code: ErrorCode) => {
-    const pending = Object.values(get().entries).filter((e) =>
-      isPending(e.phase),
-    );
-    if (pending.length > 0) {
-      explainLog(
-        "store",
-        `failAllInFlight code=${code} → failing ${
-          pending.length
-        } pending cell(s): ${pending
-          .map((e) => shortId(e.explainId))
-          .join(",")}`,
-      );
-    }
-    pending.forEach((entry) => {
-      watchdog.disarm(entry.explainId);
-      failCell(entry.explainId, code, ERROR_COPY[code], true);
+    Object.values(get().entries).forEach((entry) => {
+      if (isPending(entry.phase)) {
+        watchdog.disarm(entry.explainId);
+        failCell(entry.explainId, code, ERROR_COPY[code], true);
+      }
     });
   };
 
@@ -345,24 +309,14 @@ const useExplainStore = create<ExplainState>((set, get) => {
     // A pod that goes unready can't finish an in-flight stream — fail them so the
     // popover offers a retry instead of a permanent "Thinking…".
     setReady: (ready) => {
-      if (get().ready !== ready) {
-        explainLog("store", `setReady ${get().ready} → ${ready}`);
-      }
       if (!ready) failAllInFlight("unavailable");
       set({ ready });
     },
-    setEmit: (emit) => {
-      explainLog("store", `setEmit (had emit=${get().emit !== null})`);
-      set({ emit });
-    },
+    setEmit: (emit) => set({ emit }),
     // Ownership-guarded (mirrors window.opikBridge): a stale sidebar unmount
     // can't drop a newer instance's channel.
     clearEmit: (emit) => {
-      if (get().emit !== emit) {
-        explainLog("store", "clearEmit IGNORED (not the owning emitter)");
-        return;
-      }
-      explainLog("store", "clearEmit (owning emitter) → reset ready/caps");
+      if (get().emit !== emit) return;
       failAllInFlight("unavailable");
       set({
         emit: null,
@@ -375,23 +329,11 @@ const useExplainStore = create<ExplainState>((set, get) => {
     explain: (target) => {
       const key = cellKey(target);
       const cached = get().entries[key];
-      if (cached && cached.phase !== "error") {
-        explainLog(
-          "store",
-          `explain ${key} → REUSE cached/in-flight (phase=${
-            cached.phase
-          }, id=${shortId(cached.explainId)})`,
-        );
-        return true; // reuse cache / in-flight
-      }
+      if (cached && cached.phase !== "error") return true; // reuse cache / in-flight
 
       // At capacity: surface a clear, retryable error rather than a stuck
       // "Thinking…". No stream is dispatched, so no route is tracked.
       if (inFlightCount(get()) >= MAX_IN_FLIGHT) {
-        explainLog(
-          "store",
-          `explain ${key} → AT CAPACITY (${MAX_IN_FLIGHT} in flight), refusing`,
-        );
         mutate((c) =>
           putCell(c, key, erroredEntry(target, AT_CAPACITY), false),
         );
@@ -399,12 +341,6 @@ const useExplainStore = create<ExplainState>((set, get) => {
       }
 
       const entry = startEntry(target);
-      explainLog(
-        "store",
-        `explain ${key} → DISPATCH id=${shortId(entry.explainId)} (emit=${
-          get().emit !== null
-        })`,
-      );
       mutate((c) => putCell(c, key, entry, true));
       get().emit?.("explain:run", { explainId: entry.explainId, target });
       watchdog.arm(entry.explainId);
@@ -417,12 +353,6 @@ const useExplainStore = create<ExplainState>((set, get) => {
     retry: (target) => {
       const key = cellKey(target);
       const prev = get().entries[key];
-      explainLog(
-        "store",
-        `retry ${key} (prevPhase=${prev?.phase ?? "none"}, prevId=${shortId(
-          prev?.explainId,
-        )})`,
-      );
       if (prev) {
         watchdog.disarm(prev.explainId);
         if (isPending(prev.phase)) {
@@ -440,12 +370,6 @@ const useExplainStore = create<ExplainState>((set, get) => {
     cancel: (target) => {
       const entry = get().entries[cellKey(target)];
       if (!entry || !isPending(entry.phase)) return;
-      explainLog(
-        "store",
-        `cancel ${cellKey(target)} id=${shortId(entry.explainId)} (phase=${
-          entry.phase
-        })`,
-      );
       watchdog.disarm(entry.explainId);
       get().emit?.("explain:cancel", { explainId: entry.explainId });
       mutate((c) => dropCell(c, cellKey(target)));
@@ -475,25 +399,11 @@ const useExplainStore = create<ExplainState>((set, get) => {
       get().emit?.("chat:continue", { question, answer: entry.text, target });
     },
 
-    onConsoleReady: ({ bridgeVersion, capabilities }) => {
-      explainLog(
-        "store",
-        `onConsoleReady bridgeVersion=${bridgeVersion} caps=[${capabilities.join(
-          ",",
-        )}]`,
-      );
-      set({ capabilities, consoleBridgeVersion: bridgeVersion });
-    },
+    onConsoleReady: ({ bridgeVersion, capabilities }) =>
+      set({ capabilities, consoleBridgeVersion: bridgeVersion }),
 
     onChunk: ({ explainId, delta }) => {
       // First chunk proves the pod is alive → retire the watchdog (idempotent).
-      const entry = cellOf(get(), explainId);
-      explainLog(
-        "store",
-        `onChunk id=${shortId(explainId)} deltaLen=${delta.length} cellPhase=${
-          entry?.phase ?? "NO CELL"
-        }${entry?.phase === "error" ? " → RECOVERING from error" : ""}`,
-      );
       watchdog.disarm(explainId);
       mutate((c) => patchStream(c, explainId, (e) => withChunk(e, delta)));
     },
@@ -506,16 +416,6 @@ const useExplainStore = create<ExplainState>((set, get) => {
     onDone: ({ explainId }) => {
       watchdog.disarm(explainId);
       const entry = cellOf(get(), explainId);
-      explainLog(
-        "store",
-        `onDone id=${shortId(explainId)} cellPhase=${
-          entry?.phase ?? "NO CELL"
-        }${
-          entry?.phase === "error"
-            ? " → keeping ERROR (stream never recovered)"
-            : ""
-        }`,
-      );
       if (entry && entry.phase !== "error") {
         trackEvent(OpikEvent.EXPLAIN_COMPLETED, {
           kind: entry.kind,
@@ -538,12 +438,6 @@ const useExplainStore = create<ExplainState>((set, get) => {
     // stream chunks under the same explainId afterwards, so keep the route
     // (retire=false) and let `onChunk` resurrect the cell.
     onError: ({ explainId, message, code }) => {
-      explainLog(
-        "store",
-        `onError id=${shortId(explainId)} code=${code} msg=${JSON.stringify(
-          message,
-        )} (INBOUND from console runner)`,
-      );
       watchdog.disarm(explainId);
       failCell(explainId, code, errorMessage(code, message), false);
     },
