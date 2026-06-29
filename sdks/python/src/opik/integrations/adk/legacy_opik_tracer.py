@@ -17,6 +17,7 @@ from opik.types import DistributedTraceHeadersDict
 from . import (
     helpers as adk_helpers,
     callback_context_info_extractors,
+    output_cache,
     patchers,
 )
 
@@ -53,7 +54,10 @@ class LegacyOpikTracer:
         self._init_internal_attributes()
 
     def _init_internal_attributes(self) -> None:
-        self._last_model_output: Optional[Dict[str, Any]] = None
+        # Cache the last model output per ADK ``invocation_id`` (bounded, so a
+        # shared tracer can't grow without bound) to isolate concurrent
+        # invocations' output.
+        self._last_model_output = output_cache.LastModelOutputCache()
 
         # Use OpikContextStorage instance instead of global context storage module
         # in case we need to use different context storage for ADK in the future
@@ -181,7 +185,7 @@ class LegacyOpikTracer:
         **kwargs: Any,
     ) -> None:
         try:
-            output = self._last_model_output
+            output = self._last_model_output.get(callback_context.invocation_id)
 
             if (span_data := self._context_storage.top_span_data()) is not None:
                 if span_data.id in self._opik_created_spans:
@@ -195,14 +199,10 @@ class LegacyOpikTracer:
                         "No current trace found in context for agent output update"
                     )
                     self._current_trace_created_by_opik_tracer.set(None)
-                    self._last_model_output = None
-                    return
-
-                if trace_data.id == self._current_trace_created_by_opik_tracer.get():
+                elif trace_data.id == self._current_trace_created_by_opik_tracer.get():
                     trace_data.update(output=output)
                     self._end_current_trace()
                     self._current_trace_created_by_opik_tracer.set(None)
-                    self._last_model_output = None
         except Exception as e:
             LOGGER.error(f"Failed during after_agent_callback(): {e}", exc_info=True)
 
@@ -264,10 +264,15 @@ class LegacyOpikTracer:
         usage = None
         output = None
 
+        # Final (non-partial) response for this call: clear any output cached for
+        # this invocation up front, so a missing span or failed conversion below
+        # leaves no stale value for after_agent_callback to stamp. It is re-set
+        # only if conversion succeeds.
+        self._last_model_output.discard(callback_context.invocation_id)
+
         try:
             span_data = self._context_storage.top_span_data()
             if span_data is None:
-                self._last_model_output = None
                 LOGGER.warning(
                     "No current span found in context for model output update"
                 )
@@ -275,7 +280,7 @@ class LegacyOpikTracer:
 
             try:
                 output = adk_helpers.convert_adk_base_model_to_dict(llm_response)
-                self._last_model_output = output
+                self._last_model_output.set(callback_context.invocation_id, output)
 
                 usage_data = llm_response_wrapper.pop_llm_usage_data(
                     output, span_data.provider

@@ -1,3 +1,4 @@
+import { test } from '@playwright/test';
 import type { Page, Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { PlaygroundPage } from './playground.page';
@@ -6,7 +7,7 @@ import { PlaygroundPage } from './playground.page';
  * Per-suite items page. The underlying FE component is shared with DatasetItemsPage
  * (both routes resolve to the same DatasetDetailPage React component, discriminated
  * by URL prefix). Mechanics for items add/delete + draft staging are identical;
- * the surface difference is the "Use test suite" dropdown in the header and the
+ * the surface difference is the "Run in" header dropdown and the
  * "<N> global assertions" pill.
  */
 export class TestSuiteItemsPage {
@@ -17,40 +18,50 @@ export class TestSuiteItemsPage {
   ) {}
 
   async goto(): Promise<void> {
-    const env = loadEnvConfig();
-    await this.page.goto(
-      `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/test-suites/${this.suiteId}/items`,
-    );
+    return test.step('Open test-suite items page', async () => {
+      const env = loadEnvConfig();
+      await this.page.goto(
+        `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/test-suites/${this.suiteId}/items`,
+      );
+    });
   }
 
   async waitForReady(): Promise<void> {
-    await this.page.getByRole('tab', { name: 'Items', selected: true }).waitFor({ state: 'visible' });
-    const realRow = this.itemsTableBody.locator('tr[data-row-id]').first();
-    const emptyState = this.page.getByText('No test suite items yet');
-    await Promise.race([
-      realRow.waitFor({ state: 'visible' }),
-      emptyState.waitFor({ state: 'visible' }),
-    ]);
+    return test.step('Wait for Test cases tab ready', async () => {
+      await this.page.getByRole('tab', { name: 'Test cases', selected: true }).waitFor({ state: 'visible' });
+      const realRow = this.itemsTableBody.locator('tr[data-row-id]').first();
+      const emptyState = this.page.getByText('No test cases yet');
+      await Promise.race([
+        realRow.waitFor({ state: 'visible' }),
+        emptyState.waitFor({ state: 'visible' }),
+      ]);
+    });
   }
 
   /** Rendered row count on the current page. */
   async countItems(): Promise<number> {
-    return this.itemsTableBody.locator('tr[data-row-id]').count();
+    return test.step('Read test-suite item count', async () => {
+      return this.itemsTableBody.locator('tr[data-row-id]').count();
+    });
   }
 
   /** Read the global-assertions count from the header pill (test-suite-only pill). */
   async countGlobalAssertions(): Promise<number> {
-    const pill = this.page.getByTestId('dataset-detail-global-assertions-pill');
-    if ((await pill.count()) === 0) return 0;
-    const value = await pill.first().getAttribute('data-count');
-    return parseInt(value ?? '0', 10);
+    return test.step('Read global-assertions count', async () => {
+      const pill = this.page.getByTestId('dataset-detail-global-assertions-pill');
+      if ((await pill.count()) === 0) return 0;
+      const value = await pill.first().getAttribute('data-count');
+      return parseInt(value ?? '0', 10);
+    });
   }
 
   /** Read the version label (e.g. "v1", "v2") from the header. */
   async readVersionLabel(): Promise<string> {
-    const tag = this.page.getByTestId('dataset-detail-version-label');
-    await tag.waitFor({ state: 'visible' });
-    return (await tag.textContent())?.trim() ?? '';
+    return test.step('Read version label', async () => {
+      const tag = this.page.getByTestId('dataset-detail-version-label');
+      await tag.waitFor({ state: 'visible' });
+      return (await tag.textContent())?.trim() ?? '';
+    });
   }
 
   itemRow(index: number): Locator {
@@ -66,11 +77,12 @@ export class TestSuiteItemsPage {
   }
 
   async clickAddItem(): Promise<void> {
-    const button = await this.preferTestid('dataset-items-add-button', { role: 'button', name: 'Add item' });
-    await button.click();
-    // Wait for the Data JSON editor inside the Add panel to be interactive.
-    // This is more reliable than waitForPanelTransform on a multi-mount testid.
-    await this.addItemPanel.locator('.cm-content').first().waitFor({ state: 'visible' });
+    return test.step('Open add-item panel', async () => {
+      await this.page.getByTestId('dataset-header-add-button').click();
+      // Wait for the Data JSON editor inside the Add panel to be interactive.
+      // This is more reliable than waitForPanelTransform on a multi-mount testid.
+      await this.addItemPanel.locator('.cm-content').first().waitFor({ state: 'visible' });
+    });
   }
 
   /**
@@ -81,40 +93,46 @@ export class TestSuiteItemsPage {
    * types it into the editor.
    */
   async fillAddItemPanel(data: Record<string, unknown>): Promise<void> {
-    const editor = this.addItemPanel.locator('.cm-content').first();
-    await editor.click();
-    // Clear placeholder, then type the JSON object.
-    await this.page.keyboard.press('ControlOrMeta+A');
-    await this.page.keyboard.press('Delete');
-    await this.page.keyboard.type(JSON.stringify(data, null, 2));
+    return test.step('Fill add-item panel', async () => {
+      const editor = this.addItemPanel.locator('.cm-content').first();
+      await editor.click();
+      // Clear placeholder, then type the JSON object.
+      await this.page.keyboard.press('ControlOrMeta+A');
+      await this.page.keyboard.press('Delete');
+      await this.page.keyboard.type(JSON.stringify(data, null, 2));
+    });
   }
 
   /** Stages the new item as a draft; commitDraft() persists it as a new version. */
   async submitAddItemPanel(): Promise<void> {
-    await this.addItemPanel.getByRole('button', { name: 'Save changes' }).click();
-    // The panel slides out — its `Save changes` button becomes hidden when closed.
-    await this.addItemPanel
-      .getByRole('button', { name: 'Save changes' })
-      .waitFor({ state: 'hidden' })
-      .catch(() => {});
-    await this.draftBadge().waitFor({ state: 'visible' });
+    return test.step('Submit add-item panel (stage draft)', async () => {
+      await this.addItemPanel.getByRole('button', { name: 'Save changes' }).click();
+      // The panel slides out — its `Save changes` button becomes hidden when closed.
+      await this.addItemPanel
+        .getByRole('button', { name: 'Save changes' })
+        .waitFor({ state: 'hidden' })
+        .catch(() => {});
+      await this.draftBadge().waitFor({ state: 'visible' });
+    });
   }
 
   /** Commits all staged drafts as a new suite version via the confirmation modal. */
   async commitDraft(opts: { versionNote?: string } = {}): Promise<void> {
-    await this.pageLevelCommitButton().click();
-    const modal = await this.versionCommitModal();
-    await modal.waitFor({ state: 'visible' });
-    if (opts.versionNote !== undefined) {
-      await modal.getByRole('textbox', { name: 'Version note (optional)' }).fill(opts.versionNote);
-    }
-    await modal.getByRole('button', { name: 'Save changes' }).click();
-    await modal.waitFor({ state: 'hidden' });
-    await this.draftBadge().waitFor({ state: 'hidden' });
+    return test.step('Commit draft as new version', async () => {
+      await this.pageLevelCommitButton().click();
+      const modal = await this.versionCommitModal();
+      await modal.waitFor({ state: 'visible' });
+      if (opts.versionNote !== undefined) {
+        await modal.getByRole('textbox', { name: 'Version note (optional)' }).fill(opts.versionNote);
+      }
+      await modal.getByRole('button', { name: 'Save changes' }).click();
+      await modal.waitFor({ state: 'hidden' });
+      await this.draftBadge().waitFor({ state: 'hidden' });
+    });
   }
 
   /**
-   * Open the suite in the Prompt Playground via the "Use test suite" → "Open in Playground" menu path.
+   * Open the suite in the Prompt Playground via the "Run in" → "Open in Playground" menu path.
    *
    * The confirm dialog "Load test suite into playground" only appears when the
    * playground already has unsaved state (per UseDatasetDropdown.tsx:60-67).
@@ -125,21 +143,23 @@ export class TestSuiteItemsPage {
    * never happened.
    */
   async openInPlayground(): Promise<PlaygroundPage> {
-    await this.page.getByRole('button', { name: 'Use test suite' }).click();
-    await this.page.getByRole('menuitem', { name: /^Open in Playground/ }).click();
+    return test.step('Open suite in Playground', async () => {
+      await this.page.getByTestId('dataset-header-run-in-trigger').click();
+      await this.page.getByRole('menuitem', { name: /^Open in Playground/ }).click();
 
-    const confirm = this.page.getByRole('dialog', { name: 'Load test suite into playground' });
-    await Promise.race([
-      confirm.waitFor({ state: 'visible', timeout: 5_000 }).then(async () => {
-        await confirm.getByRole('button', { name: 'Load test suite' }).click();
-      }),
-      this.page.waitForURL((url) => url.pathname.endsWith('/playground'), { timeout: 5_000 }),
-    ]).catch(() => {});
+      const confirm = this.page.getByRole('dialog', { name: 'Load test suite into playground' });
+      await Promise.race([
+        confirm.waitFor({ state: 'visible', timeout: 5_000 }).then(async () => {
+          await confirm.getByRole('button', { name: 'Load test suite' }).click();
+        }),
+        this.page.waitForURL((url) => url.pathname.endsWith('/playground'), { timeout: 5_000 }),
+      ]).catch(() => {});
 
-    // Wait for the playground to be on the right URL.
-    await this.page.waitForURL((url) => url.pathname.endsWith('/playground'), { timeout: 15_000 });
-    const playground = new PlaygroundPage(this.page, this.projectId);
-    return playground;
+      // Wait for the playground to be on the right URL.
+      await this.page.waitForURL((url) => url.pathname.endsWith('/playground'), { timeout: 15_000 });
+      const playground = new PlaygroundPage(this.page, this.projectId);
+      return playground;
+    });
   }
 
   get addItemPanel(): Locator {
@@ -152,7 +172,7 @@ export class TestSuiteItemsPage {
   }
 
   private get itemsTableBody(): Locator {
-    return this.page.getByRole('tabpanel', { name: 'Items' }).locator('tbody');
+    return this.page.getByRole('tabpanel', { name: 'Test cases' }).locator('tbody');
   }
 
   private pageLevelCommitButton(): Locator {
@@ -164,14 +184,5 @@ export class TestSuiteItemsPage {
     const byTestid = this.page.getByTestId('dataset-version-commit-dialog');
     if ((await byTestid.count()) > 0) return byTestid;
     return this.page.getByRole('dialog', { name: 'Save changes' });
-  }
-
-  private async preferTestid(
-    testid: string,
-    role: { role: 'button'; name: string },
-  ): Promise<Locator> {
-    const byTestid = this.page.getByTestId(testid);
-    if ((await byTestid.count()) > 0) return byTestid;
-    return this.page.getByRole(role.role, { name: role.name });
   }
 }

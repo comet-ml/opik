@@ -12,5 +12,7 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "@class")
-public record ProjectWithPendingClosureTraceThreads(String workspaceId, UUID projectId) {
+public record ProjectWithPendingClosureTraceThreads(String workspaceId, UUID projectId)
+        implements
+            RedisSubscriberMessage {
 }

@@ -13,6 +13,7 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 
 type DatasetItemActionsDropdownProps = {
   datasetItemId: string;
+  itemName: string;
   onShare: () => void;
   onCopyId: () => void;
   onDelete: () => void;
@@ -20,6 +21,7 @@ type DatasetItemActionsDropdownProps = {
 
 const DatasetItemActionsDropdown: React.FC<DatasetItemActionsDropdownProps> = ({
   datasetItemId,
+  itemName,
   onShare,
   onCopyId,
   onDelete,
@@ -35,18 +37,18 @@ const DatasetItemActionsDropdown: React.FC<DatasetItemActionsDropdownProps> = ({
       <DropdownMenuContent align="end" className="w-52">
         <DropdownMenuItem onClick={onShare}>
           <Share className="mr-2 size-4" />
-          Share item
+          Share {itemName}
         </DropdownMenuItem>
         <TooltipWrapper content={datasetItemId} side="left">
           <DropdownMenuItem onClick={onCopyId}>
             <Copy className="mr-2 size-4" />
-            Copy item ID
+            Copy {itemName} ID
           </DropdownMenuItem>
         </TooltipWrapper>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={onDelete}>
           <Trash className="mr-2 size-4" />
-          Delete item
+          Delete {itemName}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

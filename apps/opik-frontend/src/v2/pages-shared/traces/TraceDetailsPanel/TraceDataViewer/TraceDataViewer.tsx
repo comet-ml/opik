@@ -136,12 +136,18 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   const feedbackScoreDeleteMutation = useTraceFeedbackScoreDeleteMutation();
 
   const onDeleteFeedbackScore = useCallback(
-    (name: string, author?: string, spanIdToDelete?: string) => {
+    (
+      name: string,
+      author?: string,
+      spanIdToDelete?: string,
+      sourceQueueId?: string,
+    ) => {
       feedbackScoreDeleteMutation.mutate({
         traceId,
         spanId: spanIdToDelete ?? spanId,
         name,
         author,
+        sourceQueueId,
       });
     },
     [traceId, spanId, feedbackScoreDeleteMutation],

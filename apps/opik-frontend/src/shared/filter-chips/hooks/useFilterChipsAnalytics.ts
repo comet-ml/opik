@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import uniq from "lodash/uniq";
 import { OpikEvent, OpikEventName, trackEvent } from "@/lib/analytics/tracking";
 import {
@@ -150,13 +150,25 @@ const useFilterChipsAnalytics = ({
     [track],
   );
 
-  return {
-    trackApplied,
-    trackRemoved,
-    trackPinned,
-    trackUnpinned,
-    trackManagerOpenChange,
-  };
+  // Stable object identity: consumers (useFilterChips' applyValue/pinChip) list
+  // this in their deps, so an unmemoized object would make those callbacks —
+  // and everything derived from them — change on every render.
+  return useMemo(
+    () => ({
+      trackApplied,
+      trackRemoved,
+      trackPinned,
+      trackUnpinned,
+      trackManagerOpenChange,
+    }),
+    [
+      trackApplied,
+      trackRemoved,
+      trackPinned,
+      trackUnpinned,
+      trackManagerOpenChange,
+    ],
+  );
 };
 
 export default useFilterChipsAnalytics;

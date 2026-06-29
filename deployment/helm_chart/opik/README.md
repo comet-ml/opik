@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 2.0.77](https://img.shields.io/badge/Version-2.0.77-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.0.77](https://img.shields.io/badge/AppVersion-2.0.77-informational?style=flat-square)
+![Version: 2.1.5](https://img.shields.io/badge/Version-2.1.5-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.1.5](https://img.shields.io/badge/AppVersion-2.1.5-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -298,6 +298,10 @@ Call opik api on http://localhost:5173/api
 | component.backend.waitForMysql.mysql.host | string | `"opik-mysql"` |  |
 | component.backend.waitForMysql.mysql.port | int | `3306` |  |
 | component.backend.waitForMysql.resources | object | `{}` |  |
+| component.frontend.aiSpendBackend.costApiRootPath | string | `"/cost-api"` |  |
+| component.frontend.aiSpendBackend.enabled | bool | `false` |  |
+| component.frontend.aiSpendBackend.host | string | `"ai-cost-backend"` |  |
+| component.frontend.aiSpendBackend.port | int | `8000` |  |
 | component.frontend.autoscaling.behavior.scaleDown.policies[0].periodSeconds | int | `60` |  |
 | component.frontend.autoscaling.behavior.scaleDown.policies[0].type | string | `"Percent"` |  |
 | component.frontend.autoscaling.behavior.scaleDown.policies[0].value | int | `50` |  |

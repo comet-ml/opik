@@ -25,12 +25,7 @@ const SOURCE_ICON_MAP: Record<string, { icon: LucideIcon; className: string }> =
 export const renderSourceOption = (option: DropdownOption<string>) => {
   const config = SOURCE_ICON_MAP[option.value];
   return (
-    <SelectItem
-      key={option.value}
-      value={option.value}
-      withoutCheck
-      wrapperAsChild={true}
-    >
+    <SelectItem key={option.value} value={option.value} wrapperAsChild={true}>
       <div className="flex w-full items-center gap-2">
         {config && (
           <config.icon className={`size-4 shrink-0 ${config.className}`} />

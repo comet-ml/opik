@@ -37,7 +37,7 @@ const DescriptionSection: React.FC = () => {
       <h3 className="comet-body-s-accented mb-2">Description</h3>
       <TextareaAutosize
         {...register("description")}
-        placeholder="Describe this item..."
+        placeholder="Describe this test case..."
         className={cn(TEXT_AREA_CLASSES, "min-h-0 resize-none")}
         minRows={1}
       />

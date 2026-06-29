@@ -57,30 +57,53 @@ export function hasValuesByAuthor(
 
 /**
  * Finds a value in value_by_author by userName, handling both regular keys (userName)
- * and composite keys (userName_spanId) used for span feedback scores.
+ * and composite keys (userName_queueId, userName_spanId, userName_queueId_spanId).
+ * When sourceQueueId is provided, looks for the entry from that specific queue.
  */
 export function findValueByAuthor(
   value_by_author: FeedbackScoreValueByAuthorMap | undefined,
   userName: string,
+  sourceQueueId?: string,
+  options?: { prefixMatch?: boolean },
 ): FeedbackScoreValueByAuthorMap[string] | undefined {
   if (!value_by_author || !userName) {
     return undefined;
   }
 
-  // First try exact match
+  const { prefixMatch = false } = options ?? {};
+
+  if (sourceQueueId) {
+    const compositeKey = `${userName}_${sourceQueueId}`;
+    if (value_by_author[compositeKey]) {
+      return value_by_author[compositeKey];
+    }
+    const matchingKey = Object.keys(value_by_author).find((key) =>
+      key.startsWith(`${compositeKey}_`),
+    );
+    return matchingKey ? value_by_author[matchingKey] : undefined;
+  }
+
   if (value_by_author[userName]) {
     return value_by_author[userName];
   }
 
-  // Then try composite keys (userName_spanId)
+  if (!prefixMatch) {
+    return undefined;
+  }
+
   const matchingKey = Object.keys(value_by_author).find((key) =>
     key.startsWith(`${userName}_`),
   );
-  if (matchingKey) {
-    return value_by_author[matchingKey];
-  }
+  return matchingKey ? value_by_author[matchingKey] : undefined;
+}
 
-  return undefined;
+export function hasAnyValueByAuthor(
+  value_by_author: FeedbackScoreValueByAuthorMap | undefined,
+  userName: string,
+): boolean {
+  return !!findValueByAuthor(value_by_author, userName, undefined, {
+    prefixMatch: true,
+  });
 }
 
 export const setExperimentsCompareCache = async (
@@ -305,25 +328,34 @@ export const setTraceSpanFeedbackScoresCache = async (
   });
 };
 
+const buildValueByAuthorKey = (
+  author?: string,
+  sourceQueueId?: string,
+): string | undefined =>
+  author && sourceQueueId ? `${author}_${sourceQueueId}` : author;
+
 export const generateUpdateMutation =
-  (score: TraceFeedbackScore, author?: string) =>
+  (score: TraceFeedbackScore, author?: string, sourceQueueId?: string) =>
   (feedbackScores?: TraceFeedbackScore[]) => {
     let retVal = feedbackScores || [];
+
+    const mapKey = buildValueByAuthorKey(author, sourceQueueId);
 
     let isUpdated = false;
     retVal = retVal.map((feedbackScore) => {
       if (feedbackScore.name === score.name) {
         isUpdated = true;
 
-        if (hasValuesByAuthor(feedbackScore) && author) {
+        if (hasValuesByAuthor(feedbackScore) && mapKey) {
           const updatedValueByAuthor: FeedbackScoreValueByAuthorMap = {
             ...feedbackScore.value_by_author,
-            [author]: {
+            [mapKey]: {
               value: score.value,
               reason: score.reason,
               category_name: score.category_name,
               source: score.source || FEEDBACK_SCORE_TYPE.ui,
               last_updated_at: new Date().toISOString(),
+              source_queue_id: sourceQueueId,
             },
           };
 
@@ -354,18 +386,20 @@ export const generateUpdateMutation =
   };
 
 export const generateDeleteMutation =
-  (name: string, author?: string) =>
+  (name: string, author?: string, sourceQueueId?: string) =>
   (feedbackScores?: TraceFeedbackScore[]): TraceFeedbackScore[] => {
     const retVal = feedbackScores || [];
     if (!author) {
       return retVal.filter((feedbackScore) => feedbackScore.name !== name);
     }
 
+    const mapKey = buildValueByAuthorKey(author, sourceQueueId);
+
     return retVal
       .map((feedbackScore) => {
         if (feedbackScore.name === name && hasValuesByAuthor(feedbackScore)) {
           const updatedValueByAuthor = { ...feedbackScore.value_by_author };
-          delete updatedValueByAuthor[author];
+          delete updatedValueByAuthor[mapKey!];
 
           if (Object.keys(updatedValueByAuthor).length === 0) {
             return null;
@@ -434,8 +468,8 @@ export const extractReasonsFromValueByAuthor = (
   if (!valueByAuthor) return [];
 
   return Object.entries(valueByAuthor)
-    .map(([author, { reason, last_updated_at, value }]) => ({
-      author,
+    .map(([key, { author, reason, last_updated_at, value }]) => ({
+      author: author ?? key,
       reason: reason || "",
       lastUpdatedAt: last_updated_at,
       value,
