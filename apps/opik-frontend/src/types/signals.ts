@@ -43,7 +43,10 @@ export interface AgentInsightsIssue {
   status: AGENT_INSIGHTS_ISSUE_STATUS;
   severity?: AGENT_INSIGHTS_ISSUE_SEVERITY;
   traces_query?: string;
+  // Cross-day sum over the window (overall scale).
   total_occurrences: number;
+  // Count on the most recent report day — matches the issue prose.
+  latest_count: number;
   total: number;
   users_impacted: number;
   total_users: number;

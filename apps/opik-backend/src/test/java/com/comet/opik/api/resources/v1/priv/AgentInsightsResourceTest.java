@@ -236,6 +236,7 @@ class AgentInsightsResourceTest {
                     .severity(AgentInsightsIssueSeverity.MEDIUM)
                     .tracesQuery("SELECT 1")
                     .totalOccurrences(occurrences)
+                    .latestCount(occurrences)
                     .total(totalCount)
                     .usersImpacted(impacted)
                     .totalUsers(totalUsers)
@@ -324,6 +325,28 @@ class AgentInsightsResourceTest {
             assertThat(issue.id()).isEqualTo(issueId);
             assertThat(issue.status()).isEqualTo(AgentInsightsIssueStatus.RESOLVED);
             assertThat(issue.description()).isEqualTo(updatedDescription);
+        }
+
+        @Test
+        @DisplayName("Multi-day issue exposes cross-day total and the latest day's count")
+        void findIssuesWhenMultiDayThenTotalAndLatestCount() {
+            var projectId = createProject();
+            var name = rndName();
+            long day1Count = 56L;
+            long day2Count = 36L;
+
+            report(projectId, DAY_1, List.of(reportedIssue(name, day1Count, 200L, 5L, 50L)));
+            var issueId = findIssues(projectId, DAY_1, DAY_1).content().getFirst().id();
+            report(projectId, DAY_2, List.of(reportedIssue(issueId, name, day2Count, 192L, 4L, 40L)));
+
+            var issue = findIssues(projectId, DAY_1, DAY_2).content().getFirst();
+            // total_occurrences stays the cross-day sum (overall scale); latest_count is the most recent
+            // day's number, which the issue prose describes — so the UI can render both without contradiction.
+            assertThat(issue.totalOccurrences()).isEqualTo(day1Count + day2Count);
+            assertThat(issue.latestCount()).isEqualTo(day2Count);
+            assertThat(issue.daysReported()).isEqualTo(2);
+            assertThat(issue.lastSeen()).isEqualTo(DAY_2);
+            assertThat(issue.firstSeen()).isEqualTo(DAY_1);
         }
 
         @Test
