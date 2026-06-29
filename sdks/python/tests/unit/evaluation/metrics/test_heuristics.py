@@ -433,11 +433,14 @@ def test_meteor_rejects_empty_inputs():
         metric.score(output="hyp", reference="   ")
 
 
-def test_meteor_default_scorer_tokenizes_inputs(monkeypatch):
-    """The built-in scorer must pass pre-tokenized inputs to NLTK.
+def test_meteor__default_scorer__passes_tokenized_inputs_to_nltk(monkeypatch):
+    """The built-in scorer must hand NLTK pre-tokenized inputs.
 
     NLTK's ``meteor_score`` requires ``references`` as ``Iterable[Iterable[str]]``
     and ``hypothesis`` as ``Iterable[str]``; passing raw strings raises ``TypeError``.
+    Asserting only the (stubbed) return value would not catch this regression,
+    since the stub ignores its arguments — so we also assert the inputs were
+    tokenized before the NLTK call.
     """
     from opik.evaluation.metrics.heuristics import meteor as meteor_module
 
@@ -449,15 +452,15 @@ def test_meteor_default_scorer_tokenizes_inputs(monkeypatch):
         return 0.5
 
     # Avoid the WordNet corpora requirement and stub the NLTK scorer so the test
-    # exercises only the default scorer's tokenization (no network/corpora needed).
+    # needs no network/corpora.
     monkeypatch.setattr(meteor_module.wordnet, "ensure_loaded", lambda: None)
     monkeypatch.setattr(
         meteor_module.nltk_meteor_score, "meteor_score", fake_meteor_score
     )
 
-    metric = METEOR(track=False)
-    metric.score(output="the cat sat", reference="the cat sat")
+    result = METEOR(track=False).score(output="the cat sat", reference="the cat sat")
 
+    assert result.value == pytest.approx(0.5)
     assert captured["hypothesis"] == ["the", "cat", "sat"]
     assert captured["references"] == [["the", "cat", "sat"]]
 
