@@ -30,30 +30,42 @@ public class RequestSizeLimitFilter implements ContainerRequestFilter {
 
     @Override
     public void filter(ContainerRequestContext requestContext) {
-        // Read the header directly as a long: ContainerRequestContext.getLength() returns an int and
-        // yields -1 for bodies larger than Integer.MAX_VALUE (~2GB), which would let the largest
-        // payloads slip through.
-        long contentLength = parseContentLength(requestContext.getHeaderString(HttpHeaders.CONTENT_LENGTH));
+        String headerValue = requestContext.getHeaderString(HttpHeaders.CONTENT_LENGTH);
+
+        // No Content-Length (e.g. chunked transfer) is legitimate; the body is still bounded by the
+        // Jackson document-length constraint during parsing.
+        if (headerValue == null) {
+            return;
+        }
+
+        // Read the header as a long: ContainerRequestContext.getLength() returns an int and yields -1
+        // for bodies larger than Integer.MAX_VALUE (~2GB), which would let the largest payloads slip
+        // through. A present-but-malformed, multi-valued, or negative Content-Length is invalid HTTP
+        // framing: fail closed with 400 rather than treating it as "unknown" and waving it past.
+        long contentLength;
+        try {
+            contentLength = Long.parseLong(headerValue.trim());
+        } catch (NumberFormatException e) {
+            abort(requestContext, Response.Status.BAD_REQUEST, "Invalid Content-Length header");
+            return;
+        }
+        if (contentLength < 0) {
+            abort(requestContext, Response.Status.BAD_REQUEST, "Invalid Content-Length header");
+            return;
+        }
+
         if (contentLength > maxRequestSizeBytes) {
             log.warn("Rejecting request with Content-Length '{}' exceeding limit '{}' bytes",
                     contentLength, maxRequestSizeBytes);
-            requestContext.abortWith(Response.status(Response.Status.REQUEST_ENTITY_TOO_LARGE)
-                    .entity(new ErrorMessage(Response.Status.REQUEST_ENTITY_TOO_LARGE.getStatusCode(),
-                            "Request body exceeds the maximum allowed size of %d bytes"
-                                    .formatted(maxRequestSizeBytes)))
-                    .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON)
-                    .build());
+            abort(requestContext, Response.Status.REQUEST_ENTITY_TOO_LARGE,
+                    "Request body exceeds the maximum allowed size of %d bytes".formatted(maxRequestSizeBytes));
         }
     }
 
-    private long parseContentLength(String headerValue) {
-        if (headerValue == null) {
-            return -1L;
-        }
-        try {
-            return Long.parseLong(headerValue.trim());
-        } catch (NumberFormatException e) {
-            return -1L;
-        }
+    private void abort(ContainerRequestContext requestContext, Response.Status status, String message) {
+        requestContext.abortWith(Response.status(status)
+                .entity(new ErrorMessage(status.getStatusCode(), message))
+                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON)
+                .build());
     }
 }

@@ -69,4 +69,43 @@ class RequestSizeLimitFilterTest {
 
         verify(context, never()).abortWith(any());
     }
+
+    @Test
+    @DisplayName("fails closed with 400 on a malformed Content-Length")
+    void failsClosedOnMalformed() {
+        var context = contextWithContentLength("not-a-number");
+
+        filter.filter(context);
+
+        var response = ArgumentCaptor.forClass(Response.class);
+        verify(context).abortWith(response.capture());
+        assertThat(response.getValue().getStatus())
+                .isEqualTo(Response.Status.BAD_REQUEST.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("fails closed with 400 on a multi-valued Content-Length")
+    void failsClosedOnMultiValue() {
+        var context = contextWithContentLength("123, 456");
+
+        filter.filter(context);
+
+        var response = ArgumentCaptor.forClass(Response.class);
+        verify(context).abortWith(response.capture());
+        assertThat(response.getValue().getStatus())
+                .isEqualTo(Response.Status.BAD_REQUEST.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("fails closed with 400 on a negative Content-Length")
+    void failsClosedOnNegative() {
+        var context = contextWithContentLength("-1");
+
+        filter.filter(context);
+
+        var response = ArgumentCaptor.forClass(Response.class);
+        verify(context).abortWith(response.capture());
+        assertThat(response.getValue().getStatus())
+                .isEqualTo(Response.Status.BAD_REQUEST.getStatusCode());
+    }
 }

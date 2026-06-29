@@ -298,21 +298,22 @@ jacksonConfig:
   #   This configuration is used by both HTTP layer and internal JSON processing for consistency,
   #   preventing memory exhaustion from extremely large base64-encoded attachments before they can be stripped
   maxStringLength: ${JACKSON_MAX_STRING_LENGTH:-104857600}
-  # Default: 104857600 (100MB)
+  # Default: 536870912 (512MB)
   # Description: Maximum total size of a single JSON document during deserialization.
   #   Unlike maxStringLength (one string value), this caps the whole document, so it catches
   #   payloads made of millions of small nodes that would otherwise expand into a multi-GB tree
   #   before any other guard fires. Enforced by the streaming parser, so oversized documents fail
-  #   fast (HTTP 400) and the tree is never materialized. Heap must fit concurrency * this value.
-  maxDocumentLength: ${JACKSON_MAX_DOCUMENT_LENGTH:-104857600}
-  # Default: 115343360 (110MB)
+  #   fast (HTTP 400) and the tree is never materialized. Sized above the largest legitimate payload
+  #   (multi-field / multi-attachment batches reach a few hundred MB) and far below the gigabyte-scale
+  #   trees that caused the OOM; heap must fit concurrency * this value.
+  maxDocumentLength: ${JACKSON_MAX_DOCUMENT_LENGTH:-536870912}
+  # Default: 536870912 (512MB)
   # Description: Maximum request body size in bytes, enforced from the Content-Length header before
   #   the body is read (HTTP 413). Fast-fails oversized ingestion at the request boundary. The
   #   header reflects the on-the-wire (possibly compressed) size, so chunked or compressed-but-
   #   amplifying bodies still rely on maxDocumentLength (enforced on the decompressed stream).
-  #   Keep slightly above maxDocumentLength so a document at the limit is not rejected by its
-  #   (slightly larger) request envelope.
-  maxRequestSizeBytes: ${JACKSON_MAX_REQUEST_SIZE_BYTES:-115343360}
+  #   Kept at maxDocumentLength so a document at the limit is not rejected by its request envelope.
+  maxRequestSizeBytes: ${JACKSON_MAX_REQUEST_SIZE_BYTES:-536870912}
 
 # Configuration for batch operations
 batchOperations:

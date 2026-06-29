@@ -35,12 +35,14 @@ public class JacksonConfig {
      * enforced by the streaming parser, so an oversized document fails fast and the tree is
      * never materialized.
      *
-     * Sizing rule: the heap must accommodate {@code maxConcurrentRequests * maxDocumentLength}.
-     * With heap ~= 70% of 16Gi (~11.2GB), a 100MB cap leaves ample headroom even under high
-     * batch-ingestion concurrency.
+     * Sizing rule: the cap must sit above the largest legitimate payload (multi-field documents and
+     * multi-attachment batches can total a few hundred MB) yet far below the multi-GB trees that
+     * caused the OOM, while keeping {@code maxConcurrentRequests * maxDocumentLength} within the
+     * ~11.2GB heap (70% of 16Gi). 512MB clears the documented payloads with room to spare and still
+     * rejects the pathological gigabyte-scale documents.
      */
     @JsonProperty
-    @Min(value = 1048576, message = "maxDocumentLength must be at least 1MB") private long maxDocumentLength = 104857600L;
+    @Min(value = 1048576, message = "maxDocumentLength must be at least 1MB") private long maxDocumentLength = 536870912L;
 
     /**
      * Maximum size (in bytes) of a request body, enforced from the {@code Content-Length} header
@@ -52,9 +54,9 @@ public class JacksonConfig {
      * chunked) or with a small-but-amplifying compressed body still rely on maxDocumentLength,
      * which is enforced on the decompressed stream during parsing.
      *
-     * Set slightly above maxDocumentLength so legitimate documents at the document-length limit
-     * are not rejected by their (slightly larger) request envelope.
+     * Set at or above maxDocumentLength so legitimate documents at the document-length limit are not
+     * rejected by their (slightly larger) request envelope.
      */
     @JsonProperty
-    @Min(value = 1048576, message = "maxRequestSizeBytes must be at least 1MB") private long maxRequestSizeBytes = 115343360L;
+    @Min(value = 1048576, message = "maxRequestSizeBytes must be at least 1MB") private long maxRequestSizeBytes = 536870912L;
 }
