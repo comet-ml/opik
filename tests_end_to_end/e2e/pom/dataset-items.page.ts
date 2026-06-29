@@ -16,9 +16,9 @@ export class DatasetItemsPage {
   }
 
   async waitForReady(): Promise<void> {
-    await this.page.getByRole('tab', { name: 'Items', selected: true }).waitFor({ state: 'visible' });
+    await this.page.getByRole('tab', { name: 'Records', selected: true }).waitFor({ state: 'visible' });
     const realRow = this.itemsTableBody.locator('tr[data-row-id]').first();
-    const emptyState = this.page.getByText('No dataset items yet');
+    const emptyState = this.page.getByText('No records yet');
     await Promise.race([
       realRow.waitFor({ state: 'visible' }),
       emptyState.waitFor({ state: 'visible' }),
@@ -47,8 +47,7 @@ export class DatasetItemsPage {
   }
 
   async clickAddItem(): Promise<void> {
-    const button = await this.preferTestid('dataset-items-add-button', { role: 'button', name: 'Add item' });
-    await button.click();
+    await this.page.getByTestId('dataset-header-add-button').click();
     await this.addItemPanel.waitFor({ state: 'visible' });
     await this.waitForPanelTransform('translateX(0');
   }
@@ -106,18 +105,17 @@ export class DatasetItemsPage {
    */
   async addItemViaEmptyStateModal(fields: Record<string, unknown>): Promise<void> {
     const triggers = this.page
-      .getByRole('button', { name: 'Add new item' })
-      .or(this.page.getByTestId('dataset-items-add-button'))
-      .or(this.page.getByRole('button', { name: 'Add item' }));
+      .getByTestId('dataset-header-add-button')
+      .or(this.page.getByTestId('dataset-items-empty-add-button'));
     await triggers.first().click();
-    const modal = this.page.getByRole('dialog', { name: 'Add dataset item' });
+    const modal = this.page.getByRole('dialog', { name: 'Add record' });
     await modal.waitFor({ state: 'visible' });
     const editor = modal.getByRole('textbox');
     await editor.click();
     await this.page.keyboard.press('ControlOrMeta+A');
     await this.page.keyboard.press('Delete');
     await this.page.keyboard.type(JSON.stringify(fields));
-    await modal.getByRole('button', { name: 'Add dataset item' }).click();
+    await modal.getByRole('button', { name: 'Add record' }).click();
     await modal.waitFor({ state: 'hidden' });
     await this.itemsTableBody.locator('tr[data-row-id]').first().waitFor({ state: 'visible' });
   }
@@ -127,7 +125,7 @@ export class DatasetItemsPage {
   }
 
   private get itemsTableBody(): Locator {
-    return this.page.getByRole('tabpanel', { name: 'Items' }).locator('tbody');
+    return this.page.getByRole('tabpanel', { name: 'Records' }).locator('tbody');
   }
 
   /** Panel stays mounted; open/closed is animated via CSS transform, not display/visibility. */

@@ -6,7 +6,7 @@ import { PlaygroundPage } from './playground.page';
  * Per-suite items page. The underlying FE component is shared with DatasetItemsPage
  * (both routes resolve to the same DatasetDetailPage React component, discriminated
  * by URL prefix). Mechanics for items add/delete + draft staging are identical;
- * the surface difference is the "Use test suite" dropdown in the header and the
+ * the surface difference is the "Run in" header dropdown and the
  * "<N> global assertions" pill.
  */
 export class TestSuiteItemsPage {
@@ -24,9 +24,9 @@ export class TestSuiteItemsPage {
   }
 
   async waitForReady(): Promise<void> {
-    await this.page.getByRole('tab', { name: 'Items', selected: true }).waitFor({ state: 'visible' });
+    await this.page.getByRole('tab', { name: 'Test cases', selected: true }).waitFor({ state: 'visible' });
     const realRow = this.itemsTableBody.locator('tr[data-row-id]').first();
-    const emptyState = this.page.getByText('No test suite items yet');
+    const emptyState = this.page.getByText('No test cases yet');
     await Promise.race([
       realRow.waitFor({ state: 'visible' }),
       emptyState.waitFor({ state: 'visible' }),
@@ -66,8 +66,7 @@ export class TestSuiteItemsPage {
   }
 
   async clickAddItem(): Promise<void> {
-    const button = await this.preferTestid('dataset-items-add-button', { role: 'button', name: 'Add item' });
-    await button.click();
+    await this.page.getByTestId('dataset-header-add-button').click();
     // Wait for the Data JSON editor inside the Add panel to be interactive.
     // This is more reliable than waitForPanelTransform on a multi-mount testid.
     await this.addItemPanel.locator('.cm-content').first().waitFor({ state: 'visible' });
@@ -114,7 +113,7 @@ export class TestSuiteItemsPage {
   }
 
   /**
-   * Open the suite in the Prompt Playground via the "Use test suite" → "Open in Playground" menu path.
+   * Open the suite in the Prompt Playground via the "Run in" → "Open in Playground" menu path.
    *
    * The confirm dialog "Load test suite into playground" only appears when the
    * playground already has unsaved state (per UseDatasetDropdown.tsx:60-67).
@@ -125,7 +124,7 @@ export class TestSuiteItemsPage {
    * never happened.
    */
   async openInPlayground(): Promise<PlaygroundPage> {
-    await this.page.getByRole('button', { name: 'Use test suite' }).click();
+    await this.page.getByTestId('dataset-header-run-in-trigger').click();
     await this.page.getByRole('menuitem', { name: /^Open in Playground/ }).click();
 
     const confirm = this.page.getByRole('dialog', { name: 'Load test suite into playground' });
@@ -152,7 +151,7 @@ export class TestSuiteItemsPage {
   }
 
   private get itemsTableBody(): Locator {
-    return this.page.getByRole('tabpanel', { name: 'Items' }).locator('tbody');
+    return this.page.getByRole('tabpanel', { name: 'Test cases' }).locator('tbody');
   }
 
   private pageLevelCommitButton(): Locator {
@@ -164,14 +163,5 @@ export class TestSuiteItemsPage {
     const byTestid = this.page.getByTestId('dataset-version-commit-dialog');
     if ((await byTestid.count()) > 0) return byTestid;
     return this.page.getByRole('dialog', { name: 'Save changes' });
-  }
-
-  private async preferTestid(
-    testid: string,
-    role: { role: 'button'; name: string },
-  ): Promise<Locator> {
-    const byTestid = this.page.getByTestId(testid);
-    if ((await byTestid.count()) > 0) return byTestid;
-    return this.page.getByRole(role.role, { name: role.name });
   }
 }

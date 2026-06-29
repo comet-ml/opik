@@ -656,6 +656,7 @@ function DatasetItemsTab({
               <button
                 onClick={onAddItem}
                 className="comet-body-s underline underline-offset-4 hover:text-primary"
+                data-testid="dataset-items-empty-add-button"
               >
                 Add new {itemName}
               </button>

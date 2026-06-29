@@ -126,7 +126,7 @@ export class TestSuitesPage {
       return;
     }
 
-    await this.page.getByRole('button', { name: 'Test settings' }).click();
+    await this.page.getByTestId('dataset-header-settings-button').click();
     const dialog = this.page.getByRole('dialog', { name: 'Test settings' });
     await dialog.waitFor({ state: 'visible' });
 
