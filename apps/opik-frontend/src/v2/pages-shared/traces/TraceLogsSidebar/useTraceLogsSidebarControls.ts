@@ -26,6 +26,14 @@ export const useTraceLogsSidebarControls = () => {
     JsonParam,
     { updateType: "replaceIn" },
   );
+  const [, setTlsScope] = useQueryParam(`${TLS_QUERY_PREFIX}scope`, JsonParam, {
+    updateType: "replaceIn",
+  });
+  const [, setTlsScopeLabel] = useQueryParam(
+    `${TLS_QUERY_PREFIX}scopeLabel`,
+    StringParam,
+    { updateType: "replaceIn" },
+  );
   const [, setTlsTrace] = useQueryParam(
     `${TLS_QUERY_PREFIX}trace`,
     StringParam,
@@ -38,21 +46,42 @@ export const useTraceLogsSidebarControls = () => {
   });
 
   const openSidebar = useCallback(
-    (sourceFilters?: Filter[]) => {
-      // Always (re)write the filter param on open, clearing it when no source filters are given, so an
-      // unfiltered trigger can't reuse the previous open's stale tls_filters.
-      setTlsFilters(sourceFilters?.length ? sourceFilters : undefined);
+    (
+      sourceFilters?: Filter[],
+      scope?: { locked?: boolean; label?: string },
+    ) => {
+      // A locked scope (e.g. the per-evaluator Evaluation traces sidebar) constrains the query but
+      // is not user-editable; a plain source filter is seeded into the editable filter bar. Always
+      // (re)write both params on open so an unfiltered/relabeled trigger can't reuse stale state.
+      if (scope?.locked) {
+        setTlsScope(sourceFilters?.length ? sourceFilters : undefined);
+        setTlsScopeLabel(scope.label);
+        setTlsFilters(undefined);
+      } else {
+        setTlsFilters(sourceFilters?.length ? sourceFilters : undefined);
+        setTlsScope(undefined);
+        setTlsScopeLabel(undefined);
+      }
       setOpen(true);
     },
-    [setTlsFilters, setOpen],
+    [setTlsFilters, setTlsScope, setTlsScopeLabel, setOpen],
   );
 
   const closeSidebar = useCallback(() => {
     setOpen(undefined);
     setTlsFilters(undefined);
+    setTlsScope(undefined);
+    setTlsScopeLabel(undefined);
     setTlsTrace(undefined);
     setTlsSpan(undefined);
-  }, [setOpen, setTlsFilters, setTlsTrace, setTlsSpan]);
+  }, [
+    setOpen,
+    setTlsFilters,
+    setTlsScope,
+    setTlsScopeLabel,
+    setTlsTrace,
+    setTlsSpan,
+  ]);
 
   return { open: Boolean(open), openSidebar, closeSidebar };
 };

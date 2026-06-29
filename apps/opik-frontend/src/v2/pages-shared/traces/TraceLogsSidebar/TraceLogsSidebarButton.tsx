@@ -13,6 +13,11 @@ type TraceLogsSidebarButtonProps = {
   projectId: string;
   logsSource?: LOGS_SOURCE;
   sourceFilters?: Filter[];
+  // When true, sourceFilters become a locked scope: applied to the query but not user-editable or
+  // removable via the filter bar (e.g. the per-evaluator Evaluation traces sidebar). scopeLabel is
+  // shown as a read-only indicator of what the view is locked to.
+  lockScope?: boolean;
+  scopeLabel?: string;
   variant?: "tag" | "icon";
   title?: string;
   label?: string;
@@ -29,6 +34,8 @@ const TraceLogsSidebarButton: React.FunctionComponent<
   projectId,
   logsSource,
   sourceFilters,
+  lockScope = false,
+  scopeLabel,
   variant = "tag",
   title,
   label = "Go to logs",
@@ -38,8 +45,12 @@ const TraceLogsSidebarButton: React.FunctionComponent<
   const { open, openSidebar, closeSidebar } = useTraceLogsSidebarControls();
 
   const handleOpen = useCallback(
-    () => openSidebar(sourceFilters),
-    [openSidebar, sourceFilters],
+    () =>
+      openSidebar(
+        sourceFilters,
+        lockScope ? { locked: true, label: scopeLabel } : undefined,
+      ),
+    [openSidebar, sourceFilters, lockScope, scopeLabel],
   );
 
   const trigger =

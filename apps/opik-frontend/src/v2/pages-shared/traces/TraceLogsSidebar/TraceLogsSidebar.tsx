@@ -60,6 +60,9 @@ import TracesActionsPanel from "@/v2/pages-shared/traces/TracesActionsPanel/Trac
 import MetricsSummary from "@/v2/pages-shared/traces/MetricsSummary/MetricsSummary";
 import { Separator } from "@/ui/separator";
 import { Sheet, SheetContent, SheetTopBar } from "@/ui/sheet";
+import { Tag } from "@/ui/tag";
+import { Lock } from "lucide-react";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
 import RefreshButton from "@/shared/RefreshButton/RefreshButton";
@@ -491,6 +494,22 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     },
   );
 
+  // Locked scope (e.g. a single evaluator's Evaluation traces): always constrains the query and is
+  // never shown in the editable filter bar, so it can't be changed or removed. User filters layer
+  // on top with AND semantics.
+  const [scopeFilters = []] = useQueryParam(
+    `${TLS_QUERY_PREFIX}scope`,
+    JsonParam,
+  );
+  const [scopeLabel] = useQueryParam(
+    `${TLS_QUERY_PREFIX}scopeLabel`,
+    StringParam,
+  );
+  const effectiveFilters = useMemo(
+    () => [...(scopeFilters ?? []), ...(filters ?? [])],
+    [scopeFilters, filters],
+  );
+
   const [sortedColumns, setSortedColumns] = useQueryParamAndLocalStorageState<
     ColumnSort[]
   >({
@@ -586,7 +605,7 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
       {
         projectId,
         sorting: sortedColumns,
-        filters: filters,
+        filters: effectiveFilters,
         page: page as number,
         size: size as number,
         search: trimmedSearch,
@@ -609,7 +628,7 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     {
       projectId,
       sorting: sortedColumns,
-      filters: filters,
+      filters: effectiveFilters,
       page: page as number,
       size: size as number,
       search: search as string,
@@ -629,7 +648,7 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
   const { data: statisticData, refetch: refetchStatistic } = useTracesStatistic(
     {
       projectId,
-      filters: filters,
+      filters: effectiveFilters,
       search: trimmedSearch,
       fromTime: intervalStart,
       toTime: intervalEnd,
@@ -955,7 +974,7 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
                 projectId={projectId}
                 entityType="traces"
                 countLabel="Traces"
-                filters={filters}
+                filters={effectiveFilters}
                 intervalStart={intervalStart}
                 intervalEnd={intervalEnd}
                 dateRange={dateRange}
@@ -979,6 +998,18 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
                 onChange={setFilters}
                 layout="icon"
               />
+              {scopeLabel && (
+                <TooltipWrapper content="These traces are locked to this evaluator and can't be changed via filters">
+                  <Tag
+                    size="md"
+                    variant="gray"
+                    className="flex max-w-[260px] items-center gap-1"
+                  >
+                    <Lock className="size-3 shrink-0" />
+                    <span className="truncate">{scopeLabel}</span>
+                  </Tag>
+                </TooltipWrapper>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <TracesActionsPanel
