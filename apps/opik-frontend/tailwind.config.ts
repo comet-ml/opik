@@ -185,6 +185,10 @@ module.exports = {
           "70%": { boxShadow: "0 0 0 5px transparent", opacity: "0.7" },
           "100%": { boxShadow: "0 0 0 0 transparent", opacity: "1" },
         },
+        "progress-indeterminate": {
+          "0%": { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(350%)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -195,6 +199,8 @@ module.exports = {
         "caret-blink": "caret-blink 1.25s ease-out infinite",
         shimmer: "shimmer 1.8s ease-in-out infinite",
         "beacon-pulse": "beacon-pulse 1.4s ease-out infinite",
+        "progress-indeterminate":
+          "progress-indeterminate 1.3s ease-in-out infinite",
       },
       boxShadow: {
         "action-card": "var(--action-card-shadow)",

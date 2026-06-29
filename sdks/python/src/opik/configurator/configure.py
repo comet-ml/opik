@@ -97,6 +97,8 @@ class OpikConfigurator:
             api_url=self.api_url,
             use_local=self.use_local,
             self_hosted_comet=self.self_hosted_comet,
+            check_tls_certificate=self.current_config.check_tls_certificate,
+            force_local_server=False,
         )
 
     def _should_setup_mcp_server(self) -> bool:

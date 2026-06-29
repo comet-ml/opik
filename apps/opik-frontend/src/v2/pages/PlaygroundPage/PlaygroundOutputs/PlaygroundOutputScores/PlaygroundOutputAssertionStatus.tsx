@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useMemo } from "react";
+import React, { useRef, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { getExperimentById } from "@/api/datasets/useExperimentById";
@@ -28,11 +28,13 @@ const PlaygroundOutputAssertionStatus: React.FunctionComponent<
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const pollingStartTimeRef = useRef<number | null>(null);
   const lastStatusRef = useRef<StatusInfo | undefined>(undefined);
+  const [pollingTimedOut, setPollingTimedOut] = useState(false);
 
   useEffect(() => {
     if (experimentId) {
       pollingStartTimeRef.current = Date.now();
       lastStatusRef.current = undefined;
+      setPollingTimedOut(false);
     }
   }, [experimentId]);
 
@@ -51,6 +53,15 @@ const PlaygroundOutputAssertionStatus: React.FunctionComponent<
   });
 
   const experimentFinished = isExperimentTerminal(experimentData?.status);
+
+  useEffect(() => {
+    if (!experimentId || experimentFinished) {
+      setPollingTimedOut(false);
+      return;
+    }
+    const timer = setTimeout(() => setPollingTimedOut(true), MAX_REFETCH_TIME);
+    return () => clearTimeout(timer);
+  }, [experimentId, experimentFinished]);
 
   const { data } = useCompareExperimentsList(
     {
@@ -76,6 +87,8 @@ const PlaygroundOutputAssertionStatus: React.FunctionComponent<
     },
   );
 
+  const effectiveExperimentFinished = experimentFinished || pollingTimedOut;
+
   const statusInfo = useMemo(() => {
     const items = data?.content ?? [];
     const matchingRow = items.find(
@@ -89,11 +102,11 @@ const PlaygroundOutputAssertionStatus: React.FunctionComponent<
 
     const result = getStatusFromExperimentItems(
       matchingRow,
-      experimentFinished,
+      effectiveExperimentFinished,
     );
     lastStatusRef.current = result;
     return result;
-  }, [data?.content, datasetItemId, experimentFinished]);
+  }, [data?.content, datasetItemId, effectiveExperimentFinished]);
 
   if (!experimentId) return null;
   if (!statusInfo?.status && !statusInfo?.evaluating) return null;

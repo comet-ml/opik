@@ -73,12 +73,6 @@ public class ExperimentAggregatesSubscriber extends BaseRedisSubscriber<Experime
     }
 
     @Override
-    protected MessageContext messageContext(ExperimentAggregationMessage message) {
-        // workspace_name is not carried into the denormalization bucket that produces this message
-        return new MessageContext(message.workspaceId(), null, message.userName());
-    }
-
-    @Override
     protected Mono<Void> processEvent(ExperimentAggregationMessage message) {
         var lockKey = new Lock(
                 EXPERIMENT_AGGREGATE_LOCK_KEY.formatted(message.workspaceId(), message.experimentId()));

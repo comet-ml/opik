@@ -257,7 +257,8 @@ public class OnlineScoringSampler {
                         logSampledTrace(evaluator, messages, scorableTraces.size());
                         if (!messages.isEmpty()) {
                             recordDecision(workspaceId, workspaceName, evaluator, DECISION_SAMPLED, messages.size());
-                            onlineScorePublisher.enqueueMessage(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                            OnlineScoringSamplerSupport.publishSampled(onlineScorePublisher, log, messages,
+                                    AutomationRuleEvaluatorType.LLM_AS_JUDGE, workspaceId, workspaceName);
                         }
                     }
                     case USER_DEFINED_METRIC_PYTHON -> {
@@ -270,8 +271,9 @@ public class OnlineScoringSampler {
                             if (!messages.isEmpty()) {
                                 recordDecision(workspaceId, workspaceName, evaluator, DECISION_SAMPLED,
                                         messages.size());
-                                onlineScorePublisher.enqueueMessage(messages,
-                                        AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON);
+                                OnlineScoringSamplerSupport.publishSampled(onlineScorePublisher, log, messages,
+                                        AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON, workspaceId,
+                                        workspaceName);
                             }
                         } else {
                             log.warn("Python evaluator is disabled. Skipping sampling for evaluator type '{}'",

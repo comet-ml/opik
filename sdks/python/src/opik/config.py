@@ -257,6 +257,15 @@ class OpikConfig(pydantic_settings.BaseSettings):
     Timeout in seconds for OPIK server's connection monitoring checks.
     """
 
+    runner_poll_interval: float = 0.5
+    """
+    Interval in seconds between polls for new jobs while the local runner
+    (`opik connect` / `opik endpoint`) is idle. Each idle poll is one request to
+    the Opik server, so the default of 0.5s produces ~120 requests/minute.
+    Increase this value if a corporate firewall or proxy throttles or blocks the
+    sustained polling traffic (at the cost of slower job pickup).
+    """
+
     replay_batch_size: int = 50
     """
     Number of failed messages to replay in a single batch after connection to the OPIK server is restored.

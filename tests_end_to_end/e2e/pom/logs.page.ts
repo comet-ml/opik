@@ -1,6 +1,7 @@
 import { test, type Page, type Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { TracePanelPage } from './trace-panel.page';
+import { ThreadPanelPage } from './thread-panel.page';
 
 export class LogsPage {
   private projectId: string | null = null;
@@ -12,6 +13,17 @@ export class LogsPage {
       this.projectId = projectId;
       const env = loadEnvConfig();
       await this.page.goto(`${env.baseUrl}/${env.workspace}/projects/${projectId}/logs`);
+    });
+  }
+
+  /** Open Logs with the Threads tab active for the given project. */
+  async gotoThreads(projectId: string): Promise<void> {
+    return test.step(`Open Logs (Threads) for project ${projectId}`, async () => {
+      this.projectId = projectId;
+      const env = loadEnvConfig();
+      await this.page.goto(
+        `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs?logsType=threads`,
+      );
     });
   }
 
@@ -96,5 +108,79 @@ export class LogsPage {
 
   get traceRows(): Locator {
     return this.page.locator('tr[data-row-id]');
+  }
+
+  // --- Threads tab ---
+
+  /** The Threads/Traces/Spans tab toggle for "Threads". */
+  get threadsTab(): Locator {
+    return this.page.getByRole('radio', { name: 'Threads' });
+  }
+
+  /** Wait for the Threads table to have rendered at least one row. */
+  async waitForThreadsReady(): Promise<void> {
+    return test.step('Wait for Threads table ready', async () => {
+      await this.page.locator('tr[data-row-id]').first().waitFor({ state: 'visible' });
+    });
+  }
+
+  /**
+   * The number shown in the "Threads" metrics card. The Threads view reuses the
+   * same count-card testid as the Traces view; with the tab active this is the
+   * thread count.
+   */
+  async countThreads(): Promise<number> {
+    return test.step('Read thread count', async () => {
+      const valueEl = this.page.getByTestId('metrics-card-count-value');
+      await valueEl.waitFor({ state: 'visible' });
+      const text = (await valueEl.textContent()) ?? '';
+      const digits = text.replace(/\D/g, '');
+      return digits ? Number(digits) : 0;
+    });
+  }
+
+  /** A thread row, keyed by thread id (the row's data-row-id IS the thread id). */
+  threadRow(threadId: string): Locator {
+    return this.page.locator(`tr[data-row-id="${threadId}"]`);
+  }
+
+  /**
+   * Read the "Message count" cell for a thread. Note: the Threads view counts
+   * messages, so a conversation of N turns (N traces) reports 2*N messages
+   * (each trace contributes an input and an output message).
+   */
+  async readThreadMessageCount(threadId: string): Promise<number> {
+    return test.step(`Read message count for thread ${threadId}`, async () => {
+      const cell = this.threadRow(threadId).locator(
+        `[data-cell-id="${threadId}_number_of_messages"]`,
+      );
+      await cell.waitFor({ state: 'visible' });
+      const text = (await cell.textContent()) ?? '';
+      const digits = text.replace(/\D/g, '');
+      return digits ? Number(digits) : 0;
+    });
+  }
+
+  /** The "First message" cell text for a thread. */
+  threadFirstMessageCell(threadId: string): Locator {
+    return this.threadRow(threadId).locator(`[data-cell-id="${threadId}_first_message"]`);
+  }
+
+  /** The "Last message" cell text for a thread. */
+  threadLastMessageCell(threadId: string): Locator {
+    return this.threadRow(threadId).locator(`[data-cell-id="${threadId}_last_message"]`);
+  }
+
+  /** Open a thread's detail panel by id, returning the conversation panel POM. */
+  async openThreadById(threadId: string): Promise<ThreadPanelPage> {
+    return test.step(`Open thread ${threadId}`, async () => {
+      if (!this.projectId) {
+        throw new Error('LogsPage.openThreadById: call gotoThreads(projectId) first');
+      }
+      const env = loadEnvConfig();
+      const url = `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/logs?logsType=threads&thread=${threadId}`;
+      await this.page.goto(url);
+      return new ThreadPanelPage(this.page, threadId);
+    });
   }
 }

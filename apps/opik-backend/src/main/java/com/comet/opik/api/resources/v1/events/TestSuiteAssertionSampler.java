@@ -143,12 +143,17 @@ public class TestSuiteAssertionSampler {
                                 datasetEvaluatorsCache, modelName, fetchTimeout)))
                 .flatMapIterable(list -> list)
                 .collectList()
-                .doOnNext(messages -> {
-                    if (!messages.isEmpty()) {
-                        log.info("Enqueuing '{}' test suite assertion messages", messages.size());
-                        onlineScorePublisher.enqueueMessage(messages,
-                                AutomationRuleEvaluatorType.LLM_AS_JUDGE);
+                .flatMap(messages -> {
+                    if (messages.isEmpty()) {
+                        return Mono.empty();
                     }
+                    log.info("Enqueuing '{}' test suite assertion messages", messages.size());
+                    return onlineScorePublisher.enqueueMessage(messages, AutomationRuleEvaluatorType.LLM_AS_JUDGE)
+                            .onErrorResume(error -> {
+                                log.error("Error enqueueing '{}' test suite assertion messages into redis",
+                                        messages.size(), error);
+                                return Mono.empty();
+                            });
                 })
                 .contextWrite(reactiveContext)
                 .block();

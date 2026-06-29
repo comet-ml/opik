@@ -2,6 +2,7 @@ package com.comet.opik.api.events;
 
 import com.comet.opik.api.Span;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import jakarta.annotation.Nullable;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 
@@ -17,5 +18,11 @@ public record SpanToScoreLlmAsJudge(
         @NotNull String ruleName,
         @NotNull SpanLlmAsJudgeCode llmAsJudgeCode,
         @NotNull String workspaceId,
-        @NotNull String userName) implements WorkspaceScopedMessage {
+        @NotNull String userName,
+        @Nullable String workspaceName) implements RedisSubscriberMessage {
+
+    @Override
+    public RedisSubscriberMessage withWorkspaceName(String workspaceName) {
+        return toBuilder().workspaceName(workspaceName).build();
+    }
 }

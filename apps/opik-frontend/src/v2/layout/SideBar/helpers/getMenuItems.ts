@@ -9,6 +9,7 @@ import {
   House,
   LayoutDashboard,
   ListChecks,
+  Radar,
   Rows3,
   Settings2,
   Sparkles,
@@ -21,6 +22,7 @@ import {
   MENU_ITEM_TYPE,
   MenuItemGroup,
 } from "@/v2/layout/SideBar/MenuItem/SidebarMenuItem";
+import DiagnosticsNavBadge from "@/v2/layout/SideBar/MenuItem/DiagnosticsNavBadge";
 const getMenuItems = ({
   projectId,
   canViewExperiments,
@@ -30,6 +32,7 @@ const getMenuItems = ({
   canViewOptimizationRuns,
   showHomePage,
   showOlliePage,
+  showDiagnostics,
 }: {
   projectId: string | null;
   canViewExperiments: boolean;
@@ -39,6 +42,7 @@ const getMenuItems = ({
   canViewOptimizationRuns: boolean;
   showHomePage: boolean;
   showOlliePage: boolean;
+  showDiagnostics: boolean;
 }): MenuItemGroup[] => {
   const projectPrefix = projectId
     ? "/$workspaceName/projects/$projectId"
@@ -89,6 +93,19 @@ const getMenuItems = ({
           label: "Logs",
           disabled: !projectPrefix,
         },
+        ...(showDiagnostics
+          ? [
+              {
+                id: "diagnostics",
+                path: projectPath("/diagnostics"),
+                type: MENU_ITEM_TYPE.router as const,
+                icon: Radar,
+                label: "Diagnostics",
+                disabled: !projectPrefix,
+                badge: DiagnosticsNavBadge,
+              },
+            ]
+          : []),
         ...(canViewDashboards
           ? [
               {

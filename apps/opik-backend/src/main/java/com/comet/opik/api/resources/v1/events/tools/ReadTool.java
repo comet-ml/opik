@@ -4,15 +4,18 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.domain.DatasetItemSearchCriteria;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
+import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
@@ -108,7 +111,9 @@ public class ReadTool implements ToolExecutor {
                     + " compressed view sized to fit a token budget. Truncated string fields include"
                     + " jq-path hints showing how to recover the full value with the jq tool."
                     + " Use this to drill into a specific span at FULL tier, or to inspect"
-                    + " an entity that is not the active trace.")
+                    + " an entity that is not the active trace. For traces, the response includes an"
+                    + " `attachments` list (file_name, mime_type, media_type); load an image/audio/video"
+                    + " attachment as viewable media with the get_attachment tool.")
             .parameters(JsonObjectSchema.builder()
                     .addStringProperty("type",
                             "Entity type: one of trace, span, dataset, dataset_item, project.")
@@ -126,6 +131,7 @@ public class ReadTool implements ToolExecutor {
     private final DatasetService datasetService;
     private final DatasetItemService datasetItemService;
     private final ProjectService projectService;
+    private final AttachmentService attachmentService;
     private final TraceCompressor traceCompressor;
     private final DatasetCompressor datasetCompressor;
     private final GenericCompressor genericCompressor;
@@ -136,6 +142,7 @@ public class ReadTool implements ToolExecutor {
             @NonNull DatasetService datasetService,
             @NonNull DatasetItemService datasetItemService,
             @NonNull ProjectService projectService,
+            @NonNull AttachmentService attachmentService,
             @NonNull TraceCompressor traceCompressor,
             @NonNull DatasetCompressor datasetCompressor,
             @NonNull GenericCompressor genericCompressor) {
@@ -144,6 +151,7 @@ public class ReadTool implements ToolExecutor {
         this.datasetService = datasetService;
         this.datasetItemService = datasetItemService;
         this.projectService = projectService;
+        this.attachmentService = attachmentService;
         this.traceCompressor = traceCompressor;
         this.datasetCompressor = datasetCompressor;
         this.genericCompressor = genericCompressor;
@@ -215,7 +223,7 @@ public class ReadTool implements ToolExecutor {
                                     traceCompressor.buildFullJson(trace, spans), trace, spans)));
         }
 
-        return dataMono.map(data -> {
+        return dataMono.flatMap(data -> {
             CacheOutcome outcome = applyCacheCap(data.fullJson(), ref, ctx);
             // Always replace the cache with outcome.cachedNode — even when the cache was
             // pre-seeded (e.g. the active trace from OnlineScoringLlmAsJudgeScorer) we want
@@ -227,8 +235,36 @@ public class ReadTool implements ToolExecutor {
             var result = guardOutput(
                     traceCompressor.compress(data.fullJson(), data.trace(), data.spans(), args.tier, suffix),
                     tier -> traceCompressor.compress(data.fullJson(), data.trace(), data.spans(), tier, suffix));
-            return buildResponse(args, result, outcome.warning()).toString();
+            // Surface the trace's attachments so the agent can discover them here (the structure
+            // tool) and fetch one via get_attachment, rather than needing a separate list call.
+            UUID projectId = data.trace() != null ? data.trace().projectId() : null;
+            return listTraceAttachments(id, projectId, ctx)
+                    .map(attachments -> buildResponse(args, result, outcome.warning(), attachments).toString());
         });
+    }
+
+    /**
+     * Lists the trace's attachments as a compact {@code [{file_name, mime_type, media_type}]}
+     * array for the read response. Best-effort: an attachment-store failure must not fail the
+     * read, so errors degrade to an empty array. Returns an empty array when {@code projectId}
+     * is unknown (cached trace that failed to deserialize).
+     */
+    private Mono<ArrayNode> listTraceAttachments(UUID traceId, UUID projectId, TraceToolContext ctx) {
+        if (projectId == null) {
+            return Mono.just(JsonUtils.getMapper().createArrayNode());
+        }
+        Optional<List<AttachmentInfo>> cached = ctx.getCachedAttachments(traceId);
+        if (cached.isPresent()) {
+            return Mono.just(AttachmentSummaries.toJsonArray(cached.get()));
+        }
+        return withRequestContext(attachmentService.getAttachmentInfoByEntity(traceId,
+                com.comet.opik.api.attachment.EntityType.TRACE, projectId), ctx)
+                .doOnSuccess(attachments -> ctx.cacheAttachments(traceId, attachments))
+                .map(AttachmentSummaries::toJsonArray)
+                .onErrorResume(e -> {
+                    log.warn("read tool failed to list attachments for trace '{}'", traceId, e);
+                    return Mono.just(JsonUtils.getMapper().createArrayNode());
+                });
     }
 
     // ---------------- Dataset ----------------
@@ -448,11 +484,19 @@ public class ReadTool implements ToolExecutor {
     }
 
     private static ObjectNode buildResponse(ParsedArgs args, CompressionResult result, String cacheWarning) {
+        return buildResponse(args, result, cacheWarning, null);
+    }
+
+    private static ObjectNode buildResponse(ParsedArgs args, CompressionResult result, String cacheWarning,
+            ArrayNode attachments) {
         ObjectNode envelope = JsonUtils.getMapper().createObjectNode();
         envelope.put("tier", effectiveTier(result.tier(), cacheWarning).name());
         envelope.put("type", args.type.name().toLowerCase());
         envelope.put("id", args.id);
         envelope.set("data", result.payload());
+        if (attachments != null) {
+            envelope.set("attachments", attachments);
+        }
         if (cacheWarning != null) {
             envelope.put("cache_warning", cacheWarning);
         }

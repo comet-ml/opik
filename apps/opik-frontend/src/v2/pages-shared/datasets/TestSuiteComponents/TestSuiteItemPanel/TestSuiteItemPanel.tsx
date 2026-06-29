@@ -161,12 +161,13 @@ const TestSuiteItemPanelLayout: React.FC<TestSuiteItemPanelLayoutProps> = ({
       header={
         <ResizableSidePanelTopBar
           variant="info"
-          title={isNewItem ? "Add item" : "Edit item"}
+          title={isNewItem ? "Add test case" : "Edit test case"}
           onClose={onClose}
         >
           {!isNewItem && (
             <DatasetItemActionsDropdown
               datasetItemId={datasetItemId}
+              itemName="test case"
               onShare={handleShare}
               onCopyId={handleCopyId}
               onDelete={handleDeleteItemConfirm}

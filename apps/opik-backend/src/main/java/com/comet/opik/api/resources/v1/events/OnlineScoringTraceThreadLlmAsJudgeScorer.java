@@ -5,6 +5,7 @@ import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.Visibility;
+import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.events.TraceThreadToScoreLlmAsJudge;
@@ -14,6 +15,7 @@ import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
+import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.llm.ChatCompletionService;
@@ -71,6 +73,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
     private final OnlineScoringConfig onlineScoringConfig;
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final SpanService spanService;
+    private final AttachmentService attachmentService;
 
     @Inject
     public OnlineScoringTraceThreadLlmAsJudgeScorer(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
@@ -84,7 +87,8 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
             @NonNull ProjectService projectService,
             @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService,
             @NonNull ToolRegistry toolRegistry,
-            @NonNull SpanService spanService) {
+            @NonNull SpanService spanService,
+            @NonNull AttachmentService attachmentService) {
         super(config, redisson, feedbackScoreService, traceService, TRACE_THREAD_LLM_AS_JUDGE,
                 Constants.TRACE_THREAD_LLM_AS_JUDGE);
         this.aiProxyService = aiProxyService;
@@ -96,6 +100,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
         this.onlineScoringConfig = config;
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.spanService = spanService;
+        this.attachmentService = attachmentService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringTraceThreadLlmAsJudgeScorer.class);
     }
 
@@ -226,8 +231,21 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                                 .put(RequestContext.WORKSPACE_ID, message.workspaceId())
                                 .put(RequestContext.USER_NAME, message.userName()))
                 : Mono.just(List.of());
-        return spansMono
-                .flatMap(spans -> evaluate(message, traces, spans, threadModelId, threadId, rule, mdc))
+        // Check whether any trace in the thread has attachments — if so, force the agentic-tools
+        // path regardless of context size (the judge needs get_attachment to fetch them). Best-effort:
+        // a transient listing error returns false and falls back to the normal size-based routing.
+        Mono<Boolean> hasAttachmentsMono = serviceTogglesConfig.isAgenticToolsEnabled()
+                ? attachmentService.hasAnyAttachmentByEntityIds(
+                        EntityType.TRACE,
+                        traces.stream().map(Trace::id).collect(Collectors.toSet()))
+                        .onErrorReturn(false)
+                        .contextWrite(ctx -> ctx
+                                .put(RequestContext.WORKSPACE_ID, message.workspaceId())
+                                .put(RequestContext.USER_NAME, message.userName()))
+                : Mono.just(false);
+        return Mono.zip(spansMono, hasAttachmentsMono)
+                .flatMap(tuple -> evaluate(message, traces, tuple.getT1(), tuple.getT2(),
+                        threadModelId, threadId, rule, mdc))
                 .flatMap(scores -> storeThreadScores(scores, threadId, message.userName(), message.workspaceId()))
                 .doOnNext(withMdc(mdc, loggedScores -> userFacingLogger
                         .info("Scores for threadId '{}' stored successfully:\n\n{}", threadId, loggedScores)))
@@ -241,14 +259,15 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
 
     /**
      * Builds and runs the LLM scoring chain for the thread. Routes through the agentic-tools
-     * branch (skeleton + ReadTool/JqTool/SearchTool drill-down) when the inline-rendered thread
-     * would exceed the configured size threshold AND the provider supports tool-calling AND the
-     * toggle is on. Otherwise the inline path runs unchanged — same shape as today.
+     * branch (skeleton + ReadTool/JqTool/SearchTool drill-down) when the toggle is on AND either
+     * the inline-rendered thread would exceed the configured size threshold OR the thread has
+     * attachments (so the judge can call get_attachment). Provider must support tool-calling and
+     * the template must be text-only. Otherwise the inline path runs unchanged — same shape as today.
      */
     private Mono<List<FeedbackScoreBatchItemThread>> evaluate(TraceThreadToScoreLlmAsJudge message,
-            List<Trace> traces, List<Span> spans, UUID threadModelId, String threadId,
+            List<Trace> traces, List<Span> spans, boolean hasAttachments, UUID threadModelId, String threadId,
             AutomationRuleEvaluator<?, ?> rule, Map<String, String> mdc) {
-        return Mono.fromCallable(() -> prepareEvaluation(message, traces, spans, threadId, rule, mdc))
+        return Mono.fromCallable(() -> prepareEvaluation(message, traces, spans, hasAttachments, threadId, rule, mdc))
                 .subscribeOn(Schedulers.parallel())
                 .flatMap(prepared -> scoreTraceReactive(prepared.scoreRequest(), message)
                         .doOnNext(withMdc(mdc, chatResponse -> {
@@ -287,7 +306,8 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
      * rendering); no blocking I/O happens here.
      */
     private PreparedEvaluation prepareEvaluation(TraceThreadToScoreLlmAsJudge message, List<Trace> traces,
-            List<Span> spans, String threadId, AutomationRuleEvaluator<?, ?> rule, Map<String, String> mdc) {
+            List<Span> spans, boolean hasAttachments, String threadId, AutomationRuleEvaluator<?, ?> rule,
+            Map<String, String> mdc) {
         try (var logContext = wrapWithMdc(mdc)) {
             userFacingLogger.info("Evaluating threadId '{}' sampled by rule '{}'", threadId, rule.getName());
 
@@ -302,8 +322,8 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                     ? OnlineScoringEngine.estimateThreadContextTokens(traces, spans,
                             onlineScoringConfig.getAgenticToolsCharsPerToken())
                     : 0;
-            boolean useTools = shouldUseAgenticTools(estimatedContextTokens, modelName, threadId,
-                    message.code().messages());
+            boolean useTools = shouldUseAgenticTools(estimatedContextTokens, hasAttachments, modelName,
+                    threadId, message.code().messages());
 
             ChatRequest scoreRequest;
             ChatRequest structuredRequest;
@@ -351,28 +371,32 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
 
     /**
      * Routing decision for whether to attach tool specs + run the tool-call loop for a thread.
-     * Threads don't have the experimentId-driven branch (no test-suite-assertion equivalent),
-     * so the decision is size-driven: toggle on + estimated thread context above threshold +
-     * provider supports tool-calling + template is string-content only. Falls back to inline +
-     * a user-facing warn when toggle is on and size is over but either the provider can't
-     * handle tools or the template carries multimodal parts.
+     * Requires the toggle on AND at least one of:
+     * <ul>
+     *   <li>estimated thread context exceeds the configured token threshold, OR</li>
+     *   <li>the thread has attachments (the judge needs get_attachment to fetch them)</li>
+     * </ul>
+     * Both cases also require the provider to support tool-calling and the template to be
+     * text-only. Falls back to inline with a user-facing warn when those secondary guards fail.
      */
-    boolean shouldUseAgenticTools(int estimatedContextTokens, String modelName, String threadId,
-            List<LlmAsJudgeMessage> templateMessages) {
-        boolean overSizeThreshold = serviceTogglesConfig.isAgenticToolsEnabled()
-                && estimatedContextTokens >= onlineScoringConfig.getAgenticToolsThresholdTokens();
-        // Skip the provider lookup when the toggle is off — most evaluations are toggle-off and
-        // this saves both a service hit and an unnecessary NPE-risk when the model is unknown.
-        if (!overSizeThreshold) {
+    boolean shouldUseAgenticTools(int estimatedContextTokens, boolean hasAttachments, String modelName,
+            String threadId, List<LlmAsJudgeMessage> templateMessages) {
+        if (!serviceTogglesConfig.isAgenticToolsEnabled()) {
+            return false;
+        }
+        boolean overSizeThreshold = estimatedContextTokens >= onlineScoringConfig.getAgenticToolsThresholdTokens();
+        // Skip the provider lookup when neither trigger is met — most evaluations are toggle-off
+        // or have neither large contexts nor attachments.
+        if (!overSizeThreshold && !hasAttachments) {
             return false;
         }
         boolean providerSupportsTools = OnlineScoringEngine.supportsToolCalling(
                 llmProviderFactory.getLlmProvider(modelName));
         if (!providerSupportsTools) {
             userFacingLogger.warn(
-                    "Thread context exceeds '{}' tokens but provider for model '{}' does not support tool"
-                            + " calling; falling back to inline path for threadId '{}' — may overflow"
-                            + " context window.",
+                    "Thread has attachments or context exceeds '{}' tokens but provider for model '{}'"
+                            + " does not support tool calling; falling back to inline path for threadId"
+                            + " '{}' — may overflow context window.",
                     onlineScoringConfig.getAgenticToolsThresholdTokens(), modelName, threadId);
             return false;
         }
@@ -381,14 +405,18 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
         // safety throw in renderThreadMessagesWithReplacement and fail the evaluation.
         if (OnlineScoringEngine.hasMultimodalTemplate(templateMessages)) {
             userFacingLogger.warn(
-                    "Thread context exceeds '{}' tokens but evaluator template has multimodal content;"
-                            + " falling back to inline path for threadId '{}' — may overflow context window.",
+                    "Thread has attachments or context exceeds '{}' tokens but evaluator template has"
+                            + " multimodal content; falling back to inline path for threadId '{}'"
+                            + " — may overflow context window.",
                     onlineScoringConfig.getAgenticToolsThresholdTokens(), threadId);
             return false;
         }
-        userFacingLogger.info(
-                "Thread context exceeds '{}' tokens; switching to agentic-tools mode for threadId '{}'",
-                onlineScoringConfig.getAgenticToolsThresholdTokens(), threadId);
+        if (hasAttachments) {
+            log.debug("Thread has attachments; switching to agentic-tools mode for threadId '{}'", threadId);
+        } else {
+            log.debug("Thread context exceeds '{}' tokens; switching to agentic-tools mode for threadId '{}'",
+                    onlineScoringConfig.getAgenticToolsThresholdTokens(), threadId);
+        }
         return true;
     }
 
@@ -418,7 +446,8 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
             // Thread-scoped context: no single active trace. ReadTool fetches any trace from the
             // thread on demand via the standard read(type=trace, id=X) path. GetTraceSpansTool
             // returns a redirect error on this context (see GetTraceSpansTool#execute).
-            var ctx = TraceToolContext.forThread(message.workspaceId(), message.userName());
+            var ctx = TraceToolContext.forThread(message.workspaceId(), message.userName(), message.projectId(),
+                    onlineScoringConfig.getAgenticToolsMaxInjectedBytes());
 
             var followUpParameters = ChatRequestParameters.builder()
                     .overrideWith(toolRequest.parameters())
@@ -431,7 +460,9 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
             return ToolCallLoop.runWithWrapUp(
                     chatResponse, toolRequest, structuredRequest, followUpParameters, toolRegistry,
                     request -> scoreTraceReactive(request, message),
-                    messages, ctx, budget, "threadId/ruleId=" + message.ruleId(), mdc);
+                    messages, ctx, budget, "threadId/ruleId=" + message.ruleId(), mdc)
+                    .onErrorResume(error -> surfaceInjectedMediaFailure(error, ctx,
+                            message.code().model().name(), userFacingLogger, mdc));
         });
     }
 

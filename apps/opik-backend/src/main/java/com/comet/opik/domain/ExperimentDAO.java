@@ -405,7 +405,8 @@ public class ExperimentDAO {
                            name,
                            value,
                            last_updated_at,
-                           feedback_scores.last_updated_by AS author
+                           feedback_scores.last_updated_by AS author,
+                           CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
@@ -421,7 +422,8 @@ public class ExperimentDAO {
                         name,
                         value,
                         last_updated_at,
-                        author
+                        author,
+                        source_queue_id
                     FROM authored_feedback_scores
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
@@ -431,7 +433,7 @@ public class ExperimentDAO {
                     AND entity_id IN (SELECT trace_id FROM experiment_items_final)
                 )
                 ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
@@ -856,7 +858,8 @@ public class ExperimentDAO {
                            name,
                            value,
                            last_updated_at,
-                           feedback_scores.last_updated_by AS author
+                           feedback_scores.last_updated_by AS author,
+                           CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
@@ -872,7 +875,8 @@ public class ExperimentDAO {
                         name,
                         value,
                         last_updated_at,
-                        author
+                        author,
+                        source_queue_id
                     FROM authored_feedback_scores
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
@@ -882,7 +886,7 @@ public class ExperimentDAO {
                     AND entity_id IN (SELECT trace_id FROM experiment_items_final)
                 )
                 ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
@@ -1337,7 +1341,8 @@ public class ExperimentDAO {
                            name,
                            value,
                            last_updated_at,
-                           feedback_scores.last_updated_by AS author
+                           feedback_scores.last_updated_by AS author,
+                           CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
@@ -1353,7 +1358,8 @@ public class ExperimentDAO {
                         name,
                         value,
                         last_updated_at,
-                        author
+                        author,
+                        source_queue_id
                     FROM authored_feedback_scores
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
@@ -1363,7 +1369,7 @@ public class ExperimentDAO {
                     AND entity_id IN (SELECT trace_id FROM experiment_items_final)
                 )
                 ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ), feedback_scores_final AS (
                 SELECT
                     fsc.workspace_id,

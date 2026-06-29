@@ -5,20 +5,27 @@ import com.google.common.base.Splitter;
 import io.dropwizard.util.Duration;
 import io.r2dbc.spi.ConnectionFactories;
 import io.r2dbc.spi.ConnectionFactory;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.lang3.StringUtils;
 
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Data
 public class DatabaseAnalyticsFactory {
 
     private static final String URL_TEMPLATE = "r2dbc:clickhouse:%s://%s:%s@%s:%d/%s%s";
     private static final String CUSTOM_HTTP_PARAMS_KEY = "custom_http_params";
+    private static final String ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS = "async_insert_busy_timeout_max_ms";
+    private static final String KEY_VALUE_FORMAT = "%s=%s";
 
     // Split each `&`/`,`-chunk on the FIRST `=` only — values may themselves contain `=`,
     // e.g. `custom_http_params=max_query_size=100000000,async_insert=1`.
@@ -35,10 +42,23 @@ public class DatabaseAnalyticsFactory {
     private @NotNull String password;
     private @NotBlank String databaseName;
     private String queryParameters;
+
+    /**
+     * Optional override (ms) for {@code async_insert_busy_timeout_max_ms} in the {@link #queryParameters}
+     * {@code custom_http_params} chain; when unset the value carried by {@code queryParameters} is left untouched.
+     * With {@code async_insert_use_adaptive_busy_timeout=1} this is a ceiling on the buffer window — the adaptive
+     * scheduler widens it only while rows are queued.
+     */
+    private @Min(1) Integer asyncInsertBusyTimeoutMaxMs;
+
     private Duration healthCheckTimeout = Duration.seconds(1);
 
+    // Optional socket timeout, applied in buildClient() only when set (null = library default of 0/no timeout).
+    private Duration clientSocketTimeout;
+
     public ConnectionFactory build() {
-        var options = queryParameters == null ? "" : "?%s".formatted(queryParameters);
+        var queryParametersOverrides = getQueryParametersOverrides(queryParameters);
+        var options = queryParametersOverrides == null ? "" : "?%s".formatted(queryParametersOverrides);
         var url = URL_TEMPLATE.formatted(protocol.getValue(), username, password, host, port, databaseName, options);
         return ConnectionFactories.get(url);
     }
@@ -49,7 +69,7 @@ public class DatabaseAnalyticsFactory {
      *
      * <p>Credentials, host, port, database and {@code queryParameters} mirror {@link #build()}
      * so the two clients share a single source of truth. Connection pool, timeouts and other
-     * driver-level behaviour are intentionally left at library defaults unless explicitly set
+     * driver-level behavior are intentionally left at library defaults unless explicitly set
      * via {@code queryParameters} (e.g. {@code compress=1}, {@code health_check_interval=2000}).
      *
      * <p>{@code queryParameters} parsing: top-level {@code &}-separated keys are applied as
@@ -78,9 +98,67 @@ public class DatabaseAnalyticsFactory {
         // are R2DBC-specific and do not translate to the v2 driver surface; connection pool,
         // timeouts and compression are owned by the v2 Client.Builder methods above. Values
         // are still returned by parseQueryParameters() for tests/observability.
-        ParsedQueryParameters parsed = parseQueryParameters(queryParameters);
+        var parsed = parseQueryParameters(getQueryParametersOverrides(queryParameters));
         parsed.serverSettings().forEach(builder::serverSetting);
+
+        if (clientSocketTimeout != null) {
+            builder.setSocketTimeout(clientSocketTimeout.toMilliseconds(), ChronoUnit.MILLIS);
+        }
+
         return builder.build();
+    }
+
+    /**
+     * Returns {@code queryParameters} with each {@link #configurableQueryParameters() configurable server setting}
+     * present in {@code custom_http_params} replaced by its config-field value; unchanged when none are present.
+     */
+    private String getQueryParametersOverrides(String queryParameters) {
+        if (StringUtils.isBlank(queryParameters)) {
+            return queryParameters;
+        }
+        var parsed = parseQueryParameters(queryParameters);
+        var overrides = configurableQueryParameters().entrySet().stream()
+                .filter(override -> parsed.serverSettings().containsKey(override.getKey()))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        if (overrides.isEmpty()) {
+            return queryParameters;
+        }
+        var serverSettings = new LinkedHashMap<>(parsed.serverSettings());
+        serverSettings.putAll(overrides);
+        return serialize(parsed.driverOptions(), serverSettings);
+    }
+
+    /**
+     * Server settings whose values come from dedicated config fields, included only when the field is set. Applied
+     * only when already present in {@code custom_http_params}, so settings absent from {@link #queryParameters} are
+     * never injected.
+     */
+    private Map<String, String> configurableQueryParameters() {
+        if (asyncInsertBusyTimeoutMaxMs == null) {
+            return Map.of();
+        }
+        return Map.of(ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS, String.valueOf(asyncInsertBusyTimeoutMaxMs));
+    }
+
+    private String serialize(Map<String, String> driverOptions, Map<String, String> serverSettings) {
+        var topLevel = driverOptions.entrySet().stream()
+                .map(this::formatEntry)
+                .collect(Collectors.toCollection(ArrayList::new));
+        if (!serverSettings.isEmpty()) {
+            var customHttpParams = serverSettings.entrySet().stream()
+                    .map(this::formatEntry)
+                    .collect(Collectors.joining(","));
+            topLevel.add(formatEntry(CUSTOM_HTTP_PARAMS_KEY, customHttpParams));
+        }
+        return String.join("&", topLevel);
+    }
+
+    private String formatEntry(Map.Entry<String, String> entry) {
+        return formatEntry(entry.getKey(), entry.getValue());
+    }
+
+    private String formatEntry(String key, String value) {
+        return KEY_VALUE_FORMAT.formatted(key, value);
     }
 
     /**
@@ -121,5 +199,4 @@ public class DatabaseAnalyticsFactory {
 
         private final String value;
     }
-
 }

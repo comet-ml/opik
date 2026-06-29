@@ -5,6 +5,8 @@ from typing import Optional
 
 import click
 
+import opik.config as opik_config
+from opik.cli import status_view
 from opik.configurator import configure as opik_configure, interactive_helpers
 
 LOGGER = logging.getLogger(__name__)
@@ -62,7 +64,11 @@ def run_interactive_configure(
     configurator.configure()
 
 
-@click.command(context_settings={"ignore_unknown_options": True})
+@click.group(
+    name="configure",
+    invoke_without_command=True,
+    context_settings={"ignore_unknown_options": True},
+)
 @click.option(
     "--use_local",
     "--use-local",
@@ -83,11 +89,26 @@ def run_interactive_configure(
     help="Register the Opik MCP server with detected AI hosts (Claude Code, Cursor, "
     "VS Code). When omitted, you are prompted interactively.",
 )
-def configure(use_local: bool, yes: bool, install_mcp: Optional[bool]) -> None:
+@click.pass_context
+def configure(
+    ctx: click.Context, use_local: bool, yes: bool, install_mcp: Optional[bool]
+) -> None:
     """
     Create a configuration file for the Opik Python SDK, if a configuration file already exists, it will be overwritten.
     This is also available as a function in the Python SDK.
     """
+    # Running `opik configure` with no subcommand performs the configuration
+    # itself; `opik configure status` (and any future subcommand) is dispatched
+    # by Click instead.
+    if ctx.invoked_subcommand is not None:
+        return
+
     run_interactive_configure(
         use_local=use_local, automatic_approvals=yes, install_mcp=install_mcp
     )
+
+
+@configure.command(name="status")
+def status() -> None:
+    """Show the active Opik configuration: file path, environment, and workspace."""
+    status_view.render_config_summary(opik_config.OpikConfig())

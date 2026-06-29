@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { Blocks, ChevronDown, Code2 } from "lucide-react";
+import { Blocks, Code2, Play } from "lucide-react";
 import { Button } from "@/ui/button";
 import {
   DropdownMenu,
@@ -90,57 +90,66 @@ function UseDatasetDropdown({
           confirmText={`Load ${entityName}`}
         />
       )}
-      <TooltipWrapper content={isEmpty ? `This ${entityName} is empty` : null}>
-        <div>
-          <DropdownMenu>
+      {disabled || isEmpty ? (
+        <TooltipWrapper
+          content={isEmpty ? `This ${entityName} is empty` : "Run in"}
+        >
+          <span className="inline-flex">
+            <Button variant="outline" size="icon-sm" disabled>
+              <Play />
+            </Button>
+          </span>
+        </TooltipWrapper>
+      ) : (
+        <DropdownMenu>
+          <TooltipWrapper content="Run in">
             <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={disabled || isEmpty}
-              >
-                Use {entityName}
-                <ChevronDown className="ml-2 size-4" />
+              <Button variant="outline" size="icon-sm">
+                <Play />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-80">
-              {canUsePlayground && (
-                <DropdownMenuItem
-                  onClick={handleOpenPlaygroundClick}
-                  disabled={disabled || isPendingProviderKeys}
-                >
-                  <Blocks className="mr-2 mt-0.5 size-4 shrink-0 self-start" />
-                  <div className="comet-body-s flex flex-col">
-                    <span>Open in Playground</span>
-                    <span className="text-light-slate">
-                      Test prompts over your {entityName} and run evaluations
-                      interactively
-                    </span>
-                  </div>
-                </DropdownMenuItem>
-              )}
-              {canCreateExperiments && (
-                <DropdownMenuItem
-                  onClick={() => {
-                    resetDialogKeyRef.current += 1;
-                    setOpenExperimentDialog(true);
-                  }}
-                  disabled={disabled}
-                >
-                  <Code2 className="mr-2 mt-0.5 size-4 shrink-0 self-start" />
-                  <div className="comet-body-s flex flex-col">
-                    <span>Run an experiment</span>
-                    <span className="text-light-slate">
-                      Use this {entityName} to run an experiment using the
-                      Python SDK
-                    </span>
-                  </div>
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </TooltipWrapper>
+          </TooltipWrapper>
+          <DropdownMenuContent
+            align="end"
+            className="w-80"
+            onCloseAutoFocus={(e) => e.preventDefault()}
+          >
+            {canUsePlayground && (
+              <DropdownMenuItem
+                onClick={handleOpenPlaygroundClick}
+                disabled={disabled || isPendingProviderKeys}
+              >
+                <Blocks className="mr-2 mt-0.5 size-4 shrink-0 self-start" />
+                <div className="comet-body-s flex flex-col">
+                  <span>Open in Playground</span>
+                  <span className="text-light-slate">
+                    Test prompts over your {entityName} and run evaluations
+                    interactively
+                  </span>
+                </div>
+              </DropdownMenuItem>
+            )}
+            {canCreateExperiments && (
+              <DropdownMenuItem
+                onClick={() => {
+                  resetDialogKeyRef.current += 1;
+                  setOpenExperimentDialog(true);
+                }}
+                disabled={disabled}
+              >
+                <Code2 className="mr-2 mt-0.5 size-4 shrink-0 self-start" />
+                <div className="comet-body-s flex flex-col">
+                  <span>Run an experiment</span>
+                  <span className="text-light-slate">
+                    Use this {entityName} to run an experiment using the Python
+                    SDK
+                  </span>
+                </div>
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
     </>
   );
 }

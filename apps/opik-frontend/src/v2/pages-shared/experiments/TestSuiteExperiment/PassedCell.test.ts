@@ -40,7 +40,7 @@ describe("getStatusFromExperimentItems", () => {
     it("returns SKIPPED with 'no experiment item' reason when experiment_items is empty", () => {
       const result = getStatusFromExperimentItems(makeRow());
       expect(result.status).toBe(RunStatus.SKIPPED);
-      expect(result.skippedReason).toBe("No experiment item defined");
+      expect(result.reason).toBe("No experiment item defined");
     });
   });
 
@@ -51,7 +51,7 @@ describe("getStatusFromExperimentItems", () => {
       });
       const result = getStatusFromExperimentItems(row);
       expect(result.status).toBe(RunStatus.SKIPPED);
-      expect(result.skippedReason).toBe("No assertions defined");
+      expect(result.reason).toBe("No assertions defined");
     });
   });
 
@@ -116,6 +116,29 @@ describe("getStatusFromExperimentItems", () => {
       const result = getStatusFromExperimentItems(row);
       expect(result.evaluating).toBe(false);
       expect(result.status).toBe(RunStatus.PASSED);
+    });
+  });
+
+  describe("scoring error state", () => {
+    it("returns error when experiment finished with evaluators but no assertion results", () => {
+      const row = makeRow({
+        experiment_items: [makeItem({ id: "i1" })],
+        evaluators: [{ name: "judge", type: "LLM_AS_JUDGE", config: {} }],
+      });
+      const result = getStatusFromExperimentItems(row, true);
+      expect(result.status).toBe(RunStatus.SKIPPED);
+      expect(result.isError).toBe(true);
+      expect(result.reason).toBeDefined();
+    });
+
+    it("returns evaluating (not error) when experiment is still running", () => {
+      const row = makeRow({
+        experiment_items: [makeItem({ id: "i1" })],
+        evaluators: [{ name: "judge", type: "LLM_AS_JUDGE", config: {} }],
+      });
+      const result = getStatusFromExperimentItems(row, false);
+      expect(result.evaluating).toBe(true);
+      expect(result.isError).toBeFalsy();
     });
   });
 
@@ -193,7 +216,7 @@ describe("getStatusInfoForExperiment", () => {
     it("returns SKIPPED with 'no experiment item' reason when item is undefined", () => {
       const result = getStatusInfoForExperiment(makeRow(), "exp-1", undefined);
       expect(result.status).toBe(RunStatus.SKIPPED);
-      expect(result.skippedReason).toBe("No experiment item defined");
+      expect(result.reason).toBe("No experiment item defined");
     });
   });
 
@@ -202,7 +225,7 @@ describe("getStatusInfoForExperiment", () => {
       const item = makeItem({ id: "i1" });
       const result = getStatusInfoForExperiment(makeRow(), "exp-1", item);
       expect(result.status).toBe(RunStatus.SKIPPED);
-      expect(result.skippedReason).toBe("No assertions defined");
+      expect(result.reason).toBe("No assertions defined");
     });
   });
 
@@ -266,6 +289,29 @@ describe("getStatusInfoForExperiment", () => {
       const result = getStatusInfoForExperiment(row, "exp-1", item);
       expect(result.evaluating).toBe(false);
       expect(result.status).toBe(RunStatus.PASSED);
+    });
+  });
+
+  describe("scoring error state", () => {
+    it("returns error when experiment finished with evaluators but no assertion results", () => {
+      const row = makeRow({
+        evaluators: [{ name: "judge", type: "LLM_AS_JUDGE", config: {} }],
+      });
+      const item = makeItem({ id: "i1" });
+      const result = getStatusInfoForExperiment(row, "exp-1", item, true);
+      expect(result.status).toBe(RunStatus.SKIPPED);
+      expect(result.isError).toBe(true);
+      expect(result.reason).toBeDefined();
+    });
+
+    it("returns evaluating (not error) when experiment is still running", () => {
+      const row = makeRow({
+        evaluators: [{ name: "judge", type: "LLM_AS_JUDGE", config: {} }],
+      });
+      const item = makeItem({ id: "i1" });
+      const result = getStatusInfoForExperiment(row, "exp-1", item, false);
+      expect(result.evaluating).toBe(true);
+      expect(result.isError).toBeFalsy();
     });
   });
 

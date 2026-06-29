@@ -15,6 +15,11 @@ import { useCodeMirrorSearch } from "@/shared/SyntaxHighlighter/hooks/useCodeMir
 import { useMarkdownSearch } from "@/shared/SyntaxHighlighter/hooks/useMarkdownSearch";
 import { createBase64ExpandExtension } from "@/shared/SyntaxHighlighter/base64Extension";
 import { createFoldingExtension } from "@/shared/SyntaxHighlighter/foldingExtension";
+import {
+  createQuickFilterExtension,
+  QuickFilterCodeConfig,
+} from "@/shared/SyntaxHighlighter/quickFilterExtension";
+import { QuickFilterMode } from "@/shared/SyntaxHighlighter/quickFilterPaths";
 import { EXTENSION_MAP, MODE_TYPE } from "@/shared/SyntaxHighlighter/constants";
 import { CodeOutput } from "@/shared/SyntaxHighlighter/types";
 import { cn, isStringMarkdown } from "@/lib/utils";
@@ -23,13 +28,24 @@ import LinkifyText from "@/shared/LinkifyText/LinkifyText";
 type CodeBlockBodyProps = {
   code: CodeOutput;
   searchValue?: string;
+  quickFilter?: QuickFilterCodeConfig;
 };
 
-const CodeBlockBody: React.FC<CodeBlockBodyProps> = ({ code, searchValue }) => {
+const CodeBlockBody: React.FC<CodeBlockBodyProps> = ({
+  code,
+  searchValue,
+  quickFilter,
+}) => {
   if (code.mode === MODE_TYPE.pretty) {
     return <MarkdownBody code={code} searchValue={searchValue} />;
   }
-  return <CodeMirrorBody code={code} searchValue={searchValue} />;
+  return (
+    <CodeMirrorBody
+      code={code}
+      searchValue={searchValue}
+      quickFilter={quickFilter}
+    />
+  );
 };
 
 const MarkdownBody: React.FC<CodeBlockBodyProps> = ({ code, searchValue }) => {
@@ -74,6 +90,7 @@ const MarkdownBody: React.FC<CodeBlockBodyProps> = ({ code, searchValue }) => {
 const CodeMirrorBody: React.FC<CodeBlockBodyProps> = ({
   code,
   searchValue,
+  quickFilter,
 }) => {
   const viewRef = useRef<EditorView | null>(null);
   const theme = useCodemirrorTheme({ transparent: true });
@@ -88,6 +105,19 @@ const CodeMirrorBody: React.FC<CodeBlockBodyProps> = ({
 
   const base64Extension = useMemo(() => createBase64ExpandExtension(), []);
   const foldingExtension = useMemo(() => createFoldingExtension(), []);
+  const quickFilterExtension = useMemo(() => {
+    if (!quickFilter) return [];
+    // Only the structured JSON/YAML grammars expose a syntax tree to walk.
+    const filterMode: QuickFilterMode | null =
+      code.mode === MODE_TYPE.json
+        ? "json"
+        : code.mode === MODE_TYPE.yaml
+          ? "yaml"
+          : null;
+    return filterMode
+      ? createQuickFilterExtension(filterMode, quickFilter)
+      : [];
+  }, [quickFilter, code.mode]);
 
   const handleCreateEditor = (view: EditorView) => {
     viewRef.current = view;
@@ -115,6 +145,7 @@ const CodeMirrorBody: React.FC<CodeBlockBodyProps> = ({
           base64Extension,
           foldingExtension,
           EXTENSION_MAP[code.mode] as LRLanguage,
+          quickFilterExtension,
         ]}
         maxHeight="700px"
         onCreateEditor={handleCreateEditor}

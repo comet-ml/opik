@@ -38,6 +38,49 @@ class CostServiceTest {
         assertThat(cost).isEqualByComparingTo("0.0001658");
     }
 
+    /**
+     * Covers every branch of the new audio-token handling in
+     * {@link SpanCostCalculator#textGenerationCost}:
+     * <ul>
+     *   <li>{@code gpt-4o-audio-preview} publishes {@code input_cost_per_audio_token} (4e-5),
+     *       which is 16x the standard input rate (2.5e-6). The Python SDK
+     *       ({@code openai_chat_completions_usage.PromptTokensDetails.audio_tokens}) flattens the
+     *       count under {@code original_usage.prompt_tokens_details.audio_tokens}; the bare OTel
+     *       key {@code prompt_tokens_details.audio_tokens} is the documented fallback.</li>
+     *   <li>{@code gpt-4o-mini} has no {@code input_cost_per_audio_token}, so
+     *       {@code inputAudioRate == 0} and the audio token key in usage is ignored — every
+     *       prompt token bills at the standard input rate.</li>
+     * </ul>
+     */
+    @ParameterizedTest(name = "{0} with key={1}")
+    @MethodSource("provideAudioPromptTokenCases")
+    void calculateCostBillsAudioPromptTokensAtTheConfiguredRate(
+            String model, String audioUsageKey, String expectedCost) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1_000,
+                "completion_tokens", 200,
+                audioUsageKey, 300);
+
+        BigDecimal cost = CostService.calculateCost(model, "openai", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideAudioPromptTokenCases() {
+        // gpt-4o-audio-preview: input 2.5e-6, output 1e-5, input_audio 4e-5
+        // non-audio prompt = 1000 - 300 = 700
+        // 700 * 2.5e-6 + 300 * 4e-5 + 200 * 1e-5 = 0.00175 + 0.012 + 0.002 = 0.01575
+        // gpt-4o-mini: input 1.5e-7, output 6e-7 (no audio rate; audio key is ignored)
+        // 1000 * 1.5e-7 + 200 * 6e-7 = 0.00015 + 0.00012 = 0.00027
+        return Stream.of(
+                Arguments.of("gpt-4o-audio-preview",
+                        "original_usage.prompt_tokens_details.audio_tokens", "0.01575"),
+                Arguments.of("gpt-4o-audio-preview",
+                        "prompt_tokens_details.audio_tokens", "0.01575"),
+                Arguments.of("gpt-4o-mini",
+                        "original_usage.prompt_tokens_details.audio_tokens", "0.00027"));
+    }
+
     @Test
     void calculateCostUsesAnthropicCacheCalculatorForClaudeOnVertexAI() {
         // Claude models hosted on Google Vertex AI ship under the litellm_provider

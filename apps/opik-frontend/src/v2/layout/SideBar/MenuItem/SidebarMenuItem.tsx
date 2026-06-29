@@ -24,6 +24,7 @@ export type MenuItem = {
   exact?: boolean;
   featureFlag?: FeatureToggleKeys;
   onClick?: MouseEventHandler<HTMLButtonElement>;
+  badge?: React.ComponentType<{ collapsed: boolean }>;
 };
 
 export type MenuItemGroup = {
@@ -64,6 +65,7 @@ const SidebarMenuItem: React.FunctionComponent<SidebarMenuItemProps> = ({
         )}
       />
       {expanded && <div className="grow truncate">{item.label}</div>}
+      {item.badge && <item.badge collapsed={!expanded} />}
     </>
   );
 

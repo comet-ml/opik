@@ -687,7 +687,7 @@ public class SpanDAO {
                     entries[1].4 AS source,
                     mapFromArrays(
                             arrayMap(e -> e.5, entries),
-                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9), entries)
+                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, '', '', '', e.5), entries)
                     ) AS value_by_author,
                     arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
                     arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
@@ -698,7 +698,15 @@ public class SpanDAO {
             SELECT
                 s.*,
                 s.project_id as project_id,
-                groupArray(tuple(c.*)) AS comments,
+                groupArray(tuple(
+                    c.comment_id,
+                    c.text,
+                    c.comment_created_at,
+                    c.comment_last_updated_at,
+                    c.comment_created_by,
+                    c.comment_last_updated_by,
+                    c.source_queue_id
+                )) AS comments,
                 any(fs.feedback_scores) as feedback_scores_list
             FROM (
                 SELECT
@@ -719,6 +727,7 @@ public class SpanDAO {
                     last_updated_at AS comment_last_updated_at,
                     created_by AS comment_created_by,
                     last_updated_by AS comment_last_updated_by,
+                    source_queue_id,
                     entity_id
                 FROM comments
                 WHERE workspace_id = :workspace_id
@@ -831,7 +840,8 @@ public class SpanDAO {
                        created_at AS comment_created_at,
                        last_updated_at AS comment_last_updated_at,
                        created_by AS comment_created_by,
-                       last_updated_by AS comment_last_updated_by
+                       last_updated_by AS comment_last_updated_by,
+                       source_queue_id
                    )) as comments
               FROM (
                 SELECT
@@ -841,6 +851,7 @@ public class SpanDAO {
                     last_updated_at,
                     created_by,
                     last_updated_by,
+                    source_queue_id,
                     entity_id,
                     workspace_id,
                     project_id
@@ -940,7 +951,7 @@ public class SpanDAO {
                     entries[1].4 AS source,
                     mapFromArrays(
                             arrayMap(e -> e.5, entries),
-                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9), entries)
+                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, '', '', '', e.5), entries)
                     ) AS value_by_author,
                     arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
                     arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
@@ -1311,7 +1322,7 @@ public class SpanDAO {
                     entries[1].4 AS source,
                     mapFromArrays(
                             arrayMap(e -> e.5, entries),
-                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9), entries)
+                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, '', '', '', e.5), entries)
                     ) AS value_by_author,
                     arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
                     arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
