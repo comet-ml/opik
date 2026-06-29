@@ -255,7 +255,11 @@ const OptimizationsPage: React.FunctionComponent = () => {
         )
       ) : (
         <>
-          {canUseOptimizationStudio && !isTableLoading && <StudioTemplates />}
+          {canUseOptimizationStudio && !isTableLoading && (
+            <StudioTemplates
+              onOptimizeViaSdkClick={handleNewOptimizationClick}
+            />
+          )}
           <div className="pt-4">
             <OptimizationsToolbar
               search={search!}

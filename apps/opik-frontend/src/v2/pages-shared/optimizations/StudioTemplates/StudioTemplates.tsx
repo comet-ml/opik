@@ -1,70 +1,105 @@
 import React from "react";
-import { SquareDashedMousePointer, MessageSquare } from "lucide-react";
-import { OPTIMIZATION_DEMO_TEMPLATES } from "@/constants/optimizations";
-import useNavigateToOptimizationStudio from "@/v2/pages-shared/optimizations/useNavigateToOptimizationStudio";
-import OptimizationTemplateCard from "./OptimizationTemplateCard";
+import {
+  ArrowRight,
+  BotMessageSquare,
+  FileSliders,
+  SquareDashedMousePointer,
+  type LucideIcon,
+} from "lucide-react";
 
-const TEMPLATE_ICONS: Record<
-  string,
-  { icon: React.ComponentType<{ className?: string }>; color: string }
-> = {
-  "opik-chatbot": {
-    icon: MessageSquare,
-    color: "text-template-icon-performance",
-  },
+import useNavigateToOptimizationStudio from "@/v2/pages-shared/optimizations/useNavigateToOptimizationStudio";
+
+type StudioTemplatesProps = {
+  onOptimizeViaSdkClick: () => void;
 };
 
-const StudioTemplates: React.FC = () => {
-  const handleTemplateClick = useNavigateToOptimizationStudio();
+type StudioCard = {
+  icon: LucideIcon;
+  // CSS color token driving the icon, its chip tint, the card tint and the link
+  color: string;
+  title: string;
+  description: string;
+  actionLabel: string;
+  onClick: () => void;
+};
+
+const StudioTemplates: React.FC<StudioTemplatesProps> = ({
+  onOptimizeViaSdkClick,
+}) => {
+  const navigateToStudio = useNavigateToOptimizationStudio();
+
+  // Three onboarding cards, matching the Figma runs-list (562:37189).
+  const cards: StudioCard[] = [
+    {
+      icon: BotMessageSquare,
+      color: "var(--chart-blue)",
+      title: "Run a demo example",
+      description:
+        "Start with a pre-configured optimization example for a support chatbot.",
+      actionLabel: "Try template",
+      onClick: () => navigateToStudio("opik-chatbot"),
+    },
+    {
+      icon: SquareDashedMousePointer,
+      color: "var(--chart-purple)",
+      title: "Use the Optimization studio",
+      description:
+        "Create a custom optimization workflow to test and improve your prompts.",
+      actionLabel: "Create optimization",
+      onClick: () => navigateToStudio(),
+    },
+    {
+      icon: FileSliders,
+      color: "var(--chart-burgundy)",
+      title: "Optimize via SDK",
+      description:
+        "Generate starter code for running a custom optimization programmatically.",
+      actionLabel: "View SDK guide",
+      onClick: onOptimizeViaSdkClick,
+    },
+  ];
 
   return (
     <div className="pt-4">
       <h2 className="comet-title-s sticky top-0 z-10 truncate break-words bg-soft-background pb-3 pt-2">
         Run an optimization
       </h2>
-      <div className="flex flex-col">
-        <div className="flex items-stretch gap-6">
-          <div className="flex gap-4">
-            {OPTIMIZATION_DEMO_TEMPLATES.map((template) => {
-              const iconConfig = TEMPLATE_ICONS[template.id];
-              return (
-                <div key={template.id} className="w-80">
-                  <OptimizationTemplateCard
-                    name={template.title}
-                    description={template.description}
-                    icon={iconConfig?.icon}
-                    iconColor={iconConfig?.color}
-                    tags={[
-                      template.studio_config?.optimizer.type || "",
-                      template.studio_config?.evaluation.metrics[0]?.type || "",
-                    ].filter(Boolean)}
-                    interactive
-                    onClick={() => handleTemplateClick(template.id)}
-                  />
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="flex flex-col items-center gap-2">
-            <div className="w-px flex-1 bg-slate-200" />
-            <p className="comet-body-xs whitespace-nowrap text-light-slate">
-              or
-            </p>
-            <div className="w-px flex-1 bg-slate-200" />
-          </div>
-
-          <div className="flex w-80">
-            <OptimizationTemplateCard
-              name="Optimize your own prompt"
-              description="Start from scratch and configure your own optimization settings."
-              icon={SquareDashedMousePointer}
-              iconColor="text-template-icon-scratch"
-              interactive
-              onClick={() => handleTemplateClick()}
-            />
-          </div>
-        </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        {cards.map(
+          ({ icon: Icon, color, title, description, actionLabel, onClick }) => (
+            <button
+              key={title}
+              type="button"
+              onClick={onClick}
+              className="flex flex-col items-start gap-2 rounded-md border border-border p-4 text-left transition-colors hover:border-primary"
+              style={{
+                backgroundColor: `color-mix(in srgb, ${color} 5%, transparent)`,
+              }}
+            >
+              <span
+                className="flex size-7 shrink-0 items-center justify-center rounded-md"
+                style={{
+                  backgroundColor: `color-mix(in srgb, ${color} 14%, transparent)`,
+                }}
+              >
+                <Icon className="size-4" style={{ color }} />
+              </span>
+              <span className="comet-body-s-accented text-foreground">
+                {title}
+              </span>
+              <span className="comet-body-xs text-muted-slate">
+                {description}
+              </span>
+              <span
+                className="comet-body-xs mt-1 inline-flex items-center gap-1 font-medium"
+                style={{ color }}
+              >
+                {actionLabel}
+                <ArrowRight className="size-3" />
+              </span>
+            </button>
+          ),
+        )}
       </div>
     </div>
   );
