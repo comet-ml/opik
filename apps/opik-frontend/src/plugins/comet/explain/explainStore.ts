@@ -66,8 +66,15 @@ const AT_CAPACITY =
   "Too many explanations in progress. Close one and try again.";
 
 // Known code → copy; otherwise the raw upstream message, then a generic line.
+// `code` is a free-form string off the bridge, so guard the lookup with an
+// own-property check: a bare `ERROR_COPY[code]` would resolve inherited
+// Object.prototype members ("constructor"/"toString"/…) to Functions, which are
+// truthy and would short-circuit the fallback — then render as a React child
+// and crash the popover.
 const errorMessage = (code: string | undefined, raw: string | undefined) =>
-  (code ? ERROR_COPY[code as ErrorCode] : undefined) ??
+  (code && Object.prototype.hasOwnProperty.call(ERROR_COPY, code)
+    ? ERROR_COPY[code as ErrorCode]
+    : undefined) ??
   raw ??
   "Something went wrong.";
 
@@ -330,6 +337,18 @@ const useExplainStore = create<ExplainState>((set, get) => {
       const key = cellKey(target);
       const cached = get().entries[key];
       if (cached && cached.phase !== "error") return true; // reuse cache / in-flight
+
+      // Re-explaining an errored cell (reopening the popover calls explain(),
+      // not retry()): drop the stale cell first so its lingering route — kept by
+      // onError, retire=false, for a console same-id retry — is removed. Without
+      // this the fresh stream's explainId would alias the same cell as the
+      // abandoned one, so a late chunk/done/error from the old stream would
+      // corrupt, truncate, or wrongly-error the new answer the user is reading
+      // (and the orphaned route would leak). Mirrors retry()'s dropCell.
+      if (cached) {
+        watchdog.disarm(cached.explainId);
+        mutate((c) => dropCell(c, key));
+      }
 
       // At capacity: surface a clear, retryable error rather than a stuck
       // "Thinking…". No stream is dispatched, so no route is tracked.

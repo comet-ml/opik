@@ -515,4 +515,59 @@ describe("explainStore", () => {
     expect(entry.error).toBe("boom");
     expect(useExplainStore.getState().routes[explainId]).toBeUndefined();
   });
+
+  it("re-explaining an errored cell drops the stale route so a late event from the abandoned stream cannot corrupt the new one", () => {
+    // onError keeps the errored stream's route (for a same-id console retry).
+    // Reopening the popover calls explain() — not retry() — starting a NEW
+    // explainId. If the old route lingers, a late chunk/done/error for the
+    // abandoned stream aliases into the live cell and corrupts the answer.
+    const emit = vi.fn();
+    reset(emit);
+    useExplainStore.getState().explain(target("e1"));
+    const oldId = Object.values(useExplainStore.getState().entries)[0]
+      .explainId;
+    handleConsoleEvent("explain:error", { explainId: oldId, message: "boom" });
+    expect(useExplainStore.getState().routes[oldId]).toBe(key("e1"));
+
+    // Reopen → fresh stream under a new explainId; the stale route is dropped.
+    useExplainStore.getState().explain(target("e1"));
+    const newId = Object.values(useExplainStore.getState().entries)[0]
+      .explainId;
+    expect(newId).not.toBe(oldId);
+    expect(useExplainStore.getState().routes[oldId]).toBeUndefined();
+    expect(useExplainStore.getState().routes[newId]).toBe(key("e1"));
+
+    // A late event for the abandoned stream is now a no-op.
+    handleConsoleEvent("explain:chunk", { explainId: oldId, delta: "STALE" });
+    handleConsoleEvent("explain:done", { explainId: oldId });
+    expect(useExplainStore.getState().entries[key("e1")].text).toBe("");
+
+    // The live stream still streams cleanly into the cell.
+    handleConsoleEvent("explain:chunk", { explainId: newId, delta: "real" });
+    handleConsoleEvent("explain:done", { explainId: newId });
+    const entry = useExplainStore.getState().entries[key("e1")];
+    expect(entry.phase).toBe("done");
+    expect(entry.text).toBe("real");
+  });
+
+  it("does not resolve a prototype-key error code to a Function (renders a safe string)", () => {
+    // `code` is free-form off the bridge; a bare ERROR_COPY[code] lookup would
+    // return Object.prototype.constructor (a Function) for code:"constructor",
+    // crashing the popover when rendered as a React child.
+    const emit = vi.fn();
+    reset(emit);
+    useExplainStore.getState().explain(target("e1"));
+    const { explainId } = Object.values(useExplainStore.getState().entries)[0];
+
+    handleConsoleEvent("explain:error", {
+      explainId,
+      code: "constructor",
+      message: "boom",
+    });
+
+    const entry = useExplainStore.getState().entries[key("e1")];
+    expect(entry.phase).toBe("error");
+    expect(typeof entry.error).toBe("string");
+    expect(entry.error).toBe("boom"); // falls through to the raw message
+  });
 });
