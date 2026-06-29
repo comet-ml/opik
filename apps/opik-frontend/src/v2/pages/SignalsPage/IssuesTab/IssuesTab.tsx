@@ -1,7 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { StringParam, useQueryParam } from "use-query-params";
-import { ChevronDown, Inbox, PartyPopper, Radar, Undo2 } from "lucide-react";
+import {
+  ChevronDown,
+  Inbox,
+  PartyPopper,
+  Radar,
+  TriangleAlert,
+  Undo2,
+} from "lucide-react";
 import {
   AGENT_INSIGHTS_ISSUE_STATUS,
   AgentInsightsIssue,
@@ -31,6 +38,7 @@ import IssueListItem from "@/v2/pages/SignalsPage/IssuesTab/IssueListItem";
 import IssueDetail from "@/v2/pages/SignalsPage/IssuesTab/IssueDetail";
 import IssueSeverityBadge from "@/v2/pages/SignalsPage/IssuesTab/IssueSeverityBadge";
 import IssuesSkeleton from "@/v2/pages/SignalsPage/IssuesTab/IssuesSkeleton";
+import { getRunFailureCopy } from "@/v2/pages/SignalsPage/runFailureCopy";
 
 const SORT_OPTIONS: { value: string; label: string; sorting: Sorting }[] = [
   {
@@ -116,6 +124,37 @@ const RunningBar: React.FC = () => (
   </div>
 );
 
+const FailedBanner: React.FC<{
+  reason?: string;
+  onRetry?: () => void;
+}> = ({ reason, onRetry }) => {
+  const { title, description } = getRunFailureCopy(reason);
+  return (
+    <div className="flex items-start gap-3 border-b border-border bg-[#FDA29B1A] px-4 py-3">
+      <IconTile className="bg-chart-red">
+        <TriangleAlert className="size-4 text-white" />
+      </IconTile>
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
+        <div className="flex flex-col gap-0.5">
+          <span className="comet-body-s-accented text-foreground">{title}</span>
+          <span className="comet-body-xs text-muted-slate">{description}</span>
+        </div>
+        {onRetry && (
+          <Button
+            variant="link"
+            size="2xs"
+            onClick={onRetry}
+            className="h-auto select-none gap-1.5 self-start px-0"
+          >
+            <Radar className="size-3" />
+            Try again
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const ListEmptyState: React.FC<{
   icon: React.ReactNode;
   title: string;
@@ -160,6 +199,7 @@ type IssuesTabProps = {
   projectId: string;
   showResolved?: boolean;
   isRunning?: boolean;
+  failedReason?: string;
   canConfigure?: boolean;
   onRunDiagnostic?: () => void;
   onShowOpenIssues?: () => void;
@@ -169,6 +209,7 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
   projectId,
   showResolved = false,
   isRunning = false,
+  failedReason,
   canConfigure = false,
   onRunDiagnostic,
   onShowOpenIssues,
@@ -255,11 +296,15 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
   }
 
   const hasIssues = issues.length > 0;
+  const isFailed = Boolean(failedReason) && !isRunning;
 
   const renderListBody = () => {
     if (hasIssues) {
       return (
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          {isFailed && (
+            <FailedBanner reason={failedReason} onRetry={onRunDiagnostic} />
+          )}
           {isRunning && (
             <div className="flex items-start gap-3 border-b border-border bg-primary-50 px-4 py-3">
               <IconTile className="bg-[#A78BFA]">
@@ -303,6 +348,34 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
           description={RUNNING_DESC}
         >
           <RunningBar />
+        </ListEmptyState>
+      );
+    }
+
+    if (isFailed) {
+      const { title, description } = getRunFailureCopy(failedReason);
+      return (
+        <ListEmptyState
+          className="bg-[#FDA29B1A]"
+          icon={
+            <IconTile className="bg-chart-red">
+              <TriangleAlert className="size-4 text-white" />
+            </IconTile>
+          }
+          title={title}
+          description={description}
+        >
+          {onRunDiagnostic && (
+            <Button
+              variant="link"
+              size="2xs"
+              onClick={onRunDiagnostic}
+              className="h-auto select-none gap-1.5 self-start px-0"
+            >
+              <Radar className="size-3" />
+              Try again
+            </Button>
+          )}
         </ListEmptyState>
       );
     }
@@ -381,6 +454,11 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
 
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-2">
+        {isFailed && (
+          <div className="shrink-0 overflow-hidden rounded-md border bg-background">
+            <FailedBanner reason={failedReason} onRetry={onRunDiagnostic} />
+          </div>
+        )}
         <DropdownMenu open={listOpen} onOpenChange={setListOpen} modal={false}>
           <DropdownMenuTrigger asChild>
             <Button

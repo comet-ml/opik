@@ -7,6 +7,7 @@ import com.comet.opik.api.AgentInsightsIssueStatus;
 import com.comet.opik.api.AgentInsightsIssueUpdate;
 import com.comet.opik.api.AgentInsightsIssueWithDetails;
 import com.comet.opik.api.AgentInsightsReport;
+import com.comet.opik.api.AgentInsightsRunFailure;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -35,6 +36,8 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 public interface AgentInsightsIssueService {
 
     void reportIssues(AgentInsightsReport report);
+
+    void reportRunFailure(AgentInsightsRunFailure failure);
 
     AgentInsightsIssue.AgentInsightsIssuePage findIssues(UUID projectId, LocalDate fromDate, LocalDate toDate,
             AgentInsightsIssueStatus status, AgentInsightsIssueSeverity severity, List<SortingField> sortingFields,
@@ -106,6 +109,20 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
 
         AgentInsightsMetrics.REPORTS_RECEIVED.add(1);
         AgentInsightsMetrics.ISSUES_REPORTED.add(report.issues().size());
+    }
+
+    @Override
+    public void reportRunFailure(@NonNull AgentInsightsRunFailure failure) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+
+        projectService.get(failure.projectId(), workspaceId);
+
+        log.warn("Reporting agent insights run failure for project '{}' in workspace '{}': code '{}'",
+                failure.projectId(), workspaceId, failure.errorCode());
+
+        transactionTemplate.inTransaction(WRITE, handle -> handle.attach(AgentInsightsJobDAO.class)
+                .markFailed(workspaceId, failure.projectId(), failure.errorCode(), failure.errorMessage(), userName));
     }
 
     @Override

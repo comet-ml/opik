@@ -45,11 +45,24 @@ interface AgentInsightsJobDAO {
 
     @SqlUpdate("""
             UPDATE agent_insights_jobs
-            SET last_scan_at = CURRENT_TIMESTAMP(6), last_updated_by = :userName
+            SET last_scan_at = CURRENT_TIMESTAMP(6), last_updated_by = :userName,
+                last_failure_reason = NULL, last_failure_detail = NULL, last_failed_at = NULL
             WHERE workspace_id = :workspaceId AND project_id = :projectId
             """)
     int markScanned(@Bind("workspaceId") String workspaceId,
             @Bind("projectId") UUID projectId,
+            @Bind("userName") String userName);
+
+    @SqlUpdate("""
+            UPDATE agent_insights_jobs
+            SET last_failure_reason = :reason, last_failure_detail = :detail,
+                last_failed_at = CURRENT_TIMESTAMP(6), last_updated_by = :userName
+            WHERE workspace_id = :workspaceId AND project_id = :projectId
+            """)
+    int markFailed(@Bind("workspaceId") String workspaceId,
+            @Bind("projectId") UUID projectId,
+            @Bind("reason") String reason,
+            @Bind("detail") String detail,
             @Bind("userName") String userName);
 
     // Cross-workspace — used only by the daily sweep (system context), never from a request thread.

@@ -1,6 +1,8 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AgentInsightsJob;
+import com.comet.opik.api.AgentInsightsReport;
+import com.comet.opik.api.AgentInsightsRunFailure;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -13,6 +15,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AgentInsightsJobResourceClient;
+import com.comet.opik.api.resources.utils.resources.AgentInsightsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.v1.jobs.AgentInsightsReportJob;
@@ -40,6 +43,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -124,6 +128,7 @@ class AgentInsightsJobsResourceTest {
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
     private AgentInsightsJobResourceClient jobsClient;
+    private AgentInsightsResourceClient insightsClient;
     private AgentInsightsReportJob reportJob;
 
     @BeforeAll
@@ -134,6 +139,7 @@ class AgentInsightsJobsResourceTest {
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, podamFactory);
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.jobsClient = new AgentInsightsJobResourceClient(client, baseURI);
+        this.insightsClient = new AgentInsightsResourceClient(client);
         this.reportJob = injector.getInstance(AgentInsightsReportJob.class);
 
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
@@ -285,6 +291,54 @@ class AgentInsightsJobsResourceTest {
         var trigger = TRIGGERS.stream().filter(t -> t.projectId().equals(projectId)).findFirst().orElseThrow();
         assertThat(trigger.workspaceId()).isEqualTo(WORKSPACE_ID);
         assertThat(trigger.periodStart()).isBefore(trigger.periodEnd());
+    }
+
+    @Test
+    @DisplayName("Run failure is recorded on the job and cleared by the next successful report")
+    void runFailure__recordedThenClearedOnSuccess() {
+        var projectId = createProject();
+        jobsClient.create(projectId, API_KEY, WORKSPACE_NAME).close();
+
+        var failure = AgentInsightsRunFailure.builder()
+                .projectId(projectId)
+                .reportDay(LocalDate.now())
+                .errorCode("out_of_credits")
+                .errorMessage("anthropic 402: insufficient credits")
+                .build();
+        insightsClient.reportRunFailure(failure, API_KEY, WORKSPACE_NAME, HttpStatus.SC_NO_CONTENT);
+
+        try (var afterFailure = jobsClient.get(projectId, API_KEY, WORKSPACE_NAME)) {
+            assertThat(afterFailure.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            var job = afterFailure.readEntity(AgentInsightsJob.class);
+            assertThat(job.lastFailureReason()).isEqualTo("out_of_credits");
+            assertThat(job.lastFailureDetail()).isEqualTo("anthropic 402: insufficient credits");
+            assertThat(job.lastFailedAt()).isNotNull();
+        }
+
+        // An all-clear report is a successful run; it advances last_scan_at and clears the failure signal.
+        insightsClient.reportIssues(
+                AgentInsightsReport.builder().projectId(projectId).reportDay(LocalDate.now()).issues(List.of())
+                        .build(),
+                API_KEY, WORKSPACE_NAME, HttpStatus.SC_NO_CONTENT);
+
+        try (var afterSuccess = jobsClient.get(projectId, API_KEY, WORKSPACE_NAME)) {
+            assertThat(afterSuccess.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            var job = afterSuccess.readEntity(AgentInsightsJob.class);
+            assertThat(job.lastScanAt()).isNotNull();
+            assertThat(job.lastFailureReason()).isNull();
+            assertThat(job.lastFailureDetail()).isNull();
+            assertThat(job.lastFailedAt()).isNull();
+        }
+    }
+
+    @Test
+    @DisplayName("Run failure for a non-existent project returns 404")
+    void runFailure__projectMissing__returns404() {
+        var failure = AgentInsightsRunFailure.builder()
+                .projectId(UUID.randomUUID())
+                .errorCode("internal_error")
+                .build();
+        insightsClient.reportRunFailure(failure, API_KEY, WORKSPACE_NAME, HttpStatus.SC_NOT_FOUND);
     }
 
     @Test

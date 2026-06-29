@@ -6,6 +6,7 @@ import com.comet.opik.api.AgentInsightsIssueStatus;
 import com.comet.opik.api.AgentInsightsIssueUpdate;
 import com.comet.opik.api.AgentInsightsIssueWithDetails;
 import com.comet.opik.api.AgentInsightsReport;
+import com.comet.opik.api.AgentInsightsRunFailure;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.utils.JsonUtils;
@@ -33,6 +34,7 @@ public class AgentInsightsResourceClient {
     private static final String INTERNAL_ISSUES_PATH = "%s/v1/private/agent-insights/issues";
     private static final String ISSUES_PATH = "%s/v1/private/agent-insights/issues";
     private static final String ISSUE_BY_ID_PATH = ISSUES_PATH + "/%s";
+    private static final String RUN_FAILURE_PATH = "%s/v1/private/agent-insights/run-failure";
 
     private final ClientSupport client;
     private final String baseURI;
@@ -55,6 +57,23 @@ public class AgentInsightsResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(report));
+    }
+
+    public void reportRunFailure(AgentInsightsRunFailure failure, String apiKey, String workspaceName,
+            int expectedStatus) {
+        try (var actualResponse = reportRunFailureWithResponse(failure, apiKey, workspaceName)) {
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+        }
+    }
+
+    public Response reportRunFailureWithResponse(AgentInsightsRunFailure failure, String apiKey,
+            String workspaceName) {
+        return client.target(RUN_FAILURE_PATH.formatted(baseURI))
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(failure));
     }
 
     public AgentInsightsIssue.AgentInsightsIssuePage findIssues(UUID projectId, LocalDate fromDate, LocalDate toDate,
