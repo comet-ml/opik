@@ -44,13 +44,8 @@ jobs:
       issues: write
     env:
       REMYX_API_KEY: ${{ secrets.REMYX_API_KEY }}
-      # Backend-conditional auth (mutually exclusive):
-      # - anthropic: ANTHROPIC_API_KEY (x-api-key header)
-      # - glm:       ANTHROPIC_AUTH_TOKEN (Bearer header)
-      # Both can't be set simultaneously — Claude Code prefers API_KEY,
-      # which z.ai rejects with HTTP 401.
-      ANTHROPIC_API_KEY: ${{ inputs.backend == 'glm' && '' || secrets.ANTHROPIC_API_KEY }}
-      ANTHROPIC_AUTH_TOKEN: ${{ inputs.backend == 'glm' && secrets.ZAI_API_KEY || '' }}
+      # ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN are set in the
+      # 'Configure backend auth' step below (one or the other, never both).
     steps:
       # Configure backend auth — Claude Code uses ANTHROPIC_AUTH_TOKEN
       # for non-default backends (Bearer header) and ANTHROPIC_API_KEY
