@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure;
 
 import io.dropwizard.jersey.errors.ErrorMessage;
+import jakarta.inject.Inject;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -21,6 +22,11 @@ import lombok.extern.slf4j.Slf4j;
 public class RequestSizeLimitFilter implements ContainerRequestFilter {
 
     private final long maxRequestSizeBytes;
+
+    @Inject
+    public RequestSizeLimitFilter(JacksonConfig jacksonConfig) {
+        this(jacksonConfig.getMaxRequestSizeBytes());
+    }
 
     @Override
     public void filter(ContainerRequestContext requestContext) {

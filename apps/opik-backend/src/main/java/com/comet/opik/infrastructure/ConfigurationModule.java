@@ -21,5 +21,8 @@ public class ConfigurationModule extends DropwizardAwareModule<OpikConfiguration
 
         var agentConfigConfiguration = configuration(AgentConfigConfiguration.class);
         bind(AgentConfigConfiguration.class).toInstance(agentConfigConfiguration);
+
+        var jacksonConfig = configuration(JacksonConfig.class);
+        bind(JacksonConfig.class).toInstance(jacksonConfig);
     }
 }

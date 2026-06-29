@@ -150,7 +150,7 @@ public class OpikApplication extends Application<OpikConfiguration> {
 
         jersey.property(ServerProperties.RESPONSE_SET_STATUS_OVER_SEND_ERROR, true);
 
-        jersey.register(new RequestSizeLimitFilter(configuration.getJacksonConfig().getMaxRequestSizeBytes()));
+        jersey.register(RequestSizeLimitFilter.class);
 
         jersey.register(JsonProcessingExceptionMapper.class);
         jersey.register(OAuthExceptionMapper.class);
