@@ -9,7 +9,8 @@ import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/Tr
 
 const RuleTracesCell = (context: CellContext<EvaluatorsRule, string>) => {
   const rule = context.row.original;
-  const projectId = rule.project_id ?? rule.project_ids?.[0];
+  const projectId =
+    rule.projects?.[0]?.project_id ?? rule.project_id ?? rule.project_ids?.[0];
 
   const wrapperProps = {
     metadata: context.column.columnDef.meta,
