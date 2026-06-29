@@ -79,6 +79,7 @@ const VersionForm: React.FC<VersionFormProps> = ({
                     )
                   }
                   align="start"
+                  tagVariant="gray"
                 />
               </FormControl>
             </FormItem>

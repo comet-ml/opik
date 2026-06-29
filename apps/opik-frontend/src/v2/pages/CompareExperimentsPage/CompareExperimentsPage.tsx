@@ -14,8 +14,6 @@ import useDeepMemo from "@/hooks/useDeepMemo";
 import { Experiment } from "@/types/datasets";
 import { isTestSuiteExperiment } from "@/lib/experiments";
 import CompareExperimentsDetails from "@/v2/pages/CompareExperimentsPage/CompareExperimentsDetails/CompareExperimentsDetails";
-import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 
 const CompareExperimentsPage: React.FunctionComponent = () => {
   const [tab = "items", setTab] = useQueryParam("tab", StringParam, {
@@ -65,25 +63,21 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
         className="min-w-min"
       >
         <PageBodyStickyContainer direction="horizontal" limitWidth>
-          <TabsList variant="underline">
-            <TabsTrigger variant="underline" value="items">
-              Experiment items
+          <TabsList variant="segmented-primary">
+            <TabsTrigger variant="segmented-primary" value="items">
+              Results
             </TabsTrigger>
             {!isTestSuite && (
-              <TabsTrigger variant="underline" value="insights">
+              <TabsTrigger variant="segmented-primary" value="insights">
                 Insights
               </TabsTrigger>
             )}
-            <TabsTrigger variant="underline" value="config">
+            <TabsTrigger variant="segmented-primary" value="config">
               Configuration
             </TabsTrigger>
             {showScoresTab && (
-              <TabsTrigger variant="underline" value="scores">
+              <TabsTrigger variant="segmented-primary" value="scores">
                 Feedback scores
-                <ExplainerIcon
-                  className="ml-1"
-                  {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores]}
-                />
               </TabsTrigger>
             )}
           </TabsList>

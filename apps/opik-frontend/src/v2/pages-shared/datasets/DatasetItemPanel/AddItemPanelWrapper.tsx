@@ -15,6 +15,7 @@ export interface AddItemPanelContext {
 interface AddItemPanelWrapperProps {
   panelId: string;
   formId: string;
+  title: string;
   open: boolean;
   onClose: () => void;
   initialWidth?: number;
@@ -99,6 +100,7 @@ const AddItemPanelWrapperContent: React.FC<{
 const AddItemPanelWrapper: React.FC<AddItemPanelWrapperProps> = ({
   panelId,
   formId,
+  title,
   open,
   onClose,
   initialWidth,
@@ -116,7 +118,7 @@ const AddItemPanelWrapper: React.FC<AddItemPanelWrapperProps> = ({
       header={
         <ResizableSidePanelTopBar
           variant="form"
-          title="Add item"
+          title={title}
           onClose={onClose}
         />
       }
