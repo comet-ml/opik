@@ -41,13 +41,8 @@ jobs:
               run: |
                 echo -e "\n\n" >> preview_url.txt
 
-                # Use JSON output for reliable parsing (CSV breaks with URLs containing commas/brackets)
-                # --concurrency 500: the preview CDN serves bursts without rate-limiting
-                # (no 429s observed), and the recurse over thousands of pages otherwise
-                # brushes the job's 15-minute timeout. Higher concurrency shortens the crawl.
-                # linkinator exits non-zero both when it finds broken links AND when it
-                # crashes mid-crawl (e.g. an unhandled ECONNRESET on a response stream),
-                # so the exit code alone can't be trusted — we validate the JSON below.
+                # --concurrency 500: the preview CDN serves bursts without rate-limiting;
+                # the recurse otherwise brushes the job's 15-minute timeout.
                 npx linkinator ${{ steps.generate-docs.outputs.URL }} \
                   --recurse \
                   --concurrency 500 \
@@ -61,13 +56,14 @@ jobs:
                   --skip "insights/script.js" \
                   --format json > linkinator_results.json || true
 
-                # A crashed crawl leaves missing/truncated output. Don't trust it: if the
-                # result isn't valid JSON with a .links array, the crawl crashed/timed out.
-                # Post a warning AND fail the check (via the flag) so the red status forces
-                # a re-run rather than silently posting "No broken links found".
+                PREVIEW_ORIGIN=$(echo "${{ steps.generate-docs.outputs.URL }}" | grep -oE '^https?://[^/]+')
+
+                # linkinator exits non-zero both when it finds broken links and when it
+                # crashes mid-crawl (e.g. unhandled ECONNRESET), so trust the output, not
+                # the exit code: invalid/missing JSON means the crawl didn't complete.
                 if ! jq -e 'type == "object" and (.links | type == "array")' linkinator_results.json > /dev/null 2>&1; then
                   {
-                    echo "⚠️ The link check did not complete (linkinator produced no usable results — likely a crawl crash or timeout). Please re-run this check."
+                    echo "⚠️ The link check did not complete (likely a crawl crash or timeout). Please re-run this check."
                     echo ""
                     echo "---"
                     echo "📌 Results for commit ${{ github.sha }}"
@@ -76,54 +72,41 @@ jobs:
                   exit 0
                 fi
 
-                # The preview host is ephemeral (torn down after the run), so strip it
-                # from the "on page" pointer — the stable relative doc path is what you
-                # grep for to find the source .mdx to fix.
-                PREVIEW_ORIGIN=$(echo "${{ steps.generate-docs.outputs.URL }}" | grep -oE '^https?://[^/]+')
+                # `↳ on page` strips the ephemeral preview host, leaving a stable,
+                # greppable doc path. Append one report entry for a status-0 url whose
+                # recheck label is computed by the caller.
+                report_timeout() {
+                  local url=$1 label=$2 parent
+                  parent=$(jq -r --arg u "$url" --arg origin "$PREVIEW_ORIGIN" \
+                    '(first(.links[] | select(.url == $u)).parent // "") | sub("^" + $origin; "")' linkinator_results.json)
+                  BROKEN_LINKS=$(printf '%s\n❌ Broken link: %s (%s)\n   ↳ on page: %s' "$BROKEN_LINKS" "$url" "$label" "$parent")
+                }
 
-                # Parse JSON and filter broken links (excluding 403s).
-                # Dedup by URL: a single broken page linked from the sidebar can
-                # appear on hundreds of parent pages, which previously multiplied
-                # the report past GitHub's 65,536-char comment limit.
-                # Status 0 (crawl timeout/abort) is handled separately below — it
-                # is not an HTTP error, just "linkinator gave up mid-crawl", which
-                # produces false positives for healthy-but-slow pages.
+                # Real HTTP errors (excluding 403s), deduped by url — one broken sidebar
+                # link otherwise multiplies into hundreds of lines and overflows GitHub's
+                # 65,536-char comment limit.
                 BROKEN_LINKS=$(jq -r --arg origin "$PREVIEW_ORIGIN" '
                   [.links[] | select(.state != "OK" and .status != 403 and .status != 0)]
-                  | group_by(.url)
-                  | map(.[0])
-                  | .[]
+                  | group_by(.url) | map(.[0]) | .[]
                   | "❌ Broken link: \(.url) (\(.status))\n   ↳ on page: \((.parent // "") | sub("^" + $origin; ""))"
                 ' linkinator_results.json)
 
-                # Re-verify each unique status-0 URL with a direct request: many are
-                # transient crawl timeouts on healthy pages (return 200 on recheck).
-                # Keep only those that are genuinely unreachable (non-2xx/3xx).
-                #
-                # Only re-check URLs on the preview origin: the false positives we are
-                # filtering are preview pages that timed out mid-crawl, and restricting
-                # the curl target to the trusted preview host avoids issuing requests to
-                # arbitrary PR-authored URLs (SSRF). A status-0 URL off the preview origin
-                # is reported as-is without a recheck.
+                # Status 0 is "crawl gave up", not an HTTP error — a false positive for
+                # healthy-but-slow pages. Re-check each (only on the preview origin, so a
+                # PR-authored link can't point curl at an arbitrary host) and keep it only
+                # if genuinely unreachable.
                 while IFS= read -r url; do
                   [ -z "$url" ] && continue
                   case "$url" in
-                    "$PREVIEW_ORIGIN"/*|"$PREVIEW_ORIGIN") ;;
+                    "$PREVIEW_ORIGIN"/*|"$PREVIEW_ORIGIN")
+                      code=$(curl -s -L -o /dev/null -w "%{http_code}" --max-time 20 "$url" 2>/dev/null)
+                      { [ -n "$code" ] && [ "$code" -ge 200 ] && [ "$code" -lt 400 ]; } && continue
+                      report_timeout "$url" "timeout, recheck ${code:-000}"
+                      ;;
                     *)
-                      # Off-origin: don't curl it, report it as a timeout as crawled.
-                      parent=$(jq -r --arg u "$url" --arg origin "$PREVIEW_ORIGIN" '(first(.links[] | select(.url == $u)).parent // "") | sub("^" + $origin; "")' linkinator_results.json)
-                      entry=$(printf '❌ Broken link: %s (timeout)\n   ↳ on page: %s' "$url" "$parent")
-                      BROKEN_LINKS=$(printf '%s\n%s' "$BROKEN_LINKS" "$entry")
-                      continue
+                      report_timeout "$url" "timeout"
                       ;;
                   esac
-                  code=$(curl -s -L -o /dev/null -w "%{http_code}" --max-time 20 "$url" 2>/dev/null)
-                  [ -z "$code" ] && code=000
-                  if [ "$code" -lt 200 ] || [ "$code" -ge 400 ]; then
-                    parent=$(jq -r --arg u "$url" --arg origin "$PREVIEW_ORIGIN" '(first(.links[] | select(.url == $u)).parent // "") | sub("^" + $origin; "")' linkinator_results.json)
-                    entry=$(printf '❌ Broken link: %s (timeout, recheck %s)\n   ↳ on page: %s' "$url" "$code" "$parent")
-                    BROKEN_LINKS=$(printf '%s\n%s' "$BROKEN_LINKS" "$entry")
-                  fi
                 done <<< "$(jq -r '[.links[] | select(.status == 0) | .url] | unique | .[]' linkinator_results.json)"
 
                 if [ -n "$BROKEN_LINKS" ]; then
@@ -132,8 +115,7 @@ jobs:
                     echo ""
                     echo "$BROKEN_LINKS"
                   } >> preview_url.txt
-                  # Record the failure so the job goes red AFTER the comment is posted,
-                  # so reviewers see the list and the check blocks until the links are fixed.
+                  # Fail the job AFTER the comment is posted (see the Fail step below).
                   echo "true" > check_failed.flag
                 else
                   echo "No broken links found" >> preview_url.txt
