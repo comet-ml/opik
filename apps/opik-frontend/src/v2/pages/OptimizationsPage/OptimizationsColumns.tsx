@@ -33,13 +33,15 @@ export const SELECTED_COLUMNS_KEY = "optimizations-selected-columns-v2";
 export const COLUMNS_WIDTH_KEY = "optimizations-columns-width-v2";
 export const COLUMNS_ORDER_KEY = "optimizations-columns-order-v2";
 
+// Default-visible column widths match the Figma runs-list table header
+// (686:35271 inside 562:37189): Name 191, Start time 145, every metric 120.
 export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
   {
     id: "name",
     label: "Name",
     type: COLUMN_TYPE.string,
     accessorFn: (row) => row.name,
-    size: 220,
+    size: 191,
   },
   {
     id: "id",
@@ -83,7 +85,7 @@ export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
     label: "Start time",
     type: COLUMN_TYPE.time,
     cell: TimeCell as never,
-    size: 140,
+    size: 145,
   },
   {
     id: "status",
@@ -96,7 +98,7 @@ export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
     id: "pass_rate",
     label: "Pass rate",
     type: COLUMN_TYPE.numberDictionary,
-    size: 200,
+    size: 120,
     accessorFn: (row) => row.best_objective_score,
     cell: OptimizationPassRateCell as never,
   },
@@ -104,7 +106,7 @@ export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
     id: "accuracy",
     label: "Accuracy",
     type: COLUMN_TYPE.numberDictionary,
-    size: 200,
+    size: 120,
     accessorFn: (row) =>
       getFeedbackScore(row.feedback_scores ?? [], row.objective_name),
     cell: OptimizationAccuracyCell as never,
@@ -113,7 +115,7 @@ export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
     id: "latency",
     label: "Latency",
     type: COLUMN_TYPE.duration,
-    size: 180,
+    size: 120,
     accessorFn: (row) => row.best_duration,
     cell: OptimizationLatencyCell as never,
   },
@@ -121,7 +123,7 @@ export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
     id: "cost",
     label: "Cost",
     type: COLUMN_TYPE.cost,
-    size: 180,
+    size: 120,
     accessorFn: (row) => row.best_cost,
     cell: OptimizationCostCell as never,
   },
