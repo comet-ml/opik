@@ -12,8 +12,6 @@ import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.observability.ObservabilityTraceRecorder;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
@@ -35,8 +33,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import reactor.core.publisher.Mono;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -112,11 +112,7 @@ public class OnlineEvaluationRecorder {
 
         @Override
         public void recordPreparation(int fetchedSpanCount, int estimatedTokens, boolean agentic) {
-            // The preparation phase decides inline vs agentic-tools mode; record it once here so the
-            // parent trace's mode metadata matches this span's reported mode.
-            if (agentic) {
-                eval.markAgentic();
-            }
+            // The preparation phase decides inline vs agentic-tools mode; recorded on this span.
             observabilityRecorder.recordSpan(eval.observabilityContext(),
                     () -> buildPreparationSpan(eval, fetchedSpanCount, estimatedTokens, agentic));
         }
@@ -173,7 +169,7 @@ public class OnlineEvaluationRecorder {
 
     private Span buildToolSpan(EvaluationContext eval, String toolName, String arguments, String result,
             Throwable error, Instant start) {
-        var input = JsonUtils.createObjectNode();
+        Map<String, Object> input = new LinkedHashMap<>();
         if (arguments != null) {
             input.put("arguments", arguments);
         }
@@ -186,13 +182,11 @@ public class OnlineEvaluationRecorder {
                 .name(toolName)
                 .startTime(start)
                 .endTime(Instant.now())
-                .input(input)
+                .input(JsonUtils.valueToTree(input))
                 .source(Source.EVALUATOR);
 
         if (result != null) {
-            var output = JsonUtils.createObjectNode();
-            output.put("result", result);
-            spanBuilder.output(output);
+            spanBuilder.output(JsonUtils.valueToTree(Map.of("result", result)));
         }
         if (error != null) {
             spanBuilder.errorInfo(toErrorInfo(error));
@@ -206,7 +200,7 @@ public class OnlineEvaluationRecorder {
         // Put the evaluated entity's own input/output on the span's input/output so the UI renders
         // them in "pretty" mode exactly as on the source trace (chat, text, etc.) instead of a raw
         // JSON blob; the evaluation bookkeeping (ids, model, fetch/size/mode) goes to span metadata.
-        var metadata = JsonUtils.createObjectNode();
+        Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put(eval.evaluatedIdKey, eval.evaluatedId);
         if (eval.evaluatedProjectId != null) {
             metadata.put("evaluated_project_id", eval.evaluatedProjectId.toString());
@@ -227,7 +221,7 @@ public class OnlineEvaluationRecorder {
                 .name(PREPARE_SPAN_NAME)
                 .startTime(eval.startTime)
                 .endTime(Instant.now())
-                .metadata(metadata)
+                .metadata(JsonUtils.valueToTree(metadata))
                 .source(Source.EVALUATOR);
 
         if (eval.evaluatedInput != null) {
@@ -240,15 +234,15 @@ public class OnlineEvaluationRecorder {
         return spanBuilder.build();
     }
 
-    private Trace buildTrace(EvaluationContext eval, ObjectNode output, ErrorInfo errorInfo) {
-        var input = JsonUtils.createObjectNode();
+    private Trace buildTrace(EvaluationContext eval, JsonNode output, ErrorInfo errorInfo) {
+        Map<String, Object> input = new LinkedHashMap<>();
         input.put(eval.evaluatedIdKey, eval.evaluatedId);
         if (eval.evaluatedProjectId != null) {
             input.put("evaluated_project_id", eval.evaluatedProjectId.toString());
         }
         input.put("model", eval.modelName);
 
-        var metadata = JsonUtils.createObjectNode();
+        Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("created_from", "online_evaluation");
         metadata.put("rule_id", eval.ruleId.toString());
         if (eval.ruleName != null) {
@@ -256,7 +250,6 @@ public class OnlineEvaluationRecorder {
         }
         metadata.put(eval.evaluatedIdKey, eval.evaluatedId);
         metadata.put("model", eval.modelName);
-        metadata.put("mode", eval.agentic() ? MODE_AGENTIC_TOOLS : MODE_INLINE);
 
         var traceBuilder = Trace.builder()
                 .id(eval.traceId)
@@ -264,8 +257,8 @@ public class OnlineEvaluationRecorder {
                 .name(TRACE_NAME)
                 .startTime(eval.startTime)
                 .endTime(Instant.now())
-                .input(input)
-                .metadata(metadata)
+                .input(JsonUtils.valueToTree(input))
+                .metadata(JsonUtils.valueToTree(metadata))
                 .source(Source.EVALUATOR)
                 .visibilityMode(VisibilityMode.HIDDEN);
 
@@ -331,54 +324,50 @@ public class OnlineEvaluationRecorder {
         }
     }
 
-    private static ObjectNode buildMessagesInput(ChatRequest request) {
-        var input = JsonUtils.createObjectNode();
-        ArrayNode messages = JsonUtils.createArrayNode();
-        if (request.messages() != null) {
-            for (var message : request.messages()) {
-                var node = JsonUtils.createObjectNode();
-                node.put("role", message.type().name().toLowerCase());
-                node.put("content", messageText(message));
-                messages.add(node);
-            }
-        }
-        input.set("messages", messages);
-        return input;
+    private static JsonNode buildMessagesInput(ChatRequest request) {
+        var messages = request.messages() == null
+                ? List.<JudgeMessage>of()
+                : request.messages().stream()
+                        .map(message -> new JudgeMessage(message.type().name().toLowerCase(), messageText(message)))
+                        .toList();
+        return JsonUtils.valueToTree(new MessagesInput(messages));
     }
 
-    private static ObjectNode buildResponseOutput(ChatResponse response) {
-        var output = JsonUtils.createObjectNode();
+    private static JsonNode buildResponseOutput(ChatResponse response) {
         var aiMessage = response.aiMessage();
-        output.put("output", aiMessage.text() == null ? "" : aiMessage.text());
-        if (aiMessage.hasToolExecutionRequests()) {
-            ArrayNode toolCalls = JsonUtils.createArrayNode();
-            aiMessage.toolExecutionRequests().forEach(toolCall -> {
-                var node = JsonUtils.createObjectNode();
-                node.put("name", toolCall.name());
-                node.put("arguments", toolCall.arguments());
-                toolCalls.add(node);
-            });
-            output.set("tool_calls", toolCalls);
-        }
-        return output;
+        var toolCalls = aiMessage.hasToolExecutionRequests()
+                ? aiMessage.toolExecutionRequests().stream()
+                        .map(toolCall -> new ToolCallView(toolCall.name(), toolCall.arguments()))
+                        .toList()
+                : null;
+        return JsonUtils.valueToTree(new ResponseOutput(aiMessage.text() == null ? "" : aiMessage.text(), toolCalls));
     }
 
-    private static ObjectNode buildScoresOutput(List<? extends FeedbackScoreItem> scores) {
-        var output = JsonUtils.createObjectNode();
-        ArrayNode scoresArray = JsonUtils.createArrayNode();
-        for (var score : scores) {
-            var node = JsonUtils.createObjectNode();
-            node.put("name", score.name());
-            if (score.value() != null) {
-                node.put("value", score.value());
-            }
-            if (score.reason() != null) {
-                node.put("reason", score.reason());
-            }
-            scoresArray.add(node);
-        }
-        output.set("scores", scoresArray);
-        return output;
+    private static JsonNode buildScoresOutput(List<? extends FeedbackScoreItem> scores) {
+        var scoreViews = scores.stream()
+                .map(score -> new ScoreView(score.name(), score.value(), score.reason()))
+                .toList();
+        return JsonUtils.valueToTree(new ScoresOutput(scoreViews));
+    }
+
+    // Fixed-shape span/trace input & output, serialized via the snake_case + non-null mapper
+    // (so toolCalls -> tool_calls and null fields are omitted), instead of hand-built JSON nodes.
+    private record MessagesInput(List<JudgeMessage> messages) {
+    }
+
+    private record JudgeMessage(String role, String content) {
+    }
+
+    private record ResponseOutput(String output, List<ToolCallView> toolCalls) {
+    }
+
+    private record ToolCallView(String name, String arguments) {
+    }
+
+    private record ScoresOutput(List<ScoreView> scores) {
+    }
+
+    private record ScoreView(String name, BigDecimal value, String reason) {
     }
 
     private static String messageText(ChatMessage message) {

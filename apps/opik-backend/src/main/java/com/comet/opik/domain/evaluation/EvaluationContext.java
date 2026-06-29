@@ -7,10 +7,8 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Per-evaluation handle. Holds the parent trace id, the evaluated entity references and the resolved
- * model/provider, and accumulates the LLM-/tool-round counts. Allocated once per evaluation by
- * {@link OnlineEvaluationRecorder#begin}; mutated only by the sequential reactive chain of a single
- * evaluation.
+ * Immutable per-evaluation handle. Holds the parent trace id, the evaluated entity references and the
+ * resolved model/provider. Allocated once per evaluation by {@link OnlineEvaluationRecorder#begin}.
  */
 final class EvaluationContext {
 
@@ -29,7 +27,6 @@ final class EvaluationContext {
     final String provider;
     final Instant startTime;
     private final ObservabilityContext observabilityContext;
-    private volatile boolean agentic;
 
     EvaluationContext(UUID traceId, EvaluatedSubject subject, UUID ruleId, String ruleName, String modelName,
             String actualModel, String provider, JsonNode evaluatedInput, JsonNode evaluatedOutput,
@@ -49,14 +46,6 @@ final class EvaluationContext {
         this.provider = provider;
         this.observabilityContext = new ObservabilityContext(workspaceId, userName);
         this.startTime = startTime;
-    }
-
-    void markAgentic() {
-        this.agentic = true;
-    }
-
-    boolean agentic() {
-        return agentic;
     }
 
     ObservabilityContext observabilityContext() {

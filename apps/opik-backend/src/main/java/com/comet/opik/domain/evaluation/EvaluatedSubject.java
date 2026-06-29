@@ -14,7 +14,7 @@ import java.util.UUID;
  * monitoring trace (e.g. {@code evaluated_span_id}).
  */
 @Builder(toBuilder = true)
-public record EvaluatedSubject(Kind kind, String id, UUID projectId, String projectName, String name,
+public record EvaluatedSubject(@NonNull Kind kind, @NonNull String id, UUID projectId, String projectName, String name,
         JsonNode input, JsonNode output) {
 
     public enum Kind {
