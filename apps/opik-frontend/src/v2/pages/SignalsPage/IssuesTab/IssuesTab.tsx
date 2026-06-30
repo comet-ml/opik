@@ -265,7 +265,7 @@ const DetailPlaceholder: React.FC = () => {
       : EmptyIssueDetailsIcon;
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
-      <Icon className="h-[68px] w-[63px] text-[#F3F4FE]" />
+      <Icon className="h-[68px] w-[63px] text-toggle-outline-active" />
       <div className="flex flex-col gap-1">
         <span className="comet-body-s-accented text-foreground">
           Your issue details will appear here
@@ -484,7 +484,7 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
         <ListEmptyState
           className="bg-[#89DEFF1A]"
           icon={
-            <IconTile className="bg-[#89DEFF] dark:bg-[#1E3A47]">
+            <IconTile className="bg-[var(--upload-chip-icon-bg)]">
               <Inbox className="size-3.5 text-black dark:text-white" />
             </IconTile>
           }
@@ -508,7 +508,7 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
 
     return (
       <ListEmptyState
-        className="bg-[#BAE6FD1A]"
+        className="bg-[var(--upload-chip-bg)]"
         icon={
           <IconTile className="bg-[#89DEFF] dark:bg-[#1E3A47]">
             <PartyPopper className="size-3.5 text-black dark:text-white" />
