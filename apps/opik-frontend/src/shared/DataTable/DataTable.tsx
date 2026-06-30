@@ -31,6 +31,7 @@ import DataTableBody, {
 } from "@/shared/DataTable/DataTableBody";
 import DataTableSkeletonBody from "@/shared/DataTable/DataTableSkeletonBody";
 import {
+  CELL_HORIZONTAL_ALIGNMENT,
   CELL_VERTICAL_ALIGNMENT,
   COLUMN_TYPE,
   Explainer,
@@ -74,6 +75,7 @@ declare module "@tanstack/react-table" {
     headerCheckbox?: boolean;
     iconType?: HeaderIconType;
     verticalAlignment?: CELL_VERTICAL_ALIGNMENT;
+    horizontalAlignment?: CELL_HORIZONTAL_ALIGNMENT;
     overrideRowHeight?: ROW_HEIGHT;
     statisticKey?: string;
     statisticDataFormater?: (value: number) => string;
