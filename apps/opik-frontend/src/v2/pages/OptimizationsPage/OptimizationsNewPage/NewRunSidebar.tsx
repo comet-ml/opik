@@ -160,7 +160,11 @@ const NewRunSidebar: React.FC<NewRunSidebarProps> = ({
     // lands; `keepDirtyValues` preserves a model the user already picked.
     values: defaultValues,
     resetOptions: { keepDirtyValues: true },
-    mode: "onChange",
+    // Validate only on submit, then live afterwards — so errors don't appear
+    // while the user is still editing (switching metrics, before picking a
+    // dataset, etc.); they surface only once "Optimize prompt" is clicked.
+    mode: "onSubmit",
+    reValidateMode: "onChange",
   });
 
   // Create demo dataset when template with dataset_items is selected

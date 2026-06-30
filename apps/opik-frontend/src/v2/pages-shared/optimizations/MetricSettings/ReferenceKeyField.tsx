@@ -28,6 +28,7 @@ const ReferenceKeyField = ({
     </Label>
     <Input
       id="reference_key"
+      dimension="sm"
       placeholder={placeholder}
       value={value}
       onChange={(e) => onChange(e.target.value)}

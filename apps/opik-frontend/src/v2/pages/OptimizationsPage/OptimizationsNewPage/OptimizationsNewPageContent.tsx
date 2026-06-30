@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/ui/button";
 import { useOptimizationsNewFormHandlers } from "./useOptimizationsNewFormHandlers";
@@ -42,6 +42,21 @@ const OptimizationsNewPageContent: React.FC<
 
   const hasMissingVariables = missingDatasetVariables.length > 0;
 
+  // Validation feedback is lazy: errors (RHF field errors + the variable
+  // mismatch) only appear once the user has tried to submit, not while they're
+  // still editing / switching metrics / before a dataset is picked.
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+
+  const onSubmit = useCallback(() => {
+    setSubmitAttempted(true);
+    if (hasMissingVariables) {
+      // Surface RHF field errors alongside the mismatch, but don't submit.
+      void form.trigger();
+      return;
+    }
+    handleSubmit();
+  }, [form, handleSubmit, hasMissingVariables]);
+
   return (
     <div className="flex size-full flex-col">
       <div className="flex flex-1 flex-col gap-6 overflow-y-auto px-6 pb-6 pt-4 xl:flex-row">
@@ -80,7 +95,7 @@ const OptimizationsNewPageContent: React.FC<
             again.
           </span>
         )}
-        {hasMissingVariables && (
+        {submitAttempted && hasMissingVariables && (
           <span className="comet-body-s text-destructive">
             {missingDatasetVariables.map((v) => `{{${v}}}`).join(", ")} not in
             the selected item source
@@ -91,12 +106,10 @@ const OptimizationsNewPageContent: React.FC<
         )}
         <div className="flex items-center gap-2">
           <Button
-            onClick={handleSubmit}
+            onClick={onSubmit}
             disabled={
               isSubmitting ||
-              !form.formState.isValid ||
               isPreparingDataset ||
-              hasMissingVariables ||
               isDatasetLoading ||
               isDatasetError
             }
