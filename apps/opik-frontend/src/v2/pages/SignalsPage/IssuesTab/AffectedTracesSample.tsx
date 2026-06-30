@@ -9,14 +9,12 @@ import { formatDate, formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
-// It's only a sample — cap the parallel GET /traces/{id} calls so an issue with
-// many example trace ids doesn't hammer the API.
+// It's only a sample — cap the parallel trace fetches.
 const SAMPLE_LIMIT = 5;
 
 type AffectedTracesSampleProps = {
   projectId: string;
-  // Resolved ids of traces that exhibit the issue (issue detail
-  // metadata.example_trace_ids, deduped). Empty when none were resolved.
+  // Deduped trace ids exhibiting the issue; empty when none resolved.
   traceIds: string[];
 };
 

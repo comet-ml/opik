@@ -126,8 +126,7 @@ const RunningBar: React.FC = () => (
   </div>
 );
 
-// The raw technical reason from the backend (job.last_failure_detail), e.g. the
-// provider error. Rendered as regular (muted) text.
+// Raw backend failure detail (job.last_failure_detail), as regular muted text.
 const FailureDetailText: React.FC<{ detail?: string; className?: string }> = ({
   detail,
   className,
@@ -156,8 +155,7 @@ const TryAgainButton: React.FC<{ onClick?: () => void }> = ({ onClick }) =>
     </Button>
   ) : null;
 
-// Shown above an existing issue list. "Show details" flows inline at the end of
-// the description; the detail expands as regular text below. Plus Try again.
+// Banner above an existing issue list: inline "Show details" + Try again.
 const FailedBanner: React.FC<{
   reason?: string;
   detail?: string;
@@ -200,9 +198,8 @@ const FailedBanner: React.FC<{
 const formatTraceCount = (n: number): string =>
   n >= 100 ? `${(Math.floor(n / 100) * 100).toLocaleString()}+` : `${n}`;
 
-// Shown above an existing issue list when the last scan is old — the displayed
-// issues may no longer reflect reality. Surfaces how many recent traces a new
-// run would evaluate (the last-24h trigger window).
+// Shown when the last scan is old — surfaces how many last-24h traces a re-run
+// would analyze.
 const StaleResultsBanner: React.FC<{
   days: number;
   traceCount: number;
@@ -387,12 +384,10 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
   }
 
   const hasIssues = issues.length > 0;
-  // Run status (in-progress / failed) belongs to the open-issues view only —
-  // never surface it on the Resolved issues page.
+  // Run status shows only on the open-issues view, never on Resolved.
+  // Precedence: running/failed take over; stale is a softer nudge.
   const running = isRunning && !showResolved;
   const isFailed = !showResolved && Boolean(failedReason) && !isRunning;
-  // Precedence: in-progress and failed take over the surface; "outdated" is a
-  // softer nudge shown only when neither applies.
   const stale = isStale && !showResolved && !running && !isFailed;
 
   const renderListBody = () => {

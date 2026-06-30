@@ -102,22 +102,16 @@ const SignalsPage: React.FC = () => {
     useDiagnosticsRunState(projectId);
   const { markSeen } = useDiagnosticsSeen(projectId);
 
-  // The job is the source of truth for a failure: the backend sets last_failed_at
-  // and clears it on the next successful report, so deriving from it (rather than a
-  // client flag) keeps the banner correct across reloads, other tabs, and a later
-  // auto-run success. The spinner takes precedence while a run is in flight.
+  // Derive failure from the job (BE sets it, clears on next success) so the banner
+  // is correct across reloads/tabs; the spinner takes precedence while running.
   const failedReason =
     !isRunning && job?.last_failed_at ? job.last_failure_reason : undefined;
   const failedDetail =
     !isRunning && job?.last_failed_at ? job.last_failure_detail : undefined;
 
-  // "Results might be outdated": when the last scan is older than the threshold,
-  // count the traces a manual run would analyze (the last-24h trigger window) and
-  // nudge only if there are any. Use the same `lastScan` the header shows (which
-  // falls back to the latest issue update) so records without last_scan_at still
-  // resolve. The cutoff is bucketed to the hour (rounded up, so the window never
-  // exceeds 24h and can't count older traces) — this tracks the rolling window
-  // without changing the query key on every render.
+  // Stale nudge: scan older than the threshold + traces in the last 24h. Uses the
+  // displayed `lastScan` fallback, and an hour-bucketed cutoff rounded up (window
+  // stays <=24h) so the query key doesn't churn each render.
   const scanAt = lastScan ? Date.parse(lastScan) : 0;
   const scanIsOld = scanAt > 0 && Date.now() - scanAt > STALE_AFTER_MS;
   const last24hCutoff = new Date(
@@ -167,9 +161,7 @@ const SignalsPage: React.FC = () => {
     }
   }, [issuesData, isRunning, baseline, endRun]);
 
-  // While a run is in flight, a last_failed_at advanced past the trigger baseline
-  // means it failed: end the run (the derived failedReason then shows the banner)
-  // and toast once. The isRunning guard keeps this from re-firing on later polls.
+  // last_failed_at past the trigger baseline = this run failed: end it and toast once.
   useEffect(() => {
     if (!isRunning) return;
     const failedAt = job?.last_failed_at ? Date.parse(job.last_failed_at) : 0;
