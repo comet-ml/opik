@@ -22,11 +22,14 @@ import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
+import java.net.URI;
 import java.util.UUID;
 
 /**
@@ -47,16 +50,20 @@ public class ReportFailuresResource {
 
     @POST
     @Operation(operationId = "createReportFailure", summary = "Record a report/job failure", description = "Appends a failure row keyed by (type, entity_id). Append-only — never overwrites earlier failures.", responses = {
-            @ApiResponse(responseCode = "204", description = "Failure recorded"),
+            @ApiResponse(responseCode = "201", description = "Created", headers = {
+                    @io.swagger.v3.oas.annotations.headers.Header(name = "Location", schema = @Schema(implementation = String.class))}),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     public Response create(
-            @RequestBody(content = @Content(schema = @Schema(implementation = ReportFailure.class))) @NotNull @Valid ReportFailure failure) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = ReportFailure.class))) @NotNull @Valid ReportFailure failure,
+            @Context UriInfo uriInfo) {
 
-        reportFailureService.create(failure);
+        UUID id = reportFailureService.create(failure);
 
-        return Response.noContent().build();
+        URI uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(id)).build();
+
+        return Response.created(uri).build();
     }
 
     @GET
