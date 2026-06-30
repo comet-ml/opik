@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Navigate, useParams } from "@tanstack/react-router";
+import { Navigate, useNavigate, useParams } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, BookOpenCheck, Radar, Settings2 } from "lucide-react";
+import { BookOpenCheck, Radar, Settings2 } from "lucide-react";
 import { useActiveProjectId } from "@/store/AppStore";
 import usePluginsStore from "@/store/PluginsStore";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
@@ -11,6 +11,7 @@ import { AGENT_INSIGHTS_ISSUES_KEY, AGENT_INSIGHTS_JOB_KEY } from "@/api/api";
 import { formatDate } from "@/lib/date";
 import PageBodyScrollContainer from "@/v2/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import BackButton from "@/shared/BackButton/BackButton";
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 import {
@@ -45,11 +46,24 @@ const maxUpdatedAt = (issues: AgentInsightsIssue[]): number =>
     return Number.isFinite(t) && t > max ? t : max;
   }, 0);
 
-const SignalsPage: React.FC = () => {
+const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
+  showResolved = false,
+}) => {
   const projectId = useActiveProjectId()!;
+  const navigate = useNavigate();
   const { workspaceName } = useParams({ strict: false }) as {
     workspaceName: string;
   };
+  const goToOpenIssues = () =>
+    navigate({
+      to: "/$workspaceName/projects/$projectId/diagnostics",
+      params: { workspaceName, projectId },
+    });
+  const goToResolved = () =>
+    navigate({
+      to: "/$workspaceName/projects/$projectId/diagnostics/resolved",
+      params: { workspaceName, projectId },
+    });
   const queryClient = useQueryClient();
 
   const AssistantSidebar = usePluginsStore((state) => state.AssistantSidebar);
@@ -138,7 +152,6 @@ const SignalsPage: React.FC = () => {
   const isStale = scanIsOld && !isRunning && recentTraceCount > 0;
   const staleDays = scanAt ? Math.floor((Date.now() - scanAt) / DAY_MS) : 0;
 
-  const [showResolved, setShowResolved] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
@@ -266,7 +279,7 @@ const SignalsPage: React.FC = () => {
                 <Button
                   variant="outline"
                   size="xs"
-                  onClick={() => setShowResolved(true)}
+                  onClick={goToResolved}
                   aria-label="Resolved issues"
                 >
                   <BookOpenCheck className="size-3.5 lg:mr-1.5" />
@@ -288,7 +301,7 @@ const SignalsPage: React.FC = () => {
           staleDays={staleDays}
           canConfigure={canConfigure}
           onRunDiagnostic={canConfigure ? handleRunDiagnostic : undefined}
-          onShowOpenIssues={() => setShowResolved(false)}
+          onShowOpenIssues={goToOpenIssues}
         />
       </div>
     );
@@ -298,17 +311,15 @@ const SignalsPage: React.FC = () => {
     <PageBodyScrollContainer className="flex flex-col overflow-hidden">
       <div className="mb-4 mt-6 flex shrink-0 items-center justify-between px-6">
         {showResolved ? (
-          <Button
-            variant="ghost"
-            onClick={() => setShowResolved(false)}
-            aria-label="Back to diagnostics"
-            className="h-auto min-w-0 gap-2 px-0 text-foreground-secondary"
-          >
-            <ArrowLeft className="size-4 shrink-0" />
-            <h1 className="truncate break-words text-base font-medium tracking-normal">
+          <div className="flex min-w-0 items-center gap-2">
+            <BackButton
+              to="/$workspaceName/projects/$projectId/diagnostics"
+              tooltip="Back to diagnostics"
+            />
+            <h1 className="truncate break-words text-base font-medium tracking-normal text-foreground-secondary">
               Resolved issues
             </h1>
-          </Button>
+          </div>
         ) : (
           <h1 className="truncate break-words text-base font-medium tracking-normal text-foreground-secondary">
             Diagnostics
