@@ -1,11 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useActiveProjectId } from "@/store/AppStore";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import Loader from "@/shared/Loader/Loader";
 import OptimizationProgressChartContainer from "@/v2/pages-shared/experiments/OptimizationProgressChart";
-import TrialConfigurationSection from "@/v2/pages-shared/experiments/TrialConfigurationSection";
+import BestTrialPrompt from "./BestTrialPrompt";
 import { IN_PROGRESS_OPTIMIZATION_STATUSES } from "@/lib/optimizations";
 import { formatDate } from "@/lib/date";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
@@ -84,12 +84,6 @@ const OptimizationPage: React.FC = () => {
     optimization?.created_at,
     setBreadcrumbParam,
   ]);
-
-  const bestExperiment = useMemo(() => {
-    if (!bestCandidate || !experiments.length) return undefined;
-    const ids = new Set(bestCandidate.experimentIds);
-    return experiments.find((e) => ids.has(e.id));
-  }, [bestCandidate, experiments]);
 
   const handleTrialClick = useCallback(
     (candidateId: string) => {
@@ -198,15 +192,13 @@ const OptimizationPage: React.FC = () => {
             />
           </div>
 
-          {bestExperiment && (
+          {bestCandidate && (
             <div className="shrink-0 pb-4">
-              <TrialConfigurationSection
-                experiments={[bestExperiment]}
-                title="Best trial configuration"
-                referenceExperiment={
-                  candidates.length > 1 ? baselineExperiment : undefined
-                }
-                studioConfig={optimization?.studio_config}
+              <BestTrialPrompt
+                bestCandidate={bestCandidate}
+                candidates={candidates}
+                experiments={experiments}
+                onViewTrial={() => handleTrialClick(bestCandidate.candidateId)}
               />
             </div>
           )}

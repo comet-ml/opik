@@ -55,8 +55,6 @@ describe("MetricPopoverContent", () => {
         metric={{ type: METRIC_TYPE.G_EVAL, label: "Custom (G-Eval)" }}
       />,
     );
-    expect(
-      screen.getByText("No additional configuration"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("No additional configuration")).toBeInTheDocument();
   });
 });
