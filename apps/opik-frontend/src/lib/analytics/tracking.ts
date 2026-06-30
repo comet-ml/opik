@@ -17,6 +17,11 @@ export const OpikEvent = {
     "opik_filter_dialog_closed_without_selection",
   FILTERS_ACTIVE_COUNT: "opik_filters_active_count",
   PINNED_FILTERS_COUNT: "opik_pinned_filters_count",
+  EXPLAIN_CLICKED: "opik_explain_clicked",
+  EXPLAIN_COMPLETED: "opik_explain_completed",
+  EXPLAIN_ERRORED: "opik_explain_errored",
+  EXPLAIN_CONTINUE_CLICKED: "opik_explain_continue_clicked",
+  EXPLAIN_RETRIED: "opik_explain_retried",
   QUICK_FILTER_APPLIED: "opik_quick_filter_applied",
 } as const;
 
