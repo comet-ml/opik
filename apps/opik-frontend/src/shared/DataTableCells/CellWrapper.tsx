@@ -1,9 +1,10 @@
 import React from "react";
 import { ColumnMeta, TableMeta } from "@tanstack/react-table";
 import {
-  CELL_HORIZONTAL_ALIGNMENT_MAP,
+  CELL_HORIZONTAL_ALIGNMENT_CLASS_MAP,
   CELL_TEXT_CLASS_MAP,
   CELL_VERTICAL_ALIGNMENT_MAP,
+  resolveHorizontalAlignment,
 } from "@/constants/shared";
 import { CELL_VERTICAL_ALIGNMENT, ROW_HEIGHT } from "@/types/shared";
 import { cn } from "@/lib/utils";
@@ -25,7 +26,6 @@ const CellWrapper = <TData,>({
   dataCellWrapper = true,
   stopClickPropagation = false,
 }: CellWrapperProps<TData>) => {
-  const { type } = metadata || {};
   const { rowHeight, rowHeightStyle } = tableMetadata || {};
 
   const verticalAlignment =
@@ -36,7 +36,7 @@ const CellWrapper = <TData,>({
 
   const verticalAlignClass = CELL_VERTICAL_ALIGNMENT_MAP[verticalAlignment];
   const horizontalAlignClass =
-    CELL_HORIZONTAL_ALIGNMENT_MAP[type!] ?? "justify-start";
+    CELL_HORIZONTAL_ALIGNMENT_CLASS_MAP[resolveHorizontalAlignment(metadata)];
 
   return (
     <div
