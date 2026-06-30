@@ -15,9 +15,9 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * A generic, feature-agnostic failure record (table {@code report_failures}). Each feature writes rows with its
- * own {@code type} discriminator and the id of the failing entity ({@code entityId}); e.g. Agent Insights uses
- * {@code type="agent_insights"} with the project id. Append-only — readers look at the latest row per entity.
+ * A failure record (table {@code report_failures}). Each row is keyed by the failing {@code projectId} and a
+ * {@code type} discriminator; e.g. Agent Insights uses {@code type="agent_insights"}. Append-only — readers look
+ * at the latest row per project.
  */
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -26,7 +26,7 @@ public record ReportFailure(
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
         @JsonIgnore String workspaceId,
         @NotBlank @Size(max = 100) String type,
-        @NotNull UUID entityId,
+        @NotNull UUID projectId,
         @NotBlank @Size(max = 255) String reason,
         String detail,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,

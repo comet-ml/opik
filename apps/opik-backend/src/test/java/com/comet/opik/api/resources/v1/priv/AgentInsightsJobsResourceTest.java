@@ -300,12 +300,12 @@ class AgentInsightsJobsResourceTest {
         assertThat(trigger.periodStart()).isBefore(trigger.periodEnd());
     }
 
-    // Failures are recorded through the generic report-failures endpoint (type=agent_insights, entity=project),
+    // Failures are recorded through the report-failures endpoint (type=agent_insights, project_id=project),
     // exactly as Ollie does; the job then surfaces the latest one via its query.
     private ReportFailure agentInsightsFailure(UUID projectId, String reason, String detail) {
         return ReportFailure.builder()
                 .type("agent_insights")
-                .entityId(projectId)
+                .projectId(projectId)
                 .reason(reason)
                 .detail(detail)
                 .build();
@@ -369,11 +369,12 @@ class AgentInsightsJobsResourceTest {
     private static Stream<Arguments> invalidReportFailures() {
         return Stream.of(
                 Arguments.of("missing type",
-                        ReportFailure.builder().entityId(UUID.randomUUID()).reason("x").build()),
-                Arguments.of("missing entity id",
+                        ReportFailure.builder().projectId(UUID.randomUUID()).reason("x").build()),
+                Arguments.of("missing project id",
                         ReportFailure.builder().type("agent_insights").reason("x").build()),
                 Arguments.of("blank reason",
-                        ReportFailure.builder().type("agent_insights").entityId(UUID.randomUUID()).reason("").build()));
+                        ReportFailure.builder().type("agent_insights").projectId(UUID.randomUUID()).reason("")
+                                .build()));
     }
 
     @ParameterizedTest(name = "[{index}] {0}")
@@ -384,7 +385,7 @@ class AgentInsightsJobsResourceTest {
     }
 
     @Test
-    @DisplayName("Report failures are listed for the entity, most recent first")
+    @DisplayName("Report failures are listed for the project, most recent first")
     void reportFailure__createAndRead() {
         var projectId = createProject();
 
@@ -398,7 +399,7 @@ class AgentInsightsJobsResourceTest {
         assertThat(page.content()).hasSize(2);
         var latest = page.content().getFirst();
         assertThat(latest.type()).isEqualTo("agent_insights");
-        assertThat(latest.entityId()).isEqualTo(projectId);
+        assertThat(latest.projectId()).isEqualTo(projectId);
         assertThat(latest.reason()).isEqualTo("out_of_credits");
         assertThat(latest.detail()).isEqualTo("latest");
         assertThat(latest.createdAt()).isNotNull();
