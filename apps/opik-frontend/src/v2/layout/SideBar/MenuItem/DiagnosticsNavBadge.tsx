@@ -2,8 +2,8 @@ import React from "react";
 import { Loader2 } from "lucide-react";
 import { useActiveProjectId } from "@/store/AppStore";
 import useAgentInsightsJob from "@/api/signals/useAgentInsightsJob";
-import useDiagnosticsRunState from "@/v2/pages/SignalsPage/useDiagnosticsRunState";
-import useDiagnosticsSeen from "@/v2/pages/SignalsPage/useDiagnosticsSeen";
+import useDiagnosticsRunState from "@/hooks/useDiagnosticsRunState";
+import useDiagnosticsSeen from "@/hooks/useDiagnosticsSeen";
 
 type DiagnosticsNavBadgeProps = {
   collapsed: boolean;

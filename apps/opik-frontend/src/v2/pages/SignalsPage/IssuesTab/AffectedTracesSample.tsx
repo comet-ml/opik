@@ -1,14 +1,17 @@
 import React from "react";
-import { useQueries } from "@tanstack/react-query";
 import { Coins, Hash, ListTree, Timer } from "lucide-react";
-import api, { TRACE_KEY, TRACES_REST_ENDPOINT } from "@/api/api";
 import { Trace } from "@/types/traces";
+import useTracesByIds from "@/api/traces/useTracesByIds";
 import useTraceThreadPanelsState from "@/v2/pages-shared/traces/useTraceThreadPanelsState";
 import { Skeleton } from "@/ui/skeleton";
 import { PROVIDERS } from "@/constants/providers";
 import { formatDate, formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
 import { cn } from "@/lib/utils";
+
+// It's only a sample — cap the parallel GET /traces/{id} calls so an issue with
+// many example trace ids doesn't hammer the API.
+const SAMPLE_LIMIT = 5;
 
 type AffectedTracesSampleProps = {
   projectId: string;
@@ -21,21 +24,13 @@ const AffectedTracesSample: React.FC<AffectedTracesSampleProps> = ({
   projectId,
   traceIds,
 }) => {
-  const results = useQueries({
-    queries: traceIds.map((traceId) => ({
-      queryKey: [TRACE_KEY, { traceId, stripAttachments: true }],
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        api
-          .get<Trace>(TRACES_REST_ENDPOINT + traceId, {
-            signal,
-            params: { strip_attachments: true },
-          })
-          .then((response) => response.data),
-      enabled: Boolean(projectId) && Boolean(traceId),
-    })),
+  const sampleIds = traceIds.slice(0, SAMPLE_LIMIT);
+  const results = useTracesByIds({
+    traceIds: sampleIds,
+    stripAttachments: true,
   });
 
-  const isPending = traceIds.length > 0 && results.some((r) => r.isPending);
+  const isPending = sampleIds.length > 0 && results.some((r) => r.isPending);
   // Drop ids that no longer resolve (e.g. a deleted trace) rather than erroring.
   const traces = results
     .map((r) => r.data)
@@ -50,7 +45,7 @@ const AffectedTracesSample: React.FC<AffectedTracesSampleProps> = ({
   if (isPending) {
     return (
       <div className="flex flex-col gap-1.5">
-        {Array.from({ length: Math.min(traceIds.length, 4) }, (_, i) => (
+        {Array.from({ length: Math.min(sampleIds.length, 4) }, (_, i) => (
           <Skeleton key={i} className="h-9 w-full rounded-md" />
         ))}
       </div>
