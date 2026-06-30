@@ -6,11 +6,17 @@ import { cn, formatNumericData } from "@/lib/utils";
 import { Tag, TagProps } from "@/ui/tag";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 
-const getConfig = (
+export type PercentageTrendType = "direct" | "inverted" | "neutral";
+export type PercentageTrendVariant = "green" | "red" | "gray";
+
+// Single source of truth for trend direction → icon + color variant. Exported so
+// table cells (e.g. the runs-list metric pill) reuse the exact same mapping
+// instead of re-deriving it.
+export const getTrendConfig = (
   percentage: number,
   trend: PercentageTrendType,
   precision: number,
-) => {
+): { Icon: typeof MoveRight; variant: PercentageTrendVariant } => {
   if (Math.abs(percentage) < Math.pow(10, -precision) / 2) {
     return {
       Icon: MoveRight,
@@ -31,8 +37,6 @@ const getConfig = (
   }
 };
 
-export type PercentageTrendType = "direct" | "inverted" | "neutral";
-
 type PercentageTrendProps = {
   percentage?: number;
   precision?: number;
@@ -45,7 +49,10 @@ type PercentageTrendProps = {
 // keeps the gray tag. Driven by the shared brand-color tokens so the trend and
 // run-status colors stay in sync. Applied to the whole tag so the icon and the
 // percentage share the color.
-const TREND_COLOR_CLASS: Record<string, string | undefined> = {
+export const TREND_COLOR_CLASS: Record<
+  PercentageTrendVariant,
+  string | undefined
+> = {
   green: "text-[var(--color-green-bright)]",
   red: "text-[var(--color-red)]",
   gray: undefined,
@@ -60,7 +67,7 @@ const PercentageTrend: React.FC<PercentageTrendProps> = ({
 }) => {
   if (isUndefined(percentage)) return null;
 
-  const { Icon, variant } = getConfig(percentage, trend, precision);
+  const { Icon, variant } = getTrendConfig(percentage, trend, precision);
   const colorClassName = TREND_COLOR_CLASS[variant];
 
   const isFinitePercentage = isFinite(percentage);

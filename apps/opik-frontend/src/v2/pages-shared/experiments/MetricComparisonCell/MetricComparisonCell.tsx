@@ -4,8 +4,11 @@ import isUndefined from "lodash/isUndefined";
 import { calcFormatterAwarePercentage } from "@/lib/percentage";
 import PercentageTrend, {
   PercentageTrendType,
+  getTrendConfig,
+  TREND_COLOR_CLASS,
 } from "@/shared/PercentageTrend/PercentageTrend";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import { cn, formatNumericData } from "@/lib/utils";
 
 type MetricComparisonCellProps = {
   baseline?: number;
@@ -25,16 +28,35 @@ const MetricComparisonCell: React.FunctionComponent<
   const percentage = calcFormatterAwarePercentage(current, baseline, formatter);
 
   if (compact) {
+    // Figma 689:34516 — the change % sits in a neutral pill with a colored
+    // trend icon and muted-slate text, followed by the current value. The pill
+    // shares the same neutral surface as the status tag (bg #f8fafc / border
+    // #f1f5f9). Trend direction/color reuses PercentageTrend's shared mapping.
+    const trendConfig =
+      !isUndefined(percentage) && isFinite(percentage)
+        ? getTrendConfig(percentage, trend, 0)
+        : null;
+    const TrendIcon = trendConfig?.Icon;
+    const percentageLabel =
+      !isUndefined(percentage) && isFinite(percentage)
+        ? `${formatNumericData(percentage, 0)}%`
+        : null;
+
     return (
       <div className="flex items-center gap-1.5">
-        {!isUndefined(baseline) && (
-          <TooltipWrapper content={String(baseline)}>
-            <span className="comet-body-xs text-muted-slate">
-              {formatter(baseline)}
+        {trendConfig && TrendIcon && (
+          <div className="inline-flex items-center gap-1 rounded-md border border-[#f1f5f9] bg-[#f8fafc] px-1.5 py-0.5">
+            <TrendIcon
+              className={cn(
+                "size-3 shrink-0",
+                TREND_COLOR_CLASS[trendConfig.variant],
+              )}
+            />
+            <span className="comet-body-xs-accented text-muted-slate">
+              {percentageLabel}
             </span>
-          </TooltipWrapper>
+          </div>
         )}
-        <PercentageTrend percentage={percentage} trend={trend} iconOnly />
         {!isUndefined(current) ? (
           <TooltipWrapper content={String(current)}>
             <span className="comet-body-xs text-foreground">
