@@ -33,10 +33,10 @@ import java.net.URI;
 import java.util.UUID;
 
 /**
- * Generic, feature-agnostic failure log. Any feature records a failure by POSTing with its own {@code type}
- * discriminator and the failing entity id, and lists failures via GET. Agent Insights uses
- * {@code type=agent_insights} with the project id; whether a job is "currently failed" is decided server-side
- * (the agent-insights job query compares the latest failure against the last successful scan).
+ * Failure log for reports/jobs. A failure is recorded by POSTing with the failing {@code project_id} and a
+ * {@code type} discriminator, and listed via GET. Agent Insights uses {@code type=agent_insights}; whether a job
+ * is "currently failed" is decided server-side (the agent-insights job query compares the latest failure against
+ * the last successful scan).
  */
 @Path("/v1/private/report-failures")
 @Consumes(MediaType.APPLICATION_JSON)
@@ -49,7 +49,7 @@ public class ReportFailuresResource {
     private final @NonNull ReportFailureService reportFailureService;
 
     @POST
-    @Operation(operationId = "createReportFailure", summary = "Record a report/job failure", description = "Appends a failure row keyed by (type, entity_id). Append-only — never overwrites earlier failures.", responses = {
+    @Operation(operationId = "createReportFailure", summary = "Record a report/job failure", description = "Appends a failure row keyed by (project_id, type). Append-only — never overwrites earlier failures.", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @io.swagger.v3.oas.annotations.headers.Header(name = "Location", schema = @Schema(implementation = String.class))}),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
@@ -67,16 +67,16 @@ public class ReportFailuresResource {
     }
 
     @GET
-    @Operation(operationId = "findReportFailures", summary = "List failures for an entity", description = "Returns failures for the given type and entity id, most recent first.", responses = {
+    @Operation(operationId = "findReportFailures", summary = "List failures for a project", description = "Returns failures for the given project id and type, most recent first.", responses = {
             @ApiResponse(responseCode = "200", description = "Failures page", content = @Content(schema = @Schema(implementation = ReportFailure.ReportFailurePage.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     public Response find(
             @QueryParam("type") @NotNull String type,
-            @QueryParam("entity_id") @NotNull UUID entityId,
+            @QueryParam("project_id") @NotNull UUID projectId,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @Max(100) @DefaultValue("10") int size) {
 
-        return Response.ok(reportFailureService.find(type, entityId, page, size)).build();
+        return Response.ok(reportFailureService.find(type, projectId, page, size)).build();
     }
 }

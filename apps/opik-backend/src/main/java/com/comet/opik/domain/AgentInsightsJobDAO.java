@@ -45,11 +45,11 @@ interface AgentInsightsJobDAO {
                    j.created_at, j.created_by, j.last_updated_at, j.last_updated_by
             FROM agent_insights_jobs j
             LEFT JOIN (
-                SELECT workspace_id, entity_id, reason, detail, created_at,
-                       ROW_NUMBER() OVER (PARTITION BY workspace_id, entity_id ORDER BY created_at DESC, id DESC) AS rn
+                SELECT workspace_id, project_id, reason, detail, created_at,
+                       ROW_NUMBER() OVER (PARTITION BY workspace_id, project_id ORDER BY created_at DESC, id DESC) AS rn
                 FROM report_failures
                 WHERE type = 'agent_insights'
-            ) f ON f.workspace_id = j.workspace_id AND f.entity_id = j.project_id AND f.rn = 1
+            ) f ON f.workspace_id = j.workspace_id AND f.project_id = j.project_id AND f.rn = 1
                 AND f.created_at > COALESCE(j.last_scan_at, '1970-01-01 00:00:00')
             WHERE j.workspace_id = :workspaceId AND j.project_id = :projectId
             """)

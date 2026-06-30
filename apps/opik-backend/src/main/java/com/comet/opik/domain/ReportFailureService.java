@@ -22,7 +22,7 @@ public interface ReportFailureService {
 
     UUID create(ReportFailure failure);
 
-    ReportFailure.ReportFailurePage find(String type, UUID entityId, int page, int size);
+    ReportFailure.ReportFailurePage find(String type, UUID projectId, int page, int size);
 }
 
 @Slf4j
@@ -41,17 +41,17 @@ class ReportFailureServiceImpl implements ReportFailureService {
         String userName = requestContext.get().getUserName();
         UUID id = idGenerator.generateId();
 
-        // Per-type integrity guard: for known types whose entity is a project, reject failures for a
-        // non-existent project so they can't linger as orphan rows that a later job query surfaces.
+        // Reject failures for a non-existent project so they can't linger as orphan rows a later job query
+        // surfaces. Gated by type to keep the check next to the only consumer that owns a project.
         if (ReportFailureDAO.AGENT_INSIGHTS_TYPE.equals(failure.type())) {
-            projectService.validateProjectIdExists(failure.entityId(), workspaceId);
+            projectService.validateProjectIdExists(failure.projectId(), workspaceId);
         }
 
-        log.info("Recording report failure type '{}' entity '{}' in workspace '{}': '{}'",
-                failure.type(), failure.entityId(), workspaceId, failure.reason());
+        log.info("Recording report failure type '{}' project '{}' in workspace '{}': '{}'",
+                failure.type(), failure.projectId(), workspaceId, failure.reason());
 
         transactionTemplate.inTransaction(WRITE, handle -> {
-            handle.attach(ReportFailureDAO.class).insert(id, workspaceId, failure.type(), failure.entityId(),
+            handle.attach(ReportFailureDAO.class).insert(id, workspaceId, failure.type(), failure.projectId(),
                     failure.reason(), failure.detail(), userName);
             return null;
         });
@@ -59,13 +59,13 @@ class ReportFailureServiceImpl implements ReportFailureService {
     }
 
     @Override
-    public ReportFailure.ReportFailurePage find(@NonNull String type, @NonNull UUID entityId, int page, int size) {
+    public ReportFailure.ReportFailurePage find(@NonNull String type, @NonNull UUID projectId, int page, int size) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             ReportFailureDAO dao = handle.attach(ReportFailureDAO.class);
-            List<ReportFailure> content = dao.find(workspaceId, type, entityId, size, (page - 1) * size);
-            long total = dao.count(workspaceId, type, entityId);
+            List<ReportFailure> content = dao.find(workspaceId, type, projectId, size, (page - 1) * size);
+            long total = dao.count(workspaceId, type, projectId);
             return ReportFailure.ReportFailurePage.builder()
                     .page(page)
                     .size(size)

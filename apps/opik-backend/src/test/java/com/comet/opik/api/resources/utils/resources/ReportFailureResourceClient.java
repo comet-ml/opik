@@ -38,10 +38,10 @@ public class ReportFailureResourceClient {
         }
     }
 
-    public ReportFailure.ReportFailurePage find(String type, UUID entityId, String apiKey, String workspaceName) {
+    public ReportFailure.ReportFailurePage find(String type, UUID projectId, String apiKey, String workspaceName) {
         try (Response response = client.target(PATH.formatted(baseURI))
                 .queryParam("type", type)
-                .queryParam("entity_id", entityId)
+                .queryParam("project_id", projectId)
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
