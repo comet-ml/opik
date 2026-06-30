@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
@@ -19,6 +25,9 @@ import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
 import ResizableSidePanelTopBar from "@/shared/ResizableSidePanel/ResizableSidePanelTopBar";
 import Loader from "@/shared/Loader/Loader";
 import OptimizationsNewPageContent from "./OptimizationsNewPageContent";
+
+/** Matches ResizableSidePanel's `duration-150` slide transition. */
+const SIDEBAR_ANIMATION_MS = 150;
 
 type NewRunSidebarProps = {
   onClose: () => void;
@@ -48,6 +57,20 @@ const NewRunSidebar: React.FC<NewRunSidebarProps> = ({
   );
   const datasetCreationRef = useRef<string | null>(null);
   const [isPreparingDataset, setIsPreparingDataset] = useState(false);
+
+  // Drive the slide-in/out: the panel mounts off-screen (open=false), then flips
+  // open on the next tick so ResizableSidePanel's transform transition runs. On
+  // close we play the slide-out, then let the parent unmount us (it clears the
+  // `?new` query param) once the animation has finished.
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    setOpen(true);
+  }, []);
+
+  const handleClose = useCallback(() => {
+    setOpen(false);
+    window.setTimeout(onClose, SIDEBAR_ANIMATION_MS);
+  }, [onClose]);
 
   useEffect(() => {
     trackEvent(OpikEvent.OPTIMIZATION_WIZARD_STARTED, {
@@ -161,38 +184,37 @@ const NewRunSidebar: React.FC<NewRunSidebarProps> = ({
     project?.name,
   ]);
 
-  const isLoading = (Boolean(rerunId) && isRerunFetching) || isPreparingDataset;
+  // Only a rerun's config fetch blocks the whole panel — there's nothing to
+  // show until it lands. Dataset preparation is surfaced inline on the dataset
+  // field so the rest of the form stays usable.
+  const isRerunLoading = Boolean(rerunId) && isRerunFetching;
 
   return (
     <ResizableSidePanel
       panelId="new-optimization-run-sidebar"
       entity="optimization run"
-      open
-      onClose={onClose}
+      open={open}
+      onClose={handleClose}
       initialWidth={0.7}
       minWidth={640}
-      blockOverlayClose
       header={
         <ResizableSidePanelTopBar
           variant="form"
           title={
             <span className="comet-body-s-accented">New optimization run</span>
           }
-          onClose={onClose}
+          onClose={handleClose}
         />
       }
     >
-      {isLoading ? (
-        <Loader
-          message={
-            isPreparingDataset
-              ? "Preparing a dataset..."
-              : "Loading optimization..."
-          }
-        />
+      {isRerunLoading ? (
+        <Loader message="Loading optimization..." />
       ) : (
         <FormProvider {...form}>
-          <OptimizationsNewPageContent onCancel={onClose} />
+          <OptimizationsNewPageContent
+            onCancel={handleClose}
+            isPreparingDataset={isPreparingDataset}
+          />
         </FormProvider>
       )}
     </ResizableSidePanel>

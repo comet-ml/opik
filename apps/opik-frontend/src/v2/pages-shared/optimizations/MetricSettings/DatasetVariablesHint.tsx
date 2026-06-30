@@ -16,7 +16,7 @@ const DatasetVariablesHint: React.FC<DatasetVariablesHintProps> = ({
   }
 
   return (
-    <p className="text-xs text-light-slate">
+    <p className="text-sm text-light-slate">
       Available:{" "}
       {datasetVariables.map((variable, index) => (
         <span key={variable}>
@@ -25,7 +25,7 @@ const DatasetVariablesHint: React.FC<DatasetVariablesHintProps> = ({
               variant="minimal"
               size="3xs"
               onClick={() => onSelect(variable)}
-              className="px-0 underline"
+              className="px-0 text-sm underline"
             >
               {variable}
             </Button>

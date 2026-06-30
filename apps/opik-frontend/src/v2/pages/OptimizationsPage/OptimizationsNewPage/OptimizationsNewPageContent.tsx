@@ -1,17 +1,20 @@
 import React from "react";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/ui/button";
-import { Spinner } from "@/ui/spinner";
 import { useOptimizationsNewFormHandlers } from "./useOptimizationsNewFormHandlers";
 import OptimizationsNewPromptSection from "./OptimizationsNewPromptSection";
 import OptimizationsNewConfigSidebar from "./OptimizationsNewConfigSidebar";
 
 type OptimizationsNewPageContentProps = {
   onCancel: () => void;
+  // True while a template's demo dataset is being created; surfaced inline on
+  // the dataset field and the submit button instead of blocking the panel.
+  isPreparingDataset: boolean;
 };
 
 const OptimizationsNewPageContent: React.FC<
   OptimizationsNewPageContentProps
-> = ({ onCancel }) => {
+> = ({ onCancel, isPreparingDataset }) => {
   const {
     form,
     isSubmitting,
@@ -22,6 +25,7 @@ const OptimizationsNewPageContent: React.FC<
     config,
     datasetSample,
     datasetVariables,
+    missingDatasetVariables,
     handleDatasetChange,
     handleOptimizerTypeChange,
     handleOptimizerParamsChange,
@@ -33,6 +37,8 @@ const OptimizationsNewPageContent: React.FC<
     handleNameChange,
     getFirstMetricParamsError,
   } = useOptimizationsNewFormHandlers();
+
+  const hasMissingVariables = missingDatasetVariables.length > 0;
 
   return (
     <div className="flex size-full flex-col">
@@ -55,6 +61,7 @@ const OptimizationsNewPageContent: React.FC<
           metricType={metricType}
           datasetSample={datasetSample}
           datasetVariables={datasetVariables}
+          isPreparingDataset={isPreparingDataset}
           onDatasetChange={handleDatasetChange}
           onOptimizerTypeChange={handleOptimizerTypeChange}
           onOptimizerParamsChange={handleOptimizerParamsChange}
@@ -64,17 +71,33 @@ const OptimizationsNewPageContent: React.FC<
         />
       </div>
 
-      <div className="flex items-center gap-2 border-t px-6 py-4">
-        <Button
-          onClick={handleSubmit}
-          disabled={isSubmitting || !form.formState.isValid}
-        >
-          {isSubmitting && <Spinner size="small" className="mr-2" />}
-          {isSubmitting ? "Starting..." : "Optimize prompt"}
-        </Button>
-        <Button variant="outline" onClick={onCancel} disabled={isSubmitting}>
-          Cancel
-        </Button>
+      <div className="flex flex-col gap-2 border-t px-6 py-4">
+        {hasMissingVariables && (
+          <span className="comet-body-s text-destructive">
+            {missingDatasetVariables.map((v) => `{{${v}}}`).join(", ")} not in
+            the selected item source
+            {datasetVariables.length > 0 &&
+              ` — available: ${datasetVariables.join(", ")}`}
+            . Update the prompt/metric or pick a matching item source.
+          </span>
+        )}
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={handleSubmit}
+            disabled={
+              isSubmitting ||
+              !form.formState.isValid ||
+              isPreparingDataset ||
+              hasMissingVariables
+            }
+          >
+            {isSubmitting && <Loader2 className="mr-2 size-4 animate-spin" />}
+            {isSubmitting ? "Starting..." : "Optimize prompt"}
+          </Button>
+          <Button variant="outline" onClick={onCancel} disabled={isSubmitting}>
+            Cancel
+          </Button>
+        </div>
       </div>
     </div>
   );

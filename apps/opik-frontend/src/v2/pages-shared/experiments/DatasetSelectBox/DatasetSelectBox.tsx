@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
+import { Database } from "lucide-react";
 
 import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
 import LoadableSelectBox from "@/shared/LoadableSelectBox/LoadableSelectBox";
@@ -14,6 +15,9 @@ type DatasetSelectBoxProps = {
   projectId?: string | null;
   placeholder?: string;
   className?: string;
+  /** Show the gold dataset icon next to the selected value (matches Figma). */
+  showIcon?: boolean;
+  disabled?: boolean;
 };
 
 const DatasetSelectBox: React.FC<DatasetSelectBoxProps> = ({
@@ -22,6 +26,8 @@ const DatasetSelectBox: React.FC<DatasetSelectBoxProps> = ({
   projectId,
   placeholder = "Select a test suite",
   className,
+  showIcon = false,
+  disabled,
 }) => {
   const {
     permissions: { canViewDatasets },
@@ -56,6 +62,16 @@ const DatasetSelectBox: React.FC<DatasetSelectBoxProps> = ({
       value={value}
       placeholder={placeholder}
       onChange={onValueChange}
+      renderTitle={
+        showIcon
+          ? (option) => (
+              <div className="flex min-w-0 items-center gap-2">
+                <Database className="size-4 shrink-0 text-[#F4B400]" />
+                <span className="truncate">{option.label}</span>
+              </div>
+            )
+          : undefined
+      }
       onLoadMore={
         total > DEFAULT_LOADED_DATASET_ITEMS && !isLoadedMore
           ? loadMoreHandler
@@ -63,6 +79,7 @@ const DatasetSelectBox: React.FC<DatasetSelectBoxProps> = ({
       }
       buttonClassName={className}
       isLoading={isLoading}
+      disabled={disabled}
       optionsCount={DEFAULT_LOADED_DATASET_ITEMS}
     />
   );

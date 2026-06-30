@@ -1,10 +1,11 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useFormContext } from "react-hook-form";
 
 import { useActiveProjectId } from "@/store/AppStore";
 import useDatasetById from "@/api/datasets/useDatasetById";
 import { METRIC_TYPE } from "@/types/optimizations";
 import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import { safelyGetPromptMustacheTags } from "@/lib/prompt";
 import { OptimizationConfigFormType } from "@/v2/pages-shared/optimizations/OptimizationConfigForm/schema";
 import useDatasetSamplePreview from "./useDatasetSamplePreview";
 import { useOptimizerFormHandlers } from "./formHandlers/useOptimizerFormHandlers";
@@ -30,12 +31,49 @@ export const useOptimizationsNewFormHandlers = () => {
   const datasetId = form.watch("datasetId");
   const optimizerType = form.watch("optimizerType");
   const metricType = form.watch("metricType");
+  const metricParams = form.watch("metricParams");
+  const messages = form.watch("messages");
   const model = form.watch("modelName") as PROVIDER_MODEL_TYPE | "";
   const config = form.watch("modelConfig");
 
   const { datasetSample, datasetVariables } = useDatasetSamplePreview({
     datasetId,
   });
+
+  // {{variables}} used in the prompt and the G-Eval metric must exist as
+  // columns in the selected item source — otherwise they resolve to nothing
+  // and the run fails at evaluation time. We surface the offenders so the form
+  // can block submit with a clear reason (e.g. after switching datasets, a
+  // template's {{question}}/{{expected_behavior}} no longer match the columns).
+  // Skipped until the sample has loaded (empty `datasetVariables`) so we don't
+  // flag a mismatch before we know the columns.
+  const missingDatasetVariables = useMemo(() => {
+    if (datasetVariables.length === 0) return [];
+
+    const referenced = new Set<string>();
+    const collect = (text: unknown) => {
+      if (typeof text !== "string" || text.length === 0) return;
+      const tags = safelyGetPromptMustacheTags(text);
+      if (tags) tags.forEach((tag) => referenced.add(tag));
+    };
+
+    (messages ?? []).forEach((message) =>
+      collect(
+        typeof message.content === "string" ? message.content : undefined,
+      ),
+    );
+
+    if (metricType === METRIC_TYPE.G_EVAL && metricParams) {
+      const params = metricParams as {
+        task_introduction?: string;
+        evaluation_criteria?: string;
+      };
+      collect(params.task_introduction);
+      collect(params.evaluation_criteria);
+    }
+
+    return [...referenced].filter((tag) => !datasetVariables.includes(tag));
+  }, [messages, metricParams, metricType, datasetVariables]);
 
   // Resolve the selected dataset's name on demand instead of scanning a
   // capped list of every project dataset.
@@ -94,6 +132,7 @@ export const useOptimizationsNewFormHandlers = () => {
     config,
     datasetSample,
     datasetVariables,
+    missingDatasetVariables,
     handleDatasetChange,
     handleOptimizerTypeChange,
     handleOptimizerParamsChange,

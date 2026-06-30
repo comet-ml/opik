@@ -3,8 +3,6 @@ import { Label } from "@/ui/label";
 import { Input } from "@/ui/input";
 import { JsonSchemaValidatorMetricParameters } from "@/types/optimizations";
 import { DEFAULT_JSON_SCHEMA_VALIDATOR_METRIC_CONFIGS } from "@/constants/optimizations";
-import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import DatasetVariablesHint from "../DatasetVariablesHint";
 
 interface JsonSchemaValidatorMetricConfigsProps {
@@ -26,14 +24,9 @@ const JsonSchemaValidatorMetricConfigs = ({
     <div className="flex w-72 flex-col gap-6">
       <div className="space-y-4">
         <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <Label htmlFor="reference_key" className="text-sm">
-              Reference key
-            </Label>
-            <ExplainerIcon
-              {...EXPLAINERS_MAP[EXPLAINER_ID.metric_reference_key]}
-            />
-          </div>
+          <Label htmlFor="reference_key" className="text-sm">
+            Reference key
+          </Label>
           <Input
             id="reference_key"
             value={referenceKey}
