@@ -110,8 +110,11 @@ public class AgentInsightsJobService {
     // System context (no request thread): records a run failure with an explicit workspace id. Best-effort.
     public void markRunFailed(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull String code,
             String detail) {
-        transactionTemplate.inTransaction(WRITE, handle -> handle.attach(AgentInsightsJobDAO.class)
-                .markFailed(workspaceId, projectId, code, detail, "system"));
+        transactionTemplate.inTransaction(WRITE, handle -> {
+            handle.attach(ReportFailureDAO.class).insert(idGenerator.generateId(), workspaceId,
+                    ReportFailureDAO.AGENT_INSIGHTS_TYPE, projectId, code, detail, "system");
+            return null;
+        });
     }
 
     // Cross-workspace; used by the daily sweep (OPIK-6853), never from a request thread. The DAO's JOIN

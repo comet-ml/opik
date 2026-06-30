@@ -121,8 +121,12 @@ class AgentInsightsIssueServiceImpl implements AgentInsightsIssueService {
         log.warn("Reporting agent insights run failure for project '{}' in workspace '{}': code '{}'",
                 failure.projectId(), workspaceId, failure.errorCode());
 
-        transactionTemplate.inTransaction(WRITE, handle -> handle.attach(AgentInsightsJobDAO.class)
-                .markFailed(workspaceId, failure.projectId(), failure.errorCode(), failure.errorMessage(), userName));
+        transactionTemplate.inTransaction(WRITE, handle -> {
+            handle.attach(ReportFailureDAO.class).insert(idGenerator.generateId(), workspaceId,
+                    ReportFailureDAO.AGENT_INSIGHTS_TYPE, failure.projectId(), failure.errorCode(),
+                    failure.errorMessage(), userName);
+            return null;
+        });
     }
 
     @Override

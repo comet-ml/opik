@@ -36,33 +36,33 @@ interface AgentInsightsJobDAO {
             @Bind("status") String status,
             @Bind("userName") String userName);
 
+    // The job's "current failure" is the latest report_failures row for this project that landed after the
+    // last successful scan (a success advances last_scan_at and supersedes older failures). Surfaced via the
+    // last_failure_* aliases so the DTO/JSON shape is unchanged even though failures now live in their own table.
     @SqlQuery("""
-            SELECT * FROM agent_insights_jobs
-            WHERE workspace_id = :workspaceId AND project_id = :projectId
+            SELECT j.id, j.workspace_id, j.project_id, j.status, j.last_scan_at,
+                   f.reason AS last_failure_reason, f.detail AS last_failure_detail, f.created_at AS last_failed_at,
+                   j.created_at, j.created_by, j.last_updated_at, j.last_updated_by
+            FROM agent_insights_jobs j
+            LEFT JOIN (
+                SELECT workspace_id, entity_id, reason, detail, created_at,
+                       ROW_NUMBER() OVER (PARTITION BY workspace_id, entity_id ORDER BY created_at DESC, id DESC) AS rn
+                FROM report_failures
+                WHERE type = 'agent_insights'
+            ) f ON f.workspace_id = j.workspace_id AND f.entity_id = j.project_id AND f.rn = 1
+                AND f.created_at > COALESCE(j.last_scan_at, '1970-01-01 00:00:00')
+            WHERE j.workspace_id = :workspaceId AND j.project_id = :projectId
             """)
     Optional<AgentInsightsJob> findByProject(@Bind("workspaceId") String workspaceId,
             @Bind("projectId") UUID projectId);
 
     @SqlUpdate("""
             UPDATE agent_insights_jobs
-            SET last_scan_at = CURRENT_TIMESTAMP(6), last_updated_by = :userName,
-                last_failure_reason = NULL, last_failure_detail = NULL, last_failed_at = NULL
+            SET last_scan_at = CURRENT_TIMESTAMP(6), last_updated_by = :userName
             WHERE workspace_id = :workspaceId AND project_id = :projectId
             """)
     int markScanned(@Bind("workspaceId") String workspaceId,
             @Bind("projectId") UUID projectId,
-            @Bind("userName") String userName);
-
-    @SqlUpdate("""
-            UPDATE agent_insights_jobs
-            SET last_failure_reason = :reason, last_failure_detail = :detail,
-                last_failed_at = CURRENT_TIMESTAMP(6), last_updated_by = :userName
-            WHERE workspace_id = :workspaceId AND project_id = :projectId
-            """)
-    int markFailed(@Bind("workspaceId") String workspaceId,
-            @Bind("projectId") UUID projectId,
-            @Bind("reason") String reason,
-            @Bind("detail") String detail,
             @Bind("userName") String userName);
 
     // Cross-workspace — used only by the daily sweep (system context), never from a request thread.

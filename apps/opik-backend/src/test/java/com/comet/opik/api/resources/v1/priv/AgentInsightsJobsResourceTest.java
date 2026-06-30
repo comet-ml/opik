@@ -335,6 +335,27 @@ class AgentInsightsJobsResourceTest {
     }
 
     @Test
+    @DisplayName("Failures accumulate as history; the job surfaces the most recent one")
+    void runFailure__multipleFailures__latestSurfaced() {
+        var projectId = createProject();
+        jobsClient.create(projectId, API_KEY, WORKSPACE_NAME).close();
+
+        insightsClient.reportRunFailure(AgentInsightsRunFailure.builder().projectId(projectId)
+                .errorCode("rate_limited").errorMessage("429 first").build(),
+                API_KEY, WORKSPACE_NAME, HttpStatus.SC_NO_CONTENT);
+        insightsClient.reportRunFailure(AgentInsightsRunFailure.builder().projectId(projectId)
+                .errorCode("out_of_credits").errorMessage("402 latest").build(),
+                API_KEY, WORKSPACE_NAME, HttpStatus.SC_NO_CONTENT);
+
+        // Each failure is appended to report_failures (history), and the job surfaces the latest.
+        try (var resp = jobsClient.get(projectId, API_KEY, WORKSPACE_NAME)) {
+            var job = resp.readEntity(AgentInsightsJob.class);
+            assertThat(job.lastFailureReason()).isEqualTo("out_of_credits");
+            assertThat(job.lastFailureDetail()).isEqualTo("402 latest");
+        }
+    }
+
+    @Test
     @DisplayName("Run failure for a non-existent project returns 404")
     void runFailure__projectMissing__returns404() {
         var failure = AgentInsightsRunFailure.builder()
