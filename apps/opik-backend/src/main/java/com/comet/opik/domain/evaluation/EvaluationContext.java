@@ -13,25 +13,20 @@ import java.util.UUID;
  * Lombok builder, so no construction logic lives in this type.
  */
 @Builder
-final class EvaluationContext {
-
-    final UUID traceId;
-    final String evaluatedIdKey;
-    final String evaluatedId;
-    final UUID evaluatedProjectId;
-    final String projectName;
-    final String evaluatedName;
-    final JsonNode evaluatedInput;
-    final JsonNode evaluatedOutput;
-    final UUID ruleId;
-    final String ruleName;
-    final String modelName;
-    final String actualModel;
-    final String provider;
-    final Instant startTime;
-    private final ObservabilityContext observabilityContext;
-
-    ObservabilityContext observabilityContext() {
-        return observabilityContext;
-    }
+record EvaluationContext(
+        UUID traceId,
+        String evaluatedIdKey,
+        String evaluatedId,
+        UUID evaluatedProjectId,
+        String projectName,
+        String evaluatedName,
+        JsonNode evaluatedInput,
+        JsonNode evaluatedOutput,
+        UUID ruleId,
+        String ruleName,
+        String modelName,
+        String actualModel,
+        String provider,
+        Instant startTime,
+        ObservabilityContext observabilityContext) {
 }

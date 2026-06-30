@@ -30,6 +30,7 @@ import reactor.test.StepVerifier;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -41,11 +42,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-// High-value unit test for the trace/span MAPPING and the fire-and-forget write contract — the only
-// part of the recorder reachable without a live LLM-judge run against a real provider. End-to-end
-// behavior (sampling, real persistence) is covered by the scorer integration tests. TraceService /
-// SpanService / LlmProviderFactory are external collaborators and are mocked; the IdGenerator is the
-// real time-ordered (UUID v7) implementation from the test factory, not a mock, so ids match prod.
+/**
+ * High-value unit test for the trace/span MAPPING and the fire-and-forget write contract — the only
+ * part of the recorder reachable without a live LLM-judge run against a real provider. End-to-end
+ * behavior (sampling, real persistence) is covered by the scorer integration tests. TraceService /
+ * SpanService / LlmProviderFactory are external collaborators and are mocked; the IdGenerator is the
+ * real time-ordered (UUID v7) implementation from the test factory, not a mock, so ids match prod.
+ */
 class OnlineEvaluationRecorderTest {
 
     private final TraceService traceService = mock(TraceService.class);
@@ -71,11 +74,11 @@ class OnlineEvaluationRecorderTest {
     }
 
     private void stubSpanWrites() {
-        when(spanService.create(any(Span.class))).thenReturn(Mono.just(UUID.randomUUID()));
+        when(spanService.create(any(Span.class))).thenReturn(Mono.just(idGenerator.generateId()));
     }
 
     private void stubTraceWrites() {
-        when(traceService.create(any(Trace.class))).thenReturn(Mono.just(UUID.randomUUID()));
+        when(traceService.create(any(Trace.class))).thenReturn(Mono.just(idGenerator.generateId()));
     }
 
     // Writes are fire-and-forget on a separate scheduler; wait for the create call before capturing.
@@ -109,11 +112,9 @@ class OnlineEvaluationRecorderTest {
 
         recorder().recordLlmCall(request(), Mono.just(responseWith(usage))).block();
 
-        assertThat(capturedSpan().usage())
-                .containsEntry("prompt_tokens", 100)
-                .containsEntry("completion_tokens", 20)
-                .containsEntry("cache_creation_input_tokens", 30)
-                .containsEntry("cache_read_input_tokens", 40);
+        assertThat(capturedSpan().usage()).isEqualTo(Map.of(
+                "prompt_tokens", 100, "completion_tokens", 20, "total_tokens", 120,
+                "cache_creation_input_tokens", 30, "cache_read_input_tokens", 40));
     }
 
     @Test
@@ -126,11 +127,9 @@ class OnlineEvaluationRecorderTest {
 
         recorder().recordLlmCall(request(), Mono.just(responseWith(usage))).block();
 
-        assertThat(capturedSpan().usage())
-                .containsEntry("prompt_tokens", 200)
-                .containsEntry("completion_tokens", 50)
-                .containsEntry("cache_read_input_tokens", 75)
-                .doesNotContainKey("cache_creation_input_tokens");
+        assertThat(capturedSpan().usage()).isEqualTo(Map.of(
+                "prompt_tokens", 200, "completion_tokens", 50, "total_tokens", 250,
+                "cache_read_input_tokens", 75));
     }
 
     @Test
@@ -142,9 +141,8 @@ class OnlineEvaluationRecorderTest {
 
         recorder().recordLlmCall(request(), Mono.just(responseWith(usage))).block();
 
-        assertThat(capturedSpan().usage())
-                .containsEntry("prompt_tokens", 300)
-                .containsEntry("cache_read_input_tokens", 120);
+        assertThat(capturedSpan().usage()).isEqualTo(Map.of(
+                "prompt_tokens", 300, "completion_tokens", 60, "cache_read_input_tokens", 120));
     }
 
     @Test
@@ -154,9 +152,8 @@ class OnlineEvaluationRecorderTest {
 
         recorder().recordLlmCall(request(), Mono.just(responseWith(usage))).block();
 
-        assertThat(capturedSpan().usage())
-                .containsEntry("prompt_tokens", 10)
-                .doesNotContainKeys("cache_read_input_tokens", "cache_creation_input_tokens");
+        assertThat(capturedSpan().usage()).isEqualTo(Map.of(
+                "prompt_tokens", 10, "completion_tokens", 5, "total_tokens", 15));
     }
 
     @Test

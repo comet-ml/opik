@@ -48,12 +48,9 @@ public class OnlineEvaluationRecorder {
     private final @NonNull EvaluationEntityFactory entityFactory;
 
     /** Real recorder backed by a per-evaluation {@link EvaluationContext}; writes the trace and spans. */
+    @RequiredArgsConstructor
     private final class RealRecorder implements EvaluationRecorder {
         private final EvaluationContext eval;
-
-        private RealRecorder(EvaluationContext eval) {
-            this.eval = eval;
-        }
 
         @Override
         public Mono<ChatResponse> recordLlmCall(ChatRequest request, Mono<ChatResponse> call) {

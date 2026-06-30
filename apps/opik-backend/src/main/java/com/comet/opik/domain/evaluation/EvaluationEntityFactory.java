@@ -26,6 +26,7 @@ import dev.langchain4j.model.openai.OpenAiTokenUsage;
 import dev.langchain4j.model.output.TokenUsage;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.exception.ExceptionUtils;
@@ -62,15 +63,15 @@ class EvaluationEntityFactory {
     Span llmSpan(EvaluationContext eval, ChatRequest request, ChatResponse response, Throwable error, Instant start) {
         var spanBuilder = Span.builder()
                 .id(idGenerator.generateId())
-                .traceId(eval.traceId)
-                .projectName(eval.projectName)
+                .traceId(eval.traceId())
+                .projectName(eval.projectName())
                 .type(SpanType.llm)
                 .name(SPAN_NAME)
                 .startTime(start)
                 .endTime(Instant.now())
                 .input(buildMessagesInput(request))
-                .model(eval.actualModel)
-                .provider(eval.provider)
+                .model(eval.actualModel())
+                .provider(eval.provider())
                 .source(Source.EVALUATOR);
 
         if (response != null) {
@@ -94,8 +95,8 @@ class EvaluationEntityFactory {
 
         var spanBuilder = Span.builder()
                 .id(idGenerator.generateId())
-                .traceId(eval.traceId)
-                .projectName(eval.projectName)
+                .traceId(eval.traceId())
+                .projectName(eval.projectName())
                 .type(SpanType.tool)
                 .name(toolName)
                 .startTime(start)
@@ -116,36 +117,36 @@ class EvaluationEntityFactory {
     /** The upfront retrieval + context-assembly span preceding the first LLM round. */
     Span preparationSpan(EvaluationContext eval, int fetchedSpanCount, int estimatedTokens, boolean agentic) {
         Map<String, Object> metadata = new LinkedHashMap<>();
-        metadata.put(eval.evaluatedIdKey, eval.evaluatedId);
-        if (eval.evaluatedProjectId != null) {
-            metadata.put("evaluated_project_id", eval.evaluatedProjectId.toString());
+        metadata.put(eval.evaluatedIdKey(), eval.evaluatedId());
+        if (eval.evaluatedProjectId() != null) {
+            metadata.put("evaluated_project_id", eval.evaluatedProjectId().toString());
         }
-        if (eval.evaluatedName != null) {
-            metadata.put("evaluated_name", eval.evaluatedName);
+        if (eval.evaluatedName() != null) {
+            metadata.put("evaluated_name", eval.evaluatedName());
         }
-        metadata.put("model", eval.modelName);
+        metadata.put("model", eval.modelName());
         metadata.put("fetched_span_count", fetchedSpanCount);
         metadata.put("estimated_tokens", estimatedTokens);
         metadata.put("mode", agentic ? MODE_AGENTIC_TOOLS : MODE_INLINE);
 
         var spanBuilder = Span.builder()
                 .id(idGenerator.generateId())
-                .traceId(eval.traceId)
-                .projectName(eval.projectName)
+                .traceId(eval.traceId())
+                .projectName(eval.projectName())
                 .type(SpanType.general)
                 .name(PREPARE_SPAN_NAME)
-                .startTime(eval.startTime)
+                .startTime(eval.startTime())
                 .endTime(Instant.now())
                 .metadata(JsonUtils.valueToTree(metadata))
                 .source(Source.EVALUATOR);
 
         // Put the evaluated entity's own input/output on the span (so the UI pretty-renders them exactly
         // as on the source trace), preview-capped to keep the monitoring span small.
-        var input = previewNode(eval.evaluatedInput);
+        var input = previewNode(eval.evaluatedInput());
         if (input != null) {
             spanBuilder.input(input);
         }
-        var output = previewNode(eval.evaluatedOutput);
+        var output = previewNode(eval.evaluatedOutput());
         if (output != null) {
             spanBuilder.output(output);
         }
@@ -165,26 +166,26 @@ class EvaluationEntityFactory {
 
     private Trace trace(EvaluationContext eval, JsonNode output, ErrorInfo errorInfo) {
         Map<String, Object> input = new LinkedHashMap<>();
-        input.put(eval.evaluatedIdKey, eval.evaluatedId);
-        if (eval.evaluatedProjectId != null) {
-            input.put("evaluated_project_id", eval.evaluatedProjectId.toString());
+        input.put(eval.evaluatedIdKey(), eval.evaluatedId());
+        if (eval.evaluatedProjectId() != null) {
+            input.put("evaluated_project_id", eval.evaluatedProjectId().toString());
         }
-        input.put("model", eval.modelName);
+        input.put("model", eval.modelName());
 
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("created_from", "online_evaluation");
-        metadata.put("rule_id", eval.ruleId.toString());
-        if (eval.ruleName != null) {
-            metadata.put("rule_name", eval.ruleName);
+        metadata.put("rule_id", eval.ruleId().toString());
+        if (eval.ruleName() != null) {
+            metadata.put("rule_name", eval.ruleName());
         }
-        metadata.put(eval.evaluatedIdKey, eval.evaluatedId);
-        metadata.put("model", eval.modelName);
+        metadata.put(eval.evaluatedIdKey(), eval.evaluatedId());
+        metadata.put("model", eval.modelName());
 
         var traceBuilder = Trace.builder()
-                .id(eval.traceId)
-                .projectName(eval.projectName)
+                .id(eval.traceId())
+                .projectName(eval.projectName())
                 .name(TRACE_NAME)
-                .startTime(eval.startTime)
+                .startTime(eval.startTime())
                 .endTime(Instant.now())
                 .input(JsonUtils.valueToTree(input))
                 .metadata(JsonUtils.valueToTree(metadata))
@@ -257,26 +258,39 @@ class EvaluationEntityFactory {
         var messages = request.messages() == null
                 ? List.<JudgeMessage>of()
                 : request.messages().stream()
-                        .map(message -> new JudgeMessage(message.type().name().toLowerCase(), messageText(message)))
+                        .map(message -> JudgeMessage.builder()
+                                .role(message.type().name().toLowerCase())
+                                .content(messageText(message))
+                                .build())
                         .toList();
-        return JsonUtils.valueToTree(new MessagesInput(messages));
+        return JsonUtils.valueToTree(MessagesInput.builder().messages(messages).build());
     }
 
     private static JsonNode buildResponseOutput(ChatResponse response) {
         var aiMessage = response.aiMessage();
         var toolCalls = aiMessage.hasToolExecutionRequests()
                 ? aiMessage.toolExecutionRequests().stream()
-                        .map(toolCall -> new ToolCallView(toolCall.name(), toolCall.arguments()))
+                        .map(toolCall -> ToolCallView.builder()
+                                .name(toolCall.name())
+                                .arguments(toolCall.arguments())
+                                .build())
                         .toList()
                 : null;
-        return JsonUtils.valueToTree(new ResponseOutput(aiMessage.text() == null ? "" : aiMessage.text(), toolCalls));
+        return JsonUtils.valueToTree(ResponseOutput.builder()
+                .output(aiMessage.text() == null ? "" : aiMessage.text())
+                .toolCalls(toolCalls)
+                .build());
     }
 
     private static JsonNode buildScoresOutput(List<? extends FeedbackScoreItem> scores) {
         var scoreViews = scores.stream()
-                .map(score -> new ScoreView(score.name(), score.value(), score.reason()))
+                .map(score -> ScoreView.builder()
+                        .name(score.name())
+                        .value(score.value())
+                        .reason(score.reason())
+                        .build())
                 .toList();
-        return JsonUtils.valueToTree(new ScoresOutput(scoreViews));
+        return JsonUtils.valueToTree(ScoresOutput.builder().scores(scoreViews).build());
     }
 
     private static String messageText(ChatMessage message) {
@@ -329,21 +343,27 @@ class EvaluationEntityFactory {
 
     // Fixed-shape span/trace input & output, serialized via the snake_case + non-null mapper
     // (so toolCalls -> tool_calls and null fields are omitted), instead of hand-built JSON nodes.
+    @Builder(toBuilder = true)
     private record MessagesInput(List<JudgeMessage> messages) {
     }
 
+    @Builder(toBuilder = true)
     private record JudgeMessage(String role, String content) {
     }
 
+    @Builder(toBuilder = true)
     private record ResponseOutput(String output, List<ToolCallView> toolCalls) {
     }
 
+    @Builder(toBuilder = true)
     private record ToolCallView(String name, String arguments) {
     }
 
+    @Builder(toBuilder = true)
     private record ScoresOutput(List<ScoreView> scores) {
     }
 
+    @Builder(toBuilder = true)
     private record ScoreView(String name, BigDecimal value, String reason) {
     }
 }
