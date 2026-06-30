@@ -100,6 +100,17 @@
     --chart-gray-light: #ebf2f5;
     --chart-gray-dark: #45575f;
 
+    /* Optimization Studio icon accents (per-algorithm / per-metric) */
+    --optimizer-icon-gepa: #12a594;
+    --optimizer-icon-hierarchical: #6e56cf;
+    --optimizer-icon-evolutionary: #30a46c;
+    --metric-icon-equals: #30a46c;
+    --metric-icon-json-schema: #0b7cff;
+    --metric-icon-g-eval: #8e4ec6;
+    --metric-icon-levenshtein: #f76808;
+    --metric-icon-numerical: #e5484d;
+    --metric-icon-code: #d6409f;
+
     /* Template icon colors */
     --template-icon-metrics: #5899da;
     --template-icon-performance: #ef6868;

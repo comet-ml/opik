@@ -45,18 +45,33 @@ import DatasetSamplePreview from "./DatasetSamplePreview";
 type IconConfig = { icon: LucideIcon; color: string };
 
 const ALGORITHM_ICON_MAP: Partial<Record<OPTIMIZER_TYPE, IconConfig>> = {
-  [OPTIMIZER_TYPE.GEPA]: { icon: Dna, color: "#12A594" },
-  [OPTIMIZER_TYPE.HIERARCHICAL_REFLECTIVE]: { icon: Network, color: "#6E56CF" },
-  [OPTIMIZER_TYPE.EVOLUTIONARY]: { icon: GitBranch, color: "#30A46C" },
+  [OPTIMIZER_TYPE.GEPA]: { icon: Dna, color: "var(--optimizer-icon-gepa)" },
+  [OPTIMIZER_TYPE.HIERARCHICAL_REFLECTIVE]: {
+    icon: Network,
+    color: "var(--optimizer-icon-hierarchical)",
+  },
+  [OPTIMIZER_TYPE.EVOLUTIONARY]: {
+    icon: GitBranch,
+    color: "var(--optimizer-icon-evolutionary)",
+  },
 };
 
 const METRIC_ICON_MAP: Record<METRIC_TYPE, IconConfig> = {
-  [METRIC_TYPE.EQUALS]: { icon: Equal, color: "#30A46C" },
-  [METRIC_TYPE.JSON_SCHEMA_VALIDATOR]: { icon: Braces, color: "#0B7CFF" },
-  [METRIC_TYPE.G_EVAL]: { icon: Sparkles, color: "#8E4EC6" },
-  [METRIC_TYPE.LEVENSHTEIN]: { icon: SpellCheck, color: "#F76808" },
-  [METRIC_TYPE.NUMERICAL_SIMILARITY]: { icon: Sigma, color: "#E5484D" },
-  [METRIC_TYPE.CODE]: { icon: Code, color: "#D6409F" },
+  [METRIC_TYPE.EQUALS]: { icon: Equal, color: "var(--metric-icon-equals)" },
+  [METRIC_TYPE.JSON_SCHEMA_VALIDATOR]: {
+    icon: Braces,
+    color: "var(--metric-icon-json-schema)",
+  },
+  [METRIC_TYPE.G_EVAL]: { icon: Sparkles, color: "var(--metric-icon-g-eval)" },
+  [METRIC_TYPE.LEVENSHTEIN]: {
+    icon: SpellCheck,
+    color: "var(--metric-icon-levenshtein)",
+  },
+  [METRIC_TYPE.NUMERICAL_SIMILARITY]: {
+    icon: Sigma,
+    color: "var(--metric-icon-numerical)",
+  },
+  [METRIC_TYPE.CODE]: { icon: Code, color: "var(--metric-icon-code)" },
 };
 
 const renderIconLabel = (cfg: IconConfig | undefined, label: string) => {
