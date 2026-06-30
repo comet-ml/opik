@@ -35,6 +35,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -48,6 +51,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
@@ -315,7 +319,7 @@ class AgentInsightsJobsResourceTest {
 
         reportFailuresClient.create(
                 agentInsightsFailure(projectId, "out_of_credits", "anthropic 402: insufficient credits"),
-                API_KEY, WORKSPACE_NAME, HttpStatus.SC_NO_CONTENT);
+                API_KEY, WORKSPACE_NAME, HttpStatus.SC_CREATED);
 
         try (var afterFailure = jobsClient.get(projectId, API_KEY, WORKSPACE_NAME)) {
             assertThat(afterFailure.getStatus()).isEqualTo(HttpStatus.SC_OK);
@@ -348,9 +352,9 @@ class AgentInsightsJobsResourceTest {
         jobsClient.create(projectId, API_KEY, WORKSPACE_NAME).close();
 
         reportFailuresClient.create(agentInsightsFailure(projectId, "rate_limited", "429 first"),
-                API_KEY, WORKSPACE_NAME, HttpStatus.SC_NO_CONTENT);
+                API_KEY, WORKSPACE_NAME, HttpStatus.SC_CREATED);
         reportFailuresClient.create(agentInsightsFailure(projectId, "out_of_credits", "402 latest"),
-                API_KEY, WORKSPACE_NAME, HttpStatus.SC_NO_CONTENT);
+                API_KEY, WORKSPACE_NAME, HttpStatus.SC_CREATED);
 
         // Both rows are appended to report_failures (history); the job surfaces the latest.
         try (var resp = jobsClient.get(projectId, API_KEY, WORKSPACE_NAME)) {
@@ -362,20 +366,21 @@ class AgentInsightsJobsResourceTest {
                 .isEqualTo(2);
     }
 
-    @Test
-    @DisplayName("Report failure with missing required fields fails validation (422)")
-    void reportFailure__invalidBody__returns422() {
-        int unprocessable = 422;
-        // missing type
-        reportFailuresClient.create(ReportFailure.builder().entityId(UUID.randomUUID()).reason("x").build(),
-                API_KEY, WORKSPACE_NAME, unprocessable);
-        // missing entity id
-        reportFailuresClient.create(ReportFailure.builder().type("agent_insights").reason("x").build(),
-                API_KEY, WORKSPACE_NAME, unprocessable);
-        // blank reason
-        reportFailuresClient.create(
-                ReportFailure.builder().type("agent_insights").entityId(UUID.randomUUID()).reason("").build(),
-                API_KEY, WORKSPACE_NAME, unprocessable);
+    private static Stream<Arguments> invalidReportFailures() {
+        return Stream.of(
+                Arguments.of("missing type",
+                        ReportFailure.builder().entityId(UUID.randomUUID()).reason("x").build()),
+                Arguments.of("missing entity id",
+                        ReportFailure.builder().type("agent_insights").reason("x").build()),
+                Arguments.of("blank reason",
+                        ReportFailure.builder().type("agent_insights").entityId(UUID.randomUUID()).reason("").build()));
+    }
+
+    @ParameterizedTest(name = "[{index}] {0}")
+    @MethodSource("invalidReportFailures")
+    @DisplayName("Report failure with an invalid body fails validation (422)")
+    void reportFailure__invalidBody__returns422(String name, ReportFailure body) {
+        reportFailuresClient.create(body, API_KEY, WORKSPACE_NAME, 422);
     }
 
     @Test
@@ -384,9 +389,9 @@ class AgentInsightsJobsResourceTest {
         var projectId = createProject();
 
         reportFailuresClient.create(agentInsightsFailure(projectId, "rate_limited", "first"),
-                API_KEY, WORKSPACE_NAME, HttpStatus.SC_NO_CONTENT);
+                API_KEY, WORKSPACE_NAME, HttpStatus.SC_CREATED);
         reportFailuresClient.create(agentInsightsFailure(projectId, "out_of_credits", "latest"),
-                API_KEY, WORKSPACE_NAME, HttpStatus.SC_NO_CONTENT);
+                API_KEY, WORKSPACE_NAME, HttpStatus.SC_CREATED);
 
         var page = reportFailuresClient.find("agent_insights", projectId, API_KEY, WORKSPACE_NAME);
         assertThat(page.total()).isEqualTo(2);

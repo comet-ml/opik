@@ -33,12 +33,19 @@ class ReportFailureServiceImpl implements ReportFailureService {
     private final @NonNull TransactionTemplate transactionTemplate;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull Provider<RequestContext> requestContext;
+    private final @NonNull ProjectService projectService;
 
     @Override
     public UUID create(@NonNull ReportFailure failure) {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
         UUID id = idGenerator.generateId();
+
+        // Per-type integrity guard: for known types whose entity is a project, reject failures for a
+        // non-existent project so they can't linger as orphan rows that a later job query surfaces.
+        if (ReportFailureDAO.AGENT_INSIGHTS_TYPE.equals(failure.type())) {
+            projectService.validateProjectIdExists(failure.entityId(), workspaceId);
+        }
 
         log.info("Recording report failure type '{}' entity '{}' in workspace '{}': '{}'",
                 failure.type(), failure.entityId(), workspaceId, failure.reason());
