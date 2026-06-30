@@ -92,7 +92,10 @@ const OptimizationsNewPromptSection: React.FC<
   const handleMessagesLoaded = useCallback(
     (newMessages: LLMMessage[], promptName: string) => {
       setLastImportedPromptName(promptName);
-      form.setValue("messages", newMessages, { shouldValidate: true });
+      form.setValue("messages", newMessages, {
+        shouldValidate: true,
+        shouldDirty: true,
+      });
 
       if (promptName) {
         onNameChange(promptName);

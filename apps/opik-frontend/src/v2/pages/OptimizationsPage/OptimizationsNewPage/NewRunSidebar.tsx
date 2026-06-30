@@ -130,12 +130,29 @@ const NewRunSidebar: React.FC<NewRunSidebarProps> = ({
     Boolean(providerKeysData) &&
     (configuredProvidersList.length === 0 || availableModels.length > 0);
 
+  // Generate message ids once per rerun/template and reuse them across the
+  // providers-ready re-seed below. `values` re-applies defaultValues when the
+  // resolved model lands; without stable ids that would mint fresh message ids
+  // and remount the (un-dirty) message rows, dropping focus mid-typing.
+  const seededMessages = useMemo(
+    () =>
+      convertOptimizationStudioToFormData(rerunData || templateData).messages,
+    [rerunData, templateData],
+  );
+
   const defaultValues = useMemo(() => {
-    return convertOptimizationStudioToFormData(
+    const seeded = convertOptimizationStudioToFormData(
       rerunData || templateData,
       providersReady ? availableModels : [],
     );
-  }, [rerunData, templateData, providersReady, availableModels]);
+    return { ...seeded, messages: seededMessages };
+  }, [
+    rerunData,
+    templateData,
+    providersReady,
+    availableModels,
+    seededMessages,
+  ]);
 
   const form = useForm<OptimizationConfigFormType>({
     resolver: zodResolver(OptimizationConfigSchema),
@@ -166,7 +183,10 @@ const NewRunSidebar: React.FC<NewRunSidebarProps> = ({
             project?.name,
           );
           if (dataset?.id) {
-            form.setValue("datasetId", dataset.id, { shouldValidate: true });
+            form.setValue("datasetId", dataset.id, {
+              shouldValidate: true,
+              shouldDirty: true,
+            });
           }
         } finally {
           setIsPreparingDataset(false);

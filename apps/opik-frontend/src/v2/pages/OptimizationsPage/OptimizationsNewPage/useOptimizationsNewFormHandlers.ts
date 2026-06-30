@@ -5,7 +5,7 @@ import { useActiveProjectId } from "@/store/AppStore";
 import useDatasetById from "@/api/datasets/useDatasetById";
 import { METRIC_TYPE } from "@/types/optimizations";
 import { PROVIDER_MODEL_TYPE } from "@/types/providers";
-import { safelyGetPromptMustacheTags } from "@/lib/prompt";
+import { safelyGetPromptVariables } from "@/lib/prompt";
 import { OptimizationConfigFormType } from "@/v2/pages-shared/optimizations/OptimizationConfigForm/schema";
 import useDatasetSamplePreview from "./useDatasetSamplePreview";
 import { useOptimizerFormHandlers } from "./formHandlers/useOptimizerFormHandlers";
@@ -53,8 +53,7 @@ export const useOptimizationsNewFormHandlers = () => {
     const referenced = new Set<string>();
     const collect = (text: unknown) => {
       if (typeof text !== "string" || text.length === 0) return;
-      const tags = safelyGetPromptMustacheTags(text);
-      if (tags) tags.forEach((tag) => referenced.add(tag));
+      safelyGetPromptVariables(text).forEach((tag) => referenced.add(tag));
     };
 
     (messages ?? []).forEach((message) =>
@@ -76,15 +75,21 @@ export const useOptimizationsNewFormHandlers = () => {
   }, [messages, metricParams, metricType, datasetVariables]);
 
   // Resolve the selected dataset's name on demand instead of scanning a
-  // capped list of every project dataset.
-  const { data: selectedDataset } = useDatasetById(
-    { datasetId },
-    { enabled: Boolean(datasetId) },
-  );
+  // capped list of every project dataset. Loading/error are surfaced so submit
+  // is gated on the lookup rather than silently no-oping when it's in flight or
+  // the dataset is gone (e.g. a rerun whose dataset was deleted).
+  const {
+    data: selectedDataset,
+    isLoading: isDatasetLoading,
+    isError: isDatasetError,
+  } = useDatasetById({ datasetId }, { enabled: Boolean(datasetId) });
 
   const handleDatasetChange = useCallback(
     (id: string | null) => {
-      form.setValue("datasetId", id || "", { shouldValidate: true });
+      form.setValue("datasetId", id || "", {
+        shouldValidate: true,
+        shouldDirty: true,
+      });
 
       // Reference keys are dataset-specific, so clear them when the dataset
       // changes for metrics that use one.
@@ -95,7 +100,7 @@ export const useOptimizationsNewFormHandlers = () => {
             ...form.getValues("metricParams"),
             reference_key: "",
           } as OptimizationConfigFormType["metricParams"],
-          { shouldValidate: true },
+          { shouldValidate: true, shouldDirty: true },
         );
       }
     },
@@ -103,7 +108,7 @@ export const useOptimizationsNewFormHandlers = () => {
   );
 
   const handleNameChange = useCallback(
-    (value: string) => form.setValue("name", value),
+    (value: string) => form.setValue("name", value, { shouldDirty: true }),
     [form],
   );
 
@@ -133,6 +138,8 @@ export const useOptimizationsNewFormHandlers = () => {
     datasetSample,
     datasetVariables,
     missingDatasetVariables,
+    isDatasetLoading,
+    isDatasetError,
     handleDatasetChange,
     handleOptimizerTypeChange,
     handleOptimizerParamsChange,

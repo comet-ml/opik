@@ -195,15 +195,16 @@ export const convertOptimizationStudioToFormData = (
       ? configuredModel
       : availableModels[0] ?? "";
 
-  const keptConfiguredModel =
-    Boolean(modelName) && modelName === configuredModel;
   const defaultConfig = modelName
     ? getDefaultModelConfig(modelName as PROVIDER_MODEL_TYPE)
     : ({} as LLMPromptConfigsType);
-  const modelConfig =
-    hasExistingConfig && keptConfiguredModel
-      ? { ...defaultConfig, ...existingConfig }
-      : defaultConfig;
+  // Keep the run's saved parameters (temperature/top_p/...) even when its model
+  // is no longer available and we fall back to another one — submit sanitizes
+  // anything the resolved model can't accept. Previously the params were
+  // silently dropped whenever the model wasn't kept verbatim.
+  const modelConfig = hasExistingConfig
+    ? { ...defaultConfig, ...existingConfig }
+    : defaultConfig;
 
   return {
     name: optimization?.name || "Optimization studio run",

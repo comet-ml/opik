@@ -13,11 +13,12 @@ export const useOptimizerFormHandlers = (
     (newOptimizerType: OPTIMIZER_TYPE) => {
       form.setValue("optimizerType", newOptimizerType, {
         shouldValidate: true,
+        shouldDirty: true,
       });
       form.setValue(
         "optimizerParams",
         getDefaultOptimizerConfig(newOptimizerType),
-        { shouldValidate: true },
+        { shouldValidate: true, shouldDirty: true },
       );
     },
     [form],
@@ -25,7 +26,7 @@ export const useOptimizerFormHandlers = (
 
   const handleOptimizerParamsChange = useCallback(
     (newParams: Partial<OptimizerParameters>) => {
-      form.setValue("optimizerParams", newParams);
+      form.setValue("optimizerParams", newParams, { shouldDirty: true });
     },
     [form],
   );

@@ -66,7 +66,7 @@ const DatasetSelectBox: React.FC<DatasetSelectBoxProps> = ({
         showIcon
           ? (option) => (
               <div className="flex min-w-0 items-center gap-2">
-                <Database className="size-4 shrink-0 text-[#F4B400]" />
+                <Database className="size-4 shrink-0 text-[color:var(--chart-yellow)]" />
                 <span className="truncate">{option.label}</span>
               </div>
             )

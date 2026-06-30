@@ -12,11 +12,11 @@ export const useMetricFormHandlers = (
   const handleMetricTypeChange = useCallback(
     (newMetricType: METRIC_TYPE) => {
       const defaultConfig = getDefaultMetricConfig(newMetricType);
-      form.setValue("metricType", newMetricType);
+      form.setValue("metricType", newMetricType, { shouldDirty: true });
       form.setValue(
         "metricParams",
         defaultConfig as OptimizationConfigFormType["metricParams"],
-        { shouldValidate: true },
+        { shouldValidate: true, shouldDirty: true },
       );
     },
     [form],
@@ -27,7 +27,7 @@ export const useMetricFormHandlers = (
       form.setValue(
         "metricParams",
         newParams as OptimizationConfigFormType["metricParams"],
-        { shouldValidate: true },
+        { shouldValidate: true, shouldDirty: true },
       );
     },
     [form],

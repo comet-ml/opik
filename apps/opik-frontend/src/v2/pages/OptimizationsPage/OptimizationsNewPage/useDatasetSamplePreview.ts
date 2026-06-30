@@ -30,10 +30,13 @@ const useDatasetSamplePreview = ({
     return datasetItemsData.content[0].data as Record<string, unknown>;
   }, [datasetItemsData]);
 
-  const datasetVariables = useMemo(() => {
-    if (!datasetSample) return [];
-    return Object.keys(datasetSample);
-  }, [datasetSample]);
+  // Use the dataset's full column set (computed server-side across every row),
+  // not the keys of the single sampled item — otherwise a column missing from
+  // row 1 but present in others would be wrongly flagged as a missing variable.
+  const datasetVariables = useMemo(
+    () => (datasetItemsData?.columns ?? []).map((column) => column.name),
+    [datasetItemsData?.columns],
+  );
 
   return {
     datasetSample,

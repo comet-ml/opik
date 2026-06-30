@@ -26,6 +26,8 @@ const OptimizationsNewPageContent: React.FC<
     datasetSample,
     datasetVariables,
     missingDatasetVariables,
+    isDatasetLoading,
+    isDatasetError,
     handleDatasetChange,
     handleOptimizerTypeChange,
     handleOptimizerParamsChange,
@@ -72,6 +74,12 @@ const OptimizationsNewPageContent: React.FC<
       </div>
 
       <div className="flex flex-col gap-2 border-t px-6 py-4">
+        {isDatasetError && (
+          <span className="comet-body-s text-destructive">
+            Couldn&apos;t load the selected item source. Pick another or try
+            again.
+          </span>
+        )}
         {hasMissingVariables && (
           <span className="comet-body-s text-destructive">
             {missingDatasetVariables.map((v) => `{{${v}}}`).join(", ")} not in
@@ -88,10 +96,16 @@ const OptimizationsNewPageContent: React.FC<
               isSubmitting ||
               !form.formState.isValid ||
               isPreparingDataset ||
-              hasMissingVariables
+              hasMissingVariables ||
+              isDatasetLoading ||
+              isDatasetError
             }
           >
-            {isSubmitting && <Loader2 className="mr-2 size-4 animate-spin" />}
+            {isSubmitting && (
+              <span className="mr-2 inline-flex animate-spin">
+                <Loader2 className="size-4" />
+              </span>
+            )}
             {isSubmitting ? "Starting..." : "Optimize prompt"}
           </Button>
           <Button variant="outline" onClick={onCancel} disabled={isSubmitting}>

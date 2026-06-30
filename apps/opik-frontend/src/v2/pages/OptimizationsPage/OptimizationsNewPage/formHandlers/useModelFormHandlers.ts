@@ -28,10 +28,11 @@ export const useModelFormHandlers = (
           provider: newProvider,
         }) ?? defaultConfig;
 
-      form.setValue("modelName", newModel);
+      form.setValue("modelName", newModel, { shouldDirty: true });
       form.setValue(
         "modelConfig",
         adjustedConfig as OptimizationConfigFormType["modelConfig"],
+        { shouldDirty: true },
       );
     },
     [form, calculateModelProvider],
@@ -40,10 +41,14 @@ export const useModelFormHandlers = (
   const handleModelConfigChange = useCallback(
     (newConfigs: Partial<LLMPromptConfigsType>) => {
       const currentConfig = form.getValues("modelConfig");
-      form.setValue("modelConfig", {
-        ...currentConfig,
-        ...newConfigs,
-      } as typeof currentConfig);
+      form.setValue(
+        "modelConfig",
+        {
+          ...currentConfig,
+          ...newConfigs,
+        } as typeof currentConfig,
+        { shouldDirty: true },
+      );
     },
     [form],
   );
