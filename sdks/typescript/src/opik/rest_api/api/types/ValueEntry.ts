@@ -10,4 +10,6 @@ export interface ValueEntry {
     lastUpdatedAt?: Date;
     spanType?: string;
     spanId?: string;
+    sourceQueueId?: string;
+    author?: string;
 }

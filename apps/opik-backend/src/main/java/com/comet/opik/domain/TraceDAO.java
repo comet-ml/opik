@@ -115,9 +115,6 @@ public interface TraceDAO {
 
     Flux<WorkspaceTraceCount> countTracesPerWorkspace(Map<UUID, Instant> excludedProjectIds);
 
-    Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(Set<UUID> projectIds, String workspaceId,
-            Instant lastUpdatedAfter, Connection connection);
-
     Mono<Set<UUID>> getProjectsWithTracesInRange(Collection<Pair<String, UUID>> workspaceProjectPairs, Instant from,
             Instant to, Connection connection);
 
@@ -2009,19 +2006,6 @@ class TraceDAOImpl implements TraceDAO {
             AND workspace_id = :workspace_id
             ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
             LIMIT 1
-            SETTINGS log_comment = '<log_comment>'
-            ;
-            """;
-
-    private static final String SELECT_TRACE_LAST_UPDATED_AT = """
-            SELECT
-                t.project_id as project_id,
-                MAX(t.last_updated_at) as last_updated_at
-            FROM traces t
-            WHERE t.workspace_id = :workspace_id
-            AND t.project_id IN :project_ids
-            <if(last_updated_after)> AND t.last_updated_at > parseDateTime64BestEffort(:last_updated_after, 9) <endif>
-            GROUP BY t.project_id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -4199,41 +4183,6 @@ class TraceDAOImpl implements TraceDAO {
                 .createdBy(row.get("created_by", String.class))
                 .createdAt(row.get("created_at", Instant.class))
                 .build());
-    }
-
-    @Override
-    @WithSpan
-    public Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(
-            @NonNull Set<UUID> projectIds, @NonNull String workspaceId, Instant lastUpdatedAfter,
-            @NonNull Connection connection) {
-
-        log.info("Getting last updated trace at for projectIds, size '{}'", projectIds.size());
-
-        var template = getSTWithLogComment(SELECT_TRACE_LAST_UPDATED_AT, "get_last_updated_trace_at", workspaceId,
-                "",
-                projectIds.size());
-
-        if (lastUpdatedAfter != null) {
-            template.add("last_updated_after", true);
-        }
-
-        var statement = connection.createStatement(template.render())
-                .bind("project_ids", projectIds.toArray(UUID[]::new))
-                .bind("workspace_id", workspaceId);
-
-        if (lastUpdatedAfter != null) {
-            statement.bind("last_updated_after", lastUpdatedAfter.toString());
-        }
-
-        return Mono.from(statement.execute())
-                .flatMapMany(result -> result.map((row, rowMetadata) -> Map.entry(row.get("project_id", UUID.class),
-                        row.get("last_updated_at", Instant.class))))
-                .collectMap(Map.Entry::getKey, Map.Entry::getValue)
-                .doFinally(signalType -> {
-                    if (signalType == SignalType.ON_COMPLETE) {
-                        log.info("Got last updated trace at for projectIds, size '{}'", projectIds.size());
-                    }
-                });
     }
 
     @Override

@@ -101,8 +101,6 @@ public interface TraceService {
 
     Mono<Long> getDailyCreatedCount();
 
-    Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(Set<UUID> projectIds, String workspaceId, Instant lastUpdatedAfter);
-
     Mono<Set<UUID>> getProjectsWithTracesInRange(@NonNull Collection<Pair<String, UUID>> workspaceProjectPairs,
             @NonNull Instant from, @NonNull Instant to);
 
@@ -566,14 +564,6 @@ class TraceServiceImpl implements TraceService {
     public Mono<Long> getDailyCreatedCount() {
         return projectService.getDemoProjectIdsWithTimestamps()
                 .switchIfEmpty(Mono.just(Map.of())).flatMap(dao::getDailyTraces);
-    }
-
-    @Override
-    public Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(Set<UUID> projectIds, String workspaceId,
-            Instant lastUpdatedAfter) {
-        return template
-                .nonTransaction(
-                        connection -> dao.getLastUpdatedTraceAt(projectIds, workspaceId, lastUpdatedAfter, connection));
     }
 
     @Override
