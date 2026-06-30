@@ -7,8 +7,7 @@ type UseTracesByIdsParams = {
   stripAttachments?: boolean;
 };
 
-// Fetches several traces by id in parallel, reusing useTraceById's fetcher and
-// query-key shape so results share its cache (no double-fetching).
+// Parallel trace fetches reusing useTraceById's fetcher + query key (shared cache).
 export default function useTracesByIds({
   traceIds,
   stripAttachments,
