@@ -28,6 +28,7 @@ from . import (
     helpers,
     opik_query_language,
     rest_helpers,
+    rest_stream_parser,
     search_helpers,
     span as span_module,
     trace as trace_module,
@@ -1990,6 +1991,7 @@ class Opik:
         exclude: Optional[List[str]] = None,
         wait_for_at_least: Optional[int] = None,
         wait_for_timeout: int = httpx_client.READ_TIMEOUT_SECONDS,
+        max_batch_size: int = rest_stream_parser.MAX_ENDPOINT_BATCH_SIZE,
     ) -> List[trace_public.TracePublic]:
         """
         Search for traces in the given project. Optionally, you can wait for at least a certain number of traces
@@ -2044,6 +2046,11 @@ class Opik:
             exclude: Fields to exclude from the response. For example, ["feedback_scores"]
             wait_for_at_least: The minimum number of traces to wait for before returning.
             wait_for_timeout: The timeout for waiting for traces.
+            max_batch_size: The maximum number of traces requested per page from the backend
+                (default 2000). The backend buffers a page in memory before streaming it, so a
+                large page of heavy traces (e.g. with inline attachments) can spike server memory;
+                lower this to bound per-request memory. On a connection/timeout error the page size
+                is automatically halved and the page retried.
 
         Raises:
             exceptions.SearchTimeoutError if wait_for_at_least traces are not found within the specified timeout.
@@ -2064,6 +2071,7 @@ class Opik:
             max_results=max_results,
             truncate=truncate,
             exclude=exclude,
+            max_batch_size=max_batch_size,
         )
 
         if wait_for_at_least is None:
@@ -2093,6 +2101,7 @@ class Opik:
         exclude: Optional[List[str]] = None,
         wait_for_at_least: Optional[int] = None,
         wait_for_timeout: int = httpx_client.READ_TIMEOUT_SECONDS,
+        max_batch_size: int = rest_stream_parser.MAX_ENDPOINT_BATCH_SIZE,
     ) -> List[span_public.SpanPublic]:
         """
         Search for spans in the given trace. This allows you to search spans based on the span input, output,
@@ -2149,6 +2158,11 @@ class Opik:
             exclude: List of fields to exclude from the response (e.g., ["feedback_scores", "input", "output"])
             wait_for_at_least: The minimum number of spans to wait for before returning.
             wait_for_timeout: The timeout for waiting for spans.
+            max_batch_size: The maximum number of spans requested per page from the backend
+                (default 2000). The backend buffers a page in memory before streaming it, so a
+                large page of heavy spans (e.g. with inline attachments) can spike server memory;
+                lower this to bound per-request memory. On a connection/timeout error the page size
+                is automatically halved and the page retried.
 
         Raises:
             exceptions.SearchTimeoutError if wait_for_at_least spans are not found within the specified timeout.
@@ -2169,6 +2183,7 @@ class Opik:
             max_results=max_results,
             truncate=truncate,
             exclude=exclude,
+            max_batch_size=max_batch_size,
         )
 
         if wait_for_at_least is None:
