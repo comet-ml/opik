@@ -263,6 +263,15 @@ const diagnosticsRoute = createRoute({
   },
 });
 
+const diagnosticsResolvedRoute = createRoute({
+  path: "/diagnostics/resolved",
+  getParentRoute: () => projectScopedRoute,
+  component: () => <SignalsPage showResolved />,
+  staticData: {
+    title: "Resolved issues",
+  },
+});
+
 // ----------- dashboards (project-scoped)
 const projectDashboardsRoute = createRoute({
   path: "/dashboards",
@@ -665,6 +674,7 @@ const routeTree = rootRoute.addChildren([
           ollieRoute,
           logsRoute,
           diagnosticsRoute,
+          diagnosticsResolvedRoute,
           projectDashboardsRoute.addChildren([projectDashboardsIndexRoute]),
           tracesRedirectRoute,
           experimentsRoute.addChildren([
