@@ -41,12 +41,13 @@ type PercentageTrendProps = {
   iconOnly?: boolean;
 };
 
-// One trend style across the product (Figma): good = green (#00D14C), bad = red
-// (#EF4444); neutral keeps the gray tag. Applied to the whole tag so the icon
-// and the percentage share the color.
+// One trend style across the product (Figma): good = green, bad = red; neutral
+// keeps the gray tag. Driven by the shared brand-color tokens so the trend and
+// run-status colors stay in sync. Applied to the whole tag so the icon and the
+// percentage share the color.
 const TREND_COLOR_CLASS: Record<string, string | undefined> = {
-  green: "text-[#00d14c]",
-  red: "text-[#ef4444]",
+  green: "text-[var(--color-green-bright)]",
+  red: "text-[var(--color-red)]",
   gray: undefined,
 };
 

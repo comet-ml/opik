@@ -5,14 +5,15 @@ import { Tag, TagProps } from "@/ui/tag";
 
 // Per Figma 562:37189 a run status is a neutral pill with a colored status dot
 // (not a colored-background badge): running = green, completed/initialized =
-// slate, cancelled/error = red. Shared so the list, run-detail header and
-// trials render the status identically.
+// slate, cancelled/error = red. Uses the shared brand-color tokens (same green/
+// red as PercentageTrend) so trend and status colors stay in sync. Shared so
+// the list, run-detail header and trials render the status identically.
 const STATUS_DOT_COLOR: Record<OPTIMIZATION_STATUS, string> = {
-  [OPTIMIZATION_STATUS.RUNNING]: "#00d14c",
-  [OPTIMIZATION_STATUS.COMPLETED]: "#94a3b8",
-  [OPTIMIZATION_STATUS.CANCELLED]: "#ef4444",
-  [OPTIMIZATION_STATUS.INITIALIZED]: "#94a3b8",
-  [OPTIMIZATION_STATUS.ERROR]: "#ef4444",
+  [OPTIMIZATION_STATUS.RUNNING]: "var(--color-green-bright)",
+  [OPTIMIZATION_STATUS.COMPLETED]: "hsl(var(--light-slate))",
+  [OPTIMIZATION_STATUS.CANCELLED]: "var(--color-red)",
+  [OPTIMIZATION_STATUS.INITIALIZED]: "hsl(var(--light-slate))",
+  [OPTIMIZATION_STATUS.ERROR]: "var(--color-red)",
 };
 
 type OptimizationStatusTagProps = {
