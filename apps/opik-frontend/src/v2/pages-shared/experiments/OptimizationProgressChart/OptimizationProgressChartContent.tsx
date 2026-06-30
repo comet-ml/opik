@@ -260,6 +260,7 @@ const OptimizationProgressChartContent: React.FC<
               candidate={c}
               chartData={chartData}
               isTestSuite={isTestSuite}
+              isBest={hoveredTrial.candidateId === bestCandidateId}
             />
           );
         })()}
@@ -278,6 +279,7 @@ const OptimizationProgressChartContent: React.FC<
                 candidate={best}
                 status={bestStatus}
                 isTestSuite={isTestSuite}
+                isBest
               />
             </div>
           );

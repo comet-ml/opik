@@ -25,6 +25,14 @@ describe("TrialCard", () => {
     expect(screen.getByText("Runtime cost")).toBeInTheDocument();
   });
 
+  it("shows a Best trial badge and drops the status row when isBest", () => {
+    render(<TrialCard candidate={candidate} status="passed" isBest />);
+
+    expect(screen.getByText("Best trial")).toBeInTheDocument();
+    expect(screen.queryByText("Status")).not.toBeInTheDocument();
+    expect(screen.getByText("Score")).toBeInTheDocument();
+  });
+
   it("uses the Pass rate label for test suites", () => {
     render(<TrialCard candidate={candidate} status="passed" isTestSuite />);
 

@@ -72,7 +72,10 @@ const BestTrialPrompt: React.FC<BestTrialPromptProps> = ({
   return (
     <div className="rounded-lg border bg-muted/20 p-6">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="comet-title-s">Best trial prompt</h3>
+        <h3 className="comet-title-s flex items-center gap-2">
+          <span className="size-2 shrink-0 rounded-full bg-primary" />
+          Best trial prompt
+        </h3>
         {onViewTrial && (
           <Button variant="ghost" size="sm" onClick={onViewTrial}>
             View trial

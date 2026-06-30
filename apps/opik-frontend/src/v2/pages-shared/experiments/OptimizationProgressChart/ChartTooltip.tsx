@@ -14,6 +14,7 @@ type ChartTooltipProps = {
   candidate: AggregatedCandidate;
   chartData: CandidateDataPoint[];
   isTestSuite?: boolean;
+  isBest?: boolean;
 };
 
 /** Trial card positioned over the hovered dot. */
@@ -22,6 +23,7 @@ const ChartTooltip: React.FC<ChartTooltipProps> = ({
   candidate,
   chartData,
   isTestSuite,
+  isBest,
 }) => {
   const chartPoint = chartData.find(
     (d) => d.candidateId === hoveredTrial.candidateId,
@@ -43,6 +45,7 @@ const ChartTooltip: React.FC<ChartTooltipProps> = ({
         candidate={candidate}
         status={status}
         isTestSuite={isTestSuite}
+        isBest={isBest}
       />
     </div>
   );
