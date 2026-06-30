@@ -7,11 +7,9 @@ import React, {
 } from "react";
 import { useParams, useRouter } from "@tanstack/react-router";
 import {
-  AssistantSidebarBridge,
   AssistantSurfaceVariant,
   BridgeContext,
   BridgeSurface,
-  HostEventMap,
   RunnerBridgeState,
   SidebarEventMap,
 } from "@/types/assistant-sidebar";
@@ -34,8 +32,15 @@ import {
   isAssistantSidebarOpen,
   setAssistantSidebarOpen,
 } from "@/constants/assistantSidebar";
-
-const BRIDGE_PROTOCOL_VERSION = 1;
+import useExplainStore from "@/plugins/comet/explain/explainStore";
+import {
+  createBridge,
+  createHostListeners,
+  emitHostEvent,
+  useLatestRef,
+  useRegisterExplainEmitter,
+  type HostListeners,
+} from "@/plugins/comet/assistantBridge";
 
 interface AssistantSidebarLoaderProps {
   error: string | null;
@@ -100,115 +105,6 @@ const AssistantSidebarLoader: React.FC<AssistantSidebarLoaderProps> = ({
 };
 
 const stopPropagation = (e: Event) => e.stopPropagation();
-
-/** Keeps a ref whose `.current` always points to the latest value. */
-function useLatestRef<T>(value: T): React.MutableRefObject<T> {
-  const ref = useRef(value);
-  ref.current = value;
-  return ref;
-}
-
-type HostListeners = {
-  [K in keyof HostEventMap]: Set<(data: HostEventMap[K]) => void>;
-};
-
-function createHostListeners(): HostListeners {
-  return {
-    "context:changed": new Set(),
-    "visibility:changed": new Set(),
-    "runner:state-changed": new Set(),
-    "conversation:start": new Set(),
-  };
-}
-
-interface BridgeRefs {
-  navigate: React.MutableRefObject<
-    (path: string, search?: Record<string, unknown>) => void
-  >;
-  onWidthChange: React.MutableRefObject<(width: number) => void>;
-  onNotification: React.MutableRefObject<
-    (data: SidebarEventMap["notification"]) => void
-  >;
-  onRequestVisibility: React.MutableRefObject<(open: boolean) => void>;
-  onRequestPair: React.MutableRefObject<
-    (data: SidebarEventMap["runner:request-pair"]) => void
-  >;
-  context: React.MutableRefObject<BridgeContext>;
-  listeners: React.MutableRefObject<HostListeners>;
-  lastRunnerState: React.MutableRefObject<RunnerBridgeState | null>;
-}
-
-const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
-  version: BRIDGE_PROTOCOL_VERSION,
-  getContext: () => refs.context.current,
-  subscribe: (event, callback) => {
-    const set = refs.listeners.current[event as keyof HostEventMap] as
-      | Set<typeof callback>
-      | undefined;
-    if (!set) return () => {};
-    set.add(callback);
-
-    // Replay latest runner state to late subscribers (e.g. Ollie iframe loaded after FE)
-    if (event === "runner:state-changed" && refs.lastRunnerState.current) {
-      (callback as (data: RunnerBridgeState) => void)(
-        refs.lastRunnerState.current,
-      );
-    }
-
-    return () => {
-      set.delete(callback);
-    };
-  },
-  emit: (event, data) => {
-    switch (event) {
-      case "navigate": {
-        const { path, search } = data as SidebarEventMap["navigate"];
-        refs.navigate.current(path, search);
-        break;
-      }
-      case "sidebar:resized":
-        refs.onWidthChange.current(
-          (data as SidebarEventMap["sidebar:resized"]).width,
-        );
-        break;
-      case "notification":
-        refs.onNotification.current(data as SidebarEventMap["notification"]);
-        break;
-      case "sidebar:request-open":
-        refs.onRequestVisibility.current(true);
-        break;
-      case "sidebar:request-close":
-        refs.onRequestVisibility.current(false);
-        break;
-      case "runner:request-pair":
-        refs.onRequestPair.current(
-          data as SidebarEventMap["runner:request-pair"],
-        );
-        break;
-      default:
-        if (IS_ASSISTANT_DEV) {
-          console.warn(
-            `[AssistantBridge] Unhandled sidebar event: "${event}"`,
-            data,
-          );
-        }
-    }
-  },
-  startConversation: (message: string) => {
-    emitHostEvent(refs.listeners, "conversation:start", { message });
-  },
-});
-
-/** Emit a host event to all subscribed sidebar listeners. */
-function emitHostEvent<E extends keyof HostEventMap>(
-  listenersRef: React.MutableRefObject<HostListeners>,
-  event: E,
-  data: HostEventMap[E],
-) {
-  for (const listener of listenersRef.current[event]) {
-    (listener as (d: HostEventMap[E]) => void)(data);
-  }
-}
 
 function useBridgeContext(
   assistantBackendUrl: string,
@@ -393,6 +289,22 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
       }
     };
   }, [meta]);
+
+  useRegisterExplainEmitter(listenersRef);
+
+  // Mirror pod readiness into the explain store so the (per-row) Explain
+  // buttons gate on one shared value rather than each calling the backend hook.
+  // No unmount reset here on purpose: a surface switch (sidebar↔page) mounts the
+  // new instance — which sets ready=true — BEFORE the old one's cleanup runs (the
+  // same ordering that forces the ownership guards on window.opikBridge/clearEmit
+  // above). An unconditional setReady(false) on unmount would clobber the live
+  // instance and, since its effect dep already settled, never restore it — every
+  // Explain button would silently vanish until reload. Teardown is instead owned
+  // by the ownership-guarded clearEmit, which resets ready only for the instance
+  // that still owns the bridge.
+  useEffect(() => {
+    useExplainStore.getState().setReady(isBackendReady);
+  }, [isBackendReady]);
 
   // Emit context changes to sidebar listeners
   useEffect(() => {

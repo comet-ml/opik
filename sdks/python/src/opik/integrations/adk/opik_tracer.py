@@ -285,9 +285,38 @@ class OpikTracer:
 
             current_span = context_storage.top_span_data()
             if current_span is None:
+                # The span pushed in before_model_callback is invisible here: ADK's
+                # ContextCacheConfig wraps the LLM call in its own OTel span, which
+                # forks the async context under SSE streaming, so the ContextVar
+                # mutation isn't visible and top_span_data() returns None (#5524).
+                #
+                # We can't finalize the per-LLM span, but we recover the model
+                # OUTPUT into the per-invocation, bounded _last_model_output cache
+                # (added in #7266) so after_agent_callback still stamps the trace
+                # output instead of dropping the whole answer. Keying by
+                # invocation_id keeps this safe across concurrent SSE sessions.
+                #
+                # Discard up front (mirroring the non-detached path below) so a
+                # failed conversion leaves no stale value; partial chunks never
+                # cache — we wait for the final response. The recovered output
+                # keeps its usage metadata (the non-detached path pops that onto the
+                # span, but there is no span here): harmless on the display-only
+                # trace output, and it preserves usage info that's otherwise lost.
                 self._last_model_output.discard(callback_context.invocation_id)
-                LOGGER.warning(
-                    "No current span found in context for model output update"
+                if not is_partial:
+                    try:
+                        self._last_model_output.set(
+                            callback_context.invocation_id,
+                            adk_helpers.convert_adk_base_model_to_dict(llm_response),
+                        )
+                    except Exception:
+                        LOGGER.debug(
+                            "Failed to recover model output without a current span",
+                            exc_info=True,
+                        )
+                LOGGER.debug(
+                    "No current span in context (detached async context, e.g. "
+                    "ContextCacheConfig); recovered model output via the cache"
                 )
                 return
 

@@ -104,6 +104,7 @@ export type ColumnData<T> = {
   cell?: Cell<T, unknown>;
   aggregatedCell?: Cell<T, unknown>;
   verticalAlignment?: CELL_VERTICAL_ALIGNMENT;
+  horizontalAlignment?: CELL_HORIZONTAL_ALIGNMENT;
   overrideRowHeight?: ROW_HEIGHT;
   statisticKey?: string;
   statisticDataFormater?: (value: number) => string;
@@ -129,6 +130,11 @@ export enum ROW_HEIGHT {
 export enum CELL_VERTICAL_ALIGNMENT {
   start = "start",
   center = "center",
+  end = "end",
+}
+
+export enum CELL_HORIZONTAL_ALIGNMENT {
+  start = "start",
   end = "end",
 }
 
