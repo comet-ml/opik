@@ -88,7 +88,7 @@ const OptimizationsEmptyState: React.FC<OptimizationsEmptyStateProps> = ({
     <div className="flex min-h-full flex-1 items-center justify-center gap-16 px-6">
       <div className="flex w-full max-w-[480px] flex-col gap-4">
         <h2 className="comet-title-s text-foreground">
-          No optimization runs yet
+          Failed visual tests
         </h2>
         <p className="comet-body-s text-muted-slate">
           Try different prompt versions and see what performs best. Optimization
