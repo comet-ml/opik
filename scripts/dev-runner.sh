@@ -776,7 +776,12 @@ start_cost_api_local() {
 
     sleep 2
     if ! kill -0 "$cost_api_pid" 2>/dev/null; then
-        log_warning "cost-api failed to start. Check logs: cat $COST_API_LOG_FILE"
+        if grep -q "address already in use" "$COST_API_LOG_FILE" 2>/dev/null; then
+            log_warning "cost-api could not bind port ${AI_COST_BACKEND_PORT} (already in use)."
+            log_warning "Set AI_COST_BACKEND_PORT to a free port, or stop whatever holds it."
+        else
+            log_warning "cost-api failed to start. Check logs: cat $COST_API_LOG_FILE"
+        fi
         log_warning "Continuing without it; AI Spend pages will not load"
         rm -f "$COST_API_PID_FILE" "$COST_API_REPO_PATH_FILE"
         return 1
@@ -1012,10 +1017,11 @@ start_frontend() {
     fi
 
     # Start the local cost-api (if a sibling checkout exists) and point the FE's
-    # ai-spend proxy at it. The plugin always targets cost-api; if it isn't
-    # running, vite.config falls back to its default port.
+    # ai-spend proxy at it ONLY once it is actually serving. If startup failed
+    # (e.g. port conflict), leave VITE_AI_COST_BACKEND_PORT unset so vite.config
+    # falls back to its default instead of proxying AI Spend to a dead port.
     start_cost_api_local || log_warning "cost-api startup failed; AI Spend pages will not load"
-    if cost_api_enabled || cost_api_healthy; then
+    if cost_api_healthy; then
         export VITE_AI_COST_BACKEND_PORT="${AI_COST_BACKEND_PORT}"
         log_info "  VITE_AI_COST_BACKEND_PORT=$VITE_AI_COST_BACKEND_PORT"
     fi
@@ -1629,6 +1635,12 @@ check_port_collisions() {
         "$MINIO_API_PORT:MinIO API"
         "$MINIO_CONSOLE_PORT:MinIO Console"
     )
+
+    # cost-api is optional and may legitimately reuse a healthy instance already
+    # listening on its port, so only flag it when enabled and not already serving.
+    if cost_api_enabled && ! cost_api_healthy; then
+        ports_to_check+=("$AI_COST_BACKEND_PORT:cost-api")
+    fi
 
     log_info "Checking for port collisions..."
 
