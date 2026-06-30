@@ -100,32 +100,35 @@ def test_after_agent_callback__no_cached_output__stamps_none():
     assert trace.output is None
 
 
+def _model_response(text: str, *, partial: bool) -> LlmResponse:
+    return LlmResponse(
+        content=genai_types.Content(
+            role="model", parts=[genai_types.Part(text=text)]
+        ),
+        partial=partial,
+    )
+
+
 @helpers.pytest_skip_for_adk_older_than_1_3_0
 def test_after_model_callback__recovers_output_when_span_detached():
     # ContextCacheConfig (issue #5524) wraps the LLM call in its own OTel span,
     # which forks the async context under SSE streaming — so the span pushed in
     # before_model_callback is invisible here and top_span_data() is None. The
     # actual model output must still be recovered and land on the trace output.
+    # Verified through the public callbacks only: after_model recovers, then
+    # after_agent stamps the recovered answer onto the trace.
     tracer = OpikTracer(project_name="adk-test")
     assert context_storage.top_span_data() is None  # detached: no current span
 
-    llm_response = LlmResponse(
-        content=genai_types.Content(
-            role="model", parts=[genai_types.Part(text="RECOVERED ANSWER")]
-        ),
-        partial=False,
+    tracer.after_model_callback(
+        _callback_context("inv-detached"),
+        _model_response("RECOVERED ANSWER", partial=False),
     )
-    tracer.after_model_callback(_callback_context("inv-detached"), llm_response)
 
-    # The real answer is recovered (not just "something" cached) ...
-    recovered = tracer._last_model_output.get("inv-detached")
-    assert recovered is not None
-    assert "RECOVERED ANSWER" in str(recovered)
-
-    # ... and after_agent_callback stamps it on the trace output end-to-end.
     trace = TraceData(name="agent")
     context_storage.set_trace_data(trace)
     tracer.after_agent_callback(_callback_context("inv-detached"))
+
     assert "RECOVERED ANSWER" in str(trace.output)
 
 
@@ -133,17 +136,24 @@ def test_after_model_callback__recovers_output_when_span_detached():
 def test_after_model_callback__detached_span__partial_chunk_discards():
     # Partial streaming chunks must not cache — and they clear any prior value for
     # the invocation (discard up front), so a stale earlier output can't leak onto
-    # the trace before the final response arrives.
+    # the trace before the final response arrives. Driven entirely through the
+    # public callbacks: a recovered final response, then a partial chunk for the
+    # same invocation, must leave the trace output empty.
     tracer = OpikTracer(project_name="adk-test")
     assert context_storage.top_span_data() is None
-    tracer._last_model_output.set("inv-partial", {"stale": "earlier"})
 
-    partial = LlmResponse(
-        content=genai_types.Content(
-            role="model", parts=[genai_types.Part(text="strea")]
-        ),
-        partial=True,
+    # An earlier final response was recovered for this invocation...
+    tracer.after_model_callback(
+        _callback_context("inv-partial"),
+        _model_response("EARLIER ANSWER", partial=False),
     )
-    tracer.after_model_callback(_callback_context("inv-partial"), partial)
+    # ...then a partial chunk arrives (still detached): it must discard, not stamp.
+    tracer.after_model_callback(
+        _callback_context("inv-partial"), _model_response("strea", partial=True)
+    )
 
-    assert tracer._last_model_output.get("inv-partial") is None
+    trace = TraceData(name="agent")
+    context_storage.set_trace_data(trace)
+    tracer.after_agent_callback(_callback_context("inv-partial"))
+
+    assert trace.output is None  # no stale "EARLIER ANSWER" leaked through
