@@ -12,6 +12,7 @@ import {
 } from "@/lib/optimization-formatters";
 import { Experiment } from "@/types/datasets";
 import { AggregatedCandidate } from "@/types/optimizations";
+import { getOptimizationDurationSeconds } from "./optimizationOverviewHelpers";
 
 type MetricValue = number | undefined;
 
@@ -53,6 +54,7 @@ type OptimizationKPICardsProps = {
   isTestSuite?: boolean;
   objectiveName?: string;
   optimizationCreatedAt?: string;
+  optimizationLastUpdatedAt?: string;
   isInProgress?: boolean;
 };
 
@@ -65,6 +67,7 @@ const OptimizationKPICards: React.FunctionComponent<
   isTestSuite,
   objectiveName,
   optimizationCreatedAt,
+  optimizationLastUpdatedAt,
   isInProgress,
 }) => {
   const kpiData = useMemo(() => {
@@ -74,19 +77,26 @@ const OptimizationKPICards: React.FunctionComponent<
     );
 
     let totalDuration: number | undefined;
-    if (optimizationCreatedAt && experiments.length > 0 && !isInProgress) {
-      const start = new Date(optimizationCreatedAt).getTime();
-      const end = new Date(
-        experiments.reduce(
-          (latest, e) => (e.created_at > latest ? e.created_at : latest),
-          experiments[0].created_at,
-        ),
-      ).getTime();
-      totalDuration = (end - start) / 1000;
+    if (!isInProgress && experiments.length > 0) {
+      // The run's completion time is the correct end; fall back to the latest
+      // trial's created_at only when last_updated_at is unavailable.
+      const latestCreatedAt = experiments.reduce(
+        (latest, e) => (e.created_at > latest ? e.created_at : latest),
+        experiments[0].created_at,
+      );
+      totalDuration = getOptimizationDurationSeconds(
+        optimizationCreatedAt,
+        optimizationLastUpdatedAt ?? latestCreatedAt,
+      );
     }
 
     return { totalOptCost, totalDuration };
-  }, [experiments, optimizationCreatedAt, isInProgress]);
+  }, [
+    experiments,
+    optimizationCreatedAt,
+    optimizationLastUpdatedAt,
+    isInProgress,
+  ]);
 
   const startTime = useMemo(() => {
     if (!optimizationCreatedAt) return undefined;

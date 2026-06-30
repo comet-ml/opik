@@ -170,6 +170,7 @@ const OptimizationPage: React.FC = () => {
               isTestSuite={isTestSuite}
               objectiveName={optimization?.objective_name}
               optimizationCreatedAt={optimization?.created_at}
+              optimizationLastUpdatedAt={optimization?.last_updated_at}
               isInProgress={
                 !!optimization?.status &&
                 IN_PROGRESS_OPTIMIZATION_STATUSES.includes(optimization.status)
