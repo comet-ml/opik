@@ -39,9 +39,15 @@ type PercentageTrendProps = {
   trend?: PercentageTrendType;
   tooltip?: string;
   iconOnly?: boolean;
-  // Use the vivid Figma trend colors for the icon — good = green (#00D14C),
-  // bad = red (#EF4444) — leaving the neutral color untouched.
-  vivid?: boolean;
+};
+
+// One trend style across the product (Figma): good = green (#00D14C), bad = red
+// (#EF4444); neutral keeps the gray tag. Applied to the whole tag so the icon
+// and the percentage share the color.
+const TREND_COLOR_CLASS: Record<string, string | undefined> = {
+  green: "text-[#00d14c]",
+  red: "text-[#ef4444]",
+  gray: undefined,
 };
 
 const PercentageTrend: React.FC<PercentageTrendProps> = ({
@@ -50,19 +56,11 @@ const PercentageTrend: React.FC<PercentageTrendProps> = ({
   trend = "direct",
   tooltip,
   iconOnly = false,
-  vivid = false,
 }) => {
   if (isUndefined(percentage)) return null;
 
   const { Icon, variant } = getConfig(percentage, trend, precision);
-
-  const iconColorClassName = !vivid
-    ? undefined
-    : variant === "green"
-      ? "text-[#00d14c]"
-      : variant === "red"
-        ? "text-[#ef4444]"
-        : undefined;
+  const colorClassName = TREND_COLOR_CLASS[variant];
 
   const isFinitePercentage = isFinite(percentage);
 
@@ -71,18 +69,21 @@ const PercentageTrend: React.FC<PercentageTrendProps> = ({
       <Tag
         size="sm"
         variant={variant as TagProps["variant"]}
-        className="inline-flex items-center justify-center px-1"
+        className={cn(
+          "inline-flex items-center justify-center px-1",
+          colorClassName,
+        )}
       >
-        <Icon className={cn("size-3", iconColorClassName)} />
+        <Icon className="size-3" />
       </Tag>
     ) : (
       <Tag
         size="md"
         variant={variant as TagProps["variant"]}
-        className="flex-row flex-nowrap gap-1"
+        className={cn("flex-row flex-nowrap gap-1", colorClassName)}
       >
         <div className="flex max-w-full items-center justify-between gap-0.5">
-          <Icon className={cn("size-3 shrink-0", iconColorClassName)} />
+          <Icon className="size-3 shrink-0" />
           <div className="min-w-8 text-right">
             {formatNumericData(percentage, precision)}%
           </div>
