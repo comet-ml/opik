@@ -5,7 +5,7 @@ import { useActiveProjectId } from "@/store/AppStore";
 import useDatasetById from "@/api/datasets/useDatasetById";
 import { METRIC_TYPE } from "@/types/optimizations";
 import { PROVIDER_MODEL_TYPE } from "@/types/providers";
-import { safelyGetPromptVariables } from "@/lib/prompt";
+import { extractMessageContent, safelyGetPromptVariables } from "@/lib/prompt";
 import { OptimizationConfigFormType } from "@/v2/pages-shared/optimizations/OptimizationConfigForm/schema";
 import useDatasetSamplePreview from "./useDatasetSamplePreview";
 import { useOptimizerFormHandlers } from "./formHandlers/useOptimizerFormHandlers";
@@ -36,9 +36,10 @@ export const useOptimizationsNewFormHandlers = () => {
   const model = form.watch("modelName") as PROVIDER_MODEL_TYPE | "";
   const config = form.watch("modelConfig");
 
-  const { datasetSample, datasetVariables } = useDatasetSamplePreview({
-    datasetId,
-  });
+  const { datasetSample, datasetVariables, areColumnsLoading } =
+    useDatasetSamplePreview({
+      datasetId,
+    });
 
   // {{variables}} used in the prompt and the G-Eval metric must exist as
   // columns in the selected item source — otherwise they resolve to nothing
@@ -56,10 +57,10 @@ export const useOptimizationsNewFormHandlers = () => {
       safelyGetPromptVariables(text).forEach((tag) => referenced.add(tag));
     };
 
+    // Flatten structured (array) message content to text so `{{vars}}` inside
+    // multipart parts are still checked, not just plain-string content.
     (messages ?? []).forEach((message) =>
-      collect(
-        typeof message.content === "string" ? message.content : undefined,
-      ),
+      collect(extractMessageContent(message.content)),
     );
 
     if (metricType === METRIC_TYPE.G_EVAL && metricParams) {
@@ -138,7 +139,9 @@ export const useOptimizationsNewFormHandlers = () => {
     datasetSample,
     datasetVariables,
     missingDatasetVariables,
-    isDatasetLoading,
+    // Gate submit while EITHER the dataset record or its columns are still
+    // loading, so the missing-variable check can't be bypassed mid-load.
+    isDatasetLoading: isDatasetLoading || areColumnsLoading,
     isDatasetError,
     handleDatasetChange,
     handleOptimizerTypeChange,

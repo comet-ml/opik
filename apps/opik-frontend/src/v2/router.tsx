@@ -46,6 +46,7 @@ import { createOAuthConsentRoute } from "@/shared/OAuthConsentPage/createOAuthCo
 import OptimizationsPage from "@/v2/pages/OptimizationsPage/OptimizationsPage";
 import OptimizationPage from "@/v2/pages/OptimizationPage/OptimizationPage";
 import OptimizationCompareRedirect from "@/v2/pages/OptimizationPage/OptimizationCompareRedirect";
+import OptimizationsNewRedirect from "@/v2/pages/OptimizationPage/OptimizationsNewRedirect";
 import TrialPage from "@/v2/pages/TrialPage/TrialPage";
 const AlertsRouteWrapper = lazy(
   () => import("@/v2/pages/AlertsPage/AlertsRouteWrapper"),
@@ -423,6 +424,15 @@ const optimizationCompareRedirectRoute = createRoute({
   component: OptimizationCompareRedirect,
 });
 
+// Back-compat: the new-run flow moved from `/optimizations/new` into a sidebar
+// (`/optimizations?new=true`). Keep the legacy path working — a static `/new`
+// also wins over the `/$optimizationId` detail route.
+const optimizationsNewRedirectRoute = createRoute({
+  path: "/new",
+  getParentRoute: () => optimizationsRoute,
+  component: OptimizationsNewRedirect,
+});
+
 const optimizationBaseRoute = createRoute({
   path: "/$optimizationId",
   getParentRoute: () => optimizationsRoute,
@@ -653,6 +663,7 @@ const routeTree = rootRoute.addChildren([
           playgroundRoute.addChildren([playgroundIndexRoute]),
           optimizationsRoute.addChildren([
             optimizationsListRoute,
+            optimizationsNewRedirectRoute,
             optimizationCompareRedirectRoute,
             optimizationBaseRoute.addChildren([optimizationRoute, trialRoute]),
           ]),

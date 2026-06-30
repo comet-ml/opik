@@ -1,9 +1,8 @@
 import React from "react";
 import { Label } from "@/ui/label";
 import { Checkbox } from "@/ui/checkbox";
-import { Input } from "@/ui/input";
 import { LevenshteinMetricParameters } from "@/types/optimizations";
-import DatasetVariablesHint from "../DatasetVariablesHint";
+import ReferenceKeyField from "../ReferenceKeyField";
 
 interface LevenshteinMetricConfigsProps {
   configs: Partial<LevenshteinMetricParameters>;
@@ -19,25 +18,11 @@ const LevenshteinMetricConfigs = ({
   return (
     <div className="flex w-72 flex-col gap-6">
       <div className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="reference_key" className="text-sm">
-            Reference key
-          </Label>
-          <Input
-            id="reference_key"
-            placeholder="e.g., answer or $.scores[?(@.name=='Useful')].value"
-            value={configs.reference_key}
-            onChange={(e) =>
-              onChange({ ...configs, reference_key: e.target.value })
-            }
-          />
-          <DatasetVariablesHint
-            datasetVariables={datasetVariables}
-            onSelect={(variable) =>
-              onChange({ ...configs, reference_key: variable })
-            }
-          />
-        </div>
+        <ReferenceKeyField
+          value={configs.reference_key ?? ""}
+          onChange={(value) => onChange({ ...configs, reference_key: value })}
+          datasetVariables={datasetVariables}
+        />
 
         <div className="flex items-center space-x-2">
           <Checkbox

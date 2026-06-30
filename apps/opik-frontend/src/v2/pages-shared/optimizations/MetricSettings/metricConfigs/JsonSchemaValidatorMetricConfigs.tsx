@@ -1,9 +1,7 @@
 import React from "react";
-import { Label } from "@/ui/label";
-import { Input } from "@/ui/input";
 import { JsonSchemaValidatorMetricParameters } from "@/types/optimizations";
 import { DEFAULT_JSON_SCHEMA_VALIDATOR_METRIC_CONFIGS } from "@/constants/optimizations";
-import DatasetVariablesHint from "../DatasetVariablesHint";
+import ReferenceKeyField from "../ReferenceKeyField";
 
 interface JsonSchemaValidatorMetricConfigsProps {
   configs: Partial<JsonSchemaValidatorMetricParameters>;
@@ -16,32 +14,18 @@ const JsonSchemaValidatorMetricConfigs = ({
   onChange,
   datasetVariables = [],
 }: JsonSchemaValidatorMetricConfigsProps) => {
-  const referenceKey =
-    configs.reference_key ??
-    DEFAULT_JSON_SCHEMA_VALIDATOR_METRIC_CONFIGS.REFERENCE_KEY;
-
   return (
     <div className="flex w-72 flex-col gap-6">
       <div className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="reference_key" className="text-sm">
-            Reference key
-          </Label>
-          <Input
-            id="reference_key"
-            value={referenceKey}
-            onChange={(e) =>
-              onChange({ ...configs, reference_key: e.target.value })
-            }
-            placeholder="e.g., expected_output"
-          />
-          <DatasetVariablesHint
-            datasetVariables={datasetVariables}
-            onSelect={(variable) =>
-              onChange({ ...configs, reference_key: variable })
-            }
-          />
-        </div>
+        <ReferenceKeyField
+          value={
+            configs.reference_key ??
+            DEFAULT_JSON_SCHEMA_VALIDATOR_METRIC_CONFIGS.REFERENCE_KEY
+          }
+          onChange={(value) => onChange({ ...configs, reference_key: value })}
+          datasetVariables={datasetVariables}
+          placeholder="e.g., expected_output"
+        />
       </div>
     </div>
   );

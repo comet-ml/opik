@@ -8,12 +8,16 @@ type UseDatasetSamplePreviewParams = {
 type UseDatasetSamplePreviewReturn = {
   datasetSample: Record<string, unknown> | null;
   datasetVariables: string[];
+  // True while the dataset's columns are still being fetched. Callers gate
+  // submit on this so the missing-variable check can't be bypassed in the
+  // window before columns arrive (when `datasetVariables` is still empty).
+  areColumnsLoading: boolean;
 };
 
 const useDatasetSamplePreview = ({
   datasetId,
 }: UseDatasetSamplePreviewParams): UseDatasetSamplePreviewReturn => {
-  const { data: datasetItemsData } = useDatasetItemsList(
+  const { data: datasetItemsData, isLoading } = useDatasetItemsList(
     {
       datasetId: datasetId || "",
       page: 1,
@@ -41,6 +45,7 @@ const useDatasetSamplePreview = ({
   return {
     datasetSample,
     datasetVariables,
+    areColumnsLoading: isLoading,
   };
 };
 
