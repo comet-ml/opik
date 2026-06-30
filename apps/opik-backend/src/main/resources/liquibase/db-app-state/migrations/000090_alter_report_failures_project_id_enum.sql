@@ -16,3 +16,4 @@ ALTER TABLE report_failures ADD INDEX report_failures_lookup_idx (workspace_id, 
 --rollback ALTER TABLE report_failures MODIFY COLUMN type VARCHAR(100) NOT NULL;
 --rollback ALTER TABLE report_failures CHANGE COLUMN project_id entity_id CHAR(36) NOT NULL;
 --rollback ALTER TABLE report_failures ADD INDEX report_failures_lookup_idx (workspace_id, type, entity_id, created_at);
+
