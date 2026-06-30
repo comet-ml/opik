@@ -1,5 +1,5 @@
 import React from "react";
-import { RotateCw, X } from "lucide-react";
+import { Calendar, RotateCw, Sparkles, Workflow, X } from "lucide-react";
 import { Tag } from "@/ui/tag";
 import { Button } from "@/ui/button";
 import { useNavigate } from "@tanstack/react-router";
@@ -11,6 +11,8 @@ import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import NavigationTag from "@/shared/NavigationTag/NavigationTag";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import { formatDate } from "@/lib/date";
+import { getOptimizationConfigItems } from "./optimizationHeaderConfig";
+import OptimizationMetricPill from "./OptimizationMetricPill";
 
 type OptimizationHeaderProps = {
   optimization?: Optimization;
@@ -38,6 +40,9 @@ const OptimizationHeader: React.FC<OptimizationHeaderProps> = ({
 
   const canStop = isStudioOptimization && optimizationId && isInProgress;
 
+  const { model, algorithmLabel, metric } =
+    getOptimizationConfigItems(optimization);
+
   const handleStop = () => {
     if (!optimizationId) return;
     stopOptimization({ optimizationId });
@@ -53,17 +58,12 @@ const OptimizationHeader: React.FC<OptimizationHeaderProps> = ({
   };
 
   return (
-    <div className="mb-4 flex min-h-8 flex-nowrap items-center justify-between gap-2">
-      <div className="flex flex-col gap-1">
+    <div className="mb-4 flex min-h-8 flex-nowrap items-start justify-between gap-2">
+      <div className="flex min-w-0 flex-col gap-2">
         <div className="flex items-center gap-2">
           <h1 className="comet-title-xs truncate break-words">
-            {optimization?.dataset_name || optimizationId}
+            {optimization?.name || optimization?.dataset_name || optimizationId}
           </h1>
-          {optimization?.created_at && (
-            <span className="comet-body-s text-muted-slate">
-              {formatDate(optimization.created_at)}
-            </span>
-          )}
           {status && (
             <Tag
               variant={STATUS_TO_VARIANT_MAP[status]}
@@ -74,17 +74,42 @@ const OptimizationHeader: React.FC<OptimizationHeaderProps> = ({
             </Tag>
           )}
         </div>
-        {optimization?.dataset_id && optimization?.dataset_name && (
-          <NavigationTag
-            id={optimization.dataset_id}
-            name={optimization.dataset_name}
-            resource={RESOURCE_TYPE.dataset}
-            prefix="Dataset"
-            className="w-fit"
-          />
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {optimization?.created_at && (
+            <span className="comet-body-s flex items-center gap-1 text-muted-slate">
+              <Calendar className="size-3.5 shrink-0" />
+              {formatDate(optimization.created_at)}
+            </span>
+          )}
+          {optimization?.dataset_id && optimization?.dataset_name && (
+            <NavigationTag
+              id={optimization.dataset_id}
+              name={optimization.dataset_name}
+              resource={RESOURCE_TYPE.dataset}
+              prefix="Dataset"
+              className="w-fit"
+            />
+          )}
+          {model && (
+            <Tag variant="default" size="md">
+              <span className="flex items-center gap-1.5">
+                <Sparkles className="size-3.5 shrink-0 text-muted-slate" />
+                <span className="truncate">{model}</span>
+              </span>
+            </Tag>
+          )}
+          {algorithmLabel && (
+            <Tag variant="default" size="md">
+              <span className="flex items-center gap-1.5">
+                <Workflow className="size-3.5 shrink-0 text-muted-slate" />
+                <span className="truncate">{algorithmLabel}</span>
+              </span>
+            </Tag>
+          )}
+          {metric && <OptimizationMetricPill metric={metric} />}
+        </div>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         {canRerun && (
           <Button variant="outline" size="sm" onClick={handleRerun}>
             <RotateCw className="mr-2 size-4" />
