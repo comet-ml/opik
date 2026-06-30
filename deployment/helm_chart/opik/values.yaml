@@ -691,6 +691,8 @@ clickhouse:
                 <max_bytes_ratio_before_external_group_by>0.2</max_bytes_ratio_before_external_group_by>
                 <!-- CH 25.8 made the experimental Time type opt-in; required for fresh installs to replay migration 000030. -->
                 <enable_time_time64_type>1</enable_time_time64_type>
+                <!-- the new CH 25.x default (1) makes FINAL reads on skip-indexed tables over-read massively; our queries already prune on the PK/project_id, so exact mode isn't needed. -->
+                <use_skip_indexes_if_final_exact_mode>0</use_skip_indexes_if_final_exact_mode>
             </default>
           </profiles>
         </clickhouse>
