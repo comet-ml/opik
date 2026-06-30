@@ -7,7 +7,6 @@ import com.comet.opik.api.AgentInsightsIssueStatus;
 import com.comet.opik.api.AgentInsightsIssueUpdate;
 import com.comet.opik.api.AgentInsightsIssueWithDetails;
 import com.comet.opik.api.AgentInsightsReport;
-import com.comet.opik.api.AgentInsightsRunFailure;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.sorting.AgentInsightsIssueSortingFactory;
 import com.comet.opik.api.sorting.SortingField;
@@ -114,22 +113,6 @@ public class AgentInsightsResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = AgentInsightsReport.class))) @NotNull @Valid AgentInsightsReport report) {
 
         agentInsightsIssueService.reportIssues(report);
-
-        return Response.noContent().build();
-    }
-
-    @POST
-    @Path("/run-failure")
-    @Operation(operationId = "reportAgentInsightsRunFailure", summary = "Record an agent insights run failure", description = "Records that a diagnostics run failed for the given project, with a stable reason code and optional detail. Clears automatically on the next successful report.", responses = {
-            @ApiResponse(responseCode = "204", description = "Run failure recorded"),
-            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-            @ApiResponse(responseCode = "404", description = "Project not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-            @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
-    })
-    public Response reportRunFailure(
-            @RequestBody(content = @Content(schema = @Schema(implementation = AgentInsightsRunFailure.class))) @NotNull @Valid AgentInsightsRunFailure failure) {
-
-        agentInsightsIssueService.reportRunFailure(failure);
 
         return Response.noContent().build();
     }
