@@ -10,4 +10,6 @@ export interface ValueEntryExperimentItemBulkWriteView {
     lastUpdatedAt?: Date;
     spanType?: string;
     spanId?: string;
+    sourceQueueId?: string;
+    author?: string;
 }

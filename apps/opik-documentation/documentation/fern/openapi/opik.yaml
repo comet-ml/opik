@@ -14421,6 +14421,10 @@ components:
           type: string
         span_id:
           type: string
+        source_queue_id:
+          type: string
+        author:
+          type: string
       readOnly: true
     DatasetItemBatch_Write:
       required:
@@ -15155,6 +15159,10 @@ components:
         span_type:
           type: string
         span_id:
+          type: string
+        source_queue_id:
+          type: string
+        author:
           type: string
       readOnly: true
     DatasetPage_Public:
@@ -17041,6 +17049,10 @@ components:
         span_type:
           type: string
         span_id:
+          type: string
+        source_queue_id:
+          type: string
+        author:
           type: string
       readOnly: true
     AssertionScoreAverage_Public:
@@ -21451,6 +21463,10 @@ components:
         span_type:
           type: string
         span_id:
+          type: string
+        source_queue_id:
+          type: string
+        author:
           type: string
       readOnly: true
     SpanPage_Public:
