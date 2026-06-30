@@ -104,6 +104,10 @@ public class AgentInsightsJobService {
                             AgentInsightsMetrics.REPORTS_ENQUEUED.add(1, AgentInsightsMetrics.ENQUEUE_MANUAL_FAILURE);
                             log.error("Failed to enqueue Agent Insights run for project '{}'", projectId,
                                     error);
+                            // Publisher-side failure: the run never reaches Ollie (which would otherwise report
+                            // its own failure), so record it here too, or the UI spins until the client timeout.
+                            markRunFailed(workspaceId, projectId, "did_not_start",
+                                    "Failed to enqueue diagnostics run");
                         });
     }
 
