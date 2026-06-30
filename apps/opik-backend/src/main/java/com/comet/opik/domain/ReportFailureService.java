@@ -6,6 +6,7 @@ import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -41,11 +42,15 @@ class ReportFailureServiceImpl implements ReportFailureService {
         String userName = requestContext.get().getUserName();
         UUID id = idGenerator.generateId();
 
-        // Reject failures for a non-existent project so they can't linger as orphan rows a later job query
-        // surfaces. Gated by type to keep the check next to the only consumer that owns a project.
-        if (ReportFailureDAO.AGENT_INSIGHTS_TYPE.equals(failure.type())) {
-            projectService.validateProjectIdExists(failure.projectId(), workspaceId);
+        // Validate type up front: the column is an enum, so an unknown value would otherwise fail at the DB
+        // with a 500 instead of a clean 400. Agent Insights is currently the only supported type.
+        if (!ReportFailureDAO.AGENT_INSIGHTS_TYPE.equals(failure.type())) {
+            throw new BadRequestException("Unsupported report failure type: '%s'".formatted(failure.type()));
         }
+
+        // The entity is a project — reject failures for a non-existent one so they can't linger as orphan
+        // rows that a later job query surfaces.
+        projectService.validateProjectIdExists(failure.projectId(), workspaceId);
 
         log.info("Recording report failure type '{}' project '{}' in workspace '{}': '{}'",
                 failure.type(), failure.projectId(), workspaceId, failure.reason());

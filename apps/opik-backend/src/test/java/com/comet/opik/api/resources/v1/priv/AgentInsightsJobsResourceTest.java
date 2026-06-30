@@ -385,6 +385,13 @@ class AgentInsightsJobsResourceTest {
     }
 
     @Test
+    @DisplayName("Report failure with an unsupported type is rejected (400) before hitting the DB enum")
+    void reportFailure__unsupportedType__returns400() {
+        var body = ReportFailure.builder().type("not_a_real_type").projectId(UUID.randomUUID()).reason("x").build();
+        reportFailuresClient.create(body, API_KEY, WORKSPACE_NAME, HttpStatus.SC_BAD_REQUEST);
+    }
+
+    @Test
     @DisplayName("Report failures are listed for the project, most recent first")
     void reportFailure__createAndRead() {
         var projectId = createProject();
