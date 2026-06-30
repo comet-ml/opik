@@ -124,13 +124,6 @@ databaseAnalyticsReadOnlyFreeFormSql:
   #   above the read-only profile's max_execution_time (180s) so the server-side cap fires first.
   socketTimeout: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_SOCKET_TIMEOUT:-200s}
 
-traceQuery:
-  # Default: true
-  # Description: Whether ClickHouse skip indexes are used for the last-updated-trace-at lookup query. When false,
-  #   `use_skip_indexes = 0` is appended to force a full project-partition scan instead of pruning via the
-  #   `idx_traces_last_updated_at` minmax index. Operational escape hatch; keep enabled in normal operation.
-  lastUpdatedTraceAtSkipIndexesEnabled: ${TRACE_QUERY_LAST_UPDATED_TRACE_AT_SKIP_INDEXES_ENABLED:-true}
-
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
   # Default: ["/health-check"]
