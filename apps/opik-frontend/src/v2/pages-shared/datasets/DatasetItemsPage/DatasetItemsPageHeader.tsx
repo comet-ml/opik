@@ -2,19 +2,24 @@ import React from "react";
 import {
   Check,
   CheckCheck,
+  FilePen,
   GitCommitVertical,
+  Plus,
   Settings2,
+  Sparkles,
   X,
 } from "lucide-react";
 
+import BackButton from "@/shared/BackButton/BackButton";
 import ColoredTag from "@/shared/ColoredTag/ColoredTag";
 import DateTag from "@/shared/DateTag/DateTag";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
+import SingleLineExpandableText from "@/shared/SingleLineExpandableText/SingleLineExpandableText";
 import TagListRenderer from "@/shared/TagListRenderer/TagListRenderer";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import UseDatasetDropdown from "@/v2/pages-shared/datasets/UseDatasetDropdown";
 import { AssertionsListTooltipContent } from "@/v2/pages-shared/experiments/TestSuiteExperiment/AssertionsListTooltipContent";
 import { Button } from "@/ui/button";
-import { Separator } from "@/ui/separator";
 import { Tag } from "@/ui/tag";
 import {
   Tooltip,
@@ -38,6 +43,8 @@ interface DatasetItemsPageHeaderProps {
   onDiscardClick: () => void;
   onSaveClick: () => void;
   onSettingsClick: () => void;
+  onAddItem: () => void;
+  onExpand: () => void;
 }
 
 const DatasetItemsPageHeader: React.FunctionComponent<
@@ -56,6 +63,8 @@ const DatasetItemsPageHeader: React.FunctionComponent<
   onDiscardClick,
   onSaveClick,
   onSettingsClick,
+  onAddItem,
+  onExpand,
 }) => {
   const datasetTags = dataset?.tags ?? [];
   const showTags = canEditDatasets || datasetTags.length > 0;
@@ -68,7 +77,15 @@ const DatasetItemsPageHeader: React.FunctionComponent<
   return (
     <div className="mb-4">
       <div className="mb-4 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <BackButton
+            to={
+              isTestSuite
+                ? "/$workspaceName/projects/$projectId/test-suites"
+                : "/$workspaceName/projects/$projectId/datasets"
+            }
+            tooltip={isTestSuite ? "Back to test suites" : "Back to datasets"}
+          />
           {hasDraft && (
             <Tag variant="orange" size="md">
               Draft
@@ -101,6 +118,19 @@ const DatasetItemsPageHeader: React.FunctionComponent<
               </Button>
             </>
           )}
+          {canEditDatasets && (
+            <TooltipWrapper content="Expand with AI">
+              <Button
+                variant="outline"
+                size="icon-sm"
+                onClick={onExpand}
+                disabled={!dataset}
+                data-testid="dataset-header-expand-button"
+              >
+                <Sparkles />
+              </Button>
+            </TooltipWrapper>
+          )}
           <UseDatasetDropdown
             datasetName={dataset?.name}
             datasetId={datasetId}
@@ -111,22 +141,32 @@ const DatasetItemsPageHeader: React.FunctionComponent<
             isTestSuite={isTestSuite}
           />
           {isTestSuite && (
+            <TooltipWrapper content="Test settings">
+              <Button
+                variant="outline"
+                size="icon-sm"
+                onClick={onSettingsClick}
+                data-testid="dataset-header-settings-button"
+              >
+                <Settings2 />
+              </Button>
+            </TooltipWrapper>
+          )}
+          {canEditDatasets && (
             <Button
-              variant="outline"
+              variant="default"
               size="sm"
-              className="gap-1.5"
-              onClick={onSettingsClick}
+              onClick={onAddItem}
+              disabled={!dataset}
+              data-testid="dataset-header-add-button"
             >
-              <Settings2 className="size-3.5 shrink-0" />
-              Test settings
+              <Plus className="mr-1.5 size-3.5" />
+              {isTestSuite ? "Test case" : "Record"}
             </Button>
           )}
         </div>
       </div>
-      {dataset?.description && (
-        <div className="-mt-3 mb-4 text-muted-slate">{dataset.description}</div>
-      )}
-      <div className="flex gap-2 overflow-x-auto">
+      <div className="mb-2 flex gap-1.5 overflow-x-auto">
         {dataset?.created_at && (
           <DateTag
             date={dataset.created_at}
@@ -137,20 +177,23 @@ const DatasetItemsPageHeader: React.FunctionComponent<
         )}
         {latestVersion && (
           <>
-            <Tag
+            <div
               data-testid="dataset-detail-version-label"
-              size="md"
-              variant="transparent"
-              className="flex shrink-0 items-center gap-1"
+              className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-border bg-primary-foreground pl-1 pr-1.5"
             >
-              <GitCommitVertical className="size-3 text-green-500" />
-              {latestVersion.version_name}
-            </Tag>
+              <span className="flex size-3 shrink-0 items-center justify-center">
+                <span className="size-1.5 rounded-full bg-light-slate" />
+              </span>
+              <span className="comet-body-xs-accented text-foreground">
+                {latestVersion.version_name}
+              </span>
+            </div>
             {latestVersion.tags?.map((tag) => (
               <ColoredTag
                 key={tag}
                 label={tag}
                 size="md"
+                variant="gray"
                 IconComponent={GitCommitVertical}
               />
             ))}
@@ -162,11 +205,11 @@ const DatasetItemsPageHeader: React.FunctionComponent<
               <div
                 data-testid="dataset-detail-global-assertions-pill"
                 data-count={effectiveAssertions.length}
-                className="flex shrink-0 cursor-pointer items-center gap-1 rounded bg-thread-active px-1.5 py-0.5"
+                className="flex h-6 shrink-0 cursor-pointer items-center gap-1 rounded-md border border-border bg-primary-foreground pl-1 pr-1.5"
                 onClick={onSettingsClick}
               >
-                <CheckCheck className="size-3 text-muted-foreground" />
-                <span className="comet-body-s-accented text-muted-foreground">
+                <CheckCheck className="size-3 shrink-0 text-muted-slate" />
+                <span className="comet-body-xs-accented text-foreground">
                   {effectiveAssertions.length} global assertion
                   {effectiveAssertions.length !== 1 ? "s" : ""}
                 </span>
@@ -185,20 +228,26 @@ const DatasetItemsPageHeader: React.FunctionComponent<
             </TooltipPortal>
           </Tooltip>
         )}
-        {showTags && (
-          <>
-            <Separator orientation="vertical" className="ml-1.5 mt-1 h-4" />
-            <TagListRenderer
-              {...tagListProps}
-              onAddTag={onAddTag}
-              onDeleteTag={onDeleteTag}
-              canAdd={canEditDatasets}
-              align="start"
-              className="min-h-0 w-auto"
-            />
-          </>
-        )}
       </div>
+      {showTags && (
+        <TagListRenderer
+          {...tagListProps}
+          onAddTag={onAddTag}
+          onDeleteTag={onDeleteTag}
+          canAdd={canEditDatasets}
+          align="start"
+          className="[&>:first-child]:-mr-1"
+          tagVariant="green"
+        />
+      )}
+      {dataset?.description && (
+        <div className="mt-2 flex items-start gap-1">
+          <FilePen className="ml-1 mt-[3px] size-3.5 shrink-0 text-muted-slate" />
+          <SingleLineExpandableText className="comet-body-s text-foreground">
+            {dataset.description}
+          </SingleLineExpandableText>
+        </div>
+      )}
     </div>
   );
 };

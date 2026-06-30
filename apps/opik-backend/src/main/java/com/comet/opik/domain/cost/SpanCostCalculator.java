@@ -16,7 +16,20 @@ class SpanCostCalculator {
     private static final String CACHE_CREATION_INPUT_TOKENS_KEY = "cache_creation_input_tokens";
 
     public static BigDecimal textGenerationCost(@NonNull ModelPrice modelPrice, @NonNull Map<String, Integer> usage) {
-        return modelPrice.inputPrice().multiply(BigDecimal.valueOf(usage.getOrDefault("prompt_tokens", 0)))
+        int promptTokens = usage.getOrDefault("prompt_tokens", 0);
+        // Audio tokens (OpenAI realtime / audio-preview models) are billed at a separate rate;
+        // SDK 1.6.0+ logs them under original_usage.prompt_tokens_details.audio_tokens,
+        // with the bare OTel key as a fallback.
+        int audioInputTokens = usage.getOrDefault("original_usage.prompt_tokens_details.audio_tokens",
+                usage.getOrDefault("prompt_tokens_details.audio_tokens", 0));
+
+        BigDecimal inputAudioRate = modelPrice.inputAudioTokenPrice();
+        int nonAudioPromptTokens = inputAudioRate.compareTo(BigDecimal.ZERO) > 0
+                ? Math.max(0, promptTokens - audioInputTokens)
+                : promptTokens;
+
+        return modelPrice.inputPrice().multiply(BigDecimal.valueOf(nonAudioPromptTokens))
+                .add(inputAudioRate.multiply(BigDecimal.valueOf(audioInputTokens)))
                 .add(modelPrice.outputPrice()
                         .multiply(BigDecimal.valueOf(usage.getOrDefault("completion_tokens", 0))));
     }

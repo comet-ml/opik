@@ -5,8 +5,8 @@ import { ExperimentItem, ExperimentsCompare } from "@/types/datasets";
 import VerticallySplitCellWrapper, {
   CustomMeta,
 } from "@/shared/DataTableCells/VerticallySplitCellWrapper";
-import { isAggregatedScore, getTrialAvgTooltip } from "@/lib/trials";
 import { MessageSquareMore } from "lucide-react";
+import { isAggregatedScore, getTrialAvgTooltip } from "@/lib/trials";
 import FeedbackScoreReasonTooltip from "@/shared/FeedbackScoreTag/FeedbackScoreReasonTooltip";
 import {
   extractReasonsFromValueByAuthor,
@@ -102,7 +102,7 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
           isUserFeedbackColumn={isUserFeedbackColumn}
           onValueChange={handleValueChange}
           size={isCompact ? "sm" : "md"}
-          tooltipSuffix={
+          footer={
             isAggregatedScore(feedbackScore)
               ? getTrialAvgTooltip(
                   feedbackScore.trialValues.length,

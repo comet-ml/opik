@@ -41,6 +41,12 @@ const CompareExperimentsButton: React.FunctionComponent<
         setOpen={setOpen}
       />
       <div className="inline-flex items-center gap-2">
+        <ExplainerIcon
+          className="-mr-0.5"
+          {...EXPLAINERS_MAP[
+            EXPLAINER_ID.what_does_it_mean_to_compare_my_experiments
+          ]}
+        />
         <TooltipWrapper content={tooltipContent}>
           <Button
             size={size}
@@ -55,12 +61,6 @@ const CompareExperimentsButton: React.FunctionComponent<
             Compare
           </Button>
         </TooltipWrapper>
-        <ExplainerIcon
-          className="-ml-0.5"
-          {...EXPLAINERS_MAP[
-            EXPLAINER_ID.what_does_it_mean_to_compare_my_experiments
-          ]}
-        />
       </div>
     </>
   );

@@ -21,7 +21,6 @@ const VersionOption: React.FC<VersionOptionProps> = ({
     <SelectItem
       key={version.id}
       value={formatDatasetVersionKey(datasetId, version.id)}
-      withoutCheck
       className={cn(
         "flex h-auto min-h-10 flex-col cursor-pointer justify-center py-2 pl-12 min-w-40 focus:bg-primary-foreground focus:text-foreground",
         {

@@ -41,6 +41,12 @@ data:
       server {{ include "opik.name" $ }}-backend:{{ (index .Values.component.backend.service.ports 1).port }};
       keepalive 16;
     }
+    {{- if .Values.component.frontend.aiSpendBackend.enabled }}
+    upstream ai-cost-backend {
+      server {{ .Values.component.frontend.aiSpendBackend.host }}:{{ .Values.component.frontend.aiSpendBackend.port }};
+      keepalive 16;
+    }
+    {{- end }}
     {{- if .Values.localFE }}
     upstream local-fe {
       server {{ .Values.localFEAddress }};
@@ -147,6 +153,31 @@ data:
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection "upgrade";
         }
+
+        {{- if .Values.component.frontend.aiSpendBackend.enabled }}
+        # Cost Intelligence (cost-api): split the ai-spend subset off to the
+        # ai-cost-backend service, same-origin. `^~` + the longer prefix make
+        # nginx prefer this over {{ $rootPath }}/api/, so only ai-spend is
+        # diverted; everything else under /api still goes to opik-backend.
+        # rootPath-aware (works at "" or /opik), so the same switch serves
+        # comet.com and single-tenant SaaS. The rewrite maps
+        # {{ $rootPath }}/api/v1/private/ai-spend/X -> {{ .Values.component.frontend.aiSpendBackend.costApiRootPath }}/v1/private/ai-spend/X.
+        location ^~ {{ $rootPath }}/api/v1/private/ai-spend/ {
+            try_files /dev/null @ai_spend;
+        }
+        location @ai_spend {
+            rewrite ^{{ $rootPath }}/api/(.*)$ {{ .Values.component.frontend.aiSpendBackend.costApiRootPath }}/$1 break;
+            proxy_pass http://ai-cost-backend;
+            proxy_redirect  off;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        {{- range $k, $v := .Values.component.frontend.upstreamConfig }}
+            {{ $k }}{{- if eq (printf "%v" $v) "true" }} on{{- else if eq (printf "%v" $v) "false" }} off{{- else }} {{ $v }}{{- end }};
+        {{- end }}
+        }
+        {{- end }}
 
         location {{ $rootPath }}/api/ {
           try_files /dev/null @api;

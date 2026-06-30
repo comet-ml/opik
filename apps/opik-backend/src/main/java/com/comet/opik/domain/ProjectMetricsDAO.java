@@ -167,7 +167,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                        name,
                        value,
                        last_updated_at,
-                       author
+                       author,
+                       source_queue_id
                 FROM (
                     SELECT workspace_id,
                            project_id,
@@ -175,7 +176,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                            name,
                            value,
                            last_updated_at,
-                           last_updated_by AS author
+                           last_updated_by AS author,
+                           CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
@@ -189,7 +191,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                            name,
                            value,
                            last_updated_at,
-                           author
+                           author,
+                           source_queue_id
                     FROM authored_feedback_scores
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
@@ -198,7 +201,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                       <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time<endif>
                 )
                 ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
              ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
@@ -273,8 +276,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     <endif>
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
-                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
-                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(uuid_from_time)> AND id >= :uuid_from_time
+                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time
+                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
                     <if(trace_filters)> AND <trace_filters> <endif>
                     <if(trace_feedback_scores_filters)>
                     AND id in (
@@ -305,7 +310,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                        name,
                        value,
                        last_updated_at,
-                       author
+                       author,
+                       source_queue_id
                 FROM (
                     SELECT workspace_id,
                            project_id,
@@ -313,7 +319,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                            name,
                            value,
                            last_updated_at,
-                           last_updated_by AS author
+                           last_updated_by AS author,
+                           CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
@@ -327,7 +334,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                            name,
                            value,
                            last_updated_at,
-                           author
+                           author,
+                           source_queue_id
                     FROM authored_feedback_scores
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
@@ -336,7 +344,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                       <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time<endif>
                 )
                 ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
              ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
@@ -455,7 +463,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                        name,
                        value,
                        last_updated_at,
-                       author
+                       author,
+                       source_queue_id
                 FROM (
                     SELECT
                         workspace_id,
@@ -464,7 +473,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         name,
                         value,
                         last_updated_at,
-                        last_updated_by AS author
+                        last_updated_by AS author,
+                        CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores
                     WHERE entity_type = 'thread'
                        AND workspace_id = :workspace_id
@@ -477,7 +487,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                            name,
                            value,
                            last_updated_at,
-                           author
+                           author,
+                           source_queue_id
                     FROM authored_feedback_scores
                     WHERE entity_type = 'thread'
                        AND workspace_id = :workspace_id
@@ -485,7 +496,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                        AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
                 )
                 ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
@@ -1062,8 +1073,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             FROM traces final
             WHERE workspace_id = :workspace_id
                 <if(project_ids)> AND project_id IN :project_ids <endif>
-                <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
-                <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
+                <if(uuid_from_time)>AND id >= :uuid_from_time
+                AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
+                <if(uuid_to_time)>AND id \\<= :uuid_to_time
+                AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
             SETTINGS log_comment = '<log_comment>';
             """;
 
@@ -1074,8 +1087,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             WHERE workspace_id = :workspace_id
                 AND length(error_info) > 0
                 <if(project_ids)> AND project_id IN :project_ids <endif>
-                <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
-                <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
+                <if(uuid_from_time)>AND id >= :uuid_from_time
+                AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
+                <if(uuid_to_time)>AND id \\<= :uuid_to_time
+                AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
             SETTINGS log_comment = '<log_comment>';
             """;
 

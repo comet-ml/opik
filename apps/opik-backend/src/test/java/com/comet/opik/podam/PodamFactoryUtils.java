@@ -3,6 +3,9 @@ package com.comet.opik.podam;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentType;
+import com.comet.opik.api.FeedbackScore;
+import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.PromptVersion;
@@ -17,6 +20,7 @@ import com.comet.opik.podam.manufacturer.BigDecimalTypeManufacturer;
 import com.comet.opik.podam.manufacturer.CategoricalFeedbackDetailTypeManufacturer;
 import com.comet.opik.podam.manufacturer.DatasetItemTypeManufacturer;
 import com.comet.opik.podam.manufacturer.ExperimentItemTypeManufacturer;
+import com.comet.opik.podam.manufacturer.FeedbackScoreTypeManufacturer;
 import com.comet.opik.podam.manufacturer.GuardrailCheckTypeManufacturer;
 import com.comet.opik.podam.manufacturer.JsonNodeTypeManufacturer;
 import com.comet.opik.podam.manufacturer.LlmAsJudgeMessageContentManufacturer;
@@ -96,6 +100,10 @@ public class PodamFactoryUtils {
         strategy.addOrReplaceTypeManufacturer(LlmAsJudgeMessageContent.class,
                 LlmAsJudgeMessageContentManufacturer.INSTANCE);
         strategy.addOrReplaceTypeManufacturer(LlmAsJudgeMessage.class, LlmAsJudgeMessageManufacturer.INSTANCE);
+        strategy.addOrReplaceTypeManufacturer(FeedbackScore.class, FeedbackScoreTypeManufacturer.SCORE);
+        strategy.addOrReplaceTypeManufacturer(FeedbackScoreBatchItem.class, FeedbackScoreTypeManufacturer.BATCH_ITEM);
+        strategy.addOrReplaceTypeManufacturer(FeedbackScoreBatchItemThread.class,
+                FeedbackScoreTypeManufacturer.BATCH_ITEM_THREAD);
 
         return podamFactory;
     }

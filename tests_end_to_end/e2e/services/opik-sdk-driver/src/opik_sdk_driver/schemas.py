@@ -24,6 +24,9 @@ class TraceCreate(BaseModel):
     name: str
     input: str
     output: str
+    # Groups this trace with others sharing the same value into a conversation
+    # thread, the unit the Logs Threads view renders.
+    thread_id: str | None = None
     workspace: str | None = None
 
 

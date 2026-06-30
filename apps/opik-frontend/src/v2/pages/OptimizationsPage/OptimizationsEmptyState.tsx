@@ -69,7 +69,7 @@ const OptimizationsEmptyState: React.FC<OptimizationsEmptyStateProps> = ({
     {
       icon: SquareDashedMousePointer,
       iconClassName: "text-chart-purple",
-      title: "Use the Optimization Studio",
+      title: "Start an optimization run",
       description:
         "Create a custom optimization workflow to test and improve your prompts.",
       onClick: () => navigateToStudio(),

@@ -87,6 +87,7 @@ const useTraceFeedbackScoreSetMutation = () => {
           reason: params.reason,
         },
         currentUserName,
+        params.sourceQueueId,
       );
 
       if (params.spanId) {
