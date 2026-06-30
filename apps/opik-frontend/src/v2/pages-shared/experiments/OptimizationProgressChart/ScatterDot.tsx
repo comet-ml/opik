@@ -6,8 +6,7 @@ import {
   CandidateDataPoint,
 } from "./optimizationChartUtils";
 import {
-  DOT_RADIUS_DEFAULT,
-  DOT_RADIUS_BEST,
+  getDotRadius,
   SELECTION_RING_EXTRA_RADIUS,
   SELECTION_RING_STROKE_WIDTH,
   SELECTION_RING_STROKE_OPACITY,
@@ -30,6 +29,7 @@ type UseScatterDotParams = {
   dotPositionsRef: React.MutableRefObject<Map<string, DotPosition>>;
   overlapOffsets: Map<string, number>;
   bestCandidateId?: string;
+  hoveredCandidateId?: string;
   pulsingCandidateId?: string;
   selectedTrialId?: string;
   onTrialSelect?: (trialId: string) => void;
@@ -55,6 +55,7 @@ const useScatterDot = ({
   dotPositionsRef,
   overlapOffsets,
   bestCandidateId,
+  hoveredCandidateId,
   pulsingCandidateId,
   selectedTrialId,
   onTrialSelect,
@@ -72,7 +73,8 @@ const useScatterDot = ({
         : TRIAL_STATUS_COLORS[payload.status];
       const isBest = payload.candidateId === bestCandidateId;
       const isSelected = payload.candidateId === selectedTrialId;
-      const radius = isBest ? DOT_RADIUS_BEST : DOT_RADIUS_DEFAULT;
+      const isHovered = payload.candidateId === hoveredCandidateId;
+      const radius = getDotRadius({ isBest, isHovered });
 
       const handleTrialSelectClick = createTrialClickHandler(
         payload.candidateId,
@@ -157,6 +159,7 @@ const useScatterDot = ({
     },
     [
       bestCandidateId,
+      hoveredCandidateId,
       pulsingCandidateId,
       selectedTrialId,
       onTrialSelect,

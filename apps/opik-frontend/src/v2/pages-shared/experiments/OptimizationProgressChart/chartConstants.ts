@@ -9,6 +9,20 @@ export const SELECTION_RING_EXTRA_RADIUS = 4;
 export const SELECTION_RING_STROKE_WIDTH = 2;
 export const SELECTION_RING_STROKE_OPACITY = 0.4;
 
+// Hover growth applied on top of the base radius
+export const DOT_RADIUS_HOVER_GROWTH = 2;
+
+/** Resolve a dot's radius from its best/hover state. */
+export const getDotRadius = ({
+  isBest = false,
+  isHovered = false,
+}: {
+  isBest?: boolean;
+  isHovered?: boolean;
+}): number =>
+  (isBest ? DOT_RADIUS_BEST : DOT_RADIUS_DEFAULT) +
+  (isHovered ? DOT_RADIUS_HOVER_GROWTH : 0);
+
 // Dot styling
 export const DOT_STROKE_WIDTH = 1.5;
 export const DOT_STROKE_COLOR = "white";

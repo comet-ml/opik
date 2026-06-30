@@ -16,6 +16,7 @@ import {
 import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
 import { AggregatedCandidate } from "@/types/optimizations";
 import ChartTooltip from "./ChartTooltip";
+import TrialCard from "./TrialCard";
 import {
   TRIAL_STATUS_COLORS,
   TRIAL_STATUS_LABELS,
@@ -171,6 +172,7 @@ const OptimizationProgressChartContent: React.FC<
     dotPositionsRef,
     overlapOffsets,
     bestCandidateId,
+    hoveredCandidateId: hoveredTrial?.candidateId,
     pulsingCandidateId,
     selectedTrialId,
     onTrialSelect,
@@ -259,6 +261,25 @@ const OptimizationProgressChartContent: React.FC<
               chartData={chartData}
               isTestSuite={isTestSuite}
             />
+          );
+        })()}
+
+      {hoveredTrial == null &&
+        bestCandidateId != null &&
+        (() => {
+          const best = candidateMap.get(bestCandidateId);
+          if (!best) return null;
+          const bestStatus =
+            chartData.find((d) => d.candidateId === bestCandidateId)?.status ??
+            "passed";
+          return (
+            <div className="pointer-events-none absolute right-2 top-9 z-10">
+              <TrialCard
+                candidate={best}
+                status={bestStatus}
+                isTestSuite={isTestSuite}
+              />
+            </div>
           );
         })()}
 
