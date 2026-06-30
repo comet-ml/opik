@@ -3,7 +3,8 @@ import IdCell from "@/shared/DataTableCells/IdCell";
 import { COLUMN_DATASET_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { Optimization } from "@/types/optimizations";
 import { getFeedbackScore } from "@/lib/feedback-scores";
-import { getOptimizerLabel, getMetricLabel } from "@/lib/optimizations";
+import { getOptimizerLabel } from "@/lib/optimizations";
+import { getMetricLabel } from "@/lib/optimization-config";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import ItemSourceCell, {
   ITEM_SOURCE_LABEL,
@@ -35,6 +36,8 @@ export const COLUMNS_ORDER_KEY = "optimizations-columns-order-v2";
 
 // Default-visible column widths match the Figma runs-list table header
 // (686:35271 inside 562:37189): Name 191, Start time 145, every metric 120.
+const DEFAULT_METRIC_COLUMN_WIDTH = 120;
+
 export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
   {
     id: "name",
@@ -77,7 +80,8 @@ export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
     id: "metric",
     label: "Metric",
     type: COLUMN_TYPE.string,
-    accessorFn: (row) => getMetricLabel(row.objective_name),
+    accessorFn: (row) =>
+      row.objective_name ? getMetricLabel(row.objective_name) : "-",
     size: 160,
   },
   {
@@ -98,7 +102,7 @@ export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
     id: "pass_rate",
     label: "Pass rate",
     type: COLUMN_TYPE.numberDictionary,
-    size: 120,
+    size: DEFAULT_METRIC_COLUMN_WIDTH,
     accessorFn: (row) => row.best_objective_score,
     cell: OptimizationPassRateCell as never,
   },
@@ -106,7 +110,7 @@ export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
     id: "accuracy",
     label: "Accuracy",
     type: COLUMN_TYPE.numberDictionary,
-    size: 120,
+    size: DEFAULT_METRIC_COLUMN_WIDTH,
     accessorFn: (row) =>
       getFeedbackScore(row.feedback_scores ?? [], row.objective_name),
     cell: OptimizationAccuracyCell as never,
@@ -115,7 +119,7 @@ export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
     id: "latency",
     label: "Latency",
     type: COLUMN_TYPE.duration,
-    size: 120,
+    size: DEFAULT_METRIC_COLUMN_WIDTH,
     accessorFn: (row) => row.best_duration,
     cell: OptimizationLatencyCell as never,
   },
@@ -123,7 +127,7 @@ export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
     id: "cost",
     label: "Cost",
     type: COLUMN_TYPE.cost,
-    size: 120,
+    size: DEFAULT_METRIC_COLUMN_WIDTH,
     accessorFn: (row) => row.best_cost,
     cell: OptimizationCostCell as never,
   },
@@ -131,7 +135,7 @@ export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
     id: "opt_cost",
     label: "Opt. cost",
     type: COLUMN_TYPE.cost,
-    size: 120,
+    size: DEFAULT_METRIC_COLUMN_WIDTH,
     accessorFn: (row) => row.total_optimization_cost,
     cell: OptimizationTotalCostCell as never,
   },

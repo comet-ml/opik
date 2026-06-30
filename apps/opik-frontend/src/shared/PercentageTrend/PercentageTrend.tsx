@@ -2,7 +2,7 @@ import React from "react";
 import { MoveRight, TrendingDown, TrendingUp } from "lucide-react";
 import isUndefined from "lodash/isUndefined";
 
-import { cn, formatNumericData } from "@/lib/utils";
+import { formatNumericData } from "@/lib/utils";
 import { Tag, TagProps } from "@/ui/tag";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 
@@ -45,10 +45,11 @@ type PercentageTrendProps = {
   iconOnly?: boolean;
 };
 
-// One trend style across the product (Figma): good = green, bad = red; neutral
-// keeps the gray tag. Driven by the shared brand-color tokens so the trend and
-// run-status colors stay in sync. Applied to the whole tag so the icon and the
-// percentage share the color.
+// Bright trend-icon colors (Figma) for the runs-list metric pill, where the
+// icon sits on a neutral surface: good = green, bad = red, neutral = inherit.
+// NOT applied to PercentageTrend's own Tag below — there the Tag variant's own
+// text token is used so the icon + percentage keep proper contrast on the
+// tinted tag background.
 export const TREND_COLOR_CLASS: Record<
   PercentageTrendVariant,
   string | undefined
@@ -68,7 +69,6 @@ const PercentageTrend: React.FC<PercentageTrendProps> = ({
   if (isUndefined(percentage)) return null;
 
   const { Icon, variant } = getTrendConfig(percentage, trend, precision);
-  const colorClassName = TREND_COLOR_CLASS[variant];
 
   const isFinitePercentage = isFinite(percentage);
 
@@ -77,10 +77,7 @@ const PercentageTrend: React.FC<PercentageTrendProps> = ({
       <Tag
         size="sm"
         variant={variant as TagProps["variant"]}
-        className={cn(
-          "inline-flex items-center justify-center px-1",
-          colorClassName,
-        )}
+        className="inline-flex items-center justify-center px-1"
       >
         <Icon className="size-3" />
       </Tag>
@@ -88,7 +85,7 @@ const PercentageTrend: React.FC<PercentageTrendProps> = ({
       <Tag
         size="md"
         variant={variant as TagProps["variant"]}
-        className={cn("flex-row flex-nowrap gap-1", colorClassName)}
+        className="flex-row flex-nowrap gap-1"
       >
         <div className="flex max-w-full items-center justify-between gap-0.5">
           <Icon className="size-3 shrink-0" />

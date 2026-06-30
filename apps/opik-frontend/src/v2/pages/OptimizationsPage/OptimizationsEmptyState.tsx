@@ -1,22 +1,28 @@
 import React from "react";
-import {
-  BotMessageSquare,
-  SquareDashedMousePointer,
-  FileSliders,
-  ExternalLink,
-  type LucideIcon,
-} from "lucide-react";
+import { ExternalLink, type LucideIcon } from "lucide-react";
 import { Button } from "@/ui/button";
 import { cn } from "@/lib/utils";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import { useTheme } from "@/contexts/theme-provider";
 import { THEME_MODE } from "@/constants/theme";
 import useNavigateToOptimizationStudio from "@/v2/pages-shared/optimizations/useNavigateToOptimizationStudio";
+import {
+  getStudioCardConfigs,
+  type StudioCardId,
+} from "@/v2/pages-shared/optimizations/studioCards";
 import emptyOptStudioLightUrl from "/images/empty-optimization-studio-light.svg";
 import emptyOptStudioDarkUrl from "/images/empty-optimization-studio-dark.svg";
 
 type OptimizationsEmptyStateProps = {
   onOptimizeViaSdkClick: () => void;
+};
+
+// Empty-state icon tint per shared card id (the populated cards style themselves
+// in StudioTemplates).
+const CARD_ICON_CLASS: Record<StudioCardId, string> = {
+  demo: "text-chart-blue",
+  studio: "text-chart-purple",
+  sdk: "text-chart-burgundy",
 };
 
 type ActionCardConfig = {
@@ -57,32 +63,13 @@ const OptimizationsEmptyState: React.FC<OptimizationsEmptyStateProps> = ({
       ? emptyOptStudioDarkUrl
       : emptyOptStudioLightUrl;
 
-  const actionCards: ActionCardConfig[] = [
-    {
-      icon: BotMessageSquare,
-      iconClassName: "text-chart-blue",
-      title: "Run a demo example",
-      description:
-        "Start with a pre-configured optimization example for a support chatbot.",
-      onClick: () => navigateToStudio("opik-chatbot"),
-    },
-    {
-      icon: SquareDashedMousePointer,
-      iconClassName: "text-chart-purple",
-      title: "Use the Optimization Studio",
-      description:
-        "Create a custom optimization workflow to test and improve your prompts.",
-      onClick: () => navigateToStudio(),
-    },
-    {
-      icon: FileSliders,
-      iconClassName: "text-chart-burgundy",
-      title: "Optimize via SDK",
-      description:
-        "Generate starter code for running a custom optimization programmatically.",
-      onClick: onOptimizeViaSdkClick,
-    },
-  ];
+  const actionCards: ActionCardConfig[] = getStudioCardConfigs({
+    navigateToStudio,
+    onOptimizeViaSdkClick,
+  }).map(({ id, ...card }) => ({
+    ...card,
+    iconClassName: CARD_ICON_CLASS[id],
+  }));
 
   return (
     <div className="flex min-h-full flex-1 items-center justify-center gap-16 px-6">

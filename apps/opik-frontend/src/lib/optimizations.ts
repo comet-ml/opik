@@ -24,7 +24,6 @@ import {
   DEFAULT_NUMERICAL_SIMILARITY_METRIC_CONFIGS,
   DEFAULT_CODE_METRIC_CONFIGS,
   OPTIMIZER_OPTIONS,
-  OPTIMIZATION_METRIC_OPTIONS,
 } from "@/constants/optimizations";
 import { DEFAULT_ANTHROPIC_CONFIGS } from "@/constants/llm";
 import {
@@ -50,14 +49,6 @@ export const getBaselineCandidate = (
 
 export const getOptimizerLabel = (type: string): string => {
   return OPTIMIZER_OPTIONS.find((opt) => opt.value === type)?.label || type;
-};
-
-export const getMetricLabel = (objectiveName?: string): string => {
-  if (!objectiveName) return "-";
-  return (
-    OPTIMIZATION_METRIC_OPTIONS.find((opt) => opt.value === objectiveName)
-      ?.label || objectiveName
-  );
 };
 
 export const getBestOptimizationScore = (
