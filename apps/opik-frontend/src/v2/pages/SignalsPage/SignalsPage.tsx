@@ -115,12 +115,13 @@ const SignalsPage: React.FC = () => {
   // count the traces a manual run would analyze (the last-24h trigger window) and
   // nudge only if there are any. Use the same `lastScan` the header shows (which
   // falls back to the latest issue update) so records without last_scan_at still
-  // resolve. The cutoff is bucketed to the hour so it tracks the rolling 24h
-  // window without changing the query key on every render.
+  // resolve. The cutoff is bucketed to the hour (rounded up, so the window never
+  // exceeds 24h and can't count older traces) — this tracks the rolling window
+  // without changing the query key on every render.
   const scanAt = lastScan ? Date.parse(lastScan) : 0;
   const scanIsOld = scanAt > 0 && Date.now() - scanAt > STALE_AFTER_MS;
   const last24hCutoff = new Date(
-    Math.floor(Date.now() / HOUR_MS) * HOUR_MS - DAY_MS,
+    Math.ceil(Date.now() / HOUR_MS) * HOUR_MS - DAY_MS,
   ).toISOString();
   const { data: recentTracesData } = useTracesList(
     {
