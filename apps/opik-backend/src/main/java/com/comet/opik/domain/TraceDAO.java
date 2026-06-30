@@ -2022,7 +2022,7 @@ class TraceDAOImpl implements TraceDAO {
             AND t.project_id IN :project_ids
             <if(last_updated_after)> AND t.last_updated_at > parseDateTime64BestEffort(:last_updated_after, 9) <endif>
             GROUP BY t.project_id
-            SETTINGS log_comment = '<log_comment>'
+            SETTINGS log_comment = '<log_comment>'<if(disable_skip_indexes)>, use_skip_indexes = 0<endif>
             ;
             """;
 
@@ -4215,6 +4215,10 @@ class TraceDAOImpl implements TraceDAO {
 
         if (lastUpdatedAfter != null) {
             template.add("last_updated_after", true);
+        }
+
+        if (!configuration.getTraceQuery().isLastUpdatedTraceAtSkipIndexesEnabled()) {
+            template.add("disable_skip_indexes", true);
         }
 
         var statement = connection.createStatement(template.render())
