@@ -42,6 +42,10 @@ OLLIE_PID_FILE="/tmp/${RESOURCE_PREFIX}-ollie.pid"
 OLLIE_LOG_FILE="/tmp/${RESOURCE_PREFIX}-ollie.log"
 # Sidecar so --stop can find the ollie repo even without OLLIE_REPO_PATH in scope.
 OLLIE_REPO_PATH_FILE="/tmp/${RESOURCE_PREFIX}-ollie.repo"
+COST_API_PID_FILE="/tmp/${RESOURCE_PREFIX}-cost-api.pid"
+COST_API_LOG_FILE="/tmp/${RESOURCE_PREFIX}-cost-api.log"
+# Sidecar so --stop can find the repo even without AI_COST_BACKEND_PATH in scope.
+COST_API_REPO_PATH_FILE="/tmp/${RESOURCE_PREFIX}-cost-api.repo"
 
 # Private ai-spend FE plugin (Opik team only). Auto-detected at
 # $PROJECT_ROOT/../opik-plugin-ai-spend if not set; its src/ is symlinked into
@@ -55,6 +59,15 @@ AI_SPEND_PLUGIN_LINK="$FRONTEND_DIR/src/plugins/ai-spend"
 # with OLLIE_REPO_PATH= (empty string).
 OLLIE_API_PORT="${OLLIE_API_PORT:-9080}"
 OLLIE_CONSOLE_PORT="${OLLIE_CONSOLE_PORT:-3333}"
+
+# ai-cost-backend (cost-api) local dev integration (Opik team only).
+# Auto-detected at $PROJECT_ROOT/../ai-cost-backend if not explicitly set; see
+# the detect block below. Override with AI_COST_BACKEND_PATH=/some/other/path;
+# opt out with AI_COST_BACKEND_PATH= (empty string).
+# Default off a free base + the worktree offset so it never collides with the
+# Opik dev stack (the python-backend already publishes host 8000) and stays
+# unique across worktrees. cost-api's own standalone default is still 8000.
+AI_COST_BACKEND_PORT="${AI_COST_BACKEND_PORT:-$((8400 + PORT_OFFSET))}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -118,6 +131,18 @@ if [ -z "${AI_SPEND_PLUGIN_PATH+set}" ]; then
         log_info "Auto-detected ai-spend plugin checkout at $AI_SPEND_PLUGIN_PATH (export AI_SPEND_PLUGIN_PATH= to opt out)"
     fi
     unset _ai_spend_candidate
+fi
+
+# Auto-detect a sibling ai-cost-backend checkout when AI_COST_BACKEND_PATH is
+# unset entirely (mirrors the conventions above). cost-api serves the AI Spend
+# API the FE plugin calls; setting AI_COST_BACKEND_PATH="" opts out.
+if [ -z "${AI_COST_BACKEND_PATH+set}" ]; then
+    _cost_api_candidate="$(cd "$PROJECT_ROOT/.." 2>/dev/null && pwd)/ai-cost-backend"
+    if [ -d "$_cost_api_candidate" ] && [ -f "$_cost_api_candidate/pyproject.toml" ]; then
+        AI_COST_BACKEND_PATH="$_cost_api_candidate"
+        log_info "Auto-detected ai-cost-backend checkout at $AI_COST_BACKEND_PATH (export AI_COST_BACKEND_PATH= to opt out)"
+    fi
+    unset _cost_api_candidate
 fi
 
 # Function to find JAR files in target directory
@@ -639,6 +664,182 @@ display_ollie_process_status() {
     return 1
 }
 
+# --- ai-cost-backend / cost-api local dev (gated on AI_COST_BACKEND_PATH) -----
+# When AI_COST_BACKEND_PATH points at a sibling ai-cost-backend checkout
+# (auto-detected at $PROJECT_ROOT/../ai-cost-backend or set explicitly),
+# dev-runner runs cost-api (uv) with auth disabled, pointed at the dev-runner's
+# own ClickHouse + MySQL, and wires the FE proxy to it via
+# VITE_AI_COST_BACKEND_PORT. The AI Spend FE plugin always calls ai-cost-backend.
+# Empty / no sibling is a no-op — OSS contributors and devs not testing AI Spend are unaffected.
+
+cost_api_enabled() {
+    [ -n "${AI_COST_BACKEND_PATH:-}" ]
+}
+
+cost_api_running() {
+    [ -f "$COST_API_PID_FILE" ] && kill -0 "$(cat "$COST_API_PID_FILE")" 2>/dev/null
+}
+
+cost_api_healthy() {
+    command -v curl >/dev/null 2>&1 || return 1
+    curl -sf --max-time 2 "http://localhost:${AI_COST_BACKEND_PORT}/cost-api/ping" >/dev/null 2>&1
+}
+
+wait_for_cost_api_ready() {
+    require_command curl
+    local pid="${1:-}"
+    log_info "Waiting for cost-api to be ready on port ${AI_COST_BACKEND_PORT}..."
+    local max_wait=60
+    local count=0
+    while [ $count -lt $max_wait ]; do
+        if cost_api_healthy; then
+            log_success "cost-api is ready and accepting connections"
+            log_info "cost-api: ${GREEN}http://localhost:${AI_COST_BACKEND_PORT}/cost-api/ping${NC}"
+            return 0
+        fi
+        sleep 1
+        count=$((count + 1))
+        if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
+            log_error "cost-api process died while waiting for it to be ready"
+            log_error "Check logs: tail -f $COST_API_LOG_FILE"
+            rm -f "$COST_API_PID_FILE"
+            return 1
+        fi
+    done
+    log_error "cost-api failed to become ready after ${max_wait}s"
+    log_error "Check logs: tail -f $COST_API_LOG_FILE"
+    return 1
+}
+
+start_cost_api_local() {
+    if ! cost_api_enabled; then
+        return 0
+    fi
+    # Optional service — a missing uv must not abort the whole dev-runner.
+    if ! command -v uv >/dev/null 2>&1; then
+        log_warning "uv not found; skipping cost-api startup (AI Spend pages will not load)"
+        return 1
+    fi
+
+    if [ ! -d "$AI_COST_BACKEND_PATH" ]; then
+        log_warning "AI_COST_BACKEND_PATH points to a non-existent directory: $AI_COST_BACKEND_PATH"
+        log_warning "Skipping cost-api startup; AI Spend pages will not load"
+        return 1
+    fi
+    if [ ! -f "$AI_COST_BACKEND_PATH/pyproject.toml" ]; then
+        log_warning "AI_COST_BACKEND_PATH has no pyproject.toml: $AI_COST_BACKEND_PATH"
+        log_warning "Skipping cost-api startup; AI Spend pages will not load"
+        return 1
+    fi
+
+    log_info "Starting cost-api (uv) from $AI_COST_BACKEND_PATH..."
+
+    # Reuse a healthy cost-api started outside this dev-runner. Avoids a port
+    # conflict and lets devs share one instance across opik worktrees.
+    if cost_api_healthy; then
+        log_success "cost-api is already healthy on port ${AI_COST_BACKEND_PORT} — reusing existing instance"
+        # Clear stale state so a later --stop won't kill the reused instance.
+        rm -f "$COST_API_PID_FILE" "$COST_API_REPO_PATH_FILE"
+        return 0
+    fi
+
+    if [ -f "$COST_API_PID_FILE" ]; then
+        local existing_pid
+        existing_pid=$(cat "$COST_API_PID_FILE")
+        if kill -0 "$existing_pid" 2>/dev/null; then
+            log_warning "cost-api is already running (PID: $existing_pid)"
+            return 0
+        fi
+        log_warning "Removing stale cost-api PID file (process $existing_pid no longer exists)"
+        rm -f "$COST_API_PID_FILE"
+    fi
+
+    # No Platform locally, so disable auth (pins to the default workspace). Point at
+    # the dev-runner's own ClickHouse + MySQL (host-published ports, opik/opik).
+    (
+        cd "$AI_COST_BACKEND_PATH" || exit 1
+        AUTH_ENABLED=false \
+        CLICKHOUSE_HOST=localhost CLICKHOUSE_PORT="$CLICKHOUSE_HTTP_PORT" \
+        CLICKHOUSE_DATABASE=opik CLICKHOUSE_USER=opik CLICKHOUSE_PASSWORD=opik \
+        MYSQL_HOST=localhost MYSQL_PORT="$MYSQL_PORT" \
+        MYSQL_DATABASE=opik MYSQL_USER=opik MYSQL_PASSWORD=opik \
+        PORT="$AI_COST_BACKEND_PORT" \
+        nohup uv run uvicorn cost_api.main:app --host 0.0.0.0 --port "$AI_COST_BACKEND_PORT" \
+            > "$COST_API_LOG_FILE" 2>&1 &
+        echo $! > "$COST_API_PID_FILE"
+    )
+    printf '%s\n' "$AI_COST_BACKEND_PATH" > "$COST_API_REPO_PATH_FILE"
+
+    local cost_api_pid
+    cost_api_pid=$(cat "$COST_API_PID_FILE")
+    log_debug "cost-api process started with PID: $cost_api_pid"
+
+    sleep 2
+    if ! kill -0 "$cost_api_pid" 2>/dev/null; then
+        log_warning "cost-api failed to start. Check logs: cat $COST_API_LOG_FILE"
+        log_warning "Continuing without it; AI Spend pages will not load"
+        rm -f "$COST_API_PID_FILE" "$COST_API_REPO_PATH_FILE"
+        return 1
+    fi
+
+    log_success "cost-api process started (PID: $cost_api_pid)"
+    log_info "cost-api logs: tail -f $COST_API_LOG_FILE"
+    if ! wait_for_cost_api_ready "$cost_api_pid"; then
+        log_warning "cost-api did not become ready in time; continuing without it"
+        stop_cost_api_local >/dev/null 2>&1 || true
+        return 1
+    fi
+    return 0
+}
+
+stop_cost_api_local() {
+    if [ ! -f "$COST_API_PID_FILE" ] && [ ! -f "$COST_API_REPO_PATH_FILE" ]; then
+        # Nothing to do — quiet skip so OSS / non-cost-api runs don't see noise.
+        return 0
+    fi
+
+    if [ -f "$COST_API_PID_FILE" ]; then
+        local cost_api_pid
+        cost_api_pid=$(cat "$COST_API_PID_FILE")
+        if kill -0 "$cost_api_pid" 2>/dev/null; then
+            log_info "Stopping cost-api (PID: $cost_api_pid)..."
+            # `uv run` spawns the uvicorn worker as a child; snapshot the
+            # descendant tree before killing the parent so we can chase it down.
+            local descendants
+            descendants=$(get_descendants "$cost_api_pid")
+            kill -TERM "$cost_api_pid" 2>/dev/null || true
+            for p in $descendants; do kill -TERM "$p" 2>/dev/null || true; done
+            for _ in {1..10}; do
+                kill -0 "$cost_api_pid" 2>/dev/null || break
+                sleep 1
+            done
+            if kill -0 "$cost_api_pid" 2>/dev/null; then
+                log_warning "Force killing cost-api..."
+                kill -9 "$cost_api_pid" 2>/dev/null || true
+            fi
+            for p in $descendants; do kill -9 "$p" 2>/dev/null || true; done
+        else
+            log_warning "cost-api PID file exists but process is not running (cleaning up stale PID file)"
+        fi
+    fi
+
+    rm -f "$COST_API_PID_FILE" "$COST_API_REPO_PATH_FILE"
+    log_success "cost-api stopped"
+}
+
+display_cost_api_process_status() {
+    if [ -f "$COST_API_PID_FILE" ] && kill -0 "$(cat "$COST_API_PID_FILE")" 2>/dev/null; then
+        echo -e "cost-api: ${GREEN}RUNNING${NC} (PID: $(cat "$COST_API_PID_FILE"))"
+        return 0
+    fi
+    if cost_api_healthy; then
+        echo -e "cost-api: ${GREEN}RUNNING${NC} (reused external instance on port ${AI_COST_BACKEND_PORT})"
+        return 0
+    fi
+    echo -e "cost-api: ${RED}STOPPED${NC}"
+    return 1
+}
+
 # Function to start backend
 start_backend() {
     require_command java
@@ -808,6 +1009,15 @@ start_frontend() {
     if [ -L "$AI_SPEND_PLUGIN_LINK" ]; then
         export VITE_FE_PLUGINS="development,ai-spend"
         log_info "  VITE_FE_PLUGINS=$VITE_FE_PLUGINS"
+    fi
+
+    # Start the local cost-api (if a sibling checkout exists) and point the FE's
+    # ai-spend proxy at it. The plugin always targets cost-api; if it isn't
+    # running, vite.config falls back to its default port.
+    start_cost_api_local || log_warning "cost-api startup failed; AI Spend pages will not load"
+    if cost_api_enabled || cost_api_healthy; then
+        export VITE_AI_COST_BACKEND_PORT="${AI_COST_BACKEND_PORT}"
+        log_info "  VITE_AI_COST_BACKEND_PORT=$VITE_AI_COST_BACKEND_PORT"
     fi
 
     log_debug "Starting frontend with: npm run start"
@@ -1058,6 +1268,9 @@ verify_services() {
     if ollie_enabled || [ -f "$OLLIE_PID_FILE" ]; then
         display_ollie_process_status || true
     fi
+    if cost_api_enabled || [ -f "$COST_API_PID_FILE" ]; then
+        display_cost_api_process_status || true
+    fi
 
     # Show access information if all services are running
     if [ "$docker_services_running" = true ] && [ "$backend_running" = true ] && [ "$frontend_running" = true ]; then
@@ -1070,6 +1283,9 @@ verify_services() {
     echo "  Frontend Process: tail -f $FRONTEND_LOG_FILE"
     if ollie_enabled || [ -f "$OLLIE_LOG_FILE" ]; then
         echo "  Ollie Process:    tail -f $OLLIE_LOG_FILE"
+    fi
+    if cost_api_enabled || [ -f "$COST_API_LOG_FILE" ]; then
+        echo "  cost-api Process: tail -f $COST_API_LOG_FILE"
     fi
 }
 
@@ -1136,6 +1352,7 @@ stop_services() {
     stop_frontend
     log_info "Step 2/4: Stopping ollie-assist (if running)..."
     stop_ollie_local
+    stop_cost_api_local
     log_info "Step 3/4: Stopping backend..."
     stop_backend
     log_info "Step 4/4: Stopping Docker services..."
@@ -1162,6 +1379,7 @@ restart_services() {
     stop_frontend
     log_info "Step 2/12: Stopping ollie-assist (if running)..."
     stop_ollie_local
+    stop_cost_api_local
     log_info "Step 3/12: Stopping backend process..."
     stop_backend
     log_info "Step 4/12: Stopping Docker services..."
@@ -1344,6 +1562,12 @@ show_usage() {
     echo "                          Set to empty string to opt out: OLLIE_REPO_PATH="
     echo "  OLLIE_API_PORT=<n>    - Override ollie healthcheck/API port (default: 9080)"
     echo "  OLLIE_CONSOLE_PORT=<n>- Override ollie console port (default: 3333)"
+    echo "  AI_COST_BACKEND_PATH=<p> - Opik-team only: path to a local ai-cost-backend"
+    echo "                          (cost-api) checkout. Defaults to <opik-root>/../ai-cost-backend"
+    echo "                          if it exists and contains a pyproject.toml. dev-runner runs"
+    echo "                          cost-api (uv, auth disabled) against the dev ClickHouse+MySQL"
+    echo "                          and serves the AI Spend pages. Opt out: AI_COST_BACKEND_PATH="
+    echo "  AI_COST_BACKEND_PORT=<n> - Override cost-api port (default: 8400 + worktree offset)"
 }
 
 # Function to handle unknown options
