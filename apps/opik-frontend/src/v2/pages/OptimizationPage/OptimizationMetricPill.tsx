@@ -1,5 +1,5 @@
 import React from "react";
-import { Gauge, Maximize2 } from "lucide-react";
+import { ChartColumnBig, Maximize2 } from "lucide-react";
 
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/ui/hover-card";
 import { Tag } from "@/ui/tag";
@@ -26,7 +26,7 @@ const OptimizationMetricPill: React.FC<OptimizationMetricPillProps> = ({
           className="cursor-pointer hover:bg-muted"
         >
           <span className="flex items-center gap-1.5">
-            <Gauge className="size-3.5 shrink-0 text-muted-slate" />
+            <ChartColumnBig className="size-3.5 shrink-0 text-muted-slate" />
             <span className="truncate">{metric.label}</span>
             <Maximize2 className="size-3 shrink-0 text-muted-slate" />
           </span>
