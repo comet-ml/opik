@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Navigate, useParams } from "@tanstack/react-router";
+import { Navigate, useNavigate, useParams } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, BookOpenCheck, Radar, Settings2 } from "lucide-react";
+import { BookOpenCheck, Radar, Settings2 } from "lucide-react";
 import { useActiveProjectId } from "@/store/AppStore";
 import usePluginsStore from "@/store/PluginsStore";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
@@ -11,6 +11,7 @@ import { AGENT_INSIGHTS_ISSUES_KEY, AGENT_INSIGHTS_JOB_KEY } from "@/api/api";
 import { formatDate } from "@/lib/date";
 import PageBodyScrollContainer from "@/v2/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import BackButton from "@/shared/BackButton/BackButton";
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 import {
@@ -19,11 +20,15 @@ import {
   AgentInsightsIssue,
 } from "@/types/signals";
 import useAgentInsightsIssuesList from "@/api/signals/useAgentInsightsIssuesList";
+import useTracesList from "@/api/traces/useTracesList";
+import { COLUMN_TYPE } from "@/types/shared";
 import useAgentInsightsJob from "@/api/signals/useAgentInsightsJob";
 import useTriggerAgentInsightsJobMutation from "@/api/signals/useTriggerAgentInsightsJobMutation";
 import useUpdateAgentInsightsJobMutation from "@/api/signals/useUpdateAgentInsightsJobMutation";
-import useDiagnosticsRunState from "@/v2/pages/SignalsPage/useDiagnosticsRunState";
-import useDiagnosticsSeen from "@/v2/pages/SignalsPage/useDiagnosticsSeen";
+import useDiagnosticsRunState from "@/hooks/useDiagnosticsRunState";
+import useDiagnosticsSeen from "@/hooks/useDiagnosticsSeen";
+import { getRunFailureCopy } from "@/v2/pages/SignalsPage/runFailureCopy";
+import { useToast } from "@/ui/use-toast";
 import SignalsStatsCards from "@/v2/pages/SignalsPage/SignalsStatsCards";
 import IssuesTab from "@/v2/pages/SignalsPage/IssuesTab/IssuesTab";
 import DiagnosticsEmptyState from "@/v2/pages/SignalsPage/DiagnosticsEmptyState";
@@ -31,6 +36,9 @@ import DiagnosticsSettingsDialog from "@/v2/pages/SignalsPage/DiagnosticsSetting
 import SignalsPageSkeleton from "@/v2/pages/SignalsPage/SignalsPageSkeleton";
 
 const RUN_POLL_INTERVAL_MS = 8000;
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+const STALE_AFTER_MS = 3 * DAY_MS;
 
 const maxUpdatedAt = (issues: AgentInsightsIssue[]): number =>
   issues.reduce((max, issue) => {
@@ -38,11 +46,24 @@ const maxUpdatedAt = (issues: AgentInsightsIssue[]): number =>
     return Number.isFinite(t) && t > max ? t : max;
   }, 0);
 
-const SignalsPage: React.FC = () => {
+const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
+  showResolved = false,
+}) => {
   const projectId = useActiveProjectId()!;
+  const navigate = useNavigate();
   const { workspaceName } = useParams({ strict: false }) as {
     workspaceName: string;
   };
+  const goToOpenIssues = () =>
+    navigate({
+      to: "/$workspaceName/projects/$projectId/diagnostics",
+      params: { workspaceName, projectId },
+    });
+  const goToResolved = () =>
+    navigate({
+      to: "/$workspaceName/projects/$projectId/diagnostics/resolved",
+      params: { workspaceName, projectId },
+    });
   const queryClient = useQueryClient();
 
   const AssistantSidebar = usePluginsStore((state) => state.AssistantSidebar);
@@ -88,13 +109,49 @@ const SignalsPage: React.FC = () => {
       ? new Date(latestIssueUpdate).toISOString()
       : undefined);
 
+  const { toast } = useToast();
   const triggerMutation = useTriggerAgentInsightsJobMutation();
   const updateJobMutation = useUpdateAgentInsightsJobMutation();
-  const { isRunning, baseline, startRun, endRun } =
+  const { isRunning, baseline, failBaseline, startRun, endRun } =
     useDiagnosticsRunState(projectId);
   const { markSeen } = useDiagnosticsSeen(projectId);
 
-  const [showResolved, setShowResolved] = useState(false);
+  // Derive failure from the job (BE sets it, clears on next success) so the banner
+  // is correct across reloads/tabs; the spinner takes precedence while running.
+  const failedReason =
+    !isRunning && job?.last_failed_at ? job.last_failure_reason : undefined;
+  const failedDetail =
+    !isRunning && job?.last_failed_at ? job.last_failure_detail : undefined;
+
+  // Stale nudge: scan older than the threshold + traces in the last 24h. Uses the
+  // displayed `lastScan` fallback, and an hour-bucketed cutoff rounded up (window
+  // stays <=24h) so the query key doesn't churn each render.
+  const scanAt = lastScan ? Date.parse(lastScan) : 0;
+  const scanIsOld = scanAt > 0 && Date.now() - scanAt > STALE_AFTER_MS;
+  const last24hCutoff = new Date(
+    Math.ceil(Date.now() / HOUR_MS) * HOUR_MS - DAY_MS,
+  ).toISOString();
+  const { data: recentTracesData } = useTracesList(
+    {
+      projectId,
+      page: 1,
+      size: 1,
+      filters: [
+        {
+          id: "stale-recent-traces",
+          field: "last_updated_at",
+          type: COLUMN_TYPE.time,
+          operator: ">",
+          value: last24hCutoff,
+        },
+      ],
+    },
+    { enabled: scanIsOld && !isRunning },
+  );
+  const recentTraceCount = recentTracesData?.total ?? 0;
+  const isStale = scanIsOld && !isRunning && recentTraceCount > 0;
+  const staleDays = scanAt ? Math.floor((Date.now() - scanAt) / DAY_MS) : 0;
+
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
@@ -117,6 +174,19 @@ const SignalsPage: React.FC = () => {
     }
   }, [issuesData, isRunning, baseline, endRun]);
 
+  // last_failed_at past the trigger baseline = this run failed: end it and toast once.
+  useEffect(() => {
+    if (!isRunning) return;
+    const failedAt = job?.last_failed_at ? Date.parse(job.last_failed_at) : 0;
+    if (failedAt > failBaseline) {
+      endRun();
+      const { title, description } = getRunFailureCopy(
+        job?.last_failure_reason,
+      );
+      toast({ title, description, variant: "destructive" });
+    }
+  }, [job, isRunning, failBaseline, endRun, toast]);
+
   const hasData = (issuesData?.content?.length ?? 0) > 0;
   const isActive = isJobEnabled || isRunning;
 
@@ -132,9 +202,12 @@ const SignalsPage: React.FC = () => {
 
   const handleRunDiagnostic = () => {
     const baselineNow = maxUpdatedAt(issuesData?.content ?? []);
+    const failBaselineNow = job?.last_failed_at
+      ? Date.parse(job.last_failed_at)
+      : 0;
     triggerMutation.mutate(
       { projectId },
-      { onSuccess: () => startRun(baselineNow) },
+      { onSuccess: () => startRun(baselineNow, failBaselineNow) },
     );
   };
 
@@ -150,7 +223,7 @@ const SignalsPage: React.FC = () => {
       return <SignalsPageSkeleton />;
     }
 
-    if (!isRunning && !isJobEnabled && !hasData) {
+    if (!isRunning && !failedReason && !isJobEnabled && !hasData) {
       return (
         <DiagnosticsEmptyState
           onRun={handleRunDiagnostic}
@@ -206,7 +279,7 @@ const SignalsPage: React.FC = () => {
                 <Button
                   variant="outline"
                   size="xs"
-                  onClick={() => setShowResolved(true)}
+                  onClick={goToResolved}
                   aria-label="Resolved issues"
                 >
                   <BookOpenCheck className="size-3.5 lg:mr-1.5" />
@@ -221,9 +294,14 @@ const SignalsPage: React.FC = () => {
           projectId={projectId}
           showResolved={showResolved}
           isRunning={isRunning}
+          failedReason={failedReason}
+          failedDetail={failedDetail}
+          isStale={isStale}
+          staleTraceCount={recentTraceCount}
+          staleDays={staleDays}
           canConfigure={canConfigure}
           onRunDiagnostic={canConfigure ? handleRunDiagnostic : undefined}
-          onShowOpenIssues={() => setShowResolved(false)}
+          onShowOpenIssues={goToOpenIssues}
         />
       </div>
     );
@@ -233,17 +311,15 @@ const SignalsPage: React.FC = () => {
     <PageBodyScrollContainer className="flex flex-col overflow-hidden">
       <div className="mb-4 mt-6 flex shrink-0 items-center justify-between px-6">
         {showResolved ? (
-          <Button
-            variant="ghost"
-            onClick={() => setShowResolved(false)}
-            aria-label="Back to diagnostics"
-            className="h-auto min-w-0 gap-2 px-0 text-foreground-secondary"
-          >
-            <ArrowLeft className="size-4 shrink-0" />
-            <h1 className="truncate break-words text-base font-medium tracking-normal">
+          <div className="flex min-w-0 items-center gap-2">
+            <BackButton
+              to="/$workspaceName/projects/$projectId/diagnostics"
+              tooltip="Back to diagnostics"
+            />
+            <h1 className="truncate break-words text-base font-medium tracking-normal text-foreground-secondary">
               Resolved issues
             </h1>
-          </Button>
+          </div>
         ) : (
           <h1 className="truncate break-words text-base font-medium tracking-normal text-foreground-secondary">
             Diagnostics
