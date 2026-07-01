@@ -610,6 +610,15 @@ public class SpanDAO {
             ;
             """;
 
+    private static final String SELECT_PROJECT_IDS_BY_SPAN_IDS = """
+            SELECT DISTINCT id, project_id
+            FROM spans
+            WHERE workspace_id = :workspace_id
+            AND id IN :ids
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
     private static final String SELECT_BY_IDS = """
             WITH feedback_scores_deduped AS (
                 SELECT workspace_id,
@@ -2154,6 +2163,31 @@ public class SpanDAO {
      * Get target project IDs from spans for the given span IDs.
      * This is executed as a separate query to reduce spans table scans in the main query.
      */
+    /**
+     * Resolves span -> project_id for the given spans, keyed off {@code workspaceId} explicitly rather than the
+     * reactive request context, so it can run from the Cost Intelligence subscriber (an async event listener with
+     * no request scope). Spans missing from ClickHouse are simply absent from the returned map.
+     */
+    @WithSpan
+    public Mono<Map<UUID, UUID>> getProjectIdsBySpanIds(@NonNull Set<UUID> spanIds, @NonNull String workspaceId) {
+        if (spanIds.isEmpty()) {
+            return Mono.just(Map.of());
+        }
+        log.info("Getting project_ids for '{}' span_ids", spanIds.size());
+        return Mono.from(connectionFactory.create())
+                .flatMap(connection -> {
+                    var template = getSTWithLogComment(SELECT_PROJECT_IDS_BY_SPAN_IDS, "get_project_ids_by_span_ids",
+                            workspaceId, "", spanIds.size());
+                    var statement = connection.createStatement(template.render())
+                            .bind("ids", spanIds.toArray(UUID[]::new))
+                            .bind("workspace_id", workspaceId);
+                    return Flux.from(statement.execute())
+                            .flatMap(result -> result.map((row, metadata) -> Map.entry(
+                                    row.get("id", UUID.class), row.get("project_id", UUID.class))))
+                            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                });
+    }
+
     private Mono<List<UUID>> getTargetProjectIdsForSpans(Set<UUID> ids) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);

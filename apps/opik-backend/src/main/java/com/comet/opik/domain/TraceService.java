@@ -334,14 +334,10 @@ class TraceServiceImpl implements TraceService {
                                                 ctx.get(RequestContext.USER_NAME),
                                                 traceUpdate,
                                                 ctx.getOrDefault(RequestContext.WORKSPACE_NAME, ""))))
-                                        .doOnSuccess(__ -> {
-                                            if (CipxMetadata.hasIdentity(traceUpdate.metadata())) {
-                                                eventBus.post(new TraceCostIntelligenceChanged(
-                                                        Map.of(id, project.id()), traceUpdate,
-                                                        ctx.get(RequestContext.WORKSPACE_ID),
-                                                        ctx.get(RequestContext.USER_NAME)));
-                                            }
-                                        }))))
+                                        .doOnSuccess(__ -> eventBus.post(new TraceCostIntelligenceChanged(
+                                                Map.of(id, project.id()), traceUpdate,
+                                                ctx.get(RequestContext.WORKSPACE_ID),
+                                                ctx.get(RequestContext.USER_NAME)))))))
                         .then()));
     }
 
@@ -364,10 +360,8 @@ class TraceServiceImpl implements TraceService {
                                     log.info("Completed batch update for '{}' traces", batchUpdate.ids().size());
                                     eventBus.post(new TracesUpdated(projectIds, batchUpdate.ids(), workspaceId,
                                             userName, batchUpdate.update(), workspaceName));
-                                    if (CipxMetadata.hasIdentity(batchUpdate.update().metadata())) {
-                                        eventBus.post(new TraceCostIntelligenceChanged(traceToProjectMap,
-                                                batchUpdate.update(), workspaceId, userName));
-                                    }
+                                    eventBus.post(new TraceCostIntelligenceChanged(traceToProjectMap,
+                                            batchUpdate.update(), workspaceId, userName));
                                 });
                     });
         });

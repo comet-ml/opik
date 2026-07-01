@@ -11,6 +11,7 @@ import com.comet.opik.domain.CipxSpendDAO;
 import com.comet.opik.domain.CipxSpendDAO.SpanRow;
 import com.comet.opik.domain.CipxTraceIdentityDAO;
 import com.comet.opik.domain.CipxTraceIdentityDAO.TraceIdentityRow;
+import com.comet.opik.domain.SpanDAO;
 import com.comet.opik.domain.retention.RetentionUtils;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
@@ -33,11 +34,14 @@ public class CostIntelligenceIngestionListener {
 
     private final CipxSpendDAO cipxSpendDAO;
     private final CipxTraceIdentityDAO cipxTraceIdentityDAO;
+    private final SpanDAO spanDAO;
 
     @Inject
-    public CostIntelligenceIngestionListener(CipxSpendDAO cipxSpendDAO, CipxTraceIdentityDAO cipxTraceIdentityDAO) {
+    public CostIntelligenceIngestionListener(CipxSpendDAO cipxSpendDAO, CipxTraceIdentityDAO cipxTraceIdentityDAO,
+            SpanDAO spanDAO) {
         this.cipxSpendDAO = cipxSpendDAO;
         this.cipxTraceIdentityDAO = cipxTraceIdentityDAO;
+        this.spanDAO = spanDAO;
     }
 
     @Subscribe
@@ -56,11 +60,20 @@ public class CostIntelligenceIngestionListener {
         if (!CipxMetadata.hasSpendCall(update.metadata())) {
             return;
         }
-        List<SpanRow> rows = event.spanProjectIds().entrySet().stream()
-                .map(entry -> SpanRow.from(entry.getKey(), update.traceId(), entry.getValue(), update.metadata(),
-                        RetentionUtils.extractInstant(entry.getKey())))
-                .toList();
-        upsertSpans(rows, event.workspaceId(), event.userName());
+        // project_id is part of the cipx_spend merge key but the span update doesn't carry it (batch updates
+        // match by id + workspace only), so resolve span -> project from the persisted spans off the request path.
+        spanDAO.getProjectIdsBySpanIds(event.spanIds(), event.workspaceId())
+                .subscribe(
+                        projectIds -> {
+                            List<SpanRow> rows = event.spanIds().stream()
+                                    .filter(projectIds::containsKey)
+                                    .map(spanId -> SpanRow.from(spanId, update.traceId(), projectIds.get(spanId),
+                                            update.metadata(), RetentionUtils.extractInstant(spanId)))
+                                    .toList();
+                            upsertSpans(rows, event.workspaceId(), event.userName());
+                        },
+                        error -> log.error("Failed to resolve project ids for cipx spend in workspace: '{}'",
+                                event.workspaceId(), error));
     }
 
     @Subscribe

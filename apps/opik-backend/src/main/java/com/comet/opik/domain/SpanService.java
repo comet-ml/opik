@@ -223,12 +223,8 @@ public class SpanService {
                                                     Mono.defer(() -> insertUpdate(project, spanUpdate, id)))
                                             .onErrorResume(this::handleSpanDBError)
                                             .then()))
-                                    .doOnSuccess(__ -> {
-                                        if (CipxMetadata.hasSpendCall(spanUpdate.metadata())) {
-                                            eventBus.post(new SpanCostIntelligenceChanged(Map.of(id, project.id()),
-                                                    spanUpdate, workspaceId, userName));
-                                        }
-                                    })))
+                                    .doOnSuccess(__ -> eventBus.post(new SpanCostIntelligenceChanged(
+                                            Set.of(id), spanUpdate, workspaceId, userName)))))
                     .doOnSuccess(__ -> eventBus.post(
                             new SpansUpdated(Set.of(spanUpdate.traceId()), workspaceId, userName)));
         });
@@ -249,12 +245,8 @@ public class SpanService {
                         log.info("Completed batch update for '{}' spans", batchUpdate.ids().size());
                         SpanUpdate update = batchUpdate.update();
                         eventBus.post(new SpansUpdated(Set.of(update.traceId()), workspaceId, userName));
-                        if (CipxMetadata.hasSpendCall(update.metadata()) && update.projectId() != null) {
-                            Map<UUID, UUID> spanProjectIds = batchUpdate.ids().stream()
-                                    .collect(Collectors.toMap(Function.identity(), spanId -> update.projectId()));
-                            eventBus.post(new SpanCostIntelligenceChanged(spanProjectIds, update, workspaceId,
-                                    userName));
-                        }
+                        eventBus.post(new SpanCostIntelligenceChanged(batchUpdate.ids(), update, workspaceId,
+                                userName));
                     });
         });
     }

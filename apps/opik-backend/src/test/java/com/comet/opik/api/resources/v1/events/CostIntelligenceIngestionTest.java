@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.Span;
+import com.comet.opik.api.SpanBatchUpdate;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceUpdate;
@@ -41,6 +42,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -205,6 +207,60 @@ class CostIntelligenceIngestionTest {
             });
 
             assertThat(countCipxSpend(spanId, ws.workspaceId())).isEqualTo(1L);
+        }
+
+        @Test
+        @DisplayName("cipx appearing on a batch span update lands a row for every span, project resolved server-side")
+        void spanCipxBatchUpdateLandsForEverySpan() {
+            var ws = newWorkspace();
+            String projectName = "cipx-" + UUID.randomUUID();
+
+            // Three plain spans sharing a trace; none lands on create (no cipx call).
+            var span1 = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .metadata(NON_CIPX_METADATA)
+                    .build();
+            UUID traceId = span1.traceId();
+            var span2 = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(traceId)
+                    .metadata(NON_CIPX_METADATA)
+                    .build();
+            var span3 = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(traceId)
+                    .metadata(NON_CIPX_METADATA)
+                    .build();
+            spanResourceClient.batchCreateSpans(List.of(span1, span2, span3), ws.apiKey(), ws.workspaceName());
+
+            // A batch update carries no project id (bulkUpdate matches by id + workspace only), so the listener
+            // must resolve each span's project from the persisted rows — otherwise nothing would land.
+            var update = SpanUpdate.builder()
+                    .traceId(traceId)
+                    .metadata(spanCipxMetadata("claude-haiku-4-5", 150, 10, 2, 60))
+                    .build();
+            var batch = SpanBatchUpdate.builder()
+                    .ids(Set.of(span1.id(), span2.id(), span3.id()))
+                    .update(update)
+                    .build();
+            spanResourceClient.batchUpdateSpans(batch, ws.apiKey(), ws.workspaceName());
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                for (var span : List.of(span1, span2, span3)) {
+                    var row = getCipxSpend(span.id(), ws.workspaceId());
+                    assertThat(row).as("cipx_spend row for span '%s'", span.id()).isPresent();
+                    assertThat(row.get().model()).isEqualTo("claude-haiku-4-5");
+                    assertThat(row.get().uInput()).isEqualTo(150L);
+                    assertThat(row.get().uCacheRead()).isEqualTo(10L);
+                    assertThat(row.get().uCacheCreation()).isEqualTo(2L);
+                    assertThat(row.get().uOutput()).isEqualTo(60L);
+                    // project_id was not on the update; it was resolved from the persisted span.
+                    assertThat(row.get().projectId()).isNotBlank();
+                    // identity_context block dropped in Java; the two real blocks remain, in order.
+                    assertThat(row.get().blockCount()).isEqualTo(2L);
+                    assertThat(row.get().blockCategories()).isEqualTo("user_prompt,tool_call");
+                }
+            });
         }
     }
 
