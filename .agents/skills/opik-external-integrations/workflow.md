@@ -18,6 +18,8 @@ Ask the user, in plain language, and wait for answers. Do **not** propose a targ
 5. **Host conventions** — link to its `CONTRIBUTING`/`AGENTS.md`; its test framework; its docs location.
 6. **Verify + credentials** — how to run the host locally to exercise the integration, and whether the needed API keys (provider + Opik) are available.
 
+Before acquiring, check **[references.md](references.md)** — known external integrations (standalone `opik-*` plugins + the cookiecutter template, and third-party hosts like LiteLLM / Dify / n8n / Flowise / Langflow) with their repo and Opik-docs URLs. If the target is listed or resembles one, start from those links and pick the closest as the clone source; a brand-new standalone package starts from `opik-project-template`.
+
 Then **acquire the repo**: clone/checkout into the scratchpad (or add it to the session if supported). Confirm it builds/installs before changing anything. Restate the answers in one line and proceed.
 
 ## Phase 1 — Investigate the host

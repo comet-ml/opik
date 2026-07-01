@@ -21,6 +21,8 @@ This skill builds Opik integrations whose code **does not live in this repositor
 
 Collect everything up front, free-form — do not propose a target. See [workflow.md](workflow.md) Phase 0 for the full list. The essentials: **which external repo/package** (URL + links), **integration shape** (standalone package vs. upstream contribution vs. plugin), **host language/stack**, **where the Opik code goes**, **how the host tests and documents**, and **how to run it to verify**.
 
+Once you know the target, check **[references.md](references.md)** — a curated list of known external integrations (standalone `opik-*` plugins incl. the cookiecutter template, and third-party host repos like LiteLLM / Dify / n8n) with their repo and Opik-docs URLs. If the target is listed or resembles one, start from its links and clone the closest sibling instead of researching blind.
+
 ## The workflow
 
 Multi-step and autonomous by default (front-load preparation, run through, self-verify, end with a report); ask for the interactive variant to approve the design first. Full playbook in **[workflow.md](workflow.md)**. At a glance:
