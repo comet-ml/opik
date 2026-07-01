@@ -10,10 +10,11 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Fired on span update so the Cost Intelligence subscriber can refresh the cipx_spend table. Carries the
- * affected span ids plus the SpanUpdate applied to all of them. project_id is part of the cipx_spend merge
- * key but neither {@code spanUpdate.projectId()} (nullable) nor the batch update path carries it, so the
- * subscriber resolves span -> project from the persisted spans, off the request path. Span creation reuses
+ * Fired on span update so the Cost Intelligence subscriber can refresh the cipx_spends table. Carries the
+ * affected span ids plus the SpanUpdate applied to all of them. project_id and trace_id are part of the
+ * cipx_spends merge key but the update carries neither per span (a batch reuses one SpanUpdate for spans
+ * that may span different traces), so the subscriber resolves span -> (project, trace) from the persisted
+ * spans, off the request path. Span creation reuses
  * {@link SpansCreated}. Posted on every span update; the subscriber filters to cipx-call spans so the
  * metadata parse stays off the ingestion flow.
  */

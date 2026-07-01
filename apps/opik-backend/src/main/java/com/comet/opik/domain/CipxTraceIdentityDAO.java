@@ -9,6 +9,7 @@ import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,8 +25,8 @@ import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolder;
 
 /**
- * Writes the cipx_trace_identity table from cipx traces. Triggered asynchronously off trace
- * create/update events; never reads the traces or cipx_trace_identity tables. Identity fields are
+ * Writes the cipx_trace_identities table from cipx traces. Triggered asynchronously off trace
+ * create/update events; never reads the traces or cipx_trace_identities tables. Identity fields are
  * parsed from metadata in Java ({@link TraceIdentityRow#from}). Plain INSERT relying on
  * ReplacingMergeTree to merge by sorting key (see {@link CipxSpendDAO}); last_updated_at is left to
  * the column DEFAULT now64(6). project_id must be non-empty, so blank rows are dropped.
@@ -35,29 +36,31 @@ import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolde
 @Slf4j
 public class CipxTraceIdentityDAO {
 
-    /** A cipx_trace_identity row constructed from a trace's metadata. */
+    /** A cipx_trace_identities row constructed from a trace's metadata. */
+    @Builder(toBuilder = true)
     public record TraceIdentityRow(
-            String traceId,
-            String projectId,
-            Instant startTime,
-            String userUuid,
-            String userEmail,
-            String userDisplayName,
-            String repository,
+            @NonNull String traceId,
+            @NonNull String projectId,
+            @NonNull Instant startTime,
+            @NonNull String userUuid,
+            @NonNull String userEmail,
+            @NonNull String userDisplayName,
+            @NonNull String repository,
             int schemaVersion) {
 
         public static TraceIdentityRow from(UUID traceId, UUID projectId, JsonNode metadata, Instant startTime) {
             JsonNode session = metadata.path("cipx").path("session");
             JsonNode identity = session.path("identity");
-            return new TraceIdentityRow(
-                    traceId.toString(),
-                    projectId != null ? projectId.toString() : "",
-                    startTime,
-                    identity.path("user_uuid").asText(""),
-                    identity.path("email").asText(""),
-                    identity.path("display_name").asText(""),
-                    session.path("repository").path("remote").asText(""),
-                    session.path("schema_version").asInt(0));
+            return TraceIdentityRow.builder()
+                    .traceId(traceId.toString())
+                    .projectId(projectId != null ? projectId.toString() : "")
+                    .startTime(startTime)
+                    .userUuid(identity.path("user_uuid").asText(""))
+                    .userEmail(identity.path("email").asText(""))
+                    .userDisplayName(identity.path("display_name").asText(""))
+                    .repository(session.path("repository").path("remote").asText(""))
+                    .schemaVersion(session.path("schema_version").asInt(0))
+                    .build();
         }
     }
 
@@ -65,7 +68,7 @@ public class CipxTraceIdentityDAO {
     // start on create, the UUIDv7-embedded time on update). The identity/repository/schema_version
     // projection is the initial extraction; the exact metadata->column mapping is finalized later.
     private static final String INSERT = """
-            INSERT INTO cipx_trace_identity
+            INSERT INTO cipx_trace_identities
                 (workspace_id, project_id, trace_id, start_time, user_uuid,
                  user_email, user_display_name, repository, schema_version)
             SETTINGS log_comment = '<log_comment>'
@@ -103,7 +106,7 @@ public class CipxTraceIdentityDAO {
     private Publisher<? extends Result> insert(List<TraceIdentityRow> rows, String workspaceId, String userName,
             Connection connection) {
         List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(rows.size());
-        ST template = getSTWithLogComment(INSERT, "insert_cipx_trace_identity", workspaceId, userName, rows.size());
+        ST template = getSTWithLogComment(INSERT, "insert_cipx_trace_identities", workspaceId, userName, rows.size());
         template.add("items", queryItems);
         Statement statement = connection.createStatement(template.render());
 

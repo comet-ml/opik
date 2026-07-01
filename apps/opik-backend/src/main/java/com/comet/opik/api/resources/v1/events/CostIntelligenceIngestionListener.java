@@ -21,7 +21,7 @@ import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import java.util.List;
 
 /**
- * Keeps the cipx_spend / cipx_trace_identity tables in sync as spans and traces are written. Create
+ * Keeps the cipx_spends / cipx_trace_identities tables in sync as spans and traces are written. Create
  * reuses the existing SpansCreated/TracesCreated (which carry the full entities); update consumes the
  * dedicated *CostIntelligenceChanged events (the *Updated events carry neither ids nor metadata). cipx
  * spans/traces are filtered out here in Java before any DB work, and the cipx fields are constructed
@@ -60,19 +60,23 @@ public class CostIntelligenceIngestionListener {
         if (!CipxMetadata.hasSpendCall(update.metadata())) {
             return;
         }
-        // project_id is part of the cipx_spend merge key but the span update doesn't carry it (batch updates
-        // match by id + workspace only), so resolve span -> project from the persisted spans off the request path.
-        spanDAO.getProjectIdsBySpanIds(event.spanIds(), event.workspaceId())
+        // project_id and trace_id are part of the cipx_spends merge key but the span update carries neither per
+        // span (a batch reuses one SpanUpdate for spans that may span different traces, matched by id + workspace),
+        // so resolve span -> (project, trace) from the persisted spans off the request path.
+        spanDAO.getProjectAndTraceIdsBySpanIds(event.spanIds(), event.workspaceId())
                 .subscribe(
-                        projectIds -> {
+                        targets -> {
                             List<SpanRow> rows = event.spanIds().stream()
-                                    .filter(projectIds::containsKey)
-                                    .map(spanId -> SpanRow.from(spanId, update.traceId(), projectIds.get(spanId),
-                                            update.metadata(), RetentionUtils.extractInstant(spanId)))
+                                    .filter(targets::containsKey)
+                                    .map(spanId -> {
+                                        var target = targets.get(spanId);
+                                        return SpanRow.from(spanId, target.traceId(), target.projectId(),
+                                                update.metadata(), RetentionUtils.extractInstant(spanId));
+                                    })
                                     .toList();
                             upsertSpans(rows, event.workspaceId(), event.userName());
                         },
-                        error -> log.error("Failed to resolve project ids for cipx spend in workspace: '{}'",
+                        error -> log.error("Failed to resolve project/trace ids for cipx spend in workspace: '{}'",
                                 event.workspaceId(), error));
     }
 
@@ -100,7 +104,7 @@ public class CostIntelligenceIngestionListener {
     }
 
     private void upsertSpans(List<SpanRow> rows, String workspaceId, String userName) {
-        // project_id is part of the cipx_spend merge key, so a row without it can't land correctly.
+        // project_id is part of the cipx_spends merge key, so a row without it can't land correctly.
         List<SpanRow> withProject = rows.stream()
                 .filter(row -> !row.projectId().isEmpty())
                 .toList();

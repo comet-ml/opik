@@ -103,12 +103,12 @@ class CostIntelligenceIngestionTest {
     }
 
     @Nested
-    @DisplayName("cipx_spend ingestion")
+    @DisplayName("cipx_spends ingestion")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class Spend {
 
         @Test
-        @DisplayName("span created with a cipx call lands in cipx_spend; a non-cipx sibling does not")
+        @DisplayName("span created with a cipx call lands in cipx_spends; a non-cipx sibling does not")
         void spanCreatedWithCipxCallLands() {
             var ws = newWorkspace();
             String projectName = "cipx-" + UUID.randomUUID();
@@ -248,7 +248,7 @@ class CostIntelligenceIngestionTest {
             await().atMost(30, SECONDS).untilAsserted(() -> {
                 for (var span : List.of(span1, span2, span3)) {
                     var row = getCipxSpend(span.id(), ws.workspaceId());
-                    assertThat(row).as("cipx_spend row for span '%s'", span.id()).isPresent();
+                    assertThat(row).as("cipx_spends row for span '%s'", span.id()).isPresent();
                     assertThat(row.get().model()).isEqualTo("claude-haiku-4-5");
                     assertThat(row.get().uInput()).isEqualTo(150L);
                     assertThat(row.get().uCacheRead()).isEqualTo(10L);
@@ -265,12 +265,12 @@ class CostIntelligenceIngestionTest {
     }
 
     @Nested
-    @DisplayName("cipx_trace_identity ingestion")
+    @DisplayName("cipx_trace_identities ingestion")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class Identity {
 
         @Test
-        @DisplayName("trace created with a cipx identity lands in cipx_trace_identity; a non-cipx sibling does not")
+        @DisplayName("trace created with a cipx identity lands in cipx_trace_identities; a non-cipx sibling does not")
         void traceCreatedWithIdentityLands() {
             var ws = newWorkspace();
             String projectName = "cipx-" + UUID.randomUUID();
@@ -401,7 +401,7 @@ class CostIntelligenceIngestionTest {
                     u_input, u_cache_read, u_cache_creation, u_output,
                     toInt64(length(blocks)) AS block_count,
                     arrayStringConcat(arrayMap(x -> x.1, blocks), ',') AS block_categories
-                FROM cipx_spend FINAL
+                FROM cipx_spends FINAL
                 WHERE workspace_id = :workspace_id AND span_id = :span_id
                 """;
         return clickHouseTemplate.nonTransaction(connection -> {
@@ -423,7 +423,7 @@ class CostIntelligenceIngestionTest {
     }
 
     private long countCipxSpend(UUID spanId, String workspaceId) {
-        String sql = "SELECT toInt64(count()) AS c FROM cipx_spend FINAL "
+        String sql = "SELECT toInt64(count()) AS c FROM cipx_spends FINAL "
                 + "WHERE workspace_id = :workspace_id AND span_id = :span_id";
         return clickHouseTemplate.nonTransaction(connection -> {
             var statement = connection.createStatement(sql)
@@ -440,7 +440,7 @@ class CostIntelligenceIngestionTest {
                     project_id AS project_id,
                     toUnixTimestamp64Milli(start_time) AS start_ms,
                     user_uuid, user_email, user_display_name, repository, schema_version
-                FROM cipx_trace_identity FINAL
+                FROM cipx_trace_identities FINAL
                 WHERE workspace_id = :workspace_id AND trace_id = :trace_id
                 """;
         return clickHouseTemplate.nonTransaction(connection -> {
@@ -460,7 +460,7 @@ class CostIntelligenceIngestionTest {
     }
 
     private long countCipxIdentity(UUID traceId, String workspaceId) {
-        String sql = "SELECT toInt64(count()) AS c FROM cipx_trace_identity FINAL "
+        String sql = "SELECT toInt64(count()) AS c FROM cipx_trace_identities FINAL "
                 + "WHERE workspace_id = :workspace_id AND trace_id = :trace_id";
         return clickHouseTemplate.nonTransaction(connection -> {
             var statement = connection.createStatement(sql)

@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Fired on trace update so the Cost Intelligence subscriber can refresh the cipx_trace_identity
+ * Fired on trace update so the Cost Intelligence subscriber can refresh the cipx_trace_identities
  * table. Carries the affected traces as traceId -> resolved projectId (project_id is part of the
  * merge key; a batch update spans multiple projects) plus the TraceUpdate. Trace creation reuses
  * {@link TracesCreated}. Posted only when the update's metadata contains cipx.session.identity.

@@ -11,6 +11,7 @@ import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,8 +27,8 @@ import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolder;
 
 /**
- * Writes the cipx_spend table from cipx LLM-call spans. Triggered asynchronously off span
- * create/update events; never reads the spans or cipx_spend tables. The cipx fields are parsed from
+ * Writes the cipx_spends table from cipx LLM-call spans. Triggered asynchronously off span
+ * create/update events; never reads the spans or cipx_spends tables. The cipx fields are parsed from
  * metadata in Java ({@link SpanRow#from}); the listener only passes rows it has already gated to cipx.
  *
  * <p>This is a plain INSERT: the incoming row is complete (cipx metadata is wholesale, project_id is
@@ -42,19 +43,20 @@ import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolde
 @Slf4j
 public class CipxSpendDAO {
 
-    /** A cipx_spend row constructed from a span's metadata. blocksJson is the cipx.blocks array with
+    /** A cipx_spends row constructed from a span's metadata. blocksJson is the cipx.blocks array with
      *  identity_context blocks already dropped in Java. */
+    @Builder(toBuilder = true)
     public record SpanRow(
-            String spanId,
-            String traceId,
-            String projectId,
-            Instant startTime,
-            String model,
+            @NonNull String spanId,
+            @NonNull String traceId,
+            @NonNull String projectId,
+            @NonNull Instant startTime,
+            @NonNull String model,
             long uInput,
             long uCacheRead,
             long uCacheCreation,
             long uOutput,
-            String blocksJson) {
+            @NonNull String blocksJson) {
 
         public static SpanRow from(UUID spanId, UUID traceId, UUID projectId, JsonNode metadata, Instant startTime) {
             JsonNode call = metadata.path("cipx").path("call");
@@ -70,26 +72,29 @@ public class CipxSpendDAO {
                     }
                 }
             }
-            return new SpanRow(
-                    spanId.toString(),
-                    traceId.toString(),
-                    projectId != null ? projectId.toString() : "",
-                    startTime,
-                    call.path("model").asText(""),
-                    usage.path("input_tokens").asLong(0),
-                    usage.path("cache_read_input_tokens").asLong(0),
-                    usage.path("cache_creation_input_tokens").asLong(0),
-                    usage.path("output_tokens").asLong(0),
-                    kept.toString());
+            return SpanRow.builder()
+                    .spanId(spanId.toString())
+                    .traceId(traceId.toString())
+                    .projectId(projectId != null ? projectId.toString() : "")
+                    .startTime(startTime)
+                    .model(call.path("model").asText(""))
+                    .uInput(usage.path("input_tokens").asLong(0))
+                    .uCacheRead(usage.path("cache_read_input_tokens").asLong(0))
+                    .uCacheCreation(usage.path("cache_creation_input_tokens").asLong(0))
+                    .uOutput(usage.path("output_tokens").asLong(0))
+                    .blocksJson(kept.toString())
+                    .build();
         }
     }
 
     // One tuple per row (mirrors SpanDAO.BULK_INSERT). start_time is bound from Java (the span's real
-    // start on create, the UUIDv7-embedded time on update); blocks is parsed from the pre-filtered JSON
-    // into the typed Array(Tuple). The exact metadata->column mapping (this projection) is the initial
+    // start on create, the UUIDv7-embedded time on update); blocks is bound as the pre-filtered JSON string
+    // and parsed into the typed Array(Tuple) by ClickHouse. The r2dbc driver inlines bound values into the
+    // FORMAT Values text, so a native Array(Tuple) can't be bound here — JSONExtract of one JSON literal is
+    // what the Values parser accepts. The exact metadata->column mapping (this projection) is the initial
     // extraction, finalized later.
     private static final String INSERT = """
-            INSERT INTO cipx_spend
+            INSERT INTO cipx_spends
                 (workspace_id, project_id, trace_id, span_id, start_time, model,
                  u_input, u_cache_read, u_cache_creation, u_output, blocks)
             SETTINGS log_comment = '<log_comment>'
@@ -128,7 +133,7 @@ public class CipxSpendDAO {
     private Publisher<? extends Result> insert(List<SpanRow> rows, String workspaceId, String userName,
             Connection connection) {
         List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(rows.size());
-        ST template = getSTWithLogComment(INSERT, "insert_cipx_spend", workspaceId, userName, rows.size());
+        ST template = getSTWithLogComment(INSERT, "insert_cipx_spends", workspaceId, userName, rows.size());
         template.add("items", queryItems);
         Statement statement = connection.createStatement(template.render());
 
