@@ -20,5 +20,7 @@ public record AgentInsightsReportMessage(
         @NonNull UUID projectId,
         @NonNull String workspaceId,
         @NonNull Instant periodStart,
-        @NonNull Instant periodEnd) implements RedisSubscriberMessage {
+        @NonNull Instant periodEnd,
+        // "manual" (Run diagnostics) or "scheduled" (daily sweep), carried through to the Ollie trigger.
+        @NonNull String triggerSource) implements RedisSubscriberMessage {
 }

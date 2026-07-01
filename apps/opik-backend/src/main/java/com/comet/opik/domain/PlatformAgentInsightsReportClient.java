@@ -37,7 +37,8 @@ public class PlatformAgentInsightsReportClient implements AgentInsightsReportCli
 
     @Override
     public void triggerAgentInsights(@NonNull String reportId, @NonNull UUID projectId,
-            @NonNull String workspaceId, @NonNull Instant periodStart, @NonNull Instant periodEnd) {
+            @NonNull String workspaceId, @NonNull Instant periodStart, @NonNull Instant periodEnd,
+            @NonNull String triggerSource) {
 
         var payload = AgentInsightsTriggerRequest.builder()
                 .reportType(REPORT_TYPE)
@@ -46,6 +47,7 @@ public class PlatformAgentInsightsReportClient implements AgentInsightsReportCli
                 .workspaceId(workspaceId)
                 .periodStart(periodStart)
                 .periodEnd(periodEnd)
+                .triggerSource(triggerSource)
                 .build();
 
         try (Response response = httpClient.target(config.getTriggerUrl())

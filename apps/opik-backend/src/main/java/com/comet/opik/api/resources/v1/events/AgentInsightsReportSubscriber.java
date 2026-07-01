@@ -72,7 +72,7 @@ public class AgentInsightsReportSubscriber extends BaseRedisSubscriber<AgentInsi
                 message.reportId(), message.projectId(), message.workspaceId());
 
         return Mono.fromRunnable(() -> reportClient.triggerAgentInsights(message.reportId(), message.projectId(),
-                message.workspaceId(), message.periodStart(), message.periodEnd()))
+                message.workspaceId(), message.periodStart(), message.periodEnd(), message.triggerSource()))
                 .subscribeOn(Schedulers.boundedElastic())
                 .then()
                 .doOnSuccess(unused -> {
