@@ -13,6 +13,7 @@ import com.comet.opik.api.UsageByWorkspaceProjectUserResponse;
 import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
+import com.comet.opik.api.events.SpanCostIntelligenceChanged;
 import com.comet.opik.api.events.SpansCreated;
 import com.comet.opik.api.events.SpansDeleted;
 import com.comet.opik.api.events.SpansUpdated;
@@ -221,9 +222,15 @@ public class SpanService {
                                             .switchIfEmpty(
                                                     Mono.defer(() -> insertUpdate(project, spanUpdate, id)))
                                             .onErrorResume(this::handleSpanDBError)
-                                            .then()))))
-                    .doOnSuccess(__ -> eventBus
-                            .post(new SpansUpdated(Set.of(spanUpdate.traceId()), workspaceId, userName)));
+                                            .then()))
+                                    .doOnSuccess(__ -> {
+                                        if (CipxMetadata.hasSpendCall(spanUpdate.metadata())) {
+                                            eventBus.post(new SpanCostIntelligenceChanged(Map.of(id, project.id()),
+                                                    spanUpdate, workspaceId, userName));
+                                        }
+                                    })))
+                    .doOnSuccess(__ -> eventBus.post(
+                            new SpansUpdated(Set.of(spanUpdate.traceId()), workspaceId, userName)));
         });
     }
 
@@ -240,8 +247,14 @@ public class SpanService {
                     .onErrorResume(TagOperations::mapTagLimitError)
                     .doOnSuccess(__ -> {
                         log.info("Completed batch update for '{}' spans", batchUpdate.ids().size());
-                        eventBus.post(
-                                new SpansUpdated(Set.of(batchUpdate.update().traceId()), workspaceId, userName));
+                        SpanUpdate update = batchUpdate.update();
+                        eventBus.post(new SpansUpdated(Set.of(update.traceId()), workspaceId, userName));
+                        if (CipxMetadata.hasSpendCall(update.metadata()) && update.projectId() != null) {
+                            Map<UUID, UUID> spanProjectIds = batchUpdate.ids().stream()
+                                    .collect(Collectors.toMap(Function.identity(), spanId -> update.projectId()));
+                            eventBus.post(new SpanCostIntelligenceChanged(spanProjectIds, update, workspaceId,
+                                    userName));
+                        }
                     });
         });
     }
