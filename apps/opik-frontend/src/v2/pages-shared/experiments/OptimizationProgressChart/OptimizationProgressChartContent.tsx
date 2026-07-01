@@ -129,16 +129,17 @@ const OptimizationProgressChartContent: React.FC<
     [positionedData],
   );
 
-  const {
-    width: tickWidth,
-    ticks,
-    domain,
-    yTickFormatter,
-  } = useChartTickDefaultConfig(values, {
-    maxTickPrecision: 2,
-    targetTickCount: 5,
-    showMinMaxDomain: true,
-  });
+  const { width: tickWidth, yTickFormatter } = useChartTickDefaultConfig(
+    values,
+    {
+      maxTickPrecision: 2,
+      targetTickCount: 5,
+      showMinMaxDomain: true,
+    },
+  );
+  // Scores / pass rates are always 0–1, so pin the axis to a fixed 0–1 domain
+  // with quarter ticks (matches the Figma spec) rather than a data-driven range.
+  const yTicks = [0, 0.25, 0.5, 0.75, 1];
 
   const candidateMap = useMemo(() => {
     const map = new Map<string, AggregatedCandidate>();
@@ -228,9 +229,9 @@ const OptimizationProgressChartContent: React.FC<
             axisLine={false}
             tickLine={false}
             tick={DEFAULT_CHART_TICK}
-            ticks={ticks}
+            ticks={yTicks}
             tickFormatter={yTickFormatter}
-            domain={domain}
+            domain={[0, 1]}
           />
 
           {/* Scatter renders BEFORE Customized so dot positions are

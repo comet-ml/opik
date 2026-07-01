@@ -1,5 +1,5 @@
 import React from "react";
-import { Calendar, RotateCw, Sparkles, Workflow, X } from "lucide-react";
+import { Clock, RotateCw, Sparkles, Workflow, X } from "lucide-react";
 import { Tag } from "@/ui/tag";
 import { Button } from "@/ui/button";
 import { useNavigate } from "@tanstack/react-router";
@@ -75,14 +75,17 @@ const OptimizationHeader: React.FC<OptimizationHeaderProps> = ({
               size="md"
               className="capitalize"
             >
-              {status}
+              <span className="flex items-center gap-1.5">
+                <span className="size-1.5 shrink-0 rounded-full bg-current opacity-70" />
+                {status}
+              </span>
             </Tag>
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {optimization?.created_at && (
             <span className="comet-body-s flex items-center gap-1 text-muted-slate">
-              <Calendar className="size-3.5 shrink-0" />
+              <Clock className="size-3.5 shrink-0" />
               {formatDate(optimization.created_at)}
             </span>
           )}
