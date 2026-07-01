@@ -131,7 +131,7 @@ const useDatasetForm = ({
     (isEdit || hideUpload || !csvRequired || hasValidUploadFile);
 
   const typeLabel = type === DATASET_TYPE.TEST_SUITE ? "test suite" : "dataset";
-  const title = isEdit ? "Edit" : "Create new";
+  const title = isEdit ? `Edit ${typeLabel}` : `Create new ${typeLabel}`;
   const buttonText = isEdit ? "Update" : "Create new";
 
   const fileSizeLimit = FILE_SIZE_LIMIT_IN_MB;
