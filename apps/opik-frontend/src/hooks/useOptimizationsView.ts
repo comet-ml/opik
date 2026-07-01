@@ -11,6 +11,11 @@ import {
 const DEFAULT_PAGE_SIZE = 100;
 const POLLING_INTERVAL_MS = 30000;
 
+const hasInProgressRun = (optimizations: Optimization[]) =>
+  optimizations.some((optimization) =>
+    IN_PROGRESS_OPTIMIZATION_STATUSES.includes(optimization.status),
+  );
+
 type UseOptimizationsViewParams = {
   workspaceName: string;
   projectId?: string;
@@ -18,11 +23,7 @@ type UseOptimizationsViewParams = {
   search?: string;
   page: number;
   rowSelection: RowSelectionState;
-  /**
-   * When true, poll only while a run in the list is in progress (and stop once
-   * everything is settled). Defaults to false, which keeps the original
-   * unconditional 30s polling for existing (v1) callers.
-   */
+  /** Poll only while a run is in progress (v2). Default false keeps v1's unconditional 30s. */
   pollWhileInProgress?: boolean;
 };
 
@@ -35,15 +36,8 @@ export const useOptimizationsView = ({
   rowSelection,
   pollWhileInProgress = false,
 }: UseOptimizationsViewParams) => {
-  // Workspace-wide "is anything running" probe so client-side pagination can't
-  // silently stop the auto-refresh when a RUNNING run sits on another page
-  // (with keepPreviousData the list query only ever holds the current page).
-  // Only runs for pollWhileInProgress (v2) callers and polls itself only while a
-  // run is active, so everything still settles to no polling once runs finish.
-  // Scope: detects RUNNING workspace-wide; a cross-page INITIALIZED run (brief,
-  // and caught by the per-page check once it surfaces) and a run started in
-  // another tab while this one stays focused are not auto-detected until the
-  // next window-focus refetch — acceptable edge cases for this list.
+  // Workspace-wide probe: keepPreviousData holds only the current page, so a
+  // RUNNING run on another page wouldn't otherwise keep the poll alive.
   const { data: activeData } = useOptimizationsList(
     {
       workspaceName,
@@ -73,15 +67,19 @@ export const useOptimizationsView = ({
       },
       {
         placeholderData: keepPreviousData,
-        refetchInterval: pollWhileInProgress
-          ? (query) =>
-              hasActiveRuns ||
-              (query.state.data?.content ?? []).some((optimization) =>
-                IN_PROGRESS_OPTIMIZATION_STATUSES.includes(optimization.status),
-              )
-                ? POLLING_INTERVAL_MS
-                : false
-          : POLLING_INTERVAL_MS,
+        refetchInterval: (query) => {
+          // v1 callers poll unconditionally; v2 callers poll only while a run
+          // is active (detected workspace-wide or in progress on this page)
+          // and stop once everything settles.
+          if (!pollWhileInProgress) {
+            return POLLING_INTERVAL_MS;
+          }
+
+          const shouldPoll =
+            hasActiveRuns || hasInProgressRun(query.state.data?.content ?? []);
+
+          return shouldPoll ? POLLING_INTERVAL_MS : false;
+        },
       },
     );
 

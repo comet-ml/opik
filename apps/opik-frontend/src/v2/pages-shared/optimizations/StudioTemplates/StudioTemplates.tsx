@@ -1,6 +1,7 @@
 import React from "react";
 import { ArrowRight } from "lucide-react";
 
+import { Button } from "@/ui/button";
 import useNavigateToOptimizationStudio from "@/v2/pages-shared/optimizations/useNavigateToOptimizationStudio";
 import {
   getStudioCardConfigs,
@@ -11,9 +12,8 @@ type StudioTemplatesProps = {
   onOptimizeViaSdkClick: () => void;
 };
 
-// Per-card visual treatment for the populated runs-list cards (Figma 686:35206):
-// a solid colored icon chip on a lightly-tinted card + a primary-blue link.
-// Card copy/icon/routing come from the shared getStudioCardConfigs.
+// Per-card visual treatment (icon chip color + card tint); copy, icon and
+// routing come from the shared getStudioCardConfigs.
 const CARD_STYLES: Record<
   StudioCardId,
   { chipColor: string; tintBg: string; tintBorder: string; actionLabel: string }
@@ -57,11 +57,11 @@ const StudioTemplates: React.FC<StudioTemplatesProps> = ({
           const { chipColor, tintBg, tintBorder, actionLabel } =
             CARD_STYLES[id];
           return (
-            <button
+            <Button
               key={id}
-              type="button"
+              variant="outline"
               onClick={onClick}
-              className="flex items-start gap-2 rounded-md border px-3 pb-2 pt-3 text-left shadow-sm transition-shadow hover:shadow-md"
+              className="h-auto items-start justify-start gap-2 whitespace-normal px-3 pb-2 pt-3 text-left shadow-sm transition-shadow hover:shadow-md"
               style={{ backgroundColor: tintBg, borderColor: tintBorder }}
             >
               <span
@@ -82,7 +82,7 @@ const StudioTemplates: React.FC<StudioTemplatesProps> = ({
                   <ArrowRight className="size-3" />
                 </span>
               </span>
-            </button>
+            </Button>
           );
         })}
       </div>

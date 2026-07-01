@@ -35,11 +35,7 @@ type CustomMeta = {
   nameKey?: string;
   idKey?: string;
   getIsDeleted?: (cellData: unknown) => boolean;
-  /**
-   * Forces the linked resource (and matching icon) instead of inferring it from
-   * the row's `evaluation_method`. Used where the row has no evaluation method
-   * of its own — e.g. optimization runs always point at a test suite.
-   */
+  /** Force the linked resource instead of inferring from `evaluation_method` (for rows that have none). */
   resource?: RESOURCE_TYPE;
 };
 
@@ -97,8 +93,7 @@ const ItemSourceCell = <TData,>(context: CellContext<TData, unknown>) => {
                 isDeleted={isDeleted}
               />
             ) : name ? (
-              // No id to link to (e.g. an optimization row whose dataset id is
-              // absent) — still show the source name rather than a bare dash.
+              // No id to link to — show the name instead of a dash.
               <span className="comet-body-s block truncate">{name}</span>
             ) : (
               "-"

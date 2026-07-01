@@ -16,9 +16,7 @@ type OptimizationsToolbarProps = {
   onSearchChange: ComponentProps<typeof SearchInput>["setSearchText"];
   filters: ComponentProps<typeof FiltersButton>["filters"];
   onFiltersChange: ComponentProps<typeof FiltersButton>["onChange"];
-  // Typed loosely + `as never` at the call site, consistent with the codebase
-  // `as never` filter/cell convention; tightening needs the shared Operator
-  // union re-typing that is out of scope here.
+  // Loosely typed; `as never` at the call site, matching the filter-config convention.
   filtersConfig: object;
   canViewDatasets: boolean;
   canDeleteOptimizationRuns: boolean;

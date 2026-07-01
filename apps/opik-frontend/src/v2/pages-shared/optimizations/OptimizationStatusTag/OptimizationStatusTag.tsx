@@ -3,11 +3,10 @@ import React from "react";
 import { OPTIMIZATION_STATUS } from "@/types/optimizations";
 import { Tag, TagProps } from "@/ui/tag";
 
-// Per Figma 562:37189 a run status is a neutral pill with a colored status dot
-// (not a colored-background badge): running = green, completed/initialized =
-// slate, cancelled/error = red. Uses the shared brand-color tokens (same green/
-// red as PercentageTrend) so trend and status colors stay in sync. Shared so
-// the list, run-detail header and trials render the status identically.
+// A run status is a neutral pill with a colored status dot: running = green,
+// completed/initialized = slate, cancelled/error = red. Uses the shared brand
+// tokens (same green/red as PercentageTrend) so status and trend colors stay in
+// sync.
 const STATUS_DOT_COLOR: Record<OPTIMIZATION_STATUS, string> = {
   [OPTIMIZATION_STATUS.RUNNING]: "var(--color-green-bright)",
   [OPTIMIZATION_STATUS.COMPLETED]: "hsl(var(--light-slate))",
@@ -27,7 +26,7 @@ const OptimizationStatusTag: React.FC<OptimizationStatusTagProps> = ({
 }) => (
   <Tag
     size={size}
-    className="border border-[#f1f5f9] bg-[#f8fafc] text-foreground"
+    className="border border-[var(--pill-neutral-border)] bg-[var(--pill-neutral-bg)] text-foreground"
   >
     <div className="flex items-center gap-1.5">
       <span

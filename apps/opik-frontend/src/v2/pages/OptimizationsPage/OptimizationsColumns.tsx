@@ -3,7 +3,10 @@ import IdCell from "@/shared/DataTableCells/IdCell";
 import { COLUMN_DATASET_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { Optimization } from "@/types/optimizations";
 import { getFeedbackScore } from "@/lib/feedback-scores";
-import { getOptimizerLabel } from "@/lib/optimizations";
+import {
+  getOptimizerLabel,
+  getOptimizationOptimizerType,
+} from "@/lib/optimizations";
 import { getMetricLabel } from "@/lib/optimization-config";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import ItemSourceCell, {
@@ -18,24 +21,11 @@ import {
   OptimizationTotalCostCell,
 } from "@/v2/pages/OptimizationsPage/OptimizationMetricCells";
 
-// NOTE: the `cell: X as never` casts match the codebase-wide convention
-// (~100 files). They exist because `ColumnData.cell` in types/shared.ts is typed
-// as tanstack's `Cell<T>` (the cell *instance* type) rather than a cell
-// *renderer*, so every render function needs the cast. Removing them properly
-// means re-typing the shared `ColumnData.cell` field, which ripples across all
-// tables — out of scope here; tracked separately.
-
-// Bumped from v1: drops the dead `deploy` column id from persisted prefs and
-// adds the new Name / Run ID / Algorithm / Metric columns. The bump
-// intentionally resets to these v2 defaults rather than migrating v1 prefs —
-// carrying the v1 selection forward would hide the new default-visible "Name"
-// column (it never existed in v1) and sort the new columns last.
+// Bumped to v2 keys to reset stale column prefs (drops the dead `deploy` id).
 export const SELECTED_COLUMNS_KEY = "optimizations-selected-columns-v2";
 export const COLUMNS_WIDTH_KEY = "optimizations-columns-width-v2";
 export const COLUMNS_ORDER_KEY = "optimizations-columns-order-v2";
 
-// Default-visible column widths match the Figma runs-list table header
-// (686:35271 inside 562:37189): Name 191, Start time 145, every metric 120.
 const DEFAULT_METRIC_COLUMN_WIDTH = 120;
 
 export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
@@ -70,12 +60,8 @@ export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
     id: "algorithm",
     label: "Algorithm",
     type: COLUMN_TYPE.string,
-    // studio_config is null for older/non-Studio runs, which instead keep the
-    // optimizer name in metadata.optimizer — fall back to it before dashing.
     accessorFn: (row) => {
-      const optimizerType =
-        row.studio_config?.optimizer?.type ??
-        (row.metadata as { optimizer?: string } | undefined)?.optimizer;
+      const optimizerType = getOptimizationOptimizerType(row);
       return optimizerType ? getOptimizerLabel(optimizerType) : "-";
     },
     size: 180,
@@ -154,10 +140,8 @@ export const FILTER_COLUMNS: ColumnData<Optimization>[] = [
   },
 ];
 
-// Default-visible set matches the Figma runs-list (562:37189): Name, Start time,
-// Status, Pass rate, Accuracy, Latency, Cost, Opt. cost. The newly-added Run ID,
-// Item source, Algorithm and Metric columns ship as available-but-hidden (users
-// enable them from the Columns picker).
+// Default-visible columns; Run ID, Item source, Algorithm and Metric ship
+// hidden and are enabled from the Columns picker.
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "name",
   "created_at",

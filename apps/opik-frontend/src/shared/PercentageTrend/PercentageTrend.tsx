@@ -9,9 +9,7 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 export type PercentageTrendType = "direct" | "inverted" | "neutral";
 export type PercentageTrendVariant = "green" | "red" | "gray";
 
-// Single source of truth for trend direction → icon + color variant. Exported so
-// table cells (e.g. the runs-list metric pill) reuse the exact same mapping
-// instead of re-deriving it.
+// Shared trend direction → icon + color mapping, reused by table cells.
 export const getTrendConfig = (
   percentage: number,
   trend: PercentageTrendType,
@@ -45,11 +43,8 @@ type PercentageTrendProps = {
   iconOnly?: boolean;
 };
 
-// Bright trend-icon colors (Figma) for the runs-list metric pill, where the
-// icon sits on a neutral surface: good = green, bad = red, neutral = inherit.
-// NOT applied to PercentageTrend's own Tag below — there the Tag variant's own
-// text token is used so the icon + percentage keep proper contrast on the
-// tinted tag background.
+// Bright trend-icon colors for the metric pill (icon on a neutral surface).
+// Not applied to the Tag below, which keeps its own variant text token.
 export const TREND_COLOR_CLASS: Record<
   PercentageTrendVariant,
   string | undefined

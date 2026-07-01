@@ -20,10 +20,7 @@ type StudioCardHandlers = {
   onOptimizeViaSdkClick: () => void;
 };
 
-// Single definition of the three optimization onboarding cards (demo / studio /
-// SDK) shared by the populated runs-list row (StudioTemplates) and the empty
-// state (OptimizationsEmptyState) so their copy, icon, and routing can't drift.
-// Each view keeps its own visual treatment, keyed by `id`.
+// Shared definition of the onboarding cards; each view styles them by `id`.
 export const getStudioCardConfigs = ({
   navigateToStudio,
   onOptimizeViaSdkClick,

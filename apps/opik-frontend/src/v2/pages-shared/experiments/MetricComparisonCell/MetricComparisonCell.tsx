@@ -28,13 +28,8 @@ const MetricComparisonCell: React.FunctionComponent<
   const percentage = calcFormatterAwarePercentage(current, baseline, formatter);
 
   if (compact) {
-    // Figma 689:34516 — the change % sits in a neutral pill with a colored
-    // trend icon and muted-slate text, followed by the current value. The pill
-    // shares the same neutral surface as the status tag (bg #f8fafc / border
-    // #f1f5f9). Trend direction/color reuses PercentageTrend's shared mapping.
-    // Compute the trend icon whenever there's a percentage — including Infinity
-    // from a zero baseline — so zero-baseline comparisons still show a
-    // direction; only the numeric label is dropped when the value isn't finite.
+    // Show the trend icon for any percentage — including Infinity from a zero
+    // baseline — and drop only the numeric label when the value isn't finite.
     const trendConfig = !isUndefined(percentage)
       ? getTrendConfig(percentage, trend, 0)
       : null;
@@ -47,7 +42,7 @@ const MetricComparisonCell: React.FunctionComponent<
     return (
       <div className="flex items-center gap-1.5">
         {trendConfig && TrendIcon && (
-          <div className="inline-flex items-center gap-1 rounded-md border border-[#f1f5f9] bg-[#f8fafc] px-1.5 py-0.5">
+          <div className="inline-flex items-center gap-1 rounded-md border border-[var(--pill-neutral-border)] bg-[var(--pill-neutral-bg)] px-1.5 py-0.5">
             <TrendIcon
               className={cn(
                 "size-3 shrink-0",

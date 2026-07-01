@@ -32,7 +32,7 @@ import emptyOptStudioDarkUrl from "/images/empty-optimization-studio-dark.svg";
 import StudioTemplates from "@/v2/pages-shared/optimizations/StudioTemplates";
 import { Separator } from "@/ui/separator";
 import { useOptimizationsView } from "@/hooks/useOptimizationsView";
-import useOptimizationsList from "@/api/optimizations/useOptimizationsList";
+import { useOptimizationsExistence } from "@/hooks/useOptimizationsExistence";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import {
   DEFAULT_COLUMNS,
@@ -140,18 +140,10 @@ const OptimizationsPage: React.FunctionComponent = () => {
     pollWhileInProgress: true,
   });
 
-  // Lightweight, unfiltered existence probe (size=1) that decides the
-  // onboarding empty state independently of the paginated/filtered list, so a
-  // cold load never shows the studio templates + a populated-looking table
-  // before we know the workspace has runs. While it resolves the table renders
-  // its skeleton (see isTableLoading), matching the Experiments page.
-  const { data: existenceData, isPending: isExistencePending } =
-    useOptimizationsList({
-      workspaceName,
-      projectId: activeProjectId ?? undefined,
-      page: 1,
-      size: 1,
-    });
+  const { isEmpty, isPending: isExistencePending } = useOptimizationsExistence({
+    workspaceName,
+    projectId: activeProjectId ?? undefined,
+  });
 
   const hasOldTypeOptimizations = useMemo(
     () =>
@@ -213,18 +205,10 @@ const OptimizationsPage: React.FunctionComponent = () => {
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
 
-  // Include the existence probe so we render the table skeleton (matching the
-  // Experiments page) until we know whether the workspace has any runs, rather
-  // than showing the studio templates + table chrome prematurely.
   const isTableLoading =
     isExistencePending ||
     isPending ||
     (isPlaceholderData && optimizations.length === 0);
-  // Only treat as empty on a *successful* zero-count probe. While it is pending
-  // or has errored, `existenceData` is undefined, so we fall through to the
-  // table view (which surfaces its own loading/error state) instead of hiding
-  // real runs behind the onboarding screen on a transient probe failure.
-  const isEmpty = existenceData?.total === 0;
 
   const handleClearFilters = useCallback(() => {
     setSearch(undefined);

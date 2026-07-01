@@ -197,6 +197,10 @@
     --color-cyan: #06b6d4;
     --color-rose: #f43f5e;
 
+    /* Neutral pill surface (status tag + metric-change pill) */
+    --pill-neutral-bg: #f8fafc;
+    --pill-neutral-border: #f1f5f9;
+
     /* Tag variant background and text colors */
     --tag-gray-bg: #f3f4f6;
     --tag-purple-bg: #efe2fd;
@@ -442,6 +446,10 @@
     --scrollbar-thumb: #242424;
     --scrollbar-thumb-hover: #2e2e2e;
     --scrollbar-background: #121212;
+    /* Neutral pill surface (status tag + metric-change pill) - Dark Mode */
+    --pill-neutral-bg: #1c1c1c;
+    --pill-neutral-border: #2a2a2a;
+
     /* Tag variant background and text colors - Dark Mode */
     --tag-gray-bg: #242424;
     --tag-purple-bg: #2e2932;
