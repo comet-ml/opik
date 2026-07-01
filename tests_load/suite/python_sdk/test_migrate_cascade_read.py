@@ -21,13 +21,14 @@ of the cascade, which is what the fix changed, so the scenario is safe to
 re-run and needs no cleanup between runs.
 
 Scale with ``--load-scale`` / ``OPIK_LOAD_SCALE``. Defaults give
-50 traces × 4000 spans = 200k spans at ~50 KB each (~10 GB of span content);
-``OPIK_LOAD_SCALE=5`` reaches ~1M spans, matching the Bayer-scale volume the
-ticket describes.
+20 traces × 2000 spans = 40k spans at ~25 KB each (~1 GB of span content);
+higher scales approach the span volume the ticket describes, subject to the
+runner having memory sized for the ingest.
 """
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 from datetime import timedelta
@@ -41,6 +42,8 @@ from opik.rest_api.types.experiment_item import ExperimentItem
 
 from . import _helpers
 from ._helpers import KB, Metrics
+
+LOGGER = logging.getLogger("test_migrate_cascade_read")
 
 # The migrate cascade's shipped per-request page size + the old SDK default,
 # so the scenario measures the exact before/after the fix changed.
@@ -130,11 +133,20 @@ def _seed_experiment(
                 client.flush()
                 rest.experiments.create_experiment_items(experiment_items=exp_items)
                 exp_items = []
+                # Progress log so a crash is attributable to the seed phase
+                # (and to which point in it) rather than being silent.
+                LOGGER.info(
+                    "seed progress: %d/%d traces (%d spans)",
+                    i + 1,
+                    trace_count,
+                    (i + 1) * spans_per_trace,
+                )
 
     client.flush()
     if exp_items:
         rest.experiments.create_experiment_items(experiment_items=exp_items)
 
+    LOGGER.info("seed complete: %d traces x %d spans", trace_count, spans_per_trace)
     return experiment_id
 
 
@@ -155,6 +167,7 @@ def _cascade_read(
     aborting the whole run.
     """
     result: Dict[str, object] = {"page_size": page_size, "read_error": None}
+    LOGGER.info("cascade read start: page_size=%d", page_size)
     start = time.perf_counter()
     try:
         traces = client.search_traces(
@@ -194,6 +207,14 @@ def _cascade_read(
     except (httpx.RemoteProtocolError, httpx.ReadTimeout, httpx.ConnectError) as exc:
         result["read_error"] = type(exc).__name__
     result["read_seconds"] = round(time.perf_counter() - start, 3)
+    LOGGER.info(
+        "cascade read done: page_size=%d took=%ss traces=%s spans=%s error=%s",
+        page_size,
+        result["read_seconds"],
+        result.get("traces_read"),
+        result.get("spans_read"),
+        result["read_error"],
+    )
     return result
 
 
@@ -201,17 +222,25 @@ def test_migrate_cascade_read(metrics: Metrics, load_scale: float) -> None:
     """Seed a dense experiment, then read it the cascade way at page=500
     (shipped) and page=2000 (old default), recording read time + errors.
 
-    At ~50 KB/span a page of 2000 is ~100 MB of span content per request vs
-    ~25 MB at 500. On a memory-constrained backend the 2000-page read is the
-    one that OOM-drops the socket; page=500 (and the adaptive shrink) is what
-    the fix relies on. The scenario records both so a regression that reverts
-    the bounding shows up as a read_error at page=500.
+    Spans are ~25 KB total (the observed average), so a page of 2000 is
+    ~50 MB of span content per request vs ~12.5 MB at 500. On a
+    memory-constrained backend the 2000-page read is the one that OOM-drops
+    the socket; page=500 (and the adaptive shrink) is what the fix relies on.
+    The scenario records both so a regression that reverts the bounding shows
+    up as a read_error at page=500.
+
+    Defaults: 20 traces × 2000 spans = 40k spans (~1 GB) at load_scale=1 — a
+    volume the shared runner sustains while still making the 2000-page read a
+    ~50 MB request. Scale up with ``--load-scale`` for a heavier read; note the
+    total content volume (and thus seed time / runner memory) scales with it,
+    so very high scales need a runner sized for the ingest.
     """
-    trace_count: int = int(50 * load_scale)
+    trace_count: int = int(20 * load_scale)
     # Env override keeps smoke tests cheap without changing the CI default.
-    spans_per_trace: int = int(os.getenv("OPIK_MIGRATE_SPANS_PER_TRACE", "4000"))
-    span_input_bytes: int = 25 * KB
-    span_output_bytes: int = 25 * KB
+    spans_per_trace: int = int(os.getenv("OPIK_MIGRATE_SPANS_PER_TRACE", "2000"))
+    # ~25 KB total per span (12.5 KB input + 12.5 KB output) = observed average.
+    span_input_bytes: int = 12 * KB
+    span_output_bytes: int = 13 * KB
     project_name: str = _helpers.unique_project_name("migrate-cascade-read")
     dataset_name: str = f"migrate-cascade-{id_helpers.generate_id()[:8]}"
 

@@ -138,17 +138,18 @@ _EXPERIMENT_PAGE_SIZE = 100
 
 # Per-request page size for the cascade's bulk trace/span reads. The SDK
 # default of 2000 (with the cascade's ``truncate=False`` for round-trip
-# fidelity) makes the per-request read a firehose: on the Bayer migration
-# (OPIK-7152) the backend container was OOM-killed by RSS (~3 GiB) driven by
-# native/off-heap read buffers tracking the SELECT throughput -- NOT JVM heap
-# (heap peaked at 931 MiB against a 3.2 GiB ceiling). The CH SELECT ran at
-# 2.93M rows/s while INSERT was only 511 rows/s, so the read path is the
-# culprit; the write path is already batched and needs no cap here.
-# 500 records/page bounds the read firehose (~12.5 MB/page at Bayer's 25 KB
-# avg span; 4.46 MB max single span) without ballooning the request count
-# (~5-6 pages for a 2.7k-span experiment). The SDK's adaptive shrink halves
-# this further if a page still drops the socket on a connection/timeout error
-# -- the reactive guard for a page that happens to bunch up multi-MB spans.
+# fidelity) makes the per-request read a firehose: on a large customer
+# migration (OPIK-7152) the backend container was OOM-killed by RSS (~3 GiB)
+# driven by native/off-heap read buffers tracking the SELECT throughput --
+# NOT JVM heap (heap peaked at 931 MiB against a 3.2 GiB ceiling). The CH
+# SELECT ran at 2.93M rows/s while INSERT was only 511 rows/s, so the read
+# path is the culprit; the write path is already batched and needs no cap
+# here. 500 records/page bounds the read firehose (~12.5 MB/page at the
+# observed ~25 KB avg span; ~4.5 MB max single span) without ballooning the
+# request count (~5-6 pages for a 2.7k-span experiment). The SDK's adaptive
+# shrink halves this further if a page still drops the socket on a
+# connection/timeout error -- the reactive guard for a page that happens to
+# bunch up multi-MB spans.
 MIGRATION_SEARCH_PAGE_SIZE = 500
 
 # Cap the per-record ``sample_source_ids`` list so a pathological
