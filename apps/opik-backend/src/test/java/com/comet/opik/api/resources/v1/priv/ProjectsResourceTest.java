@@ -137,6 +137,7 @@ import static java.util.stream.Collectors.averagingDouble;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.toMap;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -2431,16 +2432,15 @@ class ProjectsResourceTest {
     }
 
     /**
-     * last_updated_trace_at is persisted to MySQL (rounds sub-microsecond nanos to micros) while the trace's
-     * last_updated_at is stored in ClickHouse (truncates to micros), so the two representations of the same instant
-     * can differ by up to one microsecond. Compare with the same micro tolerance used for the persisted-marker
-     * assertions. Handles null (projects without traces) explicitly since the comparator dereferences the values.
+     * Compares a project's last_updated_trace_at marker with a one-microsecond tolerance: MySQL rounds it to micros
+     * while the source ClickHouse trace timestamp is truncated, so the same instant can differ by up to a microsecond.
+     * Null (projects without traces) is handled separately.
      */
     private void assertLastUpdatedTraceAtEquals(Instant actual, Instant expected) {
         if (expected == null) {
             assertThat(actual).isNull();
         } else {
-            assertThat(actual).usingComparator(TestComparators::compareMicroNanoTime).isEqualTo(expected);
+            assertThat(actual).isCloseTo(expected, within(1, ChronoUnit.MICROS));
         }
     }
 
