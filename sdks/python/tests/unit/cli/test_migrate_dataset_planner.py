@@ -12,6 +12,7 @@ come from ``_migrate_helpers``.
 from __future__ import annotations
 
 import json
+from unittest.mock import patch
 
 import pytest
 from click.testing import CliRunner
@@ -26,6 +27,7 @@ from opik.cli.migrate.errors import (
 )
 
 from ._migrate_helpers import (
+    _build_fake_client,
     _DatasetRow,
     _Page,
     _planner_client,
@@ -158,35 +160,6 @@ class TestFinalizeWithSkipsOrOk:
         on_disk = json.loads(audit_path.read_text())
         assert on_disk["status"] == "ok"
 
-    def test_exclude_experiments__success_line_notes_skip(
-        self, tmp_path, capsys
-    ) -> None:
-        # OPIK-7161 AC: run output makes clear experiments were skipped.
-        # No skip records exist on the --exclude-experiments path (the
-        # cascades never ran), so this is the happy-path branch; the note
-        # is appended to the success line.
-        from opik.cli.migrate.main import _finalize_with_skips_or_ok
-
-        audit = AuditLog(command="opik migrate dataset", args={})
-        audit.record(type="rename_source", status="ok", details={})
-        audit_path = tmp_path / "audit.json"
-
-        _finalize_with_skips_or_ok(
-            audit,
-            audit_path,
-            name="MyDataset",
-            target_label="MyDataset",
-            target_project="DestProject",
-            elapsed_seconds=5.0,
-            experiments_excluded=True,
-        )
-
-        captured = capsys.readouterr()
-        assert "--exclude-experiments" in captured.out
-        assert "skipped" in captured.out
-        on_disk = json.loads(audit_path.read_text())
-        assert on_disk["status"] == "ok"
-
     def test_multiple_skip_records__totals_aggregated_by_reason(
         self, tmp_path, capsys
     ) -> None:
@@ -261,6 +234,58 @@ class TestMigrateHelp:
         result = runner.invoke(cli, ["migrate", "dataset", "--help"])
         assert result.exit_code == 0
         assert "--exclude-experiments" in result.output
+
+    def test_migrate_dataset__exclude_experiments__cli_run_skips_and_reports(
+        self, tmp_path
+    ) -> None:
+        # OPIK-7161: exercise the flag through the public Click entrypoint,
+        # not just the finalize helper, so the option -> build_dataset_plan
+        # -> finalize plumbing in migrate_dataset_command is covered end to
+        # end (per .agents/skills/python-sdk/testing.md: test the public API).
+        # The fake client mocks the whole rename/create/replay surface; with
+        # --exclude-experiments the plan carries no cascade actions, so the
+        # command reaches the success finalize with zero experiment work.
+        client, _, _ = _build_fake_client(
+            source_rows=[_DatasetRow(id="src-1", name="MyDataset")],
+            destination_rows=[],
+            items=[{"id": "item-a", "input": "hello"}],
+        )
+        audit_path = tmp_path / "audit.json"
+
+        runner = CliRunner()
+        with patch("opik.cli.migrate.main._build_client", return_value=client):
+            result = runner.invoke(
+                cli,
+                [
+                    "migrate",
+                    "dataset",
+                    "MyDataset",
+                    "--to-project",
+                    "B",
+                    "--exclude-experiments",
+                    "--audit-log",
+                    str(audit_path),
+                ],
+            )
+
+        assert result.exit_code == 0, result.output
+        # User-facing output makes the intentional skip clear.
+        assert "--exclude-experiments" in result.output
+        assert "skipped" in result.output
+        # No experiment cascade ran: the source dataset was never queried for
+        # experiments (find_experiments belongs only to the cascade path).
+        assert client.rest_client.experiments.find_experiments.call_count == 0
+        # Audit log finalized ok and recorded the flag in its args.
+        on_disk = json.loads(audit_path.read_text())
+        assert on_disk["status"] == "ok"
+        assert on_disk["args"]["exclude_experiments"] is True
+        cascade_types = {
+            a.get("details", {}).get("type")
+            for a in on_disk["actions"]
+            if isinstance(a.get("details"), dict)
+        }
+        assert "cascade_experiments" not in cascade_types
+        assert "cascade_optimizations" not in cascade_types
 
 
 # ---------------------------------------------------------------------------
