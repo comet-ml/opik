@@ -1,12 +1,12 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.ReportFailure;
+import com.comet.opik.api.ReportFailureType;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
-import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,7 +23,7 @@ public interface ReportFailureService {
 
     UUID create(ReportFailure failure);
 
-    ReportFailure.ReportFailurePage find(String type, UUID projectId, int page, int size);
+    ReportFailure.ReportFailurePage find(ReportFailureType type, UUID projectId, int page, int size);
 }
 
 @Slf4j
@@ -42,35 +42,31 @@ class ReportFailureServiceImpl implements ReportFailureService {
         String userName = requestContext.get().getUserName();
         UUID id = idGenerator.generateId();
 
-        // Validate type up front: the column is an enum, so an unknown value would otherwise fail at the DB
-        // with a 500 instead of a clean 400. Agent Insights is currently the only supported type.
-        if (!ReportFailureDAO.AGENT_INSIGHTS_TYPE.equals(failure.type())) {
-            throw new BadRequestException("Unsupported report failure type: '%s'".formatted(failure.type()));
-        }
-
-        // The entity is a project — reject failures for a non-existent one so they can't linger as orphan
-        // rows that a later job query surfaces.
+        // type is a validated enum (unknown values are rejected at deserialization with a 400), so no manual
+        // check is needed. The entity is a project — reject failures for a non-existent one so they can't
+        // linger as orphan rows that a later job query surfaces.
         projectService.validateProjectIdExists(failure.projectId(), workspaceId);
 
         log.info("Recording report failure type '{}' project '{}' in workspace '{}': '{}'",
-                failure.type(), failure.projectId(), workspaceId, failure.reason());
+                failure.type().getValue(), failure.projectId(), workspaceId, failure.reason());
 
         transactionTemplate.inTransaction(WRITE, handle -> {
-            handle.attach(ReportFailureDAO.class).insert(id, workspaceId, failure.type(), failure.projectId(),
-                    failure.reason(), failure.detail(), userName);
+            handle.attach(ReportFailureDAO.class).insert(id, workspaceId, failure.type().getValue(),
+                    failure.projectId(), failure.reason(), failure.detail(), userName);
             return null;
         });
         return id;
     }
 
     @Override
-    public ReportFailure.ReportFailurePage find(@NonNull String type, @NonNull UUID projectId, int page, int size) {
+    public ReportFailure.ReportFailurePage find(@NonNull ReportFailureType type, @NonNull UUID projectId, int page,
+            int size) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             ReportFailureDAO dao = handle.attach(ReportFailureDAO.class);
-            List<ReportFailure> content = dao.find(workspaceId, type, projectId, size, (page - 1) * size);
-            long total = dao.count(workspaceId, type, projectId);
+            List<ReportFailure> content = dao.find(workspaceId, type.getValue(), projectId, size, (page - 1) * size);
+            long total = dao.count(workspaceId, type.getValue(), projectId);
             return ReportFailure.ReportFailurePage.builder()
                     .page(page)
                     .size(size)

@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.ReportFailure;
+import com.comet.opik.api.ReportFailureType;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.ReportFailureService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -72,7 +73,7 @@ public class ReportFailuresResource {
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     public Response find(
-            @QueryParam("type") @NotNull String type,
+            @QueryParam("type") @NotNull ReportFailureType type,
             @QueryParam("project_id") @NotNull UUID projectId,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @Max(100) @DefaultValue("10") int size) {

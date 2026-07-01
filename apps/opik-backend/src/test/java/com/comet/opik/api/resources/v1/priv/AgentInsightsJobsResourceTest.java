@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.AgentInsightsJob;
 import com.comet.opik.api.AgentInsightsReport;
 import com.comet.opik.api.ReportFailure;
+import com.comet.opik.api.ReportFailureType;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -304,7 +305,7 @@ class AgentInsightsJobsResourceTest {
     // exactly as Ollie does; the job then surfaces the latest one via its query.
     private ReportFailure agentInsightsFailure(UUID projectId, String reason, String detail) {
         return ReportFailure.builder()
-                .type("agent_insights")
+                .type(ReportFailureType.AGENT_INSIGHTS)
                 .projectId(projectId)
                 .reason(reason)
                 .detail(detail)
@@ -371,9 +372,10 @@ class AgentInsightsJobsResourceTest {
                 Arguments.of("missing type",
                         ReportFailure.builder().projectId(UUID.randomUUID()).reason("x").build()),
                 Arguments.of("missing project id",
-                        ReportFailure.builder().type("agent_insights").reason("x").build()),
+                        ReportFailure.builder().type(ReportFailureType.AGENT_INSIGHTS).reason("x").build()),
                 Arguments.of("blank reason",
-                        ReportFailure.builder().type("agent_insights").projectId(UUID.randomUUID()).reason("")
+                        ReportFailure.builder().type(ReportFailureType.AGENT_INSIGHTS).projectId(UUID.randomUUID())
+                                .reason("")
                                 .build()));
     }
 
@@ -387,8 +389,10 @@ class AgentInsightsJobsResourceTest {
     @Test
     @DisplayName("Report failure with an unsupported type is rejected (400) before hitting the DB enum")
     void reportFailure__unsupportedType__returns400() {
-        var body = ReportFailure.builder().type("not_a_real_type").projectId(UUID.randomUUID()).reason("x").build();
-        reportFailuresClient.create(body, API_KEY, WORKSPACE_NAME, HttpStatus.SC_BAD_REQUEST);
+        // Raw JSON: the typed DTO can't express an invalid enum, so post an unknown `type` directly.
+        var body = """
+                {"type": "not_a_real_type", "project_id": "%s", "reason": "x"}""".formatted(UUID.randomUUID());
+        reportFailuresClient.createRaw(body, API_KEY, WORKSPACE_NAME, HttpStatus.SC_BAD_REQUEST);
     }
 
     @Test
@@ -405,7 +409,7 @@ class AgentInsightsJobsResourceTest {
         assertThat(page.total()).isEqualTo(2);
         assertThat(page.content()).hasSize(2);
         var latest = page.content().getFirst();
-        assertThat(latest.type()).isEqualTo("agent_insights");
+        assertThat(latest.type()).isEqualTo(ReportFailureType.AGENT_INSIGHTS);
         assertThat(latest.projectId()).isEqualTo(projectId);
         assertThat(latest.reason()).isEqualTo("out_of_credits");
         assertThat(latest.detail()).isEqualTo("latest");

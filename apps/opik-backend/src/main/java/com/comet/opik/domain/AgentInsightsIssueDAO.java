@@ -87,40 +87,45 @@ interface AgentInsightsIssueDAO {
             @BindMethods("bean") List<AgentInsightsReport.ReportedIssue> issues,
             @Bind("metadata") List<String> metadata);
 
-    // Window functions (not GROUP BY) so one pass returns both the cross-day aggregates AND the most recent
-    // report day's row: the prose (description/cause) is the latest run's narrative, so the UI needs
-    // latest_count to show a number consistent with it, alongside total_occurrences for overall scale. The
-    // details table is unique per (report_day, issue), so COUNT(*) OVER equals the distinct report-day count.
+    // Aggregate the details per issue in a subquery (agg), then join once more to the row for the most recent
+    // report day (latest) for latest_count. The prose (description/cause) narrates the latest run, so the UI
+    // needs latest_count consistent with it, alongside total_occurrences for overall scale. The details table is
+    // unique per (report_day, issue), so the latest join yields exactly one row per issue. Prefer this to
+    // window functions so the aggregation can use the details index rather than scanning/partitioning every row.
     @SqlQuery("""
-            SELECT id, name, description, cause, suggested_fix, status, severity, traces_query,
-                   total_occurrences, latest_count, total, users_impacted, total_users,
-                   first_seen, last_seen, days_reported,
-                   created_by, created_at, last_updated_by, last_updated_at
-            FROM (
-                SELECT i.id, i.name, i.description, i.cause, i.suggested_fix, i.status, i.severity, i.traces_query,
-                       SUM(d.`count`) OVER (PARTITION BY i.id) AS total_occurrences,
-                       d.`count` AS latest_count,
-                       SUM(d.total_count) OVER (PARTITION BY i.id) AS total,
-                       SUM(d.users_impacted) OVER (PARTITION BY i.id) AS users_impacted,
-                       SUM(d.total_users) OVER (PARTITION BY i.id) AS total_users,
-                       MIN(d.report_day) OVER (PARTITION BY i.id) AS first_seen,
-                       MAX(d.report_day) OVER (PARTITION BY i.id) AS last_seen,
-                       COUNT(*) OVER (PARTITION BY i.id) AS days_reported,
-                       i.created_by, i.created_at, i.last_updated_by, i.last_updated_at,
-                       ROW_NUMBER() OVER (PARTITION BY i.id ORDER BY d.report_day DESC) AS rn
-                FROM agent_insights_issues i
-                JOIN agent_insights_issues_details d
-                    ON d.workspace_id = i.workspace_id
-                    AND d.project_id = i.project_id
-                    AND d.issue_id = i.id
-                WHERE i.workspace_id = :workspace_id
-                    AND i.project_id = :project_id
-                    AND d.report_day BETWEEN :from_date AND :to_date
-                    <if(status)> AND i.status = :status <endif>
-                    <if(severity)> AND i.severity = :severity <endif>
-            ) ranked
-            WHERE rn = 1
-            ORDER BY <if(sort_fields)> <sort_fields>, <endif> last_seen DESC, total_occurrences DESC, id DESC
+            SELECT i.id, i.name, i.description, i.cause, i.suggested_fix, i.status, i.severity, i.traces_query,
+                   agg.total_occurrences, latest.`count` AS latest_count, agg.total,
+                   agg.users_impacted, agg.total_users, agg.first_seen, agg.last_seen, agg.days_reported,
+                   i.created_by, i.created_at, i.last_updated_by, i.last_updated_at
+            FROM agent_insights_issues i
+            JOIN (
+                SELECT workspace_id, project_id, issue_id,
+                       SUM(`count`) AS total_occurrences,
+                       SUM(total_count) AS total,
+                       SUM(users_impacted) AS users_impacted,
+                       SUM(total_users) AS total_users,
+                       MIN(report_day) AS first_seen,
+                       MAX(report_day) AS last_seen,
+                       COUNT(DISTINCT report_day) AS days_reported
+                FROM agent_insights_issues_details
+                WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND report_day BETWEEN :from_date AND :to_date
+                GROUP BY workspace_id, project_id, issue_id
+            ) agg
+                ON agg.workspace_id = i.workspace_id
+                AND agg.project_id = i.project_id
+                AND agg.issue_id = i.id
+            JOIN agent_insights_issues_details latest
+                ON latest.workspace_id = agg.workspace_id
+                AND latest.project_id = agg.project_id
+                AND latest.issue_id = agg.issue_id
+                AND latest.report_day = agg.last_seen
+            WHERE i.workspace_id = :workspace_id
+                AND i.project_id = :project_id
+                <if(status)> AND i.status = :status <endif>
+                <if(severity)> AND i.severity = :severity <endif>
+            ORDER BY <if(sort_fields)> <sort_fields>, <endif> agg.last_seen DESC, agg.total_occurrences DESC, i.id DESC
             LIMIT :limit OFFSET :offset
             """)
     @UseStringTemplateEngine

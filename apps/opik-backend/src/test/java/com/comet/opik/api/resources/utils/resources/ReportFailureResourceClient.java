@@ -38,6 +38,19 @@ public class ReportFailureResourceClient {
         }
     }
 
+    // Raw JSON body so tests can send values the typed DTO can't express (e.g. an unknown enum `type`).
+    public void createRaw(String jsonBody, String apiKey, String workspaceName, int expectedStatus) {
+        try (var response = client.target(PATH.formatted(baseURI))
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.entity(jsonBody, MediaType.APPLICATION_JSON_TYPE))) {
+
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+        }
+    }
+
     public ReportFailure.ReportFailurePage find(String type, UUID projectId, String apiKey, String workspaceName) {
         try (Response response = client.target(PATH.formatted(baseURI))
                 .queryParam("type", type)
