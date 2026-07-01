@@ -711,6 +711,9 @@ serviceToggles:
   # Description: Master switch for the agentic-tools path on LLM-as-judge online scoring.
   agenticToolsEnabled: "false"
   # Default: false
+  # Description: Whether the online-scoring (LLM-as-judge) evaluation loop is persisted as monitoring traces.
+  onlineScoringTracingEnabled: "false"
+  # Default: false
   # Description: Whether or not the Agent Insights freeform SQL path is enabled. Tests flip this on when exercising
   #   the read-only ClickHouse client and the clickhouse-readonly-freeform-sql health check.
   agentInsightsEnabled: "false"
