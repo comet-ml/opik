@@ -1400,12 +1400,12 @@ class ProjectsResourceTest {
             assertThat(actualEntity.content().stream().map(Project::id).toList())
                     .isEqualTo(List.of(id3, id2, id));
 
-            assertThat(actualEntity.content().get(0).lastUpdatedTraceAt())
-                    .isEqualTo(expectedProject3.lastUpdatedTraceAt());
-            assertThat(actualEntity.content().get(1).lastUpdatedTraceAt())
-                    .isEqualTo(expectedProject2.lastUpdatedTraceAt());
-            assertThat(actualEntity.content().get(2).lastUpdatedTraceAt())
-                    .isEqualTo(expectedProject.lastUpdatedTraceAt());
+            assertLastUpdatedTraceAtEquals(actualEntity.content().get(0).lastUpdatedTraceAt(),
+                    expectedProject3.lastUpdatedTraceAt());
+            assertLastUpdatedTraceAtEquals(actualEntity.content().get(1).lastUpdatedTraceAt(),
+                    expectedProject2.lastUpdatedTraceAt());
+            assertLastUpdatedTraceAtEquals(actualEntity.content().get(2).lastUpdatedTraceAt(),
+                    expectedProject.lastUpdatedTraceAt());
 
             assertAllProjectsHavePersistedLastTraceAt(workspaceId, List.of(expectedProject, expectedProject2,
                     expectedProject3));
@@ -1714,11 +1714,12 @@ class ProjectsResourceTest {
             assertThat(actualEntity.content().stream().map(Project::id).toList())
                     .isEqualTo(List.of(id3, id2, id1));
 
-            // project3 and project2 carry explicit client timestamps, so the recorded marker matches exactly.
-            assertThat(actualEntity.content().get(0).lastUpdatedTraceAt())
-                    .isEqualTo(expectedProject3.lastUpdatedTraceAt());
-            assertThat(actualEntity.content().get(1).lastUpdatedTraceAt())
-                    .isEqualTo(expectedProject2.lastUpdatedTraceAt());
+            // project3 and project2 carry explicit client timestamps, so the recorded marker matches the stored value
+            // (within the micro-level rounding difference between MySQL and ClickHouse storage).
+            assertLastUpdatedTraceAtEquals(actualEntity.content().get(0).lastUpdatedTraceAt(),
+                    expectedProject3.lastUpdatedTraceAt());
+            assertLastUpdatedTraceAtEquals(actualEntity.content().get(1).lastUpdatedTraceAt(),
+                    expectedProject2.lastUpdatedTraceAt());
             // project1 left lastUpdatedAt null, so its marker is the event publish time: at or after the stored
             // value and not in the future.
             assertThat(actualEntity.content().get(2).lastUpdatedTraceAt())
@@ -2424,9 +2425,23 @@ class ProjectsResourceTest {
         assertThat(actualEntity.lastUpdatedBy()).isEqualTo(USER);
         assertThat(actualEntity.createdBy()).isEqualTo(USER);
 
-        assertThat(actualEntity.lastUpdatedTraceAt()).isEqualTo(project.lastUpdatedTraceAt());
+        assertLastUpdatedTraceAtEquals(actualEntity.lastUpdatedTraceAt(), project.lastUpdatedTraceAt());
         assertThat(actualEntity.createdAt()).isAfter(project.createdAt());
         assertThat(actualEntity.lastUpdatedAt()).isAfter(project.createdAt());
+    }
+
+    /**
+     * last_updated_trace_at is persisted to MySQL (rounds sub-microsecond nanos to micros) while the trace's
+     * last_updated_at is stored in ClickHouse (truncates to micros), so the two representations of the same instant
+     * can differ by up to one microsecond. Compare with the same micro tolerance used for the persisted-marker
+     * assertions. Handles null (projects without traces) explicitly since the comparator dereferences the values.
+     */
+    private void assertLastUpdatedTraceAtEquals(Instant actual, Instant expected) {
+        if (expected == null) {
+            assertThat(actual).isNull();
+        } else {
+            assertThat(actual).usingComparator(TestComparators::compareMicroNanoTime).isEqualTo(expected);
+        }
     }
 
     private void requestAndAssertLastTraceSorting(String workspaceName, String apiKey, List<Project> allProjects,
