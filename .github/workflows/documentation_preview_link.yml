@@ -13,7 +13,9 @@ concurrency:
 jobs:
     run:
         runs-on: ubuntu-latest
-        timeout-minutes: 15
+        # Recent runs hug the old 15-min ceiling (13.5–14.6 min); the external re-verify
+        # curls added below need headroom so they can't tip a run into a spurious timeout.
+        timeout-minutes: 20
         permissions: write-all
         steps:
             - name: Checkout repository
@@ -42,7 +44,7 @@ jobs:
                 echo -e "\n\n" >> preview_url.txt
 
                 # --concurrency 500: the preview CDN serves bursts without rate-limiting;
-                # the recurse otherwise brushes the job's 15-minute timeout.
+                # the recurse otherwise brushes the job's timeout.
                 npx linkinator ${{ steps.generate-docs.outputs.URL }} \
                   --recurse \
                   --concurrency 500 \
@@ -82,32 +84,70 @@ jobs:
                   BROKEN_LINKS=$(printf '%s\n❌ Broken link: %s (%s)\n   ↳ on page: %s' "$BROKEN_LINKS" "$url" "$label" "$parent")
                 }
 
-                # Real HTTP errors (excluding 403s), deduped by url — one broken sidebar
-                # link otherwise multiplies into hundreds of lines and overflows GitHub's
-                # 65,536-char comment limit.
+                # Real HTTP errors, deduped by url — one broken sidebar link otherwise
+                # multiplies into hundreds of lines and overflows GitHub's 65,536-char
+                # comment limit. 403s are auth walls (not broken); 0/429/500 are re-verified
+                # below (crawl gave up, HuggingFace rate-limit, Fern-under-load) so they are
+                # excluded here and re-added only if genuinely unreachable.
                 BROKEN_LINKS=$(jq -r --arg origin "$PREVIEW_ORIGIN" '
-                  [.links[] | select(.state != "OK" and .status != 403 and .status != 0)]
+                  [.links[] | select(.state != "OK" and .status != 403 and .status != 0 and .status != 429 and .status != 500)]
                   | group_by(.url) | map(.[0]) | .[]
                   | "❌ Broken link: \(.url) (\(.status))\n   ↳ on page: \((.parent // "") | sub("^" + $origin; ""))"
                 ' linkinator_results.json)
 
-                # Status 0 is "crawl gave up", not an HTTP error — a false positive for
-                # healthy-but-slow pages. Re-check each (only on the preview origin, so a
-                # PR-authored link can't point curl at an arbitrary host) and keep it only
-                # if genuinely unreachable.
+                # SSRF guard for re-verify: a PR author controls the links being fetched, so
+                # before curling an external host we require http(s) and reject any host that
+                # resolves into a private/loopback/link-local/metadata range. Exits 0 (safe)
+                # or 1 (blocked). Preview-origin URLs skip this — they are ours by construction.
+                cat > ssrf_guard.py <<'PY'
+                import ipaddress, socket, sys
+                from urllib.parse import urlparse
+                url = sys.argv[1]
+                p = urlparse(url)
+                if p.scheme not in ("http", "https") or not p.hostname:
+                    sys.exit(1)
+                try:
+                    infos = socket.getaddrinfo(p.hostname, p.port or (443 if p.scheme == "https" else 80))
+                except socket.gaierror:
+                    sys.exit(1)  # unresolvable — treat as unsafe, report as broken
+                for info in infos:
+                    ip = ipaddress.ip_address(info[4][0])
+                    if (ip.is_private or ip.is_loopback or ip.is_link_local
+                            or ip.is_multicast or ip.is_reserved or ip.is_unspecified):
+                        sys.exit(1)
+                sys.exit(0)
+                PY
+
+                # Status 0 ("crawl gave up"), 429 (HuggingFace throttling linkinator's burst)
+                # and 500 (Fern preview erroring under crawl load) are all transient false
+                # positives — each returns 2xx/3xx when fetched on its own. Re-check each once
+                # and keep it only if still unreachable. Capped at 50 re-verifies so a 500-storm
+                # can't serialize hundreds of curls into the job timeout; the overflow is
+                # reported as broken (fail loud) rather than silently skipped.
+                MAX_REVERIFY=50
+                count=0
                 while IFS= read -r url; do
                   [ -z "$url" ] && continue
+                  count=$((count + 1))
+                  if [ "$count" -gt "$MAX_REVERIFY" ]; then
+                    report_timeout "$url" "not re-verified, over cap of $MAX_REVERIFY"
+                    continue
+                  fi
                   case "$url" in
-                    "$PREVIEW_ORIGIN"/*|"$PREVIEW_ORIGIN")
-                      code=$(curl -s -L -o /dev/null -w "%{http_code}" --max-time 20 "$url" 2>/dev/null)
-                      { [ -n "$code" ] && [ "$code" -ge 200 ] && [ "$code" -lt 400 ]; } && continue
-                      report_timeout "$url" "timeout, recheck ${code:-000}"
-                      ;;
+                    "$PREVIEW_ORIGIN"/*|"$PREVIEW_ORIGIN") ;;   # ours — no SSRF check needed
                     *)
-                      report_timeout "$url" "timeout"
+                      if ! python3 ssrf_guard.py "$url" 2>/dev/null; then
+                        report_timeout "$url" "blocked by SSRF guard or unresolvable"
+                        continue
+                      fi
                       ;;
                   esac
-                done <<< "$(jq -r '[.links[] | select(.status == 0) | .url] | unique | .[]' linkinator_results.json)"
+                  code=$(curl -s -L -o /dev/null -w "%{http_code}" --max-time 20 "$url" 2>/dev/null)
+                  { [ -n "$code" ] && [ "$code" -ge 200 ] && [ "$code" -lt 400 ]; } && continue
+                  report_timeout "$url" "recheck ${code:-000}"
+                done <<< "$(jq -r '[.links[] | select(.status == 0 or .status == 429 or .status == 500) | .url] | unique | .[]' linkinator_results.json)"
+
+                rm -f ssrf_guard.py
 
                 if [ -n "$BROKEN_LINKS" ]; then
                   {

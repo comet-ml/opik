@@ -13,7 +13,7 @@ canonical-url: https://www.comet.com/docs/opik/integrations/vercel-ai-sdk
 ## Setup
 
 The AI SDK supports tracing via OpenTelemetry. With the `OpikExporter` you can collect these traces in Opik.
-While telemetry is experimental ([docs](https://sdk.vercel.ai/docs/ai-sdk-core/telemetry#enabling-telemetry)), you can enable it by setting `experimental_telemetry` on each request that you want to trace.
+While telemetry is experimental ([docs](https://ai-sdk.dev/docs/ai-sdk-core/telemetry#enabling-telemetry)), you can enable it by setting `experimental_telemetry` on each request that you want to trace.
 
 ```ts
 const result = await generateText({
@@ -197,6 +197,6 @@ OPIK_LOG_LEVEL=DEBUG
 
 ## Source references
 
-- [Vercel AI SDK telemetry](https://sdk.vercel.ai/docs/ai-sdk-core/telemetry)
+- [Vercel AI SDK telemetry](https://ai-sdk.dev/docs/ai-sdk-core/telemetry)
 - [Next.js OpenTelemetry guide](https://nextjs.org/docs/app/building-your-application/optimizing/open-telemetry)
 - [Opik Vercel exporter package](https://www.npmjs.com/package/opik-vercel)
