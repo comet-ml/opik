@@ -22,9 +22,13 @@ public enum ReportFailureType implements HasValue {
     @JsonValue
     private final String value;
 
-    // BadRequestException so an invalid body/query value yields 400 instead of JAX-RS's default 404.
+    // A present-but-unknown value yields 400; a missing/null value returns null so it falls through to the
+    // @NotNull check on ReportFailure.type (422), rather than being reported as an unknown type.
     @JsonCreator
     public static ReportFailureType fromString(String value) {
+        if (value == null) {
+            return null;
+        }
         return Arrays.stream(values())
                 .filter(type -> type.value.equals(value))
                 .findFirst()
