@@ -28,6 +28,8 @@ interface AlgorithmConfigsProps {
   configs: Partial<OptimizerParameters>;
   onChange: (configs: Partial<OptimizerParameters>) => void;
   size?: ButtonProps["size"];
+  variant?: ButtonProps["variant"];
+  className?: string;
   disabled?: boolean;
 }
 
@@ -36,6 +38,8 @@ const AlgorithmConfigs = ({
   configs,
   onChange,
   size = "icon-sm",
+  variant = "outline",
+  className,
   disabled: disabledProp = false,
 }: AlgorithmConfigsProps) => {
   const getOptimizerForm = () => {
@@ -76,7 +80,12 @@ const AlgorithmConfigs = ({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size={size} disabled={disabled}>
+        <Button
+          variant={variant}
+          size={size}
+          className={className}
+          disabled={disabled}
+        >
           <Settings2 />
         </Button>
       </DropdownMenuTrigger>
@@ -111,6 +120,7 @@ const AlgorithmConfigs = ({
                   delete next.model_parameters;
                   onChange(next);
                 }}
+                type="button"
               >
                 Use prompt model
               </Button>

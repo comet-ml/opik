@@ -23,33 +23,6 @@ export const GepaOptimizerParamsSchema = z.object({
   seed: z.number().optional(),
 });
 
-// export const EvolutionaryOptimizerParamsSchema = z.object({
-//   model: z.string().optional(),
-//   model_parameters: z.record(z.unknown()).optional(),
-//   population_size: z.number().min(1, "Must be at least 1").optional(),
-//   num_generations: z.number().min(1, "Must be at least 1").optional(),
-//   mutation_rate: z
-//     .number()
-//     .min(0, "Must be between 0 and 1")
-//     .max(1, "Must be between 0 and 1")
-//     .optional(),
-//   crossover_rate: z
-//     .number()
-//     .min(0, "Must be between 0 and 1")
-//     .max(1, "Must be between 0 and 1")
-//     .optional(),
-//   tournament_size: z.number().min(1, "Must be at least 1").optional(),
-//   elitism_size: z.number().min(0, "Must be at least 0").optional(),
-//   adaptive_mutation: z.boolean().optional(),
-//   enable_moo: z.boolean().optional(),
-//   enable_llm_crossover: z.boolean().optional(),
-//   output_style_guidance: z.string().optional(),
-//   infer_output_style: z.boolean().optional(),
-//   n_threads: z.number().min(1, "Must be at least 1").optional(),
-//   verbose: z.boolean().optional(),
-//   seed: z.number().optional(),
-// });
-
 export const HierarchicalReflectiveOptimizerParamsSchema = z.object({
   model: z.string().optional(),
   model_parameters: z.record(z.unknown()).optional(),
@@ -222,15 +195,15 @@ export const convertOptimizationStudioToFormData = (
       ? configuredModel
       : availableModels[0] ?? "";
 
-  const keptConfiguredModel =
-    Boolean(modelName) && modelName === configuredModel;
   const defaultConfig = modelName
     ? getDefaultModelConfig(modelName as PROVIDER_MODEL_TYPE)
     : ({} as LLMPromptConfigsType);
-  const modelConfig =
-    hasExistingConfig && keptConfiguredModel
-      ? { ...defaultConfig, ...existingConfig }
-      : defaultConfig;
+  // Keep the run's saved params (temperature/top_p/...) even when its model is
+  // gone and we fall back to another — submit sanitizes what the resolved model
+  // can't accept. They used to be silently dropped on any model change.
+  const modelConfig = hasExistingConfig
+    ? { ...defaultConfig, ...existingConfig }
+    : defaultConfig;
 
   return {
     name: optimization?.name || "Optimization run",
@@ -265,13 +238,10 @@ export const convertFormDataToStudioConfig = (
       messages,
     },
     llm_model: {
-      // Registry can return ids that aren't members of PROVIDER_MODEL_TYPE.
-      // Cast intentionally — StudioLlmModel.model is typed against the
-      // deprecated enum (OPIK-5022 removes it).
-      model: formData.modelName as PROVIDER_MODEL_TYPE,
-      // Drop params the model doesn't accept (e.g. temperature on models that
-      // deprecate it) before the gateway rejects the request — same last-mile
-      // hardening the playground applies.
+      model: formData.modelName,
+      // Drop params the resolved model doesn't accept (e.g. temperature) before
+      // the gateway rejects them — same hardening the playground applies. The
+      // cast is only because sanitizeConfigForRequest types its arg as the legacy enum.
       parameters: sanitizeConfigForRequest(
         formData.modelName as PROVIDER_MODEL_TYPE,
         formData.modelConfig,
