@@ -103,7 +103,7 @@ jobs:
           - For files > 500 LOC where you only need one function, prefer AST search
             + targeted Read over reading the whole file.
           EOF
-      - uses: remyxai/outrider@v1
+      - uses: remyxai/outrider@feat/measure-substitution-vs-categorical
         with:
           interest-id: 22261e0a-6f02-4e9d-b79e-8c9bcaf981f9
           # Minimum days between recommendation PRs on this repo. '0' lets
