@@ -246,7 +246,12 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 trace.input(), trace.output(), trace.metadata());
 
         return Mono.zip(gatherSpanAttachments(trace, spans, message), traceAttachmentsMono)
-                .map(tuple -> {
+                // buildFullJson + compress(FULL) is the most CPU-/GC-expensive part of routing (a
+                // valueToTree of the trace + all its spans, plus a deepCopy for the enrich pass). The
+                // zip above emits on the R2DBC/attachment scheduler thread that ran the attachment
+                // lookups, so hop this serialization onto Schedulers.parallel() — mirroring evaluate()'s
+                // prep hop — to avoid taxing the DB scheduler on the {{trace}} path.
+                .flatMap(tuple -> Mono.fromCallable(() -> {
                     // Built once here and threaded downstream to prepareEvaluation (size estimate) and
                     // the tool-cache pre-seed, so the {{trace}} path serializes {trace, spans} a single
                     // time. compress() deep-copies before mutating (FULL/MEDIUM), so this node stays
@@ -261,7 +266,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                     envelope.put("tier", compressed.tier().name());
                     envelope.set("data", compressed.payload());
                     return new TraceStructure(envelope.toString(), fullJson);
-                });
+                }).subscribeOn(Schedulers.parallel()));
     }
 
     /**
