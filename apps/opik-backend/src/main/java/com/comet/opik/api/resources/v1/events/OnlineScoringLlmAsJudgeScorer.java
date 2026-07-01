@@ -1,8 +1,10 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.Span;
+import com.comet.opik.api.Trace;
 import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
+import com.comet.opik.api.resources.v1.events.tools.CompressionTier;
 import com.comet.opik.api.resources.v1.events.tools.EntityRef;
 import com.comet.opik.api.resources.v1.events.tools.EntityType;
 import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
@@ -14,6 +16,7 @@ import com.comet.opik.domain.TestSuiteAssertionCounterService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.domain.attachment.AttachmentService;
+import com.comet.opik.domain.attachment.AttachmentUtils;
 import com.comet.opik.domain.evaluation.EvaluationRecorder;
 import com.comet.opik.domain.evaluation.OnlineEvaluationRecorder;
 import com.comet.opik.domain.evaluators.UserLog;
@@ -25,11 +28,10 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
+import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
-import dev.langchain4j.data.message.AiMessage;
-import dev.langchain4j.data.message.ChatMessage;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.langchain4j.model.chat.request.ChatRequest;
-import dev.langchain4j.model.chat.request.ChatRequestParameters;
 import dev.langchain4j.model.chat.request.ToolChoice;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.inject.Inject;
@@ -42,12 +44,13 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.Constants;
@@ -58,14 +61,6 @@ import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 @EagerSingleton
 @Slf4j
 public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<TraceToScoreLlmAsJudge> {
-
-    /**
-     * Per-variable substitution cap for the test-suite-assertion (tool-enabled) path. ≈ 4 KB chars
-     * (~ 1 K tokens via the {@code Tokens.estimate} convention) is large enough that small trace
-     * input/output blobs render inline (cheap, no tool round-trip) but small enough that a huge
-     * trace doesn't blow context — the agent fetches the rest via the {@code read} tool.
-     */
-    private static final int MAX_PROMPT_FIELD_CHARS = 4_000;
 
     private final ChatCompletionService aiProxyService;
     private final Logger userFacingLogger;
@@ -185,31 +180,30 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                                 .put(RequestContext.USER_NAME, message.userName()))
                 : Mono.just(List.of());
 
-        // Monitoring trace for the evaluation loop (OPIK-6994): one hidden source=evaluator trace per
-        // evaluation, one llm span per LLM round. NOOP when the toggle is off — the evaluation then
-        // runs exactly as before with no extra writes.
+        // Presence of the {{trace}} variable is the declarative agentic trigger: it injects the
+        // trace structure (trace id, span ids, attachment file_names) into the prompt so the judge
+        // can call get_attachment with real ids instead of guessing. Gated by the agentic-tools
+        // toggle, same as the size-based path.
+        boolean referencesTrace = serviceTogglesConfig.isAgenticToolsEnabled()
+                && OnlineScoringEngine.templateReferencesTraceStructure(
+                        message.llmAsJudgeCode().messages(),
+                        message.llmAsJudgeCode().variables(),
+                        message.promptType());
+
+        // Monitoring recorder for the evaluation loop (OPIK-6994): one hidden source=evaluator trace per
+        // evaluation, one llm span per LLM round. NOOP when the toggle is off — the evaluation then runs
+        // exactly as before with no extra writes.
         EvaluationRecorder recorder = serviceTogglesConfig.isOnlineScoringTracingEnabled()
-                ? onlineEvaluationRecorder.begin(trace, message.ruleId(),
-                        message.ruleName(), message.llmAsJudgeCode().model().name(), message.workspaceId(),
-                        message.userName())
+                ? onlineEvaluationRecorder.begin(trace, message.ruleId(), message.ruleName(),
+                        message.llmAsJudgeCode().model().name(), message.workspaceId(), message.userName())
                 : EvaluationRecorder.NOOP;
 
-        // Fetch the trace's attachments up front (toggle-gated, best-effort) so the routing decision
-        // can force the agentic-tools path when media is present. The judge discovers them by calling
-        // read(type=trace), which is guaranteed because the first tool call uses ToolChoice.REQUIRED.
-        // A transient listing failure degrades to an empty list and falls back to normal size-based
-        // routing; it never blocks scoring.
-        Mono<List<AttachmentInfo>> attachmentsMono = serviceTogglesConfig.isAgenticToolsEnabled()
-                ? attachmentService.getAttachmentInfoByEntity(trace.id(),
-                        com.comet.opik.api.attachment.EntityType.TRACE, trace.projectId())
-                        .onErrorReturn(List.of())
-                        .contextWrite(ctx -> ctx
-                                .put(RequestContext.WORKSPACE_ID, message.workspaceId())
-                                .put(RequestContext.USER_NAME, message.userName()))
-                : Mono.just(List.of());
-
-        Mono<List<FeedbackScoreBatchItem>> scoring = Mono.zip(spansMono, attachmentsMono)
-                .flatMap(tuple -> evaluate(message, tuple.getT1(), tuple.getT2(), mdc, recorder));
+        Mono<List<FeedbackScoreBatchItem>> scoring = spansMono
+                .flatMap(spans -> referencesTrace
+                        ? buildTraceStructure(trace, spans, message)
+                                .flatMap(structure -> evaluate(message, spans, structure.envelopeJson(),
+                                        structure.fullJson(), true, mdc, recorder))
+                        : evaluate(message, spans, null, null, false, mdc, recorder));
 
         return recorder.monitor(scoring)
                 .flatMap(scores -> storeScores(scores, trace, message.userName(), message.workspaceId()))
@@ -223,8 +217,89 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 .then();
     }
 
+    /**
+     * Builds the {@code {{trace}}} structure injected into the prompt: the trace+spans content
+     * (compressed via {@link TraceCompressor#compress} — the same path the {@code read} tool uses)
+     * enriched with attachment {@code file_name}s at both levels — the trace's own attachments on the
+     * trace node and each span's attachments on its {@code span_tree} / {@code spans[]} entry — wrapped
+     * in a small id envelope ({@code trace_id} + {@code tier} + {@code data}). So the judge can call
+     * {@code get_attachment} with the correct {@code (type, id, file_name)} for any attachment in the
+     * trace, whether it lives on the trace or on one of its spans.
+     *
+     * <p>Trace-level attachment metadata isn't carried on the {@link Trace} object, and per-span
+     * metadata isn't on the {@link Span} objects, so both are fetched: the trace's own via a
+     * race-tolerant single lookup, and the spans' via a race-tolerant batched lookup. Both tolerate the
+     * attachment-upload race (an attachment may not be persisted yet when scoring is enqueued) and
+     * degrade to no attachments on a listing failure rather than blocking scoring.
+     */
+    private Mono<TraceStructure> buildTraceStructure(Trace trace, List<Span> spans, TraceToScoreLlmAsJudge message) {
+        Mono<List<AttachmentInfo>> traceColdFetch = attachmentService
+                .getAttachmentInfoByEntity(trace.id(), com.comet.opik.api.attachment.EntityType.TRACE,
+                        trace.projectId())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, message.workspaceId())
+                        .put(RequestContext.USER_NAME, message.userName()));
+        // Trace's own attachments: race-tolerant (may not be uploaded yet), gated on the trace body
+        // referencing an attachment.
+        Mono<List<AttachmentInfo>> traceAttachmentsMono = listAttachmentsToleratingUploadRace(
+                traceColdFetch, message.workspaceId(), trace.id(),
+                trace.input(), trace.output(), trace.metadata());
+
+        return Mono.zip(gatherSpanAttachments(trace, spans, message), traceAttachmentsMono)
+                .map(tuple -> {
+                    // Built once here and threaded downstream to prepareEvaluation (size estimate) and
+                    // the tool-cache pre-seed, so the {{trace}} path serializes {trace, spans} a single
+                    // time. compress() deep-copies before mutating (FULL/MEDIUM), so this node stays
+                    // pristine and is safe to reuse.
+                    JsonNode fullJson = traceCompressor.buildFullJson(trace, spans);
+                    // Enrich with BOTH per-span and trace-level attachments so the judge can fetch any of them.
+                    var compressed = traceCompressor.compress(fullJson, trace, spans, CompressionTier.FULL,
+                            tuple.getT1(), tuple.getT2());
+                    // compress() is id-agnostic; add the id envelope on top here, mirroring ReadTool.
+                    ObjectNode envelope = JsonUtils.getMapper().createObjectNode();
+                    envelope.put("trace_id", trace.id() != null ? trace.id().toString() : null);
+                    envelope.put("tier", compressed.tier().name());
+                    envelope.set("data", compressed.payload());
+                    return new TraceStructure(envelope.toString(), fullJson);
+                });
+    }
+
+    /**
+     * Lists attachments for all of the trace's spans in one batched, upload-race-tolerant lookup, grouped
+     * by span id. Spans whose body references an attachment drive a bounded retry until that attachment is
+     * persisted and visible (so the injected {@code {{trace}}} payload isn't missing span-level
+     * {@code file_name}s when scoring is enqueued immediately on trace create/update); transient
+     * auto-stripped copies are dropped per span when a persistent copy exists. See
+     * {@link #listSpanAttachmentsToleratingUploadRace}.
+     */
+    private Mono<Map<UUID, List<AttachmentInfo>>> gatherSpanAttachments(
+            Trace trace, List<Span> spans, TraceToScoreLlmAsJudge message) {
+        Set<UUID> spanIds = spans.stream()
+                .map(Span::id)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (spanIds.isEmpty()) {
+            return Mono.just(Map.of());
+        }
+        // Spans whose body references an attachment are the ones whose attachment must be visible before
+        // we build the structure — they drive the upload-race retry.
+        Set<UUID> spanIdsExpectingAttachment = spans.stream()
+                .filter(span -> span.id() != null && AttachmentUtils.hasAttachmentReferences(
+                        JsonUtils.getMapper(), span.input(), span.output(), span.metadata()))
+                .map(Span::id)
+                .collect(Collectors.toSet());
+        Mono<List<AttachmentInfo>> coldBatchedFetch = attachmentService
+                .getAttachmentInfoByEntityIds(com.comet.opik.api.attachment.EntityType.SPAN, spanIds)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, message.workspaceId())
+                        .put(RequestContext.USER_NAME, message.userName()));
+        return listSpanAttachmentsToleratingUploadRace(
+                coldBatchedFetch, message.workspaceId(), trace.id(), spanIdsExpectingAttachment);
+    }
+
     private Mono<List<FeedbackScoreBatchItem>> evaluate(TraceToScoreLlmAsJudge message, List<Span> spans,
-            List<AttachmentInfo> attachments, Map<String, String> mdc, EvaluationRecorder recorder) {
+            String traceStructureJson, JsonNode prebuiltFullJson, boolean referencesTrace, Map<String, String> mdc,
+            EvaluationRecorder recorder) {
         var trace = message.trace();
         // Sync prep is CPU-bound (JSON serialization for the size estimate + prompt rendering)
         // — schedule on Schedulers.parallel() so we don't tax the R2DBC scheduler that emits
@@ -232,12 +307,13 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         // MDC is applied inside prepareEvaluation via try-with-resources; reactive operators
         // below re-apply MDC via withMdc() because they may run on a different thread than the
         // boundedElastic worker that emitted the chat response.
-        return Mono.fromCallable(() -> prepareEvaluation(message, spans, attachments, mdc))
+        return Mono.fromCallable(
+                () -> prepareEvaluation(message, spans, traceStructureJson, prebuiltFullJson, referencesTrace, mdc))
                 .subscribeOn(Schedulers.parallel())
                 .flatMap(prepared -> {
-                    // Record the upfront retrieval + context assembly (span fetch, size estimate,
-                    // mode decision) as a general span before the first LLM round. The agentic flag
-                    // also sets the parent trace's mode.
+                    // Record the upfront retrieval + context assembly (span fetch, size estimate, mode
+                    // decision) as a preparation span before the first LLM round; the agentic flag also
+                    // sets the parent trace's mode.
                     recorder.recordPreparation(spans.size(), prepared.estimatedTokens(), prepared.useTools());
                     return scoreTraceReactive(prepared.scoreRequest(), message, recorder)
                             .doOnNext(withMdc(mdc, chatResponse -> {
@@ -248,8 +324,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                             }))
                             .flatMap(initialResponse -> prepared.useTools()
                                     ? handleToolCalls(initialResponse, prepared.scoreRequest(),
-                                            prepared.structuredRequest(), message, spans, prepared.fullJson(),
-                                            mdc,
+                                            prepared.structuredRequest(), message, spans, prepared.fullJson(), mdc,
                                             recorder)
                                     : Mono.just(initialResponse));
                 })
@@ -278,7 +353,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     }
 
     private PreparedEvaluation prepareEvaluation(TraceToScoreLlmAsJudge message, List<Span> spans,
-            List<AttachmentInfo> attachments, Map<String, String> mdc) {
+            String traceStructureJson, JsonNode prebuiltFullJson, boolean referencesTrace, Map<String, String> mdc) {
         var trace = message.trace();
         // Logging tags for the rule + trace; covers every userFacingLogger call in this sync prep.
         try (var logContext = wrapWithMdc(mdc)) {
@@ -289,16 +364,19 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             // works on the {trace, spans} composite — small trace with huge spans still trips
             // the size-based agentic-tools branch.
             //
-            // Build the full JSON ONCE here when we'll need the size estimate; if useTools
-            // resolves true, handleToolCalls reuses this same JsonNode to pre-seed the cache
-            // instead of rebuilding. Saves a full trace+spans serialization on every big-trace
-            // run (the most CPU-/GC-expensive part of routing).
+            // The full JSON is serialized ONCE: on the {{trace}} path buildTraceStructure already
+            // built it and threads it in here (prebuiltFullJson); otherwise we build it now for the
+            // size estimate. If useTools resolves true, handleToolCalls reuses this same JsonNode to
+            // pre-seed the cache instead of rebuilding — saving a full trace+spans serialization on
+            // every big-trace run (the most CPU-/GC-expensive part of routing).
             String modelName = message.llmAsJudgeCode().model().name();
-            JsonNode fullJson = traceCompressor.buildFullJson(trace, spans);
+            JsonNode fullJson = prebuiltFullJson != null
+                    ? prebuiltFullJson
+                    : traceCompressor.buildFullJson(trace, spans);
             int estimatedContextTokens = OnlineScoringEngine.estimateTokensFromJson(
                     fullJson, onlineScoringConfig.getAgenticToolsCharsPerToken());
             boolean useTools = shouldUseAgenticTools(message, estimatedContextTokens, modelName,
-                    !attachments.isEmpty());
+                    referencesTrace);
 
             ChatRequest scoreRequest;
             ChatRequest structuredRequest;
@@ -316,7 +394,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                             .formatted(trace.id(), trace.id());
                     scoreRequest = OnlineScoringEngine.prepareLlmRequest(
                             message.llmAsJudgeCode(), trace, new InstructionStrategy(),
-                            message.promptType(), MAX_PROMPT_FIELD_CHARS, drillDownHint, spans);
+                            message.promptType(), MAX_PROMPT_FIELD_CHARS, drillDownHint, spans, traceStructureJson);
                     // The post-tool-loop wrap-up must use the provider-native structured-output
                     // strategy (e.g. response_format=json_schema on OpenAI). InstructionStrategy
                     // is a soft prompt and Anthropic in particular often returns conversational
@@ -325,12 +403,24 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                     structuredRequest = OnlineScoringEngine.prepareLlmRequest(
                             message.llmAsJudgeCode(), trace,
                             llmProviderFactory.getStructuredOutputStrategy(modelName),
-                            message.promptType(), MAX_PROMPT_FIELD_CHARS, drillDownHint, spans);
+                            message.promptType(), MAX_PROMPT_FIELD_CHARS, drillDownHint, spans, traceStructureJson);
+                } else if (referencesTrace) {
+                    // Inline fallback for a {{trace}} rule on a non-tool-calling provider: the structure was
+                    // built at FULL tier for the (unavailable) tools path, and there are no read/jq tools to
+                    // drill in here, so cap the substitutions to bound the context window — otherwise a large
+                    // trace would inject uncapped and could overflow the model's context. No drill-down hint:
+                    // the model can't act on one, so over-cap values are simply truncated.
+                    scoreRequest = OnlineScoringEngine.prepareLlmRequest(
+                            message.llmAsJudgeCode(), trace,
+                            llmProviderFactory.getStructuredOutputStrategy(modelName),
+                            message.promptType(), MAX_PROMPT_FIELD_CHARS, INLINE_TRUNCATION_HINT, spans,
+                            traceStructureJson);
+                    structuredRequest = scoreRequest;
                 } else {
                     scoreRequest = OnlineScoringEngine.prepareLlmRequest(
                             message.llmAsJudgeCode(), trace,
                             llmProviderFactory.getStructuredOutputStrategy(modelName),
-                            message.promptType(), spans);
+                            message.promptType(), spans, traceStructureJson);
                     structuredRequest = scoreRequest;
                 }
             } catch (Exception exception) {
@@ -381,10 +471,6 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         return recorder.recordLlmCall(request, call);
     }
 
-    private static boolean shouldUseTools(TraceToScoreLlmAsJudge message) {
-        return LlmAsJudgeToolsMode.shouldUseTools(message);
-    }
-
     /**
      * Routing decision for whether to fetch the trace's spans before running the LLM call.
      * Spans are needed in two cases:
@@ -424,41 +510,46 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 && (LlmAsJudgeToolsMode.shouldUseTools(message)
                         || serviceTogglesConfig.isAgenticToolsEnabled());
         boolean templateNeedsSpans = serviceTogglesConfig.isAgenticToolsEnabled()
-                && OnlineScoringEngine.templateReferencesSpans(
+                && (OnlineScoringEngine.templateReferencesSpans(
                         message.llmAsJudgeCode().messages(),
                         message.llmAsJudgeCode().variables(),
-                        message.promptType());
+                        message.promptType())
+                        || OnlineScoringEngine.templateReferencesTraceStructure(
+                                message.llmAsJudgeCode().messages(),
+                                message.llmAsJudgeCode().variables(),
+                                message.promptType()));
         return agenticToolsPathPossible || templateNeedsSpans;
     }
 
     /**
      * Routing decision for whether to attach tool specs + run the tool-call loop. Tools fire
-     * when EITHER (a) the experimentId-driven branch applies (test-suite assertion) OR
-     * (b) the size-based branch applies (toggle on, context above threshold) — AND the
-     * provider supports tool-calling. Without the provider check, a non-tool-calling model
-     * (Ollama / Custom / OpikFree) selected via {@code test_suite_model} metadata would
-     * crash inside the LangChain4j chat call when the request carries {@code toolSpecifications}.
+     * when ANY of (a) the experimentId-driven branch applies (test-suite assertion), (b) the
+     * size-based branch applies (toggle on, context above threshold), or (c) the prompt references
+     * the {@code {{trace}}} skeleton variable (toggle on) — AND the provider supports tool-calling.
+     * Without the provider check, a non-tool-calling model (Ollama / Custom / OpikFree) selected
+     * via {@code test_suite_model} metadata would crash inside the LangChain4j chat call when the
+     * request carries {@code toolSpecifications}.
      *
-     * <p>When the experimentId path wants tools but the provider can't handle them, we fall
-     * back to the inline path with a user-facing warn — assertions that depend on tool-driven
-     * span inspection won't be reliable for that model, and surfacing the misconfiguration
-     * loudly is better than the silent crash the old code produced.
+     * <p>When a path wants tools but the provider can't handle them, we fall back to the inline
+     * path with a user-facing warn — surfacing the misconfiguration loudly is better than the
+     * silent crash the old code produced.
      *
      * <p>Side-effects: emits user-facing diagnostic logs whenever the decision is non-trivial,
      * so operators can correlate the routing with the trace.
      */
     // Package-private for unit tests.
     boolean shouldUseAgenticTools(TraceToScoreLlmAsJudge message, int estimatedContextTokens, String modelName,
-            boolean hasAttachments) {
+            boolean referencesTrace) {
         boolean experimentIdPath = LlmAsJudgeToolsMode.shouldUseTools(message);
         boolean providerSupportsTools = OnlineScoringEngine.supportsToolCalling(
                 llmProviderFactory.getLlmProvider(modelName));
         boolean overSizeThreshold = serviceTogglesConfig.isAgenticToolsEnabled()
                 && estimatedContextTokens >= onlineScoringConfig.getAgenticToolsThresholdTokens();
-        // Attachments force the agentic-tools path regardless of context size (OPIK-6555): the judge
-        // needs the get_attachment tool to load the media. Gated by the same toggle as the size path.
-        boolean attachmentsPath = serviceTogglesConfig.isAgenticToolsEnabled() && hasAttachments;
-        boolean wantsTools = experimentIdPath || overSizeThreshold || attachmentsPath;
+        // The {{trace}} variable forces the agentic-tools path regardless of context size: the prompt
+        // carries the trace skeleton (ids + attachment file_names) and the judge uses get_attachment /
+        // read to drill in. Gated by the same toggle as the size path.
+        boolean traceVariablePath = serviceTogglesConfig.isAgenticToolsEnabled() && referencesTrace;
+        boolean wantsTools = experimentIdPath || overSizeThreshold || traceVariablePath;
         boolean useTools = wantsTools && providerSupportsTools;
 
         if (experimentIdPath && !providerSupportsTools) {
@@ -477,18 +568,20 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             userFacingLogger.info(
                     "Trace context exceeds '{}' tokens; switching to agentic-tools mode for traceId '{}'",
                     onlineScoringConfig.getAgenticToolsThresholdTokens(), message.trace().id());
-        } else if (!experimentIdPath && !overSizeThreshold && attachmentsPath && !providerSupportsTools) {
-            // Surface to the user: their trace has attachments that cannot be scored because the
-            // chosen model's provider can't call tools — an actionable misconfiguration, unlike the
-            // purely-internal routing decisions which stay on the internal log.
+        } else if (!experimentIdPath && !overSizeThreshold && traceVariablePath && !providerSupportsTools) {
+            // Surface to the user: their prompt references {{trace}} (so they expect tool-driven
+            // inspection of the trace skeleton / attachments) but the chosen model's provider can't
+            // call tools — an actionable misconfiguration, unlike the purely-internal routing
+            // decisions which stay on the internal log.
             userFacingLogger.warn(
-                    "Trace '{}' has attachments but provider for model '{}' does not support tool calling;"
-                            + " falling back to inline path — attachments cannot be loaded for scoring."
-                            + " Pick a tool-calling provider (OpenAI / Anthropic / Gemini / OpenRouter /"
-                            + " Vertex / Bedrock) to score attachments.",
+                    "Trace '{}' rule references {{trace}} but provider for model '{}' does not support tool"
+                            + " calling; falling back to inline path — the judge cannot inspect the trace"
+                            + " skeleton or load attachments. Pick a tool-calling provider"
+                            + " (OpenAI / Anthropic / Gemini / OpenRouter / Vertex / Bedrock).",
                     message.trace().id(), modelName);
-        } else if (!experimentIdPath && !overSizeThreshold && attachmentsPath && useTools) {
-            log.debug("Trace '{}' has attachments; switching to agentic-tools mode", message.trace().id());
+        } else if (!experimentIdPath && !overSizeThreshold && traceVariablePath && useTools) {
+            log.debug("Trace '{}' rule references {{trace}}; switching to agentic-tools mode",
+                    message.trace().id());
         }
         return useTools;
     }
@@ -497,47 +590,21 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     Mono<ChatResponse> handleToolCalls(ChatResponse chatResponse, ChatRequest toolRequest,
             ChatRequest structuredRequest, TraceToScoreLlmAsJudge message, List<Span> spans,
             JsonNode fullJson, Map<String, String> mdc, EvaluationRecorder recorder) {
-
-        AiMessage aiMessage = chatResponse.aiMessage();
-        if (!aiMessage.hasToolExecutionRequests()) {
-            return Mono.just(chatResponse);
-        }
-
-        // Defer everything below to subscription time so context + cache pre-seed + message
-        // list allocation happen exactly once per subscription. The early Mono.just above is
-        // cold and pure, so it doesn't need to be inside the defer.
-        return Mono.defer(() -> {
-            var trace = message.trace();
-            var ctx = TraceToolContext.forActiveTrace(trace, spans, message.workspaceId(), message.userName(),
-                    onlineScoringConfig.getAgenticToolsMaxInjectedBytes());
-            // Pre-seed the active trace into the cache using the JSON that prepareEvaluation
-            // already built for the size estimate — saves a redundant traceCompressor.buildFullJson
-            // call on big-trace evaluations. Fall back to rebuilding if the caller didn't supply
-            // one (e.g. unit tests that call handleToolCalls directly).
-            ctx.cache(new EntityRef(EntityType.TRACE, trace.id().toString()),
-                    fullJson != null ? fullJson : traceCompressor.buildFullJson(trace, spans));
-
-            // Subsequent rounds use tool_choice=AUTO so the model can decide when it has enough
-            // information to stop investigating. The initial call uses REQUIRED to force ≥1 tool
-            // call (see prepareEvaluation() — overcomes OpenAI's bias against calling tools when it
-            // can satisfy the output schema from visible context). If we kept REQUIRED on follow-ups,
-            // the wrap-up turn would loop forever, since every round would be forced to invoke
-            // a tool even after the model is ready to emit the final JSON.
-            var followUpParameters = ChatRequestParameters.builder()
-                    .overrideWith(toolRequest.parameters())
-                    .toolChoice(ToolChoice.AUTO)
-                    .build();
-
-            var messages = new ArrayList<ChatMessage>(toolRequest.messages());
-            var budget = new ToolCallLoop.Budget();
-
-            return ToolCallLoop.runWithWrapUp(
-                    chatResponse, toolRequest, structuredRequest, followUpParameters, toolRegistry,
-                    request -> scoreTraceReactive(request, message, recorder),
-                    messages, ctx, budget, trace.id().toString(), mdc, recorder)
-                    .onErrorResume(error -> surfaceInjectedMediaFailure(error, ctx,
-                            message.llmAsJudgeCode().model().name(), userFacingLogger, mdc));
-        });
+        var trace = message.trace();
+        // Shared loop orchestration lives in the base scorer; here we provide only the trace-specific
+        // context seeding. The cache is pre-seeded with the JSON prepareEvaluation already built for the
+        // size estimate (saves a rebuild on big traces); fall back to rebuilding when the caller didn't
+        // supply one (e.g. unit tests that call handleToolCalls directly).
+        return runToolCallLoop(chatResponse, toolRequest, structuredRequest,
+                () -> {
+                    var ctx = TraceToolContext.forActiveTrace(trace, spans, message.workspaceId(),
+                            message.userName(), onlineScoringConfig.getAgenticToolsMaxInjectedBytes());
+                    ctx.cache(new EntityRef(EntityType.TRACE, trace.id().toString()),
+                            fullJson != null ? fullJson : traceCompressor.buildFullJson(trace, spans));
+                    return ctx;
+                },
+                toolRegistry, request -> scoreTraceReactive(request, message, recorder),
+                message.llmAsJudgeCode().model().name(), trace.id().toString(), userFacingLogger, mdc, recorder);
     }
 
     /**
@@ -548,6 +615,15 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
      */
     private record PreparedEvaluation(ChatRequest scoreRequest, ChatRequest structuredRequest, boolean useTools,
             JsonNode fullJson, int estimatedTokens) {
+    }
+
+    /**
+     * Carry from {@link #buildTraceStructure} to {@link #evaluate} on the {@code {{trace}}} path.
+     * {@code envelopeJson} is the rendered structure injected into the prompt; {@code fullJson} is the
+     * {@code {trace, spans}} composite built alongside it, threaded down so {@link #prepareEvaluation}
+     * reuses it for the size estimate / tool-cache pre-seed instead of serializing the trace again.
+     */
+    private record TraceStructure(String envelopeJson, JsonNode fullJson) {
     }
 
 }

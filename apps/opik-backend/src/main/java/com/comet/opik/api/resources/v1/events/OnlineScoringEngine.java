@@ -83,6 +83,8 @@ public class OnlineScoringEngine {
     static final String REASON_FIELD_NAME = "reason";
 
     private static final String SPANS_VARIABLE_NAME = "spans";
+    private static final String TRACE_VARIABLE_NAME = "trace";
+    private static final String SPAN_VARIABLE_NAME = "span";
 
     private static final ObjectMapper OBJECT_MAPPER = JsonUtils.getMapper();
 
@@ -112,9 +114,18 @@ public class OnlineScoringEngine {
             @NonNull LlmAsJudgeCode evaluatorCode, Trace trace,
             StructuredOutputStrategy structuredOutputStrategy, @NonNull PromptType promptType,
             @NonNull List<Span> spans) {
+        return prepareLlmRequest(evaluatorCode, trace, structuredOutputStrategy, promptType, spans, null);
+    }
+
+    public static ChatRequest prepareLlmRequest(
+            @NonNull LlmAsJudgeCode evaluatorCode, Trace trace,
+            StructuredOutputStrategy structuredOutputStrategy, @NonNull PromptType promptType,
+            @NonNull List<Span> spans, String traceStructureJson) {
         Map<String, String> replacements = toReplacements(evaluatorCode.variables(), trace);
         injectSpansIntoReplacements(replacements, evaluatorCode.variables(),
                 evaluatorCode.messages(), promptType, spans);
+        injectTraceIntoReplacements(replacements, evaluatorCode.variables(),
+                evaluatorCode.messages(), promptType, traceStructureJson);
         var renderedMessages = renderMessagesWithReplacements(evaluatorCode.messages(), replacements, promptType);
         return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
     }
@@ -131,60 +142,99 @@ public class OnlineScoringEngine {
             @NonNull LlmAsJudgeCode evaluatorCode, Trace trace,
             StructuredOutputStrategy structuredOutputStrategy, @NonNull PromptType promptType,
             int maxReplacementChars, @NonNull String drillDownHint, @NonNull List<Span> spans) {
+        return prepareLlmRequest(evaluatorCode, trace, structuredOutputStrategy, promptType,
+                maxReplacementChars, drillDownHint, spans, null);
+    }
+
+    public static ChatRequest prepareLlmRequest(
+            @NonNull LlmAsJudgeCode evaluatorCode, Trace trace,
+            StructuredOutputStrategy structuredOutputStrategy, @NonNull PromptType promptType,
+            int maxReplacementChars, @NonNull String drillDownHint, @NonNull List<Span> spans,
+            String traceStructureJson) {
         Map<String, String> replacements = toReplacements(evaluatorCode.variables(), trace);
         injectSpansIntoReplacements(replacements, evaluatorCode.variables(),
                 evaluatorCode.messages(), promptType, spans);
+        injectTraceIntoReplacements(replacements, evaluatorCode.variables(),
+                evaluatorCode.messages(), promptType, traceStructureJson);
         Map<String, String> capped = capReplacements(replacements, maxReplacementChars, drillDownHint);
         var renderedMessages = renderMessagesWithReplacements(evaluatorCode.messages(), capped, promptType);
         return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
     }
 
     /**
-     * Whether the rule needs the trace's spans list rendered into the prompt. Two ways to
-     * opt in:
-     * <ul>
-     *   <li>Sentinel-valued variable: any entry in {@code variables} whose value is the bare
-     *       string {@code "spans"} (no JSONPath prefix) — mirrors the Python-metric convention
-     *       and is what the FE writes when the user types {@code {{spans}}} in the prompt.
-     *   <li>Direct template reference: any message in {@code messages} references
-     *       {@code {{spans}}} (per {@code promptType}) without the variables map mapping it
-     *       to a custom path. Catches API-created rules where the caller put {@code {{spans}}}
-     *       in the prompt but didn't (or didn't know to) set the sentinel mapping.
-     * </ul>
-     *
-     * <p>Used by the trace scorer to opt-in to the {@code spanService.getByTraceIds(...)} fetch
-     * for inline LLM-as-judge evaluations whose template references {@code {{spans}}}.
+     * Whether the rule needs the trace's spans list rendered into the prompt — opt-in via the
+     * {@code "spans"} sentinel (see {@link #referencesSpecialVariable} for the two opt-in shapes).
+     * Used by the trace scorer to opt-in to the {@code spanService.getByTraceIds(...)} fetch for
+     * inline LLM-as-judge evaluations whose template references {@code {{spans}}}.
      */
     public static boolean templateReferencesSpans(
             @NonNull List<LlmAsJudgeMessage> messages,
             @NonNull Map<String, String> variables,
             @NonNull PromptType promptType) {
-        return variables.containsValue(SPANS_VARIABLE_NAME)
-                || messagesReferenceSpansDirectly(messages, variables, promptType);
+        return referencesSpecialVariable(messages, variables, promptType, SPANS_VARIABLE_NAME);
     }
 
     /**
-     * True when at least one message template references {@code {{spans}}} (or the equivalent
-     * for {@code promptType}) AND the variables map does not bind {@code spans} to a custom
-     * path. The second clause respects explicit user mappings — e.g. a rule that maps
-     * {@code spans} to {@code input.something} keeps that mapping instead of being silently
-     * overridden by the spans-list injection.
-     *
-     * <p>Walks both message shapes: the simple-string {@code content} field, and the
-     * multimodal {@code contentArray} where each part exposes its own {@code text}. Scanning
-     * only {@code content} would miss {@code {{spans}}} in multimodal prompts, leaving the
-     * rendered text part unsubstituted because the spans fetch never fires.
+     * Whether the rule references the {@code {{trace}}} structure variable — the declarative signal that
+     * the judge needs the agentic-tools loop (it injects the trace id, span ids and attachment
+     * {@code file_name}s into the prompt so the judge can call {@code get_attachment} without fabricating
+     * ids). Opt-in via the {@code "trace"} sentinel (see {@link #referencesSpecialVariable}).
      */
-    private static boolean messagesReferenceSpansDirectly(
-            List<LlmAsJudgeMessage> messages, Map<String, String> variables, PromptType promptType) {
-        if (variables.containsKey(SPANS_VARIABLE_NAME)) {
+    public static boolean templateReferencesTraceStructure(
+            @NonNull List<LlmAsJudgeMessage> messages,
+            @NonNull Map<String, String> variables,
+            @NonNull PromptType promptType) {
+        return referencesSpecialVariable(messages, variables, promptType, TRACE_VARIABLE_NAME);
+    }
+
+    /**
+     * Whether a span-level rule references the {@code {{span}}} structure variable — the declarative
+     * signal that the span judge needs the agentic-tools loop (it injects the span id + the span's own
+     * attachment {@code file_name}s so the judge can call {@code get_attachment(type=span, ...)} without
+     * fabricating ids). Opt-in via the {@code "span"} sentinel (see {@link #referencesSpecialVariable});
+     * distinct from the trace-level {@code {{spans}}} list sentinel.
+     */
+    public static boolean templateReferencesSpanStructure(
+            @NonNull List<LlmAsJudgeMessage> messages,
+            @NonNull Map<String, String> variables,
+            @NonNull PromptType promptType) {
+        return referencesSpecialVariable(messages, variables, promptType, SPAN_VARIABLE_NAME);
+    }
+
+    /**
+     * Whether a rule opts into the special variable named {@code sentinel} — the shared detection behind
+     * {@code {{spans}}}, {@code {{trace}}} and {@code {{span}}}. Two opt-in shapes:
+     * <ul>
+     *   <li>Sentinel-valued variable: any entry in {@code variables} whose value is the bare sentinel
+     *       string (no JSONPath prefix) — what the FE writes when the user types {@code {{<sentinel>}}}.
+     *   <li>Direct template reference: a message references {@code {{<sentinel>}}} (per {@code promptType})
+     *       without the variables map binding it to a custom path, so an explicit user mapping wins.
+     * </ul>
+     */
+    private static boolean referencesSpecialVariable(
+            List<LlmAsJudgeMessage> messages, Map<String, String> variables, PromptType promptType,
+            String sentinel) {
+        return variables.containsValue(sentinel)
+                || messagesReferenceSpecialVariableDirectly(messages, variables, promptType, sentinel);
+    }
+
+    /**
+     * True when at least one message template references {@code {{<sentinel>}}} (per {@code promptType})
+     * AND the variables map does not bind {@code sentinel} to a custom path. Walks both message shapes —
+     * the simple-string {@code content} and the multimodal {@code contentArray} text parts (via
+     * {@link #renderableTextOf}); scanning only {@code content} would miss references in multimodal
+     * prompts, leaving the rendered text part unsubstituted because the opt-in never fires.
+     */
+    private static boolean messagesReferenceSpecialVariableDirectly(
+            List<LlmAsJudgeMessage> messages, Map<String, String> variables, PromptType promptType,
+            String sentinel) {
+        if (variables.containsKey(sentinel)) {
             return false;
         }
         return messages.stream()
                 .filter(Objects::nonNull)
                 .flatMap(OnlineScoringEngine::renderableTextOf)
-                .anyMatch(text -> TemplateParseUtils.extractVariables(text, promptType)
-                        .contains(SPANS_VARIABLE_NAME));
+                .anyMatch(text -> TemplateParseUtils.extractVariables(text, promptType).contains(sentinel));
     }
 
     /**
@@ -208,50 +258,90 @@ public class OnlineScoringEngine {
     }
 
     /**
-     * Replace any variable whose source path is the {@code "spans"} sentinel with the JSON-
-     * serialized spans list (sorted by start_time, matching the Python-metric convention).
-     * Mutates {@code replacements} in place. No-op when no variable references the sentinel
-     * and no message template references {@code {{spans}}} directly.
+     * Replace any variable mapped to the {@code "spans"} sentinel (and the implicit {@code {{spans}}}
+     * reference) with the JSON-serialized spans list (parent→child tree, siblings sorted by start_time).
+     * See {@link #injectSpecialVariable} for the shared substitution mechanics; the tree is serialized
+     * lazily, only when the sentinel is actually referenced.
      *
-     * <p>An empty spans list still triggers the rewrite (rendering as {@code "[]"}) — without
-     * it, {@code toReplacements} leaves the bare {@code "spans"} value as a literal and the
-     * prompt renders the word "spans" instead of an empty array. <strong>Intentionally not
-     * gated by {@code isAgenticToolsEnabled}</strong>: when the toggle is off, the scorer
-     * skips the spans fetch and threads an empty list here, which still rewrites
-     * sentinel-mapped variables to {@code "[]"}. Gating this would resurrect the bare-word
-     * leak for rules whose variables map still carries the sentinel from before the toggle
-     * flipped. See {@code OnlineScoringLlmAsJudgeScorer.shouldFetchSpans} for the full
-     * toggle-semantics rationale.
-     *
-     * <p>Also handles the implicit-reference case (template uses {@code {{spans}}} but the
-     * variables map doesn't bind it): mirrors the FE auto-fill server-side so API-created
-     * rules get the same behavior without forcing every caller to know the sentinel convention.
+     * <p>An empty spans list still triggers the rewrite (rendering as {@code "[]"}).
+     * <strong>Intentionally not gated by {@code isAgenticToolsEnabled}</strong>: when the toggle is off,
+     * the scorer skips the spans fetch and threads an empty list here, which still rewrites
+     * sentinel-mapped variables to {@code "[]"}. Gating this would resurrect the bare-word leak for rules
+     * whose variables map still carries the sentinel from before the toggle flipped. See
+     * {@code OnlineScoringLlmAsJudgeScorer.shouldFetchSpans} for the full toggle-semantics rationale.
      */
     private static void injectSpansIntoReplacements(
             Map<String, String> replacements, Map<String, String> variables,
             List<LlmAsJudgeMessage> messages, PromptType promptType, List<Span> spans) {
-        boolean sentinelMapped = variables.containsValue(SPANS_VARIABLE_NAME);
-        boolean templateOnly = messagesReferenceSpansDirectly(messages, variables, promptType);
+        injectSpecialVariable(replacements, variables, messages, promptType, SPANS_VARIABLE_NAME,
+                () -> serializeSpansTree(spans));
+    }
+
+    /**
+     * Replace the {@code "trace"} sentinel with the pre-built trace structure JSON (built upstream in the
+     * scorer's reactive attachment fetch). A null structure renders as {@code "{}"} so the variable never
+     * leaks the bare word "trace". See {@link #injectSpecialVariable}.
+     */
+    private static void injectTraceIntoReplacements(
+            Map<String, String> replacements, Map<String, String> variables,
+            List<LlmAsJudgeMessage> messages, PromptType promptType, String traceStructureJson) {
+        injectSpecialVariable(replacements, variables, messages, promptType, TRACE_VARIABLE_NAME,
+                () -> traceStructureJson != null ? traceStructureJson : "{}");
+    }
+
+    /**
+     * Replace the {@code "span"} sentinel with the pre-built span structure JSON. A null structure renders
+     * as {@code "{}"}. Span-level mirror of {@link #injectTraceIntoReplacements}; see
+     * {@link #injectSpecialVariable}.
+     */
+    private static void injectSpanIntoReplacements(
+            Map<String, String> replacements, Map<String, String> variables,
+            List<LlmAsJudgeMessage> messages, PromptType promptType, String spanStructureJson) {
+        injectSpecialVariable(replacements, variables, messages, promptType, SPAN_VARIABLE_NAME,
+                () -> spanStructureJson != null ? spanStructureJson : "{}");
+    }
+
+    /**
+     * Shared substitution for a sentinel-named special variable. Mutates {@code replacements} in place:
+     * every variable whose source path is {@code sentinel} (and, for an implicit {@code {{<sentinel>}}}
+     * template reference with no binding, the sentinel key itself) is set to {@code value}. No-op — and
+     * {@code value} is never invoked — when nothing references the sentinel, so callers can defer
+     * expensive value construction (e.g. serializing the spans tree) into the supplier.
+     *
+     * <p>An empty/placeholder value still triggers the rewrite (e.g. {@code "[]"} / {@code "{}"}): without
+     * it, {@code toReplacements} would leave the bare sentinel as a literal and the prompt would render
+     * the sentinel word instead. Also handles the implicit-reference case (template uses
+     * {@code {{<sentinel>}}} but the variables map doesn't bind it), mirroring the FE auto-fill so
+     * API-created rules behave the same without knowing the sentinel convention.
+     */
+    private static void injectSpecialVariable(
+            Map<String, String> replacements, Map<String, String> variables,
+            List<LlmAsJudgeMessage> messages, PromptType promptType, String sentinel,
+            Supplier<String> value) {
+        boolean sentinelMapped = variables.containsValue(sentinel);
+        boolean templateOnly = messagesReferenceSpecialVariableDirectly(messages, variables, promptType, sentinel);
         if (!sentinelMapped && !templateOnly) {
             return;
         }
-        // Project to SpanForLlm and reconstruct parent → child hierarchy so the judge sees
-        // the call tree, not a flat list. Drops audit metadata, feedback scores, comments,
-        // cost data — none of which help the judge and all of which burn tokens. Siblings
-        // are sorted by start_time inside buildSpanTree.
-        String spansJson;
-        try {
-            spansJson = OBJECT_MAPPER.writeValueAsString(buildSpanTree(spans));
-        } catch (JsonProcessingException e) {
-            throw new UncheckedIOException(e);
-        }
+        String rendered = value.get();
         variables.forEach((name, path) -> {
-            if (SPANS_VARIABLE_NAME.equals(path)) {
-                replacements.put(name, spansJson);
+            if (sentinel.equals(path)) {
+                replacements.put(name, rendered);
             }
         });
         if (templateOnly) {
-            replacements.put(SPANS_VARIABLE_NAME, spansJson);
+            replacements.put(sentinel, rendered);
+        }
+    }
+
+    private static String serializeSpansTree(List<Span> spans) {
+        // Project to SpanForLlm and reconstruct the parent→child hierarchy so the judge sees the call
+        // tree, not a flat list. Drops audit metadata, feedback scores, comments, cost data — none help
+        // the judge and all burn tokens. Siblings are sorted by start_time inside buildSpanTree.
+        try {
+            return OBJECT_MAPPER.writeValueAsString(buildSpanTree(spans));
+        } catch (JsonProcessingException e) {
+            throw new UncheckedIOException(e);
         }
     }
 
@@ -277,6 +367,46 @@ public class OnlineScoringEngine {
             @NonNull Span span,
             @NonNull StructuredOutputStrategy structuredOutputStrategy) {
         var renderedMessages = renderMessages(evaluatorCode.messages(), evaluatorCode.variables(), span);
+        return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
+    }
+
+    /**
+     * Inline variant that injects the pre-built {@code {{span}}} structure (span id + the span's own
+     * attachment {@code file_name}s) without capping — used by the span scorer when a rule references
+     * {@code {{span}}} but the provider can't call tools, so the variable still renders the structure
+     * instead of the bare word "span". Span templates always render with {@link PromptType#MUSTACHE}.
+     */
+    public static ChatRequest prepareSpanLlmRequest(
+            @NonNull AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode evaluatorCode,
+            @NonNull Span span,
+            @NonNull StructuredOutputStrategy structuredOutputStrategy,
+            String spanStructureJson) {
+        Map<String, String> replacements = toReplacements(evaluatorCode.variables(), span);
+        injectSpanIntoReplacements(replacements, evaluatorCode.variables(),
+                evaluatorCode.messages(), PromptType.MUSTACHE, spanStructureJson);
+        var renderedMessages = renderMessagesWithReplacements(evaluatorCode.messages(), replacements,
+                PromptType.MUSTACHE);
+        return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
+    }
+
+    /**
+     * Tool-mode variant of {@link #prepareSpanLlmRequest(AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode, Span, StructuredOutputStrategy)}
+     * used by the span scorer's agentic-tools path: injects the pre-built {@code {{span}}} structure
+     * (span id + the span's own attachment {@code file_name}s) and caps each rendered substitution at
+     * {@code maxReplacementChars}, appending {@code drillDownHint} to over-cap values so a huge span
+     * input/output doesn't pre-load context — the agent pulls the rest via {@code read} / {@code jq}.
+     * Span templates always render with {@link PromptType#MUSTACHE} (span rules carry no prompt type).
+     */
+    public static ChatRequest prepareSpanLlmRequest(
+            @NonNull AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode evaluatorCode,
+            @NonNull Span span,
+            @NonNull StructuredOutputStrategy structuredOutputStrategy,
+            int maxReplacementChars, @NonNull String drillDownHint, String spanStructureJson) {
+        Map<String, String> replacements = toReplacements(evaluatorCode.variables(), span);
+        injectSpanIntoReplacements(replacements, evaluatorCode.variables(),
+                evaluatorCode.messages(), PromptType.MUSTACHE, spanStructureJson);
+        Map<String, String> capped = capReplacements(replacements, maxReplacementChars, drillDownHint);
+        var renderedMessages = renderMessagesWithReplacements(evaluatorCode.messages(), capped, PromptType.MUSTACHE);
         return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
     }
 
