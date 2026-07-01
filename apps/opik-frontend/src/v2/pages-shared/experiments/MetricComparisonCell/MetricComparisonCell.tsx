@@ -4,8 +4,11 @@ import isUndefined from "lodash/isUndefined";
 import { calcFormatterAwarePercentage } from "@/lib/percentage";
 import PercentageTrend, {
   PercentageTrendType,
+  getTrendConfig,
+  TREND_COLOR_CLASS,
 } from "@/shared/PercentageTrend/PercentageTrend";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import { cn, formatNumericData } from "@/lib/utils";
 
 type MetricComparisonCellProps = {
   baseline?: number;
@@ -25,19 +28,39 @@ const MetricComparisonCell: React.FunctionComponent<
   const percentage = calcFormatterAwarePercentage(current, baseline, formatter);
 
   if (compact) {
+    // Show the trend icon for any percentage — including Infinity from a zero
+    // baseline — and drop only the numeric label when the value isn't finite.
+    const trendConfig = !isUndefined(percentage)
+      ? getTrendConfig(percentage, trend, 0)
+      : null;
+    const TrendIcon = trendConfig?.Icon;
+    const percentageLabel =
+      !isUndefined(percentage) && isFinite(percentage)
+        ? `${formatNumericData(percentage, 0)}%`
+        : null;
+
     return (
       <div className="flex items-center gap-1.5">
-        {!isUndefined(baseline) && (
-          <TooltipWrapper content={String(baseline)}>
-            <span className="comet-body-s text-muted-slate">
-              {formatter(baseline)}
-            </span>
-          </TooltipWrapper>
+        {trendConfig && TrendIcon && (
+          <div className="inline-flex items-center gap-1 rounded-md border border-[var(--pill-neutral-border)] bg-[var(--pill-neutral-bg)] px-1.5 py-0.5">
+            <TrendIcon
+              className={cn(
+                "size-3 shrink-0",
+                TREND_COLOR_CLASS[trendConfig.variant],
+              )}
+            />
+            {percentageLabel && (
+              <span className="comet-body-xs-accented text-muted-slate">
+                {percentageLabel}
+              </span>
+            )}
+          </div>
         )}
-        <PercentageTrend percentage={percentage} trend={trend} iconOnly />
         {!isUndefined(current) ? (
           <TooltipWrapper content={String(current)}>
-            <span className="comet-body-s-accented">{formatter(current)}</span>
+            <span className="comet-body-xs text-foreground">
+              {formatter(current)}
+            </span>
           </TooltipWrapper>
         ) : (
           <span className="text-muted-slate">-</span>
