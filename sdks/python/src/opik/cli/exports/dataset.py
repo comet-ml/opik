@@ -156,7 +156,7 @@ def export_experiment_datasets(
     format: str,
     debug: bool,
     force: bool,
-) -> tuple[int, int]:
+) -> tuple[int, int, int]:
     """Export datasets related to an experiment.
 
     Args:
@@ -169,10 +169,11 @@ def export_experiment_datasets(
         force: Re-download datasets even if they already exist locally
 
     Returns:
-        Tuple of (exported_count, skipped_count)
+        Tuple of (exported_count, skipped_count, error_count)
     """
     exported_count = 0
     skipped_count = 0
+    error_count = 0
 
     for dataset_name in datasets_to_export:
         try:
@@ -226,6 +227,7 @@ def export_experiment_datasets(
             console.print(f"[green]Exported dataset: {dataset_name}[/green]")
             exported_count += 1
         except Exception as e:
+            error_count += 1
             if debug:
                 console.print(
                     f"[yellow]Warning: Could not export dataset {dataset_name}: {e}[/yellow]"
@@ -233,7 +235,7 @@ def export_experiment_datasets(
             else:
                 console.print(f"[red]Error exporting dataset {dataset_name}: {e}[/red]")
 
-    return exported_count, skipped_count
+    return exported_count, skipped_count, error_count
 
 
 @click.command(name="dataset")

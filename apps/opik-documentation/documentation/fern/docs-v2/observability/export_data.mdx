@@ -177,6 +177,8 @@ opik export my-workspace my-project traces --format csv --path ./csv_data
 opik import WORKSPACE PROJECT ITEM [NAME] [OPTIONS]
 ```
 
+`WORKSPACE` is the source workspace — used to locate the exported files under `<path>/WORKSPACE/projects/`. Use `--to-workspace` to write into a different destination workspace.
+
 ```bash
 # Import a dataset
 opik import my-workspace my-project dataset "my-dataset"
@@ -187,11 +189,17 @@ opik import my-workspace my-project traces
 # Preview what would be imported
 opik import my-workspace my-project all --dry-run
 
-# Import into a different (renamed or scratch) destination project
+# Import into a different destination project
 opik import my-workspace my-project all --to-project my-restore
+
+# Import into a different destination workspace
+opik import src-workspace my-project all --to-workspace dest-workspace
+
+# Import into a different workspace and project
+opik import src-workspace my-project all --to-workspace dest-workspace --to-project new-project
 ```
 
-The project name is matched against the `name` recorded in each exported `project.json`. Import uses the same `--path` as export (both resolve `<path>/<workspace>/projects/<id>/`), so no path juggling is needed. Use `--to-project <NAME>` to import into a different destination project (default: the source project's name).
+The project name is matched against the `name` recorded in each exported `project.json`. Import uses the same `--path` as export (both resolve `<path>/<workspace>/projects/<id>/`), so no path juggling is needed. Use `--to-project <NAME>` to import into a different destination project, or `--to-workspace <NAME>` to import into a different workspace (the source `WORKSPACE` argument is still used to locate the files on disk).
 
 Imports are automatically resumable — if interrupted, re-run the same command and it picks up where it left off using a local `migration_manifest.db`.
 
@@ -203,10 +211,15 @@ Imports are automatically resumable — if interrupted, re-run the same command 
 OPIK_API_KEY=<source_key> OPIK_URL_OVERRIDE=https://source.opik.example.com \
   opik export my-workspace my-project all --path ./migration_data
 
-# Step 2: Import to destination (use destination credentials)
+# Step 2: Import to destination — same workspace (use destination credentials)
 # Same --path as export — import resolves <path>/my-workspace/projects/<id>/.
 OPIK_API_KEY=<dest_key> OPIK_URL_OVERRIDE=https://dest.opik.example.com \
   opik import my-workspace my-project all --path ./migration_data
+
+# Step 2 (alternative): Import into a different destination workspace
+# WORKSPACE (my-workspace) still locates the files; --to-workspace sets the API target.
+OPIK_API_KEY=<dest_key> OPIK_URL_OVERRIDE=https://dest.opik.example.com \
+  opik import my-workspace my-project all --path ./migration_data --to-workspace dest-workspace
 ```
 
 See the CLI help (`opik export --help` / `opik import --help`) for all options and troubleshooting.
