@@ -1,4 +1,5 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   XAxis,
   CartesianGrid,
@@ -9,6 +10,7 @@ import {
 } from "recharts";
 
 import { ChartContainer } from "@/ui/chart";
+import { cn } from "@/lib/utils";
 import {
   DEFAULT_CHART_GRID_PROPS,
   DEFAULT_CHART_TICK,
@@ -16,7 +18,7 @@ import {
 import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
 import { AggregatedCandidate } from "@/types/optimizations";
 import ChartTooltip from "./ChartTooltip";
-import TrialCard from "./TrialCard";
+import TrialCard, { TRIAL_CARD_SHELL_CLASS } from "./TrialCard";
 import {
   TRIAL_STATUS_COLORS,
   TRIAL_STATUS_LABELS,
@@ -30,6 +32,7 @@ import {
   CHART_MARGIN,
   X_AXIS_PADDING,
   X_DOMAIN_EXTRA,
+  TOOLTIP_Y_OFFSET,
 } from "./chartConstants";
 import useScatterDot from "./ScatterDot";
 import type { DotPosition } from "./ScatterDot";
@@ -182,7 +185,7 @@ const OptimizationProgressChartContent: React.FC<
     setHoveredTrial,
   });
 
-  const renderEdges = useChartEdges({ dotPositionsRef, edges });
+  const renderEdges = useChartEdges({ edges, chartData, overlapOffsets });
 
   const renderGhostCandidate = useGhostCandidate({
     dotPositionsRef,
@@ -193,6 +196,49 @@ const OptimizationProgressChartContent: React.FC<
     onTrialSelect,
     onTrialClick,
   });
+
+  // Pinned best-trial card. Rendered through a Recharts <Customized> so it
+  // reads the best dot's live position (captured by the Scatter shape into the
+  // ref) on every layout — including resize — then portals an HTML card that
+  // hangs below the dot and extends left, matching Figma. Hidden while hovering
+  // (the hover tooltip takes over).
+  const renderBestCard = useCallback(() => {
+    if (
+      bestCandidateId == null ||
+      containerRef.current == null ||
+      // Keep this card while the best dot itself is hovered (it *is* the best
+      // trial's popover); only hide it when a different dot is hovered.
+      (hoveredTrial != null && hoveredTrial.candidateId !== bestCandidateId)
+    ) {
+      return null;
+    }
+    const pos = dotPositionsRef.current.get(bestCandidateId);
+    const best = candidateMap.get(bestCandidateId);
+    if (!pos || !best) return null;
+    const bestPoint = chartData.find((d) => d.candidateId === bestCandidateId);
+    return createPortal(
+      <div
+        className={cn(
+          "pointer-events-none absolute z-10 rounded-md border bg-background shadow-md",
+          TRIAL_CARD_SHELL_CLASS,
+        )}
+        style={{
+          left: pos.cx,
+          top: pos.cy + TOOLTIP_Y_OFFSET,
+          transform: "translateX(-50%)",
+        }}
+      >
+        <TrialCard
+          candidate={best}
+          status={bestPoint?.status ?? "passed"}
+          stepIndex={bestPoint?.stepIndex ?? 0}
+          isTestSuite={isTestSuite}
+          isBest
+        />
+      </div>,
+      containerRef.current,
+    );
+  }, [hoveredTrial, bestCandidateId, candidateMap, chartData, isTestSuite]);
 
   const xDomain = useMemo(() => {
     if (steps.length === 0) return [0, 1];
@@ -234,8 +280,11 @@ const OptimizationProgressChartContent: React.FC<
             domain={[0, 1]}
           />
 
-          {/* Scatter renders BEFORE Customized so dot positions are
-              captured in the ref before renderEdges reads them. */}
+          {/* Edges render BEFORE the Scatter so the trend line sits underneath
+              the dots (per Figma). Positions come from the chart scales, so the
+              line does not depend on the Scatter having drawn first. */}
+          <Customized component={renderEdges} />
+
           <Scatter
             name={objectiveName}
             dataKey="value"
@@ -243,16 +292,16 @@ const OptimizationProgressChartContent: React.FC<
             isAnimationActive={false}
           />
 
-          {/* Edges render on top of dots in SVG paint order, but they are
-              thin translucent lines so the dots remain clearly visible. */}
-          <Customized component={renderEdges} />
-
           {/* Ghost candidate with animated connector during optimization */}
           {isInProgress && <Customized component={renderGhostCandidate} />}
+
+          {/* Pinned best-trial card, anchored below the best dot. */}
+          <Customized component={renderBestCard} />
         </ComposedChart>
       </ChartContainer>
 
       {hoveredTrial != null &&
+        hoveredTrial.candidateId !== bestCandidateId &&
         containerRef.current != null &&
         (() => {
           const c = candidateMap.get(hoveredTrial.candidateId);
@@ -263,30 +312,8 @@ const OptimizationProgressChartContent: React.FC<
               candidate={c}
               chartData={chartData}
               isTestSuite={isTestSuite}
-              isBest={hoveredTrial.candidateId === bestCandidateId}
+              isBest={false}
             />
-          );
-        })()}
-
-      {hoveredTrial == null &&
-        bestCandidateId != null &&
-        (() => {
-          const best = candidateMap.get(bestCandidateId);
-          if (!best) return null;
-          const bestPoint = chartData.find(
-            (d) => d.candidateId === bestCandidateId,
-          );
-          const bestStatus = bestPoint?.status ?? "passed";
-          return (
-            <div className="pointer-events-none absolute right-2 top-9 z-10">
-              <TrialCard
-                candidate={best}
-                status={bestStatus}
-                stepIndex={bestPoint?.stepIndex ?? 0}
-                isTestSuite={isTestSuite}
-                isBest
-              />
-            </div>
           );
         })()}
 

@@ -4,7 +4,7 @@ import { Maximize2, Scale } from "lucide-react";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/ui/hover-card";
 import OptimizationConfigPill, {
   CONFIG_PILL_ICON_CLASS,
-} from "./OptimizationConfigPill";
+} from "@/v2/pages-shared/optimizations/OptimizationConfigPill";
 import { OptimizationMetricItem } from "./optimizationHeaderConfig";
 import MetricPopoverContent from "./MetricPopoverContent";
 

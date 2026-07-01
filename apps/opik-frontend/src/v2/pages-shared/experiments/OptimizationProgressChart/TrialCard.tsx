@@ -11,8 +11,17 @@ import {
   CandidateDataPoint,
   TRIAL_STATUS_COLORS,
   TRIAL_BEST_COLOR,
+  TRIAL_BEST_RING_COLOR,
   getTrialStatusLabel,
 } from "./optimizationChartUtils";
+
+/**
+ * Shared shell sizing for the trial card. The visual chrome (border, bg,
+ * radius, shadow) comes from the core component that wraps this content —
+ * `Popover`/`PopoverContent` for the hover tooltip, `Card` for the pinned
+ * best-trial card — so this only pins the Figma width and inner padding.
+ */
+export const TRIAL_CARD_SHELL_CLASS = "w-[220px] p-1.5 shadow-md";
 
 type TrialCardProps = {
   candidate: AggregatedCandidate;
@@ -23,10 +32,9 @@ type TrialCardProps = {
 };
 
 /**
- * Card body for a single trial — used both as the hover tooltip (positioned by
- * ChartTooltip) and as the pinned best-trial card shown by default. The header
- * carries the trial name plus a status dot + label (Figma: "Passed step 1",
- * "Discarded in step 2", "Best trial"); the metrics follow below a divider.
+ * Content of a single trial card — the header (trial name + status dot + label,
+ * e.g. "Passed step 1", "Discarded in step 2", "Best trial") and the metric
+ * rows. Rendered inside a core Popover (hover tooltip) or Card (pinned best).
  */
 const TrialCard: React.FC<TrialCardProps> = ({
   candidate,
@@ -66,7 +74,7 @@ const TrialCard: React.FC<TrialCardProps> = ({
   }
 
   return (
-    <div className="w-[220px] rounded-md border border-border bg-background p-1.5 shadow-md">
+    <>
       <div className="flex min-h-[22px] items-center gap-1.5 px-1">
         <span className="comet-body-xs-accented flex-1 truncate text-foreground">
           Trial #{candidate.trialNumber}
@@ -74,7 +82,12 @@ const TrialCard: React.FC<TrialCardProps> = ({
         <span className="flex shrink-0 items-center gap-1.5">
           <span
             className="size-1.5 shrink-0 rounded-full"
-            style={{ backgroundColor: dotColor }}
+            style={{
+              backgroundColor: dotColor,
+              boxShadow: isBest
+                ? `0 0 0 2px ${TRIAL_BEST_RING_COLOR}`
+                : undefined,
+            }}
           />
           <span className="comet-body-xs-accented whitespace-nowrap text-foreground">
             {statusLabel}
@@ -94,7 +107,7 @@ const TrialCard: React.FC<TrialCardProps> = ({
           </span>
         </div>
       ))}
-    </div>
+    </>
   );
 };
 

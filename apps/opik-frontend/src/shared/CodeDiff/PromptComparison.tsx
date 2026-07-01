@@ -30,6 +30,13 @@ type PromptComparisonProps = {
   targets: PromptComparisonTarget[];
   /** Target selected initially; falls back to the first target. */
   defaultTargetId?: string;
+  /** Show the built-in target picker + diff toggle bar. Default true. */
+  showControls?: boolean;
+  /**
+   * Controlled diff state. When provided, overrides the internal toggle — use
+   * together with `showControls={false}` to drive the diff from an outer header.
+   */
+  diff?: boolean;
   className?: string;
 };
 
@@ -103,6 +110,8 @@ const PromptComparison: React.FunctionComponent<PromptComparisonProps> = ({
   currentLabel = "Trial",
   targets,
   defaultTargetId,
+  showControls = true,
+  diff,
   className,
 }) => {
   const fallbackId = targets[0]?.id;
@@ -112,7 +121,8 @@ const PromptComparison: React.FunctionComponent<PromptComparisonProps> = ({
       : fallbackId;
 
   const [selectedId, setSelectedId] = useState<string | undefined>(initialId);
-  const [showDiff, setShowDiff] = useState(true);
+  const [internalShowDiff, setShowDiff] = useState(true);
+  const showDiff = diff ?? internalShowDiff;
 
   // Always derive from the live targets so a stale selection can't point at a
   // target that no longer exists.
@@ -167,7 +177,7 @@ const PromptComparison: React.FunctionComponent<PromptComparisonProps> = ({
 
   return (
     <div className={cn("flex flex-col gap-3", className)}>
-      {hasTargets && selectedTarget && (
+      {showControls && hasTargets && selectedTarget && (
         <div className="flex items-center justify-between pl-1">
           <div className="flex items-center gap-1.5">
             <DropdownMenu>

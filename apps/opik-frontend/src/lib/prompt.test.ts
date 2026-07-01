@@ -67,6 +67,16 @@ describe("prompt utilities", () => {
       expect(extractOpenAIMessages({ messages })).toEqual(messages);
     });
 
+    it("unwraps the opik-optimizer { 'chat-prompt': [...] } wrapper", () => {
+      const messages: OpenAIMessage[] = [
+        { role: "system", content: "Answer the question." },
+        { role: "user", content: "{question}" },
+      ];
+      expect(extractOpenAIMessages({ "chat-prompt": messages })).toEqual(
+        messages,
+      );
+    });
+
     it("returns null for invalid structures", () => {
       expect(extractOpenAIMessages({})).toBeNull();
       expect(extractOpenAIMessages("invalid")).toBeNull();

@@ -44,9 +44,25 @@ describe("BestTrialPrompt", () => {
 
     expect(screen.getByText("Best trial prompt")).toBeInTheDocument();
     expect(container.textContent).toContain("improved prompt");
-    // baseline target available as a diff target
-    expect(screen.getByText("Baseline")).toBeInTheDocument();
-    expect(screen.getByText("→ Best trial")).toBeInTheDocument();
+    // default view is the plain prompt; the diff is opt-in from the header
+    expect(screen.getByText("Diff vs baseline")).toBeInTheDocument();
+    expect(container.textContent).not.toContain("baseline prompt");
+  });
+
+  it("toggles the baseline diff from the header action", () => {
+    const { container } = render(
+      <BestTrialPrompt
+        bestCandidate={best}
+        candidates={[baseline, best]}
+        experiments={experiments}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Diff vs baseline"));
+
+    // diff mode now surfaces the removed baseline content alongside the current
+    expect(screen.getByText("Hide diff")).toBeInTheDocument();
+    expect(container.textContent).toContain("baseline prompt");
   });
 
   it("fires onViewTrial when the view-trial control is clicked", () => {

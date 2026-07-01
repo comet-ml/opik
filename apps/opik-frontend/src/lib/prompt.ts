@@ -111,6 +111,16 @@ export const extractOpenAIMessages = (
     }
   }
 
+  // opik-optimizer serializes a single ChatPrompt as { "chat-prompt": [...] }.
+  // Treat that wrapper as a single message array (checked before the named /
+  // multi-prompt path, which would otherwise read "chat-prompt" as a name).
+  if (isObject(data) && !isArray(data) && "chat-prompt" in data) {
+    const messages = (data as Record<string, unknown>)["chat-prompt"];
+    if (isArray(messages) && isValidOpenAIMessages(messages)) {
+      return messages;
+    }
+  }
+
   return null;
 };
 

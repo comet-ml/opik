@@ -1,19 +1,23 @@
 import React, { useEffect, useMemo } from "react";
+import { Database, History } from "lucide-react";
 
 import { Experiment } from "@/types/datasets";
 import { Optimization } from "@/types/optimizations";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
-import DateTag from "@/shared/DateTag/DateTag";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import NavigationTag from "@/shared/NavigationTag";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import { Tag } from "@/ui/tag";
+import { formatDate } from "@/lib/date";
 import { LOGS_SOURCE } from "@/types/traces";
 import { generateExperimentIdsFilter } from "@/lib/filters";
 import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton";
 import { getFeedbackScoreValue } from "@/lib/feedback-scores";
+import OptimizationConfigPill, {
+  CONFIG_PILL_ICON_CLASS,
+} from "@/v2/pages-shared/optimizations/OptimizationConfigPill";
 import {
-  STATUS_VARIANT_MAP,
+  TRIAL_STATUS_COLORS,
+  TRIAL_STATUS_LABELS,
   type TrialStatus,
 } from "@/v2/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
 
@@ -69,20 +73,31 @@ const TrialDetails: React.FC<TrialDetailsProps> = ({
 
   return (
     <div className="py-4">
-      <div className="mb-4 flex min-h-8 items-center gap-3">
-        <h1 className="comet-title-xs truncate break-words">{title}</h1>
+      <div className="mb-2 flex min-h-8 items-center gap-1.5">
+        <h1 className="comet-body-accented truncate break-words">{title}</h1>
         {trialStatus && (
-          <Tag
-            variant={STATUS_VARIANT_MAP[trialStatus]}
-            size="md"
-            className="shrink-0 capitalize"
+          <OptimizationConfigPill
+            className="shrink-0 bg-primary-foreground pl-1 pr-1.5"
+            icon={
+              <span
+                className="size-1.5 shrink-0 rounded-full"
+                style={{ backgroundColor: TRIAL_STATUS_COLORS[trialStatus] }}
+              />
+            }
           >
-            {trialStatus}
-          </Tag>
+            {TRIAL_STATUS_LABELS[trialStatus]}
+          </OptimizationConfigPill>
         )}
       </div>
-      <div className="mb-1 flex gap-2 overflow-x-auto">
-        <DateTag date={experiment?.created_at} resource={RESOURCE_TYPE.trial} />
+      <div className="mb-1 flex items-center gap-2 overflow-x-auto">
+        {experiment?.created_at && (
+          <OptimizationConfigPill
+            className="shrink-0"
+            icon={<History className={CONFIG_PILL_ICON_CLASS} />}
+          >
+            {formatDate(experiment.created_at)}
+          </OptimizationConfigPill>
+        )}
         {canViewDatasets &&
           experiment?.dataset_id &&
           experiment?.dataset_name && (
@@ -90,7 +105,8 @@ const TrialDetails: React.FC<TrialDetailsProps> = ({
               id={experiment.dataset_id}
               name={experiment.dataset_name}
               resource={RESOURCE_TYPE.dataset}
-              prefix="Dataset"
+              icon={Database}
+              className="rounded-md"
             />
           )}
         {experiment?.project_id && (

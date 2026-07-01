@@ -13,7 +13,7 @@ import BackButton from "@/shared/BackButton/BackButton";
 import { getOptimizationConfigItems } from "./optimizationHeaderConfig";
 import OptimizationConfigPill, {
   CONFIG_PILL_ICON_CLASS,
-} from "./OptimizationConfigPill";
+} from "@/v2/pages-shared/optimizations/OptimizationConfigPill";
 import OptimizationModelPill from "./OptimizationModelPill";
 import OptimizationMetricPill from "./OptimizationMetricPill";
 

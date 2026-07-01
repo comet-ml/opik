@@ -1,7 +1,6 @@
-import React, { useMemo } from "react";
-import { ArrowUpRight } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import { ArrowUpRight, GitCompare } from "lucide-react";
 
-import { Button } from "@/ui/button";
 import { AggregatedCandidate } from "@/types/optimizations";
 import { Experiment } from "@/types/datasets";
 import PromptComparison from "@/shared/CodeDiff/PromptComparison";
@@ -67,26 +66,53 @@ const BestTrialPrompt: React.FC<BestTrialPromptProps> = ({
     [bestCandidate, candidates, candidatesById, experimentsById],
   );
 
+  const [showDiff, setShowDiff] = useState(false);
+  const hasTargets = targets.length > 0;
+
   if (current == null) return null;
 
+  const actionClass =
+    "comet-body-s inline-flex h-6 items-center gap-1 text-foreground transition-colors hover:text-primary-hover";
+
   return (
-    <div className="rounded-lg border bg-muted/20 p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <h3 className="comet-title-s flex items-center gap-2">
-          <span className="size-2 shrink-0 rounded-full bg-primary" />
-          Best trial prompt
-        </h3>
-        {onViewTrial && (
-          <Button variant="ghost" size="sm" onClick={onViewTrial}>
-            View trial
-            <ArrowUpRight className="ml-1 size-3.5" />
-          </Button>
-        )}
+    <div className="flex flex-col gap-2 rounded-md border bg-background px-4 py-3">
+      <div className="flex w-full items-center justify-between px-0.5">
+        <div className="flex items-center gap-1">
+          <span className="flex size-3 shrink-0 items-center justify-center">
+            <span className="size-1.5 rounded-full bg-[#701a75] shadow-[0_0_0_1.125px_#f0abfc]" />
+          </span>
+          <span className="comet-body-s-accented text-foreground">
+            Best trial prompt
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          {hasTargets && (
+            <button
+              type="button"
+              className={actionClass}
+              onClick={() => setShowDiff((prev) => !prev)}
+            >
+              <GitCompare className="size-3.5" />
+              {showDiff ? "Hide diff" : "Diff vs baseline"}
+            </button>
+          )}
+          {hasTargets && onViewTrial && (
+            <span className="mx-0.5 h-3 w-px shrink-0 bg-border" />
+          )}
+          {onViewTrial && (
+            <button type="button" className={actionClass} onClick={onViewTrial}>
+              View trial
+              <ArrowUpRight className="size-3.5" />
+            </button>
+          )}
+        </div>
       </div>
       <PromptComparison
         current={current}
         targets={targets}
         currentLabel="Best trial"
+        showControls={false}
+        diff={showDiff}
       />
     </div>
   );

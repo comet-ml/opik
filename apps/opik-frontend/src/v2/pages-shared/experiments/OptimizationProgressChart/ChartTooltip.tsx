@@ -1,9 +1,11 @@
 import React from "react";
 
 import { AggregatedCandidate } from "@/types/optimizations";
+import { Popover, PopoverAnchor, PopoverContent } from "@/ui/popover";
+import { cn } from "@/lib/utils";
 import { CandidateDataPoint } from "./optimizationChartUtils";
 import { TOOLTIP_Y_OFFSET } from "./chartConstants";
-import TrialCard from "./TrialCard";
+import TrialCard, { TRIAL_CARD_SHELL_CLASS } from "./TrialCard";
 
 type ChartTooltipProps = {
   hoveredTrial: {
@@ -17,7 +19,12 @@ type ChartTooltipProps = {
   isBest?: boolean;
 };
 
-/** Trial card positioned over the hovered dot. */
+/**
+ * Trial card shown over the hovered dot. Built on the core Popover so it
+ * portals above the app chrome (no longer clipped behind the side menu),
+ * animates in, and reuses the shared popover shell. An invisible anchor is
+ * pinned at the dot's coordinates; the content flips/shifts to stay on screen.
+ */
 const ChartTooltip: React.FC<ChartTooltipProps> = ({
   hoveredTrial,
   candidate,
@@ -32,24 +39,29 @@ const ChartTooltip: React.FC<ChartTooltipProps> = ({
   const stepIndex = chartPoint?.stepIndex ?? 0;
 
   return (
-    <div
-      className="pointer-events-none"
-      style={{
-        position: "absolute",
-        left: hoveredTrial.cx,
-        top: hoveredTrial.cy - TOOLTIP_Y_OFFSET,
-        transform: "translate(-50%, -100%)",
-        zIndex: 9999,
-      }}
-    >
-      <TrialCard
-        candidate={candidate}
-        status={status}
-        stepIndex={stepIndex}
-        isTestSuite={isTestSuite}
-        isBest={isBest}
-      />
-    </div>
+    <Popover open>
+      <PopoverAnchor asChild>
+        <div
+          className="absolute size-0"
+          style={{ left: hoveredTrial.cx, top: hoveredTrial.cy }}
+        />
+      </PopoverAnchor>
+      <PopoverContent
+        side="top"
+        align="center"
+        sideOffset={TOOLTIP_Y_OFFSET}
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        className={cn("pointer-events-none", TRIAL_CARD_SHELL_CLASS)}
+      >
+        <TrialCard
+          candidate={candidate}
+          status={status}
+          stepIndex={stepIndex}
+          isTestSuite={isTestSuite}
+          isBest={isBest}
+        />
+      </PopoverContent>
+    </Popover>
   );
 };
 

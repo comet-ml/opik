@@ -8,7 +8,7 @@ import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import ClaudeIcon from "@/icons/integrations/claude.svg?react";
 import OptimizationConfigPill, {
   CONFIG_PILL_ICON_CLASS,
-} from "./OptimizationConfigPill";
+} from "@/v2/pages-shared/optimizations/OptimizationConfigPill";
 
 type OptimizationModelPillProps = {
   model: string;
