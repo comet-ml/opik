@@ -102,9 +102,7 @@ def test_after_agent_callback__no_cached_output__stamps_none():
 
 def _model_response(text: str, *, partial: bool) -> LlmResponse:
     return LlmResponse(
-        content=genai_types.Content(
-            role="model", parts=[genai_types.Part(text=text)]
-        ),
+        content=genai_types.Content(role="model", parts=[genai_types.Part(text=text)]),
         partial=partial,
     )
 

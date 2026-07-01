@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import IssueSeverityBadge from "@/v2/pages/SignalsPage/IssuesTab/IssueSeverityBadge";
 import OccurrenceChart from "@/v2/pages/SignalsPage/IssuesTab/OccurrenceChart";
 import AffectedTracesSample from "@/v2/pages/SignalsPage/IssuesTab/AffectedTracesSample";
+import { formatOccurrences } from "@/v2/pages/SignalsPage/helpers";
 import useAgentInsightsIssue from "@/api/signals/useAgentInsightsIssue";
 import useUpdateAgentInsightsIssueMutation from "@/api/signals/useUpdateAgentInsightsIssueMutation";
 
@@ -163,7 +164,11 @@ const IssueDetail: React.FC<IssueDetailProps> = ({
           <MetaItem
             icon={Hash}
             label="Occurrences"
-            value={issue.total_occurrences.toLocaleString()}
+            value={formatOccurrences(
+              issue.total_occurrences,
+              issue.latest_count,
+              issue.days_reported,
+            )}
           />
           <MetaItem
             icon={Users}

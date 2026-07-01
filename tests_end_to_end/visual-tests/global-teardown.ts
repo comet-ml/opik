@@ -1,4 +1,4 @@
-import { TestHelperClient } from '../typescript-tests/helpers/test-helper-client';
+import { TestHelperClient } from './helpers/test-helper-client';
 import * as path from 'path';
 import * as fs from 'fs';
 
