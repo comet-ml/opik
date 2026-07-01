@@ -32,9 +32,9 @@ import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolde
  * metadata in Java ({@link SpanRow#from}); the listener only passes rows it has already gated to cipx.
  *
  * <p>This is a plain INSERT: the incoming row is complete (cipx metadata is wholesale, project_id is
- * the resolved id, start_time is the span's real start on create and the UUIDv7-embedded time on
- * update), so the ReplacingMergeTree merges by its sorting key — a create followed by an update
- * produces one row (latest last_updated_at wins on FINAL reads), with no self-merge needed.
+ * the resolved id, start_time is the source span's stored start — resolved from the spans table on
+ * both create and update), so the ReplacingMergeTree merges by its sorting key — a create followed by
+ * an update produces one row (latest last_updated_at wins on FINAL reads), with no self-merge needed.
  * last_updated_at is left to the column DEFAULT now64(6).
  * project_id must be non-empty for the row to land under the correct key, so blank rows are dropped.
  */
@@ -87,8 +87,8 @@ public class CipxSpendDAO {
         }
     }
 
-    // One tuple per row (mirrors SpanDAO.BULK_INSERT). start_time is bound from Java (the span's real
-    // start on create, the UUIDv7-embedded time on update); blocks is bound as the pre-filtered JSON string
+    // One tuple per row (mirrors SpanDAO.BULK_INSERT). start_time is bound from Java (the source span's
+    // stored start, resolved from the spans table on both create and update); blocks is bound as the pre-filtered JSON string
     // and parsed into the typed Array(Tuple) by ClickHouse. The r2dbc driver inlines bound values into the
     // FORMAT Values text, so a native Array(Tuple) can't be bound here — JSONExtract of one JSON literal is
     // what the Values parser accepts. The exact metadata->column mapping (this projection) is the initial

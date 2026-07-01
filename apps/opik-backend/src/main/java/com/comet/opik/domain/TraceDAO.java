@@ -122,6 +122,8 @@ public interface TraceDAO {
 
     Mono<Map<UUID, UUID>> getProjectIdsByTraceIds(List<UUID> traceIds);
 
+    Mono<Map<UUID, Instant>> getStartTimesByTraceIds(Set<UUID> traceIds, String workspaceId);
+
     Flux<BiInformation> getTraceBIInformation(Map<UUID, Instant> excludedProjectIds);
 
     Mono<ProjectStats> getStats(TraceSearchCriteria criteria);
@@ -2038,6 +2040,17 @@ class TraceDAOImpl implements TraceDAO {
             WHERE id IN :trace_ids
             AND workspace_id = :workspace_id
             GROUP BY id
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    private static final String SELECT_START_TIMES_BY_TRACE_IDS = """
+            SELECT
+                id,
+                start_time
+            FROM traces FINAL
+            WHERE id IN :ids
+            AND workspace_id = :workspace_id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -4254,6 +4267,31 @@ class TraceDAOImpl implements TraceDAO {
                         }
                     });
         }));
+    }
+
+    // Resolves trace -> stored start_time, keyed off workspaceId explicitly so it can run from the Cost
+    // Intelligence subscriber (no request scope). start_time must come from the trace (not the UUIDv7 timestamp)
+    // so a cipx identity update doesn't rewrite it for backfilled/imported traces. FINAL yields the latest
+    // version, one row per id.
+    @Override
+    @WithSpan
+    public Mono<Map<UUID, Instant>> getStartTimesByTraceIds(@NonNull Set<UUID> traceIds, @NonNull String workspaceId) {
+        if (traceIds.isEmpty()) {
+            return Mono.just(Map.of());
+        }
+        log.info("Getting start_times for '{}' trace_ids", traceIds.size());
+        return Mono.from(connectionFactory.create())
+                .flatMap(connection -> {
+                    var template = getSTWithLogComment(SELECT_START_TIMES_BY_TRACE_IDS, "get_start_times_by_trace_ids",
+                            workspaceId, "", traceIds.size());
+                    var statement = connection.createStatement(template.render())
+                            .bind("ids", traceIds.toArray(UUID[]::new))
+                            .bind("workspace_id", workspaceId);
+                    return Flux.from(statement.execute())
+                            .flatMap(result -> result.map((row, metadata) -> Map.entry(
+                                    row.get("id", UUID.class), row.get("start_time", Instant.class))))
+                            .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+                });
     }
 
     @Override

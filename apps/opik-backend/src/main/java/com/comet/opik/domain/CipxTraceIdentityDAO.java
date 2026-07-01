@@ -64,8 +64,8 @@ public class CipxTraceIdentityDAO {
         }
     }
 
-    // One tuple per row (mirrors SpanDAO.BULK_INSERT). start_time is bound from Java (the trace's real
-    // start on create, the UUIDv7-embedded time on update). The identity/repository/schema_version
+    // One tuple per row (mirrors SpanDAO.BULK_INSERT). start_time is bound from Java (the source trace's
+    // stored start, resolved from the traces table on both create and update). The identity/repository/schema_version
     // projection is the initial extraction; the exact metadata->column mapping is finalized later.
     private static final String INSERT = """
             INSERT INTO cipx_trace_identities

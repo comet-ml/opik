@@ -12,7 +12,7 @@ import com.comet.opik.domain.CipxSpendDAO.SpanRow;
 import com.comet.opik.domain.CipxTraceIdentityDAO;
 import com.comet.opik.domain.CipxTraceIdentityDAO.TraceIdentityRow;
 import com.comet.opik.domain.SpanDAO;
-import com.comet.opik.domain.retention.RetentionUtils;
+import com.comet.opik.domain.TraceDAO;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
@@ -35,13 +35,15 @@ public class CostIntelligenceIngestionListener {
     private final CipxSpendDAO cipxSpendDAO;
     private final CipxTraceIdentityDAO cipxTraceIdentityDAO;
     private final SpanDAO spanDAO;
+    private final TraceDAO traceDAO;
 
     @Inject
     public CostIntelligenceIngestionListener(CipxSpendDAO cipxSpendDAO, CipxTraceIdentityDAO cipxTraceIdentityDAO,
-            SpanDAO spanDAO) {
+            SpanDAO spanDAO, TraceDAO traceDAO) {
         this.cipxSpendDAO = cipxSpendDAO;
         this.cipxTraceIdentityDAO = cipxTraceIdentityDAO;
         this.spanDAO = spanDAO;
+        this.traceDAO = traceDAO;
     }
 
     @Subscribe
@@ -60,23 +62,24 @@ public class CostIntelligenceIngestionListener {
         if (!CipxMetadata.hasSpendCall(update.metadata())) {
             return;
         }
-        // project_id and trace_id are part of the cipx_spends merge key but the span update carries neither per
-        // span (a batch reuses one SpanUpdate for spans that may span different traces, matched by id + workspace),
-        // so resolve span -> (project, trace) from the persisted spans off the request path.
-        spanDAO.getProjectAndTraceIdsBySpanIds(event.spanIds(), event.workspaceId())
+        // project_id, trace_id and start_time are all part of / stored on the cipx_spends row but the span update
+        // carries none of them per span (a batch reuses one SpanUpdate for spans that may span different traces,
+        // matched by id + workspace), so resolve span -> (project, trace, start_time) from the persisted spans off
+        // the request path. start_time comes from the stored span, not the UUIDv7 timestamp.
+        spanDAO.getSpanRefsBySpanIds(event.spanIds(), event.workspaceId())
                 .subscribe(
-                        targets -> {
+                        refs -> {
                             List<SpanRow> rows = event.spanIds().stream()
-                                    .filter(targets::containsKey)
+                                    .filter(refs::containsKey)
                                     .map(spanId -> {
-                                        var target = targets.get(spanId);
-                                        return SpanRow.from(spanId, target.traceId(), target.projectId(),
-                                                update.metadata(), RetentionUtils.extractInstant(spanId));
+                                        var ref = refs.get(spanId);
+                                        return SpanRow.from(spanId, ref.traceId(), ref.projectId(),
+                                                update.metadata(), ref.startTime());
                                     })
                                     .toList();
                             upsertSpans(rows, event.workspaceId(), event.userName());
                         },
-                        error -> log.error("Failed to resolve project/trace ids for cipx spend in workspace: '{}'",
+                        error -> log.error("Failed to resolve span refs for cipx spend in workspace: '{}'",
                                 event.workspaceId(), error));
     }
 
@@ -96,11 +99,21 @@ public class CostIntelligenceIngestionListener {
         if (!CipxMetadata.hasIdentity(update.metadata())) {
             return;
         }
-        List<TraceIdentityRow> rows = event.traceProjectIds().entrySet().stream()
-                .map(entry -> TraceIdentityRow.from(entry.getKey(), entry.getValue(), update.metadata(),
-                        RetentionUtils.extractInstant(entry.getKey())))
-                .toList();
-        upsertTraces(rows, event.workspaceId(), event.userName());
+        // The event carries the resolved project_id per trace, but start_time must come from the stored trace
+        // (not the UUIDv7 timestamp) so a cipx update doesn't rewrite it for backfilled/imported traces.
+        var traceProjectIds = event.traceProjectIds();
+        traceDAO.getStartTimesByTraceIds(traceProjectIds.keySet(), event.workspaceId())
+                .subscribe(
+                        startTimes -> {
+                            List<TraceIdentityRow> rows = traceProjectIds.entrySet().stream()
+                                    .filter(entry -> startTimes.containsKey(entry.getKey()))
+                                    .map(entry -> TraceIdentityRow.from(entry.getKey(), entry.getValue(),
+                                            update.metadata(), startTimes.get(entry.getKey())))
+                                    .toList();
+                            upsertTraces(rows, event.workspaceId(), event.userName());
+                        },
+                        error -> log.error("Failed to resolve start_times for cipx trace identity in workspace: '{}'",
+                                event.workspaceId(), error));
     }
 
     private void upsertSpans(List<SpanRow> rows, String workspaceId, String userName) {

@@ -610,9 +610,13 @@ public class SpanDAO {
             ;
             """;
 
-    private static final String SELECT_PROJECT_AND_TRACE_IDS_BY_SPAN_IDS = """
-            SELECT DISTINCT id, project_id, trace_id
-            FROM spans
+    private static final String SELECT_SPAN_REFS_BY_SPAN_IDS = """
+            SELECT
+                id,
+                project_id,
+                trace_id,
+                start_time
+            FROM spans FINAL
             WHERE workspace_id = :workspace_id
             AND id IN :ids
             SETTINGS log_comment = '<log_comment>'
@@ -2159,40 +2163,38 @@ public class SpanDAO {
                 .flatMap(this::mapToDto);
     }
 
-    /**
-     * Get target project IDs from spans for the given span IDs.
-     * This is executed as a separate query to reduce spans table scans in the main query.
-     */
-    /** A span's project and trace, both immutable per span (part of the spans sort key). */
-    public record SpanProjectTrace(@NonNull UUID projectId, @NonNull UUID traceId) {
+    /** A persisted span's project, trace, and start_time — the fields needed to build its cipx_spends row.
+     *  project_id/trace_id are immutable (sort key); start_time is the stored value, not derived. */
+    public record SpanRef(@NonNull UUID projectId, @NonNull UUID traceId, @NonNull Instant startTime) {
     }
 
     /**
-     * Resolves span -> (project_id, trace_id) for the given spans, keyed off {@code workspaceId} explicitly rather
-     * than the reactive request context, so it can run from the Cost Intelligence subscriber (an async event listener
-     * with no request scope). Both fields are needed because a batch span update matches spans by id + workspace and
-     * carries neither the per-span project nor the per-span trace. Spans missing from ClickHouse are simply absent
-     * from the returned map.
+     * Resolves span -> (project_id, trace_id, start_time) for the given spans, keyed off {@code workspaceId}
+     * explicitly rather than the reactive request context, so it can run from the Cost Intelligence subscriber (an
+     * async event listener with no request scope). A batch span update matches spans by id + workspace and carries
+     * none of these per span, and start_time must come from the stored span (not the UUIDv7 timestamp) so a cipx
+     * update doesn't rewrite it for backfilled/imported spans. Read with FINAL so the ReplacingMergeTree dedup yields
+     * the latest version, one row per span. Spans missing from ClickHouse are absent from the map.
      */
     @WithSpan
-    public Mono<Map<UUID, SpanProjectTrace>> getProjectAndTraceIdsBySpanIds(@NonNull Set<UUID> spanIds,
-            @NonNull String workspaceId) {
+    public Mono<Map<UUID, SpanRef>> getSpanRefsBySpanIds(@NonNull Set<UUID> spanIds, @NonNull String workspaceId) {
         if (spanIds.isEmpty()) {
             return Mono.just(Map.of());
         }
-        log.info("Getting project_ids and trace_ids for '{}' span_ids", spanIds.size());
+        log.info("Getting span refs for '{}' span_ids", spanIds.size());
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {
-                    var template = getSTWithLogComment(SELECT_PROJECT_AND_TRACE_IDS_BY_SPAN_IDS,
-                            "get_project_and_trace_ids_by_span_ids", workspaceId, "", spanIds.size());
+                    var template = getSTWithLogComment(SELECT_SPAN_REFS_BY_SPAN_IDS,
+                            "get_span_refs_by_span_ids", workspaceId, "", spanIds.size());
                     var statement = connection.createStatement(template.render())
                             .bind("ids", spanIds.toArray(UUID[]::new))
                             .bind("workspace_id", workspaceId);
                     return Flux.from(statement.execute())
                             .flatMap(result -> result.map((row, metadata) -> Map.entry(
                                     row.get("id", UUID.class),
-                                    new SpanProjectTrace(row.get("project_id", UUID.class),
-                                            row.get("trace_id", UUID.class)))))
+                                    new SpanRef(row.get("project_id", UUID.class),
+                                            row.get("trace_id", UUID.class),
+                                            row.get("start_time", Instant.class)))))
                             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
                 });
     }

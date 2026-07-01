@@ -16,7 +16,6 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
-import com.comet.opik.domain.retention.RetentionUtils;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -170,8 +169,8 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().model()).isEqualTo("claude-opus-4-8");
                 assertThat(row.get().uInput()).isEqualTo(200L);
                 assertThat(row.get().uOutput()).isEqualTo(80L);
-                // no real start_time on update -> derived from the span's UUIDv7
-                assertThat(row.get().startMs()).isEqualTo(RetentionUtils.extractInstant(spanId).toEpochMilli());
+                // start_time is resolved from the stored span, not derived from the UUIDv7
+                assertThat(row.get().startMs()).isEqualTo(span.startTime().toEpochMilli());
             });
         }
 
@@ -331,8 +330,8 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().userUuid()).isEqualTo(newUuid);
                 assertThat(row.get().userEmail()).isEqualTo("new@acme.com");
                 assertThat(row.get().schemaVersion()).isEqualTo(2);
-                // update path derives start_time from the trace's UUIDv7, which wins the merge
-                assertThat(row.get().startMs()).isEqualTo(RetentionUtils.extractInstant(traceId).toEpochMilli());
+                // start_time is resolved from the stored trace, not derived from the UUIDv7
+                assertThat(row.get().startMs()).isEqualTo(trace.startTime().toEpochMilli());
             });
 
             assertThat(countCipxIdentity(traceId, ws.workspaceId())).isEqualTo(1L);
