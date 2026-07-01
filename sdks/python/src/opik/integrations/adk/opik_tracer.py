@@ -290,14 +290,9 @@ class OpikTracer:
             usage = None
             output = None
 
-            if adk_helpers.has_empty_text_part_content(llm_response):
-                # Clean up TTFT tracking if it exists before early return
-                current_span = context_storage.top_span_data()
-                if current_span is not None and current_span.id is not None:
-                    self._safe_ttft_tracking(current_span.id, pop=True)
-                return
-
-            # Resolve the LLM span created in before_model_callback. Prefer the
+            # Resolve the LLM span created in before_model_callback up front, so
+            # the ``finally`` can clean up its TTFT and pending-registry entries
+            # even on the empty-content early return below. Prefer the
             # per-model-call registry entry (keyed by id(callback_context.actions)),
             # which survives a context detach under ContextCacheConfig + SSE
             # streaming (comet-ml/opik#5524). Fall back to the context stack top
@@ -321,6 +316,15 @@ class OpikTracer:
                 )
             ):
                 current_span = stack_top
+            if current_span is not None:
+                # Recorded early so the finally can clean up TTFT on any exit path.
+                span_id = current_span.id
+
+            if adk_helpers.has_empty_text_part_content(llm_response):
+                # Empty (streaming) content: nothing to finalize. The finally
+                # drops the TTFT entry and the pending-span registry entry for a
+                # final response, and keeps them for partial chunks.
+                return
 
             if current_span is None:
                 # No LLM span was registered for this call: before_model_callback
@@ -352,9 +356,6 @@ class OpikTracer:
             # span; when the context was detached the span isn't on the stack and
             # the top (if any) is a parent we must not touch.
             span_on_stack = stack_top is not None and stack_top.id == current_span.id
-
-            # Store span_id early for cleanup on all exit paths
-            span_id = current_span.id
 
             # Track time-to-first-token: detect first token arrival
             # We check for first token on EVERY callback (including partial chunks)
@@ -444,10 +445,10 @@ class OpikTracer:
             exception_occurred = True
             LOGGER.error(f"Failed during after_model_callback(): {e}", exc_info=True)
         finally:
-            # Clean up TTFT tracking entry on all exit paths to prevent memory leak
-            # Skip cleanup for partial chunks (normal return) since ADK will call again with final response
-            # For final responses, entry is already popped at line 325, so this is a no-op
-            # For errors (exception_occurred=True) or early returns, this ensures cleanup happens
+            # Clean up the TTFT entry on any final-response or error exit (partial
+            # chunks keep it, since ADK calls again with the final response). On
+            # the main path it was already popped above, so this is a no-op; on the
+            # empty-content early return this is where the cleanup happens.
             if span_id is not None and (exception_occurred or not is_partial):
                 self._ttft_tracking.pop(span_id, None)
             # Drop the recovered span from the registry once this call is done

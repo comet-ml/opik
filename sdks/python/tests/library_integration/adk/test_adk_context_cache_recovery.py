@@ -55,7 +55,7 @@ def _start_model_call(tracer: OpikTracer, ctx: object):
 # --- shared bounded cache ---------------------------------------------------
 
 
-def test_bounded_cache__isolates_by_key_and_pops():
+def test_bounded_cache__distinct_keys__values_isolated_and_popped_independently():
     cache: BoundedCache[int, str] = BoundedCache()
     a, b = object(), object()
 
@@ -69,7 +69,7 @@ def test_bounded_cache__isolates_by_key_and_pops():
     assert cache.pop(id(a)) is None  # idempotent
 
 
-def test_bounded_cache__evicts_oldest_when_full():
+def test_bounded_cache__over_capacity__evicts_oldest_entry():
     cache: BoundedCache[int, int] = BoundedCache(max_size=2)
     keys = [object() for _ in range(3)]
     for i, key in enumerate(keys):
@@ -80,7 +80,7 @@ def test_bounded_cache__evicts_oldest_when_full():
     assert cache.get(id(keys[2])) == 2
 
 
-def test_bounded_cache__thread_safe_under_concurrency():
+def test_bounded_cache__concurrent_set_get_pop__no_corruption():
     cache: BoundedCache[int, int] = BoundedCache(max_size=50)
     errors = []
 
@@ -179,3 +179,22 @@ def test_after_model__parent_span_on_stack__finalizes_own_span_not_parent():
 
     assert span.output is not None  # our span finalized (recovered by key)
     assert context_storage.top_span_data() is parent  # parent left untouched
+
+
+@helpers.pytest_skip_for_adk_older_than_1_3_0
+def test_after_model__empty_final_response__does_not_leak_registry_entry():
+    # A final empty-content response has nothing to finalize, but must still drop
+    # the pending-span registry entry that before_model_callback registered (a
+    # leak-regression check, so it observes the internal registry).
+    context_storage.set_trace_data(TraceData(name="agent"))
+    tracer = OpikTracer(project_name="adk-test")
+    ctx = _callback_context("inv-1")
+
+    _start_model_call(tracer, ctx)
+    empty_final = models.LlmResponse(
+        content=genai_types.Content(role="model", parts=[genai_types.Part(text="")]),
+        partial=False,
+    )
+    tracer.after_model_callback(ctx, empty_final)
+
+    assert tracer._pending_llm_spans.get(id(ctx.actions)) is None
