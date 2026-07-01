@@ -29,51 +29,13 @@ Restate the answers in one line, then proceed.
 
 ---
 
-## Steps
+## Run the workflow
 
-### 1. Load the skill
+Load `.claude/skills/opik-external-integrations/SKILL.md` and its `workflow.md` (the phase playbook, execution modes, MCP-verification loop, and report format). For mechanism patterns (method patching / callback / OTel) and field mapping, also consult `.claude/skills/opik-integrations/python.md` or `typescript.md`, applied against the **published** SDK. Then execute the workflow defined there — at a glance: acquire the repo → investigate the host → investigate the Opik surface → design → implement → verify → test → document → report.
 
-Read `.claude/skills/opik-external-integrations/SKILL.md` and `workflow.md`. For mechanism patterns (method patching / callback / OTel) and field mapping, also consult `.claude/skills/opik-integrations/python.md` or `typescript.md`, applied against the published SDK.
+**Do not restate the phases here.** `workflow.md` is the single source of truth for phase detail, the design gate, the verifiability hard gate, and the report format — follow it directly so the two never drift.
 
-### 2. Acquire (Phase 0)
-
-Clone/checkout the external repo into the scratchpad (or add it to the session if supported). Confirm it builds/installs before changing anything.
-
-### 3. Investigate the host (Phase 1)
-
-Find the host's observability extension point, its closest existing integration to clone, and its dependency / test / docs / contribution conventions.
-
-### 4. Investigate the Opik surface (Phase 2)
-
-Pick the public Opik API to use (`@opik.track` / `track_*` / client / REST). Confirm the published SDK version to depend on and how the host configures Opik via env.
-
-### 5. Design & gate (Phase 3)
-
-Decide the extension point, client lifecycle/flush, field mapping, file layout (mirroring the host sibling), and how a host user enables it. Autonomous: record in the report. Interactive: present and wait for approval.
-
-### 6. Implement (Phase 4)
-
-Mirror the host's closest sibling and style. Depend on the published Opik SDK. Keep it transparent (wrap, capture, re-raise; no behavior change when Opik is unconfigured).
-
-### 7. Verify via Opik MCP (Phase 5)
-
-Configure Opik env to log into the workspace the MCP reads, run the host with the integration enabled (main + streaming + extra flows, then flush), and read the trace/spans back. Loop until the tree matches the mapping.
-
-### 8. Test (Phase 6)
-
-Use the **host's** test framework and conventions (not this repo's `fake_backend`/`testlib`). Mirror how the host tests its other integrations. Cover the verified flows.
-
-### 9. Document (Phase 7)
-
-Follow the host's docs conventions. Optionally add/point an Opik-side docs page via the `write-docs` skill. Placeholders only for credentials.
-
-### 10. Report (Phase 8)
-
-Produce the high-level report from `workflow.md`: what was done, MCP + test evidence, a per-flow supported/tested table, limitations, and upstream-PR guidance. Back every "supported" claim with a passing test or a verified trace.
-
-### 11. Sync
-
-If any files under `.agents/` in *this* repo changed, run `make claude`.
+When done, if any files under `.agents/` in *this* repo changed, run `make claude` to sync them into `.claude/`.
 
 ---
 

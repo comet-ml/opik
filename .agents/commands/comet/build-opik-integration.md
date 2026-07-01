@@ -4,10 +4,10 @@
 
 ## Overview
 
-Drive the end-to-end workflow for creating, updating, or maintaining an Opik SDK integration (Python or TypeScript). This command is the entry trigger for the `opik-integrations` skill — it loads that skill and walks the phased playbook with a human approval gate before any integration code is written.
+Entry trigger for the `opik-integrations` skill — create, update, or maintain an Opik SDK integration (Python or TypeScript) that ships **inside this repo**. This command collects the inputs (below) and then runs the skill's phased workflow; the workflow files are the single source of truth for the phases, gates, verification, and report format.
 
-- **Execution model**: Runs **autonomously** by default — makes its own preparations (installs deps, finds credentials, picks the backend), runs every phase without pausing, self-verifies against the live backend, and ends with a high-level report. Stops early only on a true blocker (missing credential with no fallback, unreachable backend, ambiguous product decision), reporting what was completed. Add "let me review the design first" to run interactively with a design gate. Re-runs from scratch each invocation.
-- **Scope**: integrations that live **inside this repo** — under `sdks/python/src/opik/integrations/` and `sdks/typescript/src/opik/integrations/`. This is SDK-contributor work — distinct from the user-facing `instrument` skill. For integrations that live in an **external** repo (a standalone `opik-*` package, or Opik support contributed into a third-party project like LiteLLM or Dify), use the `opik-external-integrations` skill / `/comet:build-opik-external-integration` command instead.
+- **Execution model**: Runs **autonomously** by default — makes its own preparations, runs every phase without pausing, self-verifies against the backend, and ends with a high-level report. The design/approval step (Phase 3) **only pauses in interactive mode** (ask "let me review the design first"); an autonomous run does not stop there — it records the design in the final report and proceeds. **Verifiability is a hard gate for `new`/`update`**: if there is no backend/credential path that can verify the integration (MCP or SDK read-back) and the user hasn't opted into an explicit unverified path, the run stops before writing integration code and reports what's blocked. Re-runs from scratch each invocation.
+- **Scope**: integrations under `sdks/python/src/opik/integrations/` and `sdks/typescript/src/opik/integrations/`. SDK-contributor work — distinct from the user-facing `instrument` skill. For integrations that live in an **external** repo (a standalone `opik-*` package, or Opik support contributed into a third-party project like LiteLLM or Dify), use `/comet:build-opik-external-integration` instead.
 
 ---
 
@@ -25,55 +25,13 @@ Once the answers are in, restate them in one line and proceed.
 
 ---
 
-## Steps
+## Run the workflow
 
-### 1. Load the skill
+Load `.claude/skills/opik-integrations/SKILL.md`, its `workflow.md` (the phase playbook, execution modes, MCP-verification loop, and report template), and the matching language reference (`python.md` / `typescript.md`). Then execute the workflow defined there — at a glance: prepare → investigate → collect → design → implement → verify → test → document → report.
 
-Read `.claude/skills/opik-integrations/SKILL.md` and the matching language reference (`python.md` or `typescript.md`). Read `workflow.md` for the phase definitions.
+**Do not restate the phases here.** `workflow.md` is the single source of truth for phase detail, the design gate, the verifiability hard gate, and the report format — follow it directly so the two never drift.
 
-### 2. Classify (Phase 0)
-
-Confirm mode, language, and the closest existing integration to clone. For `maintain` mode, skip to Investigate → Verify → Test.
-
-### 2.5. Prepare (Phase 0.5)
-
-Autonomously install/resolve the target library in the SDK venv (pinning a known-good version and restoring any disturbed core dep), locate credentials without printing them (`sdks/python/tests/pytest.ini` env block + shell env), and confirm which backend the Opik MCP reads and that it's reachable. Record blockers instead of stopping when a fallback exists.
-
-### 3. Investigate (Phase 1)
-
-Fan out exploration of the target library: entrypoint shape, methods to trace (sync + async), streaming, input/output/usage/error mapping. Read the closest sibling integration in full.
-
-### 4. Collect (Phase 2)
-
-Write a minimal runnable example script (scratchpad) and a field-mapping findings note.
-
-### 5. Design & gate (Phase 3)
-
-Decide the pattern, file layout, entrypoint signature, and field mapping. In autonomous mode, proceed and capture this in the final report; in interactive mode, present it and wait for approval before writing integration code.
-
-### 6. Implement (Phase 4)
-
-Clone the closest sibling and adapt, reusing the shared core utilities. Keep the framework import inside the integration module (Python) / as a peer dependency (TypeScript).
-
-### 7. Verify via Opik MCP (Phase 5)
-
-Configure the example's env to log into the workspace the Opik MCP reads, run it (non-streaming + streaming + each extra method, then `flush()`), and read the trace/spans back through the MCP. Check the trace tree against the field mapping. Loop until correct.
-
-### 8. Test (Phase 6)
-
-Add coverage with the language harness. Python: `tests/library_integration/<name>/` with `fake_backend` + `testlib` trees and an `ensure_<name>_configured` fixture. TypeScript: vitest `*.test.ts` mirroring the sibling package.
-
-### 9. Document (Phase 7)
-
-Author the Fern page at `docs-v2/integrations/<name>.mdx` (Python) / `<name>-typescript.mdx` (TS), route it in `fern/versions/latest.yml`, and add a `<Card>` to the integrations overview.
-
-### 10. Report (Phase 8)
-
-Produce the high-level report using the template in `workflow.md`: what was done, verification evidence (MCP trace ids + test results), a supported/not-supported table, limitations, follow-ups, and a usage snippet. Back every "supported" claim with a passing test or a verified trace.
-
-### 11. Sync
-
-If any files under `.agents/` changed, run `make claude`.
+When done, if any files under `.agents/` changed, run `make claude` to sync them into `.claude/`.
 
 ---
 
