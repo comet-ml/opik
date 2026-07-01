@@ -7,6 +7,7 @@ import com.comet.opik.api.resources.v1.events.tools.ToolExecutor;
 import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
 import com.comet.opik.api.resources.v1.events.tools.TraceToolContext;
 import com.comet.opik.domain.evaluation.EvaluationRecorder;
+import com.comet.opik.domain.llm.LlmProviderFactory;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.AiMessage;
@@ -19,10 +20,12 @@ import dev.langchain4j.model.chat.request.ChatRequestParameters;
 import dev.langchain4j.model.chat.request.ToolChoice;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.openai.OpenAiTokenUsage;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -33,6 +36,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class ToolCallLoopTest {
 
@@ -59,7 +64,7 @@ class ToolCallLoopTest {
                     scoreInvocations.incrementAndGet();
                     return Mono.just(initial);
                 },
-                messages, ctx(), budget, "trace-id", Map.of(), EvaluationRecorder.NOOP).block();
+                messages, ctx(), budget, BudgetGuard.UNLIMITED, "trace-id", Map.of(), EvaluationRecorder.NOOP).block();
 
         assertThat(result).isSameAs(initial);
         assertThat(scoreInvocations.get()).isZero();
@@ -90,11 +95,77 @@ class ToolCallLoopTest {
                     scoreInvocations.incrementAndGet();
                     return Mono.just(toolCallingResponse);
                 },
-                messages, ctx(), budget, "trace-id", Map.of(), EvaluationRecorder.NOOP).block();
+                messages, ctx(), budget, BudgetGuard.UNLIMITED, "trace-id", Map.of(), EvaluationRecorder.NOOP).block();
 
         assertThat(result).isSameAs(toolCallingResponse);
         // 10 in-loop follow-up scoreTrace calls — one per round before the cap kicks in.
         assertThat(scoreInvocations.get()).isEqualTo(ToolCallLoop.MAX_TOOL_CALL_ROUNDS);
+    }
+
+    @Test
+    void wrapsUpEarlyOnceSpendBudgetIsReached() {
+        // The model would keep calling tools forever, but a tiny per-evaluation spend budget is set.
+        // Each scoreTrace response carries token usage that, once charged through the guard, exceeds
+        // the budget after the very first follow-up call. The loop must then stop starting new turns
+        // (shouldWrapUp() gate) instead of running to MAX_TOOL_CALL_ROUNDS.
+        ToolExecutionRequest toolReq = ToolExecutionRequest.builder()
+                .id("t").name(TOOL_NAME).arguments("{}").build();
+        ChatResponse toolCallingResponse = ChatResponse.builder()
+                .aiMessage(AiMessage.from(List.of(toolReq)))
+                // gpt-4o priced at $2.5/1M in + $10/1M out -> ~$1.25 for this call, far above the limit.
+                .tokenUsage(OpenAiTokenUsage.builder()
+                        .inputTokenCount(100_000)
+                        .outputTokenCount(100_000)
+                        .totalTokenCount(200_000)
+                        .build())
+                .build();
+
+        var factory = mock(LlmProviderFactory.class);
+        when(factory.getResolvedModelInfo("gpt-4o"))
+                .thenReturn(new LlmProviderFactory.ResolvedModelInfo("gpt-4o", "openai"));
+        var costGuard = BudgetGuard.create(new BigDecimal("0.01"), "gpt-4o", factory);
+
+        AtomicInteger scoreInvocations = new AtomicInteger();
+        var messages = new ArrayList<ChatMessage>(List.of(UserMessage.from("score")));
+        var budget = new ToolCallLoop.Budget();
+
+        // The scorer wraps each call in guard.track(...); mirror that here so the loop's gate sees spend.
+        ChatResponse result = ToolCallLoop.run(
+                toolCallingResponse, baseRequest(), followUpParams(), registry(stubTool(TOOL_NAME, "ok")),
+                req -> {
+                    scoreInvocations.incrementAndGet();
+                    return costGuard.track(Mono.just(toolCallingResponse));
+                },
+                messages, ctx(), budget, costGuard, "trace-id", Map.of(), EvaluationRecorder.NOOP).block();
+
+        assertThat(result).isSameAs(toolCallingResponse);
+        // Round 0 fires one follow-up (charged, now over budget); round 1's gate trips and stops.
+        assertThat(scoreInvocations.get()).isEqualTo(1);
+        assertThat(scoreInvocations.get()).isLessThan(ToolCallLoop.MAX_TOOL_CALL_ROUNDS);
+        assertThat(costGuard.shouldWrapUp()).isTrue();
+    }
+
+    @Test
+    void budgetTriggeredWrapUpUsesBudgetSpecificInstruction() {
+        // When the spend budget cut the run short, the final re-issue must NOT tell the model it
+        // "completed" its investigation — it gets the budget-specific, best-effort-from-partial-data
+        // instruction instead.
+        var costGuard = overBudgetGuard();
+        var messages = runToWrapUp(costGuard);
+
+        assertThat(costGuard.shouldWrapUp()).isTrue();
+        assertThat(lastUserMessageText(messages))
+                .contains("evaluation spend budget")
+                .doesNotContain("completed your investigation");
+    }
+
+    @Test
+    void naturalWrapUpUsesCompletionInstruction() {
+        // No budget (UNLIMITED guard never trips): the loop caps naturally and the standard
+        // "investigation complete, emit JSON" wrap-up instruction is used.
+        var messages = runToWrapUp(BudgetGuard.UNLIMITED);
+
+        assertThat(lastUserMessageText(messages)).contains("completed your investigation");
     }
 
     @Test
@@ -144,7 +215,7 @@ class ToolCallLoopTest {
         ChatResponse result = ToolCallLoop.run(
                 toolCallingResponse, baseRequest(), followUpParams(), registry(counting),
                 req -> Mono.just(responses.removeFirst()),
-                messages, ctx(), budget, "trace-id", Map.of(), EvaluationRecorder.NOOP).block();
+                messages, ctx(), budget, BudgetGuard.UNLIMITED, "trace-id", Map.of(), EvaluationRecorder.NOOP).block();
 
         assertThat(result).isSameAs(finalResponse);
         assertThat(registryDispatches.get()).isEqualTo(1);
@@ -184,7 +255,8 @@ class ToolCallLoopTest {
         };
 
         ToolCallLoop.run(round0, baseRequest(), followUpParams(), registry(stubTool(TOOL_NAME, "res")),
-                scoreTrace, messages, ctx(), budget, "trace-id", Map.of(), EvaluationRecorder.NOOP).block();
+                scoreTrace, messages, ctx(), budget, BudgetGuard.UNLIMITED, "trace-id", Map.of(),
+                EvaluationRecorder.NOOP).block();
 
         // Two follow-up calls fired: one after round 0's tools, one after round 1's.
         assertThat(capturedRequests).hasSize(2);
@@ -235,7 +307,8 @@ class ToolCallLoopTest {
         var budget = new ToolCallLoop.Budget();
 
         ToolCallLoop.run(round0, baseRequest(), followUpParams(), new ToolRegistry(tools),
-                req -> Mono.just(done), messages, ctx(), budget, "trace-id", Map.of(), EvaluationRecorder.NOOP).block();
+                req -> Mono.just(done), messages, ctx(), budget, BudgetGuard.UNLIMITED, "trace-id", Map.of(),
+                EvaluationRecorder.NOOP).block();
 
         // Expected messages in order: original UserMessage, AiMessage(3 tool calls),
         // ToolResult(a), ToolResult(b), ToolResult(c). Pull the names off the tool results
@@ -284,7 +357,7 @@ class ToolCallLoopTest {
         var budget = new ToolCallLoop.Budget();
 
         ToolCallLoop.run(round0, baseRequest(), followUpParams(), registry(mediaTool),
-                req -> Mono.just(done), messages, ctx(), budget, "trace-id", Map.of(),
+                req -> Mono.just(done), messages, ctx(), budget, BudgetGuard.UNLIMITED, "trace-id", Map.of(),
                 EvaluationRecorder.NOOP).block();
 
         // Order: UserMessage(score), AiMessage(tool calls), ToolResult, UserMessage(media),
@@ -311,7 +384,7 @@ class ToolCallLoopTest {
         var budget = new ToolCallLoop.Budget();
 
         ToolCallLoop.run(round0, baseRequest(), followUpParams(), registry(stubTool(TOOL_NAME, "res")),
-                req -> Mono.just(done), messages, ctx(), budget, "trace-id", Map.of(),
+                req -> Mono.just(done), messages, ctx(), budget, BudgetGuard.UNLIMITED, "trace-id", Map.of(),
                 EvaluationRecorder.NOOP).block();
 
         // UserMessage(score), AiMessage(tool calls), ToolResult, terminal AiMessage(done) = 4.
@@ -321,6 +394,42 @@ class ToolCallLoopTest {
     }
 
     // --- helpers ---
+
+    private static BudgetGuard overBudgetGuard() {
+        var factory = mock(LlmProviderFactory.class);
+        when(factory.getResolvedModelInfo("gpt-4o"))
+                .thenReturn(new LlmProviderFactory.ResolvedModelInfo("gpt-4o", "openai"));
+        return BudgetGuard.create(new BigDecimal("0.01"), "gpt-4o", factory);
+    }
+
+    // Runs runWithWrapUp with a model that always requests a tool, so the loop only ends via the
+    // budget gate (over-budget guard) or the MAX_ROUNDS cap (UNLIMITED). Returns the message list
+    // whose trailing UserMessage is the wrap-up instruction that was chosen.
+    private ArrayList<ChatMessage> runToWrapUp(BudgetGuard costGuard) {
+        ToolExecutionRequest toolReq = ToolExecutionRequest.builder()
+                .id("t").name(TOOL_NAME).arguments("{}").build();
+        ChatResponse toolCallingResponse = ChatResponse.builder()
+                .aiMessage(AiMessage.from(List.of(toolReq)))
+                .tokenUsage(OpenAiTokenUsage.builder()
+                        .inputTokenCount(100_000).outputTokenCount(100_000).totalTokenCount(200_000).build())
+                .build();
+        var messages = new ArrayList<ChatMessage>(List.of(UserMessage.from("score")));
+        var budget = new ToolCallLoop.Budget();
+        ToolCallLoop.runWithWrapUp(
+                toolCallingResponse, baseRequest(), baseRequest(), followUpParams(),
+                registry(stubTool(TOOL_NAME, "ok")),
+                req -> costGuard.track(Mono.just(toolCallingResponse)),
+                messages, ctx(), budget, costGuard, "trace-id", Map.of(), EvaluationRecorder.NOOP).block();
+        return messages;
+    }
+
+    private static String lastUserMessageText(List<ChatMessage> messages) {
+        return messages.stream()
+                .filter(UserMessage.class::isInstance)
+                .map(message -> ((UserMessage) message).singleText())
+                .reduce((first, second) -> second)
+                .orElseThrow();
+    }
 
     private static ChatRequest baseRequest() {
         return ChatRequest.builder()

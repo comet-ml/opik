@@ -226,6 +226,10 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     private Mono<List<FeedbackScoreBatchItem>> evaluate(TraceToScoreLlmAsJudge message, List<Span> spans,
             List<AttachmentInfo> attachments, Map<String, String> mdc, EvaluationRecorder recorder) {
         var trace = message.trace();
+        // One guard per trace evaluation; UNLIMITED when the rule sets no maxCostUsd. Charges every
+        // LLM call (initial + tool rounds + wrap-up) and tells the tool loop when to start wrapping up.
+        var costGuard = BudgetGuard.create(message.llmAsJudgeCode().maxCostUsd(),
+                message.llmAsJudgeCode().model().name(), llmProviderFactory);
         // Sync prep is CPU-bound (JSON serialization for the size estimate + prompt rendering)
         // — schedule on Schedulers.parallel() so we don't tax the R2DBC scheduler that emits
         // the spans fetch upstream, and don't pin a workersScheduler thread on the inline path.
@@ -239,7 +243,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                     // mode decision) as a general span before the first LLM round. The agentic flag
                     // also sets the parent trace's mode.
                     recorder.recordPreparation(spans.size(), prepared.estimatedTokens(), prepared.useTools());
-                    return scoreTraceReactive(prepared.scoreRequest(), message, recorder)
+                    return scoreTraceReactive(prepared.scoreRequest(), message, recorder, costGuard)
                             .doOnNext(withMdc(mdc, chatResponse -> {
                                 if (userFacingLogger.isInfoEnabled()) {
                                     userFacingLogger.info("Received response for traceId '{}': '{}'",
@@ -250,11 +254,18 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                                     ? handleToolCalls(initialResponse, prepared.scoreRequest(),
                                             prepared.structuredRequest(), message, spans, prepared.fullJson(),
                                             mdc,
-                                            recorder)
+                                            recorder, costGuard)
                                     : Mono.just(initialResponse));
                 })
                 .map(chatResponse -> {
                     try (var logContext = wrapWithMdc(mdc)) {
+                        if (costGuard.shouldWrapUp()) {
+                            userFacingLogger.warn(
+                                    "Spend budget of '{}' USD reached for traceId '{}' (spent '{}'); "
+                                            + "stopped investigating and wrapped up with the scores gathered so far.",
+                                    costGuard.limitUsd(), trace.id(), costGuard.spentUsd());
+                            recorder.flagBudgetExceeded();
+                        }
                         // When scoreNameMapping is empty (regular online scoring), names pass through unchanged.
                         var parsed = OnlineScoringEngine.toFeedbackScores(chatResponse);
                         OnlineScoringEngine.logSkippedNullScores(userFacingLogger, parsed, "traceId", trace.id());
@@ -374,11 +385,11 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
      * pin the per-stream worker scheduler thread (OPIK-6308).
      */
     private Mono<ChatResponse> scoreTraceReactive(ChatRequest request, TraceToScoreLlmAsJudge message,
-            EvaluationRecorder recorder) {
+            EvaluationRecorder recorder, BudgetGuard costGuard) {
         var call = Mono.fromCallable(() -> aiProxyService.scoreTrace(
                 request, message.llmAsJudgeCode().model(), message.workspaceId()))
                 .subscribeOn(Schedulers.boundedElastic());
-        return recorder.recordLlmCall(request, call);
+        return costGuard.track(recorder.recordLlmCall(request, call));
     }
 
     private static boolean shouldUseTools(TraceToScoreLlmAsJudge message) {
@@ -496,7 +507,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     // Package-private for unit tests.
     Mono<ChatResponse> handleToolCalls(ChatResponse chatResponse, ChatRequest toolRequest,
             ChatRequest structuredRequest, TraceToScoreLlmAsJudge message, List<Span> spans,
-            JsonNode fullJson, Map<String, String> mdc, EvaluationRecorder recorder) {
+            JsonNode fullJson, Map<String, String> mdc, EvaluationRecorder recorder, BudgetGuard costGuard) {
 
         AiMessage aiMessage = chatResponse.aiMessage();
         if (!aiMessage.hasToolExecutionRequests()) {
@@ -533,8 +544,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
 
             return ToolCallLoop.runWithWrapUp(
                     chatResponse, toolRequest, structuredRequest, followUpParameters, toolRegistry,
-                    request -> scoreTraceReactive(request, message, recorder),
-                    messages, ctx, budget, trace.id().toString(), mdc, recorder)
+                    request -> scoreTraceReactive(request, message, recorder, costGuard),
+                    messages, ctx, budget, costGuard, trace.id().toString(), mdc, recorder)
                     .onErrorResume(error -> surfaceInjectedMediaFailure(error, ctx,
                             message.llmAsJudgeCode().model().name(), userFacingLogger, mdc));
         });
