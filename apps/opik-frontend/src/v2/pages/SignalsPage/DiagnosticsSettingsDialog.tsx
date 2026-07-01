@@ -11,6 +11,7 @@ import { Switch } from "@/ui/switch";
 import { Separator } from "@/ui/separator";
 import { AGENT_INSIGHTS_JOB_STATUS } from "@/types/signals";
 import useUpdateAgentInsightsJobMutation from "@/api/signals/useUpdateAgentInsightsJobMutation";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 
 type DiagnosticsSettingsDialogProps = {
   open: boolean;
@@ -33,6 +34,14 @@ const DiagnosticsSettingsDialog: React.FC<DiagnosticsSettingsDialogProps> = ({
   }, [open, enabled]);
 
   const handleSave = () => {
+    if (on !== enabled) {
+      trackEvent(
+        on
+          ? OpikEvent.DIAGNOSTICS_AUTO_ENABLED
+          : OpikEvent.DIAGNOSTICS_AUTO_DISABLED,
+        { project_id: projectId, source: "settings" },
+      );
+    }
     updateMutation.mutate(
       {
         projectId,

@@ -91,6 +91,7 @@ const useDiagnosticsRunState = (projectId: string) => {
 
   return {
     isRunning,
+    startedAt: state?.startedAt ?? 0,
     baseline: state?.baseline ?? 0,
     failBaseline: state?.failBaseline ?? 0,
     startRun,
