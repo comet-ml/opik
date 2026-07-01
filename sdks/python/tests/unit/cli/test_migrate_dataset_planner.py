@@ -158,6 +158,35 @@ class TestFinalizeWithSkipsOrOk:
         on_disk = json.loads(audit_path.read_text())
         assert on_disk["status"] == "ok"
 
+    def test_exclude_experiments__success_line_notes_skip(
+        self, tmp_path, capsys
+    ) -> None:
+        # OPIK-7161 AC: run output makes clear experiments were skipped.
+        # No skip records exist on the --exclude-experiments path (the
+        # cascades never ran), so this is the happy-path branch; the note
+        # is appended to the success line.
+        from opik.cli.migrate.main import _finalize_with_skips_or_ok
+
+        audit = AuditLog(command="opik migrate dataset", args={})
+        audit.record(type="rename_source", status="ok", details={})
+        audit_path = tmp_path / "audit.json"
+
+        _finalize_with_skips_or_ok(
+            audit,
+            audit_path,
+            name="MyDataset",
+            target_label="MyDataset",
+            target_project="DestProject",
+            elapsed_seconds=5.0,
+            experiments_excluded=True,
+        )
+
+        captured = capsys.readouterr()
+        assert "--exclude-experiments" in captured.out
+        assert "skipped" in captured.out
+        on_disk = json.loads(audit_path.read_text())
+        assert on_disk["status"] == "ok"
+
     def test_multiple_skip_records__totals_aggregated_by_reason(
         self, tmp_path, capsys
     ) -> None:
@@ -226,6 +255,13 @@ class TestMigrateHelp:
         assert "--from-project" in result.output
         assert "--dry-run" in result.output
 
+    def test_migrate_dataset__help_invoked__lists_exclude_experiments(self) -> None:
+        # OPIK-7161 AC: the opt-out flag must be discoverable in --help.
+        runner = CliRunner()
+        result = runner.invoke(cli, ["migrate", "dataset", "--help"])
+        assert result.exit_code == 0
+        assert "--exclude-experiments" in result.output
+
 
 # ---------------------------------------------------------------------------
 # Planner unit tests (no Click invocation)
@@ -270,6 +306,68 @@ class TestPlanBuilding:
         assert plan.target_name == "MyDataset"
         # New remap dict starts empty; _cascade_optimizations populates it.
         assert plan.optimization_id_remap == {}
+
+    def test_build_dataset_plan__exclude_experiments__omits_both_cascades(
+        self,
+    ) -> None:
+        # OPIK-7161: --exclude-experiments drops the experiment stage AND
+        # the optimization stage (optimizations are containers for the
+        # skipped experiments). The plan ends after ReplayVersions, so no
+        # experiment/optimization discovery ever runs.
+        rest_client = _planner_rest_client(
+            [
+                _Page([_DatasetRow(id="src-1", name="MyDataset", description="d")]),
+                _Page([]),
+            ]
+        )
+
+        plan = planner_module.build_dataset_plan(
+            client=_planner_client(rest_client),
+            name="MyDataset",
+            to_project="B",
+            exclude_experiments=True,
+        )
+
+        types = [type(a).__name__ for a in plan.actions]
+        assert types == [
+            "RenameSource",
+            "CreateDestination",
+            "ReplayVersions",
+        ]
+        assert not any(
+            isinstance(a, planner_module.CascadeExperiments) for a in plan.actions
+        )
+        assert not any(
+            isinstance(a, planner_module.CascadeOptimizations) for a in plan.actions
+        )
+
+    def test_build_dataset_plan__exclude_experiments_default_false__keeps_cascades(
+        self,
+    ) -> None:
+        # Default (flag off) is unchanged: both cascades still emitted.
+        # Guards the opt-out default so a plain migrate never silently
+        # starts skipping experiments.
+        rest_client = _planner_rest_client(
+            [
+                _Page([_DatasetRow(id="src-1", name="MyDataset")]),
+                _Page([]),
+            ]
+        )
+
+        plan = planner_module.build_dataset_plan(
+            client=_planner_client(rest_client),
+            name="MyDataset",
+            to_project="B",
+        )
+
+        types = [type(a).__name__ for a in plan.actions]
+        assert types == [
+            "RenameSource",
+            "CreateDestination",
+            "ReplayVersions",
+            "CascadeOptimizations",
+            "CascadeExperiments",
+        ]
 
     def test_build_dataset_plan__test_suite__type_forwarded_to_destination(
         self,
