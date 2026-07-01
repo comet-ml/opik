@@ -211,10 +211,14 @@ const buildAncestorSet = (
  *
  * During optimization: baseline → running → evaluating → passed/pruned
  * After completion: baseline, passed (has descendants or best), pruned (rest)
- * Non-test-suite: all scored = passed (no pruning)
+ * Applies to both test-suite and dataset runs so discarded trials render as the
+ * faded "pruned" dots (matching the legend + Figma).
  */
 export const computeCandidateStatuses = (
   candidates: AggregatedCandidate[],
+  // Status no longer depends on the run type — pruning applies to dataset runs
+  // too — but the arg is kept so existing call sites stay unchanged.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   isTestSuite = true,
   isInProgress = false,
   inProgressInfo?: InProgressInfo,
@@ -230,8 +234,6 @@ export const computeCandidateStatuses = (
   for (const c of candidates) {
     if (c.stepIndex === 0) {
       statusMap.set(c.candidateId, "baseline");
-    } else if (!isTestSuite) {
-      statusMap.set(c.candidateId, c.score == null ? "running" : "passed");
     } else if (c.score == null) {
       statusMap.set(c.candidateId, "running");
     } else if (isInProgress) {
@@ -282,6 +284,11 @@ export const buildCandidateChartData = (
 
 /**
  * Build parent-child edges from chart data.
+ *
+ * Only connects the winning progression: edges into a discarded (pruned) trial
+ * are skipped so the line follows baseline → passed → best and the discarded
+ * trials render as loose dots below it (matching Figma), instead of the line
+ * diving down to every discarded child and back up.
  */
 export const buildParentChildEdges = (
   data: CandidateDataPoint[],
@@ -290,6 +297,7 @@ export const buildParentChildEdges = (
   const edges: ParentChildEdge[] = [];
 
   for (const point of data) {
+    if (point.status === "pruned") continue;
     for (const parentId of point.parentCandidateIds) {
       if (candidateIds.has(parentId)) {
         edges.push({

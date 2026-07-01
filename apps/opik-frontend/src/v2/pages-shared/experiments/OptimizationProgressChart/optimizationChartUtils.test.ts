@@ -53,18 +53,26 @@ describe("computeCandidateStatuses", () => {
   });
 
   describe("non-test-suite", () => {
-    it("should mark all scored candidates as passed", () => {
+    it("derives passed/pruned from the tree, same as a test suite", () => {
       const candidates = [
-        makeCandidate({ candidateId: "a", stepIndex: 0, score: 0.5 }),
+        makeCandidate({ candidateId: "a", stepIndex: 0, score: 0.3 }),
         makeCandidate({
           candidateId: "b",
           stepIndex: 1,
-          score: 0.3,
+          score: 0.9,
+          parentCandidateIds: ["a"],
+        }),
+        makeCandidate({
+          candidateId: "c",
+          stepIndex: 1,
+          score: 0.2,
           parentCandidateIds: ["a"],
         }),
       ];
       const result = computeCandidateStatuses(candidates, false);
-      expect(result.get("b")).toBe("passed");
+      expect(result.get("a")).toBe("baseline");
+      expect(result.get("b")).toBe("passed"); // best-scoring winner
+      expect(result.get("c")).toBe("pruned"); // discarded sibling → faded dot
     });
   });
 
