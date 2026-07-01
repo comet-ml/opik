@@ -2048,9 +2048,11 @@ class TraceDAOImpl implements TraceDAO {
             SELECT
                 id,
                 start_time
-            FROM traces FINAL
+            FROM traces
             WHERE id IN :ids
             AND workspace_id = :workspace_id
+            ORDER BY id, last_updated_at DESC
+            LIMIT 1 BY id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -4271,8 +4273,8 @@ class TraceDAOImpl implements TraceDAO {
 
     // Resolves trace -> stored start_time, keyed off workspaceId explicitly so it can run from the Cost
     // Intelligence subscriber (no request scope). start_time must come from the trace (not the UUIDv7 timestamp)
-    // so a cipx identity update doesn't rewrite it for backfilled/imported traces. FINAL yields the latest
-    // version, one row per id.
+    // so a cipx identity update doesn't rewrite it for backfilled/imported traces. Deduped with LIMIT 1 BY id
+    // (latest last_updated_at wins) rather than FINAL, so it stays cheap on the ingestion path.
     @Override
     @WithSpan
     public Mono<Map<UUID, Instant>> getStartTimesByTraceIds(@NonNull Set<UUID> traceIds, @NonNull String workspaceId) {

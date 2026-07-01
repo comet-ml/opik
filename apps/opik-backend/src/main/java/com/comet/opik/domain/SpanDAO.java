@@ -36,6 +36,7 @@ import io.r2dbc.spi.RowMetadata;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -616,9 +617,11 @@ public class SpanDAO {
                 project_id,
                 trace_id,
                 start_time
-            FROM spans FINAL
+            FROM spans
             WHERE workspace_id = :workspace_id
             AND id IN :ids
+            ORDER BY id, last_updated_at DESC
+            LIMIT 1 BY id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -2165,6 +2168,7 @@ public class SpanDAO {
 
     /** A persisted span's project, trace, and start_time — the fields needed to build its cipx_spends row.
      *  project_id/trace_id are immutable (sort key); start_time is the stored value, not derived. */
+    @Builder(toBuilder = true)
     public record SpanRef(@NonNull UUID projectId, @NonNull UUID traceId, @NonNull Instant startTime) {
     }
 
@@ -2173,8 +2177,8 @@ public class SpanDAO {
      * explicitly rather than the reactive request context, so it can run from the Cost Intelligence subscriber (an
      * async event listener with no request scope). A batch span update matches spans by id + workspace and carries
      * none of these per span, and start_time must come from the stored span (not the UUIDv7 timestamp) so a cipx
-     * update doesn't rewrite it for backfilled/imported spans. Read with FINAL so the ReplacingMergeTree dedup yields
-     * the latest version, one row per span. Spans missing from ClickHouse are absent from the map.
+     * update doesn't rewrite it for backfilled/imported spans. Deduped with LIMIT 1 BY id (latest last_updated_at
+     * wins) rather than FINAL, so it stays cheap on the ingestion path. Spans missing from ClickHouse are absent.
      */
     @WithSpan
     public Mono<Map<UUID, SpanRef>> getSpanRefsBySpanIds(@NonNull Set<UUID> spanIds, @NonNull String workspaceId) {
@@ -2192,9 +2196,11 @@ public class SpanDAO {
                     return Flux.from(statement.execute())
                             .flatMap(result -> result.map((row, metadata) -> Map.entry(
                                     row.get("id", UUID.class),
-                                    new SpanRef(row.get("project_id", UUID.class),
-                                            row.get("trace_id", UUID.class),
-                                            row.get("start_time", Instant.class)))))
+                                    SpanRef.builder()
+                                            .projectId(row.get("project_id", UUID.class))
+                                            .traceId(row.get("trace_id", UUID.class))
+                                            .startTime(row.get("start_time", Instant.class))
+                                            .build())))
                             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
                 });
     }
