@@ -1,10 +1,4 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
@@ -26,18 +20,19 @@ import ResizableSidePanelTopBar from "@/shared/ResizableSidePanel/ResizableSideP
 import Loader from "@/shared/Loader/Loader";
 import OptimizationsNewPageContent from "./OptimizationsNewPageContent";
 
-/** Matches ResizableSidePanel's `duration-150` slide transition. */
-const SIDEBAR_ANIMATION_MS = 150;
-
 type NewRunSidebarProps = {
+  open: boolean;
   onClose: () => void;
   templateId?: string;
   rerunId?: string;
 };
 
-// Mounted only while open so its provider/rerun queries don't run in the
-// background and the form re-seeds fresh on each open.
-const NewRunSidebar: React.FC<NewRunSidebarProps> = ({
+type NewRunSidebarFormProps = Omit<NewRunSidebarProps, "open">;
+
+// The form and its provider/rerun queries live here so they only mount while the
+// sidebar is open (see NewRunSidebar below): no background queries when closed,
+// and the form re-seeds fresh — and the "wizard started" event fires — on each open.
+const NewRunSidebarForm: React.FC<NewRunSidebarFormProps> = ({
   onClose,
   templateId,
   rerunId,
@@ -51,20 +46,6 @@ const NewRunSidebar: React.FC<NewRunSidebarProps> = ({
   );
   const datasetCreationRef = useRef<string | null>(null);
   const [isPreparingDataset, setIsPreparingDataset] = useState(false);
-
-  // Drive the slide-in/out: the panel mounts off-screen (open=false), then flips
-  // open on the next tick so ResizableSidePanel's transform transition runs. On
-  // close we play the slide-out, then let the parent unmount us (it clears the
-  // `?new` query param) once the animation has finished.
-  const [open, setOpen] = useState(false);
-  useEffect(() => {
-    setOpen(true);
-  }, []);
-
-  const handleClose = useCallback(() => {
-    setOpen(false);
-    window.setTimeout(onClose, SIDEBAR_ANIMATION_MS);
-  }, [onClose]);
 
   useEffect(() => {
     trackEvent(OpikEvent.OPTIMIZATION_WIZARD_STARTED, {
@@ -124,29 +105,36 @@ const NewRunSidebar: React.FC<NewRunSidebarProps> = ({
     Boolean(providerKeysData) &&
     (configuredProvidersList.length === 0 || availableModels.length > 0);
 
-  // Generate message ids once per rerun/template and reuse them across the
-  // providers-ready re-seed below. `values` re-applies defaultValues when the
-  // resolved model lands; without stable ids that would mint fresh message ids
-  // and remount the (un-dirty) message rows, dropping focus mid-typing.
-  const seededMessages = useMemo(
-    () =>
-      convertOptimizationStudioToFormData(rerunData || templateData).messages,
+  // What we seed the form from: a rerun's saved config, else the picked
+  // template, else nothing (a blank run).
+  const seedSource = useMemo(
+    () => rerunData || templateData,
     [rerunData, templateData],
   );
 
-  const defaultValues = useMemo(() => {
-    const seeded = convertOptimizationStudioToFormData(
-      rerunData || templateData,
-      providersReady ? availableModels : [],
-    );
-    return { ...seeded, messages: seededMessages };
-  }, [
-    rerunData,
-    templateData,
-    providersReady,
-    availableModels,
-    seededMessages,
-  ]);
+  // The converter mints fresh message ids on every call. The form below uses
+  // `values` (not `defaultValues`), so it re-seeds once the model resolves
+  // after providers load — and re-seeding with new ids would remount the
+  // message rows and drop focus mid-typing. Message identity depends only on
+  // the seed source, so derive it once here and reuse it across that re-seed.
+  const stableMessages = useMemo(
+    () => convertOptimizationStudioToFormData(seedSource).messages,
+    [seedSource],
+  );
+
+  // Everything except messages also tracks the resolved models, so the default
+  // model is picked from what the workspace can actually run. Pass no models
+  // until providers are ready, so we never seed a guessed/empty model.
+  const defaultValues = useMemo<OptimizationConfigFormType>(
+    () => ({
+      ...convertOptimizationStudioToFormData(
+        seedSource,
+        providersReady ? availableModels : [],
+      ),
+      messages: stableMessages,
+    }),
+    [seedSource, providersReady, availableModels, stableMessages],
+  );
 
   const form = useForm<OptimizationConfigFormType>({
     resolver: zodResolver(OptimizationConfigSchema),
@@ -200,12 +188,36 @@ const NewRunSidebar: React.FC<NewRunSidebarProps> = ({
 
   const isRerunLoading = Boolean(rerunId) && isRerunFetching;
 
+  if (isRerunLoading) {
+    return <Loader message="Loading optimization..." />;
+  }
+
+  return (
+    <FormProvider {...form}>
+      <OptimizationsNewPageContent
+        onCancel={onClose}
+        isPreparingDataset={isPreparingDataset}
+      />
+    </FormProvider>
+  );
+};
+
+// Thin, always-mounted shell. ResizableSidePanel is fully controlled and drives
+// the slide-in/out from `open` via CSS, so the parent just toggles `open` (no
+// mount-time flip or close timer needed). The form content mounts only while
+// open, matching the panel's own `open`-gated rendering.
+const NewRunSidebar: React.FC<NewRunSidebarProps> = ({
+  open,
+  onClose,
+  templateId,
+  rerunId,
+}) => {
   return (
     <ResizableSidePanel
       panelId="new-optimization-run-sidebar"
       entity="optimization run"
       open={open}
-      onClose={handleClose}
+      onClose={onClose}
       initialWidth={0.7}
       minWidth={640}
       header={
@@ -214,19 +226,16 @@ const NewRunSidebar: React.FC<NewRunSidebarProps> = ({
           title={
             <span className="comet-body-s-accented">New optimization run</span>
           }
-          onClose={handleClose}
+          onClose={onClose}
         />
       }
     >
-      {isRerunLoading ? (
-        <Loader message="Loading optimization..." />
-      ) : (
-        <FormProvider {...form}>
-          <OptimizationsNewPageContent
-            onCancel={handleClose}
-            isPreparingDataset={isPreparingDataset}
-          />
-        </FormProvider>
+      {open && (
+        <NewRunSidebarForm
+          onClose={onClose}
+          templateId={templateId}
+          rerunId={rerunId}
+        />
       )}
     </ResizableSidePanel>
   );

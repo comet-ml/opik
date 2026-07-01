@@ -439,8 +439,9 @@ const OptimizationsPage: React.FunctionComponent = () => {
           </div>
         </>
       )}
-      {canUseOptimizationStudio && Boolean(newRunFlag) && (
+      {canUseOptimizationStudio && (
         <NewRunSidebar
+          open={Boolean(newRunFlag)}
           onClose={handleCloseNewRun}
           templateId={templateParam ?? undefined}
           rerunId={rerunParam ?? undefined}

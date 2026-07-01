@@ -1,18 +1,6 @@
 import React from "react";
 import { UseFormReturn } from "react-hook-form";
-import {
-  Braces,
-  Code,
-  Dna,
-  Equal,
-  ExternalLink,
-  GitBranch,
-  Network,
-  Sigma,
-  Sparkles,
-  SpellCheck,
-  type LucideIcon,
-} from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import {
   FormControl,
   FormField,
@@ -38,41 +26,12 @@ import { FormFieldCard } from "@/v2/pages-shared/llm/FormFieldCard";
 import {
   OPTIMIZER_OPTIONS,
   OPTIMIZATION_METRIC_OPTIONS,
+  ALGORITHM_ICON_MAP,
+  METRIC_ICON_MAP,
+  type IconConfig,
 } from "@/constants/optimizations";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import DatasetSamplePreview from "./DatasetSamplePreview";
-
-type IconConfig = { icon: LucideIcon; color: string };
-
-const ALGORITHM_ICON_MAP: Partial<Record<OPTIMIZER_TYPE, IconConfig>> = {
-  [OPTIMIZER_TYPE.GEPA]: { icon: Dna, color: "var(--optimizer-icon-gepa)" },
-  [OPTIMIZER_TYPE.HIERARCHICAL_REFLECTIVE]: {
-    icon: Network,
-    color: "var(--optimizer-icon-hierarchical)",
-  },
-  [OPTIMIZER_TYPE.EVOLUTIONARY]: {
-    icon: GitBranch,
-    color: "var(--optimizer-icon-evolutionary)",
-  },
-};
-
-const METRIC_ICON_MAP: Record<METRIC_TYPE, IconConfig> = {
-  [METRIC_TYPE.EQUALS]: { icon: Equal, color: "var(--metric-icon-equals)" },
-  [METRIC_TYPE.JSON_SCHEMA_VALIDATOR]: {
-    icon: Braces,
-    color: "var(--metric-icon-json-schema)",
-  },
-  [METRIC_TYPE.G_EVAL]: { icon: Sparkles, color: "var(--metric-icon-g-eval)" },
-  [METRIC_TYPE.LEVENSHTEIN]: {
-    icon: SpellCheck,
-    color: "var(--metric-icon-levenshtein)",
-  },
-  [METRIC_TYPE.NUMERICAL_SIMILARITY]: {
-    icon: Sigma,
-    color: "var(--metric-icon-numerical)",
-  },
-  [METRIC_TYPE.CODE]: { icon: Code, color: "var(--metric-icon-code)" },
-};
 
 const renderIconLabel = (cfg: IconConfig | undefined, label: string) => {
   const Icon = cfg?.icon;
