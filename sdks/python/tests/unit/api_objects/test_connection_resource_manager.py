@@ -1,4 +1,5 @@
 import threading
+import time
 from typing import List, Optional, Tuple
 from unittest import mock
 
@@ -138,6 +139,62 @@ def test_release__not_last_reference_gc_path__never_flushes():
     assert created[0].flush_calls == []
     assert not created[0].closed
     assert manager.reference_count(config, use_batching=True) == 1
+
+
+def test_release__concurrent_durable_and_teardown__no_close_during_shared_flush():
+    # Regression: a shared end(flush=True) pre-flushes while still holding its
+    # reference, so a concurrent last-release (flush=False) cannot evict + close
+    # the bundle and clear the queue mid-flush. The event forces the teardown to
+    # race the in-flight shared flush; on the buggy (decrement-then-flush) order
+    # the close would run while in_flush is True.
+    flush_started = threading.Event()
+
+    class RaceDetectBundle(FakeBundle):
+        def __init__(self) -> None:
+            super().__init__()
+            self.in_flush = False
+            self.closed_during_flush = False
+
+        def flush(self, timeout: Optional[int]) -> None:
+            self.in_flush = True
+            flush_started.set()
+            time.sleep(0.1)  # window in which a racing close must not run
+            self.in_flush = False
+            super().flush(timeout)
+
+        def close(self, timeout: Optional[int], *, flush: bool) -> None:
+            if self.in_flush:
+                self.closed_during_flush = True
+            super().close(timeout, flush=flush)
+
+    bundle = RaceDetectBundle()
+    manager = connection_resources.ConnectionResourceManager(
+        builder=lambda config, *, use_batching: bundle
+    )
+    config = _config()
+    lease_a = manager.acquire(config, use_batching=True)  # durable holder
+    lease_b = manager.acquire(config, use_batching=True)  # fire-and-forget holder
+
+    def durable_release() -> None:
+        lease_a.release(timeout=None, flush=True, close_on_zero=True)
+
+    def teardown_release() -> None:
+        flush_started.wait(timeout=2)  # release into the in-flight shared flush
+        lease_b.release(timeout=None, flush=False, close_on_zero=True)
+
+    threads = [
+        threading.Thread(target=durable_release),
+        threading.Thread(target=teardown_release),
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert not bundle.closed_during_flush  # close never ran mid-flush
+    assert bundle.closed  # bundle still torn down once, after the flush
+    assert bundle.flush_calls == [None]  # the durable holder drained the queue
+    assert manager.active_connection_count() == 0
 
 
 def test_release__last_reference__closes_and_evicts():

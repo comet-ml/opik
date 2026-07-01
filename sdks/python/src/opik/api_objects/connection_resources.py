@@ -327,23 +327,39 @@ class ConnectionResourceManager:
         flush: bool = True,
         close_on_zero: bool,
     ) -> None:
+        # Durability under sharing: an explicit ``end(flush=True)`` on a handle
+        # that still shares its bundle must drain the shared queue *before* this
+        # handle gives up its reference. Flushing while our reference is still
+        # counted keeps refcount >= 1, so a concurrent last-release cannot evict
+        # and ``close(flush=False)`` the bundle — which would clear the message
+        # queue out from under this flush and lose the data the ``flush=True``
+        # caller was promised. Pre-flush only when another handle also shares the
+        # bundle; a sole holder's ``close(flush=True)`` below already drains
+        # durably. A GC finalizer (``close_on_zero=False``) never does network
+        # I/O, so it never pre-flushes.
+        if flush and close_on_zero:
+            with self._lock:
+                entry = self._entries.get(key)
+                shared_bundle = (
+                    entry.resources
+                    if entry is not None and entry.refcount > 1
+                    else None
+                )
+            if shared_bundle is not None:
+                shared_bundle.flush(timeout)
+
+        # Now drop our reference. Because we only decrement here — after any
+        # pre-flush above has completed — a close can never run while another
+        # handle is mid pre-flush: that handle still holds its reference, so the
+        # count cannot reach zero until its flush returns.
         with self._lock:
             entry = self._entries.get(key)
             if entry is None:
                 return
             entry.refcount -= 1
-            still_shared = entry.refcount > 0
-            if still_shared:
-                # Other handles keep the bundle alive, so we must not close it —
-                # but an explicit ``end(flush=True)`` is a durability call. Drain
-                # the shared queue now (outside the lock), otherwise this handle's
-                # queued data stays buffered and a co-located handle's later
-                # ``flush=False`` teardown would discard it, silently breaking the
-                # ``flush=True`` contract. A GC finalizer (``close_on_zero=False``)
-                # must never do this — no network I/O inside garbage collection.
-                if not (flush and close_on_zero):
-                    return
-            elif not close_on_zero:
+            if entry.refcount > 0:
+                return
+            if not close_on_zero:
                 # The last reference was dropped by a GC finalizer (see
                 # ``Opik._acquire_shared_resources``). Only the refcount
                 # decrement above is safe to run there; closing — streamer
@@ -352,16 +368,12 @@ class ConnectionResourceManager:
                 # cached so a later same-identity ``acquire`` reuses it, or
                 # ``close_all`` disposes it at process exit.
                 return
-            else:
-                # Evict before close, under the lock, so a concurrent acquire
-                # never receives a bundle that is being torn down.
-                del self._entries[key]
+            # Evict before close, under the lock, so a concurrent acquire never
+            # receives a bundle that is being torn down.
+            del self._entries[key]
             bundle = entry.resources
 
-        if still_shared:
-            bundle.flush(timeout)
-        else:
-            bundle.close(timeout, flush=flush)
+        bundle.close(timeout, flush=flush)
 
     def close_all(self, *, flush: bool = True) -> None:
         """Close and evict every cached bundle. Registered as the process
