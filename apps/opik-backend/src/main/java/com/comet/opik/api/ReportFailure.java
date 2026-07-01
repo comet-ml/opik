@@ -25,7 +25,7 @@ import java.util.UUID;
 public record ReportFailure(
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
         @JsonIgnore String workspaceId,
-        @NotBlank @Size(max = 100) String type,
+        @NotNull ReportFailureType type,
         @NotNull UUID projectId,
         @NotBlank @Size(max = 255) String reason,
         String detail,
