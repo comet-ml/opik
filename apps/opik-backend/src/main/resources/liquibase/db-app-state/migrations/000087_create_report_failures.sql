@@ -22,3 +22,4 @@ CREATE TABLE IF NOT EXISTS report_failures (
   COLLATE = utf8mb4_unicode_ci;
 
 --rollback DROP TABLE IF EXISTS report_failures;
+
