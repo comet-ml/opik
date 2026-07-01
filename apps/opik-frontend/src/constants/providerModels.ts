@@ -107,6 +107,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
 
   [PROVIDER_TYPE.ANTHROPIC]: [
     {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5,
+      label: "Claude Sonnet 5",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_8,
       label: "Claude Opus 4.8",
     },
@@ -312,6 +316,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4_6,
       label: "anthropic/claude-sonnet-4.6",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_5,
+      label: "anthropic/claude-sonnet-5",
     },
     {
       value: PROVIDER_MODEL_TYPE.ARCEE_AI_AFM_4_5B,
@@ -633,6 +641,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_1_FLASH_LITE,
       label: "google/gemini-3.1-flash-lite",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_1_FLASH_LITE_IMAGE,
+      label: "google/gemini-3.1-flash-lite-image",
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_1_FLASH_LITE_PREVIEW,
@@ -2293,6 +2305,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GEMMA_4_31B_IT,
       label: "Gemma 4 31B IT",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_OMNI_FLASH_PREVIEW,
+      label: "Gemini Omni Flash Preview",
     },
     {
       value: PROVIDER_MODEL_TYPE.LYRIA_3_CLIP_PREVIEW,
