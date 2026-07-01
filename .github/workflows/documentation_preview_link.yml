@@ -13,8 +13,9 @@ concurrency:
 jobs:
     run:
         runs-on: ubuntu-latest
-        # Recent runs hug the old 15-min ceiling (13.5–14.6 min); the external re-verify
-        # curls added below need headroom so they can't tip a run into a spurious timeout.
+        # Recent runs hug the old 15-min ceiling (13.5–14.6 min). Re-verify now runs in
+        # parallel (bounded to ~one round-trip), so the crawl dominates; 20 gives headroom
+        # while the step logs reveal the true crawl-only duration.
         timeout-minutes: 20
         permissions: write-all
         steps:
@@ -74,6 +75,12 @@ jobs:
                   exit 0
                 fi
 
+                # Progress to the step log (not the PR comment) so a slow run is diagnosable:
+                # show that the crawl finished and the status breakdown it produced.
+                echo "Crawl complete: $(jq '.links | length' linkinator_results.json) links checked."
+                echo "Status breakdown:"
+                jq -r '.links | group_by(.status) | map("  \(.[0].status // "none"): \(length)") | .[]' linkinator_results.json
+
                 # `↳ on page` strips the ephemeral preview host, leaving a stable,
                 # greppable doc path. Append one report entry for a status-0 url whose
                 # recheck label is computed by the caller.
@@ -95,59 +102,119 @@ jobs:
                   | "❌ Broken link: \(.url) (\(.status))\n   ↳ on page: \((.parent // "") | sub("^" + $origin; ""))"
                 ' linkinator_results.json)
 
-                # SSRF guard for re-verify: a PR author controls the links being fetched, so
-                # before curling an external host we require http(s) and reject any host that
-                # resolves into a private/loopback/link-local/metadata range. Exits 0 (safe)
-                # or 1 (blocked). Preview-origin URLs skip this — they are ours by construction.
-                cat > ssrf_guard.py <<'PY'
-                import ipaddress, socket, sys
+                # Re-verify transient links concurrently while preserving an SSRF guard.
+                # A PR author controls these links, so before fetching any URL we require
+                # http(s) and reject hosts that resolve into private/loopback/link-local/
+                # metadata ranges. curl -L would follow a 30x to an arbitrary host WITHOUT
+                # re-checking, so a public URL could bounce to a private/metadata address and
+                # be fetched unguarded — instead this follows redirects manually in waves:
+                # guard every URL, fetch a whole wave in parallel with a single `curl -Z`
+                # (one process, no -L), then guard each Location before the next wave. Real
+                # hosts still resolve (many links legitimately 30x, e.g. http→https or
+                # sdk.vercel.ai→ai-sdk.dev); a redirect into a blocked range is unreachable.
+                # Prints one "<url>\t<label>" line per still-broken url (reachable ones print
+                # nothing). Parallelism keeps the whole phase to ~one round-trip even for a
+                # large 429/500 storm, instead of serializing curls into the job timeout.
+                cat > reverify.py <<'PY'
+                import ipaddress, socket, subprocess, sys
                 from urllib.parse import urlparse
-                url = sys.argv[1]
-                p = urlparse(url)
-                if p.scheme not in ("http", "https") or not p.hostname:
-                    sys.exit(1)
-                try:
-                    infos = socket.getaddrinfo(p.hostname, p.port or (443 if p.scheme == "https" else 80))
-                except socket.gaierror:
-                    sys.exit(1)  # unresolvable — treat as unsafe, report as broken
-                for info in infos:
-                    ip = ipaddress.ip_address(info[4][0])
-                    if (ip.is_private or ip.is_loopback or ip.is_link_local
-                            or ip.is_multicast or ip.is_reserved or ip.is_unspecified):
-                        sys.exit(1)
-                sys.exit(0)
+
+                MAX_REDIRECTS = 5
+                PARALLEL_MAX = 20
+                TIMEOUT = 8
+                MAX_REVERIFY = 200  # sanity cap; overflow reported broken (fail loud)
+
+                def is_safe(url):
+                    p = urlparse(url)
+                    if p.scheme not in ("http", "https") or not p.hostname:
+                        return False
+                    try:
+                        infos = socket.getaddrinfo(p.hostname, p.port or (443 if p.scheme == "https" else 80))
+                    except socket.gaierror:
+                        return False
+                    for info in infos:
+                        ip = ipaddress.ip_address(info[4][0])
+                        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                                or ip.is_multicast or ip.is_reserved or ip.is_unspecified):
+                            return False
+                    return True
+
+                def fetch_all(urls):
+                    cfg = []
+                    for u in urls:
+                        cfg.append('url = "%s"' % u)
+                        cfg.append('output = "/dev/null"')
+                    proc = subprocess.run(
+                        ["curl", "-s", "-Z", "--parallel-max", str(PARALLEL_MAX),
+                         "--max-time", str(TIMEOUT),
+                         "-w", "%{url}\t%{http_code}\t%{redirect_url}\n", "-K", "-"],
+                        input="\n".join(cfg), capture_output=True, text=True,
+                    )
+                    out = {}
+                    for line in proc.stdout.splitlines():
+                        parts = line.split("\t")
+                        if len(parts) == 3:
+                            out[parts[0]] = (parts[1], parts[2])
+                    return out
+
+                candidates = list(dict.fromkeys(a for a in sys.argv[1:] if a))
+                broken = {}
+                for u in candidates[MAX_REVERIFY:]:
+                    broken[u] = "not re-verified, over cap of %d" % MAX_REVERIFY
+                pending = candidates[:MAX_REVERIFY]
+                origin = {u: u for u in pending}
+                for _hop in range(MAX_REDIRECTS + 1):
+                    if not pending:
+                        break
+                    safe, blocked = [], []
+                    for u in pending:
+                        (safe if is_safe(u) else blocked).append(u)
+                    for u in blocked:
+                        broken[origin[u]] = "blocked by SSRF guard or unresolvable"
+                    if not safe:
+                        pending = []
+                        break
+                    results = fetch_all(safe)
+                    nxt = []
+                    for u in safe:
+                        code, redirect = results.get(u, ("000", ""))
+                        orig = origin[u]
+                        if code.startswith("2"):
+                            continue
+                        if code.startswith("3"):
+                            if not redirect:
+                                broken[orig] = "recheck %s (no location)" % code
+                            else:
+                                origin[redirect] = orig
+                                nxt.append(redirect)
+                        else:
+                            broken[orig] = "recheck %s" % (code or "000")
+                    pending = nxt
+                for u in pending:
+                    broken[origin.get(u, u)] = "recheck too many redirects"
+                for url, label in broken.items():
+                    print("%s\t%s" % (url, label))
                 PY
 
                 # Status 0 ("crawl gave up"), 429 (HuggingFace throttling linkinator's burst)
                 # and 500 (Fern preview erroring under crawl load) are all transient false
-                # positives — each returns 2xx/3xx when fetched on its own. Re-check each once
-                # and keep it only if still unreachable. Capped at 50 re-verifies so a 500-storm
-                # can't serialize hundreds of curls into the job timeout; the overflow is
-                # reported as broken (fail loud) rather than silently skipped.
-                MAX_REVERIFY=50
-                count=0
-                while IFS= read -r url; do
-                  [ -z "$url" ] && continue
-                  count=$((count + 1))
-                  if [ "$count" -gt "$MAX_REVERIFY" ]; then
-                    report_timeout "$url" "not re-verified, over cap of $MAX_REVERIFY"
-                    continue
-                  fi
-                  case "$url" in
-                    "$PREVIEW_ORIGIN"/*|"$PREVIEW_ORIGIN") ;;   # ours — no SSRF check needed
-                    *)
-                      if ! python3 ssrf_guard.py "$url" 2>/dev/null; then
-                        report_timeout "$url" "blocked by SSRF guard or unresolvable"
-                        continue
-                      fi
-                      ;;
-                  esac
-                  code=$(curl -s -L -o /dev/null -w "%{http_code}" --max-time 20 "$url" 2>/dev/null)
-                  { [ -n "$code" ] && [ "$code" -ge 200 ] && [ "$code" -lt 400 ]; } && continue
-                  report_timeout "$url" "recheck ${code:-000}"
-                done <<< "$(jq -r '[.links[] | select(.status == 0 or .status == 429 or .status == 500) | .url] | unique | .[]' linkinator_results.json)"
+                # positives — each returns 2xx/3xx when fetched on its own.
+                REVERIFY_URLS=$(jq -r '[.links[] | select(.status == 0 or .status == 429 or .status == 500) | .url] | unique | .[]' linkinator_results.json)
+                total_reverify=$(printf '%s\n' "$REVERIFY_URLS" | grep -c . || true)
+                echo "Re-verifying $total_reverify transient (0/429/500) link(s) in parallel..."
+                still_broken=0
+                if [ "$total_reverify" -gt 0 ]; then
+                  # xargs feeds all urls as args; reverify.py fetches them concurrently.
+                  while IFS=$'\t' read -r url label; do
+                    [ -z "$url" ] && continue
+                    echo "  broken: $url -> $label"
+                    report_timeout "$url" "$label"
+                    still_broken=$((still_broken + 1))
+                  done < <(printf '%s\n' "$REVERIFY_URLS" | xargs python3 reverify.py)
+                fi
+                echo "Re-verify done: $still_broken of $total_reverify still broken."
 
-                rm -f ssrf_guard.py
+                rm -f reverify.py
 
                 if [ -n "$BROKEN_LINKS" ]; then
                   {
