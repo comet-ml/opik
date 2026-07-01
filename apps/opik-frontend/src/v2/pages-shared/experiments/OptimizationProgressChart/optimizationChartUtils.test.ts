@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   computeCandidateStatuses,
   buildCandidateChartData,
+  getTrialStatusLabel,
 } from "./optimizationChartUtils";
 import { AggregatedCandidate } from "@/types/optimizations";
 
@@ -349,5 +350,16 @@ describe("buildCandidateChartData", () => {
     ];
     const data = buildCandidateChartData(candidates);
     expect(data[0].status).toBe("baseline");
+  });
+});
+
+describe("getTrialStatusLabel", () => {
+  it("labels baseline without a step suffix", () => {
+    expect(getTrialStatusLabel("baseline", 0)).toBe("Baseline");
+  });
+
+  it("labels passed and pruned trials with their step (Figma wording)", () => {
+    expect(getTrialStatusLabel("passed", 1)).toBe("Passed step 1");
+    expect(getTrialStatusLabel("pruned", 2)).toBe("Discarded in step 2");
   });
 });

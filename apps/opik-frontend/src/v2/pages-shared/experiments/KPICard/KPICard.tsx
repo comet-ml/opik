@@ -1,5 +1,5 @@
 import React from "react";
-import { Clock, Coins, LucideIcon, PenLine } from "lucide-react";
+import { Coins, LucideIcon, Scale, Timer } from "lucide-react";
 import isUndefined from "lodash/isUndefined";
 
 import { calcFormatterAwarePercentage } from "@/lib/percentage";
@@ -7,6 +7,7 @@ import PercentageTrend, {
   PercentageTrendType,
 } from "@/shared/PercentageTrend/PercentageTrend";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import { StatCard } from "@/ui/stat-card";
 import {
   formatAsPercentage,
   formatAsDuration,
@@ -22,21 +23,18 @@ type KPICardProps = {
 };
 
 export const KPICard: React.FunctionComponent<KPICardProps> = ({
-  icon: Icon,
+  icon,
   label,
   headerRight,
   children,
 }) => (
-  <div className="rounded-lg border bg-muted/20 p-4">
-    <div className="mb-2 flex items-center justify-between gap-2">
-      <div className="flex min-w-0 items-center gap-2">
-        <Icon className="size-4 shrink-0 text-muted-slate" />
-        <span className="comet-body-s truncate text-muted-slate">{label}</span>
-      </div>
+  <StatCard>
+    <StatCard.Header>
+      <StatCard.Title icon={icon}>{label}</StatCard.Title>
       {headerRight}
-    </div>
+    </StatCard.Header>
     {children}
-  </div>
+  </StatCard>
 );
 
 type MetricKPICardProps = {
@@ -65,24 +63,23 @@ export const MetricKPICard: React.FunctionComponent<MetricKPICardProps> = ({
       label={label}
       headerRight={
         !isUndefined(percentage) ? (
-          <PercentageTrend percentage={percentage} trend={trend} />
+          <PercentageTrend percentage={percentage} trend={trend} size="sm" />
         ) : undefined
       }
     >
-      <div className="flex flex-col gap-0.5">
-        {isUndefined(current) ? (
-          <span className="comet-title-m text-muted-slate">-</span>
-        ) : (
-          <TooltipWrapper content={String(current)}>
-            <span className="comet-title-m">{formatter(current)}</span>
-          </TooltipWrapper>
-        )}
-        {hasComparison && (
-          <span className="comet-body-xs text-muted-slate">
-            {formatter(baseline as number)} → {formatter(current as number)}
-          </span>
-        )}
-      </div>
+      {isUndefined(current) ? (
+        <StatCard.Value className="text-muted-slate">-</StatCard.Value>
+      ) : (
+        <TooltipWrapper content={String(current)}>
+          <StatCard.Value>{formatter(current)}</StatCard.Value>
+        </TooltipWrapper>
+      )}
+      {hasComparison && (
+        <StatCard.Delta
+          from={formatter(baseline as number)}
+          to={formatter(current as number)}
+        />
+      )}
     </KPICard>
   );
 };
@@ -101,13 +98,13 @@ export const getMetricKPICardConfigs = (options?: {
 }): MetricKPICardConfig[] => [
   {
     key: "score",
-    icon: PenLine,
+    icon: Scale,
     label: getObjectiveLabel(options?.isTestSuite, options?.objectiveName),
     formatter: formatAsPercentage,
   },
   {
     key: "latency",
-    icon: Clock,
+    icon: Timer,
     label: "Latency",
     formatter: formatAsDuration,
     trend: "inverted",

@@ -6,6 +6,7 @@ import {
   MetricKPICard,
   getMetricKPICardConfigs,
 } from "@/v2/pages-shared/experiments/KPICard/KPICard";
+import { StatCard } from "@/ui/stat-card";
 import {
   formatAsDuration,
   formatAsCurrency,
@@ -40,11 +41,7 @@ const ElapsedDuration: React.FunctionComponent<ElapsedDurationProps> = ({
 
   if (elapsed <= 0) return null;
 
-  return (
-    <span className="comet-body-xs text-muted-slate">
-      {formatAsDuration(elapsed)} total
-    </span>
-  );
+  return <StatCard.Caption>{formatAsDuration(elapsed)} total</StatCard.Caption>;
 };
 
 type OptimizationKPICardsProps = {
@@ -123,23 +120,23 @@ const OptimizationKPICards: React.FunctionComponent<
       })}
 
       <KPICard icon={Coins} label="Optimization cost">
-        <div className="flex items-baseline gap-1.5">
-          <span className="comet-body-s-accented">
-            {kpiData.totalOptCost > 0
-              ? formatAsCurrency(kpiData.totalOptCost)
-              : "-"}
-          </span>
-          {isInProgress && startTime != null ? (
-            <ElapsedDuration startTime={startTime} />
-          ) : (
-            kpiData.totalDuration != null &&
-            kpiData.totalDuration > 0 && (
-              <span className="comet-body-xs text-muted-slate">
-                {formatAsDuration(kpiData.totalDuration)} total
-              </span>
-            )
-          )}
-        </div>
+        <StatCard.Value
+          className={kpiData.totalOptCost > 0 ? "" : "text-muted-slate"}
+        >
+          {kpiData.totalOptCost > 0
+            ? formatAsCurrency(kpiData.totalOptCost)
+            : "-"}
+        </StatCard.Value>
+        {isInProgress && startTime != null ? (
+          <ElapsedDuration startTime={startTime} />
+        ) : (
+          kpiData.totalDuration != null &&
+          kpiData.totalDuration > 0 && (
+            <StatCard.Caption>
+              {formatAsDuration(kpiData.totalDuration)} total
+            </StatCard.Caption>
+          )
+        )}
       </KPICard>
     </div>
   );

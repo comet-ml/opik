@@ -3,6 +3,7 @@ import { Dot } from "recharts";
 
 import {
   TRIAL_STATUS_COLORS,
+  TRIAL_BEST_COLOR,
   CandidateDataPoint,
 } from "./optimizationChartUtils";
 import {
@@ -69,10 +70,12 @@ const useScatterDot = ({
       const { cx: rawCx, cy, payload } = props;
       const pxOffset = overlapOffsets.get(payload.candidateId) ?? 0;
       const cx = rawCx + pxOffset;
-      const color = !isTestSuite
-        ? TRIAL_STATUS_COLORS.passed
-        : TRIAL_STATUS_COLORS[payload.status];
       const isBest = payload.candidateId === bestCandidateId;
+      const color = isBest
+        ? TRIAL_BEST_COLOR
+        : !isTestSuite
+          ? TRIAL_STATUS_COLORS.passed
+          : TRIAL_STATUS_COLORS[payload.status];
       const isSelected = payload.candidateId === selectedTrialId;
       const isHovered = payload.candidateId === hoveredCandidateId;
       const radius = getDotRadius({ isBest, isHovered });

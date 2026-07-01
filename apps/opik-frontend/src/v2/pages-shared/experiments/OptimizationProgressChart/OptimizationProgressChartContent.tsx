@@ -273,14 +273,16 @@ const OptimizationProgressChartContent: React.FC<
         (() => {
           const best = candidateMap.get(bestCandidateId);
           if (!best) return null;
-          const bestStatus =
-            chartData.find((d) => d.candidateId === bestCandidateId)?.status ??
-            "passed";
+          const bestPoint = chartData.find(
+            (d) => d.candidateId === bestCandidateId,
+          );
+          const bestStatus = bestPoint?.status ?? "passed";
           return (
             <div className="pointer-events-none absolute right-2 top-9 z-10">
               <TrialCard
                 candidate={best}
                 status={bestStatus}
+                stepIndex={bestPoint?.stepIndex ?? 0}
                 isTestSuite={isTestSuite}
                 isBest
               />

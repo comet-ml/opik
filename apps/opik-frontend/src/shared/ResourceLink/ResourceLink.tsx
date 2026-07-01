@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, type LucideIcon } from "lucide-react";
 import isUndefined from "lodash/isUndefined";
 
 import { cn } from "@/lib/utils";
@@ -142,6 +142,8 @@ export type ResourceLinkProps = {
   isDeleted?: boolean;
   prefix?: string;
   suffix?: React.ReactNode;
+  /** Optional leading icon rendered inside the tag (asTag, non-small only). */
+  icon?: LucideIcon;
   className?: string;
 };
 
@@ -157,6 +159,7 @@ function ResourceLink({
   isDeleted = false,
   prefix,
   suffix,
+  icon: Icon,
   className,
 }: ResourceLinkProps): React.ReactElement {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -212,6 +215,9 @@ function ResourceLink({
               className,
             )}
           >
+            {!isSmall && Icon && (
+              <Icon className="size-3 shrink-0 text-muted-slate" />
+            )}
             {!isSmall &&
               (deleted ? (
                 <div className="comet-body-s-accented truncate text-foreground">

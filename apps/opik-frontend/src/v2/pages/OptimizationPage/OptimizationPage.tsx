@@ -154,11 +154,19 @@ const OptimizationPage: React.FC = () => {
         onValueChange={setActiveTab}
         className="flex flex-col"
       >
-        <TabsList variant="underline" className="shrink-0">
-          <TabsTrigger variant="underline" value={OPTIMIZATION_TAB.OVERVIEW}>
+        <TabsList variant="segmented-primary" className="shrink-0">
+          <TabsTrigger
+            variant="segmented-primary"
+            size="sm"
+            value={OPTIMIZATION_TAB.OVERVIEW}
+          >
             Overview
           </TabsTrigger>
-          <TabsTrigger variant="underline" value={OPTIMIZATION_TAB.TRIALS}>
+          <TabsTrigger
+            variant="segmented-primary"
+            size="sm"
+            value={OPTIMIZATION_TAB.TRIALS}
+          >
             Trials
           </TabsTrigger>
         </TabsList>

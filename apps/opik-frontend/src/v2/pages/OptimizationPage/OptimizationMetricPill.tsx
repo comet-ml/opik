@@ -1,8 +1,10 @@
 import React from "react";
-import { ChartColumnBig, Maximize2 } from "lucide-react";
+import { Maximize2, Scale } from "lucide-react";
 
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/ui/hover-card";
-import { Tag } from "@/ui/tag";
+import OptimizationConfigPill, {
+  CONFIG_PILL_ICON_CLASS,
+} from "./OptimizationConfigPill";
 import { OptimizationMetricItem } from "./optimizationHeaderConfig";
 import MetricPopoverContent from "./MetricPopoverContent";
 
@@ -20,17 +22,13 @@ const OptimizationMetricPill: React.FC<OptimizationMetricPillProps> = ({
   <HoverCard openDelay={150} closeDelay={150}>
     <HoverCardTrigger asChild>
       <button type="button" aria-label={`Metric: ${metric.label}`}>
-        <Tag
-          variant="default"
-          size="md"
+        <OptimizationConfigPill
           className="cursor-pointer hover:bg-muted"
+          icon={<Scale className={CONFIG_PILL_ICON_CLASS} />}
+          suffix={<Maximize2 className="size-3 shrink-0 text-muted-slate" />}
         >
-          <span className="flex items-center gap-1.5">
-            <ChartColumnBig className="size-3.5 shrink-0 text-muted-slate" />
-            <span className="truncate">{metric.label}</span>
-            <Maximize2 className="size-3 shrink-0 text-muted-slate" />
-          </span>
-        </Tag>
+          {metric.label}
+        </OptimizationConfigPill>
       </button>
     </HoverCardTrigger>
     <HoverCardContent align="start" className="w-72">

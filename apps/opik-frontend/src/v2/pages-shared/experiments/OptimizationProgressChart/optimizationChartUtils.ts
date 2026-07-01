@@ -25,13 +25,20 @@ export const STATUS_VARIANT_MAP: Record<TrialStatus, TagProps["variant"]> = {
   running: "yellow",
 };
 
+// Figma uses a fuchsia scale for trial status on the progress chart: baseline
+// and passed share fuchsia-500, discarded is the lighter fuchsia-300, and the
+// best trial is the darkest fuchsia-900. In-progress states (evaluating /
+// running) stay orange / yellow so active work reads as distinct.
 export const TRIAL_STATUS_COLORS: Record<TrialStatus, string> = {
-  baseline: "var(--color-gray)",
+  baseline: "var(--color-fuchsia)",
   passed: "var(--color-fuchsia)",
   evaluating: "var(--color-orange)",
-  pruned: "var(--color-pink)",
+  pruned: "#f0abfc",
   running: "var(--color-yellow)",
 };
+
+/** Best-trial dot colour (Tailwind fuchsia-900) — darkest in the fuchsia scale. */
+export const TRIAL_BEST_COLOR = "#701a75";
 
 export const TRIAL_STATUS_LABELS: Record<TrialStatus, string> = {
   baseline: "Baseline",
@@ -39,6 +46,31 @@ export const TRIAL_STATUS_LABELS: Record<TrialStatus, string> = {
   evaluating: "Evaluating",
   pruned: "Discarded",
   running: "Running",
+};
+
+/**
+ * Full status label for the trial tooltip header, including the step it
+ * happened at (Figma: "Passed step 1", "Discarded in step 2"). The baseline has
+ * no step suffix, and the best trial is labelled separately by the caller.
+ */
+export const getTrialStatusLabel = (
+  status: TrialStatus,
+  stepIndex: number,
+): string => {
+  switch (status) {
+    case "baseline":
+      return "Baseline";
+    case "passed":
+      return `Passed step ${stepIndex}`;
+    case "pruned":
+      return `Discarded in step ${stepIndex}`;
+    case "evaluating":
+      return `Evaluating step ${stepIndex}`;
+    case "running":
+      return `Running step ${stepIndex}`;
+    default:
+      return TRIAL_STATUS_LABELS[status];
+  }
 };
 
 export const TRIAL_STATUS_ORDER: readonly TrialStatus[] = [
