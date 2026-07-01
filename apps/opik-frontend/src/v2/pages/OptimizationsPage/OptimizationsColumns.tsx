@@ -70,10 +70,14 @@ export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
     id: "algorithm",
     label: "Algorithm",
     type: COLUMN_TYPE.string,
-    accessorFn: (row) =>
-      row.studio_config?.optimizer?.type
-        ? getOptimizerLabel(row.studio_config.optimizer.type)
-        : "-",
+    // studio_config is null for older/non-Studio runs, which instead keep the
+    // optimizer name in metadata.optimizer — fall back to it before dashing.
+    accessorFn: (row) => {
+      const optimizerType =
+        row.studio_config?.optimizer?.type ??
+        (row.metadata as { optimizer?: string } | undefined)?.optimizer;
+      return optimizerType ? getOptimizerLabel(optimizerType) : "-";
+    },
     size: 180,
   },
   {

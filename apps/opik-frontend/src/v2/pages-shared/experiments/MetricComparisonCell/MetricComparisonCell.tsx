@@ -32,10 +32,12 @@ const MetricComparisonCell: React.FunctionComponent<
     // trend icon and muted-slate text, followed by the current value. The pill
     // shares the same neutral surface as the status tag (bg #f8fafc / border
     // #f1f5f9). Trend direction/color reuses PercentageTrend's shared mapping.
-    const trendConfig =
-      !isUndefined(percentage) && isFinite(percentage)
-        ? getTrendConfig(percentage, trend, 0)
-        : null;
+    // Compute the trend icon whenever there's a percentage — including Infinity
+    // from a zero baseline — so zero-baseline comparisons still show a
+    // direction; only the numeric label is dropped when the value isn't finite.
+    const trendConfig = !isUndefined(percentage)
+      ? getTrendConfig(percentage, trend, 0)
+      : null;
     const TrendIcon = trendConfig?.Icon;
     const percentageLabel =
       !isUndefined(percentage) && isFinite(percentage)
@@ -52,9 +54,11 @@ const MetricComparisonCell: React.FunctionComponent<
                 TREND_COLOR_CLASS[trendConfig.variant],
               )}
             />
-            <span className="comet-body-xs-accented text-muted-slate">
-              {percentageLabel}
-            </span>
+            {percentageLabel && (
+              <span className="comet-body-xs-accented text-muted-slate">
+                {percentageLabel}
+              </span>
+            )}
           </div>
         )}
         {!isUndefined(current) ? (
