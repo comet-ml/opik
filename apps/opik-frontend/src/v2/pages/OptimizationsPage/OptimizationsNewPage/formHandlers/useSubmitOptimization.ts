@@ -15,16 +15,11 @@ import {
 
 type UseSubmitOptimizationParams = {
   form: UseFormReturn<OptimizationConfigFormType>;
-  /** The currently selected dataset (used to resolve its name on submit). */
   selectedDataset?: Dataset;
 };
 
-/**
- * Builds the studio config, creates the run, and navigates to it. Meant to be
- * wrapped by RHF's `form.handleSubmit(...)`, which validates first and tracks
- * `formState.isSubmitting` for the duration of the returned promise — so this
- * hook neither re-validates nor owns a busy flag.
- */
+// Wrapped by RHF's `form.handleSubmit(...)`, which validates first and tracks
+// `formState.isSubmitting` — so this hook neither re-validates nor owns a busy flag.
 export const useSubmitOptimization = ({
   form,
   selectedDataset,

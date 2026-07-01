@@ -31,18 +31,12 @@ const SIDEBAR_ANIMATION_MS = 150;
 
 type NewRunSidebarProps = {
   onClose: () => void;
-  /** Pre-fill from a demo template. */
   templateId?: string;
-  /** Pre-fill by cloning an existing run's config. */
   rerunId?: string;
 };
 
-/**
- * The "New optimization run" form, hosted in a right sidebar over the runs
- * list (replaces the former full-page `/optimizations/new` route). Mount it only
- * while open so its provider/rerun queries don't run in the background and the
- * form is re-seeded fresh on each open.
- */
+// Mounted only while open so its provider/rerun queries don't run in the
+// background and the form re-seeds fresh on each open.
 const NewRunSidebar: React.FC<NewRunSidebarProps> = ({
   onClose,
   templateId,
@@ -160,9 +154,6 @@ const NewRunSidebar: React.FC<NewRunSidebarProps> = ({
     // lands; `keepDirtyValues` preserves a model the user already picked.
     values: defaultValues,
     resetOptions: { keepDirtyValues: true },
-    // Validate only on submit, then live afterwards — so errors don't appear
-    // while the user is still editing (switching metrics, before picking a
-    // dataset, etc.); they surface only once "Optimize prompt" is clicked.
     mode: "onSubmit",
     reValidateMode: "onChange",
   });
@@ -207,9 +198,6 @@ const NewRunSidebar: React.FC<NewRunSidebarProps> = ({
     project?.name,
   ]);
 
-  // Only a rerun's config fetch blocks the whole panel — there's nothing to
-  // show until it lands. Dataset preparation is surfaced inline on the dataset
-  // field so the rest of the form stays usable.
   const isRerunLoading = Boolean(rerunId) && isRerunFetching;
 
   return (

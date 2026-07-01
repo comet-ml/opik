@@ -9,6 +9,14 @@ import { usePermissions } from "@/contexts/PermissionsContext";
 
 const DEFAULT_LOADED_DATASET_ITEMS = 1000;
 
+/** Renders the selected value with the gold dataset icon (matches Figma). */
+const renderDatasetTitleWithIcon = (option: DropdownOption<string>) => (
+  <div className="flex min-w-0 items-center gap-2">
+    <Database className="size-4 shrink-0 text-[color:var(--chart-yellow)]" />
+    <span className="truncate">{option.label}</span>
+  </div>
+);
+
 type DatasetSelectBoxProps = {
   value: string;
   onValueChange: (value: string) => void;
@@ -62,16 +70,7 @@ const DatasetSelectBox: React.FC<DatasetSelectBoxProps> = ({
       value={value}
       placeholder={placeholder}
       onChange={onValueChange}
-      renderTitle={
-        showIcon
-          ? (option) => (
-              <div className="flex min-w-0 items-center gap-2">
-                <Database className="size-4 shrink-0 text-[color:var(--chart-yellow)]" />
-                <span className="truncate">{option.label}</span>
-              </div>
-            )
-          : undefined
-      }
+      renderTitle={showIcon ? renderDatasetTitleWithIcon : undefined}
       onLoadMore={
         total > DEFAULT_LOADED_DATASET_ITEMS && !isLoadedMore
           ? loadMoreHandler

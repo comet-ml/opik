@@ -198,10 +198,9 @@ export const convertOptimizationStudioToFormData = (
   const defaultConfig = modelName
     ? getDefaultModelConfig(modelName as PROVIDER_MODEL_TYPE)
     : ({} as LLMPromptConfigsType);
-  // Keep the run's saved parameters (temperature/top_p/...) even when its model
-  // is no longer available and we fall back to another one — submit sanitizes
-  // anything the resolved model can't accept. Previously the params were
-  // silently dropped whenever the model wasn't kept verbatim.
+  // Keep the run's saved params (temperature/top_p/...) even when its model is
+  // gone and we fall back to another — submit sanitizes what the resolved model
+  // can't accept. They used to be silently dropped on any model change.
   const modelConfig = hasExistingConfig
     ? { ...defaultConfig, ...existingConfig }
     : defaultConfig;
@@ -240,10 +239,9 @@ export const convertFormDataToStudioConfig = (
     },
     llm_model: {
       model: formData.modelName,
-      // Drop params the model doesn't accept (e.g. temperature on models that
-      // deprecate it) before the gateway rejects the request — same last-mile
-      // hardening the playground applies. sanitizeConfigForRequest still types
-      // its first arg against the legacy enum, so the cast is only for that call.
+      // Drop params the resolved model doesn't accept (e.g. temperature) before
+      // the gateway rejects them — same hardening the playground applies. The
+      // cast is only because sanitizeConfigForRequest types its arg as the legacy enum.
       parameters: sanitizeConfigForRequest(
         formData.modelName as PROVIDER_MODEL_TYPE,
         formData.modelConfig,

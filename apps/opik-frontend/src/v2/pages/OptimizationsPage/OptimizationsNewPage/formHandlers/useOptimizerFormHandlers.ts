@@ -5,7 +5,6 @@ import { OPTIMIZER_TYPE, OptimizerParameters } from "@/types/optimizations";
 import { getDefaultOptimizerConfig } from "@/lib/optimizations";
 import { OptimizationConfigFormType } from "@/v2/pages-shared/optimizations/OptimizationConfigForm/schema";
 
-/** Optimizer (algorithm) section: type selection + params editing. */
 export const useOptimizerFormHandlers = (
   form: UseFormReturn<OptimizationConfigFormType>,
 ) => {

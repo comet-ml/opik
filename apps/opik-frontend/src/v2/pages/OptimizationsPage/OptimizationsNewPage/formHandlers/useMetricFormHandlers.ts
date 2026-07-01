@@ -5,7 +5,6 @@ import { METRIC_TYPE, MetricParameters } from "@/types/optimizations";
 import { getDefaultMetricConfig } from "@/lib/optimizations";
 import { OptimizationConfigFormType } from "@/v2/pages-shared/optimizations/OptimizationConfigForm/schema";
 
-/** Metric section: type selection, params editing, and error surfacing. */
 export const useMetricFormHandlers = (
   form: UseFormReturn<OptimizationConfigFormType>,
 ) => {

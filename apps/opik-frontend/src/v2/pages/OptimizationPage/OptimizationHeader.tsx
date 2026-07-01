@@ -45,7 +45,6 @@ const OptimizationHeader: React.FC<OptimizationHeaderProps> = ({
 
   const handleRerun = () => {
     if (!optimizationId) return;
-    // Opens the new-run sidebar on the runs list, pre-filled from this run.
     navigate({
       to: "/$workspaceName/projects/$projectId/optimizations",
       params: { workspaceName, projectId: activeProjectId! },

@@ -25,20 +25,11 @@ export const safelyGetPromptMustacheTags = (template: string) => {
   }
 };
 
-/**
- * Safely extracts the dataset variables a template interpolates: only `{{name}}`
- * tags, reduced to their root key for dotted paths (`{{a.b}}` -> `a`, matching
- * top-level dataset columns). Section/inverted-section/partial tokens
- * (`{{#x}}`, `{{^x}}`, `{{>x}}`) are control flow, not columns, and the implicit
- * iterator (`{{.}}`) is skipped. Returns [] on an unparseable template.
- */
 export const safelyGetPromptVariables = (template: string): string[] => {
   try {
-    return mustache
-      .parse(template)
-      .filter(([type]) => type === "name")
-      .map(([, name]) => name.split(".")[0])
-      .filter((name) => name.length > 0 && name !== ".");
+    return getPromptMustacheTags(template)
+      .map((name) => name.split(".")[0])
+      .filter((name) => name.length > 0);
   } catch (error) {
     return [];
   }

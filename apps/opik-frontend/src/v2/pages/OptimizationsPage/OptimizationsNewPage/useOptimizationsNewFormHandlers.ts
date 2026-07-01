@@ -19,11 +19,6 @@ const METRICS_WITH_REFERENCE_KEY = [
   METRIC_TYPE.LEVENSHTEIN,
 ];
 
-/**
- * Wires the new-run form together: watches, the selected-dataset lookup, the
- * dataset/name handlers, and the per-section handler hooks (optimizer, metric,
- * model, submit). Section logic lives in ./formHandlers/* — this just composes.
- */
 export const useOptimizationsNewFormHandlers = () => {
   const activeProjectId = useActiveProjectId();
   const form = useFormContext<OptimizationConfigFormType>();
@@ -41,13 +36,9 @@ export const useOptimizationsNewFormHandlers = () => {
       datasetId,
     });
 
-  // {{variables}} used in the prompt and the G-Eval metric must exist as
-  // columns in the selected item source — otherwise they resolve to nothing
-  // and the run fails at evaluation time. We surface the offenders so the form
-  // can block submit with a clear reason (e.g. after switching datasets, a
-  // template's {{question}}/{{expected_behavior}} no longer match the columns).
-  // Skipped until the sample has loaded (empty `datasetVariables`) so we don't
-  // flag a mismatch before we know the columns.
+  // Prompt + G-Eval `{{variables}}` must exist as dataset columns, or the run
+  // fails at evaluation time. Skipped until the sample loads (empty
+  // `datasetVariables`) so we don't flag a mismatch before the columns are known.
   const missingDatasetVariables = useMemo(() => {
     if (datasetVariables.length === 0) return [];
 
@@ -75,10 +66,8 @@ export const useOptimizationsNewFormHandlers = () => {
     return [...referenced].filter((tag) => !datasetVariables.includes(tag));
   }, [messages, metricParams, metricType, datasetVariables]);
 
-  // Resolve the selected dataset's name on demand instead of scanning a
-  // capped list of every project dataset. Loading/error are surfaced so submit
-  // is gated on the lookup rather than silently no-oping when it's in flight or
-  // the dataset is gone (e.g. a rerun whose dataset was deleted).
+  // Resolve the dataset by id (not from a capped list). Loading/error gate
+  // submit so an in-flight or deleted dataset can't silently no-op.
   const {
     data: selectedDataset,
     isLoading: isDatasetLoading,

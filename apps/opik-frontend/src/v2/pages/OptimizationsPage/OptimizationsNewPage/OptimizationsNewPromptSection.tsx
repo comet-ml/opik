@@ -69,9 +69,8 @@ const OptimizationsNewPromptSection: React.FC<
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { calculateModelProvider } = useLLMProviderModelsData();
 
-  // The optimization form is model-only (no `provider` field); the Playground
-  // model picker + params popover both need the composed provider, so derive it
-  // from the selected model the same way the model handler does.
+  // The form has no `provider` field, so derive it from the selected model for
+  // the model picker + params popover.
   const provider = useMemo<COMPOSED_PROVIDER_TYPE | "">(
     () => (model ? calculateModelProvider(model) : ""),
     [calculateModelProvider, model],

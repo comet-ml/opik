@@ -7,7 +7,6 @@ import { updateProviderConfig } from "@/lib/modelUtils";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import { OptimizationConfigFormType } from "@/v2/pages-shared/optimizations/OptimizationConfigForm/schema";
 
-/** Model section: model selection (with provider-aware defaults) + config edits. */
 export const useModelFormHandlers = (
   form: UseFormReturn<OptimizationConfigFormType>,
 ) => {

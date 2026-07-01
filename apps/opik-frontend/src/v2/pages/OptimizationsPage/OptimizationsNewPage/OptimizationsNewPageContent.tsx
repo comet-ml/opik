@@ -7,8 +7,6 @@ import OptimizationsNewConfigSidebar from "./OptimizationsNewConfigSidebar";
 
 type OptimizationsNewPageContentProps = {
   onCancel: () => void;
-  // True while a template's demo dataset is being created; surfaced inline on
-  // the dataset field and the submit button instead of blocking the panel.
   isPreparingDataset: boolean;
 };
 
@@ -41,27 +39,17 @@ const OptimizationsNewPageContent: React.FC<
 
   const hasMissingVariables = missingDatasetVariables.length > 0;
 
-  // RHF drives the busy flag (`isSubmitting` stays true for the duration of the
-  // async submit) and lazy validation: field errors and the variable-mismatch
-  // message only appear once the form has been submitted at least once
-  // (`isSubmitted`), not while the user is still editing / switching metrics /
-  // before a dataset is picked.
   const { isSubmitting, isSubmitted: submitAttempted } = form.formState;
 
-  // RHF's `handleSubmit` validates the schema first; this only runs when the
-  // fields are valid. The variable mismatch lives outside the schema, so we
-  // still guard it here (field errors already surfaced to the user). Returning
-  // early leaves `isSubmitSuccessful` true, but nothing reads it.
+  // The variable-mismatch check lives outside the zod schema, so guard it here
+  // even though RHF has already validated the fields.
   const onValid = useCallback(() => {
     if (hasMissingVariables) return;
     return submitOptimization();
   }, [hasMissingVariables, submitOptimization]);
 
-  // Native form submit (submit button / Enter). RHF's handleSubmit re-throws
-  // when the submit handler rejects; the create mutation already toasts API
-  // errors via its `onError`, so swallow the settled rejection to avoid an
-  // unhandled promise rejection. RHF has already reset `isSubmitting` by the
-  // time it re-throws, so state stays consistent.
+  // handleSubmit re-throws when the submit handler rejects; the create mutation
+  // already toasts API errors, so swallow it to avoid an unhandled rejection.
   const handleFormSubmit = useCallback(
     (event: React.FormEvent) => {
       void form

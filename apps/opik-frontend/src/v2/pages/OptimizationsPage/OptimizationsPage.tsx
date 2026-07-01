@@ -185,9 +185,6 @@ const OptimizationsPage: React.FunctionComponent = () => {
     updateType: "replaceIn",
   });
 
-  // New-run wizard (sidebar over the list). `new` opens it; `template`/`rerun`
-  // pre-fill it — set by the studio-templates / empty-state / detail-page
-  // entry points (replacing the former /optimizations/new route).
   const [newRunFlag, setNewRunFlag] = useQueryParam("new", StringParam, {
     updateType: "replaceIn",
   });
