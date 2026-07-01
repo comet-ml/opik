@@ -621,6 +621,8 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       projectId,
       page: 1,
       size: 1,
+      fromTime: intervalStart,
+      toTime: intervalEnd,
       logsSource: LOGS_SOURCE.sdk,
     },
     {
