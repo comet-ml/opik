@@ -120,6 +120,7 @@ const AlgorithmConfigs = ({
                   delete next.model_parameters;
                   onChange(next);
                 }}
+                type="button"
               >
                 Use prompt model
               </Button>

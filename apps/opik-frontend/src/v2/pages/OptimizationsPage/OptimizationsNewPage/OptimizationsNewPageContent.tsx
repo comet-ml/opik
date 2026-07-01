@@ -57,20 +57,22 @@ const OptimizationsNewPageContent: React.FC<
     return submitOptimization();
   }, [hasMissingVariables, submitOptimization]);
 
-  // `handleSubmit` re-throws when the submit handler rejects; the create
-  // mutation already toasts API errors via its `onError`, so swallow the
-  // settled rejection here to avoid an unhandled promise rejection. RHF has
-  // already reset `isSubmitting` by the time it re-throws, so state stays sane.
-  const handleSubmitClick = useCallback(
-    () =>
-      form
-        .handleSubmit(onValid)()
-        .catch(() => {}),
+  // Native form submit (submit button / Enter). RHF's handleSubmit re-throws
+  // when the submit handler rejects; the create mutation already toasts API
+  // errors via its `onError`, so swallow the settled rejection to avoid an
+  // unhandled promise rejection. RHF has already reset `isSubmitting` by the
+  // time it re-throws, so state stays consistent.
+  const handleFormSubmit = useCallback(
+    (event: React.FormEvent) => {
+      void form
+        .handleSubmit(onValid)(event)
+        .catch(() => {});
+    },
     [form, onValid],
   );
 
   return (
-    <div className="flex size-full flex-col">
+    <form onSubmit={handleFormSubmit} className="flex size-full flex-col">
       <div className="flex flex-1 flex-col gap-6 overflow-y-auto px-6 pb-6 pt-4 xl:flex-row">
         <OptimizationsNewPromptSection
           form={form}
@@ -118,7 +120,7 @@ const OptimizationsNewPageContent: React.FC<
         )}
         <div className="flex items-center gap-2">
           <Button
-            onClick={handleSubmitClick}
+            type="submit"
             disabled={
               isSubmitting ||
               isPreparingDataset ||
@@ -133,12 +135,17 @@ const OptimizationsNewPageContent: React.FC<
             )}
             {isSubmitting ? "Starting..." : "Optimize prompt"}
           </Button>
-          <Button variant="outline" onClick={onCancel} disabled={isSubmitting}>
+          <Button
+            variant="outline"
+            type="button"
+            onClick={onCancel}
+            disabled={isSubmitting}
+          >
             Cancel
           </Button>
         </div>
       </div>
-    </div>
+    </form>
   );
 };
 

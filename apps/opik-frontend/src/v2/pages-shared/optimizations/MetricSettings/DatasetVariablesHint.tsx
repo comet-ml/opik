@@ -26,6 +26,7 @@ const DatasetVariablesHint: React.FC<DatasetVariablesHintProps> = ({
               size="3xs"
               onClick={() => onSelect(variable)}
               className="px-0 text-sm underline"
+              type="button"
             >
               {variable}
             </Button>
