@@ -88,7 +88,6 @@ export const useOptimizationsNewFormHandlers = () => {
   const handleDatasetChange = useCallback(
     (id: string | null) => {
       form.setValue("datasetId", id || "", {
-        shouldValidate: true,
         shouldDirty: true,
       });
 
@@ -101,7 +100,7 @@ export const useOptimizationsNewFormHandlers = () => {
             ...form.getValues("metricParams"),
             reference_key: "",
           } as OptimizationConfigFormType["metricParams"],
-          { shouldValidate: true, shouldDirty: true },
+          { shouldDirty: true },
         );
       }
     },
@@ -122,14 +121,13 @@ export const useOptimizationsNewFormHandlers = () => {
   } = useMetricFormHandlers(form);
   const { handleModelChange, handleModelConfigChange } =
     useModelFormHandlers(form);
-  const { isSubmitting, handleSubmit } = useSubmitOptimization({
+  const { submitOptimization } = useSubmitOptimization({
     form,
     selectedDataset,
   });
 
   return {
     form,
-    isSubmitting,
     activeProjectId,
     datasetId,
     optimizerType,
@@ -150,7 +148,7 @@ export const useOptimizationsNewFormHandlers = () => {
     handleMetricParamsChange,
     handleModelConfigChange,
     handleModelChange,
-    handleSubmit,
+    submitOptimization,
     handleNameChange,
     getFirstMetricParamsError,
   };

@@ -188,7 +188,6 @@ const NewRunSidebar: React.FC<NewRunSidebarProps> = ({
           );
           if (dataset?.id) {
             form.setValue("datasetId", dataset.id, {
-              shouldValidate: true,
               shouldDirty: true,
             });
           }

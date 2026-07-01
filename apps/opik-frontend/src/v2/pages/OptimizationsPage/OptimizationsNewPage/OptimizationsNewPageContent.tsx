@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/ui/button";
 import { useOptimizationsNewFormHandlers } from "./useOptimizationsNewFormHandlers";
@@ -17,7 +17,6 @@ const OptimizationsNewPageContent: React.FC<
 > = ({ onCancel, isPreparingDataset }) => {
   const {
     form,
-    isSubmitting,
     activeProjectId,
     optimizerType,
     metricType,
@@ -35,27 +34,27 @@ const OptimizationsNewPageContent: React.FC<
     handleMetricParamsChange,
     handleModelConfigChange,
     handleModelChange,
-    handleSubmit,
+    submitOptimization,
     handleNameChange,
     getFirstMetricParamsError,
   } = useOptimizationsNewFormHandlers();
 
   const hasMissingVariables = missingDatasetVariables.length > 0;
 
-  // Validation feedback is lazy: errors (RHF field errors + the variable
-  // mismatch) only appear once the user has tried to submit, not while they're
-  // still editing / switching metrics / before a dataset is picked.
-  const [submitAttempted, setSubmitAttempted] = useState(false);
+  // RHF drives the busy flag (`isSubmitting` stays true for the duration of the
+  // async submit) and lazy validation: field errors and the variable-mismatch
+  // message only appear once the form has been submitted at least once
+  // (`isSubmitted`), not while the user is still editing / switching metrics /
+  // before a dataset is picked.
+  const { isSubmitting, isSubmitted: submitAttempted } = form.formState;
 
-  const onSubmit = useCallback(() => {
-    setSubmitAttempted(true);
-    if (hasMissingVariables) {
-      // Surface RHF field errors alongside the mismatch, but don't submit.
-      void form.trigger();
-      return;
-    }
-    handleSubmit();
-  }, [form, handleSubmit, hasMissingVariables]);
+  // RHF's `handleSubmit` validates the schema first; this only runs when the
+  // fields are valid. The variable mismatch lives outside the schema, so we
+  // still guard it here (field errors already surfaced to the user).
+  const onValid = useCallback(() => {
+    if (hasMissingVariables) return;
+    return submitOptimization();
+  }, [hasMissingVariables, submitOptimization]);
 
   return (
     <div className="flex size-full flex-col">
@@ -106,7 +105,7 @@ const OptimizationsNewPageContent: React.FC<
         )}
         <div className="flex items-center gap-2">
           <Button
-            onClick={onSubmit}
+            onClick={form.handleSubmit(onValid)}
             disabled={
               isSubmitting ||
               isPreparingDataset ||

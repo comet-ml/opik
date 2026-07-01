@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { UseFormReturn } from "react-hook-form";
 
@@ -19,7 +19,12 @@ type UseSubmitOptimizationParams = {
   selectedDataset?: Dataset;
 };
 
-/** Validates the form, builds the studio config, creates the run, navigates to it. */
+/**
+ * Builds the studio config, creates the run, and navigates to it. Meant to be
+ * wrapped by RHF's `form.handleSubmit(...)`, which validates first and tracks
+ * `formState.isSubmitting` for the duration of the returned promise — so this
+ * hook neither re-validates nor owns a busy flag.
+ */
 export const useSubmitOptimization = ({
   form,
   selectedDataset,
@@ -29,61 +34,50 @@ export const useSubmitOptimization = ({
   const navigate = useNavigate();
   const { setLastSessionRunId } = useLastOptimizationRun();
   const { mutateAsync: createOptimization } = useOptimizationCreateMutation();
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = useCallback(async () => {
-    const isValid = await form.trigger();
-    if (!isValid) return;
-
-    const formData = form.getValues();
+  const submitOptimization = useCallback(async () => {
     const datasetNameValue = selectedDataset?.name || "";
-
     if (!datasetNameValue) return;
 
-    setIsSubmitting(true);
+    const formData = form.getValues();
+    const studioConfig = convertFormDataToStudioConfig(
+      formData,
+      datasetNameValue,
+    );
 
-    try {
-      const studioConfig = convertFormDataToStudioConfig(
-        formData,
-        datasetNameValue,
-      );
+    // For code metrics, the objective name is the metric class extracted from
+    // the user's code; for everything else it's the metric type.
+    const metricConfig = studioConfig.evaluation.metrics[0];
+    let objectiveName: string = metricConfig.type;
+    if (
+      metricConfig.type === METRIC_TYPE.CODE &&
+      metricConfig.parameters &&
+      "code" in metricConfig.parameters
+    ) {
+      objectiveName = extractMetricNameFromCode(metricConfig.parameters.code);
+    }
 
-      // For code metrics, the objective name is the metric class extracted from
-      // the user's code; for everything else it's the metric type.
-      const metricConfig = studioConfig.evaluation.metrics[0];
-      let objectiveName: string = metricConfig.type;
-      if (
-        metricConfig.type === METRIC_TYPE.CODE &&
-        metricConfig.parameters &&
-        "code" in metricConfig.parameters
-      ) {
-        objectiveName = extractMetricNameFromCode(metricConfig.parameters.code);
-      }
+    const result = await createOptimization({
+      optimization: {
+        name: formData.name || undefined,
+        studio_config: studioConfig,
+        dataset_name: datasetNameValue,
+        objective_name: objectiveName,
+        status: OPTIMIZATION_STATUS.INITIALIZED,
+        project_id: activeProjectId ?? undefined,
+      },
+    });
 
-      const result = await createOptimization({
-        optimization: {
-          name: formData.name || undefined,
-          studio_config: studioConfig,
-          dataset_name: datasetNameValue,
-          objective_name: objectiveName,
-          status: OPTIMIZATION_STATUS.INITIALIZED,
-          project_id: activeProjectId ?? undefined,
+    if (result?.id) {
+      setLastSessionRunId(result.id);
+      navigate({
+        to: "/$workspaceName/projects/$projectId/optimizations/$optimizationId",
+        params: {
+          workspaceName,
+          projectId: activeProjectId!,
+          optimizationId: result.id,
         },
       });
-
-      if (result?.id) {
-        setLastSessionRunId(result.id);
-        navigate({
-          to: "/$workspaceName/projects/$projectId/optimizations/$optimizationId",
-          params: {
-            workspaceName,
-            projectId: activeProjectId!,
-            optimizationId: result.id,
-          },
-        });
-      }
-    } finally {
-      setIsSubmitting(false);
     }
   }, [
     form,
@@ -95,5 +89,5 @@ export const useSubmitOptimization = ({
     setLastSessionRunId,
   ]);
 
-  return { isSubmitting, handleSubmit };
+  return { submitOptimization };
 };

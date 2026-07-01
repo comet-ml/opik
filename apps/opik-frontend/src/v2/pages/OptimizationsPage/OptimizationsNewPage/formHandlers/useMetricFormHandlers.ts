@@ -16,7 +16,7 @@ export const useMetricFormHandlers = (
       form.setValue(
         "metricParams",
         defaultConfig as OptimizationConfigFormType["metricParams"],
-        { shouldValidate: true, shouldDirty: true },
+        { shouldDirty: true },
       );
     },
     [form],
@@ -27,7 +27,7 @@ export const useMetricFormHandlers = (
       form.setValue(
         "metricParams",
         newParams as OptimizationConfigFormType["metricParams"],
-        { shouldValidate: true, shouldDirty: true },
+        { shouldDirty: true },
       );
     },
     [form],
