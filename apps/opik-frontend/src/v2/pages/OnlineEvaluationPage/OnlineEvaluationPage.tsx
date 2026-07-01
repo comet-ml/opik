@@ -226,8 +226,25 @@ export const OnlineEvaluationPage: React.FC = () => {
 
   const rows: EvaluatorsRule[] = useMemo(() => data?.content ?? [], [data]);
 
-  const editingRule = rows.find((r) => r.id === editRuleId);
-  const cloningRule = rows.find((r) => r.id === cloneRuleId);
+  const rowEditingRule = rows.find((r) => r.id === editRuleId);
+  const rowCloningRule = rows.find((r) => r.id === cloneRuleId);
+
+  // When deep-linked (e.g. from the playground metrics selector) the targeted
+  // rule may not be on the current page, so fetch it by id as a fallback.
+  const { data: editRuleData } = useRulesList(
+    { projectId, page: 1, size: 1, search: (editRuleId as string) ?? "" },
+    { enabled: Boolean(editRuleId) && !rowEditingRule },
+  );
+  const { data: cloneRuleData } = useRulesList(
+    { projectId, page: 1, size: 1, search: (cloneRuleId as string) ?? "" },
+    { enabled: Boolean(cloneRuleId) && !rowCloningRule },
+  );
+
+  const editingRule =
+    rowEditingRule ?? editRuleData?.content?.find((r) => r.id === editRuleId);
+  const cloningRule =
+    rowCloningRule ?? cloneRuleData?.content?.find((r) => r.id === cloneRuleId);
+
   const isDialogOpen =
     Boolean(editingRule) || Boolean(cloningRule) || openDialogForCreate;
 
@@ -463,7 +480,11 @@ export const OnlineEvaluationPage: React.FC = () => {
         </>
       )}
       <AddEditRuleDialog
-        key={resetDialogKeyRef.current}
+        key={
+          dialogRule
+            ? `${dialogMode}-${dialogRule.id}`
+            : `create-${resetDialogKeyRef.current}`
+        }
         open={isDialogOpen}
         setOpen={handleCloseDialog}
         rule={dialogRule}
