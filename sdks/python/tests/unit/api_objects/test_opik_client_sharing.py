@@ -8,8 +8,10 @@ themselves are covered at the manager level in
 ``test_connection_resource_manager.py``.
 """
 
+import gc
 import threading
 import time
+import weakref
 from unittest import mock
 
 from opik.api_objects import opik_client
@@ -98,3 +100,20 @@ def test_opik_client__logs_after_co_located_client_ended__data_still_delivered(
     assert [trace.name for trace in fake_backend.trace_trees] == ["after-sibling-end"]
 
     keeper.end(flush=False)
+
+
+def test_opik_client__dropped_without_end__is_garbage_collected(fake_backend):
+    # No lingering strong reference (a cached manager entry, the GC finalizer, a
+    # background thread, or the global singleton) should keep a dropped client
+    # alive. After `del` + `gc.collect()`, its weakref must no longer resolve.
+    # A unique host gives this handle its own isolated bundle so the assertion is
+    # about this client alone.
+    opik_client.reset_global_client(end_client=False)
+
+    client = _make_client(host="http://localhost:39998/api")
+    client_ref = weakref.ref(client)
+
+    del client
+    gc.collect()
+
+    assert client_ref() is None

@@ -47,9 +47,10 @@ class SharedConnectionResourcesBundle:
 
     Connection-scoped: it carries no ``project_name`` or per-call state, so it
     can back multiple :class:`opik.Opik` handles. ``close`` disposes what the
-    bundle owns — the streamer's threads and the file-upload worker pool — so
-    evicting a bundle never leaks threads. ``flush_timeout`` is the connection's
-    configured drain budget, used when the process-exit hook closes the bundle.
+    bundle owns — the streamer's threads and the file-upload worker pool, plus
+    the httpx connection pool on a durable (``flush=True``) close — so evicting a
+    bundle never leaks threads. ``flush_timeout`` is the connection's configured
+    drain budget, used when the process-exit hook closes the bundle.
     """
 
     def __init__(
@@ -73,11 +74,31 @@ class SharedConnectionResourcesBundle:
     def close(self, timeout: Optional[int], *, flush: bool) -> None:
         # Drain/stop the streamer (consumer threads, replay, batch preprocessor);
         # on flush=True it also flushes pending file uploads.
+        # Closing the streamer also stops and joins the replay manager (its own
+        # daemon thread), so there is no separate replay teardown to do here.
         self.streamer.close(timeout, flush=flush)
         # Stop the upload worker pool too, so eviction doesn't leave its threads
         # running. wait=flush mirrors the streamer: block for in-flight uploads
         # on a durable close, return immediately on fire-and-forget teardown.
         self.file_upload_manager.close(wait=flush)
+        if flush:
+            # Close the httpx pool only on a durable close, and last — after the
+            # streamer has joined the replay thread and uploads have drained, so
+            # no request is in flight. Each bundle owns a dedicated client (built
+            # per connection identity), so this never affects another bundle.
+            # flush=False is fire-and-forget: the streamer deliberately leaves
+            # daemon threads to finish in-flight requests, so closing the pool
+            # here would race them — leave it for GC / process-exit close_all.
+            self.httpx_client.close()
+
+    def flush(self, timeout: Optional[int]) -> None:
+        """Drain the shared message queue without tearing the bundle down.
+
+        Used when a handle releases with ``flush=True`` while other handles still
+        share the bundle: the queued data is persisted now, but the transport
+        stays alive for the remaining handles.
+        """
+        self.streamer.flush(timeout)
 
 
 def _create_replay_manager(
@@ -311,9 +332,18 @@ class ConnectionResourceManager:
             if entry is None:
                 return
             entry.refcount -= 1
-            if entry.refcount > 0:
-                return
-            if not close_on_zero:
+            still_shared = entry.refcount > 0
+            if still_shared:
+                # Other handles keep the bundle alive, so we must not close it —
+                # but an explicit ``end(flush=True)`` is a durability call. Drain
+                # the shared queue now (outside the lock), otherwise this handle's
+                # queued data stays buffered and a co-located handle's later
+                # ``flush=False`` teardown would discard it, silently breaking the
+                # ``flush=True`` contract. A GC finalizer (``close_on_zero=False``)
+                # must never do this — no network I/O inside garbage collection.
+                if not (flush and close_on_zero):
+                    return
+            elif not close_on_zero:
                 # The last reference was dropped by a GC finalizer (see
                 # ``Opik._acquire_shared_resources``). Only the refcount
                 # decrement above is safe to run there; closing — streamer
@@ -322,12 +352,16 @@ class ConnectionResourceManager:
                 # cached so a later same-identity ``acquire`` reuses it, or
                 # ``close_all`` disposes it at process exit.
                 return
-            # Evict before close, under the lock, so a concurrent acquire never
-            # receives a bundle that is being torn down.
-            del self._entries[key]
+            else:
+                # Evict before close, under the lock, so a concurrent acquire
+                # never receives a bundle that is being torn down.
+                del self._entries[key]
             bundle = entry.resources
 
-        bundle.close(timeout, flush=flush)
+        if still_shared:
+            bundle.flush(timeout)
+        else:
+            bundle.close(timeout, flush=flush)
 
     def close_all(self, *, flush: bool = True) -> None:
         """Close and evict every cached bundle. Registered as the process

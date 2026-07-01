@@ -7,11 +7,12 @@ from opik.api_objects import connection_resources
 
 
 class FakeBundle:
-    """Stand-in for SharedConnectionResourcesBundle that records close calls."""
+    """Stand-in for SharedConnectionResourcesBundle that records close/flush calls."""
 
     def __init__(self) -> None:
         self.flush_timeout: Optional[int] = None
         self.close_calls: List[Tuple[Optional[int], bool]] = []
+        self.flush_calls: List[Optional[int]] = []
 
     @property
     def closed(self) -> bool:
@@ -19,6 +20,9 @@ class FakeBundle:
 
     def close(self, timeout: Optional[int], *, flush: bool) -> None:
         self.close_calls.append((timeout, flush))
+
+    def flush(self, timeout: Optional[int]) -> None:
+        self.flush_calls.append(timeout)
 
 
 def _manager():
@@ -86,6 +90,52 @@ def test_release__not_last_reference__keeps_bundle_open():
 
     lease_a.release(timeout=None, close_on_zero=True)
 
+    assert not created[0].closed
+    # A durable release (flush=True, the default) still drains the shared queue
+    # so this handle's data is persisted while the bundle stays alive.
+    assert created[0].flush_calls == [None]
+    assert manager.reference_count(config, use_batching=True) == 1
+
+
+def test_release__not_last_reference_with_flush__drains_shared_queue_without_closing():
+    # Durability contract under sharing: end(flush=True) on a handle that shares
+    # its bundle must flush the shared queue now — otherwise a co-located
+    # handle's later flush=False teardown could discard this handle's data.
+    manager, created = _manager()
+    config = _config()
+    lease_a = manager.acquire(config, use_batching=True)
+    manager.acquire(config, use_batching=True)
+
+    lease_a.release(timeout=3, flush=True, close_on_zero=True)
+
+    assert created[0].flush_calls == [3]
+    assert not created[0].closed
+    assert manager.reference_count(config, use_batching=True) == 1
+
+
+def test_release__not_last_reference_flush_false__neither_flushes_nor_closes():
+    manager, created = _manager()
+    config = _config()
+    lease_a = manager.acquire(config, use_batching=True)
+    manager.acquire(config, use_batching=True)
+
+    lease_a.release(timeout=None, flush=False, close_on_zero=True)
+
+    assert created[0].flush_calls == []
+    assert not created[0].closed
+
+
+def test_release__not_last_reference_gc_path__never_flushes():
+    # A GC finalizer (close_on_zero=False) must never do network I/O, even though
+    # it releases with flush=True by default.
+    manager, created = _manager()
+    config = _config()
+    lease_a = manager.acquire(config, use_batching=True)
+    manager.acquire(config, use_batching=True)
+
+    lease_a.release(timeout=None, close_on_zero=False)
+
+    assert created[0].flush_calls == []
     assert not created[0].closed
     assert manager.reference_count(config, use_batching=True) == 1
 
@@ -235,8 +285,9 @@ def test_acquire_release__concurrent_same_config__preserves_invariants():
 def _bundle_with_mock_transport(flush_timeout=None):
     streamer = mock.Mock()
     file_upload_manager = mock.Mock()
+    httpx_client = mock.Mock()
     bundle = connection_resources.SharedConnectionResourcesBundle(
-        httpx_client=mock.Mock(),
+        httpx_client=httpx_client,
         rest_client=mock.Mock(),
         message_processor=mock.Mock(),
         file_upload_manager=file_upload_manager,
@@ -244,11 +295,11 @@ def _bundle_with_mock_transport(flush_timeout=None):
         streamer=streamer,
         flush_timeout=flush_timeout,
     )
-    return bundle, streamer, file_upload_manager
+    return bundle, streamer, file_upload_manager, httpx_client
 
 
 def test_bundle_close__flush_true__drains_streamer_and_upload_pool():
-    bundle, streamer, file_upload_manager = _bundle_with_mock_transport()
+    bundle, streamer, file_upload_manager, httpx_client = _bundle_with_mock_transport()
 
     bundle.close(5, flush=True)
 
@@ -256,12 +307,32 @@ def test_bundle_close__flush_true__drains_streamer_and_upload_pool():
     # flushes uploads, and the upload pool waits for in-flight uploads.
     streamer.close.assert_called_once_with(5, flush=True)
     file_upload_manager.close.assert_called_once_with(wait=True)
+    # On a durable close the replay thread is joined and uploads drained, so the
+    # httpx pool is released too — eviction leaks no sockets.
+    httpx_client.close.assert_called_once_with()
 
 
 def test_bundle_close__flush_false__stops_without_waiting():
-    bundle, streamer, file_upload_manager = _bundle_with_mock_transport()
+    bundle, streamer, file_upload_manager, httpx_client = _bundle_with_mock_transport()
 
     bundle.close(None, flush=False)
 
     streamer.close.assert_called_once_with(None, flush=False)
     file_upload_manager.close.assert_called_once_with(wait=False)
+    # flush=False is fire-and-forget: the streamer leaves daemon threads to
+    # finish in-flight requests, so the shared httpx pool must NOT be closed here
+    # (closing it would race those requests). It's released at GC / process exit.
+    httpx_client.close.assert_not_called()
+
+
+def test_bundle_flush__drains_streamer_without_closing():
+    bundle, streamer, file_upload_manager, httpx_client = _bundle_with_mock_transport()
+
+    bundle.flush(4)
+
+    # flush() drains the queue but must not tear anything down — the bundle is
+    # still shared by other handles.
+    streamer.flush.assert_called_once_with(4)
+    streamer.close.assert_not_called()
+    file_upload_manager.close.assert_not_called()
+    httpx_client.close.assert_not_called()

@@ -66,6 +66,23 @@ def test_release__last_holder_with_reset__clears_recorded_state():
     assert emulator.trace_trees == []
 
 
+def test_release__reset_deferred_until_last_holder__cleared_only_at_zero():
+    emulator = _emulator()
+    emulator.acquire(reset=True)
+    emulator.process(_trace_message())
+    assert len(emulator.trace_trees) == 1
+
+    # A second holder acquires and releases; reset must not fire while a holder
+    # remains, so the recorded trace stays intact.
+    emulator.acquire(reset=True)
+    emulator.release(reset=True)
+    assert len(emulator.trace_trees) == 1
+
+    # Only the final release (refcount -> 0) resets the recorded state.
+    emulator.release(reset=True)
+    assert emulator.trace_trees == []
+
+
 def test_acquire__first_holder_with_reset__clears_prior_state():
     emulator = _emulator()
     emulator.acquire(reset=True)
