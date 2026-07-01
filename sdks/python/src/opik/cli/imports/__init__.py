@@ -21,6 +21,7 @@ from .utils import (
     resolve_import_project_root,
     setup_import_manifest,
     to_project_option,
+    to_workspace_option,
 )
 
 console = Console()
@@ -41,6 +42,7 @@ def _import_by_type(
     force: bool = False,
     include_attachments: bool = True,
     to_project: Optional[str] = None,
+    to_workspace: Optional[str] = None,
 ) -> None:
     """
     Import data by type (dataset, traces, experiment, prompt) into a project.
@@ -48,7 +50,8 @@ def _import_by_type(
     Args:
         import_type: Type of data to import ("dataset", "traces", "experiment", "prompt")
         path: Base directory containing the exported data
-        workspace: Target workspace name
+        workspace: Source workspace name. Used to locate the exported project folder
+            under ``<path>/<workspace>/projects/``.
         project_name: Source project name. Used to locate the exported project
             folder (matched against the name recorded in project.json). Also the
             default destination project when ``to_project`` is not given.
@@ -59,15 +62,19 @@ def _import_by_type(
         force: Discard any existing manifest and restart from scratch
         to_project: Optional destination project name. When provided the data is
             created in this project instead of ``project_name``.
+        to_workspace: Optional destination workspace name. When provided the data is
+            imported into this workspace instead of ``workspace``. ``workspace`` is
+            still used to locate the exported files on disk.
     """
     try:
         debug_print(f"DEBUG: Starting {import_type} import from {path}", debug)
 
-        # Initialize Opik client
+        # Initialize Opik client using the destination workspace
+        dest_workspace = to_workspace or workspace
         if api_key:
-            client = opik.Opik(api_key=api_key, workspace=workspace)
+            client = opik.Opik(api_key=api_key, workspace=dest_workspace)
         else:
-            client = opik.Opik(workspace=workspace)
+            client = opik.Opik(workspace=dest_workspace)
 
         # Locate the exported project folder by its recorded name and resolve
         # the destination project. Folders are keyed by id on disk; project.json
@@ -80,10 +87,14 @@ def _import_by_type(
         )
 
         # Construct + initialize the per-destination manifest (keyed by the
-        # destination project so different --to-project targets keep independent
-        # resume state). Skipped for --dry-run.
+        # destination workspace + project so different --to-workspace / --to-project
+        # targets keep independent resume state). Skipped for --dry-run.
         manifest, already_completed = setup_import_manifest(
-            project_root, target_project_name, dry_run, force
+            project_root,
+            target_project_name,
+            dry_run,
+            force,
+            destination_workspace=dest_workspace,
         )
         if already_completed:
             return
@@ -222,7 +233,10 @@ def _import_by_type(
 )
 @click.pass_context
 def import_group(
-    ctx: click.Context, workspace: str, project: str, api_key: Optional[str]
+    ctx: click.Context,
+    workspace: str,
+    project: str,
+    api_key: Optional[str],
 ) -> None:
     """Import data into an Opik project.
 
@@ -251,10 +265,11 @@ def import_group(
 
     \b
     Common Options:
-        --path, -p  Directory containing exported data (default: opik_exports)
-        --dry-run   Preview what would be imported without actually importing
-        --force     Discard manifest and restart from scratch
-        --debug     Show detailed information about the import process
+        --path, -p       Directory containing exported data (default: opik_exports)
+        --to-workspace   Destination workspace (default: same as source WORKSPACE)
+        --dry-run        Preview what would be imported without actually importing
+        --force          Discard manifest and restart from scratch
+        --debug          Show detailed information about the import process
 
     \b
     Examples:
@@ -263,6 +278,12 @@ def import_group(
 
         # Preview what would be imported
         opik import my-workspace my-project all --dry-run
+
+        # Import into a different workspace
+        opik import source-workspace my-project all --to-workspace dest-workspace
+
+        # Import into a different workspace and a different project
+        opik import source-workspace my-project all --to-workspace dest-workspace --to-project new-project
 
         # Import the project's traces
         opik import my-workspace my-project traces
@@ -351,6 +372,7 @@ import_group.add_command(import_all_command)
     help="Enable debug output to show detailed information about the import process.",
 )
 @to_project_option()
+@to_workspace_option()
 @click.pass_context
 def import_dataset(
     ctx: click.Context,
@@ -360,6 +382,7 @@ def import_dataset(
     force: bool,
     debug: bool,
     to_project: Optional[str],
+    to_workspace: Optional[str],
 ) -> None:
     """Import datasets from projects/PROJECT/datasets.
 
@@ -379,6 +402,9 @@ def import_dataset(
         # Import into a different destination project
         opik import my-workspace my-project dataset "my-dataset" --to-project other-project
     \b
+        # Import into a different workspace
+        opik import src-workspace my-project dataset "my-dataset" --to-workspace dest-workspace
+    \b
         # Import from a custom path
         opik import my-workspace my-project dataset "my-dataset" --path ./custom-exports/
     """
@@ -396,6 +422,7 @@ def import_dataset(
         api_key=api_key,
         force=force,
         to_project=to_project,
+        to_workspace=to_workspace,
     )
 
 
@@ -424,6 +451,7 @@ def import_dataset(
 )
 @no_attachments_option()
 @to_project_option()
+@to_workspace_option()
 @click.pass_context
 def import_traces(
     ctx: click.Context,
@@ -433,6 +461,7 @@ def import_traces(
     debug: bool,
     no_attachments: bool,
     to_project: Optional[str],
+    to_workspace: Optional[str],
 ) -> None:
     """Import the project's traces from projects/PROJECT/.
 
@@ -453,6 +482,9 @@ def import_traces(
     \b
         # Import into a different destination project
         opik import my-workspace my-project traces --to-project other-project
+    \b
+        # Import into a different workspace
+        opik import src-workspace my-project traces --to-workspace dest-workspace
     \b
         # Import from a custom path
         opik import my-workspace my-project traces --path ./custom-exports/
@@ -476,6 +508,7 @@ def import_traces(
         force=force,
         include_attachments=not no_attachments,
         to_project=to_project,
+        to_workspace=to_workspace,
     )
 
 
@@ -504,6 +537,7 @@ def import_traces(
     help="Enable debug output to show detailed information about the import process.",
 )
 @to_project_option()
+@to_workspace_option()
 @click.pass_context
 def import_experiment(
     ctx: click.Context,
@@ -513,6 +547,7 @@ def import_experiment(
     force: bool,
     debug: bool,
     to_project: Optional[str],
+    to_workspace: Optional[str],
 ) -> None:
     """Import experiments from projects/PROJECT/experiments.
 
@@ -535,6 +570,9 @@ def import_experiment(
         # Import into a different destination project
         opik import my-workspace my-project experiment "my-experiment" --to-project other-project
     \b
+        # Import into a different workspace
+        opik import src-workspace my-project experiment "my-experiment" --to-workspace dest-workspace
+    \b
         # Import from a custom path
         opik import my-workspace my-project experiment "my-experiment" --path ./custom-exports/
     """
@@ -553,6 +591,7 @@ def import_experiment(
         api_key=api_key,
         force=force,
         to_project=to_project,
+        to_workspace=to_workspace,
     )
 
 
@@ -581,6 +620,7 @@ def import_experiment(
     help="Enable debug output to show detailed information about the import process.",
 )
 @to_project_option()
+@to_workspace_option()
 @click.pass_context
 def import_prompt(
     ctx: click.Context,
@@ -590,6 +630,7 @@ def import_prompt(
     force: bool,
     debug: bool,
     to_project: Optional[str],
+    to_workspace: Optional[str],
 ) -> None:
     """Import prompts from projects/PROJECT/prompts.
 
@@ -609,6 +650,9 @@ def import_prompt(
         # Import into a different destination project
         opik import my-workspace my-project prompt "my-prompt" --to-project other-project
     \b
+        # Import into a different workspace
+        opik import src-workspace my-project prompt "my-prompt" --to-workspace dest-workspace
+    \b
         # Import from a custom path
         opik import my-workspace my-project prompt "my-prompt" --path ./custom-exports/
     """
@@ -626,4 +670,5 @@ def import_prompt(
         api_key=api_key,
         force=force,
         to_project=to_project,
+        to_workspace=to_workspace,
     )

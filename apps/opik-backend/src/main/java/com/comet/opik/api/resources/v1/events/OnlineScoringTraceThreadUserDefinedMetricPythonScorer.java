@@ -103,8 +103,18 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
                 message.projectId(), message.ruleId(), message.workspaceId());
 
         return Flux.fromIterable(message.threadIds())
-                .flatMap(threadId -> processThreadScores(message, threadId))
-                .then()
+                // Score each thread id independently: a single thread's failure must not stop scoring the
+                // sibling thread ids. Per-thread errors are materialized (onErrorResume) so the flatMap
+                // completes for every thread; the batch's first failure is then re-surfaced below. This keeps
+                // the failure on the Mono error path handled by BaseRedisSubscriber.processMessage's
+                // onErrorResume — classified as a processing error, following the normal retryable/
+                // non-retryable path — instead of leaking into the enclosing onErrorContinue via Flux.flatMap
+                // (which would drop the element and count it as an "unexpected" error).
+                .flatMap(threadId -> processThreadScores(message, threadId)
+                        .then(Mono.<Throwable>empty())
+                        .onErrorResume(Mono::just))
+                .collectList()
+                .flatMap(errors -> errors.isEmpty() ? Mono.<Void>empty() : Mono.error(errors.getFirst()))
                 .contextWrite(context -> context.put(RequestContext.WORKSPACE_ID, message.workspaceId())
                         .put(RequestContext.USER_NAME, message.userName())
                         .put(RequestContext.VISIBILITY, Visibility.PRIVATE))

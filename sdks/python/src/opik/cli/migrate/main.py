@@ -197,6 +197,7 @@ def _finalize_with_skips_or_ok(
     target_label: str,
     target_project: str,
     elapsed_seconds: float,
+    experiments_excluded: bool = False,
 ) -> None:
     """Finalize the audit log, then either fail loud on skips or print the
     happy-path message.
@@ -207,6 +208,12 @@ def _finalize_with_skips_or_ok(
     print a SKIP_SUMMARY line to **stderr** so CI pipelines can grep
     without parsing the JSON, and exit non-zero. Operators rely on the
     audit log to know what made it across.
+
+    ``experiments_excluded`` (OPIK-7161) is orthogonal to the OPIK-6599
+    skip machinery above: it's an intentional opt-out, not a lossy cascade,
+    so it only annotates the happy-path success line. When
+    ``--exclude-experiments`` is set there are no cascade actions and thus
+    no ``skipped`` records, so this path is always the one taken.
     """
     skip_records = [
         action for action in audit.actions if action.get("status") == "skipped"
@@ -215,9 +222,15 @@ def _finalize_with_skips_or_ok(
         audit.finalize("ok")
         audit.write(audit_path)
         elapsed = _format_elapsed(elapsed_seconds)
+        excluded_note = (
+            " Experiments and optimizations were skipped (--exclude-experiments)."
+            if experiments_excluded
+            else ""
+        )
         console.print(
             f"[green]Migrated '{name}' into project '{target_project}' as "
-            f"'{target_label}'.[/green] Took {elapsed}. Audit log: {audit_path}"
+            f"'{target_label}'.[/green]{excluded_note} Took {elapsed}. "
+            f"Audit log: {audit_path}"
         )
         return
 
@@ -296,6 +309,15 @@ def _finalize_with_skips_or_ok(
     ),
 )
 @click.option(
+    "--exclude-experiments",
+    is_flag=True,
+    help=(
+        "Migrate the dataset and its full version history but skip all "
+        "experiment (and optimization) migration. Opt-out and off by "
+        "default; a plain run migrates experiments as before."
+    ),
+)
+@click.option(
     "--dry-run",
     is_flag=True,
     help="Preview the migration without applying any changes.",
@@ -312,6 +334,7 @@ def migrate_dataset_command(
     name: str,
     to_project: str,
     from_project: Optional[str],
+    exclude_experiments: bool,
     dry_run: bool,
     audit_log: Optional[Path],
 ) -> None:
@@ -324,6 +347,10 @@ def migrate_dataset_command(
         3. Replay every source version onto the destination (full history)
         4. Cascade experiments + traces + spans into the destination project
 
+    Pass ``--exclude-experiments`` to stop after step 3: the dataset and its
+    versions migrate, but experiments and optimizations are skipped entirely
+    (no discovery pass runs).
+
     Dataset names are workspace-unique on the BE
     (``UNIQUE (workspace_id, name)``); ``--from-project`` is an
     optional source-scope hint that yields a smaller BE result set and
@@ -333,6 +360,7 @@ def migrate_dataset_command(
         "name": name,
         "to_project": to_project,
         "from_project": from_project,
+        "exclude_experiments": exclude_experiments,
         "dry_run": dry_run,
     }
     audit = AuditLog(command="opik migrate dataset", args=args)
@@ -342,11 +370,18 @@ def migrate_dataset_command(
     try:
         client = _build_client(ctx)
         _print_workspace_banner(client)
+        if exclude_experiments:
+            console.print(
+                "[yellow]--exclude-experiments set: migrating dataset + "
+                "versions only; experiments and optimizations will be "
+                "skipped.[/yellow]"
+            )
         plan = build_dataset_plan(
             client=client,
             name=name,
             to_project=to_project,
             from_project=from_project,
+            exclude_experiments=exclude_experiments,
         )
 
         _print_plan(plan)
@@ -386,6 +421,7 @@ def migrate_dataset_command(
         target_label=plan.target_name,
         target_project=to_project,
         elapsed_seconds=time.monotonic() - started_at,
+        experiments_excluded=exclude_experiments,
     )
 
 
