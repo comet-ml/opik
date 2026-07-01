@@ -217,7 +217,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
 
   return (
     <div className="flex min-h-full flex-col pt-4">
-      <div className="mb-1 flex min-h-7 items-center justify-between">
+      <div className="mb-4 flex min-h-7 items-center justify-between">
         <h1 className="comet-body-accented truncate break-words">
           Optimization runs
         </h1>
@@ -245,10 +245,10 @@ const OptimizationsPage: React.FunctionComponent = () => {
               <StudioTemplates
                 onOptimizeViaSdkClick={handleNewOptimizationClick}
               />
-              <Separator className="mt-4" />
+              <Separator className="my-3" />
             </>
           )}
-          <div className="pt-4">
+          <div>
             <OptimizationsToolbar
               search={search!}
               onSearchChange={setSearch}

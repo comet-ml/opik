@@ -36,7 +36,7 @@ export const getStudioCardConfigs = ({
   {
     id: "studio",
     icon: SquareDashedMousePointer,
-    title: "Start an optimization run",
+    title: "Use the Optimization studio",
     description:
       "Create a custom optimization workflow to test and improve your prompts.",
     onClick: () => navigateToStudio(),
