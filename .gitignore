@@ -100,6 +100,9 @@ AGENTS.override.md
 .cursor
 !tests_end_to_end/.cursor/
 
+# Local pre-PR code-review receipts (written by /comet-cra-review; never committed)
+.cra/
+
 # charts
 deployment/helm_chart/opik/charts
 deployment/helm_chart/opik/values-*.yaml

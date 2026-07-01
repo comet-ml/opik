@@ -30,6 +30,14 @@ AI-WATERMARK: [yes|no]
   - Scope:
   - Human verification:
 
+## Code Review
+<!--
+Auto-filled by `/comet:create-pr` from your local `.cra/reviews/<branch>.json` receipt
+(written by `/comet-cra-review`). To populate it: run `/comet-cra-review` in your checkout,
+then open/refresh the PR with `/comet:create-pr`. Not applicable? Leave the line below or write "N/A".
+-->
+_No pre-PR review recorded. Run `/comet-cra-review`, then re-open with `/comet:create-pr` — or N/A._
+
 ## Testing
 <!--
 REPLACE ME WITH:
