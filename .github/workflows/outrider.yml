@@ -70,6 +70,39 @@ jobs:
           if [ -n "$MODEL_INPUT" ]; then
             echo "ANTHROPIC_MODEL=$MODEL_INPUT" >> "$GITHUB_ENV"
           fi
+      - name: Install cocoindex-code as a Claude Code skill
+        run: |
+          git clone --depth 1 https://github.com/cocoindex-io/cocoindex-code /tmp/cocoindex-code
+          pipx install 'cocoindex-code[full]'
+          mkdir -p ~/.claude/skills/
+          ln -sfn /tmp/cocoindex-code ~/.claude/skills/cocoindex-code
+      - name: Write ENVIRONMENTS.md for Outrider
+        run: |
+          cat > "$GITHUB_WORKSPACE/ENVIRONMENTS.md" <<'EOF'
+          ---
+          type: Workflow Environment
+          title: cocoindex-code AST search available
+          description: cocoindex-code AST-based semantic code search is pre-installed as a Claude Code skill.
+          resource: https://github.com/cocoindex-io/cocoindex-code
+          tags: [outrider, environment, cocoindex-code, ast-search]
+          timestamp: 2026-07-01T00:00:00Z
+          ---
+
+          # Environment: cocoindex-code AST search
+
+          ## Available tools
+
+          - **`ccc` CLI** (AST-based semantic code search across the cloned repo).
+            Prefer over reading entire large files when locating functions,
+            classes, or specific code patterns. Multi-language via tree-sitter.
+
+          ## Suggested use during implementation
+
+          - For "find the function that does X" queries, invoke the semantic-search
+            skill rather than Read/Grep on speculation.
+          - For files > 500 LOC where you only need one function, prefer AST search
+            + targeted Read over reading the whole file.
+          EOF
       - uses: remyxai/outrider@v1
         with:
           interest-id: 22261e0a-6f02-4e9d-b79e-8c9bcaf981f9
