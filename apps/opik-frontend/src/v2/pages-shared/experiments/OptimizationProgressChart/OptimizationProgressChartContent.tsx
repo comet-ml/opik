@@ -52,7 +52,7 @@ type OptimizationProgressChartContentProps = {
 };
 
 const CHART_CONFIG = {
-  score: { label: "Score", color: "var(--color-blue)" },
+  score: { label: "Score", color: "var(--color-fuchsia)" },
 };
 
 const OptimizationProgressChartContent: React.FC<
@@ -136,7 +136,7 @@ const OptimizationProgressChartContent: React.FC<
     yTickFormatter,
   } = useChartTickDefaultConfig(values, {
     maxTickPrecision: 2,
-    targetTickCount: 3,
+    targetTickCount: 5,
     showMinMaxDomain: true,
   });
 
@@ -217,7 +217,9 @@ const OptimizationProgressChartContent: React.FC<
                 ? [...steps, ghostStep]
                 : steps
             }
-            tickFormatter={(value) => `Step ${value}`}
+            tickFormatter={(value) =>
+              value === 0 ? "Baseline" : `Step ${value}`
+            }
             domain={xDomain}
             padding={X_AXIS_PADDING}
           />
@@ -301,15 +303,26 @@ const OptimizationProgressChartContent: React.FC<
             </div>
           ))
         ) : (
-          <div className="flex items-center gap-1.5">
-            <span
-              className="size-2.5 rounded-full"
-              style={{ backgroundColor: TRIAL_STATUS_COLORS.passed }}
-            />
-            <span className="comet-body-xs text-muted-slate">
-              {objectiveName}
-            </span>
-          </div>
+          <>
+            <div className="flex items-center gap-1.5">
+              <span
+                className="size-2.5 rounded-full"
+                style={{ backgroundColor: TRIAL_STATUS_COLORS.passed }}
+              />
+              <span className="comet-body-xs text-muted-slate">
+                Passed trial
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span
+                className="size-2.5 rounded-full"
+                style={{ backgroundColor: TRIAL_STATUS_COLORS.pruned }}
+              />
+              <span className="comet-body-xs text-muted-slate">
+                Discarded trial
+              </span>
+            </div>
+          </>
         )}
       </div>
     </div>

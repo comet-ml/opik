@@ -27,7 +27,7 @@ export const STATUS_VARIANT_MAP: Record<TrialStatus, TagProps["variant"]> = {
 
 export const TRIAL_STATUS_COLORS: Record<TrialStatus, string> = {
   baseline: "var(--color-gray)",
-  passed: "var(--color-blue)",
+  passed: "var(--color-fuchsia)",
   evaluating: "var(--color-orange)",
   pruned: "var(--color-pink)",
   running: "var(--color-yellow)",
@@ -37,7 +37,7 @@ export const TRIAL_STATUS_LABELS: Record<TrialStatus, string> = {
   baseline: "Baseline",
   passed: "Passed",
   evaluating: "Evaluating",
-  pruned: "Pruned",
+  pruned: "Discarded",
   running: "Running",
 };
 

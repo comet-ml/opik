@@ -11,6 +11,7 @@ import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import NavigationTag from "@/shared/NavigationTag/NavigationTag";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import { formatDate } from "@/lib/date";
+import BackButton from "@/shared/BackButton/BackButton";
 import { getOptimizationConfigItems } from "./optimizationHeaderConfig";
 import OptimizationMetricPill from "./OptimizationMetricPill";
 
@@ -61,7 +62,11 @@ const OptimizationHeader: React.FC<OptimizationHeaderProps> = ({
     <div className="mb-4 flex min-h-8 flex-nowrap items-start justify-between gap-2">
       <div className="flex min-w-0 flex-col gap-2">
         <div className="flex items-center gap-2">
-          <h1 className="comet-title-xs truncate break-words">
+          <BackButton
+            to="/$workspaceName/projects/$projectId/optimizations"
+            tooltip="Back to optimization runs"
+          />
+          <h1 className="comet-title-m truncate break-words">
             {optimization?.name || optimization?.dataset_name || optimizationId}
           </h1>
           {status && (
@@ -86,7 +91,6 @@ const OptimizationHeader: React.FC<OptimizationHeaderProps> = ({
               id={optimization.dataset_id}
               name={optimization.dataset_name}
               resource={RESOURCE_TYPE.dataset}
-              prefix="Dataset"
               className="w-fit"
             />
           )}

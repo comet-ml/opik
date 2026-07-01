@@ -139,7 +139,7 @@ const useScatterDot = ({
                 width={BEST_LABEL_WIDTH}
                 height={BEST_LABEL_HEIGHT}
                 rx={BEST_LABEL_BORDER_RADIUS}
-                fill="hsl(var(--foreground))"
+                fill="var(--color-purple)"
                 opacity={BEST_LABEL_OPACITY}
               />
               <text
@@ -150,7 +150,7 @@ const useScatterDot = ({
                 fill="hsl(var(--background))"
                 fontWeight={600}
               >
-                Best candidate
+                Best trial
               </text>
             </>
           )}

@@ -31,7 +31,7 @@ export const DOT_STROKE_COLOR = "white";
 export const OVERLAP_SPACING = 16;
 
 // "Best candidate" label dimensions
-export const BEST_LABEL_WIDTH = 92;
+export const BEST_LABEL_WIDTH = 58;
 export const BEST_LABEL_HEIGHT = 18;
 export const BEST_LABEL_BORDER_RADIUS = 4;
 export const BEST_LABEL_Y_OFFSET = 22;
