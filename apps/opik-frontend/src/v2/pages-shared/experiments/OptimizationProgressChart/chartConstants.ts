@@ -12,6 +12,11 @@ export const SELECTION_RING_STROKE_OPACITY = 0.4;
 // Hover growth applied on top of the base radius
 export const DOT_RADIUS_HOVER_GROWTH = 2;
 
+// Fixed, enlarged invisible hit area around each dot. Larger than the biggest
+// visible dot (best + hover growth) so the dot is easy to hover and the
+// grow-on-hover animation never shifts the hover target.
+export const HIT_AREA_RADIUS = 18;
+
 /** Resolve a dot's radius from its best/hover state. */
 export const getDotRadius = ({
   isBest = false,

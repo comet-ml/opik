@@ -19,7 +19,8 @@ const useChartEdges = ({ dotPositionsRef, edges }: UseChartEdgesParams) => {
     if (positions.size === 0) return null;
 
     return (
-      <g>
+      // Decorative connector lines must never intercept dot hovers/clicks.
+      <g pointerEvents="none">
         {edges.map((edge) => {
           const parentPos = positions.get(edge.parentCandidateId);
           const childPos = positions.get(edge.childCandidateId);

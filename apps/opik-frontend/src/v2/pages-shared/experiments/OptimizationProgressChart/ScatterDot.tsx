@@ -7,6 +7,7 @@ import {
 } from "./optimizationChartUtils";
 import {
   getDotRadius,
+  HIT_AREA_RADIUS,
   SELECTION_RING_EXTRA_RADIUS,
   SELECTION_RING_STROKE_WIDTH,
   SELECTION_RING_STROKE_OPACITY,
@@ -94,66 +95,79 @@ const useScatterDot = ({
           onMouseLeave={() => setHoveredTrial(null)}
           style={{ cursor: "pointer" }}
         >
-          {isSelected && (
-            <Dot
-              cx={cx}
-              cy={cy}
-              fill="none"
-              stroke={color}
-              strokeWidth={SELECTION_RING_STROKE_WIDTH}
-              r={radius + SELECTION_RING_EXTRA_RADIUS}
-              strokeOpacity={SELECTION_RING_STROKE_OPACITY}
-            />
-          )}
-          {pulsingCandidateId === payload.candidateId ? (
-            <circle
-              cx={cx}
-              cy={cy}
-              r={radius}
-              fill={color}
-              strokeWidth={DOT_STROKE_WIDTH}
-              stroke={DOT_STROKE_COLOR}
-            >
-              <animate
-                attributeName="opacity"
-                values="1;0.4;1"
-                dur={BEST_PULSE_DUR}
-                repeatCount="indefinite"
+          {/* Fixed, enlarged transparent hit area. It captures the hover so the
+              target stays constant — the visible dot's grow-on-hover never
+              moves the boundary (no flicker) and the dot is easy to hover. */}
+          <circle
+            cx={cx}
+            cy={cy}
+            r={HIT_AREA_RADIUS}
+            fill="transparent"
+            pointerEvents="all"
+          />
+          {/* Visible marks never capture pointer events — only the hit area does. */}
+          <g pointerEvents="none">
+            {isSelected && (
+              <Dot
+                cx={cx}
+                cy={cy}
+                fill="none"
+                stroke={color}
+                strokeWidth={SELECTION_RING_STROKE_WIDTH}
+                r={radius + SELECTION_RING_EXTRA_RADIUS}
+                strokeOpacity={SELECTION_RING_STROKE_OPACITY}
               />
-            </circle>
-          ) : (
-            <Dot
-              cx={cx}
-              cy={cy}
-              fill={color}
-              strokeWidth={DOT_STROKE_WIDTH}
-              stroke={DOT_STROKE_COLOR}
-              r={radius}
-            />
-          )}
-          {isBest && (
-            <>
-              <rect
-                x={cx - BEST_LABEL_WIDTH / 2}
-                y={cy - radius - BEST_LABEL_Y_OFFSET}
-                width={BEST_LABEL_WIDTH}
-                height={BEST_LABEL_HEIGHT}
-                rx={BEST_LABEL_BORDER_RADIUS}
-                fill="var(--color-purple)"
-                opacity={BEST_LABEL_OPACITY}
-              />
-              <text
-                x={cx}
-                y={cy - radius - BEST_LABEL_TEXT_Y_OFFSET}
-                textAnchor="middle"
-                fontSize={BEST_LABEL_FONT_SIZE}
-                fill="hsl(var(--background))"
-                fontWeight={600}
+            )}
+            {pulsingCandidateId === payload.candidateId ? (
+              <circle
+                cx={cx}
+                cy={cy}
+                r={radius}
+                fill={color}
+                strokeWidth={DOT_STROKE_WIDTH}
+                stroke={DOT_STROKE_COLOR}
               >
-                Best trial
-              </text>
-            </>
-          )}
+                <animate
+                  attributeName="opacity"
+                  values="1;0.4;1"
+                  dur={BEST_PULSE_DUR}
+                  repeatCount="indefinite"
+                />
+              </circle>
+            ) : (
+              <Dot
+                cx={cx}
+                cy={cy}
+                fill={color}
+                strokeWidth={DOT_STROKE_WIDTH}
+                stroke={DOT_STROKE_COLOR}
+                r={radius}
+              />
+            )}
+            {isBest && (
+              <>
+                <rect
+                  x={cx - BEST_LABEL_WIDTH / 2}
+                  y={cy - radius - BEST_LABEL_Y_OFFSET}
+                  width={BEST_LABEL_WIDTH}
+                  height={BEST_LABEL_HEIGHT}
+                  rx={BEST_LABEL_BORDER_RADIUS}
+                  fill="var(--color-purple)"
+                  opacity={BEST_LABEL_OPACITY}
+                />
+                <text
+                  x={cx}
+                  y={cy - radius - BEST_LABEL_TEXT_Y_OFFSET}
+                  textAnchor="middle"
+                  fontSize={BEST_LABEL_FONT_SIZE}
+                  fill="hsl(var(--background))"
+                  fontWeight={600}
+                >
+                  Best trial
+                </text>
+              </>
+            )}
+          </g>
         </g>
       );
     },
