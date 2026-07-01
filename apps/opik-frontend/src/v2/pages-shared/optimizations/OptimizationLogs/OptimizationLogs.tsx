@@ -38,16 +38,17 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [initialScrollRatio, setInitialScrollRatio] = useState(1);
 
-  const { data, isPending, refetch, dataUpdatedAt } = useOptimizationStudioLogs(
-    {
-      optimizationId: optimization?.id ?? "",
-    },
-    {
-      enabled: Boolean(optimization?.id),
-      refetchInterval: OPTIMIZATION_ACTIVE_REFETCH_INTERVAL,
-      retry: false,
-    },
-  );
+  const { data, isPending, isError, refetch, dataUpdatedAt } =
+    useOptimizationStudioLogs(
+      {
+        optimizationId: optimization?.id ?? "",
+      },
+      {
+        enabled: Boolean(optimization?.id),
+        refetchInterval: OPTIMIZATION_ACTIVE_REFETCH_INTERVAL,
+        retry: false,
+      },
+    );
 
   const logContent = data?.content ?? "";
   const lastUpdatedAt = dataUpdatedAt
@@ -121,6 +122,16 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
           message={isInProgress ? "Waiting for logs..." : "Loading logs..."}
           className="min-h-32"
         />
+      );
+    }
+
+    if (isError && !logContent) {
+      return (
+        <div className="flex flex-1 flex-col items-center justify-center gap-2">
+          <div className="comet-body-s text-destructive">
+            Failed to load logs. Try refreshing.
+          </div>
+        </div>
       );
     }
 

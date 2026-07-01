@@ -15,6 +15,8 @@ import OptimizationHeader from "./OptimizationHeader";
 import OptimizationTrialsControls from "./OptimizationTrialsControls";
 import OptimizationTrialsTable from "./OptimizationTrialsTable";
 import OptimizationKPICards from "./OptimizationKPICards";
+import RunErrorPanel from "./RunErrorPanel";
+import { OPTIMIZATION_STATUS } from "@/types/optimizations";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 enum OPTIMIZATION_TAB {
@@ -162,6 +164,12 @@ const OptimizationPage: React.FC = () => {
         </TabsList>
 
         <TabsContent value={OPTIMIZATION_TAB.OVERVIEW} className="mt-0 pt-4">
+          {optimization &&
+            optimization.status === OPTIMIZATION_STATUS.ERROR && (
+              <div className="shrink-0 pb-4">
+                <RunErrorPanel optimization={optimization} />
+              </div>
+            )}
           <div className="shrink-0 pb-4">
             <OptimizationKPICards
               experiments={experiments}
