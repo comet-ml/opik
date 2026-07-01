@@ -22,7 +22,6 @@ import {
 import DatasetSelectBox from "@/v2/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox";
 import AlgorithmConfigs from "@/v2/pages-shared/optimizations/AlgorithmSettings/AlgorithmConfigs";
 import MetricConfigs from "@/v2/pages-shared/optimizations/MetricSettings/MetricConfigs";
-import { FormFieldCard } from "@/v2/pages-shared/llm/FormFieldCard";
 import {
   OPTIMIZER_OPTIONS,
   OPTIMIZATION_METRIC_OPTIONS,
@@ -256,20 +255,25 @@ const OptimizationsNewConfigSidebar: React.FC<
           control={form.control}
           name="metricParams"
           render={({ field: paramsField }) => (
-            <FormFieldCard title="Metric settings" bodyClassName="px-3">
-              <MetricConfigs
-                inline
-                metricType={metricType}
-                configs={paramsField.value as Partial<MetricParameters>}
-                onChange={onMetricParamsChange}
-                datasetVariables={datasetVariables}
-              />
-              {form.formState.errors.metricParams && (
-                <p className="comet-body-s mt-2 text-destructive">
-                  {getFirstMetricParamsError()}
-                </p>
-              )}
-            </FormFieldCard>
+            <FormItem className="space-y-1">
+              <FormLabel className="comet-body-s-accented">
+                Metric settings
+              </FormLabel>
+              <div className="rounded-md border border-border bg-soft-background px-3 py-2">
+                <MetricConfigs
+                  inline
+                  metricType={metricType}
+                  configs={paramsField.value as Partial<MetricParameters>}
+                  onChange={onMetricParamsChange}
+                  datasetVariables={datasetVariables}
+                />
+                {form.formState.errors.metricParams && (
+                  <p className="comet-body-s mt-2 text-destructive">
+                    {getFirstMetricParamsError()}
+                  </p>
+                )}
+              </div>
+            </FormItem>
           )}
         />
       </div>

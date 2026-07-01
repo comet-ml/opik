@@ -186,9 +186,9 @@ export const convertOptimizationStudioToFormData = (
     METRIC_TYPE.EQUALS;
 
   // Resolve a model the workspace can run: prefer the configured one (rerun /
-  // template) when available, otherwise the first available model, otherwise
-  // "" so the "Model is required" validation blocks submission instead of
-  // seeding a model the gateway can't resolve.
+  // template) when available, otherwise default to the first available model,
+  // otherwise "" (no provider configured) so the "Model is required" validation
+  // blocks submission instead of seeding a model the gateway can't resolve.
   const configuredModel = optimization?.studio_config?.llm_model?.model;
   const modelName =
     configuredModel && availableModels.includes(configuredModel)

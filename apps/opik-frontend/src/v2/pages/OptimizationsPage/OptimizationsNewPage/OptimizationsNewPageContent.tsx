@@ -5,6 +5,12 @@ import { useOptimizationsNewFormHandlers } from "./useOptimizationsNewFormHandle
 import OptimizationsNewPromptSection from "./OptimizationsNewPromptSection";
 import OptimizationsNewConfigSidebar from "./OptimizationsNewConfigSidebar";
 
+// The form body lives outside this <form> so only the footer's submit button
+// (linked via form={FORM_ID}) can submit it. A native <button> inside a <form>
+// defaults to type="submit", so keeping the dropdowns/settings buttons out of
+// the form stops them from triggering a submit on click.
+const FORM_ID = "new-optimization-run-form";
+
 type OptimizationsNewPageContentProps = {
   onCancel: () => void;
   isPreparingDataset: boolean;
@@ -20,6 +26,7 @@ const OptimizationsNewPageContent: React.FC<
     metricType,
     model,
     config,
+    datasetId,
     datasetSample,
     datasetVariables,
     missingDatasetVariables,
@@ -39,7 +46,7 @@ const OptimizationsNewPageContent: React.FC<
 
   const hasMissingVariables = missingDatasetVariables.length > 0;
 
-  const { isSubmitting, isSubmitted: submitAttempted } = form.formState;
+  const { isSubmitting } = form.formState;
 
   // The variable-mismatch check lives outside the zod schema, so guard it here
   // even though RHF has already validated the fields.
@@ -60,7 +67,8 @@ const OptimizationsNewPageContent: React.FC<
   );
 
   return (
-    <form onSubmit={handleFormSubmit} className="flex size-full flex-col">
+    <div className="flex size-full flex-col">
+      <form id={FORM_ID} onSubmit={handleFormSubmit} />
       <div className="flex flex-1 flex-col gap-6 overflow-y-auto px-6 pb-6 pt-4 xl:flex-row">
         <OptimizationsNewPromptSection
           form={form}
@@ -97,7 +105,7 @@ const OptimizationsNewPageContent: React.FC<
             again.
           </span>
         )}
-        {submitAttempted && hasMissingVariables && (
+        {hasMissingVariables && (
           <span className="comet-body-s text-destructive">
             {missingDatasetVariables.map((v) => `{{${v}}}`).join(", ")} not in
             the selected item source
@@ -109,11 +117,15 @@ const OptimizationsNewPageContent: React.FC<
         <div className="flex items-center gap-2">
           <Button
             type="submit"
+            form={FORM_ID}
             disabled={
               isSubmitting ||
               isPreparingDataset ||
               isDatasetLoading ||
-              isDatasetError
+              isDatasetError ||
+              !model ||
+              !datasetId ||
+              hasMissingVariables
             }
           >
             {isSubmitting && (
@@ -133,7 +145,7 @@ const OptimizationsNewPageContent: React.FC<
           </Button>
         </div>
       </div>
-    </form>
+    </div>
   );
 };
 
