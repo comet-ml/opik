@@ -1,8 +1,8 @@
-import collections
-import threading
 from typing import Optional
 
 from opik.api_objects.span.span_data import SpanData
+
+from .bounded_cache import DEFAULT_MAX_SIZE, BoundedCache
 
 # ADK creates the Opik LLM span in ``before_model_callback`` and finalizes it in
 # ``after_model_callback``, normally handing it over through Opik's contextvar
@@ -20,36 +20,25 @@ from opik.api_objects.span.span_data import SpanData
 # call and passes the same instance to both callbacks (it is invariant across
 # streaming partials), and object identity is immune to contextvar mutation.
 #
-# The registry is size-bounded (evict oldest) because ADK does not guarantee an
+# It is size-bounded (see ``BoundedCache``) because ADK does not guarantee an
 # ``after_model_callback`` for every ``before_model_callback`` (a before-callback
 # may short-circuit by returning a response, or the model call may error), so
 # unclaimed entries must not accumulate on a long-lived shared tracer.
-_DEFAULT_MAX_SIZE = 1000
 
 
 class PendingLlmSpanRegistry:
-    """Thread-safe, size-bounded registry of in-flight LLM spans, keyed by a
-    stable per-model-call id.
+    """Bounded registry of in-flight LLM spans, keyed by a stable
+    per-model-call id.
     """
 
-    def __init__(self, max_size: int = _DEFAULT_MAX_SIZE) -> None:
-        self._lock = threading.Lock()
-        self._entries: "collections.OrderedDict[int, SpanData]" = (
-            collections.OrderedDict()
-        )
-        self._max_size = max_size
+    def __init__(self, max_size: int = DEFAULT_MAX_SIZE) -> None:
+        self._cache: BoundedCache[int, SpanData] = BoundedCache(max_size)
 
     def register(self, key: int, span_data: SpanData) -> None:
-        with self._lock:
-            self._entries[key] = span_data
-            self._entries.move_to_end(key)
-            while len(self._entries) > self._max_size:
-                self._entries.popitem(last=False)
+        self._cache.set(key, span_data)
 
     def get(self, key: int) -> Optional[SpanData]:
-        with self._lock:
-            return self._entries.get(key)
+        return self._cache.get(key)
 
     def pop(self, key: int) -> Optional[SpanData]:
-        with self._lock:
-            return self._entries.pop(key, None)
+        return self._cache.pop(key)

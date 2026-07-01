@@ -257,10 +257,11 @@ class OpikTracer:
             context_storage.add_span_data(result.span_data)
             # Also register the span under a contextvar-independent, per-model-call
             # key so after_model_callback can recover it if ContextCacheConfig
-            # detaches the context stack (comet-ml/opik#5524).
-            self._pending_llm_spans.register(
-                id(callback_context.actions), result.span_data
-            )
+            # detaches the context stack (comet-ml/opik#5524). Guard the ``actions``
+            # access for callback contexts that don't expose it.
+            actions = getattr(callback_context, "actions", None)
+            if actions is not None:
+                self._pending_llm_spans.register(id(actions), result.span_data)
 
             # Track request start time for time-to-first-token calculation
             request_start_time = time.time()
@@ -282,6 +283,7 @@ class OpikTracer:
             is_partial = False
 
         span_id: Optional[str] = None
+        pending_key: Optional[int] = None
         exception_occurred = False
         try:
             model = None
@@ -295,15 +297,30 @@ class OpikTracer:
                     self._safe_ttft_tracking(current_span.id, pop=True)
                 return
 
-            # Resolve the LLM span created in before_model_callback. The context
-            # span stack is authoritative when it still holds our span; but with
-            # ContextCacheConfig the async context can be detached under SSE
-            # streaming, leaving the stack without it (top is None, or even a
-            # parent span). Recover it by its stable, per-model-call key so it can
-            # still be finalized (comet-ml/opik#5524).
-            pending_key = id(callback_context.actions)
-            current_span = self._pending_llm_spans.get(pending_key)
+            # Resolve the LLM span created in before_model_callback. Prefer the
+            # per-model-call registry entry (keyed by id(callback_context.actions)),
+            # which survives a context detach under ContextCacheConfig + SSE
+            # streaming (comet-ml/opik#5524). Fall back to the context stack top
+            # when it is our not-yet-finalized LLM span -- keeping the normal path
+            # working if no entry was registered (a callback context without
+            # ``actions``) or it was evicted under extreme concurrency. A parent
+            # span left on top by a detached context is not ours, so it is ignored.
+            actions = getattr(callback_context, "actions", None)
+            pending_key = id(actions) if actions is not None else None
             stack_top = context_storage.top_span_data()
+            current_span = (
+                self._pending_llm_spans.get(pending_key)
+                if pending_key is not None
+                else None
+            )
+            if (
+                current_span is None
+                and stack_top is not None
+                and llm_span_helpers.is_externally_created_llm_span_that_just_started(
+                    stack_top
+                )
+            ):
+                current_span = stack_top
 
             if current_span is None:
                 # No LLM span was registered for this call: before_model_callback
@@ -415,8 +432,6 @@ class OpikTracer:
 
             if span_on_stack:
                 context_storage.pop_span_data(ensure_id=current_span.id)
-            # Done with this call: drop it from the recovery registry.
-            self._pending_llm_spans.pop(pending_key)
             current_span.init_end_time()
             # We close this span manually because otherwise ADK will close it too late,
             # and it will also add tool spans inside of it, which we want to avoid.
@@ -435,6 +450,12 @@ class OpikTracer:
             # For errors (exception_occurred=True) or early returns, this ensures cleanup happens
             if span_id is not None and (exception_occurred or not is_partial):
                 self._ttft_tracking.pop(span_id, None)
+            # Drop the recovered span from the registry once this call is done
+            # (any final-response exit, success or error), so a failed
+            # finalization above can't leave a stale entry that a later id() reuse
+            # maps to. Partial chunks keep it for the final response.
+            if pending_key is not None and not is_partial:
+                self._pending_llm_spans.pop(pending_key)
 
     def before_tool_callback(
         self,
