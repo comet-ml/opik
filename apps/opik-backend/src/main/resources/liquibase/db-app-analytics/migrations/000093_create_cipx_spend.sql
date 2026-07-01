@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset boryst:000092_create_cipx_spend
+--changeset boryst:000093_create_cipx_spend
 --comment: Dedicated cipx per-call spend table, derived from spans.metadata.cipx
 
 -- AI-spend reads currently fan out from `spans`, scanning the 113 KiB metadata String

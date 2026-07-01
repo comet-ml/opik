@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset boryst:000093_create_cipx_trace_identity
+--changeset boryst:000094_create_cipx_trace_identity
 --comment: Dedicated cipx trace-identity table, derived from traces.metadata.cipx.session
 
 -- cipx identity rides on the trace under cipx.session.identity, not on the span. The spend
