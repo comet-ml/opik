@@ -12,6 +12,15 @@ on:
   schedule:
     - cron: '0 4 * * 0'  # Weekly, Sunday 04:00 UTC
   workflow_dispatch:
+    inputs:
+      load_scale:
+        description: "Multiplier on default trace/span counts (OPIK_LOAD_SCALE). 1 = suite defaults; 5 makes the migrate-cascade scenario ~1M spans."
+        required: false
+        default: "1"
+      test_filter:
+        description: "pytest path/-k filter to run a subset (e.g. suite/python_sdk/test_migrate_cascade_read.py). Empty = whole suite."
+        required: false
+        default: ""
 
 env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
@@ -77,9 +86,18 @@ jobs:
         # wanted. Each test uses a unique project so isolation holds. Worksteal
         # balances the very uneven per-test durations (spread is window-locked
         # at 600 s, others run in 1-6 min).
+        env:
+          # workflow_dispatch inputs override; scheduled runs fall back to the
+          # suite defaults (scale 1, whole suite).
+          OPIK_LOAD_SCALE: ${{ inputs.load_scale || '1' }}
+          TEST_FILTER: ${{ inputs.test_filter || '' }}
         run: |
           cd ${{ github.workspace }}/tests_load
-          pytest suite/python_sdk -n 2 --dist=worksteal --junitxml=${{ github.workspace }}/load_test_results.xml
+          target="suite/python_sdk"
+          if [ -n "$TEST_FILTER" ]; then
+            target="$TEST_FILTER"
+          fi
+          pytest "$target" -n 2 --dist=worksteal --junitxml=${{ github.workspace }}/load_test_results.xml
 
       - name: Render metrics into job summary
         if: always()
