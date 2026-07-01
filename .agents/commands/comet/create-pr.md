@@ -160,6 +160,7 @@ This workflow will:
 - **Check feature toggles**: Specifically analyze configuration files for added/removed feature toggles
 - **Extract commit history**: Review commit messages for context
 - **Generate summary**: Create meaningful description of what was implemented
+- **Load the code-review receipt (optional)**: If the developer ran `/comet-cra-review`, a gitignored receipt exists at `.cra/reviews/<branch-slug>.json`. Load it and classify it `fresh`/`stale`/`none` per `.agents/commands/comet/_code-review-section.md`; it feeds the `## Code Review` section in Step 7. `.cra/` is gitignored, so it never appears in the diff.
 
 ---
 
@@ -180,6 +181,7 @@ This workflow will:
   ```
   - **Fill every `##` section** in the template — the PR linter requires all sections to be present
   - If a section is not applicable, write "N/A" rather than removing it
+  - **`## Code Review`** is present in the template but is **not** a pr-lint-required section: fill it from the receipt when one exists, otherwise keep its placeholder. Never add it to the required-sections check and never remove the heading.
 - **Section guidance**:
   - **Details**: Implementation summary from git analysis (replace the HTML comment placeholder)
   - **Change checklist**: Auto-check based on file types changed (user-facing for UI changes, documentation for docs)
@@ -188,6 +190,7 @@ This workflow will:
   - **AI-WATERMARK**: Fill with `AI-WATERMARK: yes`, then list: Tools (e.g., "Claude Code"), Model(s), Scope (e.g., "full implementation" or "assisted"), Human verification (e.g., "code review + manual testing")
   - **Testing**: Extract from commit messages or set based on test files changed (replace the HTML comment placeholder)
   - **Documentation**: List docs updated or set "N/A" if no documentation changes
+  - **Code Review**: Render per `.agents/commands/comet/_code-review-section.md` from the receipt loaded in Step 6 — `fresh` → ✅ summary + counts table + marker (`status=fresh`); `stale` → ⚠️ note + marker (`status=stale head=<HEAD>`) plus a non-blocking nudge to re-review; `none` → keep the template placeholder untouched. Never fabricate counts; never paste finding message bodies.
 
 ---
 

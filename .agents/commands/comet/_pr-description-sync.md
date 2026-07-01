@@ -57,6 +57,7 @@ Apply the same logic as `/comet:create-pr` Step 6 (Extract Change Information) a
 - Keep the existing **AI-WATERMARK** answers verbatim — never silently flip `yes`↔`no`.
 - Re-derive **Testing** from commit messages and test files changed.
 - Re-derive **Documentation** from docs files changed.
+- **`## Code Review`** is NOT derived from the diff. Regenerate it per `.agents/commands/comet/_code-review-section.md`: re-read `.cra/reviews/<branch-slug>.json` and recompute freshness against the current HEAD. Because HEAD advances on each push, a section that was `fresh` at PR-open correctly flips to `stale` after a later push until the developer re-reviews — the desired behavior. If no receipt exists, restore the template placeholder verbatim.
 
 Apply the same secrecy rules as `/comet:create-pr` Step 7: never include customer/client names, internal hostnames, internal URLs, IPs, bucket names, or credentials.
 
@@ -65,7 +66,7 @@ Apply the same secrecy rules as `/comet:create-pr` Step 7: never include custome
 The sub-skill stores a hidden HTML comment at the bottom of every body it writes:
 
 ```html
-<!-- pr-sync: {"Details":"<sha1>","Change checklist":"<sha1>","Issues":"<sha1>","AI-WATERMARK":"<sha1>","Testing":"<sha1>","Documentation":"<sha1>"} -->
+<!-- pr-sync: {"Details":"<sha1>","Change checklist":"<sha1>","Issues":"<sha1>","AI-WATERMARK":"<sha1>","Code Review":"<sha1>","Testing":"<sha1>","Documentation":"<sha1>"} -->
 ```
 
 Each value is `sha1(<section content with leading/trailing whitespace trimmed>)`. The marker lets the next run distinguish *agent-generated content the user hasn't touched* from *content the user has edited*.
