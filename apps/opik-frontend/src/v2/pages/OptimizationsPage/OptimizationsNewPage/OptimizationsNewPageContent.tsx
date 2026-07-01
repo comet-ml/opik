@@ -50,11 +50,24 @@ const OptimizationsNewPageContent: React.FC<
 
   // RHF's `handleSubmit` validates the schema first; this only runs when the
   // fields are valid. The variable mismatch lives outside the schema, so we
-  // still guard it here (field errors already surfaced to the user).
+  // still guard it here (field errors already surfaced to the user). Returning
+  // early leaves `isSubmitSuccessful` true, but nothing reads it.
   const onValid = useCallback(() => {
     if (hasMissingVariables) return;
     return submitOptimization();
   }, [hasMissingVariables, submitOptimization]);
+
+  // `handleSubmit` re-throws when the submit handler rejects; the create
+  // mutation already toasts API errors via its `onError`, so swallow the
+  // settled rejection here to avoid an unhandled promise rejection. RHF has
+  // already reset `isSubmitting` by the time it re-throws, so state stays sane.
+  const handleSubmitClick = useCallback(
+    () =>
+      form
+        .handleSubmit(onValid)()
+        .catch(() => {}),
+    [form, onValid],
+  );
 
   return (
     <div className="flex size-full flex-col">
@@ -105,7 +118,7 @@ const OptimizationsNewPageContent: React.FC<
         )}
         <div className="flex items-center gap-2">
           <Button
-            onClick={form.handleSubmit(onValid)}
+            onClick={handleSubmitClick}
             disabled={
               isSubmitting ||
               isPreparingDataset ||
