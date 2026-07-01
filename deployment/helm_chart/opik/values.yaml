@@ -558,6 +558,20 @@ component:
       # proxy_send_timeout: 60
       # proxy_buffering: 'on'
       # proxy_request_buffering: 'on'
+    # Cost Intelligence (cost-api): when enabled, the frontend nginx routes the
+    # ai-spend subset (<rootPath>/api/v1/private/ai-spend/*) to the standalone
+    # ai-cost-backend service instead of opik-backend, served same-origin so the
+    # platform session cookie still reaches it. Off by default; the consuming
+    # deployment turns it on the same way on both comet.com (comet-helm) and
+    # single-tenant SaaS (comet-ml-helm-chart). rootPath-aware, so it works
+    # whether opik is served at the root or under /opik.
+    aiSpendBackend:
+      enabled: false
+      host: ai-cost-backend
+      port: 8000
+      # cost-api's ROOT_PATH — the rewrite target prefix. A request to
+      # <rootPath>/api/v1/private/ai-spend/X is proxied as <costApiRootPath>/v1/private/ai-spend/X.
+      costApiRootPath: /cost-api
     podDisruptionBudget:
       enabled: false
 
@@ -677,6 +691,8 @@ clickhouse:
                 <max_bytes_ratio_before_external_group_by>0.2</max_bytes_ratio_before_external_group_by>
                 <!-- CH 25.8 made the experimental Time type opt-in; required for fresh installs to replay migration 000030. -->
                 <enable_time_time64_type>1</enable_time_time64_type>
+                <!-- the new CH 25.x default (1) makes FINAL reads on skip-indexed tables over-read massively; our queries already prune on the PK/project_id, so exact mode isn't needed. -->
+                <use_skip_indexes_if_final_exact_mode>0</use_skip_indexes_if_final_exact_mode>
             </default>
           </profiles>
         </clickhouse>

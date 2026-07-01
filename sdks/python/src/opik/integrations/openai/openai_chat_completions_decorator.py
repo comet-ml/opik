@@ -108,6 +108,9 @@ class OpenaiChatCompletionsTrackDecorator(base_track_decorator.BaseTrackDecorato
 
         opik_usage = None
         if result_dict.get("usage") is not None:
+            # Usage is always parsed with the OpenAI converter: here "openai"
+            # denotes the usage payload format, not the span's provider (which
+            # may be overridden when the client targets an OpenAI-compatible API).
             opik_usage = llm_usage.try_build_opik_usage_or_log_error(
                 provider=LLMProvider.OPENAI,
                 usage=result_dict["usage"],

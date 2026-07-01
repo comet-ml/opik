@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -8,6 +8,11 @@ import {
 } from "@/shared/SyntaxHighlighter/hooks/useSyntaxHighlighterHooks";
 import { MODE_TYPE } from "@/shared/SyntaxHighlighter/constants";
 import { PrettifyConfig } from "@/shared/SyntaxHighlighter/types";
+import { QuickFilterCodeConfig } from "@/shared/SyntaxHighlighter/quickFilterExtension";
+import {
+  QuickFilterSection,
+  useQuickAttributeFilter,
+} from "@/shared/filter-chips/QuickAttributeFilterContext";
 import CodeBlockModeSelect from "./CodeBlockModeSelect";
 import CodeBlockSearch from "./CodeBlockSearch";
 import CodeBlockCopy from "./CodeBlockCopy";
@@ -23,6 +28,7 @@ type CodeBlockProps = {
   defaultOpen?: boolean;
   disabled?: boolean;
   className?: string;
+  quickFilterSection?: QuickFilterSection;
 };
 
 const CodeBlock: React.FC<CodeBlockProps> = ({
@@ -35,9 +41,21 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
   defaultOpen = true,
   disabled,
   className,
+  quickFilterSection,
 }) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const [localSearch, setLocalSearch] = useState("");
+
+  const api = useQuickAttributeFilter();
+  // Per-attribute "filter by this" affordance, scoped to this section. Only
+  // wired when a quick-filter provider is present (i.e. the Logs page).
+  const quickFilter = useMemo<QuickFilterCodeConfig | undefined>(() => {
+    if (!quickFilterSection || !api) return undefined;
+    return {
+      canFilter: (path) => api.canFilter(quickFilterSection, path),
+      onFilter: (path, value) => api.filter(quickFilterSection, path, value),
+    };
+  }, [api, quickFilterSection]);
 
   const { mode, setMode } = useSyntaxHighlighterMode(
     prettifyConfig,
@@ -108,7 +126,11 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
         </div>
       </div>
       <div className={cn("pt-2", !isOpen && "hidden")}>
-        <CodeBlockBody code={code} searchValue={effectiveSearch} />
+        <CodeBlockBody
+          code={code}
+          searchValue={effectiveSearch}
+          quickFilter={quickFilter}
+        />
       </div>
     </div>
   );

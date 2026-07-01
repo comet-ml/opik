@@ -9,7 +9,6 @@ import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
-import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingFactoryProjects;
 import com.comet.opik.api.sorting.SortingField;
@@ -17,10 +16,8 @@ import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.bi.AnalyticsService;
-import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.BinaryOperatorUtils;
 import com.comet.opik.utils.ErrorUtils;
-import com.comet.opik.utils.PaginationUtils;
 import com.google.inject.ImplementedBy;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
@@ -31,7 +28,6 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import reactor.core.publisher.Mono;
@@ -41,8 +37,6 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.time.Instant;
 import java.util.Collection;
-import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -57,10 +51,7 @@ import static com.comet.opik.api.ProjectStatsSummary.ProjectStatsSummaryItem;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
-import static java.util.Collections.reverseOrder;
 import static java.util.stream.Collectors.toMap;
-import static java.util.stream.Collectors.toSet;
-import static java.util.stream.Collectors.toUnmodifiableSet;
 
 @ImplementedBy(ProjectServiceImpl.class)
 public interface ProjectService {
@@ -100,7 +91,7 @@ public interface ProjectService {
 
     Project getOrCreate(String workspaceId, String projectName, String userName);
 
-    Project retrieveByName(String projectName);
+    Project retrieveByName(String projectName, boolean includeStats);
 
     Mono<List<Project>> retrieveByNamesOrCreate(Set<String> projectNames);
 
@@ -137,11 +128,18 @@ class ProjectServiceImpl implements ProjectService {
     }
 
     private static final String PROJECT_ALREADY_EXISTS = "Project already exists";
+
+    // recordLastUpdatedTrace populates projects.last_updated_trace_at from the trace timestamp, so sorting by last
+    // trace reads it straight from MySQL instead of querying ClickHouse. Projects without traces have it NULL, so we
+    // fall back to last_updated_at, matching the previous behavior while keeping this a single DB query.
+    private static final String LAST_UPDATED_TRACE_AT_SORT = "COALESCE(last_updated_trace_at, last_updated_at)";
+    private static final Map<String, String> SORTING_FIELD_MAPPING = Map.of(
+            SortableFields.LAST_UPDATED_TRACE_AT, LAST_UPDATED_TRACE_AT_SORT);
+
     private final @NonNull TransactionTemplate template;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull TraceDAO traceDAO;
-    private final @NonNull TransactionTemplateAsync transactionTemplateAsync;
     private final @NonNull SortingFactoryProjects sortingFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull AnalyticsService analyticsService;
@@ -267,21 +265,12 @@ class ProjectServiceImpl implements ProjectService {
 
     @Override
     public Project get(@NonNull UUID id, @NonNull String workspaceId) {
-        Project project = template.inTransaction(READ_ONLY, handle -> {
+        return template.inTransaction(READ_ONLY, handle -> {
 
             var repository = handle.attach(ProjectDAO.class);
 
             return repository.fetch(id, workspaceId).orElseThrow(this::createNotFoundError);
         });
-
-        //TODO: make it async
-        Map<UUID, Instant> lastUpdatedTraceAt = transactionTemplateAsync
-                .nonTransaction(connection -> traceDAO.getLastUpdatedTraceAt(Set.of(id), workspaceId, connection))
-                .block();
-
-        return project.toBuilder()
-                .lastUpdatedTraceAt(lastUpdatedTraceAt.get(project.id()))
-                .build();
     }
 
     @Override
@@ -366,10 +355,6 @@ class ProjectServiceImpl implements ProjectService {
         String workspaceId = requestContext.get().getWorkspaceId();
         Visibility visibility = requestContext.get().getVisibility();
 
-        if (!sortingFields.isEmpty() && sortingFields.getFirst().field().equals(SortableFields.LAST_UPDATED_TRACE_AT)) {
-            return findWithLastTraceSorting(page, size, criteria, sortingFields.getFirst());
-        }
-
         ProjectRecordSet projectRecordSet = template.inTransaction(READ_ONLY, handle -> {
 
             ProjectDAO repository = handle.attach(ProjectDAO.class);
@@ -378,7 +363,7 @@ class ProjectServiceImpl implements ProjectService {
 
             return new ProjectRecordSet(
                     repository.find(size, offset, workspaceId, criteria.projectName(), visibility,
-                            sortingQueryBuilder.toOrderBySql(sortingFields)),
+                            sortingQueryBuilder.toOrderBySql(sortingFields, SORTING_FIELD_MAPPING)),
                     repository.findCount(workspaceId, criteria.projectName(), visibility));
         });
 
@@ -386,24 +371,8 @@ class ProjectServiceImpl implements ProjectService {
             return ProjectPage.empty(page);
         }
 
-        Set<UUID> projectIds = projectRecordSet.content().stream().map(Project::id).collect(toSet());
-
-        Map<UUID, Instant> projectLastUpdatedTraceAtMap = transactionTemplateAsync
-                .nonTransaction(connection -> traceDAO.getLastUpdatedTraceAt(projectIds, workspaceId, connection))
-                .block();
-
-        List<Project> projects = projectRecordSet.content()
-                .stream()
-                .map(project -> {
-                    Instant lastUpdatedTraceAt = projectLastUpdatedTraceAtMap.get(project.id());
-                    return project.toBuilder()
-                            .lastUpdatedTraceAt(lastUpdatedTraceAt)
-                            .build();
-                })
-                .toList();
-
-        return new ProjectPage(page, projects.size(), projectRecordSet.total(), projects,
-                sortingFactory.getSortableFields());
+        return new ProjectPage(page, projectRecordSet.content().size(), projectRecordSet.total(),
+                projectRecordSet.content(), sortingFactory.getSortableFields());
     }
 
     private Map<UUID, Map<String, Object>> getProjectStats(List<UUID> projectIds, String workspaceId,
@@ -429,82 +398,6 @@ class ProjectServiceImpl implements ProjectService {
         }
 
         return template.inTransaction(READ_ONLY, handle -> handle.attach(ProjectDAO.class).findByIds(ids, workspaceId));
-    }
-
-    private Page<Project> findWithLastTraceSorting(int page, int size, @NonNull ProjectCriteria criteria,
-            @NonNull SortingField sortingField) {
-        String workspaceId = requestContext.get().getWorkspaceId();
-        Visibility visibility = requestContext.get().getVisibility();
-        String userName = requestContext.get().getUserName();
-
-        // get all project ids and last updated
-        List<ProjectIdLastUpdated> allProjectIdsLastUpdated = template.inTransaction(READ_ONLY, handle -> {
-            ProjectDAO repository = handle.attach(ProjectDAO.class);
-
-            return repository.getAllProjectIdsLastUpdated(workspaceId, criteria.projectName(), visibility);
-        });
-
-        if (allProjectIdsLastUpdated.isEmpty()) {
-            return ProjectPage.empty(page);
-        }
-
-        // get last trace for each project id
-        Set<UUID> allProjectIds = allProjectIdsLastUpdated.stream().map(ProjectIdLastUpdated::id)
-                .collect(toUnmodifiableSet());
-
-        Map<UUID, Instant> projectLastUpdatedTraceAtMap = transactionTemplateAsync
-                .nonTransaction(connection -> traceDAO.getLastUpdatedTraceAt(allProjectIds, workspaceId, connection))
-                .block();
-
-        if (projectLastUpdatedTraceAtMap == null) {
-            return ProjectPage.empty(page);
-        }
-
-        // sort and paginate
-        List<UUID> sorted = sortByLastTrace(allProjectIdsLastUpdated, projectLastUpdatedTraceAtMap, sortingField);
-        List<UUID> finalIds = PaginationUtils.paginate(page, size, sorted);
-
-        if (CollectionUtils.isEmpty(finalIds)) {
-            // pagination might return an empty list
-            return ProjectPage.empty(page);
-        }
-
-        // get all project properties for the final list of ids
-        Map<UUID, Project> projectsById = template.inTransaction(READ_ONLY, handle -> {
-            ProjectDAO repository = handle.attach(ProjectDAO.class);
-
-            return repository.findByIds(new HashSet<>(finalIds), workspaceId);
-        }).stream().collect(Collectors.toMap(Project::id, Function.identity()));
-
-        // compose the final projects list by the correct order and add last trace to it
-        List<Project> projects = finalIds.stream()
-                .map(projectsById::get)
-                .map(project -> project.toBuilder()
-                        .lastUpdatedTraceAt(projectLastUpdatedTraceAtMap.get(project.id()))
-                        .build())
-                .toList();
-
-        return new ProjectPage(page, projects.size(), allProjectIdsLastUpdated.size(), projects,
-                sortingFactory.getSortableFields());
-    }
-
-    private List<UUID> sortByLastTrace(
-            @NonNull List<ProjectIdLastUpdated> allProjectIdsLastUpdated,
-            @NonNull Map<UUID, Instant> projectLastUpdatedTraceAtMap,
-            @NonNull SortingField sortingField) {
-        // for projects with no traces - use last_updated_at
-        allProjectIdsLastUpdated.forEach(
-                project -> projectLastUpdatedTraceAtMap.computeIfAbsent(project.id(), key -> project.lastUpdatedAt()));
-
-        Comparator<Map.Entry<UUID, Instant>> comparator = sortingField.direction() == Direction.DESC
-                ? reverseOrder(Map.Entry.comparingByValue())
-                : Map.Entry.comparingByValue();
-
-        return projectLastUpdatedTraceAtMap.entrySet()
-                .stream()
-                .sorted(comparator)
-                .map(Map.Entry::getKey)
-                .toList();
     }
 
     @Override
@@ -620,7 +513,7 @@ class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
-    public Project retrieveByName(@NonNull String projectName) {
+    public Project retrieveByName(@NonNull String projectName, boolean includeStats) {
         var workspaceId = requestContext.get().getWorkspaceId();
 
         Optional<Project> projects = template.inTransaction(READ_ONLY, handle -> {
@@ -631,32 +524,27 @@ class ProjectServiceImpl implements ProjectService {
 
         return projects
                 .flatMap(project -> verifyVisibility(project, requestContext.get().getVisibility()))
-                .map(project -> {
-                    Map<UUID, Instant> projectLastUpdatedTraceAtMap = transactionTemplateAsync
-                            .nonTransaction(connection -> {
-                                Set<UUID> projectIds = Set.of(project.id());
-                                return traceDAO.getLastUpdatedTraceAt(projectIds, workspaceId, connection);
-                            }).block();
-
-                    Map<UUID, Map<String, Object>> projectStats = getProjectStats(List.of(project.id()),
-                            workspaceId, ProjectCriteria.builder().build());
-
-                    return project.toBuilder()
-                            .lastUpdatedTraceAt(projectLastUpdatedTraceAtMap.get(project.id()))
-                            .feedbackScores(StatsMapper.getStatsFeedbackScores(projectStats.get(project.id())))
-                            .usage(StatsMapper.getStatsUsage(projectStats.get(project.id())))
-                            .duration(StatsMapper.getStatsDuration(projectStats.get(project.id())))
-                            .totalEstimatedCost(
-                                    StatsMapper.getStatsTotalEstimatedCost(projectStats.get(project.id())))
-                            .totalEstimatedCostSum(
-                                    StatsMapper.getStatsTotalEstimatedCostSum(projectStats.get(project.id())))
-                            .traceCount(StatsMapper.getStatsTraceCount(projectStats.get(project.id())))
-                            .guardrailsFailedCount(
-                                    StatsMapper.getStatsGuardrailsFailedCount(projectStats.get(project.id())))
-                            .errorCount(StatsMapper.getStatsErrorCount(projectStats.get(project.id())))
-                            .build();
-                })
+                .map(project -> includeStats ? enrichWithStats(project, workspaceId) : project)
                 .orElseThrow(this::createNotFoundError);
+    }
+
+    private Project enrichWithStats(Project project, String workspaceId) {
+        Map<UUID, Map<String, Object>> projectStats = getProjectStats(List.of(project.id()),
+                workspaceId, ProjectCriteria.builder().build());
+
+        return project.toBuilder()
+                .feedbackScores(StatsMapper.getStatsFeedbackScores(projectStats.get(project.id())))
+                .usage(StatsMapper.getStatsUsage(projectStats.get(project.id())))
+                .duration(StatsMapper.getStatsDuration(projectStats.get(project.id())))
+                .totalEstimatedCost(
+                        StatsMapper.getStatsTotalEstimatedCost(projectStats.get(project.id())))
+                .totalEstimatedCostSum(
+                        StatsMapper.getStatsTotalEstimatedCostSum(projectStats.get(project.id())))
+                .traceCount(StatsMapper.getStatsTraceCount(projectStats.get(project.id())))
+                .guardrailsFailedCount(
+                        StatsMapper.getStatsGuardrailsFailedCount(projectStats.get(project.id())))
+                .errorCount(StatsMapper.getStatsErrorCount(projectStats.get(project.id())))
+                .build();
     }
 
     @Override

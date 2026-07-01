@@ -1,5 +1,11 @@
 import React from "react";
-import { CircleCheck, CircleX, Loader2 } from "lucide-react";
+import {
+  AlertTriangle,
+  CircleCheck,
+  CircleMinus,
+  CircleX,
+  Loader2,
+} from "lucide-react";
 import { CellContext } from "@tanstack/react-table";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import VerticallySplitCellWrapper, {
@@ -27,20 +33,57 @@ type StatusInfo = {
   status: RunStatus | undefined;
   evaluating: boolean;
   assertionsByRun: AssertionResult[][];
-  skippedReason: string | undefined;
+  reason: string | undefined;
+  isError?: boolean;
   passThreshold: number | undefined;
   runsPerItem: number | undefined;
 };
 
 const NO_EXPERIMENT_ITEM_REASON = "No experiment item defined";
 const NO_ASSERTIONS_REASON = "No assertions defined";
-const SCORING_FAILED_REASON = "Scoring failed";
+const SCORING_ERROR_REASON =
+  "Assertion scoring failed. Check that the configured model is available and try again.";
+
+type DisplayState = "error" | "skipped" | "passed" | "failed";
+
+const STATUS_DISPLAY = {
+  error: {
+    Icon: AlertTriangle,
+    label: "Scoring error",
+    colorClass: "bg-[var(--tag-orange-bg)] text-[var(--tag-orange-text)]",
+  },
+  skipped: {
+    Icon: CircleMinus,
+    label: "Skipped",
+    colorClass: "bg-muted text-muted-foreground",
+  },
+  passed: {
+    Icon: CircleCheck,
+    label: "Passed",
+    colorClass: "bg-[var(--tag-green-bg)] text-[var(--tag-green-text)]",
+  },
+  failed: {
+    Icon: CircleX,
+    label: "Failed",
+    colorClass: "bg-[var(--tag-red-bg)] text-[var(--tag-red-text)]",
+  },
+} as const;
 
 const SKIPPED_RESULT = (reason: string): StatusInfo => ({
   status: RunStatus.SKIPPED,
   evaluating: false,
   assertionsByRun: [],
-  skippedReason: reason,
+  reason: reason,
+  passThreshold: undefined,
+  runsPerItem: undefined,
+});
+
+const ERROR_RESULT = (reason: string): StatusInfo => ({
+  status: RunStatus.SKIPPED,
+  evaluating: false,
+  assertionsByRun: [],
+  reason: reason,
+  isError: true,
   passThreshold: undefined,
   runsPerItem: undefined,
 });
@@ -53,7 +96,7 @@ function resolveSkippedStatus(
   if (!status) {
     const hasEvaluators = (row.evaluators?.length ?? 0) > 0;
     if (!hasEvaluators) return SKIPPED_RESULT(NO_ASSERTIONS_REASON);
-    if (experimentFinished) return SKIPPED_RESULT(SCORING_FAILED_REASON);
+    if (experimentFinished) return ERROR_RESULT(SCORING_ERROR_REASON);
   }
   return null;
 }
@@ -99,7 +142,7 @@ export function getStatusFromExperimentItems(
     status,
     evaluating: !status,
     assertionsByRun: items.map((item) => item.assertion_results ?? []),
-    skippedReason: undefined,
+    reason: undefined,
     passThreshold,
     runsPerItem,
   };
@@ -139,7 +182,7 @@ export function getStatusInfoForExperiment(
     status,
     evaluating: !status,
     assertionsByRun: expItems.map((item) => item.assertion_results ?? []),
-    skippedReason: undefined,
+    reason: undefined,
     passThreshold,
     runsPerItem,
   };
@@ -149,7 +192,8 @@ export const StatusTag: React.FC<StatusInfo & { className?: string }> = ({
   status,
   evaluating,
   assertionsByRun,
-  skippedReason,
+  reason,
+  isError,
   passThreshold,
   runsPerItem,
   className,
@@ -169,42 +213,41 @@ export const StatusTag: React.FC<StatusInfo & { className?: string }> = ({
     return null;
   }
 
-  const isSkipped = status === RunStatus.SKIPPED;
-  const isPassed = status === RunStatus.PASSED;
-  const Icon = isPassed ? CircleCheck : CircleX;
+  const displayState: DisplayState = isError
+    ? "error"
+    : status === RunStatus.SKIPPED
+      ? "skipped"
+      : status === RunStatus.PASSED
+        ? "passed"
+        : "failed";
+
+  const { Icon, label, colorClass } = STATUS_DISPLAY[displayState];
 
   const tag = (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-md border border-transparent px-1.5 py-0.5 text-sm font-medium transition-colors",
-        isPassed
-          ? "bg-[var(--tag-green-bg)] text-[var(--tag-green-text)]"
-          : isSkipped
-            ? "bg-muted text-muted-foreground"
-            : "bg-[var(--tag-red-bg)] text-[var(--tag-red-text)]",
-        "cursor-default",
+        "inline-flex items-center gap-1 rounded-md border border-transparent px-1.5 py-0.5 text-sm font-medium transition-colors cursor-default",
+        colorClass,
         className,
       )}
     >
-      {isSkipped ? (
-        "Skipped"
-      ) : (
-        <>
-          <Icon className="size-3 shrink-0" />
-          {isPassed ? "Passed" : "Failed"}
-        </>
-      )}
+      <Icon className="size-3 shrink-0" />
+      {label}
     </span>
   );
 
-  if (isSkipped) {
+  if (displayState === "error" || displayState === "skipped") {
     return (
       <Tooltip>
         <TooltipTrigger asChild>{tag}</TooltipTrigger>
-        {skippedReason && (
+        {reason && (
           <TooltipPortal>
-            <TooltipContent side="bottom" collisionPadding={16}>
-              {skippedReason}
+            <TooltipContent
+              side="bottom"
+              collisionPadding={16}
+              className="max-w-xs"
+            >
+              {reason}
             </TooltipContent>
           </TooltipPortal>
         )}

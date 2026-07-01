@@ -23,5 +23,5 @@ public record ExperimentItemToProcess(
         String workspaceName,
         @NonNull String userName,
         @NonNull List<UUID> allExperimentIds,
-        List<OpikPromptEntry> opikPrompts) {
+        List<OpikPromptEntry> opikPrompts) implements RedisSubscriberMessage {
 }

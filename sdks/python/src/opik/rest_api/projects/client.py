@@ -808,7 +808,11 @@ class ProjectsClient:
         return _response.data
 
     def retrieve_project(
-        self, *, name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        name: str,
+        include_stats: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> ProjectDetailed:
         """
         Retrieve project
@@ -816,6 +820,8 @@ class ProjectsClient:
         Parameters
         ----------
         name : str
+
+        include_stats : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -831,7 +837,9 @@ class ProjectsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.projects.retrieve_project(name='name', )
         """
-        _response = self._raw_client.retrieve_project(name=name, request_options=request_options)
+        _response = self._raw_client.retrieve_project(
+            name=name, include_stats=include_stats, request_options=request_options
+        )
         return _response.data
 
     def get_recent_activity(
@@ -1699,7 +1707,11 @@ class AsyncProjectsClient:
         return _response.data
 
     async def retrieve_project(
-        self, *, name: str, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        name: str,
+        include_stats: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> ProjectDetailed:
         """
         Retrieve project
@@ -1707,6 +1719,8 @@ class AsyncProjectsClient:
         Parameters
         ----------
         name : str
+
+        include_stats : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1725,7 +1739,9 @@ class AsyncProjectsClient:
             await client.projects.retrieve_project(name='name', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.retrieve_project(name=name, request_options=request_options)
+        _response = await self._raw_client.retrieve_project(
+            name=name, include_stats=include_stats, request_options=request_options
+        )
         return _response.data
 
     async def get_recent_activity(

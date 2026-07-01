@@ -58,6 +58,8 @@ import useEnvironmentsList from "@/api/environments/useEnvironmentsList";
 import useFilterChips from "@/shared/filter-chips/hooks/useFilterChips";
 import FilterChipBar from "@/shared/filter-chips/FilterChipBar/FilterChipBar";
 import { useTagsChipActions } from "@/shared/filter-chips/hooks/useTagsChipActions";
+import { useQuickAttributeFilterActions } from "@/shared/filter-chips/hooks/useQuickAttributeFilterActions";
+import { QuickAttributeFilterProvider } from "@/shared/filter-chips/QuickAttributeFilterContext";
 import {
   ChipDefinition,
   ChipOptionsResult,
@@ -106,6 +108,15 @@ import EnvironmentCell from "@/shared/DataTableCells/EnvironmentCell";
 import CostCell from "@/shared/DataTableCells/CostCell";
 import ErrorCell from "@/shared/DataTableCells/ErrorCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
+import { withExplain } from "@/v2/pages/LogsPage/explain/withExplain";
+import {
+  buildCostTarget,
+  buildDurationTarget,
+  buildErrorTarget,
+  buildSpanCostTarget,
+  buildSpanDurationTarget,
+  buildSpanErrorTarget,
+} from "@/v2/pages/LogsPage/TracesSpansTab/explainTargets";
 import FeedbackScoreCell from "@/shared/DataTableCells/FeedbackScoreCell";
 import PrettyCell from "@/shared/DataTableCells/PrettyCell";
 import CommentsCell from "@/shared/DataTableCells/CommentsCell";
@@ -613,6 +624,16 @@ const SPAN_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
     defaultOperator: "contains",
     value: { placeholder: "Enter trace ID" },
   },
+  {
+    id: "provider",
+    field: "provider",
+    label: "Provider",
+    kind: "query-builder",
+    columnType: COLUMN_TYPE.string,
+    operators: STRING_OPERATORS,
+    defaultOperator: "contains",
+    value: { placeholder: "Enter provider" },
+  },
 ];
 
 const TRACE_CHIP_ORDER: string[] = [
@@ -651,6 +672,7 @@ const SPAN_CHIP_ORDER: string[] = [
   "input",
   "output",
   "name",
+  "provider",
   "with_errors",
   "error_type",
   "type",
@@ -758,6 +780,7 @@ const buildSharedDynamicChips = ({
       kind: "query-builder",
       columnType: COLUMN_TYPE.dictionary,
       operators: DICTIONARY_OPERATORS,
+      defaultOperator: "contains",
       key: {
         placeholder: "key",
         options: chipOptions(usePathsOptions, {
@@ -1059,6 +1082,14 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   const { addTag: addTagFilter } = useTagsChipActions({
     chipId: "tags",
+    values: chipValues,
+    applyValue: applyChipValue,
+    pinChip,
+  });
+
+  const quickAttributeFilterApi = useQuickAttributeFilterActions({
+    type,
+    tableId,
     values: chipValues,
     applyValue: applyChipValue,
     pinChip,
@@ -1444,6 +1475,29 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     [setThreadId, setTraceId],
   );
 
+  // Error/Duration/Cost cells get the Ollie Explain button (OPIK-6425). Wrapped
+  // here (not at module scope) so the builder set follows the active view: the
+  // Spans view emits span.* targets, the Traces view emits trace.*. entityId is
+  // the row id in both cases — the backend resolves a span's parent trace. The
+  // button is a no-op in OSS (the PluginsStore slot is empty).
+  const explainCells = useMemo(() => {
+    const isSpans = type === TRACE_DATA_TYPE.spans;
+    return {
+      error_info: withExplain(
+        ErrorCell as never,
+        isSpans ? buildSpanErrorTarget : buildErrorTarget,
+      ),
+      duration: withExplain(
+        DurationCell as never,
+        isSpans ? buildSpanDurationTarget : buildDurationTarget,
+      ),
+      total_estimated_cost: withExplain(
+        CostCell as never,
+        isSpans ? buildSpanCostTarget : buildCostTarget,
+      ),
+    };
+  }, [type]);
+
   const columnData = useMemo(() => {
     return [
       {
@@ -1453,18 +1507,25 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         cell: IdCell as never,
         sortable: true,
       },
-      ...SHARED_COLUMNS.map((col) =>
-        col.id === "tags"
-          ? {
-              ...col,
-              customMeta: {
-                ...col.customMeta,
-                onItemClick: addTagFilter,
-                getItemTooltip: (tag: string) => `Filter by tag: "${tag}"`,
-              },
-            }
-          : col,
-      ),
+      ...SHARED_COLUMNS.map((col) => {
+        if (col.id === "tags") {
+          return {
+            ...col,
+            customMeta: {
+              ...col.customMeta,
+              onItemClick: addTagFilter,
+              getItemTooltip: (tag: string) => `Filter by tag: "${tag}"`,
+            },
+          };
+        }
+        if (col.id in explainCells) {
+          return {
+            ...col,
+            cell: explainCells[col.id as keyof typeof explainCells] as never,
+          };
+        }
+        return col;
+      }),
       ...(type === TRACE_DATA_TYPE.traces
         ? [
             {
@@ -1544,7 +1605,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         : []),
       // Note: metadataColumnsData is NOT added here - it goes in columnSections instead
     ];
-  }, [type, handleThreadIdClick, isGuardrailsEnabled, addTagFilter]);
+  }, [
+    type,
+    handleThreadIdClick,
+    isGuardrailsEnabled,
+    addTagFilter,
+    explainCells,
+  ]);
 
   const columns = useMemo(() => {
     return [
@@ -1871,18 +1938,20 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           />
         </PageBodyStickyContainer>
       </DataTableStateHandler>
-      <TraceDetailsPanel
-        projectId={projectId}
-        traceId={traceId!}
-        spanId={spanId!}
-        setSpanId={setSpanId}
-        setThreadId={setThreadId}
-        hasPreviousRow={hasPrevious}
-        hasNextRow={hasNext}
-        open={Boolean(traceId) && !threadId}
-        onClose={handleClose}
-        onRowChange={handleRowChange}
-      />
+      <QuickAttributeFilterProvider value={quickAttributeFilterApi}>
+        <TraceDetailsPanel
+          projectId={projectId}
+          traceId={traceId!}
+          spanId={spanId!}
+          setSpanId={setSpanId}
+          setThreadId={setThreadId}
+          hasPreviousRow={hasPrevious}
+          hasNextRow={hasNext}
+          open={Boolean(traceId) && !threadId}
+          onClose={handleClose}
+          onRowChange={handleRowChange}
+        />
+      </QuickAttributeFilterProvider>
       <ThreadDetailsPanel
         projectId={projectId}
         projectName={projectName}

@@ -170,9 +170,24 @@ module.exports = {
           from: { opacity: "0", transform: "translateY(4px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
+        "caret-blink": {
+          "0%,70%,100%": { opacity: "1" },
+          "20%,50%": { opacity: "0" },
+        },
         shimmer: {
           "0%": { backgroundPosition: "200% 0" },
           "100%": { backgroundPosition: "-200% 0" },
+        },
+        // Outward box-shadow ring (inherits the dot's currentColor) + opacity
+        // fade — the "thinking" beacon, matching ollie-assist's status dot.
+        "beacon-pulse": {
+          "0%": { boxShadow: "0 0 0 0 currentColor", opacity: "1" },
+          "70%": { boxShadow: "0 0 0 5px transparent", opacity: "0.7" },
+          "100%": { boxShadow: "0 0 0 0 transparent", opacity: "1" },
+        },
+        "progress-indeterminate": {
+          "0%": { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(350%)" },
         },
       },
       animation: {
@@ -181,7 +196,11 @@ module.exports = {
         "ollie-breathe": "ollie-breathe 3.2s ease-in-out infinite",
         "ollie-blink": "ollie-blink 5.4s ease-in-out infinite",
         "ollie-text-in": "ollie-text-in 300ms ease-out",
+        "caret-blink": "caret-blink 1.25s ease-out infinite",
         shimmer: "shimmer 1.8s ease-in-out infinite",
+        "beacon-pulse": "beacon-pulse 1.4s ease-out infinite",
+        "progress-indeterminate":
+          "progress-indeterminate 1.3s ease-in-out infinite",
       },
       boxShadow: {
         "action-card": "var(--action-card-shadow)",

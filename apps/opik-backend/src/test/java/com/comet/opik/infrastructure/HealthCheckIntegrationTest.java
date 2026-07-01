@@ -111,18 +111,24 @@ class HealthCheckIntegrationTest {
                     .name("db").healthy(true).critical(true).type(READY).build();
             var deadlocks = HealthCheckResponse.builder()
                     .name("deadlocks").healthy(true).critical(true).type(ALIVE).build();
+            // Always-on and independent of auth: the probe leases from the live shared pool against a fixed loopback
+            // target and the connection failure there is ignored, so an alive pool reports healthy.
+            var sharedHttpClientResponse = HealthCheckResponse.builder()
+                    .name("shared_http_client").healthy(true).critical(true).type(ALIVE).build();
             var all = List.of(
                     clickHouseResponse,
                     clickhouseFreeformSqlResponse,
                     mysqlResponse,
                     redisResponse,
                     dbResponse,
-                    deadlocks);
+                    deadlocks,
+                    sharedHttpClientResponse);
             return Stream.of(
                     arguments("clickhouse", List.of(clickHouseResponse)),
                     arguments("mysql", List.of(mysqlResponse)),
                     arguments("redis", List.of(redisResponse)),
                     arguments("clickhouse-readonly-freeform-sql", List.of(clickhouseFreeformSqlResponse)),
+                    arguments("shared_http_client", List.of(sharedHttpClientResponse)),
                     arguments("all", all));
         }
 

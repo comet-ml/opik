@@ -9,6 +9,7 @@ import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.GuardrailsValidation;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.Project;
+import com.comet.opik.api.ProjectIdLastUpdated;
 import com.comet.opik.api.ProjectRetrieve;
 import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.ProjectUpdate;
@@ -772,7 +773,7 @@ class ProjectsResourceTest {
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.json(ProjectRetrieve.builder().name(project.name()).build()))) {
+                    .post(Entity.json(ProjectRetrieve.builder().name(project.name()).includeStats(true).build()))) {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                 assertThat(actualResponse.hasEntity()).isTrue();
@@ -785,6 +786,56 @@ class ProjectsResourceTest {
                         .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                         .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "totalEstimatedCost")
                         .isEqualTo(project);
+            }
+        }
+
+        @Test
+        @DisplayName("when project exists and stats are not requested, then return project without stats")
+        void getProjectByName__whenStatsNotRequested__thenReturnProjectWithoutStats() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+
+            var id = createProject(project, apiKey, workspaceName);
+
+            // Seed traces/spans so stats would be non-null if they were computed.
+            buildProjectStats(project.toBuilder().id(id).build(), apiKey, workspaceName);
+
+            // Without stats requested (OPIK-7101), no ClickHouse aggregation runs on the hot name-resolution path:
+            // identity/core fields are resolved while every stats field stays null. lastUpdatedTraceAt is a `projects`
+            // table column (set on ingestion), not part of the stats aggregation, so it is ignored via IGNORED_FIELD_MIN.
+            var expectedProject = project.toBuilder()
+                    .id(id)
+                    .feedbackScores(null)
+                    .duration(null)
+                    .totalEstimatedCost(null)
+                    .totalEstimatedCostSum(null)
+                    .usage(null)
+                    .traceCount(null)
+                    .guardrailsFailedCount(null)
+                    .errorCount(null)
+                    .build();
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("retrieve")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .post(Entity.json(ProjectRetrieve.builder().name(project.name()).build()))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                assertThat(actualResponse.hasEntity()).isTrue();
+
+                var actualEntity = actualResponse.readEntity(Project.class);
+                assertThat(actualEntity)
+                        .usingRecursiveComparison()
+                        .ignoringFields(IGNORED_FIELD_MIN)
+                        .ignoringCollectionOrder()
+                        .isEqualTo(expectedProject);
             }
         }
 
@@ -1645,8 +1696,6 @@ class ProjectsResourceTest {
             var latestActualTrace2 = traceResourceClient.getById(traces2.getLast().id(), workspaceName, API_KEY);
             var latestActualTrace3 = traceResourceClient.getById(traces3.getLast().id(), workspaceName, API_KEY);
 
-            var expectedProject1 = project1.toBuilder().id(id1)
-                    .lastUpdatedTraceAt(latestActualTrace1.lastUpdatedAt()).build();
             var expectedProject2 = project2.toBuilder().id(id2)
                     .lastUpdatedTraceAt(latestActualTrace2.lastUpdatedAt()).build();
             var expectedProject3 = project3.toBuilder().id(id3)
@@ -1665,15 +1714,18 @@ class ProjectsResourceTest {
             assertThat(actualEntity.content().stream().map(Project::id).toList())
                     .isEqualTo(List.of(id3, id2, id1));
 
+            // project3 and project2 carry explicit client timestamps, so the recorded marker matches exactly.
             assertThat(actualEntity.content().get(0).lastUpdatedTraceAt())
                     .isEqualTo(expectedProject3.lastUpdatedTraceAt());
             assertThat(actualEntity.content().get(1).lastUpdatedTraceAt())
                     .isEqualTo(expectedProject2.lastUpdatedTraceAt());
+            // project1 left lastUpdatedAt null, so its marker is the event publish time: at or after the stored
+            // value and not in the future.
             assertThat(actualEntity.content().get(2).lastUpdatedTraceAt())
-                    .isEqualTo(expectedProject1.lastUpdatedTraceAt());
+                    .isBetween(latestActualTrace1.lastUpdatedAt(), Instant.now());
 
-            assertAllProjectsHavePersistedLastTraceAt(
-                    workspaceId, List.of(expectedProject1, expectedProject2, expectedProject3));
+            assertAllProjectsHavePersistedLastTraceAt(workspaceId, List.of(expectedProject2, expectedProject3));
+            assertProjectHasLastTraceAtAtLeast(workspaceId, id1, latestActualTrace1.lastUpdatedAt());
         }
 
         @Test
@@ -1699,10 +1751,39 @@ class ProjectsResourceTest {
 
             Trace trace = getTrace(traceId, apiKey, workspaceName);
 
-            Project expectedProject = project.toBuilder().id(projectId).lastUpdatedTraceAt(trace.lastUpdatedAt())
-                    .build();
+            // The update stores a server-generated last_updated_at; the marker is the event time, not the stored value.
+            assertProjectHasLastTraceAtAtLeast(workspaceId, projectId, trace.lastUpdatedAt());
+        }
 
-            assertAllProjectsHavePersistedLastTraceAt(workspaceId, List.of(expectedProject));
+        @Test
+        void recordLastUpdatedTrace__thenOnlyMovesForward() {
+            var projectId = createProject(factory.manufacturePojo(Project.class), API_KEY, TEST_WORKSPACE);
+
+            var base = Instant.now().truncatedTo(ChronoUnit.MICROS);
+            var higher = base.plus(1, ChronoUnit.HOURS);
+            var highest = base.plus(2, ChronoUnit.HOURS);
+
+            recordLastTrace(WORKSPACE_ID, projectId, higher); // null -> set
+            assertThat(findLastTraceAt(WORKSPACE_ID, projectId)).isEqualTo(higher);
+
+            recordLastTrace(WORKSPACE_ID, projectId, base); // older -> not moved backward
+            assertThat(findLastTraceAt(WORKSPACE_ID, projectId)).isEqualTo(higher);
+
+            recordLastTrace(WORKSPACE_ID, projectId, higher); // equal -> held, guard is strict '<'
+            assertThat(findLastTraceAt(WORKSPACE_ID, projectId)).isEqualTo(higher);
+
+            recordLastTrace(WORKSPACE_ID, projectId, highest); // newer -> advances
+            assertThat(findLastTraceAt(WORKSPACE_ID, projectId)).isEqualTo(highest);
+        }
+
+        private void recordLastTrace(String workspaceId, UUID projectId, Instant lastUpdatedAt) {
+            projectService.recordLastUpdatedTrace(workspaceId,
+                    Set.of(ProjectIdLastUpdated.builder().id(projectId).lastUpdatedAt(lastUpdatedAt).build()));
+        }
+
+        private Instant findLastTraceAt(String workspaceId, UUID projectId) {
+            return projectService.findByIds(workspaceId, Set.of(projectId)).stream()
+                    .findFirst().orElseThrow().lastUpdatedTraceAt();
         }
 
         private void assertAllProjectsHavePersistedLastTraceAt(String workspaceId, List<Project> expectedProjects) {
@@ -1718,6 +1799,18 @@ class ProjectsResourceTest {
                         .usingRecursiveComparison()
                         .withComparatorForType(TestComparators::compareMicroNanoTime, Instant.class)
                         .isEqualTo(expectedLastTraceByProjectId);
+            });
+        }
+
+        /**
+         * Asserts the persisted marker for the server-generated case (trace created with a null timestamp, or
+         * updated), where the marker is the ingestion event time: at or after the stored value and not in the future.
+         */
+        private void assertProjectHasLastTraceAtAtLeast(String workspaceId, UUID projectId, Instant lowerInclusive) {
+            Awaitility.await().untilAsserted(() -> {
+                var actual = projectService.findByIds(workspaceId, Set.of(projectId)).stream()
+                        .findFirst().orElseThrow().lastUpdatedTraceAt();
+                assertThat(actual).isNotNull().isBetween(lowerInclusive, Instant.now());
             });
         }
 

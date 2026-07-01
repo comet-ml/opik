@@ -55,10 +55,21 @@ class AiSpendQueryBuilder {
     private static final String ID_WINDOW = "id BETWEEN :id_prior_start AND :id_end";
     private static final String ID_RANGE = "id BETWEEN :id_start AND :id_end";
 
+    /**
+     * Weekly-partition pruning bounds for the {@code traces} table, appended to the {@code WINDOW} / {@code RANGE}
+     * fragments. {@code toMonday(id_at)} is a strict consequence of the id-range (it can't drop a row the id-range
+     * wouldn't) but lets the planner prune partitions, which it can't infer through {@code UUIDv7ToDateTime}.
+     */
+    private static final String ID_WEEK_WINDOW = "toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:id_prior_start), 'UTC'))"
+            + " AND toMonday(id_at) <= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))";
+    /** Current-range counterpart of {@link #ID_WEEK_WINDOW}. */
+    private static final String ID_WEEK_RANGE = "toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:id_start), 'UTC'))"
+            + " AND toMonday(id_at) <= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))";
+
     private static final String CURRENT = ID_CURRENT + " AND " + TS_CURRENT;
     private static final String PREVIOUS = ID_PREVIOUS + " AND " + TS_PREVIOUS;
-    private static final String WINDOW = ID_WINDOW + " AND " + TS_WINDOW;
-    private static final String RANGE = ID_RANGE + " AND " + TS_RANGE;
+    private static final String WINDOW = ID_WINDOW + " AND " + TS_WINDOW + " AND " + ID_WEEK_WINDOW;
+    private static final String RANGE = ID_RANGE + " AND " + TS_RANGE + " AND " + ID_WEEK_RANGE;
 
     // The spans table is ordered by (workspace_id, project_id, trace_id, parent_span_id, id),
     // so adding trace_id BETWEEN — the per-call span_id and the trace_id are both
@@ -411,6 +422,84 @@ class AiSpendQueryBuilder {
             ;
             """).replace("__FANOUT_CTES__", BLOCKS_FANOUT_CTES);
 
+    // All-lane breakdown — the per-lane BREAKDOWN_TEMPLATE folded over every
+    // lane in one pass. The blocks fan-out (the expensive part: read each span's
+    // cipx.blocks[], ARRAY JOIN, allocate by chars-share) runs once and feeds
+    // every lane, instead of re-scanning the metadata blob once per lane. Each
+    // block is projected to its lane/label/is_definition via multiIfs rendered
+    // from the same INPUT_LANE_CONFIGS/OUTPUT_LANE_CONFIGS the per-lane queries
+    // use, so the projection stays single-source. tier_chars (the allocation
+    // denominator) is the full-tier chars over all blocks just as in the
+    // per-lane query, so per-lane and combined produce identical allocations.
+    private static final String COMBINED_BREAKDOWN_TEMPLATE = ("""
+            WITH
+            __FANOUT_CTES__,
+                rows AS (
+                    SELECT
+                        <bd_lane> AS lane,
+                        <bd_label> AS label,
+                        model,
+                        <bd_def> AS is_definition,
+                        if(tier_chars > 0, chars * tier_tokens / tier_chars, 0) AS alloc,
+                        tier
+                    FROM allocated
+                ),
+                agg AS (
+                    SELECT
+                        lane,
+                        label,
+                        model,
+                        SUM(alloc) AS total_tokens,
+                        SUMIf(alloc, is_definition = 1) AS definition_tokens,
+                        SUMIf(alloc, is_definition = 0) AS usage_tokens,
+                        SUMIf(alloc, tier = 'input') AS input_tokens,
+                        SUMIf(alloc, tier = 'cache_read') AS cache_read_tokens,
+                        SUMIf(alloc, tier = 'cache_creation') AS cache_creation_tokens,
+                        SUMIf(alloc, tier = 'output') AS output_tokens,
+                        countIf(is_definition = 0) AS events
+                    FROM rows
+                    WHERE lane != ''
+                    GROUP BY lane, label, model
+                    HAVING label != ''
+                ),
+                label_totals AS (
+                    SELECT lane, label, SUM(total_tokens) AS lt, SUM(events) AS le
+                    FROM agg
+                    GROUP BY lane, label
+                ),
+                ranked AS (
+                    SELECT lane, label, row_number() OVER (PARTITION BY lane ORDER BY lt DESC) AS rn
+                    FROM label_totals
+                ),
+                totals AS (
+                    SELECT lane, SUM(lt) AS grand_total, COUNT() AS group_count, SUM(le) AS total_events
+                    FROM label_totals
+                    GROUP BY lane
+                )
+            SELECT
+                a.lane AS lane,
+                if(r.rn > :limit, '__other__', a.label) AS label,
+                a.model AS model,
+                SUM(a.total_tokens) AS total_tokens,
+                SUM(a.definition_tokens) AS definition_tokens,
+                SUM(a.usage_tokens) AS usage_tokens,
+                SUM(a.events) AS events,
+                SUM(a.input_tokens) AS input_tokens,
+                SUM(a.cache_read_tokens) AS cache_read_tokens,
+                SUM(a.cache_creation_tokens) AS cache_creation_tokens,
+                SUM(a.output_tokens) AS output_tokens,
+                min(r.rn) AS rank,
+                any(t.grand_total) AS grand_total,
+                any(t.group_count) AS group_count,
+                any(t.total_events) AS total_events
+            FROM agg a
+            INNER JOIN ranked r ON a.lane = r.lane AND a.label = r.label
+            INNER JOIN totals t ON a.lane = t.lane
+            GROUP BY lane, label, a.model
+            ORDER BY lane ASC, rank ASC, total_tokens DESC
+            ;
+            """).replace("__FANOUT_CTES__", BLOCKS_FANOUT_CTES);
+
     // Users — leaderboard pivots on cipx.session.identity.user_uuid (Item 1).
     // Per-user totals come from cipx.call.usage on LLM-call spans joined to
     // their trace's identity. skills/mcps/mcp_calls derive from cipx.blocks[].
@@ -592,6 +681,40 @@ class AiSpendQueryBuilder {
             st.add("label_expr", config.labelExpr());
             st.add("def_expr", config.defExpr());
         });
+    }
+
+    TemplatedQuery allBreakdowns() {
+        var laneCase = new StringBuilder("multiIf(\n");
+        var labelCase = new StringBuilder("multiIf(\n");
+        var defCase = new StringBuilder("multiIf(\n");
+        for (SpendLane lane : SpendLane.values()) {
+            appendLaneCase(laneCase, labelCase, defCase, INPUT_LANE_CONFIGS.get(lane), lane.getKey());
+        }
+        for (OutputLane lane : OutputLane.values()) {
+            appendLaneCase(laneCase, labelCase, defCase, OUTPUT_LANE_CONFIGS.get(lane), lane.getKey());
+        }
+        laneCase.append("    ''\n)");
+        labelCase.append("    ''\n)");
+        defCase.append("    toUInt8(0)\n)");
+        return new TemplatedQuery(COMBINED_BREAKDOWN_TEMPLATE, st -> {
+            st.add("range", RANGE);
+            st.add("span_range", SPAN_RANGE);
+            st.add("user_uuid_expr", CIPX_USER_UUID_EXPR);
+            st.add("version_guard", CIPX_TRACE_VERSION_GUARD);
+            st.add("bd_lane", laneCase.toString());
+            st.add("bd_label", labelCase.toString());
+            st.add("bd_def", defCase.toString());
+        });
+    }
+
+    private static void appendLaneCase(StringBuilder laneCase, StringBuilder labelCase, StringBuilder defCase,
+            LaneBreakdownConfig config, String laneKey) {
+        if (config == null) {
+            return;
+        }
+        laneCase.append("    ").append(config.filter()).append(", '").append(laneKey).append("',\n");
+        labelCase.append("    ").append(config.filter()).append(", ").append(config.labelExpr()).append(",\n");
+        defCase.append("    ").append(config.filter()).append(", ").append(config.defExpr()).append(",\n");
     }
 
     TemplatedQuery users(List<SortingField> sortingFields) {

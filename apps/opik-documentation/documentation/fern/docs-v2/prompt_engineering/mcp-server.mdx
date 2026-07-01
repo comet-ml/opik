@@ -6,58 +6,222 @@ og:title: Integrate with Opik's MCP server
 title: Opik's MCP server
 ---
 
-Opik's [MCP server](https://github.com/comet-ml/opik-mcp) is a Python 3.13+ package
-that connects your AI host (Claude Code, Cursor, VS Code Copilot, MCP Inspector)
-directly to your Opik workspace — read traces, log scores, save prompt versions,
-and ask Ollie investigative questions, all from the chat.
-
-> `opik-mcp` has been rewritten in Python. If you previously installed the
-> npx-based JavaScript server, replace `npx -y opik-mcp` with `uvx opik-mcp` in
-> the snippets below.
-
-## Before you start
-
-You will need:
-
-- **`OPIK_API_KEY`** — generate one at [`comet.com/api/my/settings`](https://www.comet.com/api/my/settings/).
-- **`OPIK_WORKSPACE`** — the lowercase workspace name from your Comet URL. For example, `https://www.comet.com/acme-ai/...` → `OPIK_WORKSPACE=acme-ai`. Optional — defaults to `default` (the Opik SDK convention), which is correct for local/OSS installs; cloud users with a named workspace should set it. `COMET_WORKSPACE` is accepted as a deprecated alias (`OPIK_WORKSPACE` wins if both are set).
-- **[`uv`](https://docs.astral.sh/uv/)** installed locally. The fastest way is `brew install uv` (macOS) or `curl -LsSf https://astral.sh/uv/install.sh | sh`. `uvx` (bundled with `uv`) fetches and runs the latest published `opik-mcp` on demand — no global install required.
-
-<Tip>
-**Pre-release note:** `opik-mcp` is not yet published to PyPI. Until the first
-PyPI release lands, replace `uvx opik-mcp` in any snippet on this page with
-`uvx --from git+https://github.com/comet-ml/opik-mcp.git opik-mcp`.
-</Tip>
+Opik's [MCP server](https://github.com/comet-ml/opik-mcp) connects your AI host
+(Claude Code, Cursor, VS Code Copilot, MCP Inspector) directly to your Opik
+workspace — read traces, log scores, save prompt versions, and ask Ollie
+investigative questions, all from the chat.
 
 ## Quick setup with the Opik CLI
 
-The easiest way to connect the MCP server is the Opik CLI. It detects your AI
-host (Claude Code, Cursor, VS Code Copilot) and sets it up for you.
+The fastest way to connect the MCP server is the Opik CLI. It detects your AI
+host (Claude Code, Cursor, VS Code Copilot), picks the right server for your
+Opik deployment, and configures it for you.
 
-When you run [`opik configure`](/tracing/advanced/sdk_configuration), it offers
-to set up the MCP server at the end:
+<Tip>
+Prefer not to use the CLI? You can wire up any host by hand — skip to
+[Manual setup](#manual-setup).
+</Tip>
 
-> Set up the Opik MCP server for an AI assistant (Claude Code, Cursor, VS Code)? (y/N)
+<Steps>
+  <Step title="Install the Opik CLI">
+    The CLI ships with the `opik` Python package. The `opik mcp` commands require
+    **version 2.1.3 or later**:
 
-Already configured Opik? Run the wizard on its own at any time:
+    ```bash
+    pip install --upgrade "opik>=2.1.3"
+    ```
+  </Step>
+  <Step title="Configure the MCP server">
+    ```bash
+    opik mcp configure
+    ```
+
+    This reuses your existing Opik configuration (`~/.opik.config`). If you
+    haven't configured Opik yet, the wizard offers to do it for you first.
+
+    `opik configure` also offers to run this for you at the end of its setup:
+
+    > Set up the Opik MCP server for an AI assistant (Claude Code, Cursor, VS Code)? (y/N)
+  </Step>
+  <Step title="Restart your AI host and verify">
+    Restart your AI host, then ask **"list my Opik projects"** in the chat to
+    confirm it works.
+
+    <Note>
+    If your host isn't detected, use [Manual setup](#manual-setup) below.
+    </Note>
+  </Step>
+</Steps>
+
+## Check your setup
+
+Each AI host keeps its own copy of the MCP configuration, which isn't updated
+automatically when your Opik configuration changes. To see what every detected
+host points at — and whether it still matches your current Opik configuration —
+run:
 
 ```bash
-opik mcp configure
+opik mcp status
 ```
 
-That's it — restart your AI host and ask **"list my Opik projects"** to confirm
-it works.
+It prints your active Opik configuration, then each assistant that has the Opik
+MCP server configured: the config file it lives in, the server it reports to
+(hosted or local), its workspace, and whether it has drifted from your Opik
+configuration.
 
-<Note>
-You need [`uv`](https://docs.astral.sh/uv/) installed (`brew install uv` or
-`curl -LsSf https://astral.sh/uv/install.sh | sh`). If your host isn't detected,
-use [Manual setup](#manual-setup) below.
-</Note>
+```text
+Your Opik configuration
+    File          ~/.opik.config
+    Environment   https://www.comet.com/opik/api
+    Workspace     my-workspace
+
+Opik MCP server — configured for 1 AI assistant:
+
+  Claude Code
+    Config        ~/.claude.json
+    Connection    Hosted (HTTP + OAuth)
+    Reports to    https://www.comet.com/opik/api/v1/mcp
+    Status        ✓ in sync with your Opik configuration
+```
+
+A host that has drifted is flagged `✗ OUT OF SYNC` — re-run
+`opik mcp configure` to fix it.
+
+<Warning>
+A host keeps its MCP connection for the lifetime of its process. After changing
+your Opik configuration or re-running `opik mcp configure`, **restart your AI
+host** so it reconnects with the updated settings.
+</Warning>
+
+To view just your active Opik configuration (file path, environment, workspace):
+
+```bash
+opik configure status
+```
+
+## Opik Cloud and self-hosted deployments
+
+`opik mcp configure` works the same whether you're on Opik Cloud, self-hosted,
+or a local install — it sets up the right server for your deployment
+automatically.
+
+### Opik Cloud (hosted server)
+
+On [Opik Cloud](https://www.comet.com/opik), the CLI registers the **hosted MCP
+server** over HTTP. Your AI host signs in with a browser-based OAuth flow on
+first connect, so:
+
+- **No API key is stored** in the host's config — you authenticate through OAuth
+  in the browser.
+- **`uv` is not required** — there is no local process to run.
+- Your workspace is selected during the OAuth sign-in, so a hosted server shows
+  no workspace in `opik mcp status`.
+
+### Self-hosted and local (local server)
+
+If no hosted server is available for your environment, the CLI sets up the
+**local server**, which runs on demand via `uvx opik-mcp`. This requires
+[`uv`](https://docs.astral.sh/uv/) — install it with `brew install uv` (macOS)
+or `curl -LsSf https://astral.sh/uv/install.sh | sh`.
 
 ## Manual setup
 
 Prefer to wire it up yourself, or your host wasn't detected? Configure any host
 by hand below.
+
+<Note>
+There are two servers you can add by hand. [`opik mcp configure`](#quick-setup-with-the-opik-cli)
+picks the right one for you, but you can also add either directly in your AI
+host's MCP settings:
+
+- **Hosted server** (HTTP + OAuth) — available on Opik Cloud and any deployment
+  that provides it. No API key is stored; your host signs in through the browser.
+- **Local server** (`uvx opik-mcp`, stdio) — runs on your machine with your
+  credentials in the host's `env` block.
+</Note>
+
+### Hosted server (Opik Cloud)
+
+The hosted server connects over HTTP and signs in with a browser-based OAuth
+flow on first connect — no API key is stored in the host config. Point your host
+at your deployment's MCP endpoint, which is your Opik API base plus `/v1/mcp`. On
+Opik Cloud that is `https://www.comet.com/opik/api/v1/mcp`.
+
+<Tabs>
+    <Tab title="Claude Code">
+
+    Add the server with one command:
+
+    ```bash
+    claude mcp add --transport http opik-mcp https://www.comet.com/opik/api/v1/mcp
+    ```
+
+    Or edit `~/.claude.json` directly:
+
+    ```json
+    {
+      "mcpServers": {
+        "opik-mcp": {
+          "type": "http",
+          "url": "https://www.comet.com/opik/api/v1/mcp"
+        }
+      }
+    }
+    ```
+
+    Restart Claude Code and complete the browser sign-in when prompted, then ask
+    in the chat: **"list my Opik projects"**.
+
+    </Tab>
+    <Tab title="Cursor">
+
+    Edit `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (project):
+
+    ```json
+    {
+      "mcpServers": {
+        "opik-mcp": {
+          "type": "http",
+          "url": "https://www.comet.com/opik/api/v1/mcp"
+        }
+      }
+    }
+    ```
+
+    Reload Cursor and complete the browser sign-in when prompted.
+
+    </Tab>
+    <Tab title="VS Code Copilot">
+
+    Create or open `.vscode/mcp.json` in your workspace:
+
+    ```json
+    {
+      "servers": {
+        "opik-mcp": {
+          "type": "http",
+          "url": "https://www.comet.com/opik/api/v1/mcp"
+        }
+      }
+    }
+    ```
+
+    Reload the window and complete the browser sign-in when prompted.
+
+    </Tab>
+</Tabs>
+
+### Local server (uvx)
+
+The local server runs on demand via `uvx opik-mcp` (requires
+[`uv`](https://docs.astral.sh/uv/)), with your credentials passed through the
+host's `env` block.
+
+<Note>
+`opik-mcp` is now a Python package. If you previously ran the npx-based
+JavaScript server, use the `uvx opik-mcp` commands below in place of
+`npx -y opik-mcp`.
+</Note>
 
 <Tip>
 `OPIK_WORKSPACE` is **optional** — you can omit the `OPIK_WORKSPACE` line/key
@@ -220,8 +384,8 @@ For investigative or cross-entity questions:
 
 `ask_ollie` returns a `thread_id` you can pass back on follow-ups to preserve
 context. For more about Ollie itself, see [Ollie](/ollie).
-See **Ollie & auto-approve** below before running write-style prompts in shared
-workspaces.
+See [Ollie & auto-approve](#ollie--auto-approve) below before running
+write-style prompts in shared workspaces.
 
 ## Ollie & auto-approve
 

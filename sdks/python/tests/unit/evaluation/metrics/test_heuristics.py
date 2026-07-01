@@ -493,6 +493,38 @@ def test_chrf_metric_uses_custom_fn():
     assert result.value == pytest.approx(0.72)
 
 
+def test_chrf_metric__char_order_and_ignore_whitespace_vary__change_score():
+    # char_order and ignore_whitespace must reach the scorer and affect the score.
+    # Before the fix only `beta` was forwarded to NLTK, so varying these had no
+    # effect. Exercised through the public ChrF.score API on the default NLTK
+    # backend (skipped when the optional `nltk` dependency is unavailable).
+    pytest.importorskip("nltk")
+
+    ws_ignored = (
+        ChrF(ignore_whitespace=True, track=False)
+        .score(output="ab cd", reference="abcd")
+        .value
+    )
+    ws_kept = (
+        ChrF(ignore_whitespace=False, track=False)
+        .score(output="ab cd", reference="abcd")
+        .value
+    )
+    assert ws_ignored > ws_kept
+
+    order_1 = (
+        ChrF(char_order=1, track=False)
+        .score(output="the cat", reference="the dog")
+        .value
+    )
+    order_6 = (
+        ChrF(char_order=6, track=False)
+        .score(output="the cat", reference="the dog")
+        .value
+    )
+    assert order_1 != order_6
+
+
 def test_spearman_ranking_metric():
     metric = SpearmanRanking(track=False)
     result = metric.score(output=["b", "a", "c"], reference=["a", "b", "c"])

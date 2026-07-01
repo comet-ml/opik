@@ -29,6 +29,8 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -38,9 +40,13 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.dropwizard.guice.test.jupiter.param.Jit;
 
+import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -53,10 +59,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class RetentionPolicyServiceTest {
 
-    private static final String API_KEY = UUID.randomUUID().toString();
-    private static final String TEST_WORKSPACE_NAME = "workspace" + RandomStringUtils.secure().nextAlphanumeric(36);
-    private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);
-    private static final String PROJECT_NAME = "retention-test-project";
+    private static final String API_KEY = "apiKey-" + UUID.randomUUID();
+    private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(32);
+    private static final String PROJECT_NAME = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
@@ -67,7 +72,7 @@ class RetentionPolicyServiceTest {
     private final WireMockUtils.WireMockRuntime wireMock;
 
     @RegisterApp
-    private final TestDropwizardAppExtension APP;
+    private final TestDropwizardAppExtension app;
 
     {
         Startables.deepStart(REDIS, MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, ZOOKEEPER_CONTAINER).join();
@@ -100,11 +105,9 @@ class RetentionPolicyServiceTest {
                         new TestDropwizardAppExtensionUtils.CustomConfig("uuidValidation.enabled", "false")))
                 .build();
 
-        APP = newTestDropwizardAppExtension(contextConfig);
+        app = newTestDropwizardAppExtension(contextConfig);
     }
 
-    private String baseURI;
-    private String workspaceId;
     private RetentionRuleResourceClient retentionClient;
     private TraceResourceClient traceClient;
     private SpanResourceClient spanClient;
@@ -118,7 +121,7 @@ class RetentionPolicyServiceTest {
     void beforeAll(ClientSupport client, @Jit RetentionPolicyService retentionPolicyService,
             @Jit RetentionCatchUpService catchUpService, @Jit RetentionEstimationService estimationService,
             TransactionTemplateAsync templateAsync, IdGenerator idGenerator) {
-        this.baseURI = TestUtils.getBaseUrl(client);
+        var baseURI = TestUtils.getBaseUrl(client);
         ClientSupportUtils.config(client);
 
         this.retentionPolicyService = retentionPolicyService;
@@ -129,17 +132,25 @@ class RetentionPolicyServiceTest {
         this.retentionClient = new RetentionRuleResourceClient(client, baseURI);
         this.traceClient = new TraceResourceClient(client, baseURI);
         this.spanClient = new SpanResourceClient(client, baseURI);
-
-        // Workspace ID that falls in fraction 0's range (starts with 00-05)
-        this.workspaceId = "00000001-0000-0000-0000-000000000000";
-
-        AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, TEST_WORKSPACE_NAME, workspaceId, USER);
     }
 
     @Nested
     @DisplayName("Retention cycle execution")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class RetentionCycleExecution {
+
+        private static final String TEST_WORKSPACE_NAME = "workspace-"
+                + RandomStringUtils.secure().nextAlphanumeric(32);
+
+        /**
+         * Workspace ID that falls in fraction 0's range (starts with 00-05)
+         */
+        private static final String WORKSPACE_ID = "00000001-0000-0000-0000-000000000000";
+
+        @BeforeAll
+        void beforeAll() {
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, TEST_WORKSPACE_NAME, WORKSPACE_ID, USER);
+        }
 
         @Test
         @DisplayName("Deletes expired traces and spans, keeps recent data")
@@ -164,15 +175,15 @@ class RetentionPolicyServiceTest {
             createTestSpan(recentSpanId, recentTraceId, API_KEY, TEST_WORKSPACE_NAME);
 
             // Wait for async writes to reach ClickHouse before verifying
-            waitForRows("traces", workspaceId, 2);
-            waitForRows("spans", workspaceId, 2);
+            waitForRows("traces", WORKSPACE_ID, 2);
+            waitForRows("spans", WORKSPACE_ID, 2);
 
             // Execute retention cycle for fraction 0 (our workspace falls in this range)
             retentionPolicyService.executeRetentionCycle(0, now).block();
 
             // Verify: old traces/spans deleted, recent data kept
-            assertThat(countRows("traces", workspaceId)).isEqualTo(1);
-            assertThat(countRows("spans", workspaceId)).isEqualTo(1);
+            assertThat(countRows("traces", WORKSPACE_ID)).isEqualTo(1);
+            assertThat(countRows("spans", WORKSPACE_ID)).isEqualTo(1);
 
             // Verify the remaining rows are the recent ones
             assertThat(countRowsById("traces", recentTraceId)).isEqualTo(1);
@@ -301,6 +312,47 @@ class RetentionPolicyServiceTest {
             // Other workspace data should be untouched
             assertThat(countRows("traces", otherWsId)).isEqualTo(1);
             assertThat(countRows("spans", otherWsId)).isEqualTo(1);
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class WeekBoundary {
+
+        // Monday is excluded: a row one day before a Monday cutoff falls in the previous ISO week.
+        @EnumSource(value = DayOfWeek.class, names = {"MONDAY"}, mode = EnumSource.Mode.EXCLUDE)
+        @ParameterizedTest
+        void deletesRowSharingTheCutoffWeek(DayOfWeek cutoffDay) {
+            // Random, isolated workspace; the cycle below derives the fraction this id falls into so it runs
+            var wsName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var wsId = UUID.randomUUID().toString();
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, wsName, wsId, USER);
+
+            var rule = retentionClient.buildWorkspaceRule(RetentionPeriod.BASE_60D).build();
+            retentionClient.createAndGet(rule, API_KEY, wsName);
+
+            // Pin the cutoff to cutoffDay so a row one day older shares its ISO week (same Monday). This
+            // exercises the upper bound toMonday(id_at) < addWeeks(toMonday(cutoff), 1): the row must still be
+            // deleted regardless of where in the week the cutoff lands.
+            var cutoffDate = LocalDate.now(ZoneOffset.UTC).minusDays(90)
+                    .with(TemporalAdjusters.previousOrSame(cutoffDay));
+            var now = cutoffDate.plusDays(RetentionPeriod.BASE_60D.getDays())
+                    .atStartOfDay(ZoneOffset.UTC).toInstant();
+            var cutoff = cutoffDate.atStartOfDay(ZoneOffset.UTC).toInstant();
+
+            // One day before the cutoff: inside the 3-day sliding window and in the cutoff's own week.
+            var sameWeekOldTraceId = idGenerator.generateId(cutoff.minus(1, ChronoUnit.DAYS));
+            createTestTrace(sameWeekOldTraceId, API_KEY, wsName);
+            waitForRows("traces", wsId, 1);
+
+            // The cycle processes one workspace-id fraction at a time; derive the one this random workspace
+            // falls into (48 = the configured retention.executionsPerDay) so the cycle includes it. The last
+            // fraction absorbs the top of the id space, so clamp to its index.
+            var fraction = Math.min((int) (Long.parseLong(wsId.substring(0, 8), 16) / ((0xFFFFFFFFL + 1) / 48)), 47);
+            retentionPolicyService.executeRetentionCycle(fraction, now).block();
+
+            assertThat(countRows("traces", wsId)).isZero();
+            assertThat(countRowsById("traces", sameWeekOldTraceId)).isZero();
         }
     }
 
@@ -584,7 +636,7 @@ class RetentionPolicyServiceTest {
         return templateAsync.nonTransaction(connection -> {
             var sql = "SELECT count() as cnt FROM %s WHERE workspace_id = '%s'".formatted(table, wsId);
             return Mono.from(connection.createStatement(sql).execute())
-                    .flatMap(result -> Mono.from(result.map((row, metadata) -> row.get("cnt", Long.class))));
+                    .flatMap(result -> Mono.from(result.map((row, _) -> row.get("cnt", Long.class))));
         }).block();
     }
 
@@ -592,7 +644,7 @@ class RetentionPolicyServiceTest {
         return templateAsync.nonTransaction(connection -> {
             var sql = "SELECT count() as cnt FROM %s WHERE id = '%s'".formatted(table, id);
             return Mono.from(connection.createStatement(sql).execute())
-                    .flatMap(result -> Mono.from(result.map((row, metadata) -> row.get("cnt", Long.class))));
+                    .flatMap(result -> Mono.from(result.map((row, _) -> row.get("cnt", Long.class))));
         }).block();
     }
 

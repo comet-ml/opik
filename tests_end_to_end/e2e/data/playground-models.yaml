@@ -1,6 +1,4 @@
 # Test prompt + model configuration for Prompt Playground provider sanity tests.
-# Per-model toggles match the v1 suite's models_config.yaml at
-# tests_end_to_end/typescript-tests/models_config.yaml.
 #
 # `options` is the model-config knob exercised by the test (in addition to the
 # baseline prompt run). Each test sets these options on the variant before

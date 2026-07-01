@@ -126,6 +126,24 @@ main().catch(console.error);
 
 Done! All traces that contain AI SDK spans are automatically captured in Opik.
 
+## AI SDK versions and Vercel eve
+
+`OpikExporter` works with all current AI SDK versions — **v4, v5, v6, and v7** —
+with no extra setup. It also supports **Vercel eve**, the agent framework built
+on AI SDK v7, capturing each run as nested LLM and tool spans. The setup shown
+above is all you need, and your code keeps working as you upgrade.
+
+### Multi-turn eve conversations
+
+When you run Vercel eve, a multi-turn conversation is grouped into a single Opik
+thread automatically, so every turn shows up together — you don't need to set
+`threadId` yourself.
+
+### Cached token usage
+
+If your model reports prompt caching, cached tokens are tracked alongside the
+usual input and output tokens, so your token and cost metrics stay accurate.
+
 ## Configuration
 
 ### Custom Tags and Metadata

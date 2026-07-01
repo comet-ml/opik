@@ -30,6 +30,11 @@ _POLL_IDLE_INTERVAL_SECONDS = 0.5
 _CANCELLED_JOBS_TTL_SECONDS = 300
 _CANCELLED_JOBS_MAX_SIZE = 10_000
 
+# Number of consecutive poll failures before we surface the firewall/proxy hint.
+# Below this, failures are transient blips the backoff is already retrying; from
+# here on we warn on every attempt until a poll succeeds and resets the counter.
+_POLL_FAILURE_HINT_THRESHOLD = 3
+
 
 def cast_input_value(value: object, type_name: str) -> object:
     """Cast *value* to the native Python type indicated by *type_name*.
@@ -121,48 +126,75 @@ class InProcessRunnerLoop:
 
     def _poll_loop(self) -> None:
         backoff = self._initial_backoff_seconds
-        _poll_failures = 0
+        poll_failures = 0
 
         while not self._shutdown_event.is_set():
             try:
                 job = self._api.runners.next_job(self._runner_id)
-                _poll_failures = 0
             except ApiError as e:
-                _poll_failures += 1
-                if _poll_failures == 1:
-                    LOGGER.warning(
-                        "Unable to reach Opik server (API %s). Retrying...",
-                        e.status_code,
-                    )
-                else:
-                    LOGGER.debug("Poll error (API %s)", e.status_code, exc_info=True)
+                poll_failures += 1
+                self._log_poll_failure(poll_failures, e)
                 bridge_common.backoff_wait(
                     self._shutdown_event, backoff, self._backoff_cap_seconds
                 )
                 backoff = min(backoff * 2, self._backoff_cap_seconds)
                 continue
-            except Exception:
-                _poll_failures += 1
-                if _poll_failures == 1:
-                    LOGGER.warning(
-                        "Unable to reach Opik server. Retrying...", exc_info=True
-                    )
-                else:
-                    LOGGER.debug("Error polling for jobs", exc_info=True)
+            except Exception as e:
+                poll_failures += 1
+                self._log_poll_failure(poll_failures, e)
                 bridge_common.backoff_wait(
                     self._shutdown_event, backoff, self._backoff_cap_seconds
                 )
                 backoff = min(backoff * 2, self._backoff_cap_seconds)
                 continue
 
+            if poll_failures:
+                LOGGER.info(
+                    "Reconnected to Opik server after %d failed poll(s); resuming.",
+                    poll_failures,
+                )
+                poll_failures = 0
+            backoff = self._initial_backoff_seconds
+
             if job is None:
-                backoff = self._initial_backoff_seconds
                 self._shutdown_event.wait(self._poll_idle_interval_seconds)
                 continue
 
-            backoff = self._initial_backoff_seconds
             if self._loop is not None:
                 self._loop.call_soon_threadsafe(self._job_queue.put_nowait, job)
+
+    def _log_poll_failure(self, failures: int, error: Exception) -> None:
+        """Warn once poll failures are sustained, then on every further attempt.
+
+        Failures below ``_POLL_FAILURE_HINT_THRESHOLD`` are transient blips the
+        backoff is already retrying, so they stay on debug. From the threshold
+        onward we warn on every attempt; the caller resets ``failures`` to 0 as
+        soon as a poll succeeds.
+
+        The full error (for ``ApiError`` that includes status code, headers, and
+        response body) and a traceback are always logged so the failure can be
+        diagnosed, alongside the actionable hint.
+        """
+        status_code = error.status_code if isinstance(error, ApiError) else None
+
+        if failures < _POLL_FAILURE_HINT_THRESHOLD:
+            LOGGER.debug(
+                "Job poll failed (attempt %d): %s", failures, error, exc_info=True
+            )
+            return
+
+        rate_limit_note = (
+            " Opik is rate-limiting requests (HTTP 429)." if status_code == 429 else ""
+        )
+        LOGGER.warning(
+            "Job polling has failed %d times in a row: %s.%s A firewall or proxy may "
+            "be blocking the sustained connection to Opik. Check your network/proxy "
+            "settings, or increase the poll interval with OPIK_RUNNER_POLL_INTERVAL.",
+            failures,
+            error,
+            rate_limit_note,
+            exc_info=True,
+        )
 
     def _heartbeat_loop(self) -> None:
         while not self._shutdown_event.is_set():

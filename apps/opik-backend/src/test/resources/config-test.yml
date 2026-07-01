@@ -70,6 +70,12 @@ databaseAnalytics:
   #   - custom_http_params=max_query_size=100000000
   #  Description: query parameters that will be added to the connection string
   queryParameters: health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=60,async_insert_busy_timeout_min_ms=50,async_insert=1,wait_for_async_insert=1,async_insert_use_adaptive_busy_timeout=1,async_insert_deduplicate=1,use_skip_indexes_if_final=1
+  #  Default: unset (inherits the async_insert_busy_timeout_max_ms=60 carried by queryParameters above)
+  #  Description: Optional override (ms) for async_insert_busy_timeout_max_ms in the custom_http_params chain of
+  #   queryParameters above; only applied when that setting is already present there, otherwise it is not injected.
+  #   Leave unset to keep the queryParameters value untouched. With async_insert_use_adaptive_busy_timeout=1 this is
+  #   a ceiling: the adaptive scheduler widens the buffer only while rows are queued.
+  asyncInsertBusyTimeoutMaxMs: # Empty - inherits the queryParameters value above
   #  Default: 1s
   #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
   healthCheckTimeout: 1s
@@ -94,6 +100,8 @@ uuidValidation:
 databaseAnalyticsReadOnlyFreeFormSql:
   username: comet_readonly_freeform_sql_user
   password: opik
+  # Plain value (no env var).
+  socketTimeout: 200s
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
@@ -108,6 +116,11 @@ health:
   # healthy for the entire test window.
   healthChecks:
     - name: deadlocks
+      critical: true
+      type: alive
+      initialState: false
+      schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
+    - name: shared_http_client
       critical: true
       type: alive
       initialState: false
@@ -177,6 +190,9 @@ authentication:
   # Description: Configures base url for React service, used for user management and authentication
   reactService:
     url: ''
+
+sharedHttpClientHealthCheck:
+  timeout: 1s
 
 # OAuth 2.1 Authorization Server for hosted/local Opik MCP
 mcpOAuth:
@@ -351,6 +367,8 @@ onlineScoring:
   # Default: 4
   # Description: Characters-per-token ratio used to estimate trace size from serialized JSON length.
   agenticToolsCharsPerToken: 4
+  agenticToolsMaxInjectedBytes: 52428800
+  agenticToolsS3PresignTtlSeconds: 120
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
@@ -692,6 +710,9 @@ serviceToggles:
   # Default: false
   # Description: Master switch for the agentic-tools path on LLM-as-judge online scoring.
   agenticToolsEnabled: "false"
+  # Default: false
+  # Description: Whether the online-scoring (LLM-as-judge) evaluation loop is persisted as monitoring traces.
+  onlineScoringTracingEnabled: "false"
   # Default: false
   # Description: Whether or not the Agent Insights freeform SQL path is enabled. Tests flip this on when exercising
   #   the read-only ClickHouse client and the clickhouse-readonly-freeform-sql health check.

@@ -413,6 +413,22 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BiInformationResponse"
+  /v1/internal/usage/workspace-span-counts-breakdown:
+    get:
+      tags:
+      - System usage
+      summary: "Get spans count on previous day grouped by workspace, project and\
+        \ user"
+      description: "Get spans count on previous day grouped by workspace, project\
+        \ and user"
+      operationId: getSpansCountBreakdownForWorkspaces
+      responses:
+        "200":
+          description: UsageByWorkspaceProjectUserResponse resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsageByWorkspaceProjectUserResponse"
   /v1/internal/usage/workspace-span-counts:
     get:
       tags:
@@ -1247,6 +1263,31 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage"
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/ai-spend/composition/breakdowns:
+    post:
+      tags:
+      - AI Spend
+      summary: Get all spend lane breakdowns
+      description: Get the per-item breakdown for every composition lane in one request
+      operationId: getSpendAllBreakdowns
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpendMetricRequest"
+      responses:
+        "200":
+          description: Lane breakdowns
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpendBreakdownsResponse"
+        "400":
+          description: Bad Request
           content:
             application/json:
               schema:
@@ -9630,6 +9671,26 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/BiInformation"
+    UsageByWorkspaceProjectUserResponse:
+      type: object
+      properties:
+        breakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkspaceProjectUserCount"
+    WorkspaceProjectUserCount:
+      type: object
+      properties:
+        workspace_id:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        user:
+          type: string
+        count:
+          type: integer
+          format: int64
     SpansCountResponse:
       type: object
       properties:
@@ -10257,91 +10318,6 @@ components:
           - open
           - resolved
           - closed
-    HarnessEntry:
-      type: object
-      properties:
-        key:
-          type: string
-        label:
-          type: string
-    Lane:
-      type: object
-      properties:
-        key:
-          type: string
-        label:
-          type: string
-        total_tokens:
-          type: integer
-          format: int64
-        by_model:
-          type: array
-          items:
-            $ref: "#/components/schemas/ModelTiers"
-        has_breakdown:
-          type: boolean
-    ModelTiers:
-      type: object
-      properties:
-        model:
-          type: string
-        input_tokens:
-          type: integer
-          format: int64
-        cache_read_tokens:
-          type: integer
-          format: int64
-        cache_creation_tokens:
-          type: integer
-          format: int64
-        output_tokens:
-          type: integer
-          format: int64
-    Side:
-      type: object
-      properties:
-        total_tokens:
-          type: integer
-          format: int64
-        lanes:
-          type: array
-          items:
-            $ref: "#/components/schemas/Lane"
-    SpendCompositionResponse:
-      type: object
-      properties:
-        input:
-          $ref: "#/components/schemas/Side"
-        harness:
-          type: array
-          items:
-            $ref: "#/components/schemas/HarnessEntry"
-        output:
-          $ref: "#/components/schemas/Side"
-    SpendMetricRequest:
-      required:
-      - interval_end
-      - interval_start
-      type: object
-      properties:
-        project_id:
-          type: string
-          format: uuid
-        project_name:
-          type: string
-        interval_start:
-          type: string
-          format: date-time
-        interval_end:
-          type: string
-          format: date-time
-        user_id:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
-          type: string
-        start_before_end:
-          type: boolean
-        project_provided:
-          type: boolean
     Item:
       type: object
       properties:
@@ -10361,6 +10337,23 @@ components:
           items:
             $ref: "#/components/schemas/ModelTiers"
         count:
+          type: integer
+          format: int64
+    ModelTiers:
+      type: object
+      properties:
+        model:
+          type: string
+        input_tokens:
+          type: integer
+          format: int64
+        cache_read_tokens:
+          type: integer
+          format: int64
+        cache_creation_tokens:
+          type: integer
+          format: int64
+        output_tokens:
           type: integer
           format: int64
     SpendBreakdownResponse:
@@ -10388,6 +10381,81 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Item"
+    SpendBreakdownsResponse:
+      type: object
+      properties:
+        breakdowns:
+          type: array
+          items:
+            $ref: "#/components/schemas/SpendBreakdownResponse"
+    SpendMetricRequest:
+      required:
+      - interval_end
+      - interval_start
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        project_name:
+          type: string
+        interval_start:
+          type: string
+          format: date-time
+        interval_end:
+          type: string
+          format: date-time
+        user_id:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        start_before_end:
+          type: boolean
+        project_provided:
+          type: boolean
+    HarnessEntry:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+    Lane:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        total_tokens:
+          type: integer
+          format: int64
+        by_model:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModelTiers"
+        has_breakdown:
+          type: boolean
+    Side:
+      type: object
+      properties:
+        total_tokens:
+          type: integer
+          format: int64
+        lanes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Lane"
+    SpendCompositionResponse:
+      type: object
+      properties:
+        input:
+          $ref: "#/components/schemas/Side"
+        harness:
+          type: array
+          items:
+            $ref: "#/components/schemas/HarnessEntry"
+        output:
+          $ref: "#/components/schemas/Side"
     Result:
       type: object
       properties:
@@ -14353,6 +14421,10 @@ components:
           type: string
         span_id:
           type: string
+        source_queue_id:
+          type: string
+        author:
+          type: string
       readOnly: true
     DatasetItemBatch_Write:
       required:
@@ -15087,6 +15159,10 @@ components:
         span_type:
           type: string
         span_id:
+          type: string
+        source_queue_id:
+          type: string
+        author:
           type: string
       readOnly: true
     DatasetPage_Public:
@@ -16973,6 +17049,10 @@ components:
         span_type:
           type: string
         span_id:
+          type: string
+        source_queue_id:
+          type: string
+        author:
           type: string
       readOnly: true
     AssertionScoreAverage_Public:
@@ -19942,6 +20022,8 @@ components:
         name:
           minLength: 1
           type: string
+        includeStats:
+          type: boolean
     ProjectUpdate:
       type: object
       properties:
@@ -21381,6 +21463,10 @@ components:
         span_type:
           type: string
         span_id:
+          type: string
+        source_queue_id:
+          type: string
+        author:
           type: string
       readOnly: true
     SpanPage_Public:

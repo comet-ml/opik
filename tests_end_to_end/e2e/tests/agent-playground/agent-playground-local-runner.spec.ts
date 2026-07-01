@@ -44,12 +44,15 @@ test.describe('Agent Playground — Local Runner', { tag: ['@t3-nightly', '@agen
         ).toBeVisible();
       });
 
+      const query = 'capital of france';
+
       await test.step('Wait for connected state', async () => {
         await expect(playground.connectionBadge()).toBeVisible({ timeout: 60_000 });
         await expect(playground.testInputPanel()).toBeVisible({ timeout: 60_000 });
+        // The runner introspects the entrypoint and mounts its input form after
+        // the panel label appears; wait for the actual field before filling it.
+        await expect(playground.inputField('query')).toBeVisible({ timeout: 60_000 });
       });
-
-      const query = 'capital of france';
 
       await test.step('Fill input and run', async () => {
         await playground.fillInput('query', query);

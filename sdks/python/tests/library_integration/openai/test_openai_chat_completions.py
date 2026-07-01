@@ -8,6 +8,7 @@ from pydantic import BaseModel
 import opik
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.integrations.openai import track_openai
+from opik.types import LLMProvider
 from ... import llm_constants
 from ...testlib import (
     ANY_BUT_NONE,
@@ -126,6 +127,73 @@ def test_openai_client_chat_completions_create__happyflow(
 
     llm_span_metadata = trace_tree.spans[0].metadata
     _assert_metadata_contains_required_keys(llm_span_metadata)
+
+
+@pytest.mark.parametrize(
+    "provider_argument, expected_provider",
+    [
+        ("custom-provider", "custom-provider"),
+        (LLMProvider.ANTHROPIC, "anthropic"),
+    ],
+)
+def test_openai_client_chat_completions_create__custom_provider__provider_logged_on_llm_span_but_usage_still_parsed_as_openai(
+    fake_backend, provider_argument, expected_provider
+):
+    client = openai.OpenAI()
+    wrapped_client = track_openai(
+        openai_client=client,
+        provider=provider_argument,
+    )
+    messages = [
+        {"role": "user", "content": "Tell a fact"},
+    ]
+
+    _ = wrapped_client.chat.completions.create(
+        model=MODEL_FOR_TESTS,
+        messages=messages,
+        max_completion_tokens=10,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+    )
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="chat_completion_create",
+        input=ANY_DICT.containing({"messages": messages}),
+        output={"choices": ANY_BUT_NONE},
+        tags=["openai"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        project_name=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="llm",
+                name="chat_completion_create",
+                input=ANY_DICT.containing({"messages": messages}),
+                output={"choices": ANY_BUT_NONE},
+                tags=["openai"],
+                metadata=ANY_DICT,
+                # Usage is still parsed with the OpenAI converter even though the
+                # provider label is overridden.
+                usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=ANY_BUT_NONE,
+                spans=[],
+                model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
+                provider=expected_provider,
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
 def test_openai_client_chat_completions_create__create_raises_an_error__span_and_trace_finished_gracefully__error_info_is_logged(

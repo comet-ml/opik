@@ -616,6 +616,7 @@ from .span_write_source import SpanWriteSource
 from .span_write_type import SpanWriteType
 from .spans_count_response import SpansCountResponse
 from .spend_breakdown_response import SpendBreakdownResponse
+from .spend_breakdowns_response import SpendBreakdownsResponse
 from .spend_composition_response import SpendCompositionResponse
 from .spend_metric_request import SpendMetricRequest
 from .spend_summary_response import SpendSummaryResponse
@@ -687,6 +688,7 @@ from .trace_visibility_mode import TraceVisibilityMode
 from .trace_write import TraceWrite
 from .trace_write_source import TraceWriteSource
 from .usage import Usage
+from .usage_by_workspace_project_user_response import UsageByWorkspaceProjectUserResponse
 from .user_defined_metric_python_code import UserDefinedMetricPythonCode
 from .user_defined_metric_python_code_public import UserDefinedMetricPythonCodePublic
 from .user_defined_metric_python_code_write import UserDefinedMetricPythonCodeWrite
@@ -716,6 +718,7 @@ from .workspace_metric_response import WorkspaceMetricResponse
 from .workspace_metrics_summary_request import WorkspaceMetricsSummaryRequest
 from .workspace_metrics_summary_response import WorkspaceMetricsSummaryResponse
 from .workspace_name_holder import WorkspaceNameHolder
+from .workspace_project_user_count import WorkspaceProjectUserCount
 from .workspace_spans_count import WorkspaceSpansCount
 from .workspace_trace_count import WorkspaceTraceCount
 from .workspace_user_permissions import WorkspaceUserPermissions
@@ -1292,6 +1295,7 @@ __all__ = [
     "SpanWriteType",
     "SpansCountResponse",
     "SpendBreakdownResponse",
+    "SpendBreakdownsResponse",
     "SpendCompositionResponse",
     "SpendMetricRequest",
     "SpendSummaryResponse",
@@ -1363,6 +1367,7 @@ __all__ = [
     "TraceWrite",
     "TraceWriteSource",
     "Usage",
+    "UsageByWorkspaceProjectUserResponse",
     "UserDefinedMetricPythonCode",
     "UserDefinedMetricPythonCodePublic",
     "UserDefinedMetricPythonCodeWrite",
@@ -1392,6 +1397,7 @@ __all__ = [
     "WorkspaceMetricsSummaryRequest",
     "WorkspaceMetricsSummaryResponse",
     "WorkspaceNameHolder",
+    "WorkspaceProjectUserCount",
     "WorkspaceSpansCount",
     "WorkspaceTraceCount",
     "WorkspaceUserPermissions",
