@@ -16,9 +16,10 @@ canonical-url: https://www.comet.com/docs/opik/production/alerts/alerts
 
 Alerts allow you to configure automated webhook notifications for important events in your Opik workspace. When specific events occur — such as trace errors, new feedback scores, or prompt changes — Opik sends HTTP POST requests to your configured endpoint with detailed event data.
 
-Opik provides three destination types for alerts:
+Opik provides four destination types for alerts:
 - **Slack**: Native integration with automatic message formatting for Slack
 - **PagerDuty**: Native integration with automatic event formatting for PagerDuty
+- **Feishu**: Native integration with automatic interactive-card formatting for Feishu (Lark)
 - **General**: For custom webhooks, no-code automation platforms, or middleware services
 
 <Frame>
@@ -52,9 +53,11 @@ Opik provides three destination types for alerts:
      - **General**: For custom webhooks, no-code automation platforms, or middleware services
      - **Slack**: For native Slack webhook integration (automatically formats messages for Slack)
      - **PagerDuty**: For native PagerDuty integration (automatically formats events for PagerDuty)
+     - **Feishu**: For native Feishu (Lark) integration (automatically formats events as interactive cards)
    - **Endpoint URL**: Enter your webhook URL (must start with `http://` or `https://`)
      - For Slack: Use your Slack Incoming Webhook URL (e.g., `https://hooks.slack.com/services/...`)
      - For PagerDuty: Use your PagerDuty Events API v2 integration URL (e.g., `https://events.pagerduty.com/v2/enqueue`)
+     - For Feishu: Use your Feishu group bot webhook URL (e.g., `https://open.feishu.cn/open-apis/bot/v2/hook/...`)
      - For General: Use any HTTP endpoint that can receive POST requests
 
 4. **Advanced webhook settings** (optional)
