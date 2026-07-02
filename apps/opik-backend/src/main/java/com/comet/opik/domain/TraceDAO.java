@@ -359,7 +359,7 @@ class TraceDAOImpl implements TraceDAO {
                     new_trace.output_slim
                 ) as output_slim,
                 multiIf(
-                    NOT isNaN(old_trace.ttft), old_trace.ttft,
+                    old_trace.id != '' AND NOT isNaN(old_trace.ttft), old_trace.ttft,
                     new_trace.ttft
                 ) as ttft,
                 multiIf(
@@ -1953,7 +1953,7 @@ class TraceDAOImpl implements TraceDAO {
                 ) as output_slim,
                 multiIf(
                     NOT isNaN(new_trace.ttft), new_trace.ttft,
-                    NOT isNaN(old_trace.ttft), old_trace.ttft,
+                    old_trace.id != '' AND NOT isNaN(old_trace.ttft), old_trace.ttft,
                     new_trace.ttft
                 ) as ttft,
                 multiIf(

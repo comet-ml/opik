@@ -6,6 +6,7 @@ import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Row;
 import lombok.Builder;
+import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -180,6 +181,39 @@ class NaNAwareAggregateIntegrationTest {
                 row -> row.get("duration_ms", Double.class));
     }
 
+    @Test
+    void nonNullableTtftMergeUsesNewValueOnJoinMiss() {
+        // Post-cutover, a brand-new trace's dedup merge LEFT JOINs an absent old row. A non-nullable Float64 fills the
+        // join miss with 0.0 (the type zero — not the NaN default), so a bare NOT isNaN(old.ttft) guard wrongly keeps
+        // 0.0 and discards the new value. The id-presence guard (old.id != '') falls through to the new value. This
+        // pins why the ttft merge needs the id guard (end_time is safe only because its type zero is the epoch).
+        var newTtft = RandomUtils.secure().randomDouble(1.0, 1_000.0);
+        var expected = MergeMissResult.builder()
+                .missFill(0.0d)
+                .unguardedResult(0.0d)
+                .guardedResult(newTtft)
+                .build();
+
+        var actual = queryOne(
+                """
+                        WITH new_trace AS (SELECT toFixedString('550e8400-e29b-41d4-a716-446655440000', 36) AS id, %s AS ttft)
+                        SELECT old_trace.ttft                                                                            AS miss_fill,
+                               multiIf(NOT isNaN(old_trace.ttft), old_trace.ttft, new_trace.ttft)                        AS unguarded_result,
+                               multiIf(old_trace.id != '' AND NOT isNaN(old_trace.ttft), old_trace.ttft, new_trace.ttft) AS guarded_result
+                        FROM new_trace
+                        LEFT JOIN (SELECT toFixedString('', 36) AS id, CAST(0 AS Float64) AS ttft WHERE 1 = 0) AS old_trace
+                            ON new_trace.id = old_trace.id
+                        """
+                        .formatted(newTtft),
+                row -> MergeMissResult.builder()
+                        .missFill(row.get("miss_fill", Double.class))
+                        .unguardedResult(row.get("unguarded_result", Double.class))
+                        .guardedResult(row.get("guarded_result", Double.class))
+                        .build());
+
+        assertThat(actual).isEqualTo(expected);
+    }
+
     private <T> T queryOne(String sql, Function<Row, T> mapper) {
         return Mono.usingWhen(
                 connectionFactory.create(),
@@ -217,5 +251,9 @@ class NaNAwareAggregateIntegrationTest {
             Double max,
             Double quantile,
             Double quantileNullable) {
+    }
+
+    @Builder(toBuilder = true)
+    record MergeMissResult(Double missFill, Double unguardedResult, Double guardedResult) {
     }
 }
