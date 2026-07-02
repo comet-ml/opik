@@ -23,7 +23,6 @@ import {
 import { getScoreDisplayName } from "@/lib/feedback-scores";
 import { generateExperimentIdsFilter } from "@/lib/filters";
 import { isTestSuiteExperiment } from "@/lib/experiments";
-import { LOGS_SOURCE } from "@/types/traces";
 import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton";
 import ExperimentTagsList from "@/v2/pages/CompareExperimentsPage/ExperimentTagsList";
 
@@ -150,7 +149,6 @@ const CompareExperimentsDetails: React.FunctionComponent<
         {experiment?.project_id && (
           <TraceLogsSidebarButton
             projectId={experiment.project_id}
-            logsSource={LOGS_SOURCE.experiment}
             sourceFilters={experimentSourceFilters}
             title="Experiment logs"
           />

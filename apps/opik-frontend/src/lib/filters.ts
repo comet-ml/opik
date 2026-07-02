@@ -70,6 +70,10 @@ export const generateSearchByIDFilters = (search?: string) => {
 export const generateVisibilityFilters = (
   mode: TRACE_VISIBILITY_MODE = TRACE_VISIBILITY_MODE.default,
 ) => {
+  // Entity-scoped views ask for every visibility: emit no filter so hidden and default traces both return.
+  if (mode === TRACE_VISIBILITY_MODE.all) {
+    return [] as Filter[];
+  }
   return [
     {
       id: uniqid(),
