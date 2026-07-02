@@ -2671,11 +2671,16 @@ public class SpanDAO {
     /**
      * Applies the aggregate-keying decision shared by {@code find} and {@code findSpanStream}: page-keyed
      * aggregates when they are enrichment-only, otherwise the narrowing span id prefilter when filters allow it.
+     *
+     * <p>The prefilter branch fires for feedback-score-sorted queries with narrowing filters: page-keying is
+     * unsafe there (page selection reads feedback_scores_agg), but the prefilter set — all filtered span ids —
+     * is a superset of any page, so keying the aggregate CTEs on it preserves the sort while avoiding
+     * whole-project feedback-score and comment scans.
      */
     private void addAggregateKeyingFlags(ST template, SpanSearchCriteria criteria, boolean sortHasFeedbackScores) {
         if (shouldPageKeyAggregates(template, sortHasFeedbackScores)) {
             template.add("page_keyed_aggregates", true);
-        } else if (shouldUseSpanIdPrefilter(criteria, template) && !sortHasFeedbackScores) {
+        } else if (shouldUseSpanIdPrefilter(criteria, template)) {
             template.add("span_id_prefilter", true);
         }
     }
