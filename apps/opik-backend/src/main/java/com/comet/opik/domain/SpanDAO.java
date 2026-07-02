@@ -2449,11 +2449,7 @@ public class SpanDAO {
             var template = newFindTemplate(SELECT_BY_PROJECT_ID, criteria, "find_span_stream", workspaceId, userName);
 
             // The stream has no custom sorting, so only filters can make aggregates drive page selection.
-            if (shouldPageKeyAggregates(template, false)) {
-                template.add("page_keyed_aggregates", true);
-            } else if (shouldUseSpanIdPrefilter(criteria, template)) {
-                template.add("span_id_prefilter", true);
-            }
+            addAggregateKeyingFlags(template, criteria, false);
 
             bindTemplateExcludeFieldVariables(criteria, template);
 
@@ -2500,11 +2496,7 @@ public class SpanDAO {
                     .map(sortFields -> sortFields.contains("feedback_scores"))
                     .orElse(false);
 
-            if (shouldPageKeyAggregates(template, sortHasFeedbackScores)) {
-                template.add("page_keyed_aggregates", true);
-            } else if (shouldUseSpanIdPrefilter(spanSearchCriteria, template) && !sortHasFeedbackScores) {
-                template.add("span_id_prefilter", true);
-            }
+            addAggregateKeyingFlags(template, spanSearchCriteria, sortHasFeedbackScores);
 
             var finalTemplate = template;
             Optional.ofNullable(orderBySql)
@@ -2674,6 +2666,18 @@ public class SpanDAO {
      */
     private boolean shouldPageKeyAggregates(ST template, boolean sortHasFeedbackScores) {
         return !hasFeedbackScoreFilters(template) && !sortHasFeedbackScores;
+    }
+
+    /**
+     * Applies the aggregate-keying decision shared by {@code find} and {@code findSpanStream}: page-keyed
+     * aggregates when they are enrichment-only, otherwise the narrowing span id prefilter when filters allow it.
+     */
+    private void addAggregateKeyingFlags(ST template, SpanSearchCriteria criteria, boolean sortHasFeedbackScores) {
+        if (shouldPageKeyAggregates(template, sortHasFeedbackScores)) {
+            template.add("page_keyed_aggregates", true);
+        } else if (shouldUseSpanIdPrefilter(criteria, template) && !sortHasFeedbackScores) {
+            template.add("span_id_prefilter", true);
+        }
     }
 
     private boolean hasFeedbackScoreFilters(ST template) {
