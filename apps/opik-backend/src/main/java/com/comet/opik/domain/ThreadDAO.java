@@ -3,9 +3,11 @@ package com.comet.opik.domain;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadStatus;
+import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.TraceThreadSortingFactory;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
 import com.comet.opik.utils.TruncationUtils;
@@ -15,6 +17,7 @@ import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
+import io.r2dbc.spi.Row;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -43,6 +46,7 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+import static com.comet.opik.utils.SentinelTranslation.epochToNull;
 import static java.util.function.Predicate.not;
 
 @ImplementedBy(ThreadDAOImpl.class)
@@ -121,7 +125,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 ) AS ptt ON pt.thread_id = ptt.thread_id
                 ORDER BY if(ptt.last_updated_at = toDateTime64(0, 6, 'UTC'), pt.trace_last_updated_at, ptt.last_updated_at) DESC,
                     pt.start_time ASC,
-                    pt.end_time DESC,
+                    nullIf(pt.end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) DESC,
                     pt.thread_id
                 LIMIT :limit <if(offset)>OFFSET :offset<endif>
             ), <endif>traces_final AS (
@@ -416,18 +420,18 @@ class ThreadDAOImpl implements ThreadDAO {
                     t.project_id as project_id,
                     min(t.start_time) as start_time,
                     max(t.end_time) as end_time,
-                    if(end_time IS NOT NULL AND start_time IS NOT NULL
+                    if(end_time IS NOT NULL AND notEquals(end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) AND start_time IS NOT NULL
                            AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                        (dateDiff('microsecond', start_time, end_time) / 1000.0),
                        NULL) AS duration,
                     argMin(t.input, t.start_time) as first_message,
-                    argMax(t.output, t.end_time) as last_message,
+                    argMax(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as last_message,
                     argMin(t.truncated_input, t.start_time) as truncated_first_message,
-                    argMax(t.truncated_output, t.end_time) as truncated_last_message,
+                    argMax(t.truncated_output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as truncated_last_message,
                     argMin(t.input_length, t.start_time) as first_message_length,
-                    argMax(t.output_length, t.end_time) as last_message_length,
+                    argMax(t.output_length, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as last_message_length,
                     argMin(t.truncation_threshold, t.start_time) as first_message_truncation_threshold,
-                    argMax(t.truncation_threshold, t.end_time) as last_message_truncation_threshold,
+                    argMax(t.truncation_threshold, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as last_message_truncation_threshold,
                     count(DISTINCT t.id) * 2 as number_of_messages,
                     sum(s.total_estimated_cost) as total_estimated_cost,
                     sumMap(s.usage) as usage,
@@ -478,7 +482,7 @@ class ThreadDAOImpl implements ThreadDAO {
             <if(stream)>
             ORDER BY workspace_id, project_id, thread_model_id DESC
             <else>
-            <if(sort_fields)> ORDER BY <sort_fields>, last_updated_at DESC <else> ORDER BY last_updated_at DESC, start_time ASC, end_time DESC <endif>
+            <if(sort_fields)> ORDER BY <sort_fields>, last_updated_at DESC <else> ORDER BY last_updated_at DESC, start_time ASC, nullIf(end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) DESC <endif>
             <endif>
             LIMIT :limit <if(page_pushdown)><else><if(offset)>OFFSET :offset<endif><endif>
             SETTINGS log_comment = '<log_comment>'
@@ -700,12 +704,12 @@ class ThreadDAOImpl implements ThreadDAO {
                         t.project_id as project_id,
                         min(t.start_time) as start_time,
                         max(t.end_time) as end_time,
-                        if(end_time IS NOT NULL AND start_time IS NOT NULL
+                        if(end_time IS NOT NULL AND notEquals(end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) AND start_time IS NOT NULL
                                AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                            (dateDiff('microsecond', start_time, end_time) / 1000.0),
                            NULL) AS duration,
                         argMin(t.input, t.start_time) as first_message,
-                        argMax(t.output, t.end_time) as last_message,
+                        argMax(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as last_message,
                         count(DISTINCT t.id) * 2 as number_of_messages,
                         max(t.last_updated_at) as last_updated_at,
                         argMax(t.last_updated_by, t.last_updated_at) as last_updated_by,
@@ -973,18 +977,18 @@ class ThreadDAOImpl implements ThreadDAO {
                     t.project_id as project_id,
                     min(t.start_time) as start_time,
                     max(t.end_time) as end_time,
-                    if(end_time IS NOT NULL AND start_time IS NOT NULL
+                    if(end_time IS NOT NULL AND notEquals(end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) AND start_time IS NOT NULL
                            AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                        (dateDiff('microsecond', start_time, end_time) / 1000.0),
                        NULL) AS duration,
                     argMin(t.input, t.start_time) as first_message,
-                    argMax(t.output, t.end_time) as last_message,
+                    argMax(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as last_message,
                     argMin(t.truncated_input, t.start_time) as truncated_first_message,
-                    argMax(t.truncated_output, t.end_time) as truncated_last_message,
+                    argMax(t.truncated_output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as truncated_last_message,
                     argMin(t.input_length, t.start_time) as first_message_length,
-                    argMax(t.output_length, t.end_time) as last_message_length,
+                    argMax(t.output_length, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as last_message_length,
                     argMin(t.truncation_threshold, t.start_time) as first_message_truncation_threshold,
-                    argMax(t.truncation_threshold, t.end_time) as last_message_truncation_threshold,
+                    argMax(t.truncation_threshold, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as last_message_truncation_threshold,
                     count(DISTINCT t.id) * 2 as number_of_messages,
                     sum(s.total_estimated_cost) as total_estimated_cost,
                     sumMap(s.usage) as usage,
@@ -1282,12 +1286,12 @@ class ThreadDAOImpl implements ThreadDAO {
                         t.project_id as project_id,
                         min(t.start_time) as start_time,
                         max(t.end_time) as end_time,
-                        if(max(t.end_time) IS NOT NULL AND min(t.start_time) IS NOT NULL
+                        if(max(t.end_time) IS NOT NULL AND notEquals(max(t.end_time), toDateTime64('1970-01-01 00:00:00.000', 9)) AND min(t.start_time) IS NOT NULL
                                AND notEquals(min(t.start_time), toDateTime64('1970-01-01 00:00:00.000', 9)),
                            (dateDiff('microsecond', min(t.start_time), max(t.end_time)) / 1000.0),
                            NULL) AS duration,
                         argMin(t.input, t.start_time) as first_message,
-                        argMax(t.output, t.end_time) as last_message,
+                        argMax(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as last_message,
                         count(DISTINCT t.id) * 2 as number_of_messages,
                         sum(s.total_estimated_cost) as total_estimated_cost,
                         sumMap(s.usage) as usage,
@@ -1341,6 +1345,16 @@ class ThreadDAOImpl implements ThreadDAO {
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull TraceThreadSortingFactory traceThreadSortingFactory;
+    private final @NonNull OpikConfiguration configuration;
+
+    /**
+     * Sort mapping applied under {@code traceColumnsNonNullable}: a thread's {@code end_time} is
+     * {@code max(traces.end_time)}, the epoch sentinel when every trace is unfinished; {@code nullIf} restores
+     * {@code NULL} so it sorts last in ASC like a Nullable column did. {@code duration} needs no entry — ClickHouse
+     * sorts {@code NaN} like {@code NULL}.
+     */
+    private static final Map<String, String> SORT_FIELD_MAPPING_END_TIME_SENTINEL = Map.of(
+            SortableFields.END_TIME, "nullIf(end_time, toDateTime64('1970-01-01 00:00:00.000', 9))");
 
     /**
      * Determines whether to activate the traces_final_ids CTE for narrowing the raw traces / spans scans
@@ -1392,8 +1406,10 @@ class ThreadDAOImpl implements ThreadDAO {
 
                             int offset = (page - 1) * size;
 
-                            var template = newTraceThreadFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria,
-                                    THREAD_SEARCH_CLAUSE);
+                            var template = newTraceThreadFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS,
+                                    criteria,
+                                    THREAD_SEARCH_CLAUSE,
+                                    traceColumnsNonNullable());
 
                             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
 
@@ -1402,7 +1418,9 @@ class ThreadDAOImpl implements ThreadDAO {
                                             "page:" + page + ":size:" + size));
 
                             var finalTemplate = template;
-                            Optional.ofNullable(sortingQueryBuilder.toOrderBySql(criteria.sortingFields()))
+                            Optional.ofNullable(sortingQueryBuilder.toOrderBySql(
+                                    criteria.sortingFields(),
+                                    traceColumnsNonNullable() ? SORT_FIELD_MAPPING_END_TIME_SENTINEL : null))
                                     .ifPresent(sortFields -> finalTemplate.add("sort_fields", sortFields));
 
                             var hasDynamicKeys = sortingQueryBuilder.hasDynamicKeys(criteria.sortingFields());
@@ -1446,6 +1464,10 @@ class ThreadDAOImpl implements ThreadDAO {
                         })));
     }
 
+    private boolean traceColumnsNonNullable() {
+        return configuration.getDatabaseAnalyticsDataModel().traceColumnsNonNullable();
+    }
+
     @Override
     public Mono<TraceThread> findById(@NonNull UUID projectId, @NonNull String threadId, boolean truncate) {
         return makeMonoContextAware((userName, workspaceId) -> asyncTemplate.nonTransaction(connection -> {
@@ -1475,8 +1497,10 @@ class ThreadDAOImpl implements ThreadDAO {
 
         return makeFluxContextAware((userName, workspaceId) -> asyncTemplate.stream(connection -> {
 
-            var template = newTraceThreadFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria,
-                    THREAD_SEARCH_CLAUSE);
+            var template = newTraceThreadFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS,
+                    criteria,
+                    THREAD_SEARCH_CLAUSE,
+                    traceColumnsNonNullable());
             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
 
             template.add("limit", limit)
@@ -1511,7 +1535,10 @@ class ThreadDAOImpl implements ThreadDAO {
     public Mono<ProjectStats> getThreadStats(@NonNull TraceSearchCriteria criteria) {
         return makeMonoContextAware((userName, workspaceId) -> asyncTemplate.nonTransaction(connection -> {
 
-            var statsSQL = newTraceThreadFindTemplate(SELECT_TRACE_THREADS_STATS, criteria, THREAD_SEARCH_CLAUSE);
+            var statsSQL = newTraceThreadFindTemplate(SELECT_TRACE_THREADS_STATS,
+                    criteria,
+                    THREAD_SEARCH_CLAUSE,
+                    traceColumnsNonNullable());
             statsSQL.add("log_comment", getLogComment("thread_stats", workspaceId, userName, ""));
 
             if (shouldUseTracesFinalIdsPrefilter(criteria, statsSQL)) {
@@ -1537,8 +1564,10 @@ class ThreadDAOImpl implements ThreadDAO {
 
     private Mono<Long> countThreadTotal(TraceSearchCriteria traceSearchCriteria, Connection connection,
             String userName, String workspaceId) {
-        var template = newTraceThreadFindTemplate(SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS, traceSearchCriteria,
-                THREAD_SEARCH_CLAUSE);
+        var template = newTraceThreadFindTemplate(SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS,
+                traceSearchCriteria,
+                THREAD_SEARCH_CLAUSE,
+                traceColumnsNonNullable());
         template.add("log_comment", getLogComment("count_threads_by_project", workspaceId, userName, ""));
 
         if (shouldUseTracesFinalIdsPrefilter(traceSearchCriteria, template)) {
@@ -1570,7 +1599,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 .workspaceId(row.get("workspace_id", String.class))
                 .projectId(row.get("project_id", UUID.class))
                 .startTime(row.get("start_time", Instant.class))
-                .endTime(row.get("end_time", Instant.class))
+                .endTime(readEpochSentinel(row, "end_time"))
                 .duration(row.get("duration", Double.class))
                 .firstMessage(Optional.ofNullable(row.get("first_message", String.class))
                         .filter(it -> !it.isBlank())
@@ -1611,5 +1640,15 @@ class ThreadDAOImpl implements ThreadDAO {
                         .orElse(null))
                 .environment(row.get("environment", String.class))
                 .build());
+    }
+
+    /**
+     * Reads a {@code DateTime64} column, translating the epoch sentinel to {@code null} only once the columns are
+     * non-nullable — symmetric with {@code TraceDAO} so a legitimate epoch value is preserved while the columns
+     * are still {@code Nullable}.
+     */
+    private Instant readEpochSentinel(Row row, String fieldName) {
+        var value = row.get(fieldName, Instant.class);
+        return traceColumnsNonNullable() ? epochToNull(value) : value;
     }
 }

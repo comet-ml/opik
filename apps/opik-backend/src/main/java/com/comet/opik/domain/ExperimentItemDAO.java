@@ -436,7 +436,7 @@ class ExperimentItemDAO {
                       FROM (
                           SELECT
                               id,
-                              duration,
+                              if(isNaN(duration), NULL, duration) AS duration,
                               <if(truncate)> replaceRegexpAll(if(notEmpty(input_slim), input_slim, truncated_input), '<truncate>', '"[image]"') as input <else> input <endif>,
                               <if(truncate)> replaceRegexpAll(if(notEmpty(output_slim), output_slim, truncated_output), '<truncate>', '"[image]"') as output <else> output <endif>,
                               visibility_mode

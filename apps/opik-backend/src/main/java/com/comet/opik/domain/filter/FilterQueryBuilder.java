@@ -63,6 +63,13 @@ public class FilterQueryBuilder {
     private static final String DESCRIPTION_DB = "description";
     private static final String START_TIME_ANALYTICS_DB = "start_time";
     private static final String END_TIME_ANALYTICS_DB = "end_time";
+    /**
+     * Sentinel-aware {@code end_time} for trace/thread filtering once the column is non-nullable: {@code nullIf}
+     * collapses the epoch sentinel to {@code NULL} so range/inequality comparisons exclude an absent value. Applied
+     * only under {@code traceColumnsNonNullable} — while the column is Nullable a client-supplied epoch is a
+     * legitimate value that must keep matching.
+     */
+    private static final String END_TIME_NON_NULLABLE_ANALYTICS_DB = "nullIf(end_time, toDateTime64('1970-01-01 00:00:00.000', 9))";
     private static final String INPUT_ANALYTICS_DB = "input";
     private static final String OUTPUT_ANALYTICS_DB = "output";
     private static final String METADATA_ANALYTICS_DB = "metadata";
@@ -78,9 +85,25 @@ public class FilterQueryBuilder {
     private static final String USAGE_PROMPT_TOKENS_ANALYTICS_DB = "usage['prompt_tokens']";
     private static final String USAGE_TOTAL_TOKENS_ANALYTICS_DB = "usage['total_tokens']";
     private static final String VALUE_ANALYTICS_DB = "value";
-    private static final String DURATION_ANALYTICS_DB = "if(end_time IS NOT NULL AND start_time IS NOT NULL AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)), (dateDiff('microsecond', start_time, end_time) / 1000.0), 0)";
-    private static final String NEW_DURATION_ANALYTICS_DB = "duration";
-    private static final String TTFT_ANALYTICS_DB = "ttft";
+    /**
+     * Duration (ms) derived from {@code start_time}/{@code end_time}. The {@code notEquals(end_time, epoch)} guard, as
+     * in every other duration calc, keeps an absent (epoch-sentinel) {@code end_time} from yielding a garbage negative
+     * duration once the column is non-nullable. No-op while it is Nullable (an absent value reads as {@code NULL}).
+     */
+    private static final String DURATION_ANALYTICS_DB = "if(end_time IS NOT NULL AND notEquals(end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) AND start_time IS NOT NULL AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)), (dateDiff('microsecond', start_time, end_time) / 1000.0), 0)";
+    /**
+     * Sentinel-aware {@code duration} for the materialized column (experiment-comparison filtering): {@code isNaN}
+     * collapses the {@code NaN} sentinel to {@code NULL} so comparisons exclude an absent value — notably {@code !=},
+     * since {@code NaN != x} is true. Unconditional (mirrors {@code TTFT_ANALYTICS_DB}); a no-op while the column is
+     * Nullable since {@code NaN} cannot occur yet.
+     */
+    private static final String NEW_DURATION_ANALYTICS_DB = "if(isNaN(duration), NULL, duration)";
+    /**
+     * Sentinel-aware {@code ttft} for filtering: {@code isNaN} collapses the {@code NaN} sentinel to {@code NULL} so
+     * comparisons exclude an absent value — notably {@code !=}, since {@code NaN != x} is true. Unconditional, not
+     * flag-gated: {@code NaN} cannot occur while the column is Nullable, so it is a no-op today.
+     */
+    private static final String TTFT_ANALYTICS_DB = "if(isNaN(ttft), NULL, ttft)";
     private static final String THREAD_ID_ANALYTICS_DB = "thread_id";
     private static final String DATASET_ID_ANALYTICS_DB = "dataset_id";
     private static final String PROMPT_IDS_ANALYTICS_DB = "prompt_ids";
@@ -863,13 +886,25 @@ public class FilterQueryBuilder {
 
     public static Optional<String> toAnalyticsDbFilters(
             @NonNull List<? extends Filter> filters, @NonNull FilterStrategy filterStrategy) {
+        return toAnalyticsDbFilters(filters, filterStrategy, false);
+    }
+
+    /**
+     * @param traceColumnsNonNullable when {@code true}, filters use the sentinel-aware
+     *                                expression so an absent (epoch) value is excluded like a {@code NULL}; pass the
+     *                                cutover flag from callers, {@code false} elsewhere.
+     */
+    public static Optional<String> toAnalyticsDbFilters(
+            @NonNull List<? extends Filter> filters,
+            @NonNull FilterStrategy filterStrategy,
+            boolean traceColumnsNonNullable) {
         var stringJoiner = new StringJoiner(" %s ".formatted(ANALYTICS_DB_AND_OPERATOR));
         stringJoiner.setEmptyValue("");
         for (var i = 0; i < filters.size(); i++) {
             var filter = filters.get(i);
             if (getFieldsByStrategy(filterStrategy, filter).orElse(Set.of()).contains(filter.field())
                     || filter.field().isDynamic(filterStrategy)) {
-                stringJoiner.add(toAnalyticsDbFilter(filter, i, filterStrategy));
+                stringJoiner.add(toAnalyticsDbFilter(filter, i, filterStrategy, traceColumnsNonNullable));
             }
         }
         var analyticsDbFilters = stringJoiner.toString();
@@ -885,7 +920,17 @@ public class FilterQueryBuilder {
      */
     public static Optional<String> toAnalyticsDbFiltersV2Client(
             @NonNull List<? extends Filter> filters, @NonNull FilterStrategy filterStrategy) {
-        return toAnalyticsDbFilters(filters, filterStrategy)
+        return toAnalyticsDbFiltersV2Client(filters, filterStrategy, false);
+    }
+
+    /**
+     * @param traceColumnsNonNullable threaded through so a v2-client caller can opt into sentinel-aware {@code end_time}
+     *                                just like the r2dbc path; without it this entry point could never enable the flag.
+     */
+    public static Optional<String> toAnalyticsDbFiltersV2Client(
+            @NonNull List<? extends Filter> filters, @NonNull FilterStrategy filterStrategy,
+            boolean traceColumnsNonNullable) {
+        return toAnalyticsDbFilters(filters, filterStrategy, traceColumnsNonNullable)
                 .map(sql -> rewritePlaceholdersForV2Client(sql, filters));
     }
 
@@ -979,14 +1024,22 @@ public class FilterQueryBuilder {
         return FEEDBACK_SCORE_FIELDS.contains(filter.field());
     }
 
-    private static String toAnalyticsDbFilter(Filter filter, int i, FilterStrategy filterStrategy) {
+    private static String toAnalyticsDbFilter(
+            Filter filter, int i, FilterStrategy filterStrategy, boolean traceColumnsNonNullable) {
         var template = toAnalyticsDbOperator(filter, filterStrategy);
-        var dbField = getAnalyticsDbField(filter.field(), filterStrategy, i);
+        var dbField = getAnalyticsDbField(filter.field(), filterStrategy, i, traceColumnsNonNullable);
         var enumFallbackTemplate = ANALYTICS_DB_OPERATOR_MAP.get(filter.operator()).get(FieldType.ENUM);
         return filter.field().getType().buildFilter(template, dbField, i, filter.value(), enumFallbackTemplate);
     }
 
-    private static String getAnalyticsDbField(Field field, FilterStrategy filterStrategy, int i) {
+    private static String getAnalyticsDbField(
+            Field field, FilterStrategy filterStrategy, int i, boolean traceColumnsNonNullable) {
+        // Resolve end_time to the sentinel-aware expression so an absent (epoch) value is excluded like a
+        // NULL. Flag-gated (epoch is legitimate while the column is Nullable).
+        if (traceColumnsNonNullable && (field == TraceField.END_TIME || field == TraceThreadField.END_TIME)) {
+            return END_TIME_NON_NULLABLE_ANALYTICS_DB;
+        }
+
         // this is a special case where the DB field is determined by the filter strategy rather than the filter field
         if (filterStrategy == FilterStrategy.FEEDBACK_SCORES_IS_EMPTY) {
             return FEEDBACK_SCORE_COUNT_DB;
