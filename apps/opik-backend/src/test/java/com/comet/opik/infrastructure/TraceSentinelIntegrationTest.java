@@ -401,11 +401,13 @@ class TraceSentinelIntegrationTest {
             // Materialize both thread records so they surface in the list endpoint.
             traceResourceClient.getTraceThread(presentThreadId, projectId, API_KEY, WORKSPACE_NAME);
             traceResourceClient.getTraceThread(absentThreadId, projectId, API_KEY, WORKSPACE_NAME);
-            var sortByEndTimeAsc = List.of(
-                    SortingField.builder().field(SortableFields.END_TIME).direction(Direction.ASC).build());
+            var sortingField = SortingField.builder()
+                    .field(SortableFields.END_TIME)
+                    .direction(Direction.ASC)
+                    .build();
 
             var page = traceResourceClient.getTraceThreads(
-                    projectId, projectName, API_KEY, WORKSPACE_NAME, List.of(), sortByEndTimeAsc, Map.of());
+                    projectId, projectName, API_KEY, WORKSPACE_NAME, List.of(), List.of(sortingField), Map.of());
 
             // Thread end_time is max(trace end_time); the all-absent thread's epoch sorts as NULL (last) via
             // nullIf(end_time, epoch), not as 1970 (first) — only the flag-gated sort mapping produces this order.

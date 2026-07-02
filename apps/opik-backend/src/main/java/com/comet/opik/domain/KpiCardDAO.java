@@ -12,6 +12,7 @@ import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
+import com.comet.opik.utils.SentinelTranslation;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
@@ -692,9 +693,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
     }
 
     private Double filterNan(Double value) {
-        if (value == null) {
-            return null;
-        }
-        return value.isNaN() ? null : value;
+        // Delegates to the single SentinelTranslation definition.
+        return SentinelTranslation.nanToNull(value);
     }
 }

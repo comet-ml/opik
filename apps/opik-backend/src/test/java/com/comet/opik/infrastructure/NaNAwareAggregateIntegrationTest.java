@@ -1,6 +1,8 @@
 package com.comet.opik.infrastructure;
 
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
+import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Result;
@@ -53,6 +55,8 @@ class NaNAwareAggregateIntegrationTest {
      * non-nullable {@code Float64} column, {@code NULL} on the legacy {@code Nullable(Float64)} column.
      */
     private static final String SYNTHETIC_TABLE = "nan_agg_synthetic_test";
+
+    private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
     private ClickHouseContainer clickHouseContainer;
     private ConnectionFactory connectionFactory;
@@ -147,6 +151,47 @@ class NaNAwareAggregateIntegrationTest {
         assertThat(aggregates.quantile()).isEqualTo(aggregates.quantileNullable());
     }
 
+    /**
+     * Post-cutover, a brand-new trace's dedup merge LEFT JOINs an absent old row. A non-nullable Float64 fills the
+     * join miss with 0.0 (the type zero — not the NaN default), so a bare NOT isNaN(old.ttft) guard wrongly keeps
+     * 0.0 and discards the new value. The id-presence guard (old.id != '') falls through to the new value. This
+     * pins why the ttft merge needs the id guard (end_time is safe only because its type zero is the epoch).
+     */
+    @Test
+    void nonNullableTtftMergeUsesNewValueOnJoinMiss() {
+        var id = ID_GENERATOR.generateId();
+        var newTtft = RandomUtils.secure().randomDouble(1.0, 1_000.0);
+        var expected = MergeMissResult.builder()
+                .missFill(0.0d)
+                .unguardedResult(0.0d)
+                .guardedResult(newTtft)
+                .build();
+        var actual = queryOne(
+                """
+                        WITH new_trace AS (
+                          SELECT toFixedString('%s', 36) AS id,
+                          %s AS ttft
+                        )
+                        SELECT old_trace.ttft                                                                            AS miss_fill,
+                               multiIf(NOT isNaN(old_trace.ttft), old_trace.ttft, new_trace.ttft)                        AS unguarded_result,
+                               multiIf(old_trace.id != '' AND NOT isNaN(old_trace.ttft), old_trace.ttft, new_trace.ttft) AS guarded_result
+                        FROM new_trace
+                        LEFT JOIN (
+                            SELECT toFixedString('', 36) AS id,
+                            CAST(0 AS Float64) AS ttft WHERE 1 = 0
+                        ) AS old_trace
+                        ON new_trace.id = old_trace.id
+                        """
+                        .formatted(id, newTtft),
+                row -> MergeMissResult.builder()
+                        .missFill(row.get("miss_fill", Double.class))
+                        .unguardedResult(row.get("unguarded_result", Double.class))
+                        .guardedResult(row.get("guarded_result", Double.class))
+                        .build());
+
+        assertThat(actual).isEqualTo(expected);
+    }
+
     Stream<Arguments> guardedDurationFormula() {
         return Stream.of(
                 arguments("1.5s span -> 1500ms", "2026-01-01 00:00:00.000000", "2026-01-01 00:00:01.500000", 1500.0d),
@@ -179,39 +224,6 @@ class NaNAwareAggregateIntegrationTest {
                 SELECT if(end_time = epoch, nan, dateDiff('microsecond', start_time, end_time) / 1000.0) AS duration_ms
                 """.formatted(startTime, endTime),
                 row -> row.get("duration_ms", Double.class));
-    }
-
-    @Test
-    void nonNullableTtftMergeUsesNewValueOnJoinMiss() {
-        // Post-cutover, a brand-new trace's dedup merge LEFT JOINs an absent old row. A non-nullable Float64 fills the
-        // join miss with 0.0 (the type zero — not the NaN default), so a bare NOT isNaN(old.ttft) guard wrongly keeps
-        // 0.0 and discards the new value. The id-presence guard (old.id != '') falls through to the new value. This
-        // pins why the ttft merge needs the id guard (end_time is safe only because its type zero is the epoch).
-        var newTtft = RandomUtils.secure().randomDouble(1.0, 1_000.0);
-        var expected = MergeMissResult.builder()
-                .missFill(0.0d)
-                .unguardedResult(0.0d)
-                .guardedResult(newTtft)
-                .build();
-
-        var actual = queryOne(
-                """
-                        WITH new_trace AS (SELECT toFixedString('550e8400-e29b-41d4-a716-446655440000', 36) AS id, %s AS ttft)
-                        SELECT old_trace.ttft                                                                            AS miss_fill,
-                               multiIf(NOT isNaN(old_trace.ttft), old_trace.ttft, new_trace.ttft)                        AS unguarded_result,
-                               multiIf(old_trace.id != '' AND NOT isNaN(old_trace.ttft), old_trace.ttft, new_trace.ttft) AS guarded_result
-                        FROM new_trace
-                        LEFT JOIN (SELECT toFixedString('', 36) AS id, CAST(0 AS Float64) AS ttft WHERE 1 = 0) AS old_trace
-                            ON new_trace.id = old_trace.id
-                        """
-                        .formatted(newTtft),
-                row -> MergeMissResult.builder()
-                        .missFill(row.get("miss_fill", Double.class))
-                        .unguardedResult(row.get("unguarded_result", Double.class))
-                        .guardedResult(row.get("guarded_result", Double.class))
-                        .build());
-
-        assertThat(actual).isEqualTo(expected);
     }
 
     private <T> T queryOne(String sql, Function<Row, T> mapper) {
