@@ -79,6 +79,12 @@ public interface AttachmentService {
     Mono<Boolean> hasAnyAttachmentByEntityIds(EntityType entityType, Set<UUID> entityIds);
 
     /**
+     * Lists attachments for a set of entity IDs in a single batch DB call. Each returned
+     * {@link AttachmentInfo} carries its owning {@code entityId} so callers can group by entity.
+     */
+    Mono<List<AttachmentInfo>> getAttachmentInfoByEntityIds(EntityType entityType, Set<UUID> entityIds);
+
+    /**
      * Presigned (S3) download URL for a single attachment, reachable by an external
      * caller (e.g. an LLM provider fetching media during online evaluation). Uses the
      * same object-key layout as upload/download so it resolves the stored object.
@@ -436,6 +442,16 @@ class AttachmentServiceImpl implements AttachmentService {
         }
         return attachmentDAO.getAttachmentsByEntityIds(entityType, entityIds)
                 .map(list -> !list.isEmpty());
+    }
+
+    @Override
+    @WithSpan
+    public Mono<List<AttachmentInfo>> getAttachmentInfoByEntityIds(@NonNull EntityType entityType,
+            @NonNull Set<UUID> entityIds) {
+        if (entityIds.isEmpty()) {
+            return Mono.just(List.of());
+        }
+        return attachmentDAO.getAttachmentsByEntityIds(entityType, entityIds);
     }
 
     @Override
