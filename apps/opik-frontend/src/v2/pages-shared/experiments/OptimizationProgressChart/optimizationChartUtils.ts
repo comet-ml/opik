@@ -416,9 +416,6 @@ export const buildParentChildEdges = (
 };
 
 /**
- * Get unique step indices from candidates, sorted.
- */
-/**
  * Unique step indices, sorted ascending. Accepts anything carrying a
  * `stepIndex` — both `AggregatedCandidate[]` and chart `CandidateDataPoint[]`.
  */
