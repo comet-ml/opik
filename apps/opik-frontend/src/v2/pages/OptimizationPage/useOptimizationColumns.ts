@@ -63,7 +63,7 @@ export const useOptimizationColumns = ({
         label: "Trial #",
         type: COLUMN_TYPE.string,
         size: 100,
-        cell: TrialNumberCell as never,
+        cell: TrialNumberCell,
       },
       {
         id: "step",
@@ -71,7 +71,7 @@ export const useOptimizationColumns = ({
         type: COLUMN_TYPE.string,
         size: 100,
         accessorFn: (row) => row.stepIndex,
-        cell: TrialStepCell as never,
+        cell: TrialStepCell,
       },
       {
         id: COLUMN_ID_ID,
@@ -84,7 +84,7 @@ export const useOptimizationColumns = ({
         type: COLUMN_TYPE.numberDictionary,
         size: 160,
         accessorFn: (row) => row.score,
-        cell: TrialAccuracyCell as never,
+        cell: TrialAccuracyCell,
         customMeta: {
           baselineCandidate,
           isTestSuite,
@@ -96,7 +96,7 @@ export const useOptimizationColumns = ({
         type: COLUMN_TYPE.cost,
         size: 160,
         accessorFn: (row) => row.runtimeCost,
-        cell: TrialCandidateCostCell as never,
+        cell: TrialCandidateCostCell,
         customMeta: {
           baselineCandidate,
         },
@@ -107,7 +107,7 @@ export const useOptimizationColumns = ({
         type: COLUMN_TYPE.duration,
         size: 160,
         accessorFn: (row) => row.latencyP50,
-        cell: TrialCandidateLatencyCell as never,
+        cell: TrialCandidateLatencyCell,
         customMeta: {
           baselineCandidate,
         },
@@ -118,7 +118,7 @@ export const useOptimizationColumns = ({
         type: COLUMN_TYPE.string,
         size: 280,
         accessorFn: (row) => row.experimentIds?.[0],
-        cell: TrialPromptCell as never,
+        cell: TrialPromptCell,
         customMeta: {
           experimentMap,
           baselineExperiment,
@@ -131,7 +131,7 @@ export const useOptimizationColumns = ({
         type: COLUMN_TYPE.string,
         size: 120,
         accessorFn: () => undefined,
-        cell: TrialStatusCell as never,
+        cell: TrialStatusCell,
         customMeta: {
           statusMap,
           bestCandidateId,
@@ -142,7 +142,7 @@ export const useOptimizationColumns = ({
         id: "created_at",
         label: "Created",
         type: COLUMN_TYPE.time,
-        cell: TimeCell as never,
+        cell: TimeCell,
         customMeta: {
           timeMode: "absolute",
         },

@@ -1,4 +1,4 @@
-import { Cell, Header } from "@tanstack/react-table";
+import { CellContext, ColumnDefTemplate, Header } from "@tanstack/react-table";
 
 export type Updater<T> = T | ((old: T) => T);
 export type OnChangeFn<T> = (updaterOrValue: Updater<T>) => void;
@@ -101,8 +101,11 @@ export type ColumnData<T> = {
   header?: Header<T, unknown>;
   headerCheckbox?: boolean;
   explainer?: Explainer;
-  cell?: Cell<T, unknown>;
-  aggregatedCell?: Cell<T, unknown>;
+  // Tanstack's renderer template type (not the row-cell instance type `Cell`),
+  // so cell components typed `(context: CellContext<T, unknown>) => ...`
+  // assign without `as never` casts.
+  cell?: ColumnDefTemplate<CellContext<T, unknown>>;
+  aggregatedCell?: ColumnDefTemplate<CellContext<T, unknown>>;
   verticalAlignment?: CELL_VERTICAL_ALIGNMENT;
   horizontalAlignment?: CELL_HORIZONTAL_ALIGNMENT;
   overrideRowHeight?: ROW_HEIGHT;

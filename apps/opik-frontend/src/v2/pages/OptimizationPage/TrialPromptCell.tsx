@@ -45,8 +45,10 @@ const getPromptSingleLine = (prompt: unknown): string => {
   return "";
 };
 
-export const TrialPromptCell = (context: CellContext<unknown, unknown>) => {
-  const row = context.row.original as AggregatedCandidate;
+export const TrialPromptCell = (
+  context: CellContext<AggregatedCandidate, unknown>,
+) => {
+  const row = context.row.original;
   const { custom } = context.column.columnDef.meta ?? {};
   const { experimentMap, baselineExperiment, onViewPromptDiff } = (custom ??
     {}) as {

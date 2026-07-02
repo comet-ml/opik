@@ -61,8 +61,10 @@ const TrialMetricCellContent: React.FunctionComponent<TrialMetricCellProps> = ({
   </>
 );
 
-export const TrialNumberCell = (context: CellContext<unknown, unknown>) => {
-  const row = context.row.original as AggregatedCandidate;
+export const TrialNumberCell = (
+  context: CellContext<AggregatedCandidate, unknown>,
+) => {
+  const row = context.row.original;
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
@@ -73,8 +75,10 @@ export const TrialNumberCell = (context: CellContext<unknown, unknown>) => {
   );
 };
 
-export const TrialStepCell = (context: CellContext<unknown, unknown>) => {
-  const row = context.row.original as AggregatedCandidate;
+export const TrialStepCell = (
+  context: CellContext<AggregatedCandidate, unknown>,
+) => {
+  const row = context.row.original;
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
@@ -85,8 +89,10 @@ export const TrialStepCell = (context: CellContext<unknown, unknown>) => {
   );
 };
 
-export const TrialAccuracyCell = (context: CellContext<unknown, unknown>) => {
-  const row = context.row.original as AggregatedCandidate;
+export const TrialAccuracyCell = (
+  context: CellContext<AggregatedCandidate, unknown>,
+) => {
+  const row = context.row.original;
   const { custom } = context.column.columnDef.meta ?? {};
   const { baselineCandidate, isTestSuite } = (custom ?? {}) as {
     baselineCandidate?: AggregatedCandidate;
@@ -123,9 +129,9 @@ export const TrialAccuracyCell = (context: CellContext<unknown, unknown>) => {
 };
 
 export const TrialCandidateCostCell = (
-  context: CellContext<unknown, unknown>,
+  context: CellContext<AggregatedCandidate, unknown>,
 ) => {
-  const row = context.row.original as AggregatedCandidate;
+  const row = context.row.original;
   const { custom } = context.column.columnDef.meta ?? {};
   const { baselineCandidate } = (custom ?? {}) as {
     baselineCandidate?: AggregatedCandidate;
@@ -156,9 +162,9 @@ export const TrialCandidateCostCell = (
 };
 
 export const TrialCandidateLatencyCell = (
-  context: CellContext<unknown, unknown>,
+  context: CellContext<AggregatedCandidate, unknown>,
 ) => {
-  const row = context.row.original as AggregatedCandidate;
+  const row = context.row.original;
   const { custom } = context.column.columnDef.meta ?? {};
   const { baselineCandidate } = (custom ?? {}) as {
     baselineCandidate?: AggregatedCandidate;

@@ -12,8 +12,10 @@ import {
   type TrialStatus,
 } from "@/v2/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
 
-const TrialStatusCell = (context: CellContext<unknown, unknown>) => {
-  const row = context.row.original as AggregatedCandidate;
+const TrialStatusCell = (
+  context: CellContext<AggregatedCandidate, unknown>,
+) => {
+  const row = context.row.original;
   const { custom } = context.column.columnDef.meta ?? {};
   // The status map is computed once on the page (single source shared with the
   // chart and the sidebar's status card) and passed down through column meta.
