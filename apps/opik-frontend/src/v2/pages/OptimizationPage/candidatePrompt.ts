@@ -1,8 +1,24 @@
 import get from "lodash/get";
 
 import { Experiment } from "@/types/datasets";
+import { AggregatedCandidate } from "@/types/optimizations";
+import { ComparisonCandidate } from "@/shared/CodeDiff/promptComparisonTargets";
 
 type CandidateWithExperiments = { experimentIds: string[] };
+
+/**
+ * Maps an optimization candidate to the minimal structural shape that
+ * `buildPromptComparisonTargets` works with (it deliberately doesn't know
+ * about `AggregatedCandidate`).
+ */
+export const toComparisonCandidate = (
+  candidate: AggregatedCandidate,
+): ComparisonCandidate => ({
+  id: candidate.candidateId,
+  stepIndex: candidate.stepIndex,
+  parentCandidateIds: candidate.parentCandidateIds,
+  trialNumber: candidate.trialNumber,
+});
 
 /**
  * Resolve a candidate's prompt from its trial experiment configuration. The

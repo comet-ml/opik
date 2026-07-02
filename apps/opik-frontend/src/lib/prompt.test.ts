@@ -78,7 +78,16 @@ describe("prompt utilities", () => {
       );
     });
 
-    it("does not unwrap 'chat-prompt' when sibling prompts are present", () => {
+    it("unwraps a single-prompt wrapper keyed by a custom ChatPrompt name", () => {
+      const messages: OpenAIMessage[] = [
+        { role: "system", content: "You are a triage agent." },
+      ];
+      expect(extractOpenAIMessages({ "triage-agent": messages })).toEqual(
+        messages,
+      );
+    });
+
+    it("does not unwrap the wrapper when sibling prompts are present", () => {
       const chatPrompt: OpenAIMessage[] = [
         { role: "system", content: "Answer the question." },
       ];
@@ -108,7 +117,15 @@ describe("prompt utilities", () => {
       });
     });
 
-    it("keeps all prompts when 'chat-prompt' has siblings", () => {
+    it("classifies a single-key custom-named wrapper as single", () => {
+      const messages: OpenAIMessage[] = [{ role: "user", content: "Hi" }];
+      expect(extractPromptData({ "triage-agent": messages })).toEqual({
+        type: "single",
+        data: messages,
+      });
+    });
+
+    it("keeps all prompts when the wrapper has siblings", () => {
       const prompts = {
         "chat-prompt": [
           { role: "system", content: "Answer the question." },

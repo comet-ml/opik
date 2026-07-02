@@ -1,20 +1,10 @@
 import React from "react";
 
-import { OptimizationMetricItem } from "./optimizationHeaderConfig";
-
-const FIELD_LABELS: Record<string, string> = {
-  reference_key: "Reference key",
-  case_sensitive: "Case sensitive",
-  task_introduction: "Task introduction",
-  evaluation_criteria: "Evaluation criteria",
-  code: "Code",
-};
-
-const formatValue = (value: unknown): string => {
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (value === null || value === undefined || value === "") return "—";
-  return String(value);
-};
+import {
+  OptimizationMetricItem,
+  METRIC_PARAMETER_LABELS,
+  formatMetricParameterValue,
+} from "./optimizationHeaderConfig";
 
 type MetricPopoverContentProps = {
   metric: OptimizationMetricItem;
@@ -40,10 +30,10 @@ const MetricPopoverContent: React.FC<MetricPopoverContentProps> = ({
           {entries.map(([key, value]) => (
             <div key={key} className="flex flex-col gap-0.5">
               <dt className="comet-body-xs text-muted-slate">
-                {FIELD_LABELS[key] ?? key}
+                {METRIC_PARAMETER_LABELS[key] ?? key}
               </dt>
               <dd className="comet-body-xs whitespace-pre-wrap break-words text-foreground">
-                {formatValue(value)}
+                {formatMetricParameterValue(value)}
               </dd>
             </div>
           ))}

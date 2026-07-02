@@ -119,26 +119,12 @@ const StatCardCaption = React.forwardRef<
 ));
 StatCardCaption.displayName = "StatCard.Caption";
 
-type StatCardComponent = typeof StatCardRoot & {
-  Header: typeof StatCardHeader;
-  Title: typeof StatCardTitle;
-  Value: typeof StatCardValue;
-  Delta: typeof StatCardDelta;
-  Caption: typeof StatCardCaption;
-};
+const StatCard = Object.assign(StatCardRoot, {
+  Header: StatCardHeader,
+  Title: StatCardTitle,
+  Value: StatCardValue,
+  Delta: StatCardDelta,
+  Caption: StatCardCaption,
+});
 
-const StatCard = StatCardRoot as StatCardComponent;
-StatCard.Header = StatCardHeader;
-StatCard.Title = StatCardTitle;
-StatCard.Value = StatCardValue;
-StatCard.Delta = StatCardDelta;
-StatCard.Caption = StatCardCaption;
-
-export {
-  StatCard,
-  StatCardHeader,
-  StatCardTitle,
-  StatCardValue,
-  StatCardDelta,
-  StatCardCaption,
-};
+export { StatCard };

@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
   getMetricLabel,
   getOptimizationConfigItems,
+  formatMetricParameterValue,
 } from "./optimizationHeaderConfig";
 import {
   METRIC_TYPE,
@@ -78,5 +79,23 @@ describe("getOptimizationConfigItems", () => {
     expect(items.model).toBeUndefined();
     expect(items.algorithmLabel).toBeUndefined();
     expect(items.metric).toBeUndefined();
+  });
+});
+
+describe("formatMetricParameterValue", () => {
+  it("renders booleans as Yes/No", () => {
+    expect(formatMetricParameterValue(true)).toBe("Yes");
+    expect(formatMetricParameterValue(false)).toBe("No");
+  });
+
+  it("renders empty values as an em dash", () => {
+    expect(formatMetricParameterValue(null)).toBe("—");
+    expect(formatMetricParameterValue(undefined)).toBe("—");
+    expect(formatMetricParameterValue("")).toBe("—");
+  });
+
+  it("stringifies other values", () => {
+    expect(formatMetricParameterValue("answer")).toBe("answer");
+    expect(formatMetricParameterValue(0)).toBe("0");
   });
 });

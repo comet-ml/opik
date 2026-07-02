@@ -3,7 +3,6 @@ import { diffLines } from "diff";
 import { ChevronDown, GitCompareArrows } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,7 +13,9 @@ import {
 import { PromptComparisonTarget } from "./promptComparisonTargets";
 import {
   buildRoleDiffRows,
+  getRoleLabel,
   groupMessageContentByRole,
+  promptToText,
 } from "./promptMessageDiff";
 
 type PromptComparisonProps = {
@@ -39,16 +40,6 @@ type PromptComparisonProps = {
   diff?: boolean;
   className?: string;
 };
-
-const promptToText = (prompt: unknown): string => {
-  if (prompt === null || prompt === undefined) return "";
-  if (typeof prompt === "string") return prompt;
-  return JSON.stringify(prompt, null, 2);
-};
-
-const roleLabel = (role: string): string =>
-  LLM_MESSAGE_ROLE_NAME_MAP[role as keyof typeof LLM_MESSAGE_ROLE_NAME_MAP] ??
-  role;
 
 /**
  * Line-level diff: unchanged lines keep the full foreground color, added lines
@@ -86,7 +77,7 @@ const RoleCard: React.FC<{ role: string; children: React.ReactNode }> = ({
   <div className="flex w-full flex-col rounded-md border bg-primary-foreground px-3 py-2">
     <div className="pb-1.5 pt-0.5">
       <span className="comet-body-xs-accented capitalize text-muted-slate">
-        {roleLabel(role)}
+        {getRoleLabel(role)}
       </span>
     </div>
     {children}

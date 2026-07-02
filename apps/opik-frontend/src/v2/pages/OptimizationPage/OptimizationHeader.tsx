@@ -10,25 +10,15 @@ import NavigationTag from "@/shared/NavigationTag/NavigationTag";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import { formatDate } from "@/lib/date";
 import BackButton from "@/shared/BackButton/BackButton";
-import { getOptimizationConfigItems } from "./optimizationHeaderConfig";
+import {
+  getOptimizationConfigItems,
+  STATUS_DOT_COLOR,
+} from "./optimizationHeaderConfig";
 import OptimizationConfigPill, {
   CONFIG_PILL_ICON_CLASS,
 } from "@/v2/pages-shared/optimizations/OptimizationConfigPill";
 import OptimizationModelPill from "./OptimizationModelPill";
 import OptimizationMetricPill from "./OptimizationMetricPill";
-
-/**
- * Per-status dot colours. The status tag chrome stays neutral (Figma), so the
- * dot alone carries the status colour. Keyed to the same palette as
- * STATUS_TO_VARIANT_MAP.
- */
-const STATUS_DOT_COLOR: Record<OPTIMIZATION_STATUS, string> = {
-  [OPTIMIZATION_STATUS.RUNNING]: "var(--color-green)",
-  [OPTIMIZATION_STATUS.COMPLETED]: "var(--color-gray)",
-  [OPTIMIZATION_STATUS.CANCELLED]: "var(--color-red)",
-  [OPTIMIZATION_STATUS.INITIALIZED]: "var(--color-blue)",
-  [OPTIMIZATION_STATUS.ERROR]: "var(--color-red)",
-};
 
 type OptimizationHeaderProps = {
   optimization?: Optimization;

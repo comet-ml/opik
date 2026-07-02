@@ -2,8 +2,15 @@
  * Utility functions for optimization chart data processing
  */
 
+import isNumber from "lodash/isNumber";
+
 import { AggregatedCandidate } from "@/types/optimizations";
 import { TagProps } from "@/ui/tag";
+import {
+  formatAsPercentage,
+  formatAsDuration,
+  formatAsCurrency,
+} from "@/lib/optimization-formatters";
 
 export type FeedbackScore = {
   name: string;
@@ -43,6 +50,29 @@ export const TRIAL_BEST_COLOR = "var(--trial-best)";
 /** Ring around the best-trial dot — Figma's two-tone best marker (theme-aware, see main.scss). */
 export const TRIAL_BEST_RING_COLOR = "var(--trial-best-ring)";
 
+/**
+ * Fill colour for a trial dot on the progress chart:
+ * - the best trial always wins, in its own darkest fuchsia;
+ * - test-suite runs colour every status (their legend distinguishes all states);
+ * - dataset runs only distinguish passed vs discarded, so every non-pruned
+ *   status collapses to the solid "passed" colour.
+ */
+export const getTrialDotColor = ({
+  status,
+  isBest,
+  isTestSuite,
+}: {
+  status: TrialStatus;
+  isBest: boolean;
+  isTestSuite?: boolean;
+}): string => {
+  if (isBest) return TRIAL_BEST_COLOR;
+  if (isTestSuite) return TRIAL_STATUS_COLORS[status];
+  return status === "pruned"
+    ? TRIAL_STATUS_COLORS.pruned
+    : TRIAL_STATUS_COLORS.passed;
+};
+
 export const TRIAL_STATUS_LABELS: Record<TrialStatus, string> = {
   baseline: "Baseline",
   passed: "Passed",
@@ -74,6 +104,80 @@ export const getTrialStatusLabel = (
     default:
       return TRIAL_STATUS_LABELS[status];
   }
+};
+
+export type TrialCardRow = { label: string; value: string };
+
+export type TrialCardModel = {
+  /** Header title, e.g. "Trial #20". */
+  title: string;
+  /** Header status label, e.g. "Passed step 1" or "Best trial". */
+  statusLabel: string;
+  /** Fill colour of the header status dot. */
+  dotColor: string;
+  /** Ring colour around the dot for the best trial; undefined otherwise. */
+  dotRingColor?: string;
+  /** Metric rows (Score/Pass rate, then Latency and Runtime cost when present). */
+  rows: TrialCardRow[];
+};
+
+/**
+ * Builds the view model for a trial card (see {@link ./TrialCard}) from a
+ * candidate + its computed status. Keeps all the label/colour/metric derivation
+ * out of the component so it renders straight from this model and can be
+ * unit-tested without the DOM.
+ *
+ * The score row shows a percentage; test-suite runs relabel it "Pass rate" and
+ * append the passed/total fraction. Latency and cost rows are omitted when the
+ * candidate has no value for them.
+ */
+export const buildTrialCardModel = ({
+  candidate,
+  status,
+  stepIndex,
+  isTestSuite,
+  isBest,
+}: {
+  candidate: AggregatedCandidate;
+  status: TrialStatus;
+  stepIndex: number;
+  isTestSuite?: boolean;
+  isBest?: boolean;
+}): TrialCardModel => {
+  const percentage = isNumber(candidate.score)
+    ? formatAsPercentage(candidate.score)
+    : "-";
+  const fraction =
+    isTestSuite && isNumber(candidate.score) && candidate.totalCount > 0
+      ? ` (${candidate.passedCount}/${candidate.totalCount})`
+      : "";
+
+  const rows: TrialCardRow[] = [
+    {
+      label: isTestSuite ? "Pass rate" : "Score",
+      value: `${percentage}${fraction}`,
+    },
+  ];
+  if (candidate.latencyP50 != null) {
+    rows.push({
+      label: "Latency",
+      value: formatAsDuration(candidate.latencyP50),
+    });
+  }
+  if (candidate.runtimeCost != null) {
+    rows.push({
+      label: "Runtime cost",
+      value: formatAsCurrency(candidate.runtimeCost),
+    });
+  }
+
+  return {
+    title: `Trial #${candidate.trialNumber}`,
+    statusLabel: isBest ? "Best trial" : getTrialStatusLabel(status, stepIndex),
+    dotColor: isBest ? TRIAL_BEST_COLOR : TRIAL_STATUS_COLORS[status],
+    dotRingColor: isBest ? TRIAL_BEST_RING_COLOR : undefined,
+    rows,
+  };
 };
 
 export const TRIAL_STATUS_ORDER: readonly TrialStatus[] = [
@@ -314,9 +418,26 @@ export const buildParentChildEdges = (
 /**
  * Get unique step indices from candidates, sorted.
  */
-export const getUniqueSteps = (candidates: AggregatedCandidate[]): number[] => {
-  const steps = new Set(candidates.map((c) => c.stepIndex));
+/**
+ * Unique step indices, sorted ascending. Accepts anything carrying a
+ * `stepIndex` — both `AggregatedCandidate[]` and chart `CandidateDataPoint[]`.
+ */
+export const getUniqueSteps = (items: { stepIndex: number }[]): number[] => {
+  const steps = new Set(items.map((item) => item.stepIndex));
   return Array.from(steps).sort((a, b) => a - b);
+};
+
+/** A dot position on the chart, in pixel space. */
+export type ChartPoint = { cx: number; cy: number };
+
+/**
+ * SVG path for a connector between two dots: a cubic bezier with horizontal
+ * control points, giving the smooth S-curve used for both the solid parent→child
+ * edges and the dashed ghost edges.
+ */
+export const buildEdgePath = (from: ChartPoint, to: ChartPoint): string => {
+  const midX = (from.cx + to.cx) / 2;
+  return `M ${from.cx},${from.cy} C ${midX},${from.cy} ${midX},${to.cy} ${to.cx},${to.cy}`;
 };
 
 const MAIN_OBJECTIVE_COLOR = "var(--color-blue)";

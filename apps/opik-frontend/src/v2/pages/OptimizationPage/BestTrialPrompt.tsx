@@ -4,11 +4,8 @@ import { ArrowUpRight, GitCompare } from "lucide-react";
 import { AggregatedCandidate } from "@/types/optimizations";
 import { Experiment } from "@/types/datasets";
 import PromptComparison from "@/shared/CodeDiff/PromptComparison";
-import {
-  buildPromptComparisonTargets,
-  ComparisonCandidate,
-} from "@/shared/CodeDiff/promptComparisonTargets";
-import { getCandidatePrompt } from "./candidatePrompt";
+import { buildPromptComparisonTargets } from "@/shared/CodeDiff/promptComparisonTargets";
+import { getCandidatePrompt, toComparisonCandidate } from "./candidatePrompt";
 
 type BestTrialPromptProps = {
   bestCandidate: AggregatedCandidate;
@@ -16,15 +13,6 @@ type BestTrialPromptProps = {
   experiments: Experiment[];
   onViewTrial?: () => void;
 };
-
-const toComparisonCandidate = (
-  c: AggregatedCandidate,
-): ComparisonCandidate => ({
-  id: c.candidateId,
-  stepIndex: c.stepIndex,
-  parentCandidateIds: c.parentCandidateIds,
-  trialNumber: c.trialNumber,
-});
 
 /**
  * Overview "Best trial prompt" panel: shows the best trial's prompt with an

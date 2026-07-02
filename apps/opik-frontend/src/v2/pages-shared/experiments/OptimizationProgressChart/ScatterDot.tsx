@@ -2,9 +2,8 @@ import React, { useCallback } from "react";
 import { Dot } from "recharts";
 
 import {
-  TRIAL_STATUS_COLORS,
-  TRIAL_BEST_COLOR,
   TRIAL_BEST_RING_COLOR,
+  getTrialDotColor,
   CandidateDataPoint,
 } from "./optimizationChartUtils";
 import {
@@ -73,17 +72,11 @@ const useScatterDot = ({
       const pxOffset = overlapOffsets.get(payload.candidateId) ?? 0;
       const cx = rawCx + pxOffset;
       const isBest = payload.candidateId === bestCandidateId;
-      // Discarded (pruned) trials always read as the lighter fuchsia-300, for
-      // both test-suite and dataset runs — matching the legend + Figma. Test
-      // suites colour every state; dataset runs otherwise collapse to the solid
-      // "passed" colour (their legend only distinguishes passed vs discarded).
-      const color = isBest
-        ? TRIAL_BEST_COLOR
-        : isTestSuite
-          ? TRIAL_STATUS_COLORS[payload.status]
-          : payload.status === "pruned"
-            ? TRIAL_STATUS_COLORS.pruned
-            : TRIAL_STATUS_COLORS.passed;
+      const color = getTrialDotColor({
+        status: payload.status,
+        isBest,
+        isTestSuite,
+      });
       const isSelected = payload.candidateId === selectedTrialId;
       // The best dot's popover is always shown, so it stays in its hovered
       // (grown) state by default — no separate active styling needed.

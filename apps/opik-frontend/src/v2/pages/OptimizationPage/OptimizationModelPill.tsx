@@ -3,21 +3,19 @@ import { Sparkles } from "lucide-react";
 
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import { parseComposedProviderType } from "@/lib/provider";
-import { PROVIDERS } from "@/constants/providers";
-import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
-import ClaudeIcon from "@/icons/integrations/claude.svg?react";
+import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 import OptimizationConfigPill, {
   CONFIG_PILL_ICON_CLASS,
 } from "@/v2/pages-shared/optimizations/OptimizationConfigPill";
+import { getModelPillIcon } from "@/v2/pages-shared/optimizations/modelPillIcon";
 
 type OptimizationModelPillProps = {
   model: string;
 };
 
 /**
- * Model pill in the run header. Resolves the model's provider to pick a brand
- * icon: Anthropic models get the coloured Claude logo (Figma); other providers
- * fall back to their (monochrome) provider mark, and unknown models to Sparkles.
+ * Model pill in the run header. Resolves the model's provider to a brand icon
+ * (see modelPillIcon), falling back to Sparkles for unknown models.
  */
 const OptimizationModelPill: React.FC<OptimizationModelPillProps> = ({
   model,
@@ -29,19 +27,20 @@ const OptimizationModelPill: React.FC<OptimizationModelPillProps> = ({
     return composed ? parseComposedProviderType(composed) : undefined;
   }, [calculateModelProvider, model]);
 
-  const renderIcon = () => {
-    if (providerType === PROVIDER_TYPE.ANTHROPIC) {
-      return <ClaudeIcon className="size-3 shrink-0" />;
-    }
-    const ProviderIcon = providerType && PROVIDERS[providerType]?.icon;
-    if (ProviderIcon) {
-      return <ProviderIcon className="size-3 shrink-0 text-muted-slate" />;
-    }
-    return <Sparkles className={CONFIG_PILL_ICON_CLASS} />;
-  };
+  const Icon = getModelPillIcon(providerType);
 
   return (
-    <OptimizationConfigPill icon={renderIcon()}>{model}</OptimizationConfigPill>
+    <OptimizationConfigPill
+      icon={
+        Icon ? (
+          <Icon className={CONFIG_PILL_ICON_CLASS} />
+        ) : (
+          <Sparkles className={CONFIG_PILL_ICON_CLASS} />
+        )
+      }
+    >
+      {model}
+    </OptimizationConfigPill>
   );
 };
 

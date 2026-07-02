@@ -111,19 +111,20 @@ export const extractOpenAIMessages = (
     }
   }
 
-  // opik-optimizer serializes a single ChatPrompt as { "chat-prompt": [...] }.
-  // Treat that wrapper as a single message array (checked before the named /
-  // multi-prompt path, which would otherwise read "chat-prompt" as a name).
-  // Only unwrap when "chat-prompt" is the object's sole key — a multi-prompt
-  // payload may legitimately contain a prompt named "chat-prompt" alongside
-  // others, and unwrapping it here would drop the sibling prompts.
+  // A single-prompt optimizer run serializes the prompt as a one-key wrapper
+  // { <prompt-name>: [...messages] } — the name defaults to "chat-prompt" but
+  // is any custom ChatPrompt.name the user set. Unwrap that as a single prompt
+  // (checked before the named/multi path, which would otherwise read the sole
+  // key as a prompt name and render it as raw JSON). Multi-prompt runs have
+  // more than one key and still fall through to extractNamedPrompts below.
   if (isObject(data) && !isArray(data)) {
-    const keys = Object.keys(data);
-    if (keys.length === 1 && keys[0] === "chat-prompt") {
-      const messages = (data as Record<string, unknown>)["chat-prompt"];
-      if (isArray(messages) && isValidOpenAIMessages(messages)) {
-        return messages;
-      }
+    const values = Object.values(data as Record<string, unknown>);
+    if (
+      values.length === 1 &&
+      isArray(values[0]) &&
+      isValidOpenAIMessages(values[0])
+    ) {
+      return values[0];
     }
   }
 

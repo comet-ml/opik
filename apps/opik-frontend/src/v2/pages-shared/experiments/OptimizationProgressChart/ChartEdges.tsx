@@ -3,7 +3,9 @@ import React, { useCallback } from "react";
 import type {
   ParentChildEdge,
   CandidateDataPoint,
+  ChartPoint,
 } from "./optimizationChartUtils";
+import { buildEdgePath } from "./optimizationChartUtils";
 import {
   EDGE_STROKE_WIDTH,
   EDGE_STROKE_OPACITY,
@@ -12,10 +14,14 @@ import {
 
 type Scale = (value: number) => number;
 
+/** Recharts hands <Customized> its internal axis maps, keyed by axis id. */
 type CustomizedAxisProps = {
   xAxisMap?: Record<string, { scale?: Scale }>;
   yAxisMap?: Record<string, { scale?: Scale }>;
 };
+
+const firstScale = (map?: Record<string, { scale?: Scale }>) =>
+  map ? Object.values(map)[0]?.scale : undefined;
 
 type UseChartEdgesParams = {
   edges: ParentChildEdge[];
@@ -27,21 +33,16 @@ const useChartEdges = ({
   edges,
   chartData,
   overlapOffsets,
-}: UseChartEdgesParams) => {
-  return useCallback(
+}: UseChartEdgesParams) =>
+  useCallback(
     (props: CustomizedAxisProps) => {
-      // Positions are derived from the chart scales (not the dot-position ref)
-      // so the edges can render BEFORE the Scatter — i.e. underneath the dots,
-      // matching Figma — without depending on the Scatter having drawn first.
-      const xScale = props.xAxisMap
-        ? Object.values(props.xAxisMap)[0]?.scale
-        : undefined;
-      const yScale = props.yAxisMap
-        ? Object.values(props.yAxisMap)[0]?.scale
-        : undefined;
+      // Positions come from the chart scales (not the shared dot-position ref)
+      // so edges can render before the Scatter — underneath the dots, per Figma.
+      const xScale = firstScale(props.xAxisMap);
+      const yScale = firstScale(props.yAxisMap);
       if (!xScale || !yScale) return null;
 
-      const positions = new Map<string, { cx: number; cy: number }>();
+      const positions = new Map<string, ChartPoint>();
       for (const d of chartData) {
         if (d.value == null) continue;
         positions.set(d.candidateId, {
@@ -52,20 +53,17 @@ const useChartEdges = ({
       if (positions.size === 0) return null;
 
       return (
-        // Decorative connector lines must never intercept dot hovers/clicks.
+        // Decorative connectors must never intercept dot hovers/clicks.
         <g pointerEvents="none">
           {edges.map((edge) => {
-            const parentPos = positions.get(edge.parentCandidateId);
-            const childPos = positions.get(edge.childCandidateId);
-            if (!parentPos || !childPos) return null;
-
-            const midX = (parentPos.cx + childPos.cx) / 2;
-            const d = `M ${parentPos.cx},${parentPos.cy} C ${midX},${parentPos.cy} ${midX},${childPos.cy} ${childPos.cx},${childPos.cy}`;
+            const from = positions.get(edge.parentCandidateId);
+            const to = positions.get(edge.childCandidateId);
+            if (!from || !to) return null;
 
             return (
               <path
                 key={`${edge.parentCandidateId}-${edge.childCandidateId}`}
-                d={d}
+                d={buildEdgePath(from, to)}
                 fill="none"
                 stroke={EDGE_STROKE_COLOR}
                 strokeWidth={EDGE_STROKE_WIDTH}
@@ -78,6 +76,5 @@ const useChartEdges = ({
     },
     [edges, chartData, overlapOffsets],
   );
-};
 
 export default useChartEdges;

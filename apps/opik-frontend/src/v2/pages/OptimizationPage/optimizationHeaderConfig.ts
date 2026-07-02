@@ -2,21 +2,46 @@ import {
   METRIC_TYPE,
   MetricParameters,
   Optimization,
+  OPTIMIZATION_STATUS,
 } from "@/types/optimizations";
-import { OPTIMIZATION_METRIC_OPTIONS } from "@/constants/optimizations";
-import { getOptimizerLabel } from "@/lib/optimizations";
+import { getMetricLabel, getOptimizerLabel } from "@/lib/optimizations";
 
-/** Human label for a metric type, falling back to the raw value then an em dash. */
-export const getMetricLabel = (type?: string): string =>
-  OPTIMIZATION_METRIC_OPTIONS.find((option) => option.value === type)?.label ??
-  type ??
-  "—";
+export { getMetricLabel };
+
+/**
+ * Per-status dot colours for the header status pill. The pill chrome stays
+ * neutral (Figma), so the dot alone carries the status colour. Keyed to the
+ * same palette as STATUS_TO_VARIANT_MAP.
+ */
+export const STATUS_DOT_COLOR: Record<OPTIMIZATION_STATUS, string> = {
+  [OPTIMIZATION_STATUS.RUNNING]: "var(--color-green)",
+  [OPTIMIZATION_STATUS.COMPLETED]: "var(--color-gray)",
+  [OPTIMIZATION_STATUS.CANCELLED]: "var(--color-red)",
+  [OPTIMIZATION_STATUS.INITIALIZED]: "var(--color-blue)",
+  [OPTIMIZATION_STATUS.ERROR]: "var(--color-red)",
+};
 
 export interface OptimizationMetricItem {
   type: METRIC_TYPE;
   label: string;
   parameters?: Partial<MetricParameters>;
 }
+
+/** Human labels for the metric parameter keys shown in the metric popover. */
+export const METRIC_PARAMETER_LABELS: Record<string, string> = {
+  reference_key: "Reference key",
+  case_sensitive: "Case sensitive",
+  task_introduction: "Task introduction",
+  evaluation_criteria: "Evaluation criteria",
+  code: "Code",
+};
+
+/** Render a metric parameter value for display: booleans as Yes/No, empty as an em dash. */
+export const formatMetricParameterValue = (value: unknown): string => {
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (value === null || value === undefined || value === "") return "—";
+  return String(value);
+};
 
 export interface OptimizationConfigItems {
   model?: string;

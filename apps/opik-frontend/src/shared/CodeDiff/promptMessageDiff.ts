@@ -11,6 +11,7 @@
 import isArray from "lodash/isArray";
 import isObject from "lodash/isObject";
 
+import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
 import {
   OpenAIMessage,
   extractMessageContent,
@@ -19,6 +20,21 @@ import {
 
 /** Roles render in this order; anything else falls after, sorted alphabetically. */
 export const ROLE_DISPLAY_ORDER = ["system", "user", "assistant"];
+
+/**
+ * Fallback text rendering for a prompt that isn't a plain message array:
+ * strings pass through, anything else is pretty-printed as JSON.
+ */
+export const promptToText = (prompt: unknown): string => {
+  if (prompt === null || prompt === undefined) return "";
+  if (typeof prompt === "string") return prompt;
+  return JSON.stringify(prompt, null, 2);
+};
+
+/** Display name for a message role, falling back to the raw role key. */
+export const getRoleLabel = (role: string): string =>
+  LLM_MESSAGE_ROLE_NAME_MAP[role as keyof typeof LLM_MESSAGE_ROLE_NAME_MAP] ??
+  role;
 
 export type RoleContent = {
   role: string;

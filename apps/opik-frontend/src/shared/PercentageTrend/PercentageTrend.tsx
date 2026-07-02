@@ -57,41 +57,43 @@ const PercentageTrend: React.FC<PercentageTrendProps> = ({
   if (isUndefined(percentage)) return null;
 
   const { Icon, variant } = getConfig(percentage, trend, precision);
+  const tagVariant = variant as TagProps["variant"];
 
-  const isFinitePercentage = isFinite(percentage);
-  const isIconOnly = iconOnly || !isFinitePercentage;
+  const isIconOnly = iconOnly || !isFinite(percentage);
   const isCompact = size === "sm";
 
-  let tag: React.ReactNode;
+  const renderTag = () => {
+    if (isIconOnly) {
+      return (
+        <Tag
+          size={isCompact ? "default" : "sm"}
+          variant={tagVariant}
+          className={cn("inline-flex items-center justify-center px-1", {
+            "rounded-md": isCompact,
+          })}
+        >
+          <Icon className="size-3" />
+        </Tag>
+      );
+    }
 
-  if (isIconOnly) {
-    tag = (
-      <Tag
-        size={isCompact ? "default" : "sm"}
-        variant={variant as TagProps["variant"]}
-        className={cn("inline-flex items-center justify-center px-1", {
-          "rounded-md": isCompact,
-        })}
-      >
-        <Icon className="size-3" />
-      </Tag>
-    );
-  } else if (isCompact) {
-    tag = (
-      <Tag
-        size="default"
-        variant={variant as TagProps["variant"]}
-        className="flex items-center gap-1 rounded-md px-1.5"
-      >
-        <Icon className="size-3 shrink-0" />
-        <span>{formatNumericData(percentage, precision)}%</span>
-      </Tag>
-    );
-  } else {
-    tag = (
+    if (isCompact) {
+      return (
+        <Tag
+          size="default"
+          variant={tagVariant}
+          className="flex items-center gap-1 rounded-md px-1.5"
+        >
+          <Icon className="size-3 shrink-0" />
+          <span>{formatNumericData(percentage, precision)}%</span>
+        </Tag>
+      );
+    }
+
+    return (
       <Tag
         size="md"
-        variant={variant as TagProps["variant"]}
+        variant={tagVariant}
         className="flex-row flex-nowrap gap-1"
       >
         <div className="flex max-w-full items-center justify-between gap-0.5">
@@ -102,7 +104,9 @@ const PercentageTrend: React.FC<PercentageTrendProps> = ({
         </div>
       </Tag>
     );
-  }
+  };
+
+  const tag = renderTag();
 
   if (tooltip) {
     return <TooltipWrapper content={tooltip}>{tag}</TooltipWrapper>;

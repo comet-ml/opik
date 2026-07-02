@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 
-import { getCandidatePrompt } from "./candidatePrompt";
+import { getCandidatePrompt, toComparisonCandidate } from "./candidatePrompt";
 import { Experiment } from "@/types/datasets";
+import { AggregatedCandidate } from "@/types/optimizations";
 
 const makeExperiment = (id: string, configuration: unknown): Experiment =>
   ({ id, metadata: { configuration } }) as unknown as Experiment;
@@ -49,5 +50,24 @@ describe("getCandidatePrompt", () => {
     expect(
       getCandidatePrompt({ experimentIds: ["missing"] }, experimentsById),
     ).toBeNull();
+  });
+});
+
+describe("toComparisonCandidate", () => {
+  it("maps a candidate to the structural comparison shape", () => {
+    const candidate = {
+      candidateId: "c2",
+      stepIndex: 1,
+      parentCandidateIds: ["c1"],
+      trialNumber: 2,
+      experimentIds: ["e2"],
+    } as unknown as AggregatedCandidate;
+
+    expect(toComparisonCandidate(candidate)).toEqual({
+      id: "c2",
+      stepIndex: 1,
+      parentCandidateIds: ["c1"],
+      trialNumber: 2,
+    });
   });
 });

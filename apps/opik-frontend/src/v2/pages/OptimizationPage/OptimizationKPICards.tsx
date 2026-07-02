@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { Coins } from "lucide-react";
+import dayjs from "dayjs";
 
 import {
   KPICard,
@@ -13,7 +14,7 @@ import {
 } from "@/lib/optimization-formatters";
 import { Experiment } from "@/types/datasets";
 import { AggregatedCandidate } from "@/types/optimizations";
-import { getOptimizationDurationSeconds } from "./optimizationOverviewHelpers";
+import { getCompletedRunDurationSeconds } from "./optimizationOverviewHelpers";
 
 type MetricValue = number | undefined;
 
@@ -24,21 +25,25 @@ const CANDIDATE_KEY_MAP: Record<string, keyof AggregatedCandidate> = {
 };
 
 type ElapsedDurationProps = {
-  startTime: number;
+  /** ISO timestamp the run started at. */
+  startedAt: string;
 };
 
 const ElapsedDuration: React.FunctionComponent<ElapsedDurationProps> = ({
-  startTime,
+  startedAt,
 }) => {
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => dayjs());
 
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
+    const id = setInterval(() => setNow(dayjs()), 1000);
     return () => clearInterval(id);
   }, []);
 
-  const elapsed = (now - startTime) / 1000;
+  const start = dayjs(startedAt);
+  if (!start.isValid()) return null;
 
+  // `true` keeps fractional seconds so the ticking caption reads smoothly.
+  const elapsed = now.diff(start, "second", true);
   if (elapsed <= 0) return null;
 
   return <StatCard.Caption>{formatAsDuration(elapsed)} total</StatCard.Caption>;
@@ -67,38 +72,26 @@ const OptimizationKPICards: React.FunctionComponent<
   optimizationLastUpdatedAt,
   isInProgress,
 }) => {
-  const kpiData = useMemo(() => {
-    const totalOptCost = experiments.reduce(
-      (sum, e) => sum + (e.total_estimated_cost ?? 0),
-      0,
-    );
-
-    let totalDuration: number | undefined;
-    if (!isInProgress && experiments.length > 0) {
-      // The run's completion time is the correct end; fall back to the latest
-      // trial's created_at only when last_updated_at is unavailable.
-      const latestCreatedAt = experiments.reduce(
-        (latest, e) => (e.created_at > latest ? e.created_at : latest),
-        experiments[0].created_at,
-      );
-      totalDuration = getOptimizationDurationSeconds(
+  const kpiData = useMemo(
+    () => ({
+      totalOptCost: experiments.reduce(
+        (sum, e) => sum + (e.total_estimated_cost ?? 0),
+        0,
+      ),
+      totalDuration: getCompletedRunDurationSeconds({
+        isInProgress,
         optimizationCreatedAt,
-        optimizationLastUpdatedAt ?? latestCreatedAt,
-      );
-    }
-
-    return { totalOptCost, totalDuration };
-  }, [
-    experiments,
-    optimizationCreatedAt,
-    optimizationLastUpdatedAt,
-    isInProgress,
-  ]);
-
-  const startTime = useMemo(() => {
-    if (!optimizationCreatedAt) return undefined;
-    return new Date(optimizationCreatedAt).getTime();
-  }, [optimizationCreatedAt]);
+        optimizationLastUpdatedAt,
+        trialCreatedTimes: experiments.map((e) => e.created_at),
+      }),
+    }),
+    [
+      experiments,
+      optimizationCreatedAt,
+      optimizationLastUpdatedAt,
+      isInProgress,
+    ],
+  );
 
   const configs = getMetricKPICardConfigs({ isTestSuite, objectiveName });
 
@@ -127,8 +120,8 @@ const OptimizationKPICards: React.FunctionComponent<
             ? formatAsCurrency(kpiData.totalOptCost)
             : "-"}
         </StatCard.Value>
-        {isInProgress && startTime != null ? (
-          <ElapsedDuration startTime={startTime} />
+        {isInProgress && optimizationCreatedAt ? (
+          <ElapsedDuration startedAt={optimizationCreatedAt} />
         ) : (
           kpiData.totalDuration != null &&
           kpiData.totalDuration > 0 && (

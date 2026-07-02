@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  getCompletedRunDurationSeconds,
   getOptimizationDurationSeconds,
   getOptimizationRefetchInterval,
 } from "./optimizationOverviewHelpers";
@@ -34,6 +35,49 @@ describe("getOptimizationDurationSeconds", () => {
     ).toBeUndefined();
     expect(
       getOptimizationDurationSeconds("2026-01-01T00:00:00Z", undefined),
+    ).toBeUndefined();
+  });
+});
+
+describe("getCompletedRunDurationSeconds", () => {
+  const base = {
+    isInProgress: false,
+    optimizationCreatedAt: "2026-01-01T00:00:00Z",
+    optimizationLastUpdatedAt: "2026-01-01T00:05:00Z",
+    trialCreatedTimes: ["2026-01-01T00:01:00Z", "2026-01-01T00:03:00Z"],
+  };
+
+  it("uses the run's completion time as the end", () => {
+    expect(getCompletedRunDurationSeconds(base)).toBe(300);
+  });
+
+  it("falls back to the newest trial's created_at when last_updated_at is missing", () => {
+    expect(
+      getCompletedRunDurationSeconds({
+        ...base,
+        optimizationLastUpdatedAt: undefined,
+      }),
+    ).toBe(180);
+  });
+
+  it("returns undefined while the run is in progress", () => {
+    expect(
+      getCompletedRunDurationSeconds({ ...base, isInProgress: true }),
+    ).toBeUndefined();
+  });
+
+  it("returns undefined when the run produced no trials", () => {
+    expect(
+      getCompletedRunDurationSeconds({ ...base, trialCreatedTimes: [] }),
+    ).toBeUndefined();
+  });
+
+  it("returns undefined when the run's start time is missing", () => {
+    expect(
+      getCompletedRunDurationSeconds({
+        ...base,
+        optimizationCreatedAt: undefined,
+      }),
     ).toBeUndefined();
   });
 });

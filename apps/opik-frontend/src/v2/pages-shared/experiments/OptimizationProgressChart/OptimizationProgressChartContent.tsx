@@ -1,5 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import React, { useMemo, useRef, useState } from "react";
 import {
   XAxis,
   CartesianGrid,
@@ -10,7 +9,6 @@ import {
 } from "recharts";
 
 import { ChartContainer } from "@/ui/chart";
-import { cn } from "@/lib/utils";
 import {
   DEFAULT_CHART_GRID_PROPS,
   DEFAULT_CHART_TICK,
@@ -18,13 +16,13 @@ import {
 import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
 import { AggregatedCandidate } from "@/types/optimizations";
 import ChartTooltip from "./ChartTooltip";
-import TrialCard, { TRIAL_CARD_SHELL_CLASS } from "./TrialCard";
 import {
   TRIAL_STATUS_COLORS,
   TRIAL_STATUS_LABELS,
   TRIAL_STATUS_ORDER,
   CandidateDataPoint,
   buildParentChildEdges,
+  getUniqueSteps,
 } from "./optimizationChartUtils";
 import type { InProgressInfo } from "./optimizationChartUtils";
 import {
@@ -32,12 +30,12 @@ import {
   CHART_MARGIN,
   X_AXIS_PADDING,
   X_DOMAIN_EXTRA,
-  TOOLTIP_Y_OFFSET,
 } from "./chartConstants";
 import useScatterDot from "./ScatterDot";
 import type { DotPosition } from "./ScatterDot";
 import useChartEdges from "./ChartEdges";
 import useGhostCandidate from "./GhostCandidate";
+import useBestTrialCard from "./BestTrialCard";
 
 const GHOST_ID = "__ghost__";
 
@@ -72,10 +70,25 @@ const OptimizationProgressChartContent: React.FC<
   isInProgress = false,
   inProgressInfo,
 }) => {
-  const steps = useMemo(() => {
-    const s = new Set(chartData.map((d) => d.stepIndex));
-    return Array.from(s).sort((a, b) => a - b);
-  }, [chartData]);
+  const steps = useMemo(() => getUniqueSteps(chartData), [chartData]);
+
+  // Test-suite runs distinguish every status (only those actually present);
+  // dataset runs collapse to a fixed Passed/Discarded pair (matching the dot
+  // colours from getTrialDotColor).
+  const legendItems = useMemo<{ color: string; label: string }[]>(() => {
+    if (isTestSuite) {
+      return TRIAL_STATUS_ORDER.filter((s) =>
+        chartData.some((d) => d.status === s),
+      ).map((s) => ({
+        color: TRIAL_STATUS_COLORS[s],
+        label: TRIAL_STATUS_LABELS[s],
+      }));
+    }
+    return [
+      { color: TRIAL_STATUS_COLORS.passed, label: "Passed trial" },
+      { color: TRIAL_STATUS_COLORS.pruned, label: "Discarded trial" },
+    ];
+  }, [isTestSuite, chartData]);
 
   const positionedData = useMemo(() => {
     return chartData.map((d) => ({
@@ -197,48 +210,15 @@ const OptimizationProgressChartContent: React.FC<
     onTrialClick,
   });
 
-  // Pinned best-trial card. Rendered through a Recharts <Customized> so it
-  // reads the best dot's live position (captured by the Scatter shape into the
-  // ref) on every layout — including resize — then portals an HTML card that
-  // hangs below the dot and extends left, matching Figma. Hidden while hovering
-  // (the hover tooltip takes over).
-  const renderBestCard = useCallback(() => {
-    if (
-      bestCandidateId == null ||
-      containerRef.current == null ||
-      // Keep this card while the best dot itself is hovered (it *is* the best
-      // trial's popover); only hide it when a different dot is hovered.
-      (hoveredTrial != null && hoveredTrial.candidateId !== bestCandidateId)
-    ) {
-      return null;
-    }
-    const pos = dotPositionsRef.current.get(bestCandidateId);
-    const best = candidateMap.get(bestCandidateId);
-    if (!pos || !best) return null;
-    const bestPoint = chartData.find((d) => d.candidateId === bestCandidateId);
-    return createPortal(
-      <div
-        className={cn(
-          "pointer-events-none absolute z-10 rounded-md border bg-background shadow-md",
-          TRIAL_CARD_SHELL_CLASS,
-        )}
-        style={{
-          left: pos.cx,
-          top: pos.cy + TOOLTIP_Y_OFFSET,
-          transform: "translateX(-50%)",
-        }}
-      >
-        <TrialCard
-          candidate={best}
-          status={bestPoint?.status ?? "passed"}
-          stepIndex={bestPoint?.stepIndex ?? 0}
-          isTestSuite={isTestSuite}
-          isBest
-        />
-      </div>,
-      containerRef.current,
-    );
-  }, [hoveredTrial, bestCandidateId, candidateMap, chartData, isTestSuite]);
+  const renderBestCard = useBestTrialCard({
+    dotPositionsRef,
+    containerRef,
+    bestCandidateId,
+    hoveredCandidateId: hoveredTrial?.candidateId,
+    candidateMap,
+    chartData,
+    isTestSuite,
+  });
 
   const xDomain = useMemo(() => {
     if (steps.length === 0) return [0, 1];
@@ -247,6 +227,13 @@ const OptimizationProgressChartContent: React.FC<
       ghostStep != null ? Math.max(maxDataStep, ghostStep) : maxDataStep;
     return [0, max + X_DOMAIN_EXTRA];
   }, [steps, ghostStep]);
+
+  // The hover tooltip only serves non-best dots — the best dot's card is the
+  // always-visible pinned one (useBestTrialCard).
+  const hoveredCandidate =
+    hoveredTrial != null && hoveredTrial.candidateId !== bestCandidateId
+      ? candidateMap.get(hoveredTrial.candidateId)
+      : undefined;
 
   return (
     <div ref={containerRef} className="relative">
@@ -300,60 +287,25 @@ const OptimizationProgressChartContent: React.FC<
         </ComposedChart>
       </ChartContainer>
 
-      {hoveredTrial != null &&
-        hoveredTrial.candidateId !== bestCandidateId &&
-        containerRef.current != null &&
-        (() => {
-          const c = candidateMap.get(hoveredTrial.candidateId);
-          if (!c) return null;
-          return (
-            <ChartTooltip
-              hoveredTrial={hoveredTrial}
-              candidate={c}
-              chartData={chartData}
-              isTestSuite={isTestSuite}
-              isBest={false}
-            />
-          );
-        })()}
+      {hoveredTrial != null && hoveredCandidate != null && (
+        <ChartTooltip
+          hoveredTrial={hoveredTrial}
+          candidate={hoveredCandidate}
+          chartData={chartData}
+          isTestSuite={isTestSuite}
+        />
+      )}
 
       <div className="mt-1 flex items-center justify-center gap-4">
-        {isTestSuite ? (
-          TRIAL_STATUS_ORDER.filter((s) =>
-            chartData.some((d) => d.status === s),
-          ).map((s) => (
-            <div key={s} className="flex items-center gap-1.5">
-              <span
-                className="size-2.5 rounded-full"
-                style={{ backgroundColor: TRIAL_STATUS_COLORS[s] }}
-              />
-              <span className="comet-body-xs text-muted-slate">
-                {TRIAL_STATUS_LABELS[s]}
-              </span>
-            </div>
-          ))
-        ) : (
-          <>
-            <div className="flex items-center gap-1.5">
-              <span
-                className="size-2.5 rounded-full"
-                style={{ backgroundColor: TRIAL_STATUS_COLORS.passed }}
-              />
-              <span className="comet-body-xs text-muted-slate">
-                Passed trial
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span
-                className="size-2.5 rounded-full"
-                style={{ backgroundColor: TRIAL_STATUS_COLORS.pruned }}
-              />
-              <span className="comet-body-xs text-muted-slate">
-                Discarded trial
-              </span>
-            </div>
-          </>
-        )}
+        {legendItems.map(({ color, label }) => (
+          <div key={label} className="flex items-center gap-1.5">
+            <span
+              className="size-2.5 rounded-full"
+              style={{ backgroundColor: color }}
+            />
+            <span className="comet-body-xs text-muted-slate">{label}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
