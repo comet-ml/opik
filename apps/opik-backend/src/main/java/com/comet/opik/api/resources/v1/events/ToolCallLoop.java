@@ -80,6 +80,19 @@ final class ToolCallLoop {
             + " the original instructions. Do not call any more tools. Do not include any"
             + " prose, commentary, or markdown fences — emit only the raw JSON object.";
 
+    /**
+     * Budget-triggered wrap-up. Unlike {@link #WRAP_UP_USER_MESSAGE}, this does not claim the
+     * investigation is complete — the spend budget cut it short. It tells the model to stop now and
+     * give a best-effort verdict from the partial data gathered so far, so the emitted JSON reflects
+     * an acknowledged-incomplete assessment rather than a falsely-confident "finished" one.
+     */
+    private static final String BUDGET_WRAP_UP_USER_MESSAGE = "The evaluation spend budget for this"
+            + " judgment has been reached, so you must stop investigating now even though your"
+            + " analysis may be incomplete. Do not call any more tools. Based only on the"
+            + " information you have already gathered, give your best-effort assessment and respond"
+            + " with ONLY the JSON object specified in the original instructions. Do not include any"
+            + " prose, commentary, or markdown fences — emit only the raw JSON object.";
+
     private ToolCallLoop() {
     }
 
@@ -124,11 +137,12 @@ final class ToolCallLoop {
             @NonNull ArrayList<ChatMessage> messages,
             @NonNull TraceToolContext ctx,
             @NonNull Budget budget,
+            @NonNull BudgetGuard costGuard,
             @NonNull String logIdValue,
             @NonNull Map<String, String> mdc,
             @NonNull EvaluationRecorder recorder) {
         return toolCallLoop(0, initialResponse, toolRequest, followUpParameters, toolRegistry,
-                scoreTrace, messages, ctx, budget, logIdValue, mdc, recorder);
+                scoreTrace, messages, ctx, budget, costGuard, logIdValue, mdc, recorder);
     }
 
     /**
@@ -151,13 +165,20 @@ final class ToolCallLoop {
             @NonNull ArrayList<ChatMessage> messages,
             @NonNull TraceToolContext ctx,
             @NonNull Budget budget,
+            @NonNull BudgetGuard costGuard,
             @NonNull String logIdValue,
             @NonNull Map<String, String> mdc,
             @NonNull EvaluationRecorder recorder) {
         return run(initialResponse, toolRequest, followUpParameters, toolRegistry, scoreTrace,
-                messages, ctx, budget, logIdValue, mdc, recorder)
+                messages, ctx, budget, costGuard, logIdValue, mdc, recorder)
                 .flatMap(loopFinalResponse -> {
-                    messages.add(UserMessage.from(WRAP_UP_USER_MESSAGE));
+                    // Budget-triggered wrap-up gets a distinct instruction: the run was cut short, so
+                    // ask for a best-effort verdict from partial data rather than telling the model it
+                    // "completed" its investigation.
+                    var wrapUpMessage = costGuard.shouldWrapUp()
+                            ? BUDGET_WRAP_UP_USER_MESSAGE
+                            : WRAP_UP_USER_MESSAGE;
+                    messages.add(UserMessage.from(wrapUpMessage));
                     var finalRequest = structuredRequest.toBuilder()
                             .messages(new ArrayList<>(messages))
                             .build();
@@ -168,9 +189,16 @@ final class ToolCallLoop {
     private static Mono<ChatResponse> toolCallLoop(int round, ChatResponse currentResponse,
             ChatRequest toolRequest, ChatRequestParameters followUpParameters,
             ToolRegistry toolRegistry, Function<ChatRequest, Mono<ChatResponse>> scoreTrace,
-            ArrayList<ChatMessage> messages, TraceToolContext ctx, Budget budget,
+            ArrayList<ChatMessage> messages, TraceToolContext ctx, Budget budget, BudgetGuard costGuard,
             String logIdValue, Map<String, String> mdc, EvaluationRecorder recorder) {
-        if (round >= MAX_TOOL_CALL_ROUNDS) {
+        // Soft spend budget: once the guard says the limit is reached we stop starting new turns and
+        // let runWithWrapUp do its final tools-stripped call (the intended, bounded overshoot). Same
+        // no-append reasoning as the MAX_TOOL_CALL_ROUNDS cap below.
+        if (round >= MAX_TOOL_CALL_ROUNDS || costGuard.shouldWrapUp()) {
+            if (costGuard.shouldWrapUp() && round < MAX_TOOL_CALL_ROUNDS) {
+                log.info("Evaluation spend budget reached for '{}' (spent '{}' of '{}' USD);"
+                        + " wrapping up", logIdValue, costGuard.spentUsd(), costGuard.limitUsd());
+            }
             // Don't append: the cap-round response may carry unfulfilled tool_executions_requests
             // (we're abandoning them by hitting the cap). An AiMessage with tool_calls but no
             // matching ToolExecutionResultMessage produces a malformed sequence that OpenAI /
@@ -224,7 +252,7 @@ final class ToolCallLoop {
                     }))
                     .flatMap(nextResponse -> toolCallLoop(round + 1, nextResponse, toolRequest,
                             followUpParameters, toolRegistry, scoreTrace, messages, ctx, budget,
-                            logIdValue, mdc, recorder));
+                            costGuard, logIdValue, mdc, recorder));
         });
     }
 

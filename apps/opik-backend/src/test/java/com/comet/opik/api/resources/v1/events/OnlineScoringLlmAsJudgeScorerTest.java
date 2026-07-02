@@ -353,7 +353,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
 
         ChatResponse result = scorer
                 .handleToolCalls(plainResponse, toolRequest, structuredRequest, message, List.of(), null, Map.of(),
-                        EvaluationRecorder.NOOP)
+                        EvaluationRecorder.NOOP, BudgetGuard.UNLIMITED)
                 .block();
 
         assertThat(result).isSameAs(plainResponse);
@@ -396,7 +396,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 .build();
 
         ChatResponse result = scorer.handleToolCalls(initialResponse, toolRequest, structuredRequest, message,
-                List.of(), null, Map.of(), EvaluationRecorder.NOOP).block();
+                List.of(), null, Map.of(), EvaluationRecorder.NOOP, BudgetGuard.UNLIMITED).block();
 
         assertThat(result).isSameAs(finalResponse);
 
@@ -473,7 +473,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
         org.assertj.core.api.Assertions
                 .assertThatThrownBy(() -> scorer.handleToolCalls(
                         initialResponse, toolRequest, structuredRequest, message, List.of(), null, Map.of(),
-                        EvaluationRecorder.NOOP).block())
+                        EvaluationRecorder.NOOP, BudgetGuard.UNLIMITED).block())
                 .isSameAs(providerFailure);
 
         // Exactly one provider call attempted; the loop did not swallow + continue.
@@ -527,7 +527,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
 
         ChatResponse result = scorer.handleToolCalls(
                 toolCallingResponse, toolRequest, structuredRequest, message, List.of(), null, Map.of(),
-                EvaluationRecorder.NOOP).block();
+                EvaluationRecorder.NOOP, BudgetGuard.UNLIMITED).block();
 
         // Result is the wrap-up structured response — wrap-up still fires when the cap is hit.
         assertThat(result).isSameAs(finalResponse);

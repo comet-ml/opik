@@ -5,6 +5,7 @@ import find from "lodash/find";
 import get from "lodash/get";
 
 import { Label } from "@/ui/label";
+import { Input } from "@/ui/input";
 import { FormControl, FormField, FormItem, FormMessage } from "@/ui/form";
 import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptModelSelect";
 import PromptModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
@@ -235,6 +236,53 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
           );
         }}
       />
+      {/* Budget applies only to agentic (multi-turn) evaluations — trace and thread. Span scoring is
+          a single LLM call with no loop to wrap up, so the field is hidden there. */}
+      {!isSpanScope && (
+        <FormField
+          control={form.control}
+          name="llmJudgeDetails.maxCostUsd"
+          render={({ field, formState }) => {
+            const validationErrors = get(formState.errors, [
+              "llmJudgeDetails",
+              "maxCostUsd",
+            ]);
+
+            return (
+              <FormItem>
+                <Label>Max cost per evaluation (USD)</Label>
+                <FormControl>
+                  <Input
+                    type="number"
+                    // Positive-only, matching the Zod `.positive()` rule — 0 is a meaningless
+                    // budget (would wrap up before any work), so the control must not offer it.
+                    min={0.000001}
+                    step="any"
+                    placeholder="No limit"
+                    value={field.value ?? ""}
+                    className={`max-w-40${
+                      validationErrors?.message ? " border-destructive" : ""
+                    }`}
+                    onChange={(event) =>
+                      field.onChange(
+                        event.target.value === ""
+                          ? null
+                          : event.target.valueAsNumber,
+                      )
+                    }
+                  />
+                </FormControl>
+                <div className="comet-body-xs text-muted-slate">
+                  Once an evaluation&apos;s spend reaches this amount the judge
+                  wraps up and returns its scores so far. Leave empty for no
+                  limit.
+                </div>
+                <FormMessage />
+              </FormItem>
+            );
+          }}
+        />
+      )}
       <FormField
         control={form.control}
         name="llmJudgeDetails.template"

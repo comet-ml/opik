@@ -300,7 +300,7 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
 
             var result = scorer.handleToolCalls(
                     plainResponse, toolRequest, structuredRequest, message, Map.of(),
-                    EvaluationRecorder.NOOP).block();
+                    EvaluationRecorder.NOOP, BudgetGuard.UNLIMITED).block();
 
             org.assertj.core.api.Assertions.assertThat(result).isSameAs(plainResponse);
             Mockito.verifyNoInteractions(aiProxyService);
@@ -349,7 +349,7 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
 
             var result = scorer.handleToolCalls(
                     initialResponse, toolRequest, structuredRequest, message, Map.of(),
-                    EvaluationRecorder.NOOP).block();
+                    EvaluationRecorder.NOOP, BudgetGuard.UNLIMITED).block();
 
             org.assertj.core.api.Assertions.assertThat(result).isSameAs(finalResponse);
 
@@ -420,7 +420,7 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
             org.assertj.core.api.Assertions
                     .assertThatThrownBy(() -> scorer.handleToolCalls(
                             initialResponse, toolRequest, structuredRequest, message, Map.of(),
-                            EvaluationRecorder.NOOP).block())
+                            EvaluationRecorder.NOOP, BudgetGuard.UNLIMITED).block())
                     .isSameAs(providerFailure);
 
             // Exactly one provider call attempted — the loop didn't swallow + continue.
@@ -473,7 +473,7 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
 
             var result = scorer.handleToolCalls(
                     toolCallingResponse, toolRequest, structuredRequest, message, Map.of(),
-                    EvaluationRecorder.NOOP).block();
+                    EvaluationRecorder.NOOP, BudgetGuard.UNLIMITED).block();
 
             org.assertj.core.api.Assertions.assertThat(result).isSameAs(finalResponse);
 

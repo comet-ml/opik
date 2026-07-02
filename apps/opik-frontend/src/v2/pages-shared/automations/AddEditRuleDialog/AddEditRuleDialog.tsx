@@ -99,6 +99,7 @@ export const DEFAULT_LLM_AS_JUDGE_DATA = {
     messages: LLM_PROMPT_CUSTOM_TRACE_TEMPLATE.messages,
     variables: LLM_PROMPT_CUSTOM_TRACE_TEMPLATE.variables,
     schema: LLM_PROMPT_CUSTOM_TRACE_TEMPLATE.schema,
+    maxCostUsd: null,
   },
   [EVALUATORS_RULE_SCOPE.thread]: {
     model: "",
@@ -111,6 +112,7 @@ export const DEFAULT_LLM_AS_JUDGE_DATA = {
     messages: LLM_PROMPT_CUSTOM_THREAD_TEMPLATE.messages,
     variables: LLM_PROMPT_CUSTOM_THREAD_TEMPLATE.variables,
     schema: LLM_PROMPT_CUSTOM_THREAD_TEMPLATE.schema,
+    maxCostUsd: null,
   },
   [EVALUATORS_RULE_SCOPE.span]: {
     model: "",
