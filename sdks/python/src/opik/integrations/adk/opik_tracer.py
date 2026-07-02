@@ -18,6 +18,7 @@ from . import (
     helpers as adk_helpers,
     callback_context_info_extractors,
     output_cache,
+    pending_llm_spans,
     patchers,
 )
 from .patchers import (
@@ -74,6 +75,11 @@ class OpikTracer:
         # ``track_adk_agent_recursive`` pattern), so keying by invocation isolates
         # their output; the cache is bounded so it can't grow without bound.
         self._last_model_output = output_cache.LastModelOutputCache()
+        # In-flight LLM spans keyed by id(callback_context.actions) so
+        # after_model_callback can recover the span created in
+        # before_model_callback even when ContextCacheConfig detaches the
+        # contextvar span stack under SSE streaming (comet-ml/opik#5524).
+        self._pending_llm_spans = pending_llm_spans.PendingLlmSpanRegistry()
         # Track time-to-first-token: map span_id -> (request_start_time, first_token_time)
         self._ttft_tracking: Dict[str, Tuple[float, Optional[float]]] = {}
 
@@ -249,6 +255,13 @@ class OpikTracer:
             )
 
             context_storage.add_span_data(result.span_data)
+            # Also register the span under a contextvar-independent, per-model-call
+            # key so after_model_callback can recover it if ContextCacheConfig
+            # detaches the context stack (comet-ml/opik#5524). Guard the ``actions``
+            # access for callback contexts that don't expose it.
+            actions = getattr(callback_context, "actions", None)
+            if actions is not None:
+                self._pending_llm_spans.register(actions, result.span_data)
 
             # Track request start time for time-to-first-token calculation
             request_start_time = time.time()
@@ -270,38 +283,53 @@ class OpikTracer:
             is_partial = False
 
         span_id: Optional[str] = None
+        actions = getattr(callback_context, "actions", None)
         exception_occurred = False
         try:
             model = None
             usage = None
             output = None
 
+            # Resolve the LLM span created in before_model_callback up front, so
+            # the ``finally`` can clean up its TTFT and pending-registry entries
+            # even on the empty-content early return below. Prefer the
+            # per-model-call registry entry (keyed by id(callback_context.actions)),
+            # which survives a context detach under ContextCacheConfig + SSE
+            # streaming (comet-ml/opik#5524). Fall back to the context stack top
+            # when it is our not-yet-finalized LLM span -- keeping the normal path
+            # working if no entry was registered (a callback context without
+            # ``actions``) or it was evicted under extreme concurrency. A parent
+            # span left on top by a detached context is not ours, so it is ignored.
+            stack_top = context_storage.top_span_data()
+            current_span = (
+                self._pending_llm_spans.get(actions) if actions is not None else None
+            )
+            if (
+                current_span is None
+                and stack_top is not None
+                and llm_span_helpers.is_externally_created_llm_span_that_just_started(
+                    stack_top
+                )
+            ):
+                current_span = stack_top
+            if current_span is not None:
+                # Recorded early so the finally can clean up TTFT on any exit path.
+                span_id = current_span.id
+
             if adk_helpers.has_empty_text_part_content(llm_response):
-                # Clean up TTFT tracking if it exists before early return
-                current_span = context_storage.top_span_data()
-                if current_span is not None and current_span.id is not None:
-                    self._safe_ttft_tracking(current_span.id, pop=True)
+                # Empty (streaming) content: nothing to finalize. The finally
+                # drops the TTFT entry and the pending-span registry entry for a
+                # final response, and keeps them for partial chunks.
                 return
 
-            current_span = context_storage.top_span_data()
             if current_span is None:
-                # The span pushed in before_model_callback is invisible here: ADK's
-                # ContextCacheConfig wraps the LLM call in its own OTel span, which
-                # forks the async context under SSE streaming, so the ContextVar
-                # mutation isn't visible and top_span_data() returns None (#5524).
-                #
-                # We can't finalize the per-LLM span, but we recover the model
-                # OUTPUT into the per-invocation, bounded _last_model_output cache
-                # (added in #7266) so after_agent_callback still stamps the trace
-                # output instead of dropping the whole answer. Keying by
-                # invocation_id keeps this safe across concurrent SSE sessions.
-                #
-                # Discard up front (mirroring the non-detached path below) so a
-                # failed conversion leaves no stale value; partial chunks never
-                # cache — we wait for the final response. The recovered output
-                # keeps its usage metadata (the non-detached path pops that onto the
-                # span, but there is no span here): harmless on the display-only
-                # trace output, and it preserves usage info that's otherwise lost.
+                # No LLM span was registered for this call: before_model_callback
+                # didn't run, or the entry was already consumed. The detached-
+                # context case (#5524) is handled above via _pending_llm_spans, so
+                # here we only recover the model OUTPUT into the per-invocation,
+                # bounded _last_model_output cache (#7266) so after_agent_callback
+                # still stamps the trace output. Discard up front so a failed
+                # conversion leaves no stale value; partial chunks never cache.
                 self._last_model_output.discard(callback_context.invocation_id)
                 if not is_partial:
                     try:
@@ -320,8 +348,10 @@ class OpikTracer:
                 )
                 return
 
-            # Store span_id early for cleanup on all exit paths
-            span_id = current_span.id
+            # Pop the context stack at finalization only if it actually holds our
+            # span; when the context was detached the span isn't on the stack and
+            # the top (if any) is a parent we must not touch.
+            span_on_stack = stack_top is not None and stack_top.id == current_span.id
 
             # Track time-to-first-token: detect first token arrival
             # We check for first token on EVERY callback (including partial chunks)
@@ -397,7 +427,8 @@ class OpikTracer:
                 project_name=self.project_name,
             )
 
-            context_storage.pop_span_data(ensure_id=current_span.id)
+            if span_on_stack:
+                context_storage.pop_span_data(ensure_id=current_span.id)
             current_span.init_end_time()
             # We close this span manually because otherwise ADK will close it too late,
             # and it will also add tool spans inside of it, which we want to avoid.
@@ -410,12 +441,18 @@ class OpikTracer:
             exception_occurred = True
             LOGGER.error(f"Failed during after_model_callback(): {e}", exc_info=True)
         finally:
-            # Clean up TTFT tracking entry on all exit paths to prevent memory leak
-            # Skip cleanup for partial chunks (normal return) since ADK will call again with final response
-            # For final responses, entry is already popped at line 325, so this is a no-op
-            # For errors (exception_occurred=True) or early returns, this ensures cleanup happens
+            # Clean up the TTFT entry on any final-response or error exit (partial
+            # chunks keep it, since ADK calls again with the final response). On
+            # the main path it was already popped above, so this is a no-op; on the
+            # empty-content early return this is where the cleanup happens.
             if span_id is not None and (exception_occurred or not is_partial):
                 self._ttft_tracking.pop(span_id, None)
+            # Drop the recovered span from the registry once this call is done
+            # (any final-response exit, success or error), so a failed
+            # finalization above can't leave a stale entry that a later id() reuse
+            # maps to. Partial chunks keep it for the final response.
+            if actions is not None and not is_partial:
+                self._pending_llm_spans.pop(actions)
 
     def before_tool_callback(
         self,
@@ -489,9 +526,11 @@ class OpikTracer:
         state.pop("_opik_client", None)
         # Don't serialize TTFT tracking as it's runtime state
         state.pop("_ttft_tracking", None)
-        # The output cache holds a threading.Lock (unpicklable) and is per-process
-        # runtime state; __setstate__ recreates a fresh one.
+        # The output cache and pending-span registry hold a threading.Lock
+        # (unpicklable) and are per-process runtime state; __setstate__ recreates
+        # fresh ones.
         state.pop("_last_model_output", None)
+        state.pop("_pending_llm_spans", None)
         return state
 
     def __setstate__(self, state: Dict[str, Any]) -> None:
