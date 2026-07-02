@@ -49,7 +49,7 @@ import OptimizationsPage from "@/v2/pages/OptimizationsPage/OptimizationsPage";
 import OptimizationsNewPage from "@/v2/pages/OptimizationsPage/OptimizationsNewPage/OptimizationsNewPage";
 import OptimizationPage from "@/v2/pages/OptimizationPage/OptimizationPage";
 import OptimizationCompareRedirect from "@/v2/pages/OptimizationPage/OptimizationCompareRedirect";
-import TrialPage from "@/v2/pages/TrialPage/TrialPage";
+import TrialsRedirect from "@/v2/pages/OptimizationPage/TrialsRedirect";
 const AlertsRouteWrapper = lazy(
   () => import("@/v2/pages/AlertsPage/AlertsRouteWrapper"),
 );
@@ -466,14 +466,12 @@ const optimizationRoute = createRoute({
   component: OptimizationPage,
 });
 
+// The trial view lives in a sidebar on the run overview; old /trials deep
+// links redirect there with their params intact.
 const trialRoute = createRoute({
   path: "/trials",
   getParentRoute: () => optimizationBaseRoute,
-  component: TrialPage,
-  staticData: {
-    param: "trial",
-    paramValue: "trials",
-  },
+  component: TrialsRedirect,
 });
 
 // ----------- agent runner (project-scoped)
