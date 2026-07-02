@@ -186,6 +186,7 @@
     --color-orange: #f97316;
     --color-yellow: #eab308;
     --color-green: #10b981;
+    --color-green-bright: #00d14c;
     --color-lime: #a3e635;
     --color-turquoise: #06b6d4;
     --color-blue: #3b82f6;
@@ -195,6 +196,10 @@
     --color-emerald: #10b981;
     --color-cyan: #06b6d4;
     --color-rose: #f43f5e;
+
+    /* Neutral pill surface (status tag + metric-change pill) */
+    --pill-neutral-bg: #f8fafc;
+    --pill-neutral-border: #f1f5f9;
 
     /* Tag variant background and text colors */
     --tag-gray-bg: #f3f4f6;
@@ -441,6 +446,10 @@
     --scrollbar-thumb: #242424;
     --scrollbar-thumb-hover: #2e2e2e;
     --scrollbar-background: #121212;
+    /* Neutral pill surface (status tag + metric-change pill) - Dark Mode */
+    --pill-neutral-bg: #1c1c1c;
+    --pill-neutral-border: #2a2a2a;
+
     /* Tag variant background and text colors - Dark Mode */
     --tag-gray-bg: #242424;
     --tag-purple-bg: #2e2932;
