@@ -18,5 +18,6 @@ public record AttachmentInfo(
         @NonNull EntityType entityType,
         @NonNull UUID entityId,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID containerId,
-        String mimeType) implements AttachmentInfoHolder {
+        String mimeType,
+        long fileSize) implements AttachmentInfoHolder {
 }

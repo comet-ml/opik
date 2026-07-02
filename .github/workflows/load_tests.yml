@@ -21,7 +21,11 @@ env:
 
 jobs:
   run-load-tests:
-    runs-on: ubuntu-latest
+    # Larger GitHub-hosted runner (~4 vCPU / 16 GB) instead of the default
+    # ubuntu-latest (2 vCPU / 7 GB). The heaviest ingestion scenarios
+    # (e.g. test_many_spans_per_trace) intermittently OOM-killed an xdist
+    # worker on 7 GB; the extra memory headroom is what stops that.
+    runs-on: ubuntu-latest-m
     timeout-minutes: 60
 
     steps:
@@ -62,16 +66,17 @@ jobs:
 
       - name: Run Python SDK load tests
         # -n 2 + --dist=worksteal runs two scenarios in parallel at a time.
-        # `-n auto` (= 4 workers on ubuntu-latest) was the previous setting
-        # but reliably OOM-killed the heaviest scenarios
+        # History: on the old 7 GB ubuntu-latest, `-n auto` (= 4 workers)
+        # reliably OOM-killed the heaviest scenarios
         # (test_many_traces_one_span_each, test_many_spans_per_trace) when
-        # they ended up co-scheduled with other heavy tests against the
-        # same docker-compose Opik stack on the runner's 7 GB RAM. -n 2
-        # halves concurrent backend pressure and per-runner memory, at the
-        # cost of ~1.5x wall-clock (~32 min -> ~50 min). Each test still
-        # uses a unique project so isolation holds. Worksteal balances the
-        # very uneven per-test durations (spread is window-locked at 600 s,
-        # others run in 1-6 min).
+        # co-scheduled against the same docker-compose Opik stack, and even
+        # -n 2 still crashed a worker occasionally. The job now runs on the
+        # larger ubuntu-latest-m (~16 GB, see runs-on above), so -n 2 has
+        # comfortable memory headroom; it's kept conservative for now and can
+        # be raised toward -n auto on the larger runner if more parallelism is
+        # wanted. Each test uses a unique project so isolation holds. Worksteal
+        # balances the very uneven per-test durations (spread is window-locked
+        # at 600 s, others run in 1-6 min).
         run: |
           cd ${{ github.workspace }}/tests_load
           pytest suite/python_sdk -n 2 --dist=worksteal --junitxml=${{ github.workspace }}/load_test_results.xml

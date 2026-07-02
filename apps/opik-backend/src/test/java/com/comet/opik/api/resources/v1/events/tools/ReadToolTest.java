@@ -1,22 +1,31 @@
 package com.comet.opik.api.resources.v1.events.tools;
 
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
+import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import reactor.core.publisher.Mono;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 class ReadToolTest {
 
@@ -25,12 +34,22 @@ class ReadToolTest {
     private final DatasetService datasetService = mock(DatasetService.class);
     private final DatasetItemService datasetItemService = mock(DatasetItemService.class);
     private final ProjectService projectService = mock(ProjectService.class);
+    private final AttachmentService attachmentService = mock(AttachmentService.class);
     private final TraceCompressor traceCompressor = new TraceCompressor();
     private final DatasetCompressor datasetCompressor = new DatasetCompressor();
     private final GenericCompressor genericCompressor = new GenericCompressor();
 
     private final ReadTool tool = new ReadTool(traceService, spanService, datasetService,
-            datasetItemService, projectService, traceCompressor, datasetCompressor, genericCompressor);
+            datasetItemService, projectService, attachmentService, traceCompressor, datasetCompressor,
+            genericCompressor);
+
+    @BeforeEach
+    void stubAttachments() {
+        // Trace reads now list the trace's attachments; default to none so the existing
+        // assertions (which don't concern attachments) are unaffected.
+        when(attachmentService.getAttachmentInfoByEntity(any(), any(), any()))
+                .thenReturn(Mono.just(List.<AttachmentInfo>of()));
+    }
 
     @Test
     void specHasExpectedNameAndRequiredFields() {
@@ -302,10 +321,12 @@ class ReadToolTest {
         var trace = Trace.builder()
                 .id(UUID.randomUUID())
                 .projectId(UUID.randomUUID())
-                .name("active")
+                .name("trace-" + RandomStringUtils.secure().nextAlphanumeric(8))
                 .startTime(Instant.now())
                 .build();
-        var ctx = TraceToolContext.forActiveTrace(trace, List.of(), "ws", "user");
+        var ctx = TraceToolContext.forActiveTrace(trace, List.of(),
+                "ws-" + RandomStringUtils.secure().nextAlphanumeric(8),
+                "user-" + RandomStringUtils.secure().nextAlphanumeric(8));
 
         var spanId = UUID.randomUUID();
         var ref = new EntityRef(EntityType.SPAN, spanId.toString());
@@ -385,14 +406,125 @@ class ReadToolTest {
         assertThat(result.get("tier").asText()).isEqualTo(CompressionTier.MEDIUM.name());
     }
 
+    @Test
+    void traceReadListsAttachmentsAsCompactSummaries() {
+        var traceId = UUID.randomUUID();
+        var projectId = UUID.randomUUID();
+        String fileName = "img-" + RandomStringUtils.secure().nextAlphanumeric(8) + ".png";
+        var trace = Trace.builder()
+                .id(traceId)
+                .projectId(projectId)
+                .name("trace-" + RandomStringUtils.secure().nextAlphanumeric(8))
+                .startTime(Instant.now())
+                .build();
+        var ctx = TraceToolContext.forActiveTrace(trace, List.of(),
+                "ws-" + RandomStringUtils.secure().nextAlphanumeric(8),
+                "user-" + RandomStringUtils.secure().nextAlphanumeric(8));
+        ctx.cache(new EntityRef(EntityType.TRACE, traceId.toString()),
+                traceCompressor.buildFullJson(trace, List.of()));
+
+        // Override the @BeforeEach empty default: this trace has one image attachment. The read
+        // response must surface it so the judge can call get_attachment(fileName) without a
+        // separate list round-trip.
+        when(attachmentService.getAttachmentInfoByEntity(any(), any(), any()))
+                .thenReturn(Mono.just(List.of(AttachmentInfo.builder()
+                        .fileName(fileName)
+                        .mimeType("image/png")
+                        .entityType(com.comet.opik.api.attachment.EntityType.TRACE)
+                        .entityId(traceId)
+                        .containerId(projectId)
+                        .fileSize(0L)
+                        .build())));
+
+        var result = JsonUtils.getJsonNodeFromString(
+                tool.execute("{\"type\": \"trace\", \"id\": \"%s\"}".formatted(traceId), ctx).block());
+
+        var attachments = result.get("attachments");
+        assertThat(attachments).isNotNull();
+        assertThat(attachments.isArray()).isTrue();
+        assertThat(attachments).hasSize(1);
+        var entry = attachments.get(0);
+        assertThat(entry.get("file_name").asText()).isEqualTo(fileName);
+        assertThat(entry.get("mime_type").asText()).isEqualTo("image/png");
+        assertThat(entry.get("media_type").asText()).isEqualTo("image");
+    }
+
+    @Test
+    void attachmentListCachedAfterFirstRead_serviceNotCalledOnReread() {
+        var traceId = UUID.randomUUID();
+        var projectId = UUID.randomUUID();
+        String fileName = "img-" + RandomStringUtils.secure().nextAlphanumeric(8) + ".png";
+        var trace = Trace.builder()
+                .id(traceId)
+                .projectId(projectId)
+                .name("trace-" + RandomStringUtils.secure().nextAlphanumeric(8))
+                .startTime(Instant.now())
+                .build();
+        var ctx = TraceToolContext.forActiveTrace(trace, List.of(),
+                "ws-" + RandomStringUtils.secure().nextAlphanumeric(8),
+                "user-" + RandomStringUtils.secure().nextAlphanumeric(8));
+        ctx.cache(new EntityRef(EntityType.TRACE, traceId.toString()),
+                traceCompressor.buildFullJson(trace, List.of()));
+
+        when(attachmentService.getAttachmentInfoByEntity(any(), any(), any()))
+                .thenReturn(Mono.just(List.of(AttachmentInfo.builder()
+                        .fileName(fileName)
+                        .mimeType("image/png")
+                        .entityType(com.comet.opik.api.attachment.EntityType.TRACE)
+                        .entityId(traceId)
+                        .containerId(projectId)
+                        .fileSize(1024L)
+                        .build())));
+
+        String args = "{\"type\": \"trace\", \"id\": \"%s\"}".formatted(traceId);
+        var firstResult = JsonUtils.getJsonNodeFromString(tool.execute(args, ctx).block());
+        var secondResult = JsonUtils.getJsonNodeFromString(tool.execute(args, ctx).block());
+
+        // Service must have been called exactly once — the second read hits the cache.
+        verify(attachmentService, times(1)).getAttachmentInfoByEntity(any(), any(), any());
+
+        // Both reads must expose the same attachment.
+        assertThat(firstResult.get("attachments").get(0).get("file_name").asText()).isEqualTo(fileName);
+        assertThat(secondResult.get("attachments").get(0).get("file_name").asText()).isEqualTo(fileName);
+    }
+
+    @Test
+    void traceReadRendersEmptyAttachmentsArrayWhenTraceHasNone() {
+        // The @BeforeEach default stubs an empty list; assert the envelope still carries an (empty)
+        // attachments array so the judge sees "no attachments" explicitly rather than the key being
+        // absent.
+        var traceId = UUID.randomUUID();
+        var trace = Trace.builder()
+                .id(traceId)
+                .projectId(UUID.randomUUID())
+                .name("trace-" + RandomStringUtils.secure().nextAlphanumeric(8))
+                .startTime(Instant.now())
+                .build();
+        var ctx = TraceToolContext.forActiveTrace(trace, List.of(),
+                "ws-" + RandomStringUtils.secure().nextAlphanumeric(8),
+                "user-" + RandomStringUtils.secure().nextAlphanumeric(8));
+        ctx.cache(new EntityRef(EntityType.TRACE, traceId.toString()),
+                traceCompressor.buildFullJson(trace, List.of()));
+
+        var result = JsonUtils.getJsonNodeFromString(
+                tool.execute("{\"type\": \"trace\", \"id\": \"%s\"}".formatted(traceId), ctx).block());
+
+        var attachments = result.get("attachments");
+        assertThat(attachments).isNotNull();
+        assertThat(attachments.isArray()).isTrue();
+        assertThat(attachments).isEmpty();
+    }
+
     private static TraceToolContext newContextWithSeededTrace() {
         var trace = Trace.builder()
                 .id(UUID.randomUUID())
                 .projectId(UUID.randomUUID())
-                .name("active")
+                .name("trace-" + RandomStringUtils.secure().nextAlphanumeric(8))
                 .startTime(Instant.now())
                 .build();
-        var ctx = TraceToolContext.forActiveTrace(trace, List.of(), "ws", "user");
+        var ctx = TraceToolContext.forActiveTrace(trace, List.of(),
+                "ws-" + RandomStringUtils.secure().nextAlphanumeric(8),
+                "user-" + RandomStringUtils.secure().nextAlphanumeric(8));
         // Mirror the production seed: cache the {trace, spans} composite under EntityRef(TRACE, id).
         JsonNode composite = new TraceCompressor().buildFullJson(trace, List.of());
         ctx.cache(new EntityRef(EntityType.TRACE, trace.id().toString()), composite);

@@ -83,15 +83,16 @@ const TrialDetails: React.FC<TrialDetailsProps> = ({
       </div>
       <div className="mb-1 flex gap-2 overflow-x-auto">
         <DateTag date={experiment?.created_at} resource={RESOURCE_TYPE.trial} />
-        {canViewDatasets && (
-          <NavigationTag
-            id={experiment?.dataset_id}
-            name={
-              experiment?.dataset_name && `Go to ${experiment.dataset_name}`
-            }
-            resource={RESOURCE_TYPE.dataset}
-          />
-        )}
+        {canViewDatasets &&
+          experiment?.dataset_id &&
+          experiment?.dataset_name && (
+            <NavigationTag
+              id={experiment.dataset_id}
+              name={experiment.dataset_name}
+              resource={RESOURCE_TYPE.dataset}
+              prefix="Dataset"
+            />
+          )}
         {experiment?.project_id && (
           <TraceLogsSidebarButton
             projectId={experiment.project_id}

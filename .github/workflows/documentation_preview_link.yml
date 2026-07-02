@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
         - 'apps/opik-documentation/documentation/**'
+        - '.github/workflows/documentation_preview_link.yml'
 
 
 concurrency:
@@ -39,10 +40,12 @@ jobs:
               working-directory: apps/opik-documentation/documentation
               run: |
                 echo -e "\n\n" >> preview_url.txt
-                
-                # Use JSON output for reliable parsing (CSV breaks with URLs containing commas/brackets)
+
+                # --concurrency 500: the preview CDN serves bursts without rate-limiting;
+                # the recurse otherwise brushes the job's 15-minute timeout.
                 npx linkinator ${{ steps.generate-docs.outputs.URL }} \
                   --recurse \
+                  --concurrency 500 \
                   --skip "search\/v2\/key" \
                   --skip "https://ai.google.dev/gemini-api" \
                   --skip "https://ai.google.dev/aistudio" \
@@ -52,20 +55,68 @@ jobs:
                   --skip "googletagmanager.com" \
                   --skip "insights/script.js" \
                   --format json > linkinator_results.json || true
-                
-                # Parse JSON and filter broken links (excluding 403s)
-                BROKEN_LINKS=$(jq -r '
-                  .links[]
-                  | select(.state != "OK" and .status != 403)
-                  | "Page: \(.parent)\n❌ Broken link: \(.url) (\(.status))\n"
+
+                PREVIEW_ORIGIN=$(echo "${{ steps.generate-docs.outputs.URL }}" | grep -oE '^https?://[^/]+')
+
+                # linkinator exits non-zero both when it finds broken links and when it
+                # crashes mid-crawl (e.g. unhandled ECONNRESET), so trust the output, not
+                # the exit code: invalid/missing JSON means the crawl didn't complete.
+                if ! jq -e 'type == "object" and (.links | type == "array")' linkinator_results.json > /dev/null 2>&1; then
+                  {
+                    echo "⚠️ The link check did not complete (likely a crawl crash or timeout). Please re-run this check."
+                    echo ""
+                    echo "---"
+                    echo "📌 Results for commit ${{ github.sha }}"
+                  } >> preview_url.txt
+                  echo "true" > check_failed.flag
+                  exit 0
+                fi
+
+                # `↳ on page` strips the ephemeral preview host, leaving a stable,
+                # greppable doc path. Append one report entry for a status-0 url whose
+                # recheck label is computed by the caller.
+                report_timeout() {
+                  local url=$1 label=$2 parent
+                  parent=$(jq -r --arg u "$url" --arg origin "$PREVIEW_ORIGIN" \
+                    '(first(.links[] | select(.url == $u)).parent // "") | sub("^" + $origin; "")' linkinator_results.json)
+                  BROKEN_LINKS=$(printf '%s\n❌ Broken link: %s (%s)\n   ↳ on page: %s' "$BROKEN_LINKS" "$url" "$label" "$parent")
+                }
+
+                # Real HTTP errors (excluding 403s), deduped by url — one broken sidebar
+                # link otherwise multiplies into hundreds of lines and overflows GitHub's
+                # 65,536-char comment limit.
+                BROKEN_LINKS=$(jq -r --arg origin "$PREVIEW_ORIGIN" '
+                  [.links[] | select(.state != "OK" and .status != 403 and .status != 0)]
+                  | group_by(.url) | map(.[0]) | .[]
+                  | "❌ Broken link: \(.url) (\(.status))\n   ↳ on page: \((.parent // "") | sub("^" + $origin; ""))"
                 ' linkinator_results.json)
-                
+
+                # Status 0 is "crawl gave up", not an HTTP error — a false positive for
+                # healthy-but-slow pages. Re-check each (only on the preview origin, so a
+                # PR-authored link can't point curl at an arbitrary host) and keep it only
+                # if genuinely unreachable.
+                while IFS= read -r url; do
+                  [ -z "$url" ] && continue
+                  case "$url" in
+                    "$PREVIEW_ORIGIN"/*|"$PREVIEW_ORIGIN")
+                      code=$(curl -s -L -o /dev/null -w "%{http_code}" --max-time 20 "$url" 2>/dev/null)
+                      { [ -n "$code" ] && [ "$code" -ge 200 ] && [ "$code" -lt 400 ]; } && continue
+                      report_timeout "$url" "timeout, recheck ${code:-000}"
+                      ;;
+                    *)
+                      report_timeout "$url" "timeout"
+                      ;;
+                  esac
+                done <<< "$(jq -r '[.links[] | select(.status == 0) | .url] | unique | .[]' linkinator_results.json)"
+
                 if [ -n "$BROKEN_LINKS" ]; then
                   {
                     echo "**The following broken links were found:**"
                     echo ""
                     echo "$BROKEN_LINKS"
                   } >> preview_url.txt
+                  # Fail the job AFTER the comment is posted (see the Fail step below).
+                  echo "true" > check_failed.flag
                 else
                   echo "No broken links found" >> preview_url.txt
                 fi
@@ -79,7 +130,17 @@ jobs:
                 } >> preview_url.txt
 
             - name: Comment URL in PR
+              if: always()
               uses: thollander/actions-comment-pull-request@v3
               with:
                   file-path: apps/opik-documentation/documentation/preview_url.txt
                   comment-tag: docs-preview
+
+            - name: Fail if the link check failed
+              if: always()
+              working-directory: apps/opik-documentation/documentation
+              run: |
+                if [ -f check_failed.flag ]; then
+                  echo "Link check failed — broken links were found, or the crawl did not complete. See the PR comment."
+                  exit 1
+                fi

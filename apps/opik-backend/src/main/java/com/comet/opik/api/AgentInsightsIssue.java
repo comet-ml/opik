@@ -24,6 +24,9 @@ public record AgentInsightsIssue(
         AgentInsightsIssueSeverity severity,
         String tracesQuery,
         @Schema(description = "SUM(count) over the requested window") long totalOccurrences,
+        @Schema(description = "Occurrences on the latest report day in the window only. The issue's description/cause "
+                + "narrate that most recent run, so this is the count consistent with them; totalOccurrences instead "
+                + "sums every day in the window.") long latestCount,
         @Schema(description = "SUM(total_count) over the requested window") long total,
         @Schema(description = "SUM(users_impacted) over the requested window") long usersImpacted,
         @Schema(description = "SUM(total_users) over the requested window") long totalUsers,

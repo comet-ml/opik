@@ -166,7 +166,8 @@ class ExperimentItemDAO {
                       last_updated_by,
                       created_at,
                       last_updated_at,
-                      author
+                      author,
+                      source_queue_id
                   FROM (
                       SELECT
                           workspace_id,
@@ -181,7 +182,8 @@ class ExperimentItemDAO {
                           last_updated_by,
                           created_at,
                           last_updated_at,
-                          feedback_scores.last_updated_by AS author
+                          feedback_scores.last_updated_by AS author,
+                          CAST('' AS FixedString(36)) AS source_queue_id
                       FROM feedback_scores
                       WHERE entity_type = 'trace'
                         AND workspace_id = :workspace_id
@@ -201,7 +203,8 @@ class ExperimentItemDAO {
                           last_updated_by,
                           created_at,
                           last_updated_at,
-                          author
+                          author,
+                          source_queue_id
                       FROM authored_feedback_scores
                       WHERE entity_type = 'trace'
                         AND workspace_id = :workspace_id
@@ -209,14 +212,14 @@ class ExperimentItemDAO {
                         AND entity_id IN (SELECT trace_id FROM experiment_items_ids)
                   )
                   ORDER BY last_updated_at DESC
-                  LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                  LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ), feedback_scores_grouped AS (
                   SELECT
                       workspace_id,
                       project_id,
                       entity_id,
                       name,
-                      groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at)) AS entries
+                      groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at, source_queue_id)) AS entries
                   FROM feedback_scores_deduped
                   GROUP BY workspace_id, project_id, entity_id, name
             ), feedback_scores_final AS (
@@ -230,8 +233,8 @@ class ExperimentItemDAO {
                       arrayStringConcat(arrayMap(e -> e.2, entries), ', ') AS reason,
                       arrayElement(entries, 1).4 AS source,
                       mapFromArrays(
-                          arrayMap(e -> e.5, entries),
-                          arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9), entries)
+                          arrayMap(e -> if(e.10 = '', e.5, concat(e.5, '_', toString(e.10))), entries),
+                          arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, '', '', e.10, e.5), entries)
                       ) AS value_by_author,
                       arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
                       arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
@@ -278,14 +281,22 @@ class ExperimentItemDAO {
                                                   v.2,
                                                   v.3,
                                                   toString(v.4),
-                                                  concat(replaceOne(toString(v.5), ' ', 'T'), 'Z')
+                                                  concat(replaceOne(toString(v.5), ' ', 'T'), 'Z'),
+                                                  v.6,
+                                                  v.7,
+                                                  v.8,
+                                                  v.9
                                               ),
                                               'Tuple(
                                                   value Decimal(18,9),
                                                   reason String,
                                                   category_name String,
                                                   source String,
-                                                  last_updated_at String
+                                                  last_updated_at String,
+                                                  span_type String,
+                                                  span_id String,
+                                                  source_queue_id String,
+                                                  author String
                                               )'
                                           ),
                                           mapValues(value_by_author)
@@ -309,7 +320,11 @@ class ExperimentItemDAO {
                                               reason String,
                                               category_name String,
                                               source String,
-                                              last_updated_at String
+                                              last_updated_at String,
+                                              span_type String,
+                                              span_id String,
+                                              source_queue_id String,
+                                              author String
                                           )
                                       )
                                   )'

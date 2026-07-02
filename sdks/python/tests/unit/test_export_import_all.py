@@ -89,13 +89,15 @@ def _seed_project_meta(tmp_path: Path) -> Path:
     return proj
 
 
-def _manifest_dir(tmp_path: Path) -> Path:
-    """Destination-keyed import-manifest dir for the default (no --to-project)
-    case, where the destination project == the source project name."""
+def _manifest_dir(tmp_path: Path, dest_workspace: str = _WORKSPACE) -> Path:
+    """Destination-keyed import-manifest dir for the default (no --to-project /
+    --to-workspace) case, where destination == source workspace + project name."""
     from opik.cli.imports.utils import destination_manifest_dir
 
     return destination_manifest_dir(
-        tmp_path / _WORKSPACE / "projects" / _PROJECT, _PROJECT
+        tmp_path / _WORKSPACE / "projects" / _PROJECT,
+        _PROJECT,
+        dest_workspace,
     )
 
 
@@ -1100,6 +1102,56 @@ class TestImportAll:
         assert kwargs.get("api_key") == "secret-key"
         assert kwargs.get("workspace") == _WORKSPACE
 
+    def test_import_all__to_workspace__uses_dest_workspace_for_opik_client(
+        self, tmp_path
+    ):
+        """--to-workspace overrides the workspace passed to opik.Opik() while
+        leaving the on-disk path lookup (which uses the source workspace) unchanged.
+
+        Scenario: data exported from 'ws', imported into 'dest-ws'.
+        The exported files live under <path>/ws/projects/. The Opik client
+        must be constructed with workspace='dest-ws'.
+        """
+        # Seed export layout under the SOURCE workspace directory.
+        _seed_project_meta(tmp_path)
+        client = _make_import_client()
+
+        from click.testing import CliRunner
+        from opik.cli.imports import import_group
+
+        runner = CliRunner()
+        with (
+            patch(f"{_IMPORT_MODULE}.opik.Opik", return_value=client) as mock_opik,
+            patch(f"{_IMPORT_MODULE}.import_datasets_from_directory", return_value={}),
+            patch(
+                f"{_IMPORT_MODULE}.import_prompts_from_directory",
+                return_value={"prompts": 0},
+            ),
+            patch(f"{_IMPORT_MODULE}.import_traces_from_directory", return_value={}),
+            patch(
+                f"{_IMPORT_MODULE}.import_experiments_from_directory", return_value={}
+            ),
+        ):
+            result = runner.invoke(
+                import_group,
+                [
+                    _WORKSPACE,  # source workspace: used for file lookup
+                    _PROJECT,
+                    "all",
+                    "--path",
+                    str(tmp_path),
+                    "--to-workspace",
+                    "dest-ws",  # destination workspace: used for Opik client
+                    "--include",
+                    "",  # empty include → skip all phases, just test client construction
+                ],
+            )
+
+        assert result.exit_code == 0, result.output
+        mock_opik.assert_called_once()
+        kwargs = mock_opik.call_args[1]
+        assert kwargs.get("workspace") == "dest-ws"
+
 
 # ---------------------------------------------------------------------------
 # export_all
@@ -1118,7 +1170,7 @@ class TestExportAll:
                 side_effect=_fake_prepare_export_dir,
             ),
             patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(0, 0)),
-            patch(f"{_EXPORT_MODULE}._export_all_prompts", return_value=(0, 0)),
+            patch(f"{_EXPORT_MODULE}._export_all_prompts", return_value=(0, 0, 0)),
             patch(
                 f"{_EXPORT_MODULE}._export_project_traces",
                 return_value=(0, 0, 0, False),
@@ -1152,7 +1204,7 @@ class TestExportAll:
                 side_effect=_fake_prepare_export_dir,
             ),
             patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(0, 0)),
-            patch(f"{_EXPORT_MODULE}._export_all_prompts", return_value=(0, 0)),
+            patch(f"{_EXPORT_MODULE}._export_all_prompts", return_value=(0, 0, 0)),
             patch(
                 f"{_EXPORT_MODULE}._export_project_traces",
                 return_value=(0, 0, 0, False),
@@ -1188,7 +1240,7 @@ class TestExportAll:
                 f"{_EXPORT_MODULE}._export_all_datasets", return_value=(2, 0)
             ) as mock_ds,
             patch(
-                f"{_EXPORT_MODULE}._export_all_prompts", return_value=(0, 0)
+                f"{_EXPORT_MODULE}._export_all_prompts", return_value=(0, 0, 0)
             ) as mock_pr,
             patch(
                 f"{_EXPORT_MODULE}._export_project_traces",
@@ -1223,7 +1275,7 @@ class TestExportAll:
         with (
             patch(f"{_EXPORT_MODULE}.opik.Opik", return_value=client),
             patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(1, 0)),
-            patch(f"{_EXPORT_MODULE}._export_all_prompts", return_value=(2, 0)),
+            patch(f"{_EXPORT_MODULE}._export_all_prompts", return_value=(2, 0, 0)),
             patch(
                 f"{_EXPORT_MODULE}._export_project_traces",
                 return_value=(1, 5, 0, False),
@@ -1260,7 +1312,7 @@ class TestExportAll:
         with (
             patch(f"{_EXPORT_MODULE}.opik.Opik", return_value=client) as mock_opik,
             patch(f"{_EXPORT_MODULE}._export_all_datasets", return_value=(0, 0)),
-            patch(f"{_EXPORT_MODULE}._export_all_prompts", return_value=(0, 0)),
+            patch(f"{_EXPORT_MODULE}._export_all_prompts", return_value=(0, 0, 0)),
             patch(
                 f"{_EXPORT_MODULE}._export_project_traces",
                 return_value=(0, 0, 0, False),

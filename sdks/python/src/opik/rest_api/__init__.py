@@ -525,6 +525,9 @@ from .types import (
     RecentActivityItemPublic,
     RecentActivityItemPublicType,
     RecentActivityPagePublic,
+    ReportFailure,
+    ReportFailurePage,
+    ReportFailureType,
     ReportPreference,
     ReportedIssue,
     ReportedIssueSeverity,
@@ -726,6 +729,7 @@ from . import (
     projects,
     prompts,
     redirect,
+    report_failures,
     reports,
     retention_rules,
     runners,
@@ -773,6 +777,7 @@ from .projects import (
     ProjectWriteVisibility,
 )
 from .prompts import CreatePromptVersionDetailTemplateStructure, PromptWriteTemplateStructure, PromptWriteType
+from .report_failures import FindReportFailuresRequestType
 from .reports import ReportCompleteRequestStatus
 from .retention_rules import RetentionRuleWriteRetention
 from .runners import (
@@ -1167,6 +1172,7 @@ __all__ = [
     "FindAgentInsightsIssuesRequestStatus",
     "FindFeedbackDefinitionsRequestType",
     "FindFeedbackScoreNames1RequestType",
+    "FindReportFailuresRequestType",
     "ForbiddenError",
     "Function",
     "FunctionCall",
@@ -1359,6 +1365,9 @@ __all__ = [
     "RecentActivityItemPublicType",
     "RecentActivityPagePublic",
     "ReportCompleteRequestStatus",
+    "ReportFailure",
+    "ReportFailurePage",
+    "ReportFailureType",
     "ReportPreference",
     "ReportedIssue",
     "ReportedIssueSeverity",
@@ -1554,6 +1563,7 @@ __all__ = [
     "projects",
     "prompts",
     "redirect",
+    "report_failures",
     "reports",
     "retention_rules",
     "runners",

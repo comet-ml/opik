@@ -137,8 +137,9 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
           {annotationQueue?.project_id && (
             <NavigationTag
               id={annotationQueue.project_id}
-              name={`Go to ${annotationQueue.project_name}`}
+              name={annotationQueue.project_name}
               resource={RESOURCE_TYPE.project}
+              prefix="Project"
             />
           )}
           {annotationQueue && (

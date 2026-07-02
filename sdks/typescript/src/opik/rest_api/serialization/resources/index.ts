@@ -49,6 +49,8 @@ export * from "./projects/types/index.js";
 export * from "./prompts/client/requests/index.js";
 export * as prompts from "./prompts/index.js";
 export * from "./prompts/types/index.js";
+export * as reportFailures from "./reportFailures/index.js";
+export * from "./reportFailures/types/index.js";
 export * from "./reports/client/requests/index.js";
 export * as reports from "./reports/index.js";
 export * from "./reports/types/index.js";
