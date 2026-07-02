@@ -1,46 +1,30 @@
-import React, { useMemo } from "react";
+import React from "react";
 import { CellContext } from "@tanstack/react-table";
 
+import { cn } from "@/lib/utils";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import { Tag } from "@/ui/tag";
 import { getCellTagSize, TAG_SIZE_MAP } from "@/constants/shared";
 import { AggregatedCandidate } from "@/types/optimizations";
 import {
-  computeCandidateStatuses,
   STATUS_VARIANT_MAP,
-  type InProgressInfo,
+  getTrialDotColor,
+  type TrialStatus,
 } from "@/v2/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
 
 const TrialStatusCell = (context: CellContext<unknown, unknown>) => {
   const row = context.row.original as AggregatedCandidate;
   const { custom } = context.column.columnDef.meta ?? {};
-  const {
-    candidates,
-    bestCandidateId,
-    isTestSuite,
-    isInProgress,
-    inProgressInfo,
-  } = (custom ?? {}) as {
-    candidates: AggregatedCandidate[];
+  // The status map is computed once on the page (single source shared with the
+  // chart and the sidebar's status card) and passed down through column meta.
+  const { statusMap, bestCandidateId, isTestSuite } = (custom ?? {}) as {
+    statusMap?: Map<string, TrialStatus>;
     bestCandidateId?: string;
     isTestSuite?: boolean;
-    isInProgress?: boolean;
-    inProgressInfo?: InProgressInfo;
   };
 
   const isBest = bestCandidateId === row.candidateId;
-
-  const statusMap = useMemo(
-    () =>
-      computeCandidateStatuses(
-        candidates ?? [],
-        isTestSuite,
-        isInProgress,
-        inProgressInfo,
-      ),
-    [candidates, isTestSuite, isInProgress, inProgressInfo],
-  );
-  const status = statusMap.get(row.candidateId) ?? "pruned";
+  const status = statusMap?.get(row.candidateId) ?? "pruned";
   const tagSize = getCellTagSize(context, TAG_SIZE_MAP);
 
   return (
@@ -48,19 +32,19 @@ const TrialStatusCell = (context: CellContext<unknown, unknown>) => {
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      {isBest ? (
-        <Tag variant="green" size={tagSize}>
-          Best
-        </Tag>
-      ) : (
-        <Tag
-          variant={STATUS_VARIANT_MAP[status]}
-          size={tagSize}
-          className="capitalize"
-        >
-          {status}
-        </Tag>
-      )}
+      <Tag
+        variant={isBest ? "green" : STATUS_VARIANT_MAP[status]}
+        size={tagSize}
+        className={cn("flex items-center gap-1.5", !isBest && "capitalize")}
+      >
+        <span
+          className="size-1.5 shrink-0 rounded-full"
+          style={{
+            backgroundColor: getTrialDotColor({ status, isBest, isTestSuite }),
+          }}
+        />
+        {isBest ? "Best" : status}
+      </Tag>
     </CellWrapper>
   );
 };

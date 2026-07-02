@@ -20,9 +20,9 @@ import {
 } from "@/v2/pages/OptimizationPage/TrialMetricCells";
 import { TrialPromptCell } from "@/v2/pages/OptimizationPage/TrialPromptCell";
 import { getObjectiveLabel } from "@/lib/optimizations";
+import type { TrialStatus } from "@/v2/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
 
 type UseOptimizationColumnsParams = {
-  candidates: AggregatedCandidate[];
   experiments: Experiment[];
   baselineExperiment?: Experiment;
   columnsOrder: string[];
@@ -31,17 +31,14 @@ type UseOptimizationColumnsParams = {
   bestCandidateId?: string;
   baselineCandidate?: AggregatedCandidate;
   isTestSuite?: boolean;
-  isInProgress?: boolean;
-  inProgressInfo?: {
-    candidateId: string;
-    stepIndex: number;
-    parentCandidateIds: string[];
-  };
+  /** Page-level status map — the single status source shared with the chart. */
+  statusMap: Map<string, TrialStatus>;
+  /** Opens the trial sidebar on the Prompt tab (prompt cell's diff button). */
+  onViewPromptDiff: (row: AggregatedCandidate) => void;
   objectiveName?: string;
 };
 
 export const useOptimizationColumns = ({
-  candidates,
   experiments,
   baselineExperiment,
   columnsOrder,
@@ -50,8 +47,8 @@ export const useOptimizationColumns = ({
   bestCandidateId,
   baselineCandidate,
   isTestSuite,
-  isInProgress,
-  inProgressInfo,
+  statusMap,
+  onViewPromptDiff,
   objectiveName,
 }: UseOptimizationColumnsParams) => {
   const experimentMap = useMemo(
@@ -125,14 +122,8 @@ export const useOptimizationColumns = ({
         customMeta: {
           experimentMap,
           baselineExperiment,
+          onViewPromptDiff,
         },
-      },
-      {
-        id: "trace_count",
-        label: "Trial items",
-        type: COLUMN_TYPE.number,
-        size: 80,
-        accessorFn: (row) => row.totalDatasetItemCount,
       },
       {
         id: "trial_status",
@@ -142,11 +133,9 @@ export const useOptimizationColumns = ({
         accessorFn: () => undefined,
         cell: TrialStatusCell as never,
         customMeta: {
-          candidates,
+          statusMap,
           bestCandidateId,
           isTestSuite,
-          isInProgress,
-          inProgressInfo,
         },
       },
       {
@@ -160,14 +149,13 @@ export const useOptimizationColumns = ({
       },
     ];
   }, [
-    candidates,
     experimentMap,
     baselineExperiment,
     bestCandidateId,
     baselineCandidate,
     isTestSuite,
-    isInProgress,
-    inProgressInfo,
+    statusMap,
+    onViewPromptDiff,
     objectiveName,
   ]);
 

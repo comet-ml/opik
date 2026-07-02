@@ -5,11 +5,10 @@ import isObject from "lodash/isObject";
 import { GitCompareArrows } from "lucide-react";
 
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { AggregatedCandidate } from "@/types/optimizations";
 import { Experiment } from "@/types/datasets";
 import { ROW_HEIGHT } from "@/types/shared";
-import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
-import PromptDiff from "@/shared/CodeDiff/PromptDiff";
 import { extractMessages } from "@/lib/optimization-config";
 
 const getPromptFromExperiment = (experiment: Experiment): unknown => {
@@ -49,9 +48,11 @@ const getPromptSingleLine = (prompt: unknown): string => {
 export const TrialPromptCell = (context: CellContext<unknown, unknown>) => {
   const row = context.row.original as AggregatedCandidate;
   const { custom } = context.column.columnDef.meta ?? {};
-  const { experimentMap, baselineExperiment } = (custom ?? {}) as {
+  const { experimentMap, baselineExperiment, onViewPromptDiff } = (custom ??
+    {}) as {
     experimentMap: Map<string, Experiment>;
     baselineExperiment?: Experiment;
+    onViewPromptDiff?: (row: AggregatedCandidate) => void;
   };
 
   const rowHeight =
@@ -77,7 +78,8 @@ export const TrialPromptCell = (context: CellContext<unknown, unknown>) => {
 
   const isBaseline = experiment?.id === baselineExperiment?.id;
 
-  const showDiff = !isBaseline && !!currentPrompt && !!baselinePrompt;
+  const showDiff =
+    !isBaseline && !!currentPrompt && !!baselinePrompt && !!onViewPromptDiff;
 
   const preview = useMemo(
     () =>
@@ -105,27 +107,19 @@ export const TrialPromptCell = (context: CellContext<unknown, unknown>) => {
         </span>
       )}
       {showDiff && (
-        <Popover>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              onClick={(e) => e.stopPropagation()}
-              className="shrink-0 self-start text-muted-slate hover:text-foreground"
-            >
-              <GitCompareArrows className="size-4" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent
-            className="max-h-[400px] w-[500px] overflow-y-auto p-4"
-            align="end"
-            onClick={(e) => e.stopPropagation()}
+        <TooltipWrapper content="View prompt diff">
+          <button
+            type="button"
+            aria-label="View prompt diff"
+            onClick={(e) => {
+              e.stopPropagation();
+              onViewPromptDiff(row);
+            }}
+            className="shrink-0 self-start text-muted-slate opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover/row:opacity-100"
           >
-            <h4 className="comet-body-s-accented mb-3">
-              Prompt diff vs baseline
-            </h4>
-            <PromptDiff baseline={baselinePrompt} current={currentPrompt} />
-          </PopoverContent>
-        </Popover>
+            <GitCompareArrows className="size-4" />
+          </button>
+        </TooltipWrapper>
       )}
     </CellWrapper>
   );

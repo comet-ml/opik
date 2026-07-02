@@ -17,7 +17,10 @@ import RunErrorPanel from "./RunErrorPanel";
 import TrialSidebar from "./TrialSidebar/TrialSidebar";
 import TrialSidebarContent from "./TrialSidebar/TrialSidebarContent";
 import { computeCandidateStatuses } from "@/v2/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
-import { OPTIMIZATION_STATUS } from "@/types/optimizations";
+import {
+  OPTIMIZATION_STATUS,
+  AggregatedCandidate,
+} from "@/types/optimizations";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 enum OPTIMIZATION_TAB {
@@ -132,8 +135,12 @@ const OptimizationPage: React.FC = () => {
     [candidates, trialSidebar.trialNumber, trialSidebar.experimentIds],
   );
 
+  const handleViewPromptDiff = useCallback(
+    (row: AggregatedCandidate) => openTrial(row, "prompt"),
+    [openTrial],
+  );
+
   const { columnsDef, columns } = useOptimizationColumns({
-    candidates,
     experiments,
     baselineExperiment,
     columnsOrder,
@@ -142,8 +149,8 @@ const OptimizationPage: React.FC = () => {
     bestCandidateId: bestCandidate?.candidateId,
     baselineCandidate,
     isTestSuite,
-    isInProgress,
-    inProgressInfo,
+    statusMap,
+    onViewPromptDiff: handleViewPromptDiff,
     objectiveName: optimization?.objective_name,
   });
 

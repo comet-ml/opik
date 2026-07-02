@@ -20,7 +20,6 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   "objective_name",
   "runtime_cost",
   "latency",
-  "trace_count",
   "trial_status",
   "created_at",
 ];
@@ -33,7 +32,6 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   "objective_name",
   "runtime_cost",
   "latency",
-  "trace_count",
   "trial_status",
   "created_at",
 ];
