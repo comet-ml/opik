@@ -1528,4 +1528,89 @@ class OpenTelemetryMapperTest {
             assertThat(map(okSpan).errorInfo()).isNull();
         }
     }
+
+    @Nested
+    class ClaudeCodeMappingTest {
+
+        private Span enrich(List<KeyValue> attributes, List<io.opentelemetry.proto.trace.v1.Span.Event> events) {
+            var spanBuilder = Span.builder()
+                    .id(UUID.randomUUID())
+                    .traceId(UUID.randomUUID())
+                    .projectId(UUID.randomUUID())
+                    .startTime(Instant.now());
+            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, events);
+            return spanBuilder.build();
+        }
+
+        private KeyValue str(String key, String value) {
+            return KeyValue.newBuilder()
+                    .setKey(key)
+                    .setValue(AnyValue.newBuilder().setStringValue(value))
+                    .build();
+        }
+
+        @Test
+        void userPromptMapsToInput() {
+            var span = enrich(List.of(str("user_prompt", "What is the marker?")), null);
+
+            assertThat(span.input().get("user_prompt").asText()).isEqualTo("What is the marker?");
+        }
+
+        @Test
+        void toolInputMapsToInput() {
+            var span = enrich(List.of(str("tool_input", "[TOOL INPUT: Bash]\n{\"command\":\"ls\"}")), null);
+
+            assertThat(span.input().get("tool_input").asText()).contains("\"command\":\"ls\"");
+        }
+
+        @Test
+        void responseModelOutputMapsToOutput() {
+            var span = enrich(List.of(str("response.model_output", "The marker is OTEL-REPRO-MARKER-12345.")), null);
+
+            assertThat(span.output().get("response.model_output").asText())
+                    .isEqualTo("The marker is OTEL-REPRO-MARKER-12345.");
+            assertThat(span.input()).isNull();
+        }
+
+        @Test
+        void modelOutputTruncationSiblingsGoToMetadata() {
+            var span = enrich(List.of(
+                    str("response.model_output", "partial"),
+                    KeyValue.newBuilder().setKey("response.model_output_truncated")
+                            .setValue(AnyValue.newBuilder().setBoolValue(true)).build(),
+                    KeyValue.newBuilder().setKey("response.model_output_original_length")
+                            .setValue(AnyValue.newBuilder().setIntValue(120)).build()),
+                    null);
+
+            assertThat(span.output().has("response.model_output")).isTrue();
+            assertThat(span.metadata().has("response.model_output_truncated")).isTrue();
+            assertThat(span.metadata().get("response.model_output_original_length").asInt()).isEqualTo(120);
+        }
+
+        @Test
+        void toolOutputEventMapsToOutput() {
+            var event = io.opentelemetry.proto.trace.v1.Span.Event.newBuilder()
+                    .setName("tool.output")
+                    .addAttributes(str("bash_command", "ls"))
+                    .addAttributes(str("output", "AGENTS.md\nREADME.md"))
+                    .build();
+
+            var span = enrich(List.of(str("tool_name", "Bash")), List.of(event));
+
+            assertThat(span.output().get("output").asText()).isEqualTo("AGENTS.md\nREADME.md");
+        }
+
+        @Test
+        void toolOutputEventContentAttributeMapsToOutput() {
+            var event = io.opentelemetry.proto.trace.v1.Span.Event.newBuilder()
+                    .setName("tool.output")
+                    .addAttributes(str("file_path", "/tmp/repro.txt"))
+                    .addAttributes(str("content", "marker: OTEL-REPRO-MARKER-12345"))
+                    .build();
+
+            var span = enrich(List.of(), List.of(event));
+
+            assertThat(span.output().get("content").asText()).isEqualTo("marker: OTEL-REPRO-MARKER-12345");
+        }
+    }
 }
