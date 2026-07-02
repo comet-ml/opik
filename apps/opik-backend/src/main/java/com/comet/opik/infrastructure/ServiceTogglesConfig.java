@@ -69,8 +69,6 @@ public class ServiceTogglesConfig {
     @NotNull boolean agenticToolsEnabled;
     @JsonProperty
     @NotNull boolean agentInsightsEnabled;
-    @JsonProperty
-    @NotNull boolean onlineScoringTracingEnabled;
 
     @NotNull Set<@NotBlank String> v2WorkspaceAllowlistIds = Set.of();
 
