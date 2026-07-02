@@ -4,5 +4,6 @@ export const AlertWriteAlertType = {
     General: "general",
     Slack: "slack",
     Pagerduty: "pagerduty",
+    Feishu: "feishu",
 } as const;
 export type AlertWriteAlertType = (typeof AlertWriteAlertType)[keyof typeof AlertWriteAlertType];

@@ -7,6 +7,7 @@ import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.events.webhooks.MetricsAlertPayload;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
+import com.comet.opik.api.resources.v1.events.webhooks.feishu.FeishuWebhookPayloadMapper;
 import com.comet.opik.api.resources.v1.events.webhooks.pagerduty.PagerDutyWebhookPayloadMapper;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -79,6 +80,7 @@ public class AlertPayloadAdapter {
                         .alertMetadata(null).build();
             case PAGERDUTY -> PagerDutyWebhookPayloadMapper.toPagerDutyPayload(event);
             case SLACK -> SlackWebhookPayloadMapper.toSlackPayload(event);
+            case FEISHU -> FeishuWebhookPayloadMapper.toFeishuPayload(event);
         };
     }
 
