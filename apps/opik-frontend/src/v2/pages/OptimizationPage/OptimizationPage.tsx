@@ -15,6 +15,8 @@ import OptimizationTrialsTable from "./OptimizationTrialsTable";
 import OptimizationKPICards from "./OptimizationKPICards";
 import RunErrorPanel from "./RunErrorPanel";
 import TrialSidebar from "./TrialSidebar/TrialSidebar";
+import TrialSidebarContent from "./TrialSidebar/TrialSidebarContent";
+import { computeCandidateStatuses } from "@/v2/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
 import { OPTIMIZATION_STATUS } from "@/types/optimizations";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
@@ -105,6 +107,30 @@ const OptimizationPage: React.FC = () => {
   const isInProgress =
     !!optimization?.status &&
     IN_PROGRESS_OPTIMIZATION_STATUSES.includes(optimization.status);
+
+  // Single status source for the chart, the trials table, and the sidebar's
+  // status card.
+  const statusMap = useMemo(
+    () =>
+      computeCandidateStatuses(
+        candidates,
+        isTestSuite,
+        isInProgress,
+        inProgressInfo,
+      ),
+    [candidates, isTestSuite, isInProgress, inProgressInfo],
+  );
+
+  // The candidate behind the open sidebar; matched by trial number with an
+  // experiment-ids fallback for deep links minted before numbering.
+  const activeTrialCandidate = useMemo(
+    () =>
+      candidates.find((c) => c.trialNumber === trialSidebar.trialNumber) ??
+      candidates.find((c) =>
+        c.experimentIds.some((id) => trialSidebar.experimentIds.includes(id)),
+      ),
+    [candidates, trialSidebar.trialNumber, trialSidebar.experimentIds],
+  );
 
   const { columnsDef, columns } = useOptimizationColumns({
     candidates,
@@ -256,7 +282,28 @@ const OptimizationPage: React.FC = () => {
         onClose={trialSidebar.close}
         trialNumber={trialSidebar.trialNumber}
         trialExperiments={trialExperiments}
-      />
+      >
+        <TrialSidebarContent
+          optimization={optimization}
+          experimentIds={trialSidebar.experimentIds}
+          trialExperiments={trialExperiments}
+          allExperiments={experiments}
+          baselineExperiment={baselineExperiment}
+          isTestSuite={isTestSuite}
+          status={
+            activeTrialCandidate
+              ? statusMap.get(activeTrialCandidate.candidateId)
+              : undefined
+          }
+          isBest={
+            !!activeTrialCandidate &&
+            activeTrialCandidate.candidateId === bestCandidate?.candidateId
+          }
+          stepIndex={activeTrialCandidate?.stepIndex}
+          tab={trialSidebar.tab}
+          onTabChange={trialSidebar.setTab}
+        />
+      </TrialSidebar>
     </div>
   );
 };

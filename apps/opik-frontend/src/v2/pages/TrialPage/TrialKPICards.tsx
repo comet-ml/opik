@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 
+import { cn } from "@/lib/utils";
 import {
   MetricKPICard,
   getMetricKPICardConfigs,
@@ -17,6 +18,9 @@ type TrialKPICardsProps = {
   allOptimizationExperiments: Experiment[];
   objectiveName?: string;
   isTestSuite?: boolean;
+  className?: string;
+  /** Extra cards appended to the grid (e.g. the sidebar's status card). */
+  children?: React.ReactNode;
 };
 
 const getMetricValue = (
@@ -32,6 +36,8 @@ const TrialKPICards: React.FunctionComponent<TrialKPICardsProps> = ({
   allOptimizationExperiments,
   objectiveName,
   isTestSuite,
+  className,
+  children,
 }) => {
   const currentMetrics = useMemo(
     () => aggregateExperimentMetrics(experiments, objectiveName),
@@ -76,7 +82,7 @@ const TrialKPICards: React.FunctionComponent<TrialKPICardsProps> = ({
   const configs = getMetricKPICardConfigs({ isTestSuite, objectiveName });
 
   return (
-    <div className="grid grid-cols-3 gap-4">
+    <div className={cn("grid grid-cols-3 gap-4", className)}>
       {configs.map((config) => (
         <MetricKPICard
           key={config.key}
@@ -88,6 +94,7 @@ const TrialKPICards: React.FunctionComponent<TrialKPICardsProps> = ({
           trend={config.trend}
         />
       ))}
+      {children}
     </div>
   );
 };
