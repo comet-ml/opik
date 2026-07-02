@@ -91,7 +91,13 @@ public class FilterQueryBuilder {
      * duration once the column is non-nullable. No-op while it is Nullable (an absent value reads as {@code NULL}).
      */
     private static final String DURATION_ANALYTICS_DB = "if(end_time IS NOT NULL AND notEquals(end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) AND start_time IS NOT NULL AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)), (dateDiff('microsecond', start_time, end_time) / 1000.0), 0)";
-    private static final String NEW_DURATION_ANALYTICS_DB = "duration";
+    /**
+     * Sentinel-aware {@code duration} for the materialized column (experiment-comparison filtering): {@code isNaN}
+     * collapses the {@code NaN} sentinel to {@code NULL} so comparisons exclude an absent value — notably {@code !=},
+     * since {@code NaN != x} is true. Unconditional (mirrors {@code TTFT_ANALYTICS_DB}); a no-op while the column is
+     * Nullable since {@code NaN} cannot occur yet.
+     */
+    private static final String NEW_DURATION_ANALYTICS_DB = "if(isNaN(duration), NULL, duration)";
     /**
      * Sentinel-aware {@code ttft} for filtering: {@code isNaN} collapses the {@code NaN} sentinel to {@code NULL} so
      * comparisons exclude an absent value — notably {@code !=}, since {@code NaN != x} is true. Unconditional, not
@@ -914,7 +920,17 @@ public class FilterQueryBuilder {
      */
     public static Optional<String> toAnalyticsDbFiltersV2Client(
             @NonNull List<? extends Filter> filters, @NonNull FilterStrategy filterStrategy) {
-        return toAnalyticsDbFilters(filters, filterStrategy)
+        return toAnalyticsDbFiltersV2Client(filters, filterStrategy, false);
+    }
+
+    /**
+     * @param traceColumnsNonNullable threaded through so a v2-client caller can opt into sentinel-aware {@code end_time}
+     *                                just like the r2dbc path; without it this entry point could never enable the flag.
+     */
+    public static Optional<String> toAnalyticsDbFiltersV2Client(
+            @NonNull List<? extends Filter> filters, @NonNull FilterStrategy filterStrategy,
+            boolean traceColumnsNonNullable) {
+        return toAnalyticsDbFilters(filters, filterStrategy, traceColumnsNonNullable)
                 .map(sql -> rewritePlaceholdersForV2Client(sql, filters));
     }
 

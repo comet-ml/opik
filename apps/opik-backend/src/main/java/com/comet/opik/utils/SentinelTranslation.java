@@ -29,7 +29,7 @@ import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_
 @UtilityClass
 public class SentinelTranslation {
 
-    /** Sentinel for a non-nullable {@code DateTime64} column ({@code DEFAULT toDateTime64('1970-01-01 00:00:00', 6)}). */
+    /** Sentinel for a non-nullable {@code DateTime64(9)} column ({@code DEFAULT toDateTime64('1970-01-01 00:00:00', 9)}), matching the {@code precision-9} SQL fragments and the current {@code end_time} column. */
     public static final Instant EPOCH_SENTINEL = Instant.EPOCH;
 
     /** Sentinel for a non-nullable {@code FixedString(36)} column ({@code DEFAULT ''}). */
