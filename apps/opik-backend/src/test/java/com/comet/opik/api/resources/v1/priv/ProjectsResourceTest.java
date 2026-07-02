@@ -1,6 +1,5 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.TestComparators;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.ErrorCountWithDeviation;
 import com.comet.opik.api.ErrorInfo;
@@ -1790,17 +1789,16 @@ class ProjectsResourceTest {
 
         private void assertAllProjectsHavePersistedLastTraceAt(String workspaceId, List<Project> expectedProjects) {
             Awaitility.await().untilAsserted(() -> {
-                List<Project> dbProjects = projectService.findByIds(workspaceId, expectedProjects.stream()
-                        .map(Project::id).collect(Collectors.toUnmodifiableSet()));
-                Map<UUID, Instant> actualLastTraceByProjectId = dbProjects.stream()
+                var expectedLastTraceByProjectId = expectedProjects.stream()
                         .collect(toMap(Project::id, Project::lastUpdatedTraceAt));
-                Map<UUID, Instant> expectedLastTraceByProjectId = expectedProjects.stream()
+                var expectedProjectIds = expectedLastTraceByProjectId.keySet();
+                var actualLastTraceByProjectId = projectService.findByIds(
+                        workspaceId, expectedProjectIds).stream()
                         .collect(toMap(Project::id, Project::lastUpdatedTraceAt));
-
                 assertThat(actualLastTraceByProjectId)
-                        .usingRecursiveComparison()
-                        .withComparatorForType(TestComparators::compareMicroNanoTime, Instant.class)
-                        .isEqualTo(expectedLastTraceByProjectId);
+                        .containsOnlyKeys(expectedProjectIds)
+                        .allSatisfy((projectId, actualLastUpdatedTraceAt) -> assertLastUpdatedTraceAtEquals(
+                                actualLastUpdatedTraceAt, expectedLastTraceByProjectId.get(projectId)));
             });
         }
 
