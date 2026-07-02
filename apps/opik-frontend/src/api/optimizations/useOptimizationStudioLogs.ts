@@ -66,12 +66,18 @@ const getOptimizationStudioLogs = async ({
       url: presignedUrl,
       expiresAt,
     };
-  } catch {
-    return {
-      content: "",
-      url: null,
-      expiresAt: null,
-    };
+  } catch (error) {
+    // A missing log file (404) just means logs aren't available yet — treat as
+    // empty. Any other failure is a real fetch error and must surface instead
+    // of being silently hidden as "no logs".
+    if (axios.isAxiosError(error) && error.response?.status === 404) {
+      return {
+        content: "",
+        url: null,
+        expiresAt: null,
+      };
+    }
+    throw error;
   }
 };
 

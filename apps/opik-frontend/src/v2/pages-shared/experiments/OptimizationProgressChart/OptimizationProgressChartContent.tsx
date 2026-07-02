@@ -22,6 +22,7 @@ import {
   TRIAL_STATUS_ORDER,
   CandidateDataPoint,
   buildParentChildEdges,
+  getUniqueSteps,
 } from "./optimizationChartUtils";
 import type { InProgressInfo } from "./optimizationChartUtils";
 import {
@@ -34,6 +35,7 @@ import useScatterDot from "./ScatterDot";
 import type { DotPosition } from "./ScatterDot";
 import useChartEdges from "./ChartEdges";
 import useGhostCandidate from "./GhostCandidate";
+import useBestTrialCard from "./BestTrialCard";
 
 const GHOST_ID = "__ghost__";
 
@@ -51,7 +53,7 @@ type OptimizationProgressChartContentProps = {
 };
 
 const CHART_CONFIG = {
-  score: { label: "Score", color: "var(--color-blue)" },
+  score: { label: "Score", color: "var(--color-fuchsia)" },
 };
 
 const OptimizationProgressChartContent: React.FC<
@@ -68,10 +70,25 @@ const OptimizationProgressChartContent: React.FC<
   isInProgress = false,
   inProgressInfo,
 }) => {
-  const steps = useMemo(() => {
-    const s = new Set(chartData.map((d) => d.stepIndex));
-    return Array.from(s).sort((a, b) => a - b);
-  }, [chartData]);
+  const steps = useMemo(() => getUniqueSteps(chartData), [chartData]);
+
+  // Test-suite runs distinguish every status (only those actually present);
+  // dataset runs collapse to a fixed Passed/Discarded pair (matching the dot
+  // colours from getTrialDotColor).
+  const legendItems = useMemo<{ color: string; label: string }[]>(() => {
+    if (isTestSuite) {
+      return TRIAL_STATUS_ORDER.filter((s) =>
+        chartData.some((d) => d.status === s),
+      ).map((s) => ({
+        color: TRIAL_STATUS_COLORS[s],
+        label: TRIAL_STATUS_LABELS[s],
+      }));
+    }
+    return [
+      { color: TRIAL_STATUS_COLORS.passed, label: "Passed trial" },
+      { color: TRIAL_STATUS_COLORS.pruned, label: "Discarded trial" },
+    ];
+  }, [isTestSuite, chartData]);
 
   const positionedData = useMemo(() => {
     return chartData.map((d) => ({
@@ -128,16 +145,17 @@ const OptimizationProgressChartContent: React.FC<
     [positionedData],
   );
 
-  const {
-    width: tickWidth,
-    ticks,
-    domain,
-    yTickFormatter,
-  } = useChartTickDefaultConfig(values, {
-    maxTickPrecision: 2,
-    targetTickCount: 3,
-    showMinMaxDomain: true,
-  });
+  const { width: tickWidth, yTickFormatter } = useChartTickDefaultConfig(
+    values,
+    {
+      maxTickPrecision: 2,
+      targetTickCount: 5,
+      showMinMaxDomain: true,
+    },
+  );
+  // Scores / pass rates are always 0–1, so pin the axis to a fixed 0–1 domain
+  // with quarter ticks (matches the Figma spec) rather than a data-driven range.
+  const yTicks = [0, 0.25, 0.5, 0.75, 1];
 
   const candidateMap = useMemo(() => {
     const map = new Map<string, AggregatedCandidate>();
@@ -171,6 +189,7 @@ const OptimizationProgressChartContent: React.FC<
     dotPositionsRef,
     overlapOffsets,
     bestCandidateId,
+    hoveredCandidateId: hoveredTrial?.candidateId,
     pulsingCandidateId,
     selectedTrialId,
     onTrialSelect,
@@ -179,7 +198,7 @@ const OptimizationProgressChartContent: React.FC<
     setHoveredTrial,
   });
 
-  const renderEdges = useChartEdges({ dotPositionsRef, edges });
+  const renderEdges = useChartEdges({ edges, chartData, overlapOffsets });
 
   const renderGhostCandidate = useGhostCandidate({
     dotPositionsRef,
@@ -191,6 +210,16 @@ const OptimizationProgressChartContent: React.FC<
     onTrialClick,
   });
 
+  const renderBestCard = useBestTrialCard({
+    dotPositionsRef,
+    containerRef,
+    bestCandidateId,
+    hoveredCandidateId: hoveredTrial?.candidateId,
+    candidateMap,
+    chartData,
+    isTestSuite,
+  });
+
   const xDomain = useMemo(() => {
     if (steps.length === 0) return [0, 1];
     const maxDataStep = steps[steps.length - 1];
@@ -198,6 +227,13 @@ const OptimizationProgressChartContent: React.FC<
       ghostStep != null ? Math.max(maxDataStep, ghostStep) : maxDataStep;
     return [0, max + X_DOMAIN_EXTRA];
   }, [steps, ghostStep]);
+
+  // The hover tooltip only serves non-best dots — the best dot's card is the
+  // always-visible pinned one (useBestTrialCard).
+  const hoveredCandidate =
+    hoveredTrial != null && hoveredTrial.candidateId !== bestCandidateId
+      ? candidateMap.get(hoveredTrial.candidateId)
+      : undefined;
 
   return (
     <div ref={containerRef} className="relative">
@@ -215,7 +251,9 @@ const OptimizationProgressChartContent: React.FC<
                 ? [...steps, ghostStep]
                 : steps
             }
-            tickFormatter={(value) => `Step ${value}`}
+            tickFormatter={(value) =>
+              value === 0 ? "Baseline" : `Step ${value}`
+            }
             domain={xDomain}
             padding={X_AXIS_PADDING}
           />
@@ -224,13 +262,16 @@ const OptimizationProgressChartContent: React.FC<
             axisLine={false}
             tickLine={false}
             tick={DEFAULT_CHART_TICK}
-            ticks={ticks}
+            ticks={yTicks}
             tickFormatter={yTickFormatter}
-            domain={domain}
+            domain={[0, 1]}
           />
 
-          {/* Scatter renders BEFORE Customized so dot positions are
-              captured in the ref before renderEdges reads them. */}
+          {/* Edges render BEFORE the Scatter so the trend line sits underneath
+              the dots (per Figma). Positions come from the chart scales, so the
+              line does not depend on the Scatter having drawn first. */}
+          <Customized component={renderEdges} />
+
           <Scatter
             name={objectiveName}
             dataKey="value"
@@ -238,56 +279,33 @@ const OptimizationProgressChartContent: React.FC<
             isAnimationActive={false}
           />
 
-          {/* Edges render on top of dots in SVG paint order, but they are
-              thin translucent lines so the dots remain clearly visible. */}
-          <Customized component={renderEdges} />
-
           {/* Ghost candidate with animated connector during optimization */}
           {isInProgress && <Customized component={renderGhostCandidate} />}
+
+          {/* Pinned best-trial card, anchored below the best dot. */}
+          <Customized component={renderBestCard} />
         </ComposedChart>
       </ChartContainer>
 
-      {hoveredTrial != null &&
-        containerRef.current != null &&
-        (() => {
-          const c = candidateMap.get(hoveredTrial.candidateId);
-          if (!c) return null;
-          return (
-            <ChartTooltip
-              hoveredTrial={hoveredTrial}
-              candidate={c}
-              chartData={chartData}
-              isTestSuite={isTestSuite}
-            />
-          );
-        })()}
+      {hoveredTrial != null && hoveredCandidate != null && (
+        <ChartTooltip
+          hoveredTrial={hoveredTrial}
+          candidate={hoveredCandidate}
+          chartData={chartData}
+          isTestSuite={isTestSuite}
+        />
+      )}
 
       <div className="mt-1 flex items-center justify-center gap-4">
-        {isTestSuite ? (
-          TRIAL_STATUS_ORDER.filter((s) =>
-            chartData.some((d) => d.status === s),
-          ).map((s) => (
-            <div key={s} className="flex items-center gap-1.5">
-              <span
-                className="size-2.5 rounded-full"
-                style={{ backgroundColor: TRIAL_STATUS_COLORS[s] }}
-              />
-              <span className="comet-body-xs text-muted-slate">
-                {TRIAL_STATUS_LABELS[s]}
-              </span>
-            </div>
-          ))
-        ) : (
-          <div className="flex items-center gap-1.5">
+        {legendItems.map(({ color, label }) => (
+          <div key={label} className="flex items-center gap-1.5">
             <span
               className="size-2.5 rounded-full"
-              style={{ backgroundColor: TRIAL_STATUS_COLORS.passed }}
+              style={{ backgroundColor: color }}
             />
-            <span className="comet-body-xs text-muted-slate">
-              {objectiveName}
-            </span>
+            <span className="comet-body-xs text-muted-slate">{label}</span>
           </div>
-        )}
+        ))}
       </div>
     </div>
   );
