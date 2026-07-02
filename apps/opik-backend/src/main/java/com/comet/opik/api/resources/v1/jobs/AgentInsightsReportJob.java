@@ -103,7 +103,8 @@ public class AgentInsightsReportJob extends Job {
                             .flatMapMany(withTraces -> Flux.fromIterable(jobs)
                                     .filter(job -> withTraces.contains(job.projectId())))
                             .concatMap(job -> reportPublisher
-                                    .enqueue(job.projectId(), job.workspaceId(), periodStart, periodEnd)
+                                    .enqueue(job.projectId(), job.workspaceId(), periodStart, periodEnd,
+                                            AgentInsightsMetrics.SCHEDULED)
                                     .doOnNext(__ -> AgentInsightsMetrics.REPORTS_ENQUEUED.add(1,
                                             AgentInsightsMetrics.ENQUEUE_SCHEDULED_SUCCESS))
                                     .then()
