@@ -191,10 +191,15 @@ def test_after_model__empty_final_response__does_not_leak_registry_entry():
     ctx = _callback_context("inv-1")
 
     _start_model_call(tracer, ctx)
+    # before_model_callback registered the span for this call...
+    assert tracer._pending_llm_spans.get(id(ctx.actions)) is not None
+
     empty_final = models.LlmResponse(
         content=genai_types.Content(role="model", parts=[genai_types.Part(text="")]),
         partial=False,
     )
     tracer.after_model_callback(ctx, empty_final)
 
+    # ...and after_model_callback drops it, even with nothing to finalize (so
+    # this fails on a broken registration as well as on a cleanup leak).
     assert tracer._pending_llm_spans.get(id(ctx.actions)) is None
