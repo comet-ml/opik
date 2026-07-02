@@ -7,8 +7,8 @@ import type * as serializers from "../index.js";
 export const TraceExperimentItemBulkWriteViewSource: core.serialization.Schema<
     serializers.TraceExperimentItemBulkWriteViewSource.Raw,
     OpikApi.TraceExperimentItemBulkWriteViewSource
-> = core.serialization.enum_(["sdk", "experiment", "playground", "optimization"]);
+> = core.serialization.enum_(["sdk", "experiment", "playground", "optimization", "evaluator"]);
 
 export declare namespace TraceExperimentItemBulkWriteViewSource {
-    export type Raw = "sdk" | "experiment" | "playground" | "optimization";
+    export type Raw = "sdk" | "experiment" | "playground" | "optimization" | "evaluator";
 }

@@ -16,6 +16,8 @@ export const ValueEntryCompare: core.serialization.ObjectSchema<
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
     spanType: core.serialization.property("span_type", core.serialization.string().optional()),
     spanId: core.serialization.property("span_id", core.serialization.string().optional()),
+    sourceQueueId: core.serialization.property("source_queue_id", core.serialization.string().optional()),
+    author: core.serialization.string().optional(),
 });
 
 export declare namespace ValueEntryCompare {
@@ -27,5 +29,7 @@ export declare namespace ValueEntryCompare {
         last_updated_at?: string | null;
         span_type?: string | null;
         span_id?: string | null;
+        source_queue_id?: string | null;
+        author?: string | null;
     }
 }

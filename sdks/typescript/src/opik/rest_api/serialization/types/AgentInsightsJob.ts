@@ -13,6 +13,9 @@ export const AgentInsightsJob: core.serialization.ObjectSchema<
     projectId: core.serialization.property("project_id", core.serialization.string().optional()),
     status: AgentInsightsJobStatus.optional(),
     lastScanAt: core.serialization.property("last_scan_at", core.serialization.date().optional()),
+    lastFailureReason: core.serialization.property("last_failure_reason", core.serialization.string().optional()),
+    lastFailureDetail: core.serialization.property("last_failure_detail", core.serialization.string().optional()),
+    lastFailedAt: core.serialization.property("last_failed_at", core.serialization.date().optional()),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
@@ -25,6 +28,9 @@ export declare namespace AgentInsightsJob {
         project_id?: string | null;
         status?: AgentInsightsJobStatus.Raw | null;
         last_scan_at?: string | null;
+        last_failure_reason?: string | null;
+        last_failure_detail?: string | null;
+        last_failed_at?: string | null;
         created_at?: string | null;
         created_by?: string | null;
         last_updated_at?: string | null;

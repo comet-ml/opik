@@ -43,11 +43,14 @@ def create_test_suite(
         )
         if body.items:
             suite.insert([item.model_dump(exclude_none=True) for item in body.items])
+        # suite.id is a lazy cached_property that fetches from the backend on
+        # first read; resolve it while the client is still open, before end().
+        suite_id, suite_name = str(suite.id), suite.name
     finally:
         client.end(flush=True)
         atexit.unregister(client.end)
 
-    return TestSuiteResponse(id=str(suite.id), name=suite.name)
+    return TestSuiteResponse(id=suite_id, name=suite_name)
 
 
 @router.post(

@@ -265,6 +265,6 @@ class FileUploadManager(base_upload_manager.BaseFileUploadManager):
 
         return False
 
-    def close(self) -> None:
-        self._executor.shutdown(wait=True)
+    def close(self, wait: bool = True) -> None:
+        self._executor.shutdown(wait=wait)
         self.closed = True

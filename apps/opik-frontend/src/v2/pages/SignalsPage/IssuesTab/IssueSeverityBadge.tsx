@@ -10,8 +10,8 @@ const IssueSeverityBadge: React.FC<{
 }> = ({ severity, className }) => (
   <span
     className={cn(
-      "flex size-4 shrink-0 items-center justify-center rounded-[2px]",
-      severity ? SEVERITY_DOT_MAP[severity] : "bg-[#94A3B8]",
+      "flex size-4 shrink-0 items-center justify-center rounded",
+      severity ? SEVERITY_DOT_MAP[severity] : "bg-light-slate",
       className,
     )}
   >

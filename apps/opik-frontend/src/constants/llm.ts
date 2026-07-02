@@ -137,6 +137,14 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
     supportsSamplingParams: false,
     thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
   },
+  [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5]: {
+    supportsSamplingParams: false,
+    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5]: {
+    supportsSamplingParams: false,
+    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+  },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6]: {
     thinkingEffortOptions: ["adaptive", "low", "medium", "high", "max"],
   },

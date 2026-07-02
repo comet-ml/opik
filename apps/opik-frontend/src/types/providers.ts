@@ -108,6 +108,7 @@ export enum PROVIDER_MODEL_TYPE {
   CLAUDE_SONNET_4_5 = "claude-sonnet-4-5",
   CLAUDE_SONNET_4_5_20250929 = "claude-sonnet-4-5-20250929",
   CLAUDE_SONNET_4_6 = "claude-sonnet-4-6",
+  CLAUDE_SONNET_5 = "claude-sonnet-5",
 
   //  <---- OpenRouter
   AI21_JAMBA_LARGE_1_7 = "ai21/jamba-large-1.7",
@@ -152,6 +153,7 @@ export enum PROVIDER_MODEL_TYPE {
   ANTHROPIC_CLAUDE_SONNET_4 = "anthropic/claude-sonnet-4",
   ANTHROPIC_CLAUDE_SONNET_4_5 = "anthropic/claude-sonnet-4.5",
   ANTHROPIC_CLAUDE_SONNET_4_6 = "anthropic/claude-sonnet-4.6",
+  ANTHROPIC_CLAUDE_SONNET_5 = "anthropic/claude-sonnet-5",
   ARCEE_AI_AFM_4_5B = "arcee-ai/afm-4.5b",
   ARCEE_AI_CODER_LARGE = "arcee-ai/coder-large",
   ARCEE_AI_MAESTRO_REASONING = "arcee-ai/maestro-reasoning",
@@ -233,6 +235,7 @@ export enum PROVIDER_MODEL_TYPE {
   GOOGLE_GEMINI_3_1_FLASH_IMAGE = "google/gemini-3.1-flash-image",
   GOOGLE_GEMINI_3_1_FLASH_IMAGE_PREVIEW = "google/gemini-3.1-flash-image-preview",
   GOOGLE_GEMINI_3_1_FLASH_LITE = "google/gemini-3.1-flash-lite",
+  GOOGLE_GEMINI_3_1_FLASH_LITE_IMAGE = "google/gemini-3.1-flash-lite-image",
   GOOGLE_GEMINI_3_1_FLASH_LITE_PREVIEW = "google/gemini-3.1-flash-lite-preview",
   GOOGLE_GEMINI_3_1_PRO_PREVIEW = "google/gemini-3.1-pro-preview",
   GOOGLE_GEMINI_3_1_PRO_PREVIEW_CUSTOMTOOLS = "google/gemini-3.1-pro-preview-customtools",
@@ -667,6 +670,8 @@ export enum PROVIDER_MODEL_TYPE {
   LYRIA_3_PRO_PREVIEW = "lyria-3-pro-preview",
   NANO_BANANA_PRO_PREVIEW = "nano-banana-pro-preview",
   TEXT_EMBEDDING = "text-embedding-004",
+  GEMINI_3_1_FLASH_LITE_IMAGE = "gemini-3.1-flash-lite-image",
+  GEMINI_OMNI_FLASH_PREVIEW = "gemini-omni-flash-preview",
 
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",

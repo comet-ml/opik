@@ -115,15 +115,14 @@ public interface TraceDAO {
 
     Flux<WorkspaceTraceCount> countTracesPerWorkspace(Map<UUID, Instant> excludedProjectIds);
 
-    Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(Set<UUID> projectIds, String workspaceId,
-            Instant lastUpdatedAfter, Connection connection);
-
     Mono<Set<UUID>> getProjectsWithTracesInRange(Collection<Pair<String, UUID>> workspaceProjectPairs, Instant from,
             Instant to, Connection connection);
 
     Mono<UUID> getProjectIdFromTrace(UUID traceId);
 
     Mono<Map<UUID, UUID>> getProjectIdsByTraceIds(List<UUID> traceIds);
+
+    Mono<Map<UUID, Instant>> getStartTimesByTraceIds(Set<UUID> traceIds, String workspaceId);
 
     Flux<BiInformation> getTraceBIInformation(Map<UUID, Instant> excludedProjectIds);
 
@@ -2013,19 +2012,6 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
-    private static final String SELECT_TRACE_LAST_UPDATED_AT = """
-            SELECT
-                t.project_id as project_id,
-                MAX(t.last_updated_at) as last_updated_at
-            FROM traces t
-            WHERE t.workspace_id = :workspace_id
-            AND t.project_id IN :project_ids
-            <if(last_updated_after)> AND t.last_updated_at > parseDateTime64BestEffort(:last_updated_after, 9) <endif>
-            GROUP BY t.project_id
-            SETTINGS log_comment = '<log_comment>'<if(disable_skip_indexes)>, use_skip_indexes = 0<endif>
-            ;
-            """;
-
     private static final String SELECT_PROJECTS_WITH_TRACES_IN_RANGE = """
             SELECT DISTINCT project_id
             FROM traces
@@ -2054,6 +2040,19 @@ class TraceDAOImpl implements TraceDAO {
             WHERE id IN :trace_ids
             AND workspace_id = :workspace_id
             GROUP BY id
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    private static final String SELECT_START_TIMES_BY_TRACE_IDS = """
+            SELECT
+                id,
+                start_time
+            FROM traces
+            WHERE id IN :ids
+            AND workspace_id = :workspace_id
+            ORDER BY id, last_updated_at DESC
+            LIMIT 1 BY id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -4203,45 +4202,6 @@ class TraceDAOImpl implements TraceDAO {
 
     @Override
     @WithSpan
-    public Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(
-            @NonNull Set<UUID> projectIds, @NonNull String workspaceId, Instant lastUpdatedAfter,
-            @NonNull Connection connection) {
-
-        log.info("Getting last updated trace at for projectIds, size '{}'", projectIds.size());
-
-        var template = getSTWithLogComment(SELECT_TRACE_LAST_UPDATED_AT, "get_last_updated_trace_at", workspaceId,
-                "",
-                projectIds.size());
-
-        if (lastUpdatedAfter != null) {
-            template.add("last_updated_after", true);
-        }
-
-        if (!configuration.getTraceQuery().isLastUpdatedTraceAtSkipIndexesEnabled()) {
-            template.add("disable_skip_indexes", true);
-        }
-
-        var statement = connection.createStatement(template.render())
-                .bind("project_ids", projectIds.toArray(UUID[]::new))
-                .bind("workspace_id", workspaceId);
-
-        if (lastUpdatedAfter != null) {
-            statement.bind("last_updated_after", lastUpdatedAfter.toString());
-        }
-
-        return Mono.from(statement.execute())
-                .flatMapMany(result -> result.map((row, rowMetadata) -> Map.entry(row.get("project_id", UUID.class),
-                        row.get("last_updated_at", Instant.class))))
-                .collectMap(Map.Entry::getKey, Map.Entry::getValue)
-                .doFinally(signalType -> {
-                    if (signalType == SignalType.ON_COMPLETE) {
-                        log.info("Got last updated trace at for projectIds, size '{}'", projectIds.size());
-                    }
-                });
-    }
-
-    @Override
-    @WithSpan
     public Mono<Set<UUID>> getProjectsWithTracesInRange(@NonNull Collection<Pair<String, UUID>> workspaceProjectPairs,
             @NonNull Instant from, @NonNull Instant to, @NonNull Connection connection) {
 
@@ -4309,6 +4269,31 @@ class TraceDAOImpl implements TraceDAO {
                         }
                     });
         }));
+    }
+
+    // Resolves trace -> stored start_time, keyed off workspaceId explicitly so it can run from the Cost
+    // Intelligence subscriber (no request scope). start_time must come from the trace (not the UUIDv7 timestamp)
+    // so a cipx identity update doesn't rewrite it for backfilled/imported traces. Deduped with LIMIT 1 BY id
+    // (latest last_updated_at wins) rather than FINAL, so it stays cheap on the ingestion path.
+    @Override
+    @WithSpan
+    public Mono<Map<UUID, Instant>> getStartTimesByTraceIds(@NonNull Set<UUID> traceIds, @NonNull String workspaceId) {
+        if (traceIds.isEmpty()) {
+            return Mono.just(Map.of());
+        }
+        log.info("Getting start_times for '{}' trace_ids", traceIds.size());
+        return Mono.from(connectionFactory.create())
+                .flatMap(connection -> {
+                    var template = getSTWithLogComment(SELECT_START_TIMES_BY_TRACE_IDS, "get_start_times_by_trace_ids",
+                            workspaceId, "", traceIds.size());
+                    var statement = connection.createStatement(template.render())
+                            .bind("ids", traceIds.toArray(UUID[]::new))
+                            .bind("workspace_id", workspaceId);
+                    return Flux.from(statement.execute())
+                            .flatMap(result -> result.map((row, metadata) -> Map.entry(
+                                    row.get("id", UUID.class), row.get("start_time", Instant.class))))
+                            .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+                });
     }
 
     @Override

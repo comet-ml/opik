@@ -124,13 +124,6 @@ databaseAnalyticsReadOnlyFreeFormSql:
   #   above the read-only profile's max_execution_time (180s) so the server-side cap fires first.
   socketTimeout: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_SOCKET_TIMEOUT:-200s}
 
-traceQuery:
-  # Default: true
-  # Description: Whether ClickHouse skip indexes are used for the last-updated-trace-at lookup query. When false,
-  #   `use_skip_indexes = 0` is appended to force a full project-partition scan instead of pruning via the
-  #   `idx_traces_last_updated_at` minmax index. Operational escape hatch; keep enabled in normal operation.
-  lastUpdatedTraceAtSkipIndexesEnabled: ${TRACE_QUERY_LAST_UPDATED_TRACE_AT_SKIP_INDEXES_ENABLED:-true}
-
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
   # Default: ["/health-check"]
@@ -1229,6 +1222,11 @@ serviceToggles:
   # Description: Whether or not the Agent Insights freeform SQL path is enabled. Gates the read-only ClickHouse client
   #   and the clickhouse-readonly-freeform-sql health check usage. When off, the read-only client is never queried.
   agentInsightsEnabled: ${TOGGLE_AGENT_INSIGHTS_ENABLED:-"false"}
+  # Default: true
+  # Description: Whether the online-scoring (LLM-as-judge) evaluation loop is persisted as monitoring traces/spans.
+  #   When on, each evaluation produces one trace (source=evaluator) with one llm span per LLM round, so cost and
+  #   behavior are auditable inside Opik. When off, evaluations run exactly as before with no extra writes.
+  onlineScoringTracingEnabled: ${TOGGLE_ONLINE_SCORING_TRACING_ENABLED:-"true"}
   # Default: "" (empty, no allowlisted workspaces)
   # Description: Comma-separated list of workspace IDs that should always receive V2 navigation.
   # Valid values: comma-separated workspace IDs (e.g. "ws-id-1,ws-id-2"), or "" (empty, disabled).

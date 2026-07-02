@@ -130,6 +130,8 @@ openai:
     structuredOutput: true
     reasoning: true
 anthropic:
+  - id: "claude-sonnet-5"
+    label: "Claude Sonnet 5"
   - id: "claude-opus-4-8"
     label: "Claude Opus 4.8"
     structuredOutput: true
@@ -188,6 +190,8 @@ gemini:
     label: "Gemma 4 26B A4B IT"
   - id: "gemma-4-31b-it"
     label: "Gemma 4 31B IT"
+  - id: "gemini-omni-flash-preview"
+    label: "Gemini Omni Flash Preview"
   - id: "lyria-3-clip-preview"
     label: "Lyria 3 Clip Preview"
   - id: "lyria-3-pro-preview"
@@ -212,6 +216,7 @@ gemini:
   - id: "gemini-3.1-flash-image"
   - id: "gemini-3.1-flash-image-preview"
     structuredOutput: true
+  - id: "gemini-3.1-flash-lite-image"
   - id: "gemini-3.1-flash-tts-preview"
   - id: "gemini-pro-vision"
   - id: "nano-banana-pro-preview"
@@ -350,6 +355,8 @@ openrouter:
     label: "anthropic/claude-sonnet-4.5"
   - id: "anthropic/claude-sonnet-4.6"
     label: "anthropic/claude-sonnet-4.6"
+  - id: "anthropic/claude-sonnet-5"
+    label: "anthropic/claude-sonnet-5"
   - id: "arcee-ai/afm-4.5b"
     label: "arcee-ai/afm-4.5b"
   - id: "arcee-ai/coder-large"
@@ -537,6 +544,8 @@ openrouter:
   - id: "google/gemini-3.1-flash-lite"
     label: "google/gemini-3.1-flash-lite"
     structuredOutput: true
+  - id: "google/gemini-3.1-flash-lite-image"
+    label: "google/gemini-3.1-flash-lite-image"
   - id: "google/gemini-3.1-flash-lite-preview"
     label: "google/gemini-3.1-flash-lite-preview"
     structuredOutput: true

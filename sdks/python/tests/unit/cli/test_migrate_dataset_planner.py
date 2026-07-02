@@ -12,6 +12,7 @@ come from ``_migrate_helpers``.
 from __future__ import annotations
 
 import json
+from unittest.mock import patch
 
 import pytest
 from click.testing import CliRunner
@@ -26,6 +27,7 @@ from opik.cli.migrate.errors import (
 )
 
 from ._migrate_helpers import (
+    _build_fake_client,
     _DatasetRow,
     _Page,
     _planner_client,
@@ -226,6 +228,65 @@ class TestMigrateHelp:
         assert "--from-project" in result.output
         assert "--dry-run" in result.output
 
+    def test_migrate_dataset__help_invoked__lists_exclude_experiments(self) -> None:
+        # OPIK-7161 AC: the opt-out flag must be discoverable in --help.
+        runner = CliRunner()
+        result = runner.invoke(cli, ["migrate", "dataset", "--help"])
+        assert result.exit_code == 0
+        assert "--exclude-experiments" in result.output
+
+    def test_migrate_dataset__exclude_experiments__cli_run_skips_and_reports(
+        self, tmp_path
+    ) -> None:
+        # OPIK-7161: exercise the flag through the public Click entrypoint,
+        # not just the finalize helper, so the option -> build_dataset_plan
+        # -> finalize plumbing in migrate_dataset_command is covered end to
+        # end (per .agents/skills/python-sdk/testing.md: test the public API).
+        # The fake client mocks the whole rename/create/replay surface; with
+        # --exclude-experiments the plan carries no cascade actions, so the
+        # command reaches the success finalize with zero experiment work.
+        client, _, _ = _build_fake_client(
+            source_rows=[_DatasetRow(id="src-1", name="MyDataset")],
+            destination_rows=[],
+            items=[{"id": "item-a", "input": "hello"}],
+        )
+        audit_path = tmp_path / "audit.json"
+
+        runner = CliRunner()
+        with patch("opik.cli.migrate.main._build_client", return_value=client):
+            result = runner.invoke(
+                cli,
+                [
+                    "migrate",
+                    "dataset",
+                    "MyDataset",
+                    "--to-project",
+                    "B",
+                    "--exclude-experiments",
+                    "--audit-log",
+                    str(audit_path),
+                ],
+            )
+
+        assert result.exit_code == 0, result.output
+        # User-facing output makes the intentional skip clear.
+        assert "--exclude-experiments" in result.output
+        assert "skipped" in result.output
+        # No experiment cascade ran: the source dataset was never queried for
+        # experiments (find_experiments belongs only to the cascade path).
+        assert client.rest_client.experiments.find_experiments.call_count == 0
+        # Audit log finalized ok and recorded the flag in its args.
+        on_disk = json.loads(audit_path.read_text())
+        assert on_disk["status"] == "ok"
+        assert on_disk["args"]["exclude_experiments"] is True
+        cascade_types = {
+            a.get("details", {}).get("type")
+            for a in on_disk["actions"]
+            if isinstance(a.get("details"), dict)
+        }
+        assert "cascade_experiments" not in cascade_types
+        assert "cascade_optimizations" not in cascade_types
+
 
 # ---------------------------------------------------------------------------
 # Planner unit tests (no Click invocation)
@@ -270,6 +331,68 @@ class TestPlanBuilding:
         assert plan.target_name == "MyDataset"
         # New remap dict starts empty; _cascade_optimizations populates it.
         assert plan.optimization_id_remap == {}
+
+    def test_build_dataset_plan__exclude_experiments__omits_both_cascades(
+        self,
+    ) -> None:
+        # OPIK-7161: --exclude-experiments drops the experiment stage AND
+        # the optimization stage (optimizations are containers for the
+        # skipped experiments). The plan ends after ReplayVersions, so no
+        # experiment/optimization discovery ever runs.
+        rest_client = _planner_rest_client(
+            [
+                _Page([_DatasetRow(id="src-1", name="MyDataset", description="d")]),
+                _Page([]),
+            ]
+        )
+
+        plan = planner_module.build_dataset_plan(
+            client=_planner_client(rest_client),
+            name="MyDataset",
+            to_project="B",
+            exclude_experiments=True,
+        )
+
+        types = [type(a).__name__ for a in plan.actions]
+        assert types == [
+            "RenameSource",
+            "CreateDestination",
+            "ReplayVersions",
+        ]
+        assert not any(
+            isinstance(a, planner_module.CascadeExperiments) for a in plan.actions
+        )
+        assert not any(
+            isinstance(a, planner_module.CascadeOptimizations) for a in plan.actions
+        )
+
+    def test_build_dataset_plan__exclude_experiments_default_false__keeps_cascades(
+        self,
+    ) -> None:
+        # Default (flag off) is unchanged: both cascades still emitted.
+        # Guards the opt-out default so a plain migrate never silently
+        # starts skipping experiments.
+        rest_client = _planner_rest_client(
+            [
+                _Page([_DatasetRow(id="src-1", name="MyDataset")]),
+                _Page([]),
+            ]
+        )
+
+        plan = planner_module.build_dataset_plan(
+            client=_planner_client(rest_client),
+            name="MyDataset",
+            to_project="B",
+        )
+
+        types = [type(a).__name__ for a in plan.actions]
+        assert types == [
+            "RenameSource",
+            "CreateDestination",
+            "ReplayVersions",
+            "CascadeOptimizations",
+            "CascadeExperiments",
+        ]
 
     def test_build_dataset_plan__test_suite__type_forwarded_to_destination(
         self,

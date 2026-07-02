@@ -17,6 +17,7 @@ import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
+import com.comet.opik.api.events.TraceCostIntelligenceChanged;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.events.TracesDeleted;
 import com.comet.opik.api.events.TracesUpdated;
@@ -100,8 +101,6 @@ public interface TraceService {
     Mono<ProjectStats> getStats(TraceSearchCriteria searchCriteria);
 
     Mono<Long> getDailyCreatedCount();
-
-    Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(Set<UUID> projectIds, String workspaceId, Instant lastUpdatedAfter);
 
     Mono<Set<UUID>> getProjectsWithTracesInRange(@NonNull Collection<Pair<String, UUID>> workspaceProjectPairs,
             @NonNull Instant from, @NonNull Instant to);
@@ -334,7 +333,11 @@ class TraceServiceImpl implements TraceService {
                                                 ctx.get(RequestContext.WORKSPACE_ID),
                                                 ctx.get(RequestContext.USER_NAME),
                                                 traceUpdate,
-                                                ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "")))))))
+                                                ctx.getOrDefault(RequestContext.WORKSPACE_NAME, ""))))
+                                        .doOnSuccess(__ -> eventBus.post(new TraceCostIntelligenceChanged(
+                                                Map.of(id, project.id()), traceUpdate,
+                                                ctx.get(RequestContext.WORKSPACE_ID),
+                                                ctx.get(RequestContext.USER_NAME)))))))
                         .then()));
     }
 
@@ -357,6 +360,8 @@ class TraceServiceImpl implements TraceService {
                                     log.info("Completed batch update for '{}' traces", batchUpdate.ids().size());
                                     eventBus.post(new TracesUpdated(projectIds, batchUpdate.ids(), workspaceId,
                                             userName, batchUpdate.update(), workspaceName));
+                                    eventBus.post(new TraceCostIntelligenceChanged(traceToProjectMap,
+                                            batchUpdate.update(), workspaceId, userName));
                                 });
                     });
         });
@@ -566,14 +571,6 @@ class TraceServiceImpl implements TraceService {
     public Mono<Long> getDailyCreatedCount() {
         return projectService.getDemoProjectIdsWithTimestamps()
                 .switchIfEmpty(Mono.just(Map.of())).flatMap(dao::getDailyTraces);
-    }
-
-    @Override
-    public Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(Set<UUID> projectIds, String workspaceId,
-            Instant lastUpdatedAfter) {
-        return template
-                .nonTransaction(
-                        connection -> dao.getLastUpdatedTraceAt(projectIds, workspaceId, lastUpdatedAfter, connection));
     }
 
     @Override

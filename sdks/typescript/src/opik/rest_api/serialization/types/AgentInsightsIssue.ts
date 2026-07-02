@@ -19,6 +19,7 @@ export const AgentInsightsIssue: core.serialization.ObjectSchema<
     severity: AgentInsightsIssueSeverity.optional(),
     tracesQuery: core.serialization.property("traces_query", core.serialization.string().optional()),
     totalOccurrences: core.serialization.property("total_occurrences", core.serialization.number().optional()),
+    latestCount: core.serialization.property("latest_count", core.serialization.number().optional()),
     total: core.serialization.number().optional(),
     usersImpacted: core.serialization.property("users_impacted", core.serialization.number().optional()),
     totalUsers: core.serialization.property("total_users", core.serialization.number().optional()),
@@ -42,6 +43,7 @@ export declare namespace AgentInsightsIssue {
         severity?: AgentInsightsIssueSeverity.Raw | null;
         traces_query?: string | null;
         total_occurrences?: number | null;
+        latest_count?: number | null;
         total?: number | null;
         users_impacted?: number | null;
         total_users?: number | null;
