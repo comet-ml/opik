@@ -9,6 +9,7 @@ import com.comet.opik.infrastructure.ConfigurationModule;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.FilterUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.RequestSizeLimitFilter;
 import com.comet.opik.infrastructure.auth.AuthModule;
 import com.comet.opik.infrastructure.aws.AwsModule;
 import com.comet.opik.infrastructure.bi.OpikGuiceyLifecycleEventListener;
@@ -133,19 +134,23 @@ public class OpikApplication extends Application<OpikConfiguration> {
                         .addDeserializer(Message.class, OpenAiMessageJsonDeserializer.INSTANCE)
                         .addDeserializer(Duration.class, StrictDurationDeserializer.INSTANCE));
 
-        // Get the configured limit from config.yml
+        // Get the configured limits from config.yml
         int maxStringLength = configuration.getJacksonConfig().getMaxStringLength();
+        long maxDocumentLength = configuration.getJacksonConfig().getMaxDocumentLength();
 
         // Configure Dropwizard ObjectMapper (HTTP layer)
         StreamReadConstraints readConstraints = StreamReadConstraints.builder()
                 .maxStringLength(maxStringLength)
+                .maxDocumentLength(maxDocumentLength)
                 .build();
         environment.getObjectMapper().getFactory().setStreamReadConstraints(readConstraints);
 
-        // Configure JsonUtils ObjectMapper (internal processing) with SAME limit
-        JsonUtils.configure(maxStringLength);
+        // Configure JsonUtils ObjectMapper (internal processing) with SAME limits
+        JsonUtils.configure(maxStringLength, maxDocumentLength);
 
         jersey.property(ServerProperties.RESPONSE_SET_STATUS_OVER_SEND_ERROR, true);
+
+        jersey.register(RequestSizeLimitFilter.class);
 
         jersey.register(JsonProcessingExceptionMapper.class);
         jersey.register(OAuthExceptionMapper.class);

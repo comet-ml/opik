@@ -44,22 +44,25 @@ public class JsonUtils {
     private static volatile ObjectMapper MAPPER;
 
     static {
-        // Initialize with default (20MB - Jackson default) until OpikApplication configures it
-        MAPPER = createConfiguredMapper(StreamReadConstraints.DEFAULT_MAX_STRING_LEN);
-        log.info("JsonUtils initialized with default maxStringLength: '{}'",
-                StreamReadConstraints.DEFAULT_MAX_STRING_LEN);
+        // Initialize with Jackson defaults until OpikApplication configures it
+        MAPPER = createConfiguredMapper(StreamReadConstraints.DEFAULT_MAX_STRING_LEN,
+                StreamReadConstraints.DEFAULT_MAX_DOC_LEN);
+        log.info("JsonUtils initialized with default maxStringLength: '{}', maxDocumentLength: '{}'",
+                StreamReadConstraints.DEFAULT_MAX_STRING_LEN, StreamReadConstraints.DEFAULT_MAX_DOC_LEN);
     }
 
     /**
-     * Configures JsonUtils with the limit from config.yml.
+     * Configures JsonUtils with the limits from config.yml.
      * Called by OpikApplication during startup.
      *
      * @param maxStringLength Maximum string length in bytes
+     * @param maxDocumentLength Maximum total document length in bytes
      */
-    public static synchronized void configure(int maxStringLength) {
-        MAPPER = createConfiguredMapper(maxStringLength);
-        log.info("JsonUtils configured with maxStringLength: '{}' bytes ('{}'MB)",
-                maxStringLength, maxStringLength / 1024 / 1024);
+    public static synchronized void configure(int maxStringLength, long maxDocumentLength) {
+        MAPPER = createConfiguredMapper(maxStringLength, maxDocumentLength);
+        log.info(
+                "JsonUtils configured with maxStringLength: '{}' bytes ('{}'MB), maxDocumentLength: '{}' bytes ('{}'MB)",
+                maxStringLength, maxStringLength / 1024 / 1024, maxDocumentLength, maxDocumentLength / 1024 / 1024);
     }
 
     /**
@@ -67,9 +70,10 @@ public class JsonUtils {
      * This configuration matches the Dropwizard ObjectMapper setup in OpikApplication.
      *
      * @param maxStringLength Maximum string length in bytes
+     * @param maxDocumentLength Maximum total document length in bytes
      * @return Configured ObjectMapper instance
      */
-    private static ObjectMapper createConfiguredMapper(int maxStringLength) {
+    private static ObjectMapper createConfiguredMapper(int maxStringLength, long maxDocumentLength) {
         ObjectMapper mapper = new ObjectMapper();
 
         // Basic configuration matching Dropwizard defaults
@@ -90,6 +94,7 @@ public class JsonUtils {
         // Configure stream read constraints
         StreamReadConstraints readConstraints = StreamReadConstraints.builder()
                 .maxStringLength(maxStringLength)
+                .maxDocumentLength(maxDocumentLength)
                 .build();
         mapper.getFactory().setStreamReadConstraints(readConstraints);
 

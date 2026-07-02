@@ -262,6 +262,12 @@ jacksonConfig:
   #   This configuration is used by both HTTP layer and internal JSON processing for consistency,
   #   preventing memory exhaustion from extremely large base64-encoded attachments before they can be stripped
   maxStringLength: 262144000
+  # Matches the production default; above the largest multi-attachment payload exercised by
+  # LargePayloadTests (~280MB). Small-nodes document-length enforcement is unit-tested in JsonUtilsTest.
+  maxDocumentLength: 536870912
+  # Matches the production default; the Content-Length 413/400 behaviour is unit-tested in
+  # RequestSizeLimitFilterTest.
+  maxRequestSizeBytes: 536870912
 
 # Configuration for batch operations
 batchOperations:
