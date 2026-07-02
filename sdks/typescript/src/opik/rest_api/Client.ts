@@ -30,6 +30,7 @@ import { PairingClient } from "./api/resources/pairing/client/Client.js";
 import { ProjectsClient } from "./api/resources/projects/client/Client.js";
 import { PromptsClient } from "./api/resources/prompts/client/Client.js";
 import { RedirectClient } from "./api/resources/redirect/client/Client.js";
+import { ReportFailuresClient } from "./api/resources/reportFailures/client/Client.js";
 import { ReportsClient } from "./api/resources/reports/client/Client.js";
 import { RetentionRulesClient } from "./api/resources/retentionRules/client/Client.js";
 import { RunnersClient } from "./api/resources/runners/client/Client.js";
@@ -89,6 +90,7 @@ export class OpikApiClient {
     protected _pairing: PairingClient | undefined;
     protected _projects: ProjectsClient | undefined;
     protected _prompts: PromptsClient | undefined;
+    protected _reportFailures: ReportFailuresClient | undefined;
     protected _reports: ReportsClient | undefined;
     protected _retentionRules: RetentionRulesClient | undefined;
     protected _serviceToggles: ServiceTogglesClient | undefined;
@@ -229,6 +231,10 @@ export class OpikApiClient {
 
     public get prompts(): PromptsClient {
         return (this._prompts ??= new PromptsClient(this._options));
+    }
+
+    public get reportFailures(): ReportFailuresClient {
+        return (this._reportFailures ??= new ReportFailuresClient(this._options));
     }
 
     public get reports(): ReportsClient {

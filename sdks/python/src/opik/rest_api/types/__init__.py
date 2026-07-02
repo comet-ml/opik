@@ -569,6 +569,9 @@ from .provider_api_key_public_provider import ProviderApiKeyPublicProvider
 from .recent_activity_item_public import RecentActivityItemPublic
 from .recent_activity_item_public_type import RecentActivityItemPublicType
 from .recent_activity_page_public import RecentActivityPagePublic
+from .report_failure import ReportFailure
+from .report_failure_page import ReportFailurePage
+from .report_failure_type import ReportFailureType
 from .report_preference import ReportPreference
 from .reported_issue import ReportedIssue
 from .reported_issue_severity import ReportedIssueSeverity
@@ -1248,6 +1251,9 @@ __all__ = [
     "RecentActivityItemPublic",
     "RecentActivityItemPublicType",
     "RecentActivityPagePublic",
+    "ReportFailure",
+    "ReportFailurePage",
+    "ReportFailureType",
     "ReportPreference",
     "ReportedIssue",
     "ReportedIssueSeverity",
