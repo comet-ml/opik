@@ -21086,6 +21086,7 @@ components:
       - guardrailsEnabled
       - ollamaProviderEnabled
       - ollieEnabled
+      - onlineScoringTracingEnabled
       - openaiProviderEnabled
       - openrouterProviderEnabled
       - opikAIEnabled
@@ -21149,6 +21150,8 @@ components:
         agenticToolsEnabled:
           type: boolean
         agentInsightsEnabled:
+          type: boolean
+        onlineScoringTracingEnabled:
           type: boolean
         v2WorkspaceAllowlistIds:
           uniqueItems: true
