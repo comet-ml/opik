@@ -28,10 +28,21 @@ class SpanCostCalculator {
                 ? Math.max(0, promptTokens - audioInputTokens)
                 : promptTokens;
 
+        int completionTokens = usage.getOrDefault("completion_tokens", 0);
+        // Audio output tokens (OpenAI audio-preview / realtime) likewise carry a separate rate;
+        // they're nested under original_usage.completion_tokens_details.audio_tokens.
+        int audioOutputTokens = usage.getOrDefault("original_usage.completion_tokens_details.audio_tokens",
+                usage.getOrDefault("completion_tokens_details.audio_tokens", 0));
+
+        BigDecimal outputAudioRate = modelPrice.outputAudioTokenPrice();
+        int nonAudioCompletionTokens = outputAudioRate.compareTo(BigDecimal.ZERO) > 0
+                ? Math.max(0, completionTokens - audioOutputTokens)
+                : completionTokens;
+
         return modelPrice.inputPrice().multiply(BigDecimal.valueOf(nonAudioPromptTokens))
                 .add(inputAudioRate.multiply(BigDecimal.valueOf(audioInputTokens)))
-                .add(modelPrice.outputPrice()
-                        .multiply(BigDecimal.valueOf(usage.getOrDefault("completion_tokens", 0))));
+                .add(modelPrice.outputPrice().multiply(BigDecimal.valueOf(nonAudioCompletionTokens)))
+                .add(outputAudioRate.multiply(BigDecimal.valueOf(audioOutputTokens)));
     }
 
     public static BigDecimal textGenerationWithCacheCostOpenAI(@NonNull ModelPrice modelPrice,
@@ -53,12 +64,33 @@ class SpanCostCalculator {
             inputTokens = Math.max(0, inputTokens - cachedReadInputTokens);
         }
 
+        // Audio input tokens (OpenAI realtime models like gpt-4o-realtime-preview, gpt-realtime)
+        // are billed at a separate rate when the model publishes input_cost_per_audio_token.
+        // SDK 1.6.0+ logs them under original_usage.prompt_tokens_details.audio_tokens, with the
+        // bare OTel key as a fallback.
+        int audioInputTokens = usage.getOrDefault("original_usage.prompt_tokens_details.audio_tokens",
+                usage.getOrDefault("prompt_tokens_details.audio_tokens", 0));
+        BigDecimal inputAudioRate = modelPrice.inputAudioTokenPrice();
+        if (inputAudioRate.compareTo(BigDecimal.ZERO) > 0) {
+            inputTokens = Math.max(0, inputTokens - audioInputTokens);
+        }
+
         // Get the output tokens (SDK version below 1.6.0 logged completion_tokens, while 1.6.0+ logged original_usage.completion_tokens)
         int outputTokens = usage.getOrDefault("original_usage.completion_tokens",
                 usage.getOrDefault("completion_tokens", 0));
 
+        // Audio output tokens carry their own rate via output_cost_per_audio_token; same fallback shape.
+        int audioOutputTokens = usage.getOrDefault("original_usage.completion_tokens_details.audio_tokens",
+                usage.getOrDefault("completion_tokens_details.audio_tokens", 0));
+        BigDecimal outputAudioRate = modelPrice.outputAudioTokenPrice();
+        if (outputAudioRate.compareTo(BigDecimal.ZERO) > 0) {
+            outputTokens = Math.max(0, outputTokens - audioOutputTokens);
+        }
+
         return modelPrice.inputPrice().multiply(BigDecimal.valueOf(inputTokens))
+                .add(inputAudioRate.multiply(BigDecimal.valueOf(audioInputTokens)))
                 .add(modelPrice.outputPrice().multiply(BigDecimal.valueOf(outputTokens)))
+                .add(outputAudioRate.multiply(BigDecimal.valueOf(audioOutputTokens)))
                 .add(modelPrice.cacheReadInputTokenPrice().multiply(BigDecimal.valueOf(cachedReadInputTokens)));
     }
 
