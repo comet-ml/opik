@@ -104,7 +104,7 @@ const PlaygroundPrompt = ({
   const updateOutput = useUpdateOutput();
 
   const {
-    permissions: { canCreatePrompts },
+    permissions: { canViewPrompts, canCreatePrompts, canEditPrompts },
   } = usePermissions();
 
   const [showSaveChatPromptDialog, setShowSaveChatPromptDialog] =
@@ -396,49 +396,51 @@ const PlaygroundPrompt = ({
               onClear={() => handleImportChatPrompt(undefined, undefined)}
             />
           ) : (
-            <PromptLibraryMenu
-              projectId={activeProjectId!}
-              filterByTemplateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
-              onSelect={({ promptId: pId, versionId }) =>
-                handleImportChatPrompt(pId, versionId)
-              }
-              onOpenChange={setIsChatLibraryOpen}
-              trigger={
-                <div>
-                  <TooltipWrapper content="Load prompt">
-                    <Button
-                      variant="minimal"
-                      size="icon-sm"
-                      data-testid="load-prompt-button"
-                    >
-                      <FileTerminal />
-                    </Button>
-                  </TooltipWrapper>
-                </div>
-              }
-            />
+            canViewPrompts && (
+              <PromptLibraryMenu
+                projectId={activeProjectId!}
+                filterByTemplateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
+                onSelect={({ promptId: pId, versionId }) =>
+                  handleImportChatPrompt(pId, versionId)
+                }
+                onOpenChange={setIsChatLibraryOpen}
+                trigger={
+                  <div>
+                    <TooltipWrapper content="Load prompt">
+                      <Button
+                        variant="minimal"
+                        size="icon-sm"
+                        data-testid="load-prompt-button"
+                      >
+                        <FileTerminal />
+                      </Button>
+                    </TooltipWrapper>
+                  </div>
+                }
+              />
+            )
           )}
 
           <div className="flex shrink-0 items-center">
-            {hasMessageContent && (
-              <TooltipWrapper
-                content={
-                  hasUnsavedChatPromptChanges
-                    ? PROMPT_UNSAVED_TOOLTIP
-                    : PROMPT_SAVE_AS_CHAT_TOOLTIP
-                }
-              >
-                <Button
-                  variant="minimal"
-                  size="icon-sm"
-                  onClick={handleSaveChatPrompt}
-                  disabled={!canCreatePrompts && !selectedChatPromptId}
-                  data-testid="playground-save-prompt-button"
+            {hasMessageContent &&
+              (selectedChatPromptId ? canEditPrompts : canCreatePrompts) && (
+                <TooltipWrapper
+                  content={
+                    hasUnsavedChatPromptChanges
+                      ? PROMPT_UNSAVED_TOOLTIP
+                      : PROMPT_SAVE_AS_CHAT_TOOLTIP
+                  }
                 >
-                  <Save />
-                </Button>
-              </TooltipWrapper>
-            )}
+                  <Button
+                    variant="minimal"
+                    size="icon-sm"
+                    onClick={handleSaveChatPrompt}
+                    data-testid="playground-save-prompt-button"
+                  >
+                    <Save />
+                  </Button>
+                </TooltipWrapper>
+              )}
 
             {promptCount > 1 && (
               <>

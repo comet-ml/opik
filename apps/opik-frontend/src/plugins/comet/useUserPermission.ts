@@ -254,10 +254,11 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
 
   const canViewAgentPlayground = useMemo(
     () =>
+      canViewPrompts &&
       canLogTraceSpanThread &&
       checkNullablePermission(ManagementPermissionsNames.EXPERIMENT_CREATE) &&
       checkNullablePermission(ManagementPermissionsNames.AGENT_PLAYGROUND_USE),
-    [canLogTraceSpanThread, checkNullablePermission],
+    [canViewPrompts, canLogTraceSpanThread, checkNullablePermission],
   );
 
   const canViewOptimizationRuns = useMemo(

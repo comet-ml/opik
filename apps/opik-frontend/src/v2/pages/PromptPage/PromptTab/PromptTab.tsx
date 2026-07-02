@@ -384,7 +384,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              {canUsePlayground && !isChatPrompt && (
+              {canUsePlayground && canEditPrompts && !isChatPrompt && (
                 <>
                   <Separator orientation="vertical" className="mx-1 h-4" />
                   <ImproveInPlaygroundButton
