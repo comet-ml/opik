@@ -9,6 +9,7 @@ Domain-specific agent skills for the Opik monorepo. Each skill provides patterns
 | diagram-generation | `diagram-generation/` | Generate self-contained HTML architecture diagrams. Use when creating visual diagrams for PRs, task plans, or architectural explanations. |
 | documentation | `documentation/` | Feature documentation and release notes patterns. Use when documenting changes, writing PR descriptions, or preparing releases. |
 | local-dev | `local-dev/` | Local development environment setup and commands. Use when helping with dev server, Docker, or local testing. |
+| metrics-instrumentation | `metrics-instrumentation/` | Instrument an opik-backend workflow with operational OpenTelemetry metrics and a flow-ordered Grafana dashboard. Use when a pipeline is a black box and you need per-stage throughput/latency/error visibility plus a per-customer drill. Distinct from analytics-instrumentation (PostHog product events). |
 | opik-backend | `opik-backend/` | Java backend patterns for Opik. Use when working in `apps/opik-backend`, designing APIs, database operations, or services. |
 | opik-external-integrations | `opik-external-integrations/` | Build an Opik integration that lives outside this repo — a standalone `opik-*` package or Opik support contributed into a third-party project (LiteLLM, Dify, …). Activates only for external-repo targets. |
 | opik-frontend | `opik-frontend/` | React frontend patterns for Opik. Use when working in `apps/opik-frontend`, on components, state, or data fetching. |
