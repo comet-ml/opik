@@ -392,7 +392,10 @@ const PlaygroundPrompt = ({
                 chatPromptVersionData?.environments ??
                 chatPromptData?.latest_version?.environments
               }
-              hasUnsavedChanges={hasUnsavedChatPromptChanges}
+              hasUnsavedChanges={
+                (canEditPrompts || canCreatePrompts) &&
+                hasUnsavedChatPromptChanges
+              }
               onClear={() => handleImportChatPrompt(undefined, undefined)}
             />
           ) : (
@@ -422,25 +425,24 @@ const PlaygroundPrompt = ({
           )}
 
           <div className="flex shrink-0 items-center">
-            {hasMessageContent &&
-              (selectedChatPromptId ? canEditPrompts : canCreatePrompts) && (
-                <TooltipWrapper
-                  content={
-                    hasUnsavedChatPromptChanges
-                      ? PROMPT_UNSAVED_TOOLTIP
-                      : PROMPT_SAVE_AS_CHAT_TOOLTIP
-                  }
+            {hasMessageContent && (canEditPrompts || canCreatePrompts) && (
+              <TooltipWrapper
+                content={
+                  hasUnsavedChatPromptChanges
+                    ? PROMPT_UNSAVED_TOOLTIP
+                    : PROMPT_SAVE_AS_CHAT_TOOLTIP
+                }
+              >
+                <Button
+                  variant="minimal"
+                  size="icon-sm"
+                  onClick={handleSaveChatPrompt}
+                  data-testid="playground-save-prompt-button"
                 >
-                  <Button
-                    variant="minimal"
-                    size="icon-sm"
-                    onClick={handleSaveChatPrompt}
-                    data-testid="playground-save-prompt-button"
-                  >
-                    <Save />
-                  </Button>
-                </TooltipWrapper>
-              )}
+                  <Save />
+                </Button>
+              </TooltipWrapper>
+            )}
 
             {promptCount > 1 && (
               <>

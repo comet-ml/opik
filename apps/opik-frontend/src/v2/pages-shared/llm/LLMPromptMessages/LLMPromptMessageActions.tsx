@@ -224,8 +224,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     [onChangeMessage],
   );
 
-  const saveDisabled =
-    !hasContent || (promptId ? !canEditPrompts : !canCreatePrompts);
+  const saveDisabled = !hasContent || (!canEditPrompts && !canCreatePrompts);
   // Compare against the actually-loaded version when available; fall back to
   // `latest_version` only when no specific version is referenced.
   const baselineVersion =
