@@ -299,7 +299,7 @@ public class PromptResource {
             @ApiResponse(responseCode = "409", description = "Conflict", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
     })
     @RateLimited
-    @RequiredPermissions(WorkspaceUserPermission.PROMPT_CREATE)
+    @RequiredPermissions(WorkspaceUserPermission.PROMPT_EDIT)
     @JsonView({PromptVersion.View.Detail.class})
     public Response createPromptVersion(
             @RequestBody(content = @Content(schema = @Schema(implementation = CreatePromptVersion.class))) @JsonView({
@@ -488,7 +488,7 @@ public class PromptResource {
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
     })
     @RateLimited
-    @RequiredPermissions(WorkspaceUserPermission.PROMPT_CREATE)
+    @RequiredPermissions(WorkspaceUserPermission.PROMPT_EDIT)
     @JsonView({PromptVersion.View.Detail.class})
     public Response restorePromptVersion(@PathParam("promptId") UUID promptId, @PathParam("versionId") UUID versionId) {
 
