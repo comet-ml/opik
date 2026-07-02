@@ -91,9 +91,15 @@ export class ConfigurationPage {
   /**
    * Add a provider's API key via the UI. Idempotent: if the provider is already
    * in the table, no-ops.
+   *
+   * Returns `false` when the deployment doesn't offer this provider in the
+   * add-provider dialog — restricted environments expose only a subset of
+   * providers, and a missing option must fall through to the next candidate
+   * instead of hanging on a click that will never resolve. Returns `true` when
+   * the provider is configured (either already present or added just now).
    */
-  async ensureProviderConfigured(provider: ProviderName, apiKey: string): Promise<void> {
-    if (await this.hasProvider(provider)) return;
+  async ensureProviderConfigured(provider: ProviderName, apiKey: string): Promise<boolean> {
+    if (await this.hasProvider(provider)) return true;
 
     // Two buttons can have the name "Add configuration": the toolbar button
     // (always visible) and an empty-state CTA inside the table's no-data row.
@@ -106,11 +112,27 @@ export class ConfigurationPage {
     const dialog = this.page.getByTestId('add-provider-dialog');
     await dialog.waitFor({ state: 'visible' });
 
+    // Wait for the option grid to populate before deciding a provider is
+    // absent: the dialog turns visible a beat before its options render, so an
+    // immediate presence check would false-negative an offered provider.
+    await dialog.getByTestId('add-provider-dialog-option').first().waitFor({ state: 'visible' });
+
     const providerType = PROVIDER_TYPE_MAP[provider];
     const providerButton = dialog
       .getByTestId('add-provider-dialog-option')
-      .and(this.page.locator(`[data-provider="${providerType}"]`));
-    await providerButton.first().click();
+      .and(this.page.locator(`[data-provider="${providerType}"]`))
+      .first();
+
+    const offered = await providerButton
+      .waitFor({ state: 'visible', timeout: 2_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!offered) {
+      await this.page.keyboard.press('Escape');
+      await dialog.waitFor({ state: 'hidden' });
+      return false;
+    }
+    await providerButton.click();
 
     // Step 2: API key input. The textbox accessible name follows
     // "<Provider> API Key" exactly (verified during Phase 3 discovery).
@@ -125,6 +147,7 @@ export class ConfigurationPage {
         intervals: [500, 1000],
       })
       .toBe(true);
+    return true;
   }
 
   /**
