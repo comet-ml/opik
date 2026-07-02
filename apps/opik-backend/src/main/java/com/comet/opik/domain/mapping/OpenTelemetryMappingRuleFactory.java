@@ -1,5 +1,6 @@
 package com.comet.opik.domain.mapping;
 
+import com.comet.opik.domain.mapping.otel.ClaudeCodeMappingRules;
 import com.comet.opik.domain.mapping.otel.GenAIMappingRules;
 import com.comet.opik.domain.mapping.otel.GeneralMappingRules;
 import com.comet.opik.domain.mapping.otel.LangFuseMappingRules;
@@ -26,6 +27,7 @@ public class OpenTelemetryMappingRuleFactory {
 
     private static final List<OpenTelemetryMappingRule> ALL_RULES = Stream.of(
             LogfireMappingRules.getRules(),
+            ClaudeCodeMappingRules.getRules(),
             GenAIMappingRules.getRules(),
             OpenInferenceMappingRules.getRules(),
             LiveKitMappingRules.getRules(),
