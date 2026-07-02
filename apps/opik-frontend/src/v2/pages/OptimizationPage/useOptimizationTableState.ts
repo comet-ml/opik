@@ -1,11 +1,9 @@
-import { useCallback, useMemo } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useMemo } from "react";
 import { ColumnSort } from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
 import { StringParam, useQueryParam } from "use-query-params";
 
 import { COLUMN_ID_ID, COLUMN_NAME_ID, ROW_HEIGHT } from "@/types/shared";
-import { useActiveProjectId } from "@/store/AppStore";
 import { AggregatedCandidate } from "@/types/optimizations";
 import { sortCandidates } from "@/lib/optimizations";
 
@@ -44,18 +42,14 @@ const DEFAULT_SORTING: ColumnSort[] = [{ id: COLUMN_NAME_ID, desc: false }];
 
 interface UseOptimizationTableStateParams {
   candidates: AggregatedCandidate[];
-  workspaceName: string;
-  optimizationId: string;
+  /** Opens the trial sidebar for the clicked row. */
+  onRowClick: (row: AggregatedCandidate) => void;
 }
 
 export const useOptimizationTableState = ({
   candidates,
-  workspaceName,
-  optimizationId,
+  onRowClick,
 }: UseOptimizationTableStateParams) => {
-  const navigate = useNavigate();
-  const activeProjectId = useActiveProjectId();
-
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
   });
@@ -101,24 +95,6 @@ export const useOptimizationTableState = ({
     return sortCandidates(filtered, sortedColumns);
   }, [candidates, search, sortedColumns]);
 
-  const handleRowClick = useCallback(
-    (row: AggregatedCandidate) => {
-      navigate({
-        to: "/$workspaceName/projects/$projectId/optimizations/$optimizationId/trials",
-        params: {
-          optimizationId,
-          workspaceName,
-          projectId: activeProjectId!,
-        },
-        search: {
-          trials: row.experimentIds,
-          trialNumber: row.trialNumber,
-        },
-      });
-    },
-    [navigate, workspaceName, activeProjectId, optimizationId],
-  );
-
   return {
     search,
     setSearch,
@@ -134,6 +110,6 @@ export const useOptimizationTableState = ({
     setColumnsWidth,
     height,
     setHeight,
-    handleRowClick,
+    handleRowClick: onRowClick,
   };
 };

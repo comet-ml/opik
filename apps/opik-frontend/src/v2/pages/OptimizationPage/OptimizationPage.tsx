@@ -1,6 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
-import { useActiveProjectId } from "@/store/AppStore";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import Loader from "@/shared/Loader/Loader";
@@ -16,6 +14,7 @@ import OptimizationTrialsControls from "./OptimizationTrialsControls";
 import OptimizationTrialsTable from "./OptimizationTrialsTable";
 import OptimizationKPICards from "./OptimizationKPICards";
 import RunErrorPanel from "./RunErrorPanel";
+import TrialSidebar from "./TrialSidebar/TrialSidebar";
 import { OPTIMIZATION_STATUS } from "@/types/optimizations";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
@@ -25,14 +24,11 @@ enum OPTIMIZATION_TAB {
 }
 
 const OptimizationPage: React.FC = () => {
-  const navigate = useNavigate();
-  const activeProjectId = useActiveProjectId();
   const {
     permissions: { canUseOptimizationStudio },
   } = usePermissions();
 
   const {
-    workspaceName,
     optimizationId,
     optimization,
     experiments,
@@ -65,6 +61,7 @@ const OptimizationPage: React.FC = () => {
 
     handleRowClick,
     handleRefresh,
+    trialSidebar,
   } = useOptimizationData();
 
   const [selectedTrialId, setSelectedTrialId] = useState<string | undefined>();
@@ -87,24 +84,22 @@ const OptimizationPage: React.FC = () => {
     setBreadcrumbParam,
   ]);
 
+  const { openTrial } = trialSidebar;
+
   const handleTrialClick = useCallback(
     (candidateId: string) => {
       const candidate = candidates.find((c) => c.candidateId === candidateId);
       if (!candidate) return;
-      navigate({
-        to: "/$workspaceName/projects/$projectId/optimizations/$optimizationId/trials",
-        params: {
-          optimizationId,
-          workspaceName,
-          projectId: activeProjectId!,
-        },
-        search: {
-          trials: candidate.experimentIds,
-          trialNumber: candidate.trialNumber,
-        },
-      });
+      openTrial(candidate);
     },
-    [candidates, navigate, optimizationId, workspaceName, activeProjectId],
+    [candidates, openTrial],
+  );
+
+  // The sidebar's experiments come from the run's already-loaded list — the
+  // sidebar itself fetches nothing.
+  const trialExperiments = useMemo(
+    () => experiments.filter((e) => trialSidebar.experimentIds.includes(e.id)),
+    [experiments, trialSidebar.experimentIds],
   );
 
   const isInProgress =
@@ -255,6 +250,13 @@ const OptimizationPage: React.FC = () => {
           </div>
         </TabsContent>
       </Tabs>
+
+      <TrialSidebar
+        open={trialSidebar.open}
+        onClose={trialSidebar.close}
+        trialNumber={trialSidebar.trialNumber}
+        trialExperiments={trialExperiments}
+      />
     </div>
   );
 };
