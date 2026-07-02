@@ -22,5 +22,7 @@ public record AgentInsightsReportMessage(
         @NonNull Instant periodStart,
         @NonNull Instant periodEnd,
         // "manual" (Run diagnostics) or "scheduled" (daily sweep), carried through to the Ollie trigger.
-        @NonNull String triggerSource) implements RedisSubscriberMessage {
+        // Nullable (not @NonNull) so a message queued before this field existed still deserializes on a
+        // rolling upgrade; the subscriber defaults a null to "scheduled".
+        String triggerSource) implements RedisSubscriberMessage {
 }
