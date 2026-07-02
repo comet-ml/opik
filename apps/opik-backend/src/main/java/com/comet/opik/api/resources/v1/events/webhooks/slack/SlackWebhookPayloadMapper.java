@@ -1,12 +1,12 @@
 package com.comet.opik.api.resources.v1.events.webhooks.slack;
 
-import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.events.webhooks.MetricsAlertPayload;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
+import com.comet.opik.api.resources.v1.events.webhooks.common.AlertWebhookUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
@@ -16,7 +16,6 @@ import org.apache.commons.lang3.tuple.Pair;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -34,8 +33,6 @@ public class SlackWebhookPayloadMapper {
 
     private static final int SLACK_HEADER_BLOCK_LIMIT = 150;
     private static final int SLACK_TEXT_BLOCK_LIMIT = 3000;
-    public static final String BASE_URL_METADATA_KEY = "base_url";
-    private static final String DEFAULT_BASE_URL = "http://localhost:5173";
 
     private static final String METRICS_ALERT_DETAILS_TEMPLATE = "• *Current <type>:* <valuePrefix><metricValue><valueSuffix>\n"
             +
@@ -78,7 +75,7 @@ public class SlackWebhookPayloadMapper {
     private static SlackBlock createSummaryBlock(@NonNull WebhookEvent<Map<String, Object>> event) {
         List<?> metadata = (List<?>) event.getPayload().getOrDefault("metadata", List.of());
         int count = metadata.size();
-        String eventTypeName = formatEventType(event.getEventType());
+        String eventTypeName = AlertWebhookUtils.formatEventType(event.getEventType());
 
         String summary = String.format("*%d* new %s event%s happened",
                 count, eventTypeName, count != 1 ? "s" : "");
@@ -89,10 +86,7 @@ public class SlackWebhookPayloadMapper {
     private static List<SlackBlock> createDetailsBlocks(@NonNull WebhookEvent<Map<String, Object>> event) {
         List<?> metadata = (List<?>) event.getPayload().getOrDefault("metadata", List.of());
 
-        var metadataUrl = event.getAlertMetadata().getOrDefault(BASE_URL_METADATA_KEY, DEFAULT_BASE_URL);
-        metadataUrl = metadataUrl.endsWith("/") ? metadataUrl : metadataUrl + "/";
-
-        String baseUrl = metadataUrl + event.getWorkspaceName();
+        String baseUrl = AlertWebhookUtils.resolveBaseUrl(event.getAlertMetadata(), event.getWorkspaceName());
 
         DetailsBuildResult result = switch (event.getEventType()) {
             case PROMPT_CREATED -> buildPromptCreatedDetails(metadata, baseUrl);
@@ -300,7 +294,7 @@ public class SlackWebhookPayloadMapper {
     private static String formatMetricsAlertPayload(@NonNull MetricsAlertPayload payload, String type) {
         try {
             // Format window duration
-            String windowDuration = formatWindowDuration(payload.windowSeconds());
+            String windowDuration = AlertWebhookUtils.formatWindowDuration(payload.windowSeconds());
 
             // Build scope description
             String scope = (payload.projectIds() == null || payload.projectIds().isEmpty())
@@ -334,26 +328,6 @@ public class SlackWebhookPayloadMapper {
         }
     }
 
-    /**
-     * Formats window duration from seconds to human-readable format.
-     */
-    private static String formatWindowDuration(long seconds) {
-        Duration duration = Duration.ofSeconds(seconds);
-
-        if (duration.toDays() > 0) {
-            long days = duration.toDays();
-            return days + " day" + (days != 1 ? "s" : "");
-        } else if (duration.toHours() > 0) {
-            long hours = duration.toHours();
-            return hours + " hour" + (hours != 1 ? "s" : "");
-        } else if (duration.toMinutes() > 0) {
-            long minutes = duration.toMinutes();
-            return minutes + " minute" + (minutes != 1 ? "s" : "");
-        } else {
-            return seconds + " second" + (seconds != 1 ? "s" : "");
-        }
-    }
-
     private static DetailsBuildResult checkSlackTextLimit(String text, String mainText,
             List<String> links, String fallbackText) {
         // Check if exceeds limit
@@ -378,21 +352,6 @@ public class SlackWebhookPayloadMapper {
         }
 
         return new DetailsBuildResult(text);
-    }
-
-    private static String formatEventType(@NonNull AlertEventType eventType) {
-        return switch (eventType) {
-            case PROMPT_CREATED -> "Prompt Created";
-            case PROMPT_DELETED -> "Prompt Deleted";
-            case PROMPT_COMMITTED -> "Prompt Committed";
-            case TRACE_ERRORS -> "Trace Error Alert";
-            case TRACE_FEEDBACK_SCORE -> "Trace Feedback Score";
-            case TRACE_THREAD_FEEDBACK_SCORE -> "Thread Feedback Score";
-            case TRACE_GUARDRAILS_TRIGGERED -> "Guardrail Triggered";
-            case EXPERIMENT_FINISHED -> "Experiment Finished";
-            case TRACE_COST -> "Cost Alert";
-            case TRACE_LATENCY -> "Latency Alert";
-        };
     }
 
     /**
