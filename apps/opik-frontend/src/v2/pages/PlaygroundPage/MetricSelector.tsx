@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useCallback } from "react";
 import { ChevronDown, Pencil, Plus } from "lucide-react";
+import toLower from "lodash/toLower";
 
 import { Button } from "@/ui/button";
 import { Tag } from "@/ui/tag";
@@ -17,7 +18,6 @@ import {
   toggleAllMetrics,
   toggleMetricSelection,
 } from "@/v2/pages/PlaygroundPage/metricSelection";
-import toLower from "lodash/toLower";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import emptyMetricsLightUrl from "/images/empty-metrics-light.svg";
 import emptyMetricsDarkUrl from "/images/empty-metrics-dark.svg";
@@ -152,7 +152,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
 
   return (
     <>
-      <Popover onOpenChange={openChangeHandler} open={open} modal>
+      <Popover onOpenChange={openChangeHandler} open={open}>
         <PopoverTrigger asChild>
           <div
             tabIndex={0}
