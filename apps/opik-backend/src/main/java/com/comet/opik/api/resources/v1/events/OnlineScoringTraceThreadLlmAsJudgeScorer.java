@@ -248,20 +248,18 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                                 .put(RequestContext.USER_NAME, message.userName()))
                 : Mono.just(List.of());
         // Monitoring recorder (OPIK-6994): one hidden evaluator trace per thread evaluation, with an
-        // llm span per LLM round and tool spans for the agentic loop. NOOP when the toggle is off.
+        // llm span per LLM round and tool spans for the agentic loop.
         // Resolved reactively because the project-name lookup is blocking.
         Mono<EvaluationRecorder> recorderMono = Mono.fromCallable(
-                () -> serviceTogglesConfig.isOnlineScoringTracingEnabled()
-                        ? onlineEvaluationRecorder.begin(
-                                EvaluatedThread.builder()
-                                        .id(threadId)
-                                        .projectId(message.projectId())
-                                        .projectName(projectService.get(message.projectId(),
-                                                message.workspaceId()).name())
-                                        .build(),
-                                rule.getId(), rule.getName(), message.code().model().name(),
-                                message.workspaceId(), message.userName())
-                        : EvaluationRecorder.NOOP)
+                () -> onlineEvaluationRecorder.begin(
+                        EvaluatedThread.builder()
+                                .id(threadId)
+                                .projectId(message.projectId())
+                                .projectName(projectService.get(message.projectId(),
+                                        message.workspaceId()).name())
+                                .build(),
+                        rule.getId(), rule.getName(), message.code().model().name(),
+                        message.workspaceId(), message.userName()))
                 .subscribeOn(Schedulers.boundedElastic())
                 // Monitoring is best-effort: a project-name lookup failure (e.g. missing project) must
                 // not abort the actual thread scoring, so degrade to NOOP instead of failing the zip.

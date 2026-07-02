@@ -92,12 +92,10 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
                 UserLog.RULE_ID, message.ruleId().toString());
 
         // Monitoring recorder (OPIK-6994): one hidden evaluator trace per span evaluation with an llm
-        // span for the scoring call. NOOP when the toggle is off.
-        EvaluationRecorder recorder = serviceTogglesConfig.isOnlineScoringTracingEnabled()
-                ? onlineEvaluationRecorder.begin(span,
-                        message.ruleId(), message.ruleName(), message.llmAsJudgeCode().model().name(),
-                        message.workspaceId(), message.userName())
-                : EvaluationRecorder.NOOP;
+        // span for the scoring call.
+        EvaluationRecorder recorder = onlineEvaluationRecorder.begin(span,
+                message.ruleId(), message.ruleName(), message.llmAsJudgeCode().model().name(),
+                message.workspaceId(), message.userName());
 
         Mono<List<FeedbackScoreBatchItem>> scoring = Mono.fromCallable(() -> prepareSpanRequest(message, mdc))
                 .subscribeOn(Schedulers.boundedElastic())

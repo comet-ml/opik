@@ -186,13 +186,10 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 : Mono.just(List.of());
 
         // Monitoring trace for the evaluation loop (OPIK-6994): one hidden source=evaluator trace per
-        // evaluation, one llm span per LLM round. NOOP when the toggle is off — the evaluation then
-        // runs exactly as before with no extra writes.
-        EvaluationRecorder recorder = serviceTogglesConfig.isOnlineScoringTracingEnabled()
-                ? onlineEvaluationRecorder.begin(trace, message.ruleId(),
-                        message.ruleName(), message.llmAsJudgeCode().model().name(), message.workspaceId(),
-                        message.userName())
-                : EvaluationRecorder.NOOP;
+        // evaluation, one llm span per LLM round.
+        EvaluationRecorder recorder = onlineEvaluationRecorder.begin(trace, message.ruleId(),
+                message.ruleName(), message.llmAsJudgeCode().model().name(), message.workspaceId(),
+                message.userName());
 
         // Fetch the trace's attachments up front (toggle-gated, best-effort) so the routing decision
         // can force the agentic-tools path when media is present. The judge discovers them by calling

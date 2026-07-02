@@ -26,7 +26,6 @@ export interface ServiceTogglesConfig {
     projectHomepageEnabled: boolean;
     agenticToolsEnabled: boolean;
     agentInsightsEnabled: boolean;
-    onlineScoringTracingEnabled: boolean;
     v2WorkspaceAllowlistIds: string[];
     v1WorkspaceAllowlistIds: string[];
     forceWorkspaceVersion: string;
