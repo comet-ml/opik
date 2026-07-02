@@ -1,6 +1,5 @@
 import React, { useMemo, useState, useCallback } from "react";
-import { ChevronDown, ExternalLink, Plus } from "lucide-react";
-import { Link } from "@tanstack/react-router";
+import { ChevronDown, Pencil, Plus } from "lucide-react";
 
 import { Button } from "@/ui/button";
 import { Tag } from "@/ui/tag";
@@ -27,22 +26,28 @@ interface MetricSelectorProps {
   rules: EvaluatorsRule[];
   selectedRuleIds: string[] | null;
   onSelectionChange: (ruleIds: string[] | null) => void;
-  workspaceName: string;
   projectId?: string;
   canUsePlayground: boolean;
+  datasetColumnNames?: string[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onRuleCreated?: (rule: EvaluatorsRule) => void;
 }
 
 const MetricSelector: React.FC<MetricSelectorProps> = ({
   rules,
   selectedRuleIds,
   onSelectionChange,
-  workspaceName,
   projectId,
   canUsePlayground,
+  datasetColumnNames,
+  open,
+  onOpenChange,
+  onRuleCreated,
 }) => {
-  const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [isRuleDialogOpen, setIsRuleDialogOpen] = useState(false);
+  const [ruleToEdit, setRuleToEdit] = useState<EvaluatorsRule | null>(null);
 
   const {
     permissions: { canUpdateOnlineEvaluationRules },
@@ -91,10 +96,13 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
     onSelectionChange(toggleAllMetrics(isAllSelected));
   }, [onSelectionChange, isAllSelected]);
 
-  const openChangeHandler = useCallback((newOpen: boolean) => {
-    setOpen(newOpen);
-    if (!newOpen) setSearch("");
-  }, []);
+  const openChangeHandler = useCallback(
+    (newOpen: boolean) => {
+      onOpenChange(newOpen);
+      if (!newOpen) setSearch("");
+    },
+    [onOpenChange],
+  );
 
   const isSelected = useCallback(
     (ruleId: string) => {
@@ -104,14 +112,34 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
     [isAllSelected, selectedRuleIdsSet],
   );
 
+  const openCreateDialog = useCallback(() => {
+    setRuleToEdit(null);
+    onOpenChange(false);
+    setIsRuleDialogOpen(true);
+  }, [onOpenChange]);
+
+  const openEditDialog = useCallback(
+    (rule: EvaluatorsRule) => {
+      setRuleToEdit(rule);
+      onOpenChange(false);
+      setIsRuleDialogOpen(true);
+    },
+    [onOpenChange],
+  );
+
+  const handleDialogOpenChange = useCallback((newOpen: boolean) => {
+    setIsRuleDialogOpen(newOpen);
+    if (!newOpen) setRuleToEdit(null);
+  }, []);
+
   const hasNoRules = rules.length === 0;
 
   const triggerContent =
     selectedCount === 0 ? (
-      <span className="truncate">Select metrics</span>
+      <span className="min-w-0 truncate">Select metrics</span>
     ) : (
-      <div className="flex items-center gap-1.5">
-        <span>Metrics</span>
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span className="truncate">Metrics</span>
         <Tag
           variant="green"
           size="sm"
@@ -119,7 +147,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
         >
           {selectedCount}
         </Tag>
-      </div>
+      </span>
     );
 
   return (
@@ -129,7 +157,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
           <div
             tabIndex={0}
             className={cn(
-              "flex h-full cursor-pointer items-center gap-1 px-2 text-xs focus:outline-none",
+              "flex h-full w-[120px] cursor-pointer items-center gap-1 px-2 text-xs focus:outline-none",
               open
                 ? "text-foreground"
                 : selectedCount > 0
@@ -137,7 +165,9 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
                   : "text-light-slate hover:text-foreground",
             )}
           >
-            {triggerContent}
+            <div className="flex min-w-0 flex-1 items-center overflow-hidden">
+              {triggerContent}
+            </div>
             <ChevronDown
               className={cn(
                 "size-3.5 shrink-0 text-light-slate transition-transform group-hover:text-primary",
@@ -173,14 +203,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
                 darkImageUrl={emptyMetricsDarkUrl}
                 title="No metrics yet"
                 ctaLabel={canCreateRule ? "Create metric" : undefined}
-                onCreate={
-                  canCreateRule
-                    ? () => {
-                        setOpen(false);
-                        setIsRuleDialogOpen(true);
-                      }
-                    : undefined
-                }
+                onCreate={canCreateRule ? openCreateDialog : undefined}
               />
             ) : filteredRules.length > 0 ? (
               filteredRules.map((rule) => (
@@ -198,28 +221,22 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
                       <div className="comet-body-s truncate">{rule.name}</div>
                     </div>
                   </TooltipWrapper>
-                  <TooltipWrapper content="Open in a new tab">
-                    <Button
-                      type="button"
-                      variant="minimal"
-                      size="icon-xs"
-                      asChild
-                    >
-                      <Link
-                        to={`/${workspaceName}/projects/${projectId}/online-evaluation${
-                          canUpdateOnlineEvaluationRules
-                            ? `?editRule=${rule.id}`
-                            : ""
-                        }`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
-                        onClick={(e) => e.stopPropagation()}
+                  {canUpdateOnlineEvaluationRules && (
+                    <TooltipWrapper content="Edit metric">
+                      <Button
+                        type="button"
+                        variant="minimal"
+                        size="icon-xs"
+                        className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditDialog(rule);
+                        }}
                       >
-                        <ExternalLink className="size-3.5 shrink-0" />
-                      </Link>
-                    </Button>
-                  </TooltipWrapper>
+                        <Pencil className="size-3.5 shrink-0" />
+                      </Button>
+                    </TooltipWrapper>
+                  )}
                 </div>
               ))
             ) : (
@@ -257,10 +274,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
                   <ListAction
                     variant="default"
                     size="sm"
-                    onClick={() => {
-                      setOpen(false);
-                      setIsRuleDialogOpen(true);
-                    }}
+                    onClick={openCreateDialog}
                   >
                     <Plus className="size-3.5 shrink-0" />
                     New metric
@@ -273,10 +287,15 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
       </Popover>
 
       <AddEditRuleDialog
+        key={ruleToEdit ? `edit-${ruleToEdit.id}` : "create"}
         open={isRuleDialogOpen}
-        setOpen={setIsRuleDialogOpen}
+        setOpen={handleDialogOpenChange}
         projectId={projectId || ""}
+        rule={ruleToEdit ?? undefined}
+        mode={ruleToEdit ? "edit" : "create"}
+        datasetColumnNames={datasetColumnNames}
         hideScopeSelector
+        onRuleCreated={onRuleCreated}
       />
     </>
   );

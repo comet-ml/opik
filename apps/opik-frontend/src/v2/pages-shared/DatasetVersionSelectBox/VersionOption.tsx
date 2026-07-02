@@ -30,10 +30,10 @@ const VersionOption: React.FC<VersionOptionProps> = ({
       )}
     >
       <div className="flex w-full min-w-0 flex-col">
-        <div className="comet-body-s flex items-center gap-2 whitespace-nowrap text-foreground">
+        <div className="comet-body-s flex items-start gap-2 text-foreground">
           <span className="shrink-0">{version.version_name}</span>
           {version.tags && version.tags.length > 0 && (
-            <div className="flex items-center gap-1">
+            <div className="flex min-w-0 flex-wrap items-center gap-1">
               {version.tags.map((tag) => (
                 <ColoredTag key={tag} label={tag} />
               ))}

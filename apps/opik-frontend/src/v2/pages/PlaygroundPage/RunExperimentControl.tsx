@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import dayjs from "dayjs";
 import { Database, FlaskConical, ListChecks, X } from "lucide-react";
 
@@ -30,6 +30,7 @@ import {
 } from "@/store/PlaygroundStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { DATASET_TYPE } from "@/types/datasets";
+import { EvaluatorsRule } from "@/types/automations";
 import {
   parseDatasetVersionKey,
   toPlainDatasetId,
@@ -60,6 +61,7 @@ interface RunExperimentControlProps {
   workspaceName: string;
   datasetId: string | null;
   versionName?: string;
+  datasetColumnNames?: string[];
   onChangeDatasetId: (id: string | null) => void;
   onLeaveExperimentMode: () => void;
 }
@@ -68,6 +70,7 @@ const RunExperimentControl: React.FC<RunExperimentControlProps> = ({
   workspaceName,
   datasetId,
   versionName,
+  datasetColumnNames,
   onChangeDatasetId,
   onLeaveExperimentMode,
 }) => {
@@ -92,6 +95,7 @@ const RunExperimentControl: React.FC<RunExperimentControlProps> = ({
   } = usePermissions();
 
   const [pendingType, setPendingType] = useState<DATASET_TYPE | null>(null);
+  const [metricsOpen, setMetricsOpen] = useState(false);
 
   const isExperimentMode = !!datasetId;
   const activeType = isExperimentMode
@@ -134,19 +138,21 @@ const RunExperimentControl: React.FC<RunExperimentControlProps> = ({
 
       const ruleIds =
         type === DATASET_TYPE.DATASET
-          ? scoresByDatasetId[newPlainId] ?? []
+          ? scoresByDatasetId[newPlainId] ?? null
           : [];
       setSelectedRuleIds(ruleIds);
 
       if (isDifferentDataset) resetDatasetFilters();
 
       const name = dataset?.name ?? "";
+      const date = dayjs().format("YYYY-MM-DD");
       setExperimentNamePrefix(
-        `${name.replace(/\s+/g, "-")}-${dayjs().format("YYYY-MM-DD")}`,
+        name ? `${name.replace(/\s+/g, "-")}-${date}` : date,
       );
       setDatasetType(type);
       if (type === DATASET_TYPE.DATASET) {
         setScoresForDataset(newPlainId, ruleIds);
+        setMetricsOpen(true);
       }
 
       setPendingType(null);
@@ -168,15 +174,40 @@ const RunExperimentControl: React.FC<RunExperimentControlProps> = ({
 
   const handleMetricsChange = useCallback(
     (ruleIds: string[] | null) => {
-      // Resolve "all" (null) to concrete ids so the run path keeps working with
-      // an explicit metric list, matching the previous dialog behavior.
-      const resolved =
-        ruleIds === null && rules.length > 0 ? rules.map((r) => r.id) : ruleIds;
-      setSelectedRuleIds(resolved);
+      setSelectedRuleIds(ruleIds);
       const plainId = toPlainDatasetId(datasetId);
-      if (plainId) setScoresForDataset(plainId, resolved);
+      if (plainId) setScoresForDataset(plainId, ruleIds);
     },
-    [rules, datasetId, setSelectedRuleIds, setScoresForDataset],
+    [datasetId, setSelectedRuleIds, setScoresForDataset],
+  );
+
+  // Resolve null (="all rules") to actual IDs so the backend can score non-SDK traces
+  useEffect(() => {
+    if (
+      isExperimentMode &&
+      activeType === DATASET_TYPE.DATASET &&
+      selectedRuleIds === null &&
+      rules.length > 0
+    ) {
+      setSelectedRuleIds(rules.map((r) => r.id));
+    }
+  }, [
+    isExperimentMode,
+    activeType,
+    selectedRuleIds,
+    rules,
+    setSelectedRuleIds,
+  ]);
+
+  const handleRuleCreated = useCallback(
+    (rule: EvaluatorsRule) => {
+      if (selectedRuleIds === null) return;
+      const next = [...selectedRuleIds, rule.id];
+      setSelectedRuleIds(next);
+      const plainId = toPlainDatasetId(datasetId);
+      if (plainId) setScoresForDataset(plainId, next);
+    },
+    [selectedRuleIds, datasetId, setSelectedRuleIds, setScoresForDataset],
   );
 
   const handleClickX = useCallback(() => {
@@ -184,6 +215,7 @@ const RunExperimentControl: React.FC<RunExperimentControlProps> = ({
       onLeaveExperimentMode();
     }
     setPendingType(null);
+    setMetricsOpen(false);
   }, [isExperimentMode, onLeaveExperimentMode]);
 
   if (!(canViewDatasets && canCreateExperiments && canViewExperiments)) {
@@ -203,17 +235,21 @@ const RunExperimentControl: React.FC<RunExperimentControlProps> = ({
         projectId={activeProjectId ?? undefined}
         datasetType={type}
         autoOpen={!isExperimentMode}
+        onDismiss={() => !isExperimentMode && setPendingType(null)}
       />
       {type === DATASET_TYPE.DATASET && (
         <>
           <Separator orientation="vertical" className="h-3" />
           <MetricSelector
             rules={rules}
-            selectedRuleIds={selectedRuleIds ?? []}
+            selectedRuleIds={isExperimentMode ? selectedRuleIds : []}
             onSelectionChange={handleMetricsChange}
-            workspaceName={workspaceName}
             projectId={activeProjectId ?? undefined}
             canUsePlayground={canUsePlayground}
+            datasetColumnNames={datasetColumnNames}
+            open={metricsOpen}
+            onOpenChange={setMetricsOpen}
+            onRuleCreated={handleRuleCreated}
           />
         </>
       )}
@@ -248,7 +284,10 @@ const RunExperimentControl: React.FC<RunExperimentControlProps> = ({
               key={type}
               data-testid={testId}
               className="flex-col items-start gap-1 p-3"
-              onClick={() => setPendingType(type)}
+              onClick={() => {
+                setMetricsOpen(false);
+                setPendingType(type);
+              }}
             >
               <div className="flex items-center gap-2">
                 <Icon className={`size-4 shrink-0 ${iconClassName}`} />
