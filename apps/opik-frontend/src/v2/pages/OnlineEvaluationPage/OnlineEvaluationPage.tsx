@@ -228,6 +228,7 @@ export const OnlineEvaluationPage: React.FC = () => {
 
   const editingRule = rows.find((r) => r.id === editRuleId);
   const cloningRule = rows.find((r) => r.id === cloneRuleId);
+
   const isDialogOpen =
     Boolean(editingRule) || Boolean(cloningRule) || openDialogForCreate;
 

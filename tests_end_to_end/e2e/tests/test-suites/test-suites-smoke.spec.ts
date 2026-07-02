@@ -190,7 +190,7 @@ test.describe('Test Suites — smoke', { tag: ['@t1-smoke', '@test-suites'] }, (
       // "Run experiment" dialog → Test suite tab.
       if ((await playground.loadedSourcePill().count()) === 0) {
         await playground.clickRunExperiment();
-        await playground.submitRunExperimentDialog({ mode: 'test_suite', entityName: name });
+        await playground.selectRunExperimentSource({ mode: 'test_suite', entityName: name });
       }
       await expect(playground.loadedSourcePill()).toBeVisible({ timeout: 20_000 });
 
