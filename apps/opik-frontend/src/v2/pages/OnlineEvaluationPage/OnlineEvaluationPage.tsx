@@ -396,8 +396,14 @@ export const OnlineEvaluationPage: React.FC = () => {
           description={
             "Create a rule to automatically score your model's outputs.\nDefine criteria, evaluate responses in real time, and track quality over time."
           }
-          primaryActionLabel="Create your first rule"
-          onPrimaryAction={handleNewRuleClick}
+          primaryActionLabel={
+            canUpdateOnlineEvaluationRules
+              ? "Create your first rule"
+              : undefined
+          }
+          onPrimaryAction={
+            canUpdateOnlineEvaluationRules ? handleNewRuleClick : undefined
+          }
           docsUrl={buildDocsUrl("/production/online-evaluation/rules")}
         />
       ) : (
