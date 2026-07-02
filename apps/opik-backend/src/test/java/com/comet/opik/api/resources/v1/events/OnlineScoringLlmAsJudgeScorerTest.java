@@ -134,6 +134,10 @@ class OnlineScoringLlmAsJudgeScorerTest {
         lenient().when(onlineScoringConfig.getMaxRetries()).thenReturn(3);
         lenient().when(onlineScoringConfig.getAgenticToolsCharsPerToken()).thenReturn(4);
 
+        lenient().when(onlineEvaluationRecorder.begin(
+                any(Trace.class), any(), any(), any(), any(), any()))
+                .thenReturn(EvaluationRecorder.NOOP);
+
         ToolRegistry toolRegistry = new ToolRegistry(Set.of(
                 stubTool(GetTraceSpansTool.NAME, "{}"),
                 stubTool(ReadTool.NAME, "{}")));
