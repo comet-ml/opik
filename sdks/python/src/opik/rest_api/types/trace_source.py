@@ -2,4 +2,4 @@
 
 import typing
 
-TraceSource = typing.Union[typing.Literal["sdk", "experiment", "playground", "optimization"], typing.Any]
+TraceSource = typing.Union[typing.Literal["sdk", "experiment", "playground", "optimization", "evaluator"], typing.Any]
