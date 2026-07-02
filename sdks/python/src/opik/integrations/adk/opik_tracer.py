@@ -261,7 +261,7 @@ class OpikTracer:
             # access for callback contexts that don't expose it.
             actions = getattr(callback_context, "actions", None)
             if actions is not None:
-                self._pending_llm_spans.register(id(actions), result.span_data)
+                self._pending_llm_spans.register(actions, result.span_data)
 
             # Track request start time for time-to-first-token calculation
             request_start_time = time.time()
@@ -283,7 +283,7 @@ class OpikTracer:
             is_partial = False
 
         span_id: Optional[str] = None
-        pending_key: Optional[int] = None
+        actions = getattr(callback_context, "actions", None)
         exception_occurred = False
         try:
             model = None
@@ -300,13 +300,9 @@ class OpikTracer:
             # working if no entry was registered (a callback context without
             # ``actions``) or it was evicted under extreme concurrency. A parent
             # span left on top by a detached context is not ours, so it is ignored.
-            actions = getattr(callback_context, "actions", None)
-            pending_key = id(actions) if actions is not None else None
             stack_top = context_storage.top_span_data()
             current_span = (
-                self._pending_llm_spans.get(pending_key)
-                if pending_key is not None
-                else None
+                self._pending_llm_spans.get(actions) if actions is not None else None
             )
             if (
                 current_span is None
@@ -455,8 +451,8 @@ class OpikTracer:
             # (any final-response exit, success or error), so a failed
             # finalization above can't leave a stale entry that a later id() reuse
             # maps to. Partial chunks keep it for the final response.
-            if pending_key is not None and not is_partial:
-                self._pending_llm_spans.pop(pending_key)
+            if actions is not None and not is_partial:
+                self._pending_llm_spans.pop(actions)
 
     def before_tool_callback(
         self,

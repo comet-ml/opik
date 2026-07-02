@@ -27,6 +27,7 @@ from opik import context_storage
 from opik.api_objects.trace.trace_data import TraceData
 from opik.integrations.adk import OpikTracer
 from opik.integrations.adk.bounded_cache import BoundedCache
+from opik.integrations.adk.pending_llm_spans import PendingLlmSpanRegistry
 
 from . import helpers
 
@@ -101,6 +102,38 @@ def test_bounded_cache__concurrent_set_get_pop__no_corruption():
         thread.join()
 
     assert not errors
+
+
+# --- pending-span registry (identity check) ---------------------------------
+
+
+def test_pending_llm_span_registry__distinct_actions__spans_isolated():
+    registry = PendingLlmSpanRegistry()
+    actions_a, actions_b = object(), object()
+    span_a, span_b = object(), object()
+
+    registry.register(actions_a, span_a)
+    registry.register(actions_b, span_b)
+
+    assert registry.get(actions_a) is span_a
+    assert registry.get(actions_b) is span_b
+    assert registry.pop(actions_a) is span_a
+    assert registry.get(actions_a) is None
+
+
+def test_pending_llm_span_registry__recycled_id__stale_span_not_returned():
+    registry = PendingLlmSpanRegistry()
+    stale_actions, live_actions = object(), object()
+    stale_span = object()
+
+    # Simulate CPython reusing an abandoned actions object's id for a later
+    # call: the slot for live_actions' id holds an entry from a *different*
+    # object. The identity check must refuse the stale span rather than
+    # finalizing it for the wrong call.
+    registry._cache.set(id(live_actions), (stale_actions, stale_span))
+
+    assert registry.get(live_actions) is None
+    assert registry.pop(live_actions) is None
 
 
 # --- recovery (modern tracer) ----------------------------------------------
@@ -192,7 +225,7 @@ def test_after_model__empty_final_response__does_not_leak_registry_entry():
 
     _start_model_call(tracer, ctx)
     # before_model_callback registered the span for this call...
-    assert tracer._pending_llm_spans.get(id(ctx.actions)) is not None
+    assert tracer._pending_llm_spans.get(ctx.actions) is not None
 
     empty_final = models.LlmResponse(
         content=genai_types.Content(role="model", parts=[genai_types.Part(text="")]),
@@ -202,4 +235,4 @@ def test_after_model__empty_final_response__does_not_leak_registry_entry():
 
     # ...and after_model_callback drops it, even with nothing to finalize (so
     # this fails on a broken registration as well as on a cleanup leak).
-    assert tracer._pending_llm_spans.get(id(ctx.actions)) is None
+    assert tracer._pending_llm_spans.get(ctx.actions) is None

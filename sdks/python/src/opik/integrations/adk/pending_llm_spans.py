@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, Optional, Tuple
 
 from opik.api_objects.span.span_data import SpanData
 
@@ -14,31 +14,43 @@ from .bounded_cache import DEFAULT_MAX_SIZE, BoundedCache
 # the span is never finalized (comet-ml/opik#5524).
 #
 # This registry is a contextvar-independent handoff: ``before_model_callback``
-# registers the span under a key that is stable across the fork and unique per
-# model call, and ``after_model_callback`` recovers it by the same key. The key
-# is ``id(callback_context.actions)`` — ADK builds one ``EventActions`` per model
-# call and passes the same instance to both callbacks (it is invariant across
-# streaming partials), and object identity is immune to contextvar mutation.
+# registers the span against the ADK ``EventActions`` object that ADK builds once
+# per model call and passes to both callbacks (invariant across streaming
+# partials, immune to contextvar mutation), and ``after_model_callback`` recovers
+# it by the same object.
 #
-# It is size-bounded (see ``BoundedCache``) because ADK does not guarantee an
-# ``after_model_callback`` for every ``before_model_callback`` (a before-callback
-# may short-circuit by returning a response, or the model call may error), so
-# unclaimed entries must not accumulate on a long-lived shared tracer.
+# ``EventActions`` is not reliably hashable, so entries are keyed by
+# ``id(actions)`` but ALSO hold a strong reference to the ``actions`` object and
+# verify identity on lookup. That closes the ``id()``-recycling hazard: an entry
+# that outlives its callback (a call whose ``after_model_callback`` never runs —
+# a short-circuiting before-callback or a model error) keeps its ``actions``
+# alive, so CPython can't reuse that id for a later call's ``EventActions``; and
+# if an id ever did collide, the identity check refuses the stale span rather
+# than finalizing it for the wrong call.
+#
+# It is size-bounded (see ``BoundedCache``) because those unclaimed entries must
+# not accumulate on a long-lived shared tracer.
 
 
 class PendingLlmSpanRegistry:
-    """Bounded registry of in-flight LLM spans, keyed by a stable
-    per-model-call id.
+    """Bounded registry of in-flight LLM spans, keyed by the per-model-call
+    ``EventActions`` object (by id, with an identity check).
     """
 
     def __init__(self, max_size: int = DEFAULT_MAX_SIZE) -> None:
-        self._cache: BoundedCache[int, SpanData] = BoundedCache(max_size)
+        self._cache: BoundedCache[int, Tuple[Any, SpanData]] = BoundedCache(max_size)
 
-    def register(self, key: int, span_data: SpanData) -> None:
-        self._cache.set(key, span_data)
+    def register(self, actions: Any, span_data: SpanData) -> None:
+        self._cache.set(id(actions), (actions, span_data))
 
-    def get(self, key: int) -> Optional[SpanData]:
-        return self._cache.get(key)
+    def get(self, actions: Any) -> Optional[SpanData]:
+        entry = self._cache.get(id(actions))
+        if entry is not None and entry[0] is actions:
+            return entry[1]
+        return None
 
-    def pop(self, key: int) -> Optional[SpanData]:
-        return self._cache.pop(key)
+    def pop(self, actions: Any) -> Optional[SpanData]:
+        entry = self._cache.pop(id(actions))
+        if entry is not None and entry[0] is actions:
+            return entry[1]
+        return None
