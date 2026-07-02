@@ -19,12 +19,13 @@ type RunErrorPanelProps = {
  */
 const RunErrorPanel: React.FC<RunErrorPanelProps> = ({ optimization }) => {
   const [open, setOpen] = useState(false);
-  const { data, dataUpdatedAt } = useOptimizationStudioLogs(
+  const { data, dataUpdatedAt, isError, refetch } = useOptimizationStudioLogs(
     { optimizationId: optimization.id },
     { enabled: Boolean(optimization.id), retry: false },
   );
 
   const logContent = data?.content ?? "";
+  const logsFailedToLoad = isError && !logContent;
   const errorMessage = useMemo(
     () => extractErrorFromLogs(logContent),
     [logContent],
@@ -45,7 +46,9 @@ const RunErrorPanel: React.FC<RunErrorPanelProps> = ({ optimization }) => {
         </div>
         <p className="comet-body-s whitespace-pre-wrap break-words text-foreground">
           {errorMessage ??
-            "The run ended with an error. Open the logs for details."}
+            (logsFailedToLoad
+              ? "The run ended with an error, but the logs could not be loaded."
+              : "The run ended with an error. Open the logs for details.")}
         </p>
         {logContent && (
           <Button
@@ -55,6 +58,16 @@ const RunErrorPanel: React.FC<RunErrorPanelProps> = ({ optimization }) => {
             onClick={() => setOpen(true)}
           >
             View logs
+          </Button>
+        )}
+        {logsFailedToLoad && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-3"
+            onClick={() => refetch()}
+          >
+            Retry loading logs
           </Button>
         )}
       </div>

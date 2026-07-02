@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   extractMessageContent,
   extractOpenAIMessages,
+  extractPromptData,
   formatMessagesAsText,
   isValidOpenAIMessages,
   OpenAIMessage,
@@ -77,9 +78,49 @@ describe("prompt utilities", () => {
       );
     });
 
+    it("does not unwrap 'chat-prompt' when sibling prompts are present", () => {
+      const chatPrompt: OpenAIMessage[] = [
+        { role: "system", content: "Answer the question." },
+      ];
+      const otherPrompt: OpenAIMessage[] = [
+        { role: "system", content: "Summarize the answer." },
+      ];
+      expect(
+        extractOpenAIMessages({
+          "chat-prompt": chatPrompt,
+          "other-prompt": otherPrompt,
+        }),
+      ).toBeNull();
+    });
+
     it("returns null for invalid structures", () => {
       expect(extractOpenAIMessages({})).toBeNull();
       expect(extractOpenAIMessages("invalid")).toBeNull();
+    });
+  });
+
+  describe("extractPromptData", () => {
+    it("classifies the single-key 'chat-prompt' wrapper as single", () => {
+      const messages: OpenAIMessage[] = [{ role: "user", content: "Hi" }];
+      expect(extractPromptData({ "chat-prompt": messages })).toEqual({
+        type: "single",
+        data: messages,
+      });
+    });
+
+    it("keeps all prompts when 'chat-prompt' has siblings", () => {
+      const prompts = {
+        "chat-prompt": [
+          { role: "system", content: "Answer the question." },
+        ] as OpenAIMessage[],
+        "other-prompt": [
+          { role: "system", content: "Summarize the answer." },
+        ] as OpenAIMessage[],
+      };
+      expect(extractPromptData(prompts)).toEqual({
+        type: "multi",
+        data: prompts,
+      });
     });
   });
 

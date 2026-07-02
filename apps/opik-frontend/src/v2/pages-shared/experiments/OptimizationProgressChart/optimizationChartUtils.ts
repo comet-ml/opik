@@ -33,15 +33,15 @@ export const TRIAL_STATUS_COLORS: Record<TrialStatus, string> = {
   baseline: "var(--color-fuchsia)",
   passed: "var(--color-fuchsia)",
   evaluating: "var(--color-orange)",
-  pruned: "#f0abfc",
+  pruned: "var(--trial-pruned)",
   running: "var(--color-yellow)",
 };
 
-/** Best-trial dot colour (Tailwind fuchsia-900) — darkest in the fuchsia scale. */
-export const TRIAL_BEST_COLOR = "#701a75";
+/** Best-trial dot colour — darkest in the fuchsia scale (theme-aware, see main.scss). */
+export const TRIAL_BEST_COLOR = "var(--trial-best)";
 
-/** Ring around the best-trial dot (Tailwind fuchsia-300) — Figma's two-tone best marker. */
-export const TRIAL_BEST_RING_COLOR = "#f0abfc";
+/** Ring around the best-trial dot — Figma's two-tone best marker (theme-aware, see main.scss). */
+export const TRIAL_BEST_RING_COLOR = "var(--trial-best-ring)";
 
 export const TRIAL_STATUS_LABELS: Record<TrialStatus, string> = {
   baseline: "Baseline",

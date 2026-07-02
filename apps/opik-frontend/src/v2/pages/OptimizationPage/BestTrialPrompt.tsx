@@ -79,7 +79,7 @@ const BestTrialPrompt: React.FC<BestTrialPromptProps> = ({
       <div className="flex w-full items-center justify-between px-0.5">
         <div className="flex items-center gap-1">
           <span className="flex size-3 shrink-0 items-center justify-center">
-            <span className="size-1.5 rounded-full bg-[#701a75] shadow-[0_0_0_1.125px_#f0abfc]" />
+            <span className="size-1.5 rounded-full bg-[var(--trial-best)] shadow-[0_0_0_1.125px_var(--trial-best-ring)]" />
           </span>
           <span className="comet-body-s-accented text-foreground">
             Best trial prompt
