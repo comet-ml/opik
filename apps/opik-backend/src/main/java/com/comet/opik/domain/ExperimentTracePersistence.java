@@ -90,7 +90,7 @@ class ExperimentTracePersistence {
                 .input(input)
                 .output(output)
                 .metadata(metadata)
-                .source(Source.PLAYGROUND);
+                .source(Source.EXPERIMENT);
 
         if (ctx.errorMessage() != null) {
             traceBuilder.errorInfo(ErrorInfo.builder()
@@ -136,7 +136,7 @@ class ExperimentTracePersistence {
                 .model(resolvedModelInfo.actualModel())
                 .provider(resolvedModelInfo.provider())
                 .usage(usage)
-                .source(Source.PLAYGROUND);
+                .source(Source.EXPERIMENT);
 
         if (ctx.errorMessage() != null) {
             spanBuilder.errorInfo(ErrorInfo.builder()
