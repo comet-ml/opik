@@ -134,6 +134,11 @@ const PlaygroundHeader = ({
     { enabled: !!plainDatasetId && isDatasetExperiment },
   );
 
+  const datasetColumnNames = useMemo(
+    () => (datasetItemsForColumns?.columns ?? []).map((c) => c.name),
+    [datasetItemsForColumns?.columns],
+  );
+
   const filterColumns = useMemo(
     () => buildDatasetFilterColumns(datasetItemsForColumns?.columns ?? []),
     [datasetItemsForColumns?.columns],
@@ -258,6 +263,7 @@ const PlaygroundHeader = ({
           workspaceName={workspaceName}
           datasetId={datasetId}
           versionName={versionName}
+          datasetColumnNames={datasetColumnNames}
           onChangeDatasetId={onChangeDatasetId}
           onLeaveExperimentMode={handleLeaveExperimentMode}
         />

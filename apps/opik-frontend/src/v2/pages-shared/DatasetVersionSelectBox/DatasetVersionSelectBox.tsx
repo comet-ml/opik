@@ -45,6 +45,7 @@ interface DatasetVersionSelectBoxProps {
   projectId?: string | null;
   datasetType?: DATASET_TYPE;
   autoOpen?: boolean;
+  onDismiss?: () => void;
 }
 
 function DatasetVersionSelectBox({
@@ -54,9 +55,11 @@ function DatasetVersionSelectBox({
   projectId,
   datasetType,
   autoOpen = false,
+  onDismiss,
 }: DatasetVersionSelectBoxProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const resetDialogKeyRef = useRef(0);
+  const selectedInSessionRef = useRef(false);
 
   const [search, setSearch] = useState("");
   const [openDatasetId, setOpenDatasetId] = useState<string | null>(null);
@@ -122,6 +125,7 @@ function DatasetVersionSelectBox({
         dataset.id,
         dataset.latest_version.id,
       );
+      selectedInSessionRef.current = true;
       onChange(formattedValue);
       setIsSelectOpen(false);
       setOpenDatasetId(null);
@@ -291,14 +295,18 @@ function DatasetVersionSelectBox({
         <Select
           value={value || ""}
           onValueChange={(selectedValue) => {
+            selectedInSessionRef.current = true;
             onChange(selectedValue);
             setIsSelectOpen(false);
             setOpenDatasetId(null);
           }}
           onOpenChange={(open) => {
-            if (!open) {
+            if (open) {
+              selectedInSessionRef.current = false;
+            } else {
               setSearch("");
               setOpenDatasetId(null);
+              if (!selectedInSessionRef.current) onDismiss?.();
             }
             setIsSelectOpen(open);
           }}
