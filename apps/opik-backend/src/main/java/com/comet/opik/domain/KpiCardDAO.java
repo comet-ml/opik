@@ -693,7 +693,6 @@ class KpiCardDAOImpl implements KpiCardDAO {
     }
 
     private Double filterNan(Double value) {
-        // Delegates to the single SentinelTranslation definition.
         return SentinelTranslation.nanToNull(value);
     }
 }

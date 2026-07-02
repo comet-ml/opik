@@ -208,7 +208,6 @@ public class DatasetItemResultMapper {
     }
 
     static Instant nullIfEpoch(Instant instant) {
-        // Delegates to the single SentinelTranslation definition.
         return SentinelTranslation.epochToNull(instant);
     }
 

@@ -1,5 +1,7 @@
 package com.comet.opik.domain.filter;
 
+import com.comet.opik.api.filter.ExperimentsComparisonFilter;
+import com.comet.opik.api.filter.ExperimentsComparisonValidKnownField;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.SpanField;
@@ -86,6 +88,22 @@ class FilterQueryBuilderSentinelTest {
 
         var actualWithoutFlag = toSql(filter, FilterStrategy.TRACE, false);
         var actualWithFlag = toSql(filter, FilterStrategy.TRACE, true);
+
+        assertThat(actualWithoutFlag).isEqualTo(expected);
+        assertThat(actualWithFlag).isEqualTo(expected);
+    }
+
+    @Test
+    void experimentComparisonDurationFilterExcludesNaNSentinel() {
+        var filter = ExperimentsComparisonFilter.builder()
+                .field(ExperimentsComparisonValidKnownField.DURATION.getQueryParamField())
+                .operator(Operator.NOT_EQUAL)
+                .value(RandomStringUtils.secure().nextNumeric(32))
+                .build();
+        var expected = singleFilter("if(isNaN(duration), NULL, duration)", "!= :filter0");
+
+        var actualWithoutFlag = toSql(filter, FilterStrategy.EXPERIMENT_ITEM, false);
+        var actualWithFlag = toSql(filter, FilterStrategy.EXPERIMENT_ITEM, true);
 
         assertThat(actualWithoutFlag).isEqualTo(expected);
         assertThat(actualWithFlag).isEqualTo(expected);
