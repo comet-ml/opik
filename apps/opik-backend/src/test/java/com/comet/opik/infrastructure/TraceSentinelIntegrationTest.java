@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure;
 
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.TraceField;
@@ -374,6 +375,44 @@ class TraceSentinelIntegrationTest {
             // A thread's end_time is max(trace end_time); with every trace absent it is the epoch, so the flag-gated
             // ThreadDAO read must surface null rather than the 1970 sentinel.
             assertThat(thread.endTime()).isNull();
+        }
+
+        @Test
+        void sortByEndTimeAscendingOrdersAbsentThreadLast() {
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var presentThreadId = "thread-" + UUID.randomUUID();
+            var absentThreadId = "thread-" + UUID.randomUUID();
+            var startTime = Instant.now().minusSeconds(1);
+            var presentTrace = newTraceBuilder()
+                    .projectName(projectName)
+                    .threadId(presentThreadId)
+                    .startTime(startTime)
+                    .endTime(startTime.plusSeconds(1))
+                    .build();
+            var absentTrace = newTraceBuilder()
+                    .projectName(projectName)
+                    .threadId(absentThreadId)
+                    .startTime(Instant.now())
+                    .endTime(null)
+                    .build();
+            var presentTraceId = traceResourceClient.createTrace(presentTrace, API_KEY, WORKSPACE_NAME);
+            traceResourceClient.createTrace(absentTrace, API_KEY, WORKSPACE_NAME);
+            var projectId = traceResourceClient.getById(presentTraceId, WORKSPACE_NAME, API_KEY).projectId();
+            // Materialize both thread records so they surface in the list endpoint.
+            traceResourceClient.getTraceThread(presentThreadId, projectId, API_KEY, WORKSPACE_NAME);
+            traceResourceClient.getTraceThread(absentThreadId, projectId, API_KEY, WORKSPACE_NAME);
+            var sortByEndTimeAsc = List.of(
+                    SortingField.builder().field(SortableFields.END_TIME).direction(Direction.ASC).build());
+
+            var page = traceResourceClient.getTraceThreads(
+                    projectId, projectName, API_KEY, WORKSPACE_NAME, List.of(), sortByEndTimeAsc, Map.of());
+
+            // Thread end_time is max(trace end_time); the all-absent thread's epoch sorts as NULL (last) via
+            // nullIf(end_time, epoch), not as 1970 (first) — only the flag-gated sort mapping produces this order.
+            var endTimes = page.content().stream().map(TraceThread::endTime).toList();
+            assertThat(endTimes).hasSize(2);
+            assertThat(endTimes.get(0)).isNotNull();
+            assertThat(endTimes.get(1)).isNull();
         }
     }
 
