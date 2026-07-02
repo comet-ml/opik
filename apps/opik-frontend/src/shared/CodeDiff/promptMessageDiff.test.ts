@@ -3,7 +3,37 @@ import { describe, it, expect } from "vitest";
 import {
   groupMessageContentByRole,
   buildRoleDiffRows,
+  getRoleLabel,
+  promptToText,
 } from "./promptMessageDiff";
+
+describe("promptToText", () => {
+  it("passes strings through unchanged", () => {
+    expect(promptToText("You are a classifier.")).toBe("You are a classifier.");
+  });
+
+  it("returns an empty string for null and undefined", () => {
+    expect(promptToText(null)).toBe("");
+    expect(promptToText(undefined)).toBe("");
+  });
+
+  it("pretty-prints non-string prompts as JSON", () => {
+    expect(promptToText({ role: "user" })).toBe(
+      JSON.stringify({ role: "user" }, null, 2),
+    );
+  });
+});
+
+describe("getRoleLabel", () => {
+  it("resolves known roles to their display names", () => {
+    expect(getRoleLabel("system")).toBe("System");
+    expect(getRoleLabel("assistant")).toBe("Assistant");
+  });
+
+  it("falls back to the raw role for unknown roles", () => {
+    expect(getRoleLabel("critic")).toBe("critic");
+  });
+});
 
 describe("groupMessageContentByRole", () => {
   it("groups messages by role in display order", () => {

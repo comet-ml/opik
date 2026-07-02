@@ -1,11 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useActiveProjectId } from "@/store/AppStore";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import Loader from "@/shared/Loader/Loader";
 import OptimizationProgressChartContainer from "@/v2/pages-shared/experiments/OptimizationProgressChart";
-import TrialConfigurationSection from "@/v2/pages-shared/experiments/TrialConfigurationSection";
+import BestTrialPrompt from "./BestTrialPrompt";
 import { IN_PROGRESS_OPTIMIZATION_STATUSES } from "@/lib/optimizations";
 import { formatDate } from "@/lib/date";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
@@ -15,6 +15,8 @@ import OptimizationHeader from "./OptimizationHeader";
 import OptimizationTrialsControls from "./OptimizationTrialsControls";
 import OptimizationTrialsTable from "./OptimizationTrialsTable";
 import OptimizationKPICards from "./OptimizationKPICards";
+import RunErrorPanel from "./RunErrorPanel";
+import { OPTIMIZATION_STATUS } from "@/types/optimizations";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 enum OPTIMIZATION_TAB {
@@ -85,12 +87,6 @@ const OptimizationPage: React.FC = () => {
     setBreadcrumbParam,
   ]);
 
-  const bestExperiment = useMemo(() => {
-    if (!bestCandidate || !experiments.length) return undefined;
-    const ids = new Set(bestCandidate.experimentIds);
-    return experiments.find((e) => ids.has(e.id));
-  }, [bestCandidate, experiments]);
-
   const handleTrialClick = useCallback(
     (candidateId: string) => {
       const candidate = candidates.find((c) => c.candidateId === candidateId);
@@ -158,16 +154,30 @@ const OptimizationPage: React.FC = () => {
         onValueChange={setActiveTab}
         className="flex flex-col"
       >
-        <TabsList variant="underline" className="shrink-0">
-          <TabsTrigger variant="underline" value={OPTIMIZATION_TAB.OVERVIEW}>
+        <TabsList variant="segmented-primary" className="shrink-0">
+          <TabsTrigger
+            variant="segmented-primary"
+            size="sm"
+            value={OPTIMIZATION_TAB.OVERVIEW}
+          >
             Overview
           </TabsTrigger>
-          <TabsTrigger variant="underline" value={OPTIMIZATION_TAB.TRIALS}>
+          <TabsTrigger
+            variant="segmented-primary"
+            size="sm"
+            value={OPTIMIZATION_TAB.TRIALS}
+          >
             Trials
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value={OPTIMIZATION_TAB.OVERVIEW} className="mt-0 pt-4">
+          {optimization &&
+            optimization.status === OPTIMIZATION_STATUS.ERROR && (
+              <div className="shrink-0 pb-4">
+                <RunErrorPanel optimization={optimization} />
+              </div>
+            )}
           <div className="shrink-0 pb-4">
             <OptimizationKPICards
               experiments={experiments}
@@ -176,6 +186,7 @@ const OptimizationPage: React.FC = () => {
               isTestSuite={isTestSuite}
               objectiveName={optimization?.objective_name}
               optimizationCreatedAt={optimization?.created_at}
+              optimizationLastUpdatedAt={optimization?.last_updated_at}
               isInProgress={
                 !!optimization?.status &&
                 IN_PROGRESS_OPTIMIZATION_STATUSES.includes(optimization.status)
@@ -198,15 +209,13 @@ const OptimizationPage: React.FC = () => {
             />
           </div>
 
-          {bestExperiment && (
+          {bestCandidate && (
             <div className="shrink-0 pb-4">
-              <TrialConfigurationSection
-                experiments={[bestExperiment]}
-                title="Best trial configuration"
-                referenceExperiment={
-                  candidates.length > 1 ? baselineExperiment : undefined
-                }
-                studioConfig={optimization?.studio_config}
+              <BestTrialPrompt
+                bestCandidate={bestCandidate}
+                candidates={candidates}
+                experiments={experiments}
+                onViewTrial={() => handleTrialClick(bestCandidate.candidateId)}
               />
             </div>
           )}

@@ -161,11 +161,19 @@ const TrialPage: React.FunctionComponent = () => {
             limitWidth
             className="mb-6"
           >
-            <TabsList variant="underline">
-              <TabsTrigger variant="underline" value="results">
+            <TabsList variant="segmented-primary">
+              <TabsTrigger
+                variant="segmented-primary"
+                size="sm"
+                value="results"
+              >
                 Results
               </TabsTrigger>
-              <TabsTrigger variant="underline" value="configuration">
+              <TabsTrigger
+                variant="segmented-primary"
+                size="sm"
+                value="configuration"
+              >
                 Configuration
               </TabsTrigger>
             </TabsList>
