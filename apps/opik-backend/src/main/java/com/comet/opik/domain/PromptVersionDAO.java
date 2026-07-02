@@ -134,29 +134,24 @@ interface PromptVersionDAO {
     }
 
     @SqlQuery("""
-            WITH paginated AS (
-                SELECT pv.*,
-                    p.template_structure
-                FROM prompt_versions pv
-                INNER JOIN prompts p ON pv.prompt_id = p.id
-                WHERE pv.workspace_id = :workspace_id
-                <if(ids)> AND pv.id IN (<ids>) <endif>
-                <if(prompt_id)> AND pv.prompt_id = :prompt_id AND pv.version_type = 'prompt_version' <endif>
-                <if(search)> AND (pv.template LIKE CONCAT('%', :search, '%') OR pv.change_description LIKE CONCAT('%', :search, '%')) <endif>
-                <if(filters)> AND <filters> <endif>
-                ORDER BY <if(sort_fields)><sort_fields>, <endif>pv.id DESC
-                <if(limit)> LIMIT :limit OFFSET :offset <endif>
-            ), ver_envs AS (
-                SELECT pve.version_id, JSON_ARRAYAGG(pve.environment) AS environments
-                FROM prompt_version_envs pve
-                INNER JOIN paginated pv ON pv.id = pve.version_id
-                WHERE pve.workspace_id = :workspace_id AND pve.ended_at IS NULL
-                GROUP BY pve.version_id
-            )
-            SELECT pv.*, ve.environments
-            FROM paginated pv
-            LEFT JOIN ver_envs ve ON ve.version_id = pv.id
+            SELECT pv.*,
+                p.template_structure,
+                (
+                    SELECT JSON_ARRAYAGG(pve.environment)
+                    FROM prompt_version_envs pve
+                    WHERE pve.version_id = pv.id
+                        AND pve.workspace_id = :workspace_id
+                        AND pve.ended_at IS NULL
+                ) AS environments
+            FROM prompt_versions pv
+            INNER JOIN prompts p ON pv.prompt_id = p.id
+            WHERE pv.workspace_id = :workspace_id
+            <if(ids)> AND pv.id IN (<ids>) <endif>
+            <if(prompt_id)> AND pv.prompt_id = :prompt_id AND pv.version_type = 'prompt_version' <endif>
+            <if(search)> AND (pv.template LIKE CONCAT('%', :search, '%') OR pv.change_description LIKE CONCAT('%', :search, '%')) <endif>
+            <if(filters)> AND <filters> <endif>
             ORDER BY <if(sort_fields)><sort_fields>, <endif>pv.id DESC
+            <if(limit)> LIMIT :limit OFFSET :offset <endif>
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
