@@ -617,7 +617,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
             config={filtersConfig as never}
             filters={filters}
             onChange={setFilters}
-            size="2xs"
+            layout="icon"
           />
           {isTestSuite && (
             <ToggleGroup
@@ -645,8 +645,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
           <DataTableRowHeightSelector
             type={height as ROW_HEIGHT}
             setType={setHeight}
-            layout="labeled"
-            size="2xs"
+            size="icon-xs"
           />
           <ColumnsButton
             columns={[...activeDefaultColumns, ...datasetColumnsData]}
@@ -656,7 +655,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
             onOrderChange={setColumnsOrder}
             sections={columnSections}
             layout="labeled"
-            size="2xs"
+            size="xs"
           ></ColumnsButton>
         </div>
       </PageBodyStickyContainer>
