@@ -260,7 +260,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                     .map(Optional::of)
                     .defaultIfEmpty(Optional.empty())
                     .onErrorResume(e -> {
-                        log.warn("Failed to resolve projectId for {} '{}' before score delete; "
+                        log.warn("Failed to resolve projectId for '{}' '{}' before score delete; "
                                 + "continuing without project scope", entityType, entityId, e);
                         return Mono.just(Optional.empty());
                     })
