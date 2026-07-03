@@ -26,6 +26,7 @@ import com.comet.opik.utils.TruncationUtils;
 import com.comet.opik.utils.UsageUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
@@ -843,7 +844,8 @@ public class SpanDAO {
      * referencing {@code page_ids} before its definition is fine — CTE names resolve independently of
      * declaration order.
      */
-    private static final String SELECT_BY_PROJECT_ID = """
+    @VisibleForTesting
+    static final String SELECT_BY_PROJECT_ID = """
             WITH <if(span_id_prefilter)>span_id_prefilter AS (
                 SELECT DISTINCT id FROM spans
                 WHERE project_id = :project_id
