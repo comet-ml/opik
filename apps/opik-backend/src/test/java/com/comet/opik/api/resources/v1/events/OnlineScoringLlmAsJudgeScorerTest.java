@@ -32,6 +32,7 @@ import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.ChatRequest;
@@ -335,6 +336,37 @@ class OnlineScoringLlmAsJudgeScorerTest {
         assertThat(withTools.parameters().maxOutputTokens()).isEqualTo(123);
         // Tool choice is propagated.
         assertThat(withTools.parameters().toolChoice()).isEqualTo(ToolChoice.REQUIRED);
+    }
+
+    @Test
+    void markPromptForCachingTagsLastUserMessageEphemeral() {
+        ChatRequest request = ChatRequest.builder()
+                .messages(SystemMessage.from("judge instructions"), UserMessage.from("the big context"))
+                .build();
+
+        ChatRequest cached = OnlineScoringEngine.markPromptForCaching(request);
+
+        // The last user message carries the ephemeral breakpoint; langchain4j's Anthropic mapper reads
+        // this attribute to cache the whole prefix before it. Other messages are untouched.
+        var lastUser = (UserMessage) cached.messages().get(1);
+        assertThat(lastUser.attributes())
+                .containsEntry(OnlineScoringEngine.CACHE_CONTROL_ATTRIBUTE,
+                        OnlineScoringEngine.CACHE_CONTROL_EPHEMERAL);
+        assertThat(cached.messages().get(0)).isInstanceOf(SystemMessage.class);
+        // Content is preserved through the rebuild.
+        assertThat(lastUser.singleText()).isEqualTo("the big context");
+    }
+
+    @Test
+    void markPromptForCachingIsIdempotentAndNoOpWithoutUserMessage() {
+        ChatRequest alreadyCached = OnlineScoringEngine.markPromptForCaching(
+                ChatRequest.builder().messages(UserMessage.from("ctx")).build());
+        // Re-marking returns the same instance (nothing to change).
+        assertThat(OnlineScoringEngine.markPromptForCaching(alreadyCached)).isSameAs(alreadyCached);
+
+        // No user message -> unchanged request returned as-is.
+        ChatRequest noUser = ChatRequest.builder().messages(SystemMessage.from("only system")).build();
+        assertThat(OnlineScoringEngine.markPromptForCaching(noUser)).isSameAs(noUser);
     }
 
     @Test

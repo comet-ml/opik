@@ -421,6 +421,11 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                 // ≥1 tool call before the model can answer from skeleton alone. Follow-up rounds
                 // switch to AUTO so the wrap-up turn can emit JSON without invoking a tool.
                 scoreRequest = OnlineScoringEngine.addToolSpecs(scoreRequest, ToolChoice.REQUIRED, toolRegistry);
+                if (onlineScoringConfig.isAgenticPromptCachingEnabled()) {
+                    // Cache the static prefix (tools + system + thread skeleton) so the tool-call
+                    // rounds and the wrap-up re-read it instead of re-sending it as fresh input tokens.
+                    scoreRequest = OnlineScoringEngine.markPromptForCaching(scoreRequest);
+                }
             }
 
             // summarizeRequest is cheap (no per-message toString streaming). At INFO to mirror

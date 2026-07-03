@@ -360,6 +360,11 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 // a uniform REQUIRED would loop forever because the wrap-up turn would also
                 // be forced to call a tool.
                 scoreRequest = OnlineScoringEngine.addToolSpecs(scoreRequest, ToolChoice.REQUIRED, toolRegistry);
+                if (onlineScoringConfig.isAgenticPromptCachingEnabled()) {
+                    // Cache the static prefix (tools + system + context) so the ≤10 tool-call rounds
+                    // and the wrap-up re-read it instead of re-sending it as fresh input tokens.
+                    scoreRequest = OnlineScoringEngine.markPromptForCaching(scoreRequest);
+                }
             }
 
             // summarizeRequest is cheap (no per-message toString streaming since the chars-count

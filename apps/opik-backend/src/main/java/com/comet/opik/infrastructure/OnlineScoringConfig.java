@@ -111,6 +111,16 @@ public class OnlineScoringConfig {
     @JsonProperty
     @Min(1) @Max(3600) private int agenticToolsS3PresignTtlSeconds = 120;
 
+    /**
+     * When true (default), the agentic tool-call path places a prompt-caching breakpoint on the judge
+     * conversation so providers that support prompt caching (Anthropic today) cache the re-sent context
+     * across tool-call rounds, cutting input-token cost. Safe no-op for providers without caching
+     * (attribute ignored) and for providers that cache automatically (OpenAI). Disable to send every
+     * round uncached.
+     */
+    @JsonProperty
+    private boolean agenticPromptCachingEnabled = true;
+
     @Data
     @Builder(toBuilder = true)
     @NoArgsConstructor

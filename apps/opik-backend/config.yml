@@ -651,6 +651,11 @@ onlineScoring:
   #   tool. The URL is consumed within a single tool-call round; 120 s is ample for most providers.
   #   Capped at 3600 s — longer-lived URLs are a security risk if the URL leaks.
   agenticToolsS3PresignTtlSeconds: ${ONLINE_SCORING_AGENTIC_TOOLS_S3_PRESIGN_TTL_SECONDS:-120}
+  # Default: true
+  # Description: When true, the agentic tool-call path marks the judge conversation with a prompt-caching
+  #   breakpoint so providers that support prompt caching (Anthropic) cache the re-sent context across
+  #   tool-call rounds, cutting input-token cost. No-op for providers that ignore it or cache automatically.
+  agenticPromptCachingEnabled: ${ONLINE_SCORING_AGENTIC_PROMPT_CACHING_ENABLED:-true}
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only

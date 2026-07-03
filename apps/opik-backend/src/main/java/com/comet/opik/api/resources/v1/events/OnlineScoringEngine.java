@@ -1190,4 +1190,43 @@ public class OnlineScoringEngine {
                 .parameters(parameters)
                 .build();
     }
+
+    // langchain4j reads this attribute off a message to place an Anthropic ephemeral cache breakpoint
+    // (see AnthropicMapper); the value must be exactly "ephemeral".
+    static final String CACHE_CONTROL_ATTRIBUTE = "cache_control";
+    static final String CACHE_CONTROL_EPHEMERAL = "ephemeral";
+
+    /**
+     * Marks the conversation for provider prompt caching by placing a single ephemeral cache
+     * breakpoint on the last {@link UserMessage}. Anthropic caches the entire prefix <em>before</em>
+     * that breakpoint — tool specs, system prompt, and all earlier messages — and reads it back on
+     * every request that shares the prefix. Because the marked message stays in the tool-call loop's
+     * message list, the initial call, every follow-up round, and the wrap-up all re-read that cached
+     * prefix, which is what makes the re-sent agentic context cheap. Providers without prompt caching
+     * simply ignore the attribute, so this is a safe no-op for them.
+     * <p>
+     * A single breakpoint intentionally replaces per-tool / per-system-message caching flags: one
+     * breakpoint late in the static prefix subsumes them and scales to a conversation of any length.
+     * Only worthwhile on the multi-call agentic path — a single call would pay the cache-write premium
+     * with no subsequent read — so callers gate it on the agentic branch.
+     */
+    public static ChatRequest markPromptForCaching(@NonNull ChatRequest request) {
+        var messages = request.messages();
+        if (messages == null || messages.isEmpty()) {
+            return request;
+        }
+        for (int index = messages.size() - 1; index >= 0; index--) {
+            if (messages.get(index) instanceof UserMessage userMessage) {
+                if (CACHE_CONTROL_EPHEMERAL.equals(userMessage.attributes().get(CACHE_CONTROL_ATTRIBUTE))) {
+                    return request;
+                }
+                var attributes = new HashMap<>(userMessage.attributes());
+                attributes.put(CACHE_CONTROL_ATTRIBUTE, CACHE_CONTROL_EPHEMERAL);
+                var updatedMessages = new ArrayList<>(messages);
+                updatedMessages.set(index, userMessage.toBuilder().attributes(attributes).build());
+                return request.toBuilder().messages(updatedMessages).build();
+            }
+        }
+        return request;
+    }
 }
