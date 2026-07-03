@@ -135,16 +135,21 @@ public class OpenTelemetryMapper {
             metadata.put("integration", integrationName);
         }
 
+        // Claude Code spans carry a lot of session/config attributes that aren't input. For that
+        // integration the default bucket for unmapped attributes is metadata (not input), so only
+        // the explicitly promoted content attributes land in input/output/usage.
+        boolean isClaudeCode = OpenTelemetryMappingRuleFactory.isClaudeCode(integrationName);
+        ObjectNode defaultBucket = isClaudeCode ? metadata : input;
+
         // Iterate over each attribute key-value pair
         for (KeyValue attribute : attributes) {
             var key = attribute.getKey();
             var value = attribute.getValue();
-            var ruleOpt = OpenTelemetryMappingRuleFactory.findRule(key);
+            var ruleOpt = OpenTelemetryMappingRuleFactory.findRule(key, integrationName);
 
             if (ruleOpt.isEmpty()) {
-                // if it's not explicitly request to drop, we keep it in input
-                log.debug("No rule found for kv {} -> {}. Using for Input.", key, attribute.getValue());
-                extractToJsonColumn(input, key, value);
+                log.debug("No rule found for kv {} -> {}. Using default bucket.", key, attribute.getValue());
+                extractToJsonColumn(defaultBucket, key, value);
                 continue;
             }
 
@@ -207,7 +212,9 @@ public class OpenTelemetryMapper {
         // Claude Code emits the tool result as a `tool.output` span event (Bash carries it on
         // `output`, file tools on `content`). Surface it as the tool span's output instead of
         // leaving it only in metadata.opentelemetry.events.
-        extractToolOutputEvent(events, output);
+        if (isClaudeCode) {
+            extractToolOutputEvent(events, output);
+        }
 
         // Rewrite Elastic Inference Service model/provider into the underlying provider so
         // that cost lookup and provider-based filtering see the real upstream. Records the

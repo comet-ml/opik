@@ -1532,14 +1532,23 @@ class OpenTelemetryMapperTest {
     @Nested
     class ClaudeCodeMappingTest {
 
+        private static final String CLAUDE_CODE = "com.anthropic.claude_code.tracing";
+
         private Span enrich(List<KeyValue> attributes, List<io.opentelemetry.proto.trace.v1.Span.Event> events) {
             var spanBuilder = Span.builder()
                     .id(UUID.randomUUID())
                     .traceId(UUID.randomUUID())
                     .projectId(UUID.randomUUID())
                     .startTime(Instant.now());
-            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, events);
+            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, CLAUDE_CODE, events);
             return spanBuilder.build();
+        }
+
+        private KeyValue intVal(String key, long value) {
+            return KeyValue.newBuilder()
+                    .setKey(key)
+                    .setValue(AnyValue.newBuilder().setIntValue(value))
+                    .build();
         }
 
         private KeyValue str(String key, String value) {
@@ -1601,6 +1610,56 @@ class OpenTelemetryMapperTest {
             var span = enrich(List.of(), List.of(event));
 
             assertThat(span.output().get(contentKey).asText()).isEqualTo(value);
+        }
+
+        @Test
+        void sessionIdMapsToThreadId() {
+            var span = enrich(List.of(str("session.id", "session-abc-123")), null);
+
+            assertThat(span.metadata().get("thread_id").asText()).isEqualTo("session-abc-123");
+            assertThat(span.input()).isNull();
+        }
+
+        @Test
+        void tokensMapToUsage() {
+            var span = enrich(List.of(
+                    intVal("input_tokens", 1234),
+                    intVal("output_tokens", 26),
+                    intVal("cache_read_tokens", 100)),
+                    null);
+
+            assertThat(span.usage().get("prompt_tokens")).isEqualTo(1234);
+            assertThat(span.usage().get("completion_tokens")).isEqualTo(26);
+            assertThat(span.usage().get("cache_read_tokens")).isEqualTo(100);
+            assertThat(span.input()).isNull();
+            assertThat(span.output()).isNull();
+        }
+
+        @Test
+        void unmappedAttributesGoToMetadataNotInput() {
+            var span = enrich(List.of(
+                    str("user.id", "user-1"),
+                    str("terminal.type", "ghostty"),
+                    str("span.type", "interaction"),
+                    str("user_prompt", "hello")),
+                    null);
+
+            // Only the promoted content is input; the session/identity noise is metadata.
+            assertThat(span.input().get("user_prompt").asText()).isEqualTo("hello");
+            assertThat(span.input().has("user.id")).isFalse();
+            assertThat(span.metadata().get("user.id").asText()).isEqualTo("user-1");
+            assertThat(span.metadata().get("terminal.type").asText()).isEqualTo("ghostty");
+        }
+
+        @Test
+        void newContextIsDropped() {
+            var span = enrich(List.of(
+                    str("user_prompt", "hello"),
+                    str("new_context", "[USER PROMPT]\nhello")),
+                    null);
+
+            assertThat(span.input().has("new_context")).isFalse();
+            assertThat(span.metadata().has("new_context")).isFalse();
         }
     }
 }
