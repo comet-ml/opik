@@ -9,9 +9,11 @@ import { AggregatedCandidate } from "@/types/optimizations";
 import { Experiment } from "@/types/datasets";
 import { ROW_HEIGHT } from "@/types/shared";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/ui/hover-card";
+import { Separator } from "@/ui/separator";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import PromptDiff from "@/shared/CodeDiff/PromptDiff";
 import { extractMessages } from "@/lib/optimization-config";
+import { cn } from "@/lib/utils";
 
 const getPromptFromExperiment = (experiment: Experiment): unknown => {
   const metadata = experiment.metadata;
@@ -116,25 +118,36 @@ export const TrialPromptCell = (
           openDelay={300}
           closeDelay={150}
         >
-          {/* Figma note 686:53223: the diff button only shows while hovering
-              the row (rows carry the `group/row` class), stays visible while
-              its popover is open, and carries the previously missing tooltip.
-              The popover opens on hover or click (689:36080). */}
-          <TooltipWrapper content="View diff vs baseline">
-            <HoverCardTrigger asChild>
-              <button
-                type="button"
-                aria-label="View diff vs baseline"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setDiffOpen(true);
-                }}
-                className="shrink-0 self-start text-muted-slate opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover/row:opacity-100 data-[state=open]:opacity-100"
-              >
-                <GitCompareArrows className="size-4" />
-              </button>
-            </HoverCardTrigger>
-          </TooltipWrapper>
+          {/* Figma (696:44233): a thin separator + the diff button reveal
+              together only while hovering the row (rows carry the `group/row`
+              class) and stay visible while the popover is open. `hidden` (not
+              opacity) so the button reserves no width at rest — the prompt text
+              uses the full column until hovered. The button opens the diff on
+              hover or click (689:36080) and carries the tooltip. */}
+          <div
+            className={cn(
+              "hidden shrink-0 items-center gap-1 group-hover/row:flex",
+              isLarge ? "self-start" : "self-center",
+              diffOpen && "flex",
+            )}
+          >
+            <Separator orientation="vertical" className="h-3" />
+            <TooltipWrapper content="View diff vs baseline">
+              <HoverCardTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="View diff vs baseline"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDiffOpen(true);
+                  }}
+                  className="text-muted-slate transition-colors hover:text-foreground"
+                >
+                  <GitCompareArrows className="size-4" />
+                </button>
+              </HoverCardTrigger>
+            </TooltipWrapper>
+          </div>
           <HoverCardContent
             align="end"
             className="w-[660px] max-w-[90vw] p-3 shadow-lg"
