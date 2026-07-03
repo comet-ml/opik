@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.utils.template.TemplateUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -94,13 +95,35 @@ class SpanPageKeyedAggregatesPlanShapeTest {
                     'span', toFixedString('%s', 36), '%s', 'accuracy', toDecimal32(0.5, 4), 'sdk'
                 FROM numbers(%d)
                 """.formatted(DATABASE_NAME, SPAN_COUNT, projectId, workspaceId, FEEDBACK_SCORE_COUNT));
+
+        // authored feedback scores and comments for every span: the remaining two aggregate CTE paths must
+        // also be exercised so their pruning regressions surface in the plan-shape assertions
+        execute("""
+                INSERT INTO %s.authored_feedback_scores
+                    (entity_id, entity_type, project_id, workspace_id, author, name, value, source)
+                SELECT
+                    toFixedString(concat('00000000-0000-0000-0001-', leftPad(toString(number), 12, '0')), 36),
+                    'span', toFixedString('%s', 36), '%s', 'author', 'relevance', toDecimal64(0.7, 9), 'ui'
+                FROM numbers(%d)
+                """.formatted(DATABASE_NAME, projectId, workspaceId, SPAN_COUNT));
+        execute("""
+                INSERT INTO %s.comments (id, entity_id, entity_type, project_id, workspace_id, text)
+                SELECT
+                    toFixedString(concat('00000000-0000-0000-0003-', leftPad(toString(number), 12, '0')), 36),
+                    toFixedString(concat('00000000-0000-0000-0001-', leftPad(toString(number), 12, '0')), 36),
+                    'span', toFixedString('%s', 36), '%s', concat('comment-', toString(number))
+                FROM numbers(%d)
+                """.formatted(DATABASE_NAME, projectId, workspaceId, SPAN_COUNT));
     }
 
     @Test
     void pageKeyedAggregatesReadPageSizedSlicesAndCacheThePageIdScalar() throws SQLException {
         var query = renderPageKeyedQuery();
         assertThat(query).doesNotContain("span_id_prefilter");
-        assertThat(query).contains("IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))");
+        // all three aggregate CTE sites (comments, feedback_scores, authored_feedback_scores) must carry the
+        // page-keyed predicate; a bare contains() would pass even if the template dropped it from two of them
+        var pageKeyedPredicate = "IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))";
+        assertThat(StringUtils.countMatches(query, pageKeyedPredicate)).isEqualTo(3);
 
         int resultRows = 0;
         try (var statement = connection.createStatement()) {
