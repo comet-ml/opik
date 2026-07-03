@@ -658,7 +658,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 FROM (
                     SELECT
                         id,
-                       if(end_time IS NOT NULL AND start_time IS NOT NULL
+                       if(end_time IS NOT NULL AND notEquals(end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) AND start_time IS NOT NULL
                                              AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                                          NULL) AS duration,
@@ -938,7 +938,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 LEFT JOIN (
                     SELECT
                         id,
-                        if(end_time IS NOT NULL AND start_time IS NOT NULL
+                        if(end_time IS NOT NULL AND notEquals(end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) AND start_time IS NOT NULL
                             AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                             (dateDiff('microsecond', start_time, end_time) / 1000.0),
                             NULL) as duration

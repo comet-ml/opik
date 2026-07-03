@@ -711,7 +711,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             SELECT
                 id as trace_id,
                 project_id,
-                duration,
+                if(isNaN(duration), NULL, duration) AS duration,
                 metadata,
                 input,
                 output,

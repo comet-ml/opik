@@ -132,6 +132,7 @@ openai:
 anthropic:
   - id: "claude-sonnet-5"
     label: "Claude Sonnet 5"
+    structuredOutput: true
   - id: "claude-opus-4-8"
     label: "Claude Opus 4.8"
     structuredOutput: true
@@ -1120,6 +1121,10 @@ openrouter:
     label: "poolside/laguna-m.1"
   - id: "poolside/laguna-m.1:free"
     label: "poolside/laguna-m.1:free"
+  - id: "poolside/laguna-xs-2.1"
+    label: "poolside/laguna-xs-2.1"
+  - id: "poolside/laguna-xs-2.1:free"
+    label: "poolside/laguna-xs-2.1:free"
   - id: "poolside/laguna-xs.2"
     label: "poolside/laguna-xs.2"
   - id: "poolside/laguna-xs.2:free"

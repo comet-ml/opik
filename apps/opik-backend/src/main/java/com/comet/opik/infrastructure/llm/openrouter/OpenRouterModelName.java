@@ -400,6 +400,8 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     PERPLEXITY_SONAR_REASONING_PRO("perplexity/sonar-reasoning-pro"),
     POOLSIDE_LAGUNA_M_1("poolside/laguna-m.1"),
     POOLSIDE_LAGUNA_M_1_FREE("poolside/laguna-m.1:free"),
+    POOLSIDE_LAGUNA_XS_2_1("poolside/laguna-xs-2.1"),
+    POOLSIDE_LAGUNA_XS_2_1_FREE("poolside/laguna-xs-2.1:free"),
     POOLSIDE_LAGUNA_XS_2("poolside/laguna-xs.2"),
     POOLSIDE_LAGUNA_XS_2_FREE("poolside/laguna-xs.2:free"),
     PRIME_INTELLECT_INTELLECT_3("prime-intellect/intellect-3"),

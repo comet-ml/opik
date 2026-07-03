@@ -1676,6 +1676,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "poolside/laguna-m.1:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_XS_2_1,
+      label: "poolside/laguna-xs-2.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_XS_2_1_FREE,
+      label: "poolside/laguna-xs-2.1:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_XS_2,
       label: "poolside/laguna-xs.2",
     },
