@@ -50,19 +50,31 @@ describe("useTrialSidebarState", () => {
     );
   });
 
+  it("maps trialTab=diff to the Prompt tab in diff view", () => {
+    mockQuery = { trials: ["exp-1"], trialTab: "diff" };
+    const { result } = renderHook(() => useTrialSidebarState());
+    expect(result.current.tab).toBe("prompt");
+    expect(result.current.promptView).toBe("diff");
+
+    mockQuery = { trials: ["exp-1"], trialTab: "prompt" };
+    expect(
+      renderHook(() => useTrialSidebarState()).result.current.promptView,
+    ).toBe("config");
+  });
+
   it("openTrial batches the params and resets per-trial state", () => {
     const { result } = renderHook(() => useTrialSidebarState());
     act(() => {
       result.current.openTrial(
         { experimentIds: ["exp-9"], trialNumber: 9 },
-        "prompt",
+        "diff",
       );
     });
     expect(mockSetQuery).toHaveBeenCalledWith(
       {
         trials: ["exp-9"],
         trialNumber: 9,
-        trialTab: "prompt",
+        trialTab: "diff",
         trace: undefined,
         span: undefined,
         page: undefined,

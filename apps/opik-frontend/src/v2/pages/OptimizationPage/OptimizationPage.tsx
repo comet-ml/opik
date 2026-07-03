@@ -136,7 +136,7 @@ const OptimizationPage: React.FC = () => {
   );
 
   const handleViewPromptDiff = useCallback(
-    (row: AggregatedCandidate) => openTrial(row, "prompt"),
+    (row: AggregatedCandidate) => openTrial(row, "diff"),
     [openTrial],
   );
 
@@ -308,6 +308,7 @@ const OptimizationPage: React.FC = () => {
           }
           stepIndex={activeTrialCandidate?.stepIndex}
           tab={trialSidebar.tab}
+          promptView={trialSidebar.promptView}
           onTabChange={trialSidebar.setTab}
         />
       </TrialSidebar>

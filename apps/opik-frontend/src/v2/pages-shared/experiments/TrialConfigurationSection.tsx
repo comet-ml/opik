@@ -47,6 +47,8 @@ type TrialConfigurationSectionProps = {
   referenceExperiment?: Experiment | null;
   parentExperiment?: Experiment | null;
   studioConfig?: OptimizationStudioConfig;
+  /** Initial view mode — e.g. open straight into the baseline diff. */
+  defaultViewMode?: "config" | "diff-baseline" | "diff-parent";
 };
 
 const MessageBlock: React.FC<{ message: MessageEntry }> = ({ message }) => {
@@ -240,10 +242,9 @@ const TrialConfigurationSection: React.FC<TrialConfigurationSectionProps> = ({
   referenceExperiment,
   parentExperiment,
   studioConfig,
+  defaultViewMode = CONFIG_VIEW_MODE.CONFIG,
 }) => {
-  const [viewMode, setViewMode] = useState<ConfigViewMode>(
-    CONFIG_VIEW_MODE.CONFIG,
-  );
+  const [viewMode, setViewMode] = useState<ConfigViewMode>(defaultViewMode);
 
   const experiment = experiments[0];
   const configuration = useMemo(() => {

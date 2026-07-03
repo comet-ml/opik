@@ -28,6 +28,8 @@ type TrialSidebarContentProps = {
   isBest?: boolean;
   stepIndex?: number;
   tab: TrialSidebarTab;
+  /** "diff" opens the Prompt section straight in diff-vs-baseline view. */
+  promptView?: "config" | "diff";
   onTabChange: (tab: string) => void;
 };
 
@@ -48,6 +50,7 @@ const TrialSidebarContent: React.FC<TrialSidebarContentProps> = ({
   isBest,
   stepIndex,
   tab,
+  promptView = "config",
   onTabChange,
 }) => {
   const {
@@ -127,11 +130,19 @@ const TrialSidebarContent: React.FC<TrialSidebarContentProps> = ({
             className="mb-6"
           >
             <TrialConfigurationSection
+              // Remount on trial/view change so the diff button's "open in
+              // diff view" intent applies even while the sidebar stays open.
+              key={`${trialExperiment?.id}-${promptView}`}
               title="Prompt"
               experiments={trialExperiments}
               referenceExperiment={baselineExperiment}
               parentExperiment={parentExperiment}
               studioConfig={optimization?.studio_config}
+              defaultViewMode={
+                promptView === "diff" && baselineExperiment
+                  ? "diff-baseline"
+                  : "config"
+              }
             />
           </PageBodyStickyContainer>
         </TabsContent>

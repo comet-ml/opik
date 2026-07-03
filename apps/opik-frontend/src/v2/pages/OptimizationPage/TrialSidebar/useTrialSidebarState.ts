@@ -10,6 +10,9 @@ import {
 
 export type TrialSidebarTab = "results" | "prompt";
 
+/** Deep-link targets: the Prompt tab plain, or straight into the baseline diff. */
+export type TrialSidebarTarget = "prompt" | "diff";
+
 export type OpenTrialTarget = {
   experimentIds: string[];
   trialNumber: number;
@@ -64,8 +67,14 @@ export const useTrialSidebarState = () => {
     [query.trials],
   );
 
+  // Both "prompt" and "diff" land on the Prompt tab; "diff" additionally
+  // opens the section in diff-vs-baseline view (the prompt cell's diff button).
   const tab: TrialSidebarTab =
-    query.trialTab === "prompt" ? "prompt" : "results";
+    query.trialTab === "prompt" || query.trialTab === "diff"
+      ? "prompt"
+      : "results";
+  const promptView: "config" | "diff" =
+    query.trialTab === "diff" ? "diff" : "config";
 
   const setTab = useCallback(
     (nextTab: string) =>
@@ -77,13 +86,13 @@ export const useTrialSidebarState = () => {
   );
 
   const openTrial = useCallback(
-    (target: OpenTrialTarget, targetTab?: TrialSidebarTab) =>
+    (target: OpenTrialTarget, targetTab?: TrialSidebarTarget) =>
       setQuery(
         {
           ...PER_TRIAL_PARAMS,
           trials: target.experimentIds,
           trialNumber: target.trialNumber,
-          trialTab: targetTab === "prompt" ? "prompt" : undefined,
+          trialTab: targetTab,
         },
         "replaceIn",
       ),
@@ -100,6 +109,7 @@ export const useTrialSidebarState = () => {
     experimentIds,
     trialNumber: query.trialNumber ?? undefined,
     tab,
+    promptView,
     setTab,
     openTrial,
     close,

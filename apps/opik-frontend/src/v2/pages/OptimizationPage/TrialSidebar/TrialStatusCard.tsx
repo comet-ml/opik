@@ -53,7 +53,8 @@ const TrialStatusCard: React.FC<TrialStatusCardProps> = ({
       )}
     </StatCard.Header>
     <StatCard.Value className={status ? undefined : "text-muted-slate"}>
-      {status ? TRIAL_STATUS_LABELS[status] : "-"}
+      {/* Match the trials table, where the best trial reads "Best". */}
+      {isBest ? "Best" : status ? TRIAL_STATUS_LABELS[status] : "-"}
     </StatCard.Value>
     {createdAt && <StatCard.Caption>{formatDate(createdAt)}</StatCard.Caption>}
   </StatCard>
