@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Span;
+import com.comet.opik.domain.mapping.OpenTelemetryMappingRuleFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
@@ -1532,7 +1533,7 @@ class OpenTelemetryMapperTest {
     @Nested
     class ClaudeCodeMappingTest {
 
-        private static final String CLAUDE_CODE = "com.anthropic.claude_code.tracing";
+        private static final String CLAUDE_CODE = OpenTelemetryMappingRuleFactory.CLAUDE_CODE_INSTRUMENTATION;
 
         private Span enrich(List<KeyValue> attributes, List<io.opentelemetry.proto.trace.v1.Span.Event> events) {
             return enrich(attributes, events, "claude_code.interaction");
@@ -1574,7 +1575,7 @@ class OpenTelemetryMapperTest {
         void toolInputMapsToInput() {
             var span = enrich(List.of(str("tool_input", "[TOOL INPUT: Bash]\n{\"command\":\"ls\"}")), null);
 
-            assertThat(span.input().get("tool_input").asText()).contains("\"command\":\"ls\"");
+            assertThat(span.input().get("tool_input").asText()).isEqualTo("[TOOL INPUT: Bash]\n{\"command\":\"ls\"}");
         }
 
         @Test
@@ -1707,7 +1708,7 @@ class OpenTelemetryMapperTest {
                     null);
 
             assertThat(span.input().get("model").asText()).isEqualTo("claude-sonnet-4-6");
-            assertThat(span.input().get("system_prompt_preview").asText()).contains("Claude agent");
+            assertThat(span.input().get("system_prompt_preview").asText()).isEqualTo("You are a Claude agent...");
             // request classifiers / identity stay in metadata
             assertThat(span.metadata().get("llm_request.context").asText()).isEqualTo("interaction");
             assertThat(span.metadata().get("query_source").asText()).isEqualTo("sdk");
@@ -1719,7 +1720,7 @@ class OpenTelemetryMapperTest {
             var span = enrich(List.of(str("new_context", "[TOOL RESULT: t1]\nAGENTS.md README.md")),
                     null, "claude_code.llm_request");
 
-            assertThat(span.input().get("new_context").asText()).contains("AGENTS.md README.md");
+            assertThat(span.input().get("new_context").asText()).isEqualTo("[TOOL RESULT: t1]\nAGENTS.md README.md");
         }
 
         @Test
@@ -1730,7 +1731,7 @@ class OpenTelemetryMapperTest {
                     null, "claude_code.interaction");
 
             assertThat(span.input().has("new_context")).isFalse();
-            assertThat(span.metadata().get("new_context").asText()).contains("hello");
+            assertThat(span.metadata().get("new_context").asText()).isEqualTo("[USER PROMPT]\nhello");
         }
     }
 }

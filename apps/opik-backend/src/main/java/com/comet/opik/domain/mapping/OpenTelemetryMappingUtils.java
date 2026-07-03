@@ -82,6 +82,12 @@ public class OpenTelemetryMappingUtils {
         }
     }
 
+    // Prefix rules (e.g. `gen_ai.usage.`) carry the usage name in the suffix; exact-match rules
+    // (e.g. Claude Code's `input_tokens`) use the full key.
+    private static String usageKey(OpenTelemetryMappingRule rule, String key) {
+        return rule.isPrefix() ? key.substring(rule.getRule().length()) : key;
+    }
+
     /**
      * Extracts usage-related fields from a given value and adds them to the usage map.
      * The method supports extracting usage from integer values, string values, and JSON objects.
@@ -91,12 +97,6 @@ public class OpenTelemetryMappingUtils {
      * @param key the attribute key associated with the value
      * @param value the value to be processed and extracted
      */
-    // Prefix rules (e.g. `gen_ai.usage.`) carry the usage name in the suffix; exact-match rules
-    // (e.g. Claude Code's `input_tokens`) use the full key.
-    private static String usageKey(OpenTelemetryMappingRule rule, String key) {
-        return rule.isPrefix() ? key.substring(rule.getRule().length()) : key;
-    }
-
     public static void extractUsageField(@NonNull Map<String, Integer> usage, @NonNull OpenTelemetryMappingRule rule,
             @NonNull String key, @NonNull AnyValue value) {
         // usage might appear as single int or string values as well as a JSON object

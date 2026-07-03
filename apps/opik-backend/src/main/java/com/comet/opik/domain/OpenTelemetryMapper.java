@@ -128,6 +128,13 @@ public class OpenTelemetryMapper {
     private static final String CLAUDE_CODE_LLM_SPAN = "claude_code.llm_request";
     private static final String NEW_CONTEXT_ATTR = "new_context";
 
+    /**
+     * Same as {@link #enrichSpanWithAttributes(SpanBuilder, List, String, List)} but with the OTEL
+     * span name, used for span-name-aware routing (e.g. Claude Code's {@code new_context} maps to
+     * input only on {@code claude_code.llm_request} spans).
+     *
+     * @param spanName the OTEL span name (may be null)
+     */
     public static void enrichSpanWithAttributes(SpanBuilder spanBuilder, List<KeyValue> attributes,
             String integrationName, List<Span.Event> events, String spanName) {
         Map<String, Integer> usage = new HashMap<>();
