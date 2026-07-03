@@ -67,7 +67,19 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
 
         Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
 
-        return builder.build();
+        ChatModel model = builder.build();
+
+        // Rolling-breakpoint prompt caching for the agentic judge loop (default on): wrap the stock
+        // model so multi-turn tool conversations cache the whole re-sent transcript, which the
+        // high-level Anthropic API can't. The wrapper delegates single-call requests (and any failure)
+        // straight to the stock model, so non-agentic scoring is unchanged.
+        boolean rollingCaching = Optional.ofNullable(llmProviderClientConfig.getAnthropicClient())
+                .map(LlmProviderClientConfig.AnthropicClientConfig::rollingPromptCaching)
+                .orElse(true);
+        if (rollingCaching) {
+            return new OpikCachingAnthropicChatModel(model, newAnthropicClient(config));
+        }
+        return model;
     }
 
     @Override

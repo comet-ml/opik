@@ -995,6 +995,12 @@ llmProviderClient:
     # Default: 2023-06-01
     # Description: Anthropic API version https://docs.anthropic.com/en/api/versioning
     version: ${LLM_PROVIDER_ANTHROPIC_VERSION:-'2023-06-01'}
+    # Default: true
+    # Description: Route the Anthropic LLM-as-judge through a caching model that places a rolling
+    #   ephemeral cache breakpoint on the whole conversation each agentic round, so the re-sent
+    #   tool-result/assistant transcript is cached (langchain4j's high-level API cannot). Single-call
+    #   requests and any failure fall back to the stock model. Set false to disable.
+    rollingPromptCaching: ${LLM_PROVIDER_ANTHROPIC_ROLLING_PROMPT_CACHING:-true}
   # Default: https://openrouter.ai/api/v1
   # Description: OpenRouter API URL
   openRouterUrl: ${LLM_PROVIDER_OPENROUTER_URL:-https://openrouter.ai/api/v1}

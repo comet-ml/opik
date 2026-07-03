@@ -15,7 +15,7 @@ public class LlmProviderClientConfig {
     public record OpenAiClientConfig(String url) {
     }
 
-    public record AnthropicClientConfig(String url, String version) {
+    public record AnthropicClientConfig(String url, String version, Boolean rollingPromptCaching) {
     }
 
     public record VertexAIClientConfig(String scope) {
