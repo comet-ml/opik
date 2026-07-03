@@ -861,6 +861,11 @@ class TraceDAOImpl implements TraceDAO {
      * so every aggregate scans only the page's traces instead of the full filtered project. The aggregate CTEs
      * referencing {@code page_ids} before its definition is fine — CTE names resolve independently of
      * declaration order.
+     * <p>
+     * A ClickHouse upgrade must re-verify the three behaviors this mode relies on (validated on 25.3 and 25.8):
+     * forward CTE resolution, scalar-subquery caching (one evaluation reused across all reference sites — if the
+     * cache stops applying, results stay correct but every aggregate silently regresses to a whole-project scan),
+     * and primary-key pruning of the materialized IN-set.
      */
     private static final String SELECT_BY_PROJECT_ID = """
             WITH <if(trace_id_prefilter)>trace_id_prefilter AS (
@@ -3698,8 +3703,12 @@ class TraceDAOImpl implements TraceDAO {
                     .map(sortFields -> sortFields.contains("feedback_scores"))
                     .orElse(false);
             boolean sortHasSpanStatistics = hasSpanStatistics(orderBySql);
-            boolean sortHasExperiment = Optional.ofNullable(orderBySql)
-                    .map(sortFields -> sortFields.contains("experiment_id") || sortFields.contains("eaag.experiment"))
+            // Structured check on the requested sort fields rather than a substring match on the rendered
+            // ORDER BY SQL: this now gates page-keyed aggregates, so it must track the experiment sort exactly
+            // even if EXPERIMENT_FIELD_MAPPING changes what SQL the field renders to.
+            boolean sortHasExperiment = Optional.ofNullable(traceSearchCriteria.sortingFields())
+                    .map(sortingFields -> sortingFields.stream()
+                            .anyMatch(sortingField -> SortableFields.EXPERIMENT_ID.equals(sortingField.field())))
                     .orElse(false);
 
             if (shouldPageKeyAggregates(template, sortHasFeedbackScores, sortHasSpanStatistics, sortHasExperiment)) {
