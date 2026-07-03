@@ -27,6 +27,7 @@ from opik import context_storage
 from opik.api_objects.trace.trace_data import TraceData
 from opik.integrations.adk import OpikTracer
 from opik.integrations.adk.bounded_cache import BoundedCache
+from opik.integrations.adk.patchers.adk_otel_tracer import llm_span_helpers
 from opik.integrations.adk.pending_llm_spans import PendingLlmSpanRegistry
 
 from . import helpers
@@ -136,6 +137,23 @@ def test_pending_llm_span_registry__recycled_id__stale_span_not_returned():
     assert registry.pop(live_actions) is None
 
 
+def test_pending_llm_span_registry__eviction__finalizes_dropped_span_only():
+    # The size bound can't tell an unclaimed pending span from a still-live one,
+    # so an evicted entry is handed to on_evict_span (the tracer finalizes it)
+    # instead of being silently dropped and stranded in the 'started' state. Only
+    # the evicted (oldest) span is finalized; survivors stay recoverable.
+    finalized = []
+    registry = PendingLlmSpanRegistry(max_size=2, on_evict_span=finalized.append)
+    actions = [object() for _ in range(3)]
+    spans = [object() for _ in range(3)]
+    for actions_obj, span_obj in zip(actions, spans):
+        registry.register(actions_obj, span_obj)
+
+    assert finalized == [spans[0]]  # oldest evicted + finalized, exactly once
+    assert registry.get(actions[1]) is spans[1]  # survivors still recoverable
+    assert registry.get(actions[2]) is spans[2]
+
+
 # --- recovery (modern tracer) ----------------------------------------------
 
 
@@ -178,9 +196,9 @@ def test_after_model__normal_path__finalizes_and_pops_stack():
 @helpers.pytest_skip_for_adk_older_than_1_3_0
 def test_after_model__no_actions_key__finalizes_via_stack_fallback():
     # A callback context without ``actions`` (older ADK / custom callbacks) can't
-    # be registered, so nothing is keyed — the same situation as a registry
-    # eviction. after_model must fall back to the LLM span still on the stack
-    # rather than dropping it.
+    # be registered, so nothing is keyed — after_model must fall back to the LLM
+    # span still on the stack rather than dropping it. (Registry eviction is a
+    # distinct case: it finalizes the evicted span itself, tested separately.)
     context_storage.set_trace_data(TraceData(name="agent"))
     tracer = OpikTracer(project_name="adk-test")
     ctx = types.SimpleNamespace(invocation_id="inv-1")  # no .actions
@@ -236,3 +254,35 @@ def test_after_model__empty_final_response__does_not_leak_registry_entry():
     # ...and after_model_callback drops it, even with nothing to finalize (so
     # this fails on a broken registration as well as on a cleanup leak).
     assert tracer._pending_llm_spans.get(ctx.actions) is None
+
+
+@helpers.pytest_skip_for_adk_older_than_1_3_0
+def test_finalize_evicted_llm_span__started_span__closed_idempotently():
+    # A span the registry evicts before after_model_callback claims it must be
+    # finalized (end time + ready-for-finalization status) instead of being left
+    # stuck in 'started', its TTFT bookkeeping dropped, and re-finalizing it must
+    # be a harmless no-op — this is what before_model_callback wires the registry
+    # to do on eviction.
+    context_storage.set_trace_data(TraceData(name="agent"))
+    tracer = OpikTracer(project_name="adk-test")
+    ctx = _callback_context("inv-1")
+
+    span = _start_model_call(tracer, ctx)
+    assert span.end_time is None  # created 'started' by before_model_callback
+    assert span.id in tracer._ttft_tracking
+
+    tracer._finalize_evicted_llm_span(span)
+
+    assert span.end_time is not None
+    assert (
+        span.metadata[llm_span_helpers.SPAN_STATUS]
+        == llm_span_helpers.LLMSpanStatus.READY_FOR_FINALIZATION.value
+    )
+    assert span.metadata["opik_finalized_on_registry_eviction"] is True
+    assert span.id not in tracer._ttft_tracking  # TTFT entry dropped, no leak
+
+    # Idempotent: an already-finalized span (its after_model_callback won the
+    # race) is left untouched and no exception escapes.
+    first_end_time = span.end_time
+    tracer._finalize_evicted_llm_span(span)
+    assert span.end_time == first_end_time

@@ -78,8 +78,12 @@ class OpikTracer:
         # In-flight LLM spans keyed by id(callback_context.actions) so
         # after_model_callback can recover the span created in
         # before_model_callback even when ContextCacheConfig detaches the
-        # contextvar span stack under SSE streaming (comet-ml/opik#5524).
-        self._pending_llm_spans = pending_llm_spans.PendingLlmSpanRegistry()
+        # contextvar span stack under SSE streaming (comet-ml/opik#5524). A span
+        # dropped by the registry's size bound is routed to
+        # _finalize_evicted_llm_span so it is closed rather than stranded.
+        self._pending_llm_spans = pending_llm_spans.PendingLlmSpanRegistry(
+            on_evict_span=self._finalize_evicted_llm_span
+        )
         # Track time-to-first-token: map span_id -> (request_start_time, first_token_time)
         self._ttft_tracking: Dict[str, Tuple[float, Optional[float]]] = {}
 
@@ -268,6 +272,38 @@ class OpikTracer:
             self._ttft_tracking[result.span_data.id] = (request_start_time, None)
         except Exception as e:
             LOGGER.error(f"Failed during before_model_callback(): {e}", exc_info=True)
+
+    def _finalize_evicted_llm_span(self, span_data: span.SpanData) -> None:
+        """Close an in-flight LLM span dropped from the pending-span registry by
+        its size bound before ``after_model_callback`` finalized it.
+
+        The bound only evicts the oldest entry, which is overwhelmingly one whose
+        ``after_model_callback`` never runs (a short-circuited before-callback or
+        a failed/cancelled model call) and only under more than ``max_size``
+        truly-concurrent in-flight calls a still-live one. Either way the span
+        would otherwise stay stuck in the ``started`` state with no end time, so
+        finalize it here. Best-effort and idempotent: it skips a span already
+        finalized (its ``after_model_callback`` won the race) and never raises,
+        since it runs from inside ``BoundedCache.set``.
+        """
+        try:
+            if span_data.end_time is not None:
+                return
+            if span_data.metadata is None:
+                span_data.metadata = {}
+            span_data.metadata[llm_span_helpers.SPAN_STATUS] = (
+                llm_span_helpers.LLMSpanStatus.READY_FOR_FINALIZATION.value
+            )
+            # Mark it as force-closed so an incomplete span (no output/usage) is
+            # distinguishable from a normally finalized one when inspecting traces.
+            span_data.metadata["opik_finalized_on_registry_eviction"] = True
+            span_data.init_end_time()
+            # Drop the matching TTFT entry so it can't leak either.
+            self._ttft_tracking.pop(span_data.id, None)
+            if opik.is_tracing_active():
+                self._opik_client.__internal_api__span__(**span_data.as_parameters)
+        except Exception:
+            LOGGER.debug("Failed to finalize evicted LLM span", exc_info=True)
 
     def after_model_callback(
         self,

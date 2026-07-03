@@ -1,4 +1,4 @@
-from typing import Any, Optional, Tuple
+from typing import Any, Callable, Optional, Tuple
 
 from opik.api_objects.span.span_data import SpanData
 
@@ -10,7 +10,7 @@ from .bounded_cache import DEFAULT_MAX_SIZE, BoundedCache
 # active, its ``handle_context_caching`` / ``create_cache`` OpenTelemetry spans
 # add extra ``context.attach()/detach()`` cycles that, across an SSE streaming
 # async-generator suspension, revert the contextvar to a snapshot predating that
-# push — so ``top_span_data()`` returns ``None`` in ``after_model_callback`` and
+# push -- so ``top_span_data()`` returns ``None`` in ``after_model_callback`` and
 # the span is never finalized (comet-ml/opik#5524).
 #
 # This registry is a contextvar-independent handoff: ``before_model_callback``
@@ -22,23 +22,41 @@ from .bounded_cache import DEFAULT_MAX_SIZE, BoundedCache
 # ``EventActions`` is not reliably hashable, so entries are keyed by
 # ``id(actions)`` but ALSO hold a strong reference to the ``actions`` object and
 # verify identity on lookup. That closes the ``id()``-recycling hazard: an entry
-# that outlives its callback (a call whose ``after_model_callback`` never runs —
+# that outlives its callback (a call whose ``after_model_callback`` never runs --
 # a short-circuiting before-callback or a model error) keeps its ``actions``
 # alive, so CPython can't reuse that id for a later call's ``EventActions``; and
 # if an id ever did collide, the identity check refuses the stale span rather
 # than finalizing it for the wrong call.
 #
 # It is size-bounded (see ``BoundedCache``) because those unclaimed entries must
-# not accumulate on a long-lived shared tracer.
+# not accumulate on a long-lived shared tracer. Because the bound cannot tell an
+# unclaimed entry from a still-in-flight one, eviction routes the dropped span to
+# ``on_evict_span`` (the tracer finalizes it) rather than discarding it, so an
+# evicted span is closed instead of being stranded in the ``started`` state.
 
 
 class PendingLlmSpanRegistry:
     """Bounded registry of in-flight LLM spans, keyed by the per-model-call
     ``EventActions`` object (by id, with an identity check).
+
+    ``on_evict_span`` is called with the ``SpanData`` of any entry the bound
+    drops, so the tracer can finalize a span whose ``after_model_callback`` will
+    never claim it instead of leaking it in the ``started`` state.
     """
 
-    def __init__(self, max_size: int = DEFAULT_MAX_SIZE) -> None:
-        self._cache: BoundedCache[int, Tuple[Any, SpanData]] = BoundedCache(max_size)
+    def __init__(
+        self,
+        max_size: int = DEFAULT_MAX_SIZE,
+        on_evict_span: Optional[Callable[[SpanData], None]] = None,
+    ) -> None:
+        self._on_evict_span = on_evict_span
+        self._cache: BoundedCache[int, Tuple[Any, SpanData]] = BoundedCache(
+            max_size, on_evict=self._handle_evict
+        )
+
+    def _handle_evict(self, key: int, entry: Tuple[Any, SpanData]) -> None:
+        if self._on_evict_span is not None:
+            self._on_evict_span(entry[1])
 
     def register(self, actions: Any, span_data: SpanData) -> None:
         self._cache.set(id(actions), (actions, span_data))
