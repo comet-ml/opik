@@ -261,27 +261,93 @@ def test_after_model__parent_span_on_stack__finalizes_own_span_not_parent():
     assert context_storage.top_span_data() is parent  # parent left untouched
 
 
+def _empty_final_response() -> models.LlmResponse:
+    # Terminal (partial=False) SSE chunk whose single text part is empty --
+    # e.g. the model streamed its text in earlier partial chunks. This trips
+    # has_empty_text_part_content, the early-return path in after_model_callback.
+    return models.LlmResponse(
+        content=genai_types.Content(role="model", parts=[genai_types.Part(text="")]),
+        partial=False,
+    )
+
+
 @helpers.pytest_skip_for_adk_older_than_1_3_0
-def test_after_model__empty_final_response__does_not_leak_registry_entry():
-    # A final empty-content response has nothing to finalize, but must still drop
-    # the pending-span registry entry that before_model_callback registered (a
-    # leak-regression check, so it observes the internal registry).
+def test_after_model__empty_final_response_on_stack__force_closes_and_drops_entry():
+    # A terminal empty-content response has nothing to record, but must still
+    # force-close the span (not leave it 'started') and drop the pending-span
+    # registry entry that before_model_callback registered.
     context_storage.set_trace_data(TraceData(name="agent"))
     tracer = OpikTracer(project_name="adk-test")
     ctx = _callback_context("inv-1")
 
-    _start_model_call(tracer, ctx)
-    # before_model_callback registered the span for this call...
-    assert tracer._pending_llm_spans.get(ctx.actions) is not None
+    span = _start_model_call(tracer, ctx)
+    assert tracer._pending_llm_spans.get(ctx.actions) is not None  # registered
+    assert span.end_time is None  # still 'started'
 
-    empty_final = models.LlmResponse(
-        content=genai_types.Content(role="model", parts=[genai_types.Part(text="")]),
-        partial=False,
+    tracer.after_model_callback(ctx, _empty_final_response())
+
+    assert span.end_time is not None  # force-closed, not stranded
+    assert (
+        span.metadata["_opik_llm_span_force_closed_reason"] == "empty_terminal_response"
     )
-    tracer.after_model_callback(ctx, empty_final)
+    assert context_storage.top_span_data() is None  # popped off the stack
+    # Entry dropped even with nothing to finalize (fails on a broken registration
+    # as well as on a cleanup leak).
+    assert tracer._pending_llm_spans.get(ctx.actions) is None
+    assert span.id not in tracer._ttft_tracking
 
-    # ...and after_model_callback drops it, even with nothing to finalize (so
-    # this fails on a broken registration as well as on a cleanup leak).
+
+@helpers.pytest_skip_for_adk_older_than_1_3_0
+def test_after_model__empty_final_response_detached__force_closes_recovered_span():
+    # The #5524 case: text arrived in partial chunks, the terminal partial=False
+    # chunk is empty, AND ContextCacheConfig detached the stack. The span is not
+    # on the stack and the finally drops the registry entry, so the empty-content
+    # early return must force-close the recovered span rather than strand it.
+    context_storage.set_trace_data(TraceData(name="agent"))
+    tracer = OpikTracer(project_name="adk-test")
+    ctx = _callback_context("inv-1")
+
+    span = _start_model_call(tracer, ctx)
+    context_storage.pop_span_data()  # simulate the ContextCacheConfig detach
+    assert context_storage.top_span_data() is None
+
+    tracer.after_model_callback(ctx, _empty_final_response())
+
+    assert span.end_time is not None  # force-closed despite the detached stack
+    assert (
+        span.metadata[llm_span_helpers.SPAN_STATUS]
+        == llm_span_helpers.LLMSpanStatus.READY_FOR_FINALIZATION.value
+    )
+    assert (
+        span.metadata["_opik_llm_span_force_closed_reason"] == "empty_terminal_response"
+    )
+    assert tracer._pending_llm_spans.get(ctx.actions) is None
+    assert span.id not in tracer._ttft_tracking
+
+
+@helpers.pytest_skip_for_adk_older_than_1_3_0
+def test_after_model__empty_partial_chunk__keeps_span_for_final_response():
+    # An empty *partial* chunk is not terminal: the span, its TTFT entry, and its
+    # registry entry must be kept so the later final response can finalize it.
+    context_storage.set_trace_data(TraceData(name="agent"))
+    tracer = OpikTracer(project_name="adk-test")
+    ctx = _callback_context("inv-1")
+
+    span = _start_model_call(tracer, ctx)
+    empty_partial = models.LlmResponse(
+        content=genai_types.Content(role="model", parts=[genai_types.Part(text="")]),
+        partial=True,
+    )
+    tracer.after_model_callback(ctx, empty_partial)
+
+    assert span.end_time is None  # not closed
+    assert tracer._pending_llm_spans.get(ctx.actions) is span  # entry kept
+    assert span.id in tracer._ttft_tracking  # TTFT kept
+
+    # The real final response then finalizes it normally.
+    tracer.after_model_callback(ctx, _final_text_response("hello"))
+    assert span.output is not None
+    assert span.end_time is not None
     assert tracer._pending_llm_spans.get(ctx.actions) is None
 
 
@@ -307,7 +373,7 @@ def test_finalize_evicted_llm_span__started_span__closed_idempotently():
         span.metadata[llm_span_helpers.SPAN_STATUS]
         == llm_span_helpers.LLMSpanStatus.READY_FOR_FINALIZATION.value
     )
-    assert span.metadata["_opik_finalized_on_registry_eviction"] is True
+    assert span.metadata["_opik_llm_span_force_closed_reason"] == "registry_eviction"
     assert span.id not in tracer._ttft_tracking  # TTFT entry dropped, no leak
 
     # Idempotent: an already-finalized span (its after_model_callback won the

@@ -274,18 +274,18 @@ class OpikTracer:
         except Exception as e:
             LOGGER.error(f"Failed during before_model_callback(): {e}", exc_info=True)
 
-    def _finalize_evicted_llm_span(self, span_data: span.SpanData) -> None:
-        """Close an in-flight LLM span dropped from the pending-span registry by
-        its size bound before ``after_model_callback`` finalized it.
+    def _force_close_llm_span(self, span_data: span.SpanData, reason: str) -> None:
+        """Close an in-flight LLM span that reached a terminal state without a
+        normal finalization -- dropped from the pending-span registry by its size
+        bound, or a terminal empty SSE response with nothing to record. Without
+        this the span stays stuck in the ``started`` state with no end time
+        (comet-ml/opik#5524).
 
-        The bound only evicts the oldest entry, which is overwhelmingly one whose
-        ``after_model_callback`` never runs (a short-circuited before-callback or
-        a failed/cancelled model call) and only under more than ``max_size``
-        truly-concurrent in-flight calls a still-live one. Either way the span
-        would otherwise stay stuck in the ``started`` state with no end time, so
-        finalize it here. Best-effort and idempotent: it skips a span already
-        finalized (its ``after_model_callback`` won the race) and never raises,
-        since it runs from inside ``BoundedCache.set``.
+        Best-effort and idempotent: it skips a span already finalized (a normal
+        ``after_model_callback`` won the race) and never raises, since callers run
+        it from a cache-eviction callback or an early-return path. ``reason`` is
+        recorded in metadata so an incomplete span (no output/usage) is
+        distinguishable from a normally finalized one when inspecting traces.
         """
         try:
             if span_data.end_time is not None:
@@ -295,17 +295,26 @@ class OpikTracer:
             span_data.metadata[llm_span_helpers.SPAN_STATUS] = (
                 llm_span_helpers.LLMSpanStatus.READY_FOR_FINALIZATION.value
             )
-            # Mark it as force-closed so an incomplete span (no output/usage) is
-            # distinguishable from a normally finalized one when inspecting traces.
             # Leading-underscore internal-metadata convention (cf. _OPIK_SPAN_STATUS).
-            span_data.metadata["_opik_finalized_on_registry_eviction"] = True
+            span_data.metadata["_opik_llm_span_force_closed_reason"] = reason
             span_data.init_end_time()
             # Drop the matching TTFT entry so it can't leak either.
             self._ttft_tracking.pop(span_data.id, None)
             if opik.is_tracing_active():
                 self._opik_client.__internal_api__span__(**span_data.as_parameters)
         except Exception:
-            LOGGER.debug("Failed to finalize evicted LLM span", exc_info=True)
+            LOGGER.debug(
+                "Failed to force-close LLM span (reason=%s)", reason, exc_info=True
+            )
+
+    def _finalize_evicted_llm_span(self, span_data: span.SpanData) -> None:
+        # Registry eviction: the bound dropped the oldest in-flight entry before
+        # after_model_callback claimed it -- overwhelmingly one whose callback
+        # never runs (a short-circuited before-callback or a failed/cancelled
+        # model call), and only under more than max_size truly-concurrent
+        # in-flight calls a still-live one. Either way, close it (see
+        # PendingLlmSpanRegistry, which wires this as on_evict_span).
+        self._force_close_llm_span(span_data, reason="registry_eviction")
 
     def after_model_callback(
         self,
@@ -355,9 +364,21 @@ class OpikTracer:
                 span_id = current_span.id
 
             if adk_helpers.has_empty_text_part_content(llm_response):
-                # Empty (streaming) content: nothing to finalize. The finally
-                # drops the TTFT entry and the pending-span registry entry for a
-                # final response, and keeps them for partial chunks.
+                # Empty content. A partial chunk may be followed by more (ADK
+                # calls again with the final response), so keep the span, its TTFT
+                # entry, and its registry entry and wait. But the TERMINAL
+                # (non-partial) empty response is the last callback for this call:
+                # there is nothing to record, yet the finally drops the registry
+                # entry and -- under a detached ContextCacheConfig context -- the
+                # span isn't on the stack either, so a bare return would strand the
+                # recovered span in ``started``. Force-close it instead
+                # (comet-ml/opik#5524), popping it off the stack first if present.
+                if not is_partial and current_span is not None:
+                    if stack_top is not None and stack_top.id == current_span.id:
+                        context_storage.pop_span_data(ensure_id=current_span.id)
+                    self._force_close_llm_span(
+                        current_span, reason="empty_terminal_response"
+                    )
                 return
 
             if current_span is None:
