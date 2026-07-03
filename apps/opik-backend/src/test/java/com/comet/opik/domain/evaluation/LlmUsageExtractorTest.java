@@ -88,4 +88,26 @@ class LlmUsageExtractorTest {
                 .containsEntry("prompt_tokens", 400)
                 .containsEntry("cache_read_input_tokens", 120);
     }
+
+    @Test
+    void omitsCacheKeysWhenCacheCountsAreNullOrZero() {
+        // The value != null && value > 0 guard is what keeps the usage map (and therefore cost)
+        // unchanged when a provider reports no caching — exercise both the null-field and zero-field
+        // branches it protects, plus the null-details branch on the OpenAI subtype.
+        var nullCache = LlmUsageExtractor.toUsageMap(responseWith(AnthropicTokenUsage.builder()
+                .inputTokenCount(100).outputTokenCount(20).build()));
+        assertThat(nullCache)
+                .containsEntry("prompt_tokens", 100)
+                .doesNotContainKeys("cache_creation_input_tokens", "cache_read_input_tokens");
+
+        var zeroCache = LlmUsageExtractor.toUsageMap(responseWith(AnthropicTokenUsage.builder()
+                .inputTokenCount(100).outputTokenCount(20)
+                .cacheCreationInputTokens(0).cacheReadInputTokens(0).build()));
+        assertThat(zeroCache)
+                .doesNotContainKeys("cache_creation_input_tokens", "cache_read_input_tokens");
+
+        var nullDetails = LlmUsageExtractor.toUsageMap(responseWith(OpenAiTokenUsage.builder()
+                .inputTokenCount(200).outputTokenCount(50).totalTokenCount(250).build()));
+        assertThat(nullDetails).doesNotContainKey("cache_read_input_tokens");
+    }
 }

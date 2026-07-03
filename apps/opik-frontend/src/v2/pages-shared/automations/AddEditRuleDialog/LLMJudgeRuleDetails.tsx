@@ -263,13 +263,14 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     className={`max-w-40${
                       validationErrors?.message ? " border-destructive" : ""
                     }`}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const value = event.target.valueAsNumber;
                       field.onChange(
-                        event.target.value === ""
+                        event.target.value === "" || Number.isNaN(value)
                           ? null
-                          : event.target.valueAsNumber,
-                      )
-                    }
+                          : value,
+                      );
+                    }}
                   />
                 </FormControl>
                 <div className="comet-body-xs text-muted-slate">

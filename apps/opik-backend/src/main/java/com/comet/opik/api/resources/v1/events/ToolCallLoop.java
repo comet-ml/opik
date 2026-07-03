@@ -191,26 +191,28 @@ final class ToolCallLoop {
             ToolRegistry toolRegistry, Function<ChatRequest, Mono<ChatResponse>> scoreTrace,
             ArrayList<ChatMessage> messages, TraceToolContext ctx, Budget budget, BudgetGuard costGuard,
             String logIdValue, Map<String, String> mdc, EvaluationRecorder recorder) {
-        // Soft spend budget: once the guard says the limit is reached we stop starting new turns and
-        // let runWithWrapUp do its final tools-stripped call (the intended, bounded overshoot). Same
-        // no-append reasoning as the MAX_TOOL_CALL_ROUNDS cap below.
+        // Model stopped on its own (no tool requests) — append its terminal AiMessage and finish,
+        // regardless of round count or spend budget. There are no pending tool calls to leave
+        // unfulfilled here, so appending is always safe; the downstream wrap-up (runWithWrapUp) then
+        // re-issues the structured request WITH the assistant's last turn in the conversation
+        // history. Checked before the round/budget gate below so a response that both finishes
+        // naturally AND tips over the budget still keeps its final reasoning turn (otherwise the
+        // wrap-up "emit only JSON" message would be appended in a vacuum).
+        if (!currentResponse.aiMessage().hasToolExecutionRequests()) {
+            messages.add(currentResponse.aiMessage());
+            return Mono.just(currentResponse);
+        }
+        // Between agent turns: stop starting new turns at the round cap or once the spend budget is
+        // reached, and let runWithWrapUp do its final tools-stripped call (the intended, bounded
+        // overshoot). Don't append: the response here carries unfulfilled tool_execution_requests
+        // (we're abandoning them). An AiMessage with tool_calls but no matching
+        // ToolExecutionResultMessage produces a malformed sequence that OpenAI / Anthropic reject.
+        // runWithWrapUp will bridge via the forcing user message.
         if (round >= MAX_TOOL_CALL_ROUNDS || costGuard.shouldWrapUp()) {
             if (costGuard.shouldWrapUp() && round < MAX_TOOL_CALL_ROUNDS) {
                 log.info("Evaluation spend budget reached for '{}' (spent '{}' of '{}' USD);"
                         + " wrapping up", logIdValue, costGuard.spentUsd(), costGuard.limitUsd());
             }
-            // Don't append: the cap-round response may carry unfulfilled tool_executions_requests
-            // (we're abandoning them by hitting the cap). An AiMessage with tool_calls but no
-            // matching ToolExecutionResultMessage produces a malformed sequence that OpenAI /
-            // Anthropic reject. runWithWrapUp will bridge via the forcing user message.
-            return Mono.just(currentResponse);
-        }
-        if (!currentResponse.aiMessage().hasToolExecutionRequests()) {
-            // Model stopped on its own — append its terminal AiMessage so the downstream wrap-up
-            // (runWithWrapUp) re-issues the structured request with the assistant's last turn in
-            // the conversation history. Without this, the wrap-up "emit only JSON" user message
-            // is appended in a vacuum where the model's final reasoning is missing.
-            messages.add(currentResponse.aiMessage());
             return Mono.just(currentResponse);
         }
 

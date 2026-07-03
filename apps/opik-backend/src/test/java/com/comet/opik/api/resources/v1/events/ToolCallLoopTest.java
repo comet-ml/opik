@@ -169,6 +169,38 @@ class ToolCallLoopTest {
     }
 
     @Test
+    void appendsTerminalAiMessageWhenBudgetTripsOnANaturalStop() {
+        // Regression: when a follow-up round both finishes naturally (no tool calls) AND tips spend
+        // over the budget, the terminal AiMessage must still be appended so the wrap-up re-issues
+        // with the model's final reasoning. The budget gate must not swallow a no-tool-call response.
+        var costGuard = overBudgetGuard();
+        ToolExecutionRequest toolReq = ToolExecutionRequest.builder()
+                .id("t").name(TOOL_NAME).arguments("{}").build();
+        ChatResponse round0 = ChatResponse.builder()
+                .aiMessage(AiMessage.from(List.of(toolReq))).build();
+        // Follow-up response: no tool calls (natural stop) + usage that trips the $0.01 budget.
+        ChatResponse naturalStop = ChatResponse.builder()
+                .aiMessage(AiMessage.from("final reasoning"))
+                .tokenUsage(OpenAiTokenUsage.builder()
+                        .inputTokenCount(100_000).outputTokenCount(100_000).totalTokenCount(200_000).build())
+                .build();
+
+        var messages = new ArrayList<ChatMessage>(List.of(UserMessage.from("score")));
+        var budget = new ToolCallLoop.Budget();
+
+        ChatResponse result = ToolCallLoop.run(
+                round0, baseRequest(), followUpParams(), registry(stubTool(TOOL_NAME, "ok")),
+                req -> costGuard.track(Mono.just(naturalStop)),
+                messages, ctx(), budget, costGuard, "trace-id", Map.of(), EvaluationRecorder.NOOP).block();
+
+        assertThat(result).isSameAs(naturalStop);
+        assertThat(costGuard.shouldWrapUp()).isTrue();
+        // The natural-stop terminal AiMessage is retained as the last message (not dropped by the gate).
+        assertThat(messages.getLast()).isInstanceOf(AiMessage.class);
+        assertThat(((AiMessage) messages.getLast()).text()).isEqualTo("final reasoning");
+    }
+
+    @Test
     void budgetExhaustionReturnsSentinelWithoutDispatchingThroughRegistry() {
         // First tool call returns a payload just under the cap; the second round's tool
         // dispatch must see cumulative >= cap and skip the registry, returning the
