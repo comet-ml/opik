@@ -322,9 +322,15 @@ export const ALERT_FIELD_MAPPINGS: AlertTypeMappings = {
       targetPath: "blocks[0].text.text",
     },
   ],
-  // Feishu builds its full card (including the "Opik Alert: " title) server-side,
-  // so no field replacement is needed here; mapping name onto the title would drop that prefix.
-  [ALERT_TYPE.feishu]: [],
+  // Feishu builds its full card (including the "Opik Alert: " title prefix) server-side when
+  // sending; this mapping only drives the live preview, so the user-entered alert name shows up
+  // in the example payload's card title instead of the static placeholder.
+  [ALERT_TYPE.feishu]: [
+    {
+      sourceField: "name",
+      targetPath: "card.header.title.content",
+    },
+  ],
 };
 
 /**
