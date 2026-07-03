@@ -119,12 +119,12 @@ export const TrialPromptCell = (
           openDelay={300}
           closeDelay={150}
         >
-          {/* Figma (696:44233): a thin separator + the diff button reveal
-              together only while hovering the row (rows carry the `group/row`
-              class) and stay visible while the popover is open. `hidden` (not
-              opacity) so the button reserves no width at rest — the prompt text
-              uses the full column until hovered. The button opens the diff on
-              hover or click (689:36080) and carries the tooltip. */}
+          {/* A thin separator + the diff button reveal together only while
+              hovering the row (rows carry the `group/row` class) and stay
+              visible while the popover is open. `hidden` (not opacity) so the
+              button reserves no width at rest — the prompt text uses the full
+              column until hovered. The button opens the diff on hover or
+              click and carries the tooltip. */}
           <div
             className={cn(
               "hidden shrink-0 items-center gap-1 group-hover/row:flex",
