@@ -27,6 +27,7 @@ type FiltersButtonProps<TColumnData> = {
   disabled?: boolean;
   deferOnChange?: boolean;
   tooltip?: string;
+  className?: string;
 };
 
 const FiltersButton = <TColumnData,>({
@@ -41,6 +42,7 @@ const FiltersButton = <TColumnData,>({
   disabled,
   deferOnChange = false,
   tooltip,
+  className,
 }: FiltersButtonProps<TColumnData>) => {
   const [filters, setFilters] = useState<Filters>(initialFilters);
   const [open, setOpen] = useState(false);
@@ -94,6 +96,7 @@ const FiltersButton = <TColumnData,>({
             className={cn(
               isIconLayout && !validFilters.length && "size-8 px-0",
               isIconLayout && validFilters.length && "px-3",
+              className,
             )}
             disabled={disabled}
           >

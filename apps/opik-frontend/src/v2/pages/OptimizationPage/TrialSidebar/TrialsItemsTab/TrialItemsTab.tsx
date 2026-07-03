@@ -22,7 +22,6 @@ import {
 } from "@/types/shared";
 import { EXPERIMENT_ITEM_OUTPUT_PREFIX } from "@/constants/experiments";
 import DataTable from "@/shared/DataTable/DataTable";
-import DataTableVirtualBody from "@/shared/DataTable/DataTableVirtualBody";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
@@ -53,7 +52,6 @@ import ExperimentsFeedbackScoresSelect from "@/v2/pages-shared/experiments/Exper
 import { calculateHeightStyle } from "@/shared/DataTable/utils";
 import SectionHeader from "@/shared/DataTableHeaders/SectionHeader";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
-import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { generateDistinctColorMap } from "@/v2/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
 import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
@@ -602,22 +600,26 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
     <>
       <PageBodyStickyContainer direction="horizontal" limitWidth>
         <ExplainerCallout
-          className="mb-4"
+          className="mb-3"
           {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_trial_items]}
         />
       </PageBodyStickyContainer>
       <PageBodyStickyContainer
-        className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-6 pt-4"
+        className="mb-3 flex flex-wrap items-center justify-between gap-x-8 gap-y-2"
         direction="bidirectional"
         limitWidth
       >
         <div className="flex items-center gap-2">
+          <h2 className="comet-title-xs">
+            {isTestSuite ? "Test items" : "Evaluation results"}
+          </h2>
           <FiltersButton
             columns={filterColumns}
             config={filtersConfig as never}
             filters={filters}
             onChange={setFilters}
             layout="icon"
+            className="size-7"
           />
           {isTestSuite && (
             <ToggleGroup
@@ -659,23 +661,28 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
           ></ColumnsButton>
         </div>
       </PageBodyStickyContainer>
-      <DataTable
-        columns={columns}
-        data={rows}
-        resizeConfig={resizeConfig}
-        getRowId={getRowId}
-        rowHeight={height as ROW_HEIGHT}
-        getRowHeightStyle={getRowHeightStyle}
-        columnPinning={DEFAULT_COLUMN_PINNING}
-        noData={<DataTableNoData title={noDataText} />}
-        TableWrapper={PageBodyStickyTableWrapper}
-        TableBody={DataTableVirtualBody}
-        stickyHeader
-        showSkeleton={isTableLoading}
-        showLoadingOverlay={!isTableLoading && isPlaceholderData && isFetching}
-      />
       <PageBodyStickyContainer
-        className="py-4"
+        direction="horizontal"
+        limitWidth
+        className="mb-3"
+      >
+        <DataTable
+          columns={columns}
+          data={rows}
+          resizeConfig={resizeConfig}
+          getRowId={getRowId}
+          rowHeight={height as ROW_HEIGHT}
+          getRowHeightStyle={getRowHeightStyle}
+          columnPinning={DEFAULT_COLUMN_PINNING}
+          noData={<DataTableNoData title={noDataText} />}
+          showSkeleton={isTableLoading}
+          showLoadingOverlay={
+            !isTableLoading && isPlaceholderData && isFetching
+          }
+        />
+      </PageBodyStickyContainer>
+      <PageBodyStickyContainer
+        className="pb-4"
         direction="horizontal"
         limitWidth
       >

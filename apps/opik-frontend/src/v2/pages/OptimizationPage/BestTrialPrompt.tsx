@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { ArrowUpRight, GitCompare } from "lucide-react";
 
+import GitCompareOff from "@/icons/git-compare-off.svg?react";
 import { AggregatedCandidate } from "@/types/optimizations";
 import { Experiment } from "@/types/datasets";
 import PromptComparison from "@/shared/CodeDiff/PromptComparison";
@@ -80,7 +81,11 @@ const BestTrialPrompt: React.FC<BestTrialPromptProps> = ({
               className={actionClass}
               onClick={() => setShowDiff((prev) => !prev)}
             >
-              <GitCompare className="size-3.5" />
+              {showDiff ? (
+                <GitCompareOff className="size-3.5" />
+              ) : (
+                <GitCompare className="size-3.5" />
+              )}
               {showDiff ? "Hide diff" : "Diff vs baseline"}
             </button>
           )}

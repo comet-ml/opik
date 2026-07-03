@@ -1,13 +1,15 @@
 import React, { useMemo, useState } from "react";
 import { diffLines } from "diff";
-import { ChevronDown, GitCompareArrows } from "lucide-react";
+import { ChevronDown, GitCompare } from "lucide-react";
 
+import GitCompareOff from "@/icons/git-compare-off.svg?react";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
 import { PromptComparisonTarget } from "./promptComparisonTargets";
@@ -33,6 +35,14 @@ type PromptComparisonProps = {
   defaultTargetId?: string;
   /** Show the built-in target picker + diff toggle bar. Default true. */
   showControls?: boolean;
+  /**
+   * Section title shown on the left of the control bar while NOT diffing (e.g.
+   * "Trial prompt"). Once diffing starts it is replaced by the target picker.
+   * When omitted, the target picker is always shown (the original behavior).
+   */
+  title?: string;
+  /** Whether the built-in toggle starts in the diff state. Default true. */
+  defaultDiff?: boolean;
   /**
    * Controlled diff state. When provided, overrides the internal toggle — use
    * together with `showControls={false}` to drive the diff from an outer header.
@@ -102,6 +112,8 @@ const PromptComparison: React.FunctionComponent<PromptComparisonProps> = ({
   targets,
   defaultTargetId,
   showControls = true,
+  title,
+  defaultDiff = true,
   diff,
   className,
 }) => {
@@ -112,7 +124,7 @@ const PromptComparison: React.FunctionComponent<PromptComparisonProps> = ({
       : fallbackId;
 
   const [selectedId, setSelectedId] = useState<string | undefined>(initialId);
-  const [internalShowDiff, setShowDiff] = useState(true);
+  const [internalShowDiff, setShowDiff] = useState(defaultDiff);
   const showDiff = diff ?? internalShowDiff;
 
   // Always derive from the live targets so a stale selection can't point at a
@@ -166,46 +178,84 @@ const PromptComparison: React.FunctionComponent<PromptComparisonProps> = ({
     return null;
   }
 
+  // A plain title stands in for the target picker until diffing begins; without
+  // a title the picker always shows (the original behavior).
+  const showTitle = Boolean(title) && !diffActive;
+
   return (
     <div className={cn("flex flex-col gap-3", className)}>
-      {showControls && hasTargets && selectedTarget && (
+      {showControls && (hasTargets || showTitle) && (
         <div className="flex items-center justify-between pl-1">
           <div className="flex items-center gap-1.5">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className="comet-body-s-accented inline-flex items-center gap-0.5 border-b border-foreground pb-px text-foreground outline-none"
-                >
-                  {selectedTarget.label}
-                  <ChevronDown className="size-3.5" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <DropdownMenuRadioGroup
-                  value={selectedTarget.id}
-                  onValueChange={setSelectedId}
-                >
-                  {targets.map((target) => (
-                    <DropdownMenuRadioItem key={target.id} value={target.id}>
-                      {target.label}
-                    </DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <span className="comet-body-s-accented text-foreground">
-              → {currentLabel}
-            </span>
+            {showTitle ? (
+              <span className="comet-body-s-accented text-foreground">
+                {title}
+              </span>
+            ) : (
+              selectedTarget && (
+                <>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        className="comet-body-s-accented inline-flex items-center gap-0.5 border-b border-foreground pb-px text-foreground outline-none"
+                      >
+                        {selectedTarget.label}
+                        {selectedTarget.caption && (
+                          <span className="comet-body-xs text-muted-slate">
+                            {selectedTarget.caption}
+                          </span>
+                        )}
+                        <ChevronDown className="size-3.5" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="start"
+                      className="min-w-[180px]"
+                    >
+                      <DropdownMenuLabel size="sm">
+                        Compare against
+                      </DropdownMenuLabel>
+                      <DropdownMenuSeparator className="bg-border" />
+                      {targets.map((target) => (
+                        <DropdownMenuItem
+                          key={target.id}
+                          size="sm"
+                          selected={target.id === selectedTarget.id}
+                          onSelect={() => setSelectedId(target.id)}
+                          className="justify-between gap-2"
+                        >
+                          <span>{target.label}</span>
+                          {target.caption && (
+                            <span className="comet-body-xs text-muted-slate">
+                              {target.caption}
+                            </span>
+                          )}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <span className="comet-body-s-accented text-foreground">
+                    → {currentLabel}
+                  </span>
+                </>
+              )
+            )}
           </div>
-          <button
-            type="button"
-            onClick={() => setShowDiff((prev) => !prev)}
-            className="comet-body-s inline-flex items-center gap-1 text-foreground"
-          >
-            <GitCompareArrows className="size-3.5" />
-            {showDiff ? "Hide diff" : "Show diff"}
-          </button>
+          {hasTargets && (
+            <button
+              type="button"
+              onClick={() => setShowDiff((prev) => !prev)}
+              className="comet-body-s inline-flex items-center gap-1 text-foreground"
+            >
+              {showDiff ? (
+                <GitCompareOff className="size-3.5" />
+              ) : (
+                <GitCompare className="size-3.5" />
+              )}
+              {showDiff ? "Hide diff" : "Show diff"}
+            </button>
+          )}
         </div>
       )}
       <div className="flex flex-col gap-1.5">{body}</div>

@@ -1,17 +1,17 @@
-import React, { useMemo } from "react";
+import React from "react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
+import { Separator } from "@/ui/separator";
 import PageBodyScrollContainer from "@/v2/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import TrialKPICards from "./TrialKPICards";
 import TrialItemsTab from "./TrialsItemsTab/TrialItemsTab";
-import TrialConfigurationSection from "@/v2/pages-shared/experiments/TrialConfigurationSection";
+import TrialPromptSection from "../TrialPromptSection";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { Experiment } from "@/types/datasets";
-import { Optimization } from "@/types/optimizations";
+import { AggregatedCandidate, Optimization } from "@/types/optimizations";
 import type { TrialStatus } from "@/v2/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
 import TrialStatusCard from "./TrialStatusCard";
-import { resolveParentExperiment } from "./resolveTrialLineage";
 import type { TrialSidebarTab } from "./useTrialSidebarState";
 
 type TrialSidebarContentProps = {
@@ -20,9 +20,12 @@ type TrialSidebarContentProps = {
   experimentIds: string[];
   /** The open trial's experiments (resolved from the run's loaded list). */
   trialExperiments: Experiment[];
-  /** Every experiment of the run — baseline metrics + parent resolution. */
+  /** Every experiment of the run — baseline metrics + prompt resolution. */
   allExperiments: Experiment[];
-  baselineExperiment?: Experiment;
+  /** Run candidates — resolve the prompt diff's baseline/parent targets. */
+  candidates: AggregatedCandidate[];
+  /** The open trial's candidate — carries lineage for the prompt diff. */
+  candidate?: AggregatedCandidate;
   isTestSuite?: boolean;
   status?: TrialStatus;
   isBest?: boolean;
@@ -44,7 +47,8 @@ const TrialSidebarContent: React.FC<TrialSidebarContentProps> = ({
   experimentIds,
   trialExperiments,
   allExperiments,
-  baselineExperiment,
+  candidates,
+  candidate,
   isTestSuite,
   status,
   isBest,
@@ -59,18 +63,13 @@ const TrialSidebarContent: React.FC<TrialSidebarContentProps> = ({
 
   const trialExperiment = trialExperiments[0];
 
-  const parentExperiment = useMemo(
-    () => resolveParentExperiment(trialExperiment, allExperiments),
-    [trialExperiment, allExperiments],
-  );
-
   return (
     <PageBodyScrollContainer className="mx-0 h-full bg-soft-background">
       <Tabs value={tab} onValueChange={onTabChange} className="min-w-min">
         <PageBodyStickyContainer
           direction="horizontal"
           limitWidth
-          className="mb-6 pt-4"
+          className="mb-3 pt-4"
         >
           <TabsList variant="segmented-primary">
             <TabsTrigger variant="segmented-primary" size="sm" value="results">
@@ -86,7 +85,7 @@ const TrialSidebarContent: React.FC<TrialSidebarContentProps> = ({
           <PageBodyStickyContainer
             direction="horizontal"
             limitWidth
-            className="mb-6"
+            className="mb-3"
           >
             <TrialKPICards
               className="grid-cols-4"
@@ -107,10 +106,12 @@ const TrialSidebarContent: React.FC<TrialSidebarContentProps> = ({
 
           {canViewDatasets && (
             <>
-              <PageBodyStickyContainer direction="horizontal" limitWidth>
-                <h2 className="comet-title-s mb-4">
-                  {isTestSuite ? "Test items" : "Evaluation results"}
-                </h2>
+              <PageBodyStickyContainer
+                direction="horizontal"
+                limitWidth
+                className="mb-3"
+              >
+                <Separator />
               </PageBodyStickyContainer>
               <TrialItemsTab
                 objectiveName={optimization?.objective_name}
@@ -129,20 +130,14 @@ const TrialSidebarContent: React.FC<TrialSidebarContentProps> = ({
             limitWidth
             className="mb-6"
           >
-            <TrialConfigurationSection
+            <TrialPromptSection
               // Remount on trial/view change so the diff button's "open in
               // diff view" intent applies even while the sidebar stays open.
               key={`${trialExperiment?.id}-${promptView}`}
-              title="Prompt"
-              experiments={trialExperiments}
-              referenceExperiment={baselineExperiment}
-              parentExperiment={parentExperiment}
-              studioConfig={optimization?.studio_config}
-              defaultViewMode={
-                promptView === "diff" && baselineExperiment
-                  ? "diff-baseline"
-                  : "config"
-              }
+              candidate={candidate}
+              candidates={candidates}
+              experiments={allExperiments}
+              defaultDiff={promptView === "diff"}
             />
           </PageBodyStickyContainer>
         </TabsContent>

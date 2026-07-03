@@ -337,7 +337,8 @@ const OptimizationPage: React.FC = () => {
           experimentIds={trialSidebar.experimentIds}
           trialExperiments={trialExperiments}
           allExperiments={experiments}
-          baselineExperiment={baselineExperiment}
+          candidates={candidates}
+          candidate={activeTrialCandidate}
           isTestSuite={isTestSuite}
           status={
             activeTrialCandidate

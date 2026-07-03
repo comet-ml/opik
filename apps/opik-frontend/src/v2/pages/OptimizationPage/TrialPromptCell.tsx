@@ -10,7 +10,6 @@ import { Experiment } from "@/types/datasets";
 import { ROW_HEIGHT } from "@/types/shared";
 import { Button } from "@/ui/button";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/ui/hover-card";
-import { Separator } from "@/ui/separator";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import PromptDiff from "@/shared/CodeDiff/PromptDiff";
 import { extractMessages } from "@/lib/optimization-config";
@@ -101,7 +100,7 @@ export const TrialPromptCell = (
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className="gap-2"
+      className="relative"
     >
       {isLarge ? (
         <div className="comet-body-s h-full min-w-0 flex-1 overflow-y-auto whitespace-pre-line break-words">
@@ -119,20 +118,19 @@ export const TrialPromptCell = (
           openDelay={300}
           closeDelay={150}
         >
-          {/* A thin separator + the diff button reveal together only while
-              hovering the row (rows carry the `group/row` class) and stay
-              visible while the popover is open. `hidden` (not opacity) so the
-              button reserves no width at rest — the prompt text uses the full
-              column until hovered. The button opens the diff on hover or
-              click and carries the tooltip. */}
+          {/* The diff button floats over the right edge of the cell (absolute,
+              out of flow) so the prompt text always uses the full column width.
+              It reveals on row hover (rows carry the `group/row` class) and
+              stays while the popover is open. We toggle `opacity`, never
+              `hidden`: a `display:none` trigger loses its bounding box, so Radix
+              would re-anchor the popover to the top-left corner on hover-out. */}
           <div
             className={cn(
-              "hidden shrink-0 items-center gap-1 group-hover/row:flex",
-              isLarge ? "self-start" : "self-center",
-              diffOpen && "flex",
+              "absolute right-2 flex items-center opacity-0 transition-opacity group-hover/row:opacity-100",
+              isLarge ? "top-2" : "inset-y-0",
+              diffOpen && "opacity-100",
             )}
           >
-            <Separator orientation="vertical" className="h-3" />
             <TooltipWrapper content="View diff vs baseline">
               <HoverCardTrigger asChild>
                 <Button
