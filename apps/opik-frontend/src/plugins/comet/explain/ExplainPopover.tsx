@@ -114,7 +114,10 @@ const ExplainPopover = ({ target, onContinue }: Props) => {
             variant="tableLink"
             className={`mt-2 ${linkClass}`}
             onClick={() => {
-              trackEvent(OpikEvent.EXPLAIN_RETRIED, { kind: target.kind });
+              trackEvent(OpikEvent.EXPLAIN_RETRIED, {
+                kind: target.kind,
+                code: entry?.code ?? "unknown",
+              });
               retry(target);
             }}
           >

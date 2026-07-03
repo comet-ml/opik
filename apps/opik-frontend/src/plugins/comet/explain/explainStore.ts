@@ -264,7 +264,10 @@ const useExplainStore = create<ExplainState>((set, get) => {
   ) => {
     const entry = cellOf(get(), explainId);
     if (!entry) return;
-    trackEvent(OpikEvent.EXPLAIN_ERRORED, { kind: entry.kind });
+    trackEvent(OpikEvent.EXPLAIN_ERRORED, {
+      kind: entry.kind,
+      code: code ?? "unknown",
+    });
     mutate((c) =>
       patchStream(
         c,
