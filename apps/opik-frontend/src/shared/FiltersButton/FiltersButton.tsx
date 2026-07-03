@@ -22,6 +22,7 @@ type FiltersButtonProps<TColumnData> = {
   onChange: (filters: Filters) => void;
   layout?: "standard" | "icon";
   variant?: ButtonProps["variant"];
+  size?: ButtonProps["size"];
   align?: "start" | "end";
   disabled?: boolean;
   deferOnChange?: boolean;
@@ -35,6 +36,7 @@ const FiltersButton = <TColumnData,>({
   onChange,
   layout = "standard",
   variant = "outline",
+  size = "sm",
   align = "start",
   disabled,
   deferOnChange = false,
@@ -88,7 +90,7 @@ const FiltersButton = <TColumnData,>({
         <PopoverTrigger asChild>
           <Button
             variant={variant}
-            size="sm"
+            size={size}
             className={cn(
               isIconLayout && !validFilters.length && "size-8 px-0",
               isIconLayout && validFilters.length && "px-3",

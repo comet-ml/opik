@@ -2,12 +2,13 @@ import React, { useMemo, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
 import get from "lodash/get";
 import isObject from "lodash/isObject";
-import { GitCompareArrows } from "lucide-react";
+import { GitCompare } from "lucide-react";
 
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import { AggregatedCandidate } from "@/types/optimizations";
 import { Experiment } from "@/types/datasets";
 import { ROW_HEIGHT } from "@/types/shared";
+import { Button } from "@/ui/button";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/ui/hover-card";
 import { Separator } from "@/ui/separator";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
@@ -134,17 +135,18 @@ export const TrialPromptCell = (
             <Separator orientation="vertical" className="h-3" />
             <TooltipWrapper content="View diff vs baseline">
               <HoverCardTrigger asChild>
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  size="icon-2xs"
                   aria-label="View diff vs baseline"
                   onClick={(e) => {
                     e.stopPropagation();
                     setDiffOpen(true);
                   }}
-                  className="text-muted-slate transition-colors hover:text-foreground"
                 >
-                  <GitCompareArrows className="size-4" />
-                </button>
+                  <GitCompare />
+                </Button>
               </HoverCardTrigger>
             </TooltipWrapper>
           </div>
