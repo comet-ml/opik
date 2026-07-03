@@ -15,6 +15,9 @@ import {
  */
 export const TRIAL_CARD_SHELL_CLASS = "w-[220px] p-1.5 shadow-md";
 
+/** Card width in px — keep in sync with the `w-[220px]` in the shell class. */
+export const TRIAL_CARD_WIDTH = 220;
+
 type TrialCardProps = {
   candidate: AggregatedCandidate;
   status: CandidateDataPoint["status"];

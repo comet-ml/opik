@@ -5,8 +5,14 @@ import { cn } from "@/lib/utils";
 import { AggregatedCandidate } from "@/types/optimizations";
 import { CandidateDataPoint } from "./optimizationChartUtils";
 import { TOOLTIP_Y_OFFSET } from "./chartConstants";
-import TrialCard, { TRIAL_CARD_SHELL_CLASS } from "./TrialCard";
+import TrialCard, {
+  TRIAL_CARD_SHELL_CLASS,
+  TRIAL_CARD_WIDTH,
+} from "./TrialCard";
 import type { DotPosition } from "./ScatterDot";
+
+/** Minimum gap between the pinned card and the chart container's edges. */
+const CARD_EDGE_GAP = 4;
 
 type UseBestTrialCardParams = {
   dotPositionsRef: React.MutableRefObject<Map<string, DotPosition>>;
@@ -50,6 +56,18 @@ const useBestTrialCard = ({
 
     const bestPoint = chartData.find((d) => d.candidateId === bestCandidateId);
 
+    // Center the card under the dot, but clamp it inside the chart container —
+    // a dot near the chart's edge (e.g. a baseline-only run) must not push the
+    // card over the surrounding layout (side menu, adjacent panels).
+    const containerWidth = containerRef.current.clientWidth;
+    const left = Math.max(
+      CARD_EDGE_GAP,
+      Math.min(
+        pos.cx - TRIAL_CARD_WIDTH / 2,
+        containerWidth - TRIAL_CARD_WIDTH - CARD_EDGE_GAP,
+      ),
+    );
+
     return createPortal(
       <div
         className={cn(
@@ -57,9 +75,8 @@ const useBestTrialCard = ({
           TRIAL_CARD_SHELL_CLASS,
         )}
         style={{
-          left: pos.cx,
+          left,
           top: pos.cy + TOOLTIP_Y_OFFSET,
-          transform: "translateX(-50%)",
         }}
       >
         <TrialCard
