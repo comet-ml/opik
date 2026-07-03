@@ -261,9 +261,10 @@ class OpikTracer:
             context_storage.add_span_data(result.span_data)
             # Also register the span under a contextvar-independent, per-model-call
             # key so after_model_callback can recover it if ContextCacheConfig
-            # detaches the context stack (comet-ml/opik#5524). Guard the ``actions``
-            # access for callback contexts that don't expose it.
-            actions = getattr(callback_context, "actions", None)
+            # detaches the context stack (comet-ml/opik#5524). The key resolves
+            # the shared EventActions across the whole supported ADK range (public
+            # ``.actions`` on >= 1.29, private ``_event_actions`` before it).
+            actions = _resolve_event_actions(callback_context)
             if actions is not None:
                 self._pending_llm_spans.register(actions, result.span_data)
 
@@ -296,7 +297,8 @@ class OpikTracer:
             )
             # Mark it as force-closed so an incomplete span (no output/usage) is
             # distinguishable from a normally finalized one when inspecting traces.
-            span_data.metadata["opik_finalized_on_registry_eviction"] = True
+            # Leading-underscore internal-metadata convention (cf. _OPIK_SPAN_STATUS).
+            span_data.metadata["_opik_finalized_on_registry_eviction"] = True
             span_data.init_end_time()
             # Drop the matching TTFT entry so it can't leak either.
             self._ttft_tracking.pop(span_data.id, None)
@@ -319,7 +321,7 @@ class OpikTracer:
             is_partial = False
 
         span_id: Optional[str] = None
-        actions = getattr(callback_context, "actions", None)
+        actions = _resolve_event_actions(callback_context)
         exception_occurred = False
         try:
             model = None
@@ -572,6 +574,26 @@ class OpikTracer:
     def __setstate__(self, state: Dict[str, Any]) -> None:
         self.__dict__.update(state)
         self._init_internal_attributes()
+
+
+def _resolve_event_actions(
+    callback_context: callback_context.CallbackContext,
+) -> Optional[Any]:
+    """Return the per-model-call ``EventActions`` object ADK passes to both
+    before/after_model_callback -- the contextvar-free key the pending-span
+    registry uses for comet-ml/opik#5524 recovery.
+
+    ADK >= 1.29 exposes it as the public ``.actions`` property; earlier supported
+    versions -- where ContextCacheConfig + SSE can still strand the span -- only
+    store it privately as ``_event_actions``. Prefer the public property and fall
+    back to the private attribute so the key is populated across the whole range;
+    both resolve to the same object, so before/after_model_callback agree on the
+    key. Returns ``None`` for a callback context exposing neither.
+    """
+    actions = getattr(callback_context, "actions", None)
+    if actions is None:
+        actions = getattr(callback_context, "_event_actions", None)
+    return actions
 
 
 def _try_add_agent_graph_to_metadata(

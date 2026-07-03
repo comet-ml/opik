@@ -40,6 +40,12 @@ def _callback_context(invocation_id: str) -> types.SimpleNamespace:
     return types.SimpleNamespace(invocation_id=invocation_id, actions=object())
 
 
+def _legacy_callback_context(invocation_id: str) -> types.SimpleNamespace:
+    # Pre-1.29 ADK has no public ``.actions`` property; the per-call EventActions
+    # is reachable only as the private ``_event_actions`` attribute.
+    return types.SimpleNamespace(invocation_id=invocation_id, _event_actions=object())
+
+
 def _final_text_response(text: str) -> models.LlmResponse:
     return models.LlmResponse(
         content=genai_types.Content(role="model", parts=[genai_types.Part(text=text)]),
@@ -178,6 +184,29 @@ def test_after_model__detached_context__finalizes_recovered_llm_span():
 
 
 @helpers.pytest_skip_for_adk_older_than_1_3_0
+def test_after_model__legacy_event_actions__recovers_via_private_attr():
+    # Pre-1.29 ADK exposes the per-call EventActions only as ``_event_actions``
+    # (no public ``.actions``), yet ContextCacheConfig + SSE can still strand the
+    # span there. The tracer must key the pending-span registry off the private
+    # attribute so recovery works across the whole supported ADK range.
+    context_storage.set_trace_data(TraceData(name="agent"))
+    tracer = OpikTracer(project_name="adk-test")
+    ctx = _legacy_callback_context("inv-1")
+
+    span = _start_model_call(tracer, ctx)
+    # Registered under the private-attr key (not dropped for lack of .actions).
+    assert tracer._pending_llm_spans.get(ctx._event_actions) is span
+
+    context_storage.pop_span_data()  # simulate the ContextCacheConfig detach
+    assert context_storage.top_span_data() is None
+
+    tracer.after_model_callback(ctx, _final_text_response("hello"))
+
+    assert span.output is not None
+    assert span.end_time is not None
+
+
+@helpers.pytest_skip_for_adk_older_than_1_3_0
 def test_after_model__normal_path__finalizes_and_pops_stack():
     context_storage.set_trace_data(TraceData(name="agent"))
     tracer = OpikTracer(project_name="adk-test")
@@ -278,7 +307,7 @@ def test_finalize_evicted_llm_span__started_span__closed_idempotently():
         span.metadata[llm_span_helpers.SPAN_STATUS]
         == llm_span_helpers.LLMSpanStatus.READY_FOR_FINALIZATION.value
     )
-    assert span.metadata["opik_finalized_on_registry_eviction"] is True
+    assert span.metadata["_opik_finalized_on_registry_eviction"] is True
     assert span.id not in tracer._ttft_tracking  # TTFT entry dropped, no leak
 
     # Idempotent: an already-finalized span (its after_model_callback won the
