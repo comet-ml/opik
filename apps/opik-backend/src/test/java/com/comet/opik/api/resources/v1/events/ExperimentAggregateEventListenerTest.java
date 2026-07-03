@@ -41,6 +41,7 @@ import reactor.core.publisher.Mono;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -52,6 +53,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -587,6 +589,130 @@ class ExperimentAggregateEventListenerTest {
                         .untilAsserted(
                                 () -> verify(publisher, never()).publish(any(), anyString(), anyString()));
             }
+        }
+    }
+
+    @Nested
+    class ProjectSplittingAndThreading {
+
+        @Test
+        void splitsTraceIdsPerProjectOnTracesCreated() {
+            when(config.isEnabled()).thenReturn(true);
+            when(experimentItemService.getExperimentRefsByTraceIds(any(), any(), any())).thenReturn(Flux.empty());
+
+            var projectA = UUID.randomUUID();
+            var projectB = UUID.randomUUID();
+            var t1 = traceIn(projectA);
+            var t2 = traceIn(projectA);
+            var t3 = traceIn(projectB);
+
+            listener.onTracesCreated(new TracesCreated(List.of(t1, t2, t3), WORKSPACE_ID, USER_NAME));
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS).untilAsserted(() -> {
+                verify(experimentItemService)
+                        .getExperimentRefsByTraceIds(eq(Set.of(t1.id(), t2.id())), any(), eq(projectA));
+                verify(experimentItemService)
+                        .getExperimentRefsByTraceIds(eq(Set.of(t3.id())), any(), eq(projectB));
+                verify(experimentItemService, times(2)).getExperimentRefsByTraceIds(any(), any(), any());
+            });
+        }
+
+        @Test
+        void splitsTraceIdsPerProjectOnSpansCreated() {
+            when(config.isEnabled()).thenReturn(true);
+            when(experimentItemService.getExperimentRefsByTraceIds(any(), any(), any())).thenReturn(Flux.empty());
+
+            var projectA = UUID.randomUUID();
+            var projectB = UUID.randomUUID();
+            var traceA = UUID.randomUUID();
+            var traceB = UUID.randomUUID();
+
+            listener.onSpansCreated(new SpansCreated(
+                    List.of(spanIn(projectA, traceA), spanIn(projectB, traceB)), WORKSPACE_ID, USER_NAME));
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS).untilAsserted(() -> {
+                verify(experimentItemService).getExperimentRefsByTraceIds(eq(Set.of(traceA)), any(), eq(projectA));
+                verify(experimentItemService).getExperimentRefsByTraceIds(eq(Set.of(traceB)), any(), eq(projectB));
+            });
+        }
+
+        @Test
+        void splitsTraceIdsPerProjectOnTracesUpdatedUsingMapping() {
+            when(config.isEnabled()).thenReturn(true);
+            when(experimentItemService.getExperimentRefsByTraceIds(any(), any(), any())).thenReturn(Flux.empty());
+
+            var projectA = UUID.randomUUID();
+            var projectB = UUID.randomUUID();
+            var traceA = UUID.randomUUID();
+            var traceB = UUID.randomUUID();
+
+            listener.onTracesUpdated(new TracesUpdated(Set.of(projectA, projectB), Set.of(traceA, traceB),
+                    WORKSPACE_ID, USER_NAME, TraceUpdate.builder().build(), null,
+                    Map.of(traceA, projectA, traceB, projectB)));
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS).untilAsserted(() -> {
+                verify(experimentItemService).getExperimentRefsByTraceIds(eq(Set.of(traceA)), any(), eq(projectA));
+                verify(experimentItemService).getExperimentRefsByTraceIds(eq(Set.of(traceB)), any(), eq(projectB));
+            });
+        }
+
+        @Test
+        void passesEventProjectIdOnTracesDeleted() {
+            when(config.isEnabled()).thenReturn(true);
+            when(experimentItemService.getExperimentRefsByTraceIds(any(), any(), any())).thenReturn(Flux.empty());
+
+            var projectId = UUID.randomUUID();
+            var traceId = UUID.randomUUID();
+
+            listener.onTracesDeleted(new TracesDeleted(Set.of(traceId), projectId, WORKSPACE_ID, USER_NAME));
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS).untilAsserted(() -> verify(experimentItemService)
+                    .getExperimentRefsByTraceIds(eq(Set.of(traceId)), any(), eq(projectId)));
+        }
+
+        @Test
+        void passesEventProjectIdOnSpansDeleted() {
+            when(config.isEnabled()).thenReturn(true);
+            when(experimentItemService.getExperimentRefsByTraceIds(any(), any(), any())).thenReturn(Flux.empty());
+
+            var projectId = UUID.randomUUID();
+            var traceId = UUID.randomUUID();
+
+            listener.onSpansDeleted(
+                    new SpansDeleted(Set.of(UUID.randomUUID()), Set.of(traceId), WORKSPACE_ID, USER_NAME, projectId));
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS).untilAsserted(() -> verify(experimentItemService)
+                    .getExperimentRefsByTraceIds(eq(Set.of(traceId)), any(), eq(projectId)));
+        }
+
+        @Test
+        void passesEventProjectIdOnSpanFeedbackScore() {
+            when(config.isEnabled()).thenReturn(true);
+            when(experimentItemService.getExperimentRefsBySpanIds(any(), any(), any())).thenReturn(Flux.empty());
+
+            var projectId = UUID.randomUUID();
+            var spanId = UUID.randomUUID();
+
+            listener.onFeedbackScoresCreated(
+                    new FeedbackScoresCreated(Set.of(spanId), EntityType.SPAN, WORKSPACE_ID, USER_NAME, projectId));
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS).untilAsserted(() -> verify(experimentItemService)
+                    .getExperimentRefsBySpanIds(eq(Set.of(spanId)), any(), eq(projectId)));
+        }
+
+        private Trace traceIn(UUID projectId) {
+            return podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .id(UUID.randomUUID())
+                    .projectId(projectId)
+                    .build();
+        }
+
+        private Span spanIn(UUID projectId, UUID traceId) {
+            return podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .id(UUID.randomUUID())
+                    .traceId(traceId)
+                    .projectId(projectId)
+                    .build();
         }
     }
 }
