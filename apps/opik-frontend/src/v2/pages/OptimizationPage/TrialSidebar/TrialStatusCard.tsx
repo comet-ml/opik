@@ -18,9 +18,9 @@ type TrialStatusCardProps = {
 };
 
 /**
- * The "Details" card in the trial sidebar's stats row (Figma): the trial's
- * status as the value, its step as a header tag, and the created date as the
- * caption. The status dot uses the same colour the chart and trials table use.
+ * The "Details" card in the trial sidebar's stats row: the trial's status as
+ * the value, its step as a header tag, and the created date as the caption.
+ * The status dot uses the same colour the chart and trials table use.
  */
 const TrialStatusCard: React.FC<TrialStatusCardProps> = ({
   status,

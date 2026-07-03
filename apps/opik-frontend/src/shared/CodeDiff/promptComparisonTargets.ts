@@ -37,10 +37,10 @@ export const BASELINE_TARGET_LABEL = "Baseline";
 export const PARENT_TARGET_LABEL = "Parent";
 
 /**
- * A candidate usually has a single parent, shown simply as "Parent" (matching
- * the Figma design). Evolutionary crossover can produce multiple parents, so we
- * disambiguate those by trial number — otherwise the dropdown would list two
- * identical "Parent" options.
+ * A candidate usually has a single parent, shown simply as "Parent".
+ * Evolutionary crossover can produce multiple parents, so we disambiguate
+ * those by trial number — otherwise the dropdown would list two identical
+ * "Parent" options.
  */
 export const buildParentTargetLabel = (trialNumber: number): string =>
   `${PARENT_TARGET_LABEL} (Trial #${trialNumber})`;

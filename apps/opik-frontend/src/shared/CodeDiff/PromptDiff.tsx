@@ -10,9 +10,9 @@ import TextDiff from "./TextDiff";
 import { Tag } from "@/ui/tag";
 
 /**
- * "default" keeps the original muted cards with role tags. "panel" matches the
- * trials-table diff popover (Figma 689:36080): primary-foreground cards with a
- * plain muted role label, changes communicated by the inline highlight alone.
+ * "default" keeps the original muted cards with role tags. "panel" is the
+ * trials-table diff popover style: primary-foreground cards with a plain
+ * muted role label, changes communicated by the inline highlight alone.
  */
 type PromptDiffVariant = "default" | "panel";
 

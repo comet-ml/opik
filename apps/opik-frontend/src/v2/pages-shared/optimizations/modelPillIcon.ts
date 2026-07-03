@@ -4,8 +4,8 @@ import { PROVIDER_TYPE } from "@/types/providers";
 
 /**
  * Brand-icon overrides for model pills. Most providers use the monochrome
- * provider mark from PROVIDERS, but some show their coloured brand logo per
- * Figma — e.g. Anthropic models render the Claude logo rather than the generic
+ * provider mark from PROVIDERS, but some show their coloured brand logo —
+ * e.g. Anthropic models render the Claude logo rather than the generic
  * Anthropic mark. Add a provider here to override its pill icon.
  */
 const MODEL_PILL_ICON_OVERRIDES: Partial<Record<PROVIDER_TYPE, IconType>> = {

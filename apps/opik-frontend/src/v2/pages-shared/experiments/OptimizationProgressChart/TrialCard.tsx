@@ -11,7 +11,7 @@ import {
  * radius, shadow) comes from the wrapper that hosts this content —
  * `Popover`/`PopoverContent` for the hover tooltip (ChartTooltip), a styled
  * portal div for the pinned best-trial card (useBestTrialCard) — so this only
- * pins the Figma width and inner padding.
+ * pins the width and inner padding.
  */
 export const TRIAL_CARD_SHELL_CLASS = "w-[220px] p-1.5 shadow-md";
 

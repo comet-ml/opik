@@ -18,7 +18,7 @@ interface OptimizationTrialsControlsProps {
   onColumnsOrderChange: (order: string[]) => void;
 }
 
-// Control order follows Figma 689:34824: Row size · Columns · | · Refresh.
+// Control order: Row size · Columns · | · Refresh.
 const OptimizationTrialsControls: React.FC<OptimizationTrialsControlsProps> = ({
   onRefresh,
   isFetching,

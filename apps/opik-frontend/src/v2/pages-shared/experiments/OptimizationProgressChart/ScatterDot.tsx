@@ -124,10 +124,10 @@ const useScatterDot = ({
                 strokeOpacity={SELECTION_RING_STROKE_OPACITY}
               />
             )}
-            {/* Halo drawn behind the fill so the border sits outside the dot
-                (per Figma): the best dot gets a fuchsia-300 ring, every other
-                dot a 1.5px white/background border so it reads crisply over the
-                trend line and grid. */}
+            {/* Halo drawn behind the fill so the border sits outside the dot:
+                the best dot gets a fuchsia-300 ring, every other dot a 1.5px
+                white/background border so it reads crisply over the trend line
+                and grid. */}
             <circle
               cx={cx}
               cy={cy}
@@ -149,7 +149,7 @@ const useScatterDot = ({
             {isBest &&
               (() => {
                 // Fuchsia-300 pill with dark text and a downward tail pointing
-                // at the dot (Figma node 686:51916).
+                // at the dot.
                 const tailTipY = cy - radius - BEST_LABEL_GAP;
                 const tailBaseY = tailTipY - BEST_LABEL_TAIL_HEIGHT;
                 const pillTop = tailBaseY - BEST_LABEL_HEIGHT;

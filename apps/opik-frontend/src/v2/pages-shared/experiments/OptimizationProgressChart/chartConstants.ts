@@ -2,7 +2,7 @@
  * Constants for the optimization progress chart layout and sizing.
  */
 
-// Dot radii (Figma: regular dot 6px diameter, best dot 8px diameter)
+// Dot radii (regular dot 6px diameter, best dot 8px diameter)
 export const DOT_RADIUS_DEFAULT = 3;
 export const DOT_RADIUS_BEST = 4;
 export const SELECTION_RING_EXTRA_RADIUS = 4;
@@ -35,8 +35,8 @@ export const DOT_BEST_RING_WIDTH = 2;
 // Overlap spacing for dots sharing the same (step, score)
 export const OVERLAP_SPACING = 16;
 
-// "Best trial" badge above the best dot (Figma node 686:51916): a fuchsia-300
-// pill with dark text and a downward tail pointing at the dot.
+// "Best trial" badge above the best dot: a fuchsia-300 pill with dark text and
+// a downward tail pointing at the dot.
 export const BEST_LABEL_WIDTH = 64;
 export const BEST_LABEL_HEIGHT = 20;
 export const BEST_LABEL_BORDER_RADIUS = 6;
@@ -46,13 +46,13 @@ export const BEST_LABEL_TAIL_HEIGHT = 6;
 // Gap between the tail tip and the top of the dot.
 export const BEST_LABEL_GAP = 4;
 
-// Edge styling — the progress trend line (Figma: solid fuchsia-500)
+// Edge styling — the progress trend line (solid fuchsia-500)
 export const EDGE_STROKE_WIDTH = 2;
 export const EDGE_STROKE_OPACITY = 1;
 export const EDGE_STROKE_COLOR = "var(--color-fuchsia)";
 
-// Dot border colour (Figma: 1.5px white/background border so dots read crisply
-// over the trend line and grid). Paired with DOT_STROKE_WIDTH.
+// Dot border colour (1.5px white/background border so dots read crisply over
+// the trend line and grid). Paired with DOT_STROKE_WIDTH.
 export const DOT_STROKE_COLOR = "hsl(var(--background))";
 
 // Ghost candidate edge styling

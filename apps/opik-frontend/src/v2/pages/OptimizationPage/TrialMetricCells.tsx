@@ -42,9 +42,9 @@ type TrialMetricCellProps = {
   suffix?: string;
 };
 
-// Figma (689:34824): the trend tag sits before the value, and the pair is
-// flush right (the column types right-align via CellWrapper). The compact
-// 20px "sm" tag fits the 32px rows — the default 24px one overflows.
+// The trend tag sits before the value, and the pair is flush right (the
+// column types right-align via CellWrapper). The compact 20px "sm" tag fits
+// the 32px rows — the default 24px one overflows.
 const TrialMetricCellContent: React.FunctionComponent<TrialMetricCellProps> = ({
   value,
   formatter,

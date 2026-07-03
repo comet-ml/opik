@@ -16,8 +16,8 @@ type TrialStatusPillProps = {
 };
 
 /**
- * Trial status pill (Figma 689:34917 / 689:35240): a soft pill with a
- * status-coloured dot and label. The best trial gets the two-tone treatment —
+ * Trial status pill: a soft pill with a status-coloured dot and label. The
+ * best trial gets the two-tone treatment —
  * the darkest-fuchsia dot on a translucent pale-fuchsia fill. Colours and
  * labels come from the shared trial-status tokens, so the trials table, the
  * progress chart and the trial details header always agree.

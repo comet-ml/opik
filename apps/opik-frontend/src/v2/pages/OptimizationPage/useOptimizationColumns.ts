@@ -99,8 +99,8 @@ export const useOptimizationColumns = ({
         label: getObjectiveLabel(isTestSuite, objectiveName),
         type: COLUMN_TYPE.numberDictionary,
         size: 130,
-        // numberDictionary defaults to start; the Figma table keys all metric
-        // columns to the right edge.
+        // numberDictionary defaults to start; all metric columns key to the
+        // right edge.
         horizontalAlignment: CELL_HORIZONTAL_ALIGNMENT.end,
         accessorFn: (row) => row.score,
         cell: TrialAccuracyCell,

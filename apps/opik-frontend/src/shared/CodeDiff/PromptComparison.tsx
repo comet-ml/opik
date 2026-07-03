@@ -43,8 +43,8 @@ type PromptComparisonProps = {
 
 /**
  * Line-level diff: unchanged lines keep the full foreground color, added lines
- * get a green band and removed lines a struck-through red band (matching the
- * Figma trial-details diff — no word-level inline highlighting, no tag pills).
+ * get a green band and removed lines a struck-through red band (no word-level
+ * inline highlighting, no tag pills).
  */
 const LineDiff: React.FC<{ base: string; current: string }> = ({
   base,

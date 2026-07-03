@@ -32,8 +32,8 @@ export const STATUS_VARIANT_MAP: Record<TrialStatus, TagProps["variant"]> = {
   running: "yellow",
 };
 
-// Figma uses a fuchsia scale for trial status on the progress chart: baseline
-// and passed share fuchsia-500, discarded is the lighter fuchsia-300, and the
+// A fuchsia scale encodes trial status on the progress chart: baseline and
+// passed share fuchsia-500, discarded is the lighter fuchsia-300, and the
 // best trial is the darkest fuchsia-900. In-progress states (evaluating /
 // running) stay orange / yellow so active work reads as distinct.
 export const TRIAL_STATUS_COLORS: Record<TrialStatus, string> = {
@@ -47,7 +47,7 @@ export const TRIAL_STATUS_COLORS: Record<TrialStatus, string> = {
 /** Best-trial dot colour — darkest in the fuchsia scale (theme-aware, see main.scss). */
 export const TRIAL_BEST_COLOR = "var(--trial-best)";
 
-/** Ring around the best-trial dot — Figma's two-tone best marker (theme-aware, see main.scss). */
+/** Ring around the best-trial dot — the two-tone best marker (theme-aware, see main.scss). */
 export const TRIAL_BEST_RING_COLOR = "var(--trial-best-ring)";
 
 /**
@@ -83,7 +83,7 @@ export const TRIAL_STATUS_LABELS: Record<TrialStatus, string> = {
 
 /**
  * Full status label for the trial tooltip header, including the step it
- * happened at (Figma: "Passed step 1", "Discarded in step 2"). The baseline has
+ * happened at (e.g. "Passed step 1", "Discarded in step 2"). The baseline has
  * no step suffix, and the best trial is labelled separately by the caller.
  */
 export const getTrialStatusLabel = (
@@ -316,7 +316,7 @@ const buildAncestorSet = (
  * During optimization: baseline → running → evaluating → passed/pruned
  * After completion: baseline, passed (has descendants or best), pruned (rest)
  * Applies to both test-suite and dataset runs so discarded trials render as the
- * faded "pruned" dots (matching the legend + Figma).
+ * faded "pruned" dots (matching the legend).
  */
 export const computeCandidateStatuses = (
   candidates: AggregatedCandidate[],
@@ -394,8 +394,8 @@ const TREND_LINE_STATUSES: ReadonlySet<TrialStatus> = new Set([
 
 /**
  * Edges of the trend line: ONE continuous path connecting the best-scoring
- * baseline/passed trial of each step — baseline → step 1 winner → … (per
- * Figma). Everything else (discarded, still-evaluating, non-winning passed
+ * baseline/passed trial of each step — baseline → step 1 winner → … .
+ * Everything else (discarded, still-evaluating, non-winning passed
  * trials) renders as loose dots off the line, so the line never forks even
  * when a step has several passed trials. Steps without a scored winner are
  * skipped — the line bridges straight to the next step that has one.

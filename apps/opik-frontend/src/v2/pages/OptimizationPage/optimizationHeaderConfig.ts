@@ -10,8 +10,8 @@ export { getMetricLabel };
 
 /**
  * Per-status dot colours for the header status pill. The pill chrome stays
- * neutral (Figma), so the dot alone carries the status colour. Keyed to the
- * same palette as STATUS_TO_VARIANT_MAP.
+ * neutral, so the dot alone carries the status colour. Keyed to the same
+ * palette as STATUS_TO_VARIANT_MAP.
  */
 export const STATUS_DOT_COLOR: Record<OPTIMIZATION_STATUS, string> = {
   [OPTIMIZATION_STATUS.RUNNING]: "var(--color-green)",

@@ -4,8 +4,7 @@
  * Optimization prompts are OpenAI-style message arrays. For the diff view we
  * group message content by role (system / user / assistant / …) and pair the
  * comparison target's content against the current prompt's, role by role —
- * matching the Figma trial-details diff (one card per role, content diffed
- * line by line).
+ * one card per role, content diffed line by line.
  */
 
 import isArray from "lodash/isArray";

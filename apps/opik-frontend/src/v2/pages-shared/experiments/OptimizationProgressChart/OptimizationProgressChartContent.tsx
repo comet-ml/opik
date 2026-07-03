@@ -154,7 +154,7 @@ const OptimizationProgressChartContent: React.FC<
     },
   );
   // Scores / pass rates are always 0–1, so pin the axis to a fixed 0–1 domain
-  // with quarter ticks (matches the Figma spec) rather than a data-driven range.
+  // with quarter ticks rather than a data-driven range.
   const yTicks = [0, 0.25, 0.5, 0.75, 1];
 
   const candidateMap = useMemo(() => {
@@ -268,8 +268,8 @@ const OptimizationProgressChartContent: React.FC<
           />
 
           {/* Edges render BEFORE the Scatter so the trend line sits underneath
-              the dots (per Figma). Positions come from the chart scales, so the
-              line does not depend on the Scatter having drawn first. */}
+              the dots. Positions come from the chart scales, so the line does
+              not depend on the Scatter having drawn first. */}
           <Customized component={renderEdges} />
 
           <Scatter

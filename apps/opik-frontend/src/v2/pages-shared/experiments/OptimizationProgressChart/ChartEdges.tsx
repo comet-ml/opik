@@ -37,7 +37,7 @@ const useChartEdges = ({
   useCallback(
     (props: CustomizedAxisProps) => {
       // Positions come from the chart scales (not the shared dot-position ref)
-      // so edges can render before the Scatter — underneath the dots, per Figma.
+      // so edges can render before the Scatter — underneath the dots.
       const xScale = firstScale(props.xAxisMap);
       const yScale = firstScale(props.yAxisMap);
       if (!xScale || !yScale) return null;

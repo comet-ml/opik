@@ -28,7 +28,7 @@ type UseBestTrialCardParams = {
  * Pinned best-trial card. Rendered through a Recharts <Customized> so it
  * reads the best dot's live position (captured by the Scatter shape into the
  * ref) on every layout — including resize — then portals an HTML card that
- * hangs below the dot, matching Figma. Kept while the best dot itself is
+ * hangs below the dot. Kept while the best dot itself is
  * hovered (it *is* the best trial's popover); hidden only while a different
  * dot is hovered (the hover tooltip takes over).
  */

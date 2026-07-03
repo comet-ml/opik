@@ -17,7 +17,7 @@ const PAGE_SIZE_KEY = "optimization-experiments-page-size";
 const DEFAULT_PAGE_SIZE = 50;
 
 // "Trial items" (trace_count) stays available in the columns picker but is out
-// of the default view, matching the Figma column set (689:34824).
+// of the default view.
 const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
   "step",
@@ -127,8 +127,8 @@ export const useOptimizationTableState = ({
 
   const total = filteredRows.length;
 
-  // Client-side pagination (Figma 689:34824): all trials are already in
-  // memory, so paging is a slice over the filtered + sorted list.
+  // Client-side pagination: all trials are already in memory, so paging is a
+  // slice over the filtered + sorted list.
   const rows = useMemo(() => {
     const safePage = Math.max(page ?? 1, 1);
     return filteredRows.slice((safePage - 1) * pageSize, safePage * pageSize);

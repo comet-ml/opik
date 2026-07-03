@@ -4,8 +4,7 @@ import { Tag } from "@/ui/tag";
 import { cn } from "@/lib/utils";
 
 /**
- * Shared shell for the run-config header pills
- * (Figma: Optimization Runs → single-run overview → "Row").
+ * Shared shell for the run-config header pills on the single-run overview.
  *
  * A white, bordered tag: 24px tall, 6px radius, 8px horizontal padding, with a
  * 12px muted-slate leading icon and 12px medium foreground text. Building every

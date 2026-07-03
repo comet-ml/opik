@@ -388,7 +388,7 @@ describe("getTrialStatusLabel", () => {
     expect(getTrialStatusLabel("baseline", 0)).toBe("Baseline");
   });
 
-  it("labels passed and pruned trials with their step (Figma wording)", () => {
+  it("labels passed and pruned trials with their step", () => {
     expect(getTrialStatusLabel("passed", 1)).toBe("Passed step 1");
     expect(getTrialStatusLabel("pruned", 2)).toBe("Discarded in step 2");
   });
