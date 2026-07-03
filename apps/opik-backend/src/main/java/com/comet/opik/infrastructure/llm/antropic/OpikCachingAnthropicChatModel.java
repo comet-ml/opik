@@ -38,7 +38,7 @@ class OpikCachingAnthropicChatModel implements ChatModel {
 
     @Override
     public ChatResponse chat(@NonNull ChatRequest chatRequest) {
-        if (!isAgenticMultiTurn(chatRequest)) {
+        if (!isToolCallingRequest(chatRequest)) {
             return delegate.chat(chatRequest);
         }
         try {
@@ -70,12 +70,12 @@ class OpikCachingAnthropicChatModel implements ChatModel {
         }
     }
 
-    // Caching only pays off once the conversation is multi-turn with tools (the agentic loop): a
-    // single-call request has no prior prefix to re-read, so caching it is a pure cache-write premium.
-    private static boolean isAgenticMultiTurn(ChatRequest chatRequest) {
-        return chatRequest.toolSpecifications() != null
-                && !chatRequest.toolSpecifications().isEmpty()
-                && chatRequest.messages().size() > 1;
+    // The agentic tool-calling loop: every round that carries tool specs goes through the cached path,
+    // including the first (single-message) call, so all rounds build the request identically and each
+    // round re-reads the prefix the previous one cached. Requests without tools — inline/span scoring
+    // and the tools-stripped wrap-up — have no re-read to gain and are delegated to the stock model.
+    private static boolean isToolCallingRequest(ChatRequest chatRequest) {
+        return chatRequest.toolSpecifications() != null && !chatRequest.toolSpecifications().isEmpty();
     }
 
     @Override
