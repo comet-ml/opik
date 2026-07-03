@@ -17,6 +17,7 @@ import java.sql.SQLException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -44,6 +45,12 @@ class SpanPageKeyedAggregatesPlanShapeTest {
     private static final int SPAN_COUNT = 500;
     private static final int FEEDBACK_SCORE_COUNT = 300_000;
     private static final int PAGE_SIZE = 10;
+
+    // page-keyed predicate sites per aggregate CTE: feedback_scores_deduped keys two scans
+    // (legacy + authored scores), comments_final one
+    private static final Map<String, Integer> PAGE_KEYED_SITES_PER_CTE = Map.of(
+            "comments_final", 1,
+            "feedback_scores_deduped", 2);
 
     // per-run identifiers: the containers are shared/reused across tests and runs, so the seeded data and
     // the query_log lookup must not collide with previous executions
@@ -122,10 +129,16 @@ class SpanPageKeyedAggregatesPlanShapeTest {
     void pageKeyedAggregatesReadPageSizedSlicesAndCacheThePageIdScalar() throws SQLException {
         var query = renderPageKeyedQuery();
         assertThat(query).doesNotContain("span_id_prefilter");
-        // all three aggregate CTE sites (comments, feedback_scores, authored_feedback_scores) must carry the
-        // page-keyed predicate; a bare contains() would pass even if the template dropped it from two of them
+        // every aggregate CTE must carry the page-keyed predicate at its expected sites; asserting per CTE
+        // block (not a global count) catches a drop in one CTE masked by a duplicate in another
         var pageKeyedPredicate = "IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))";
-        assertThat(StringUtils.countMatches(query, pageKeyedPredicate)).isEqualTo(3);
+        PAGE_KEYED_SITES_PER_CTE.forEach((cte, sites) -> assertThat(
+                StringUtils.countMatches(cteBlock(query, cte), pageKeyedPredicate))
+                .as("page-keyed predicate sites in CTE '%s'", cte)
+                .isEqualTo(sites));
+        assertThat(StringUtils.countMatches(query, pageKeyedPredicate))
+                .as("total page-keyed predicate sites")
+                .isEqualTo(3);
 
         int resultRows = 0;
         try (var statement = connection.createStatement()) {
@@ -170,6 +183,25 @@ class SpanPageKeyedAggregatesPlanShapeTest {
                     "FROM %s.%s".formatted(DATABASE_NAME, table));
         }
         return rendered;
+    }
+
+    /**
+     * Slices the rendered query down to one named CTE definition: from {@code <name> AS (} up to the next
+     * CTE definition (or the end of the query), so predicate assertions are scoped per CTE block.
+     */
+    private String cteBlock(String query, String cteName) {
+        var startMarker = cteName + " AS (";
+        var start = query.indexOf(startMarker);
+        assertThat(start).as("CTE '%s' present in the rendered query", cteName).isNotNegative();
+        var nextCte = java.util.regex.Pattern.compile("\\w+ AS \\(").matcher(query);
+        var end = query.length();
+        while (nextCte.find()) {
+            if (nextCte.start() > start + startMarker.length()) {
+                end = nextCte.start();
+                break;
+            }
+        }
+        return query.substring(start, end);
     }
 
     private void execute(String sql) throws SQLException {
