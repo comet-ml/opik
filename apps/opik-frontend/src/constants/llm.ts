@@ -21,7 +21,7 @@ export const PLAYGROUND_SELECTED_DATASET_VERSION_KEY =
   "playground-selected-dataset-version";
 
 export const PLAYGROUND_PROMPT_COLORS = [
-  { bg: "#b8e54a", text: "#1a1a1a" },
+  { bg: "#6bdf93", text: "#1a1a1a" },
   { bg: "#a6ddfe", text: "#1a1a1a" },
   { bg: "#6e3de8", text: "#ffffff" },
   { bg: "#be48ea", text: "#ffffff" },
