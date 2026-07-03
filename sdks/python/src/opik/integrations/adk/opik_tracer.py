@@ -231,6 +231,16 @@ class OpikTracer:
         **kwargs: Any,
     ) -> None:
         try:
+            # If a previously force-closed LLM span is still on top of this
+            # context's stack, drop it before creating the new span so the new
+            # span is not mis-parented under an already-finalized one. This
+            # happens when a span was force-closed in a *different* async context
+            # (e.g. dropped by the pending-span registry's size bound during a
+            # concurrent call) and so could not be popped there. The OTel patcher
+            # reclaims such spans on start_as_current_span, but this direct span
+            # creation bypasses it, so mirror that reclaim here.
+            self._discard_stale_finalized_top_span()
+
             input = adk_helpers.convert_adk_base_model_to_dict(llm_request)
 
             provider, model = litellm_wrappers.parse_provider_and_model(
@@ -297,6 +307,14 @@ class OpikTracer:
             )
             # Leading-underscore internal-metadata convention (cf. _OPIK_SPAN_STATUS).
             span_data.metadata["_opik_llm_span_force_closed_reason"] = reason
+            # Pop it off the current context stack if it is on top, so a closed
+            # span never lingers there to mis-parent later spans. (If it was
+            # created in a different async context -- an eviction from a
+            # concurrent call -- it isn't on this stack; before_model_callback's
+            # stale-top guard and the OTel patcher reclaim it there instead.)
+            stack_top = context_storage.top_span_data()
+            if stack_top is not None and stack_top.id == span_data.id:
+                context_storage.pop_span_data(ensure_id=span_data.id)
             span_data.init_end_time()
             # Drop the matching TTFT entry so it can't leak either.
             self._ttft_tracking.pop(span_data.id, None)
@@ -306,6 +324,25 @@ class OpikTracer:
             LOGGER.debug(
                 "Failed to force-close LLM span (reason=%s)", reason, exc_info=True
             )
+
+    def _discard_stale_finalized_top_span(self) -> None:
+        """Pop the context stack's top span if it is an LLM span we already
+        force-closed (``READY_FOR_FINALIZATION``) that was left behind -- e.g.
+        force-closed in a different async context, so it could not be popped
+        there. Leaving it on top would mis-parent the next directly-created span.
+        A ``STARTED`` span (a genuine in-flight parent) is never touched.
+        """
+        try:
+            stack_top = context_storage.top_span_data()
+            if (
+                stack_top is not None
+                and llm_span_helpers.is_externally_created_llm_span_ready_for_immediate_finalization(
+                    stack_top
+                )
+            ):
+                context_storage.pop_span_data(ensure_id=stack_top.id)
+        except Exception:
+            LOGGER.debug("Failed to discard stale finalized top span", exc_info=True)
 
     def _finalize_evicted_llm_span(self, span_data: span.SpanData) -> None:
         # Registry eviction: the bound dropped the oldest in-flight entry before
@@ -372,10 +409,9 @@ class OpikTracer:
                 # entry and -- under a detached ContextCacheConfig context -- the
                 # span isn't on the stack either, so a bare return would strand the
                 # recovered span in ``started``. Force-close it instead
-                # (comet-ml/opik#5524), popping it off the stack first if present.
+                # (comet-ml/opik#5524); _force_close_llm_span also pops it off the
+                # stack when it is on top.
                 if not is_partial and current_span is not None:
-                    if stack_top is not None and stack_top.id == current_span.id:
-                        context_storage.pop_span_data(ensure_id=current_span.id)
                     self._force_close_llm_span(
                         current_span, reason="empty_terminal_response"
                     )
