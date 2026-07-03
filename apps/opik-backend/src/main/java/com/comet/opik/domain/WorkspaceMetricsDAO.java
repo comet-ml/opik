@@ -6,6 +6,7 @@ import com.comet.opik.api.metrics.WorkspaceMetricResponse;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryRequest;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.utils.SentinelTranslation;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
@@ -345,10 +346,6 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
     }
 
     Double filterNan(Double value) {
-        if (value == null) {
-            return null;
-        }
-
-        return value.isNaN() ? null : value;
+        return SentinelTranslation.nanToNull(value);
     }
 }
