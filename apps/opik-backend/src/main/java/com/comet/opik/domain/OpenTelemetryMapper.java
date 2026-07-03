@@ -157,11 +157,9 @@ public class OpenTelemetryMapper {
 
             // Claude Code's `new_context` is the latest message fed to the model on llm_request
             // spans (the real LLM input); on interaction/tool spans it just repeats the prompt /
-            // tool result, so it's dropped there.
+            // tool result, so it's kept in metadata there rather than input.
             if (isClaudeCode && NEW_CONTEXT_ATTR.equals(key)) {
-                if (CLAUDE_CODE_LLM_SPAN.equals(spanName)) {
-                    extractToJsonColumn(input, key, value);
-                }
+                extractToJsonColumn(CLAUDE_CODE_LLM_SPAN.equals(spanName) ? input : metadata, key, value);
                 continue;
             }
 

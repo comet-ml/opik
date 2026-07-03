@@ -1701,14 +1701,14 @@ class OpenTelemetryMapperTest {
         }
 
         @Test
-        void newContextIsDroppedOnNonLlmSpans() {
+        void newContextGoesToMetadataOnNonLlmSpans() {
             var span = enrich(List.of(
                     str("user_prompt", "hello"),
                     str("new_context", "[USER PROMPT]\nhello")),
                     null, "claude_code.interaction");
 
             assertThat(span.input().has("new_context")).isFalse();
-            assertThat(span.metadata().has("new_context")).isFalse();
+            assertThat(span.metadata().get("new_context").asText()).contains("hello");
         }
     }
 }

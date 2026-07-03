@@ -24,7 +24,7 @@ import java.util.List;
  * </ul>
  * {@code new_context} is handled span-aware in {@code OpenTelemetryMapper}: it is the latest LLM
  * message on {@code claude_code.llm_request} spans (→ input) and a duplicate of the prompt / tool
- * result elsewhere (dropped).
+ * result elsewhere (→ metadata).
  * The tool result is emitted as a {@code tool.output} span event and mapped to the tool span
  * output directly in {@code OpenTelemetryMapper}.
  */
