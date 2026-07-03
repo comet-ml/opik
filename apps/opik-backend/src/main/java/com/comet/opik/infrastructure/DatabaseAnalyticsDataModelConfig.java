@@ -12,7 +12,14 @@ import lombok.Builder;
  * non-nullable column. The flag gates reads too (sentinel→{@code null}), so while it is {@code false} a legitimate
  * epoch end time round-trips unchanged rather than being read as {@code null}. Flip this in lockstep with the EXCHANGE
  * step of the cutover. A sibling {@code spanColumnsNonNullable} follows later.</p>
+ *
+ * <p>{@code traceDeletionEventsCaptureEnabled}: when {@code true}, trace deletes also record the deleted ids in the
+ * {@code deletion_events_local} bridge so they survive the table copy. Left {@code false} at deploy time and turned on
+ * once the trace backfill begins, so capture spans exactly the backfill-to-cutover window. A sibling
+ * {@code spanDeletionEventsCaptureEnabled} follows when spans migrate.</p>
  */
 @Builder(toBuilder = true)
-public record DatabaseAnalyticsDataModelConfig(boolean traceColumnsNonNullable) {
+public record DatabaseAnalyticsDataModelConfig(
+        boolean traceColumnsNonNullable,
+        boolean traceDeletionEventsCaptureEnabled) {
 }

@@ -89,6 +89,10 @@ databaseAnalyticsDataModel:
   #   while false a legitimate epoch end time round-trips unchanged instead of reading as null.
   #   Flip in lockstep with the cutover EXCHANGE.
   traceColumnsNonNullable: false
+  #  Default: false
+  #  Description: Turn true once the trace backfill starts so trace deletes also record the deleted ids in the
+  #   deletion_events_local bridge; without it those deletes are lost from the table copy.
+  traceDeletionEventsCaptureEnabled: false
 
 # Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
 #   window, protecting data quality.
