@@ -4,6 +4,7 @@ import { Button } from "@/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/ui/dialog";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { formatDate } from "@/lib/date";
+import { applyVerticalScrollRatio, getVerticalScrollRatio } from "@/lib/scroll";
 import { useChatScroll } from "@/v1/pages-shared/traces/TraceDetailsPanel/TraceAIViewer/useChatScroll";
 
 type OptimizationLogsFullscreenDialogProps = {
@@ -43,10 +44,10 @@ const OptimizationLogsFullscreenDialog: React.FC<
     if (open && logContent && !hasInitializedScrollRef.current) {
       requestAnimationFrame(() => {
         if (scrollContainerRef.current) {
-          const { scrollHeight, clientHeight } = scrollContainerRef.current;
-          const maxScroll = scrollHeight - clientHeight;
-          const targetScroll = maxScroll * initialScrollRatio;
-          scrollContainerRef.current.scrollTop = targetScroll;
+          applyVerticalScrollRatio(
+            scrollContainerRef.current,
+            initialScrollRatio,
+          );
           hasInitializedScrollRef.current = true;
         }
       });
@@ -60,11 +61,7 @@ const OptimizationLogsFullscreenDialog: React.FC<
   const handleOpenChange = useCallback(
     (isOpen: boolean) => {
       if (!isOpen && scrollContainerRef.current) {
-        const { scrollTop, scrollHeight, clientHeight } =
-          scrollContainerRef.current;
-        const maxScroll = scrollHeight - clientHeight;
-        const ratio = maxScroll > 0 ? scrollTop / maxScroll : 1;
-        onClose(ratio);
+        onClose(getVerticalScrollRatio(scrollContainerRef.current));
       }
       onOpenChange(isOpen);
     },

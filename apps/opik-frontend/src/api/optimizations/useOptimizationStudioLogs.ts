@@ -51,12 +51,30 @@ const getOptimizationStudioLogs = async ({
     const expiresAt = urlResponse.expires_at;
 
     // Fetch the gzipped log file as binary data
-    const { data: compressedData } = await axios.get<ArrayBuffer>(
-      presignedUrl,
-      {
+    let compressedData: ArrayBuffer;
+    try {
+      ({ data: compressedData } = await axios.get<ArrayBuffer>(presignedUrl, {
         responseType: "arraybuffer",
-      },
-    );
+      }));
+    } catch (presignedError) {
+      // A 404 means the log file genuinely doesn't exist — let the outer
+      // handler map it to "no logs".
+      if (
+        axios.isAxiosError(presignedError) &&
+        presignedError.response?.status === 404
+      ) {
+        throw presignedError;
+      }
+      // Anything else usually means the presigned host isn't reachable from
+      // the browser (e.g. in-cluster MinIO) or CORS blocked the request.
+      // Fall back to streaming the same file through the backend, which
+      // serves it for MinIO installations (403 on real S3 → surfaces as a
+      // real error, since there the presigned URL should have worked).
+      ({ data: compressedData } = await api.get<ArrayBuffer>(
+        `${OPTIMIZATIONS_STUDIO_REST_ENDPOINT}${optimizationId}/logs/download`,
+        { responseType: "arraybuffer" },
+      ));
+    }
 
     // Decompress the gzipped content
     const logContent = await decompressGzip(compressedData);

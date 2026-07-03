@@ -22,6 +22,7 @@ import {
 import { convertTerminalOutputToHtml } from "@/lib/terminalOutput";
 import { useChatScroll } from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceAIViewer/useChatScroll";
 import { formatDate } from "@/lib/date";
+import { applyVerticalScrollRatio, getVerticalScrollRatio } from "@/lib/scroll";
 import OptimizationLogsFullscreenDialog from "./OptimizationLogsFullscreenDialog";
 
 type OptimizationLogsProps = {
@@ -89,11 +90,7 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
 
   const openFullscreen = useCallback(() => {
     if (scrollContainerRef.current) {
-      const { scrollTop, scrollHeight, clientHeight } =
-        scrollContainerRef.current;
-      const maxScroll = scrollHeight - clientHeight;
-      const ratio = maxScroll > 0 ? scrollTop / maxScroll : 1;
-      setInitialScrollRatio(ratio);
+      setInitialScrollRatio(getVerticalScrollRatio(scrollContainerRef.current));
     }
     setIsFullscreen(true);
   }, [scrollContainerRef]);
@@ -102,9 +99,7 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
     (scrollRatio: number) => {
       requestAnimationFrame(() => {
         if (scrollContainerRef.current) {
-          const { scrollHeight, clientHeight } = scrollContainerRef.current;
-          const maxScroll = scrollHeight - clientHeight;
-          scrollContainerRef.current.scrollTop = maxScroll * scrollRatio;
+          applyVerticalScrollRatio(scrollContainerRef.current, scrollRatio);
         }
       });
     },
