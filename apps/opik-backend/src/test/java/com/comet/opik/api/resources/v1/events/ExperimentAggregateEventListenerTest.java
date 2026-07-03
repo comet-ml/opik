@@ -671,6 +671,27 @@ class ExperimentAggregateEventListenerTest {
         }
 
         @Test
+        void routesTraceIdsNotCoveredByMappingThroughFallbackOnTracesUpdated() {
+            when(config.isEnabled()).thenReturn(true);
+            when(experimentItemService.getExperimentRefsByTraceIds(any(), any(), any())).thenReturn(Flux.empty());
+
+            var projectA = UUID.randomUUID();
+            var mappedTraceId = UUID.randomUUID();
+            var unmappedTraceId = UUID.randomUUID();
+
+            // The event carries both trace ids, but the mapping only covers one of them.
+            listener.onTracesUpdated(new TracesUpdated(Set.of(projectA), Set.of(mappedTraceId, unmappedTraceId),
+                    WORKSPACE_ID, USER_NAME, TraceUpdate.builder().build(), null, Map.of(mappedTraceId, projectA)));
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS).untilAsserted(() -> {
+                // Mapped id is pruned by its project; the uncovered id still runs via the workspace-scoped fallback.
+                verify(experimentItemService).getExperimentRefsByTraceIds(eq(Set.of(mappedTraceId)), any(),
+                        eq(projectA));
+                verify(experimentItemService).getExperimentRefsByTraceIds(eq(Set.of(unmappedTraceId)), any(), isNull());
+            });
+        }
+
+        @Test
         void passesEventProjectIdOnTracesDeleted() {
             when(config.isEnabled()).thenReturn(true);
             when(experimentItemService.getExperimentRefsByTraceIds(any(), any(), any())).thenReturn(Flux.empty());

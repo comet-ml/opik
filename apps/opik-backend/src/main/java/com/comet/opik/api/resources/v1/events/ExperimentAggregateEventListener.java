@@ -135,16 +135,29 @@ public class ExperimentAggregateEventListener {
     @Subscribe
     public void onTracesUpdated(TracesUpdated event) {
         var errorMessage = "Error triggering aggregation for traces updated";
-        // Split the trace ids by project so each aggregation trigger targets a single project.
-        if (MapUtils.isNotEmpty(event.traceIdToProjectId())) {
-            Map<UUID, Set<UUID>> traceIdsByProject = event.traceIdToProjectId().entrySet().stream()
-                    .collect(Collectors.groupingBy(Map.Entry::getValue,
-                            Collectors.mapping(Map.Entry::getKey, Collectors.toSet())));
-            triggerByTraceIdsPerProject(traceIdsByProject, event.workspaceId(), event.userName(), errorMessage);
-        } else {
+        var traceIdToProjectId = event.traceIdToProjectId();
+
+        if (MapUtils.isEmpty(traceIdToProjectId)) {
             // No per-trace -> project mapping available: fall back to a single workspace-scoped trigger that
             // relies on the trace_id skip index, instead of re-scanning the full id set once per project.
             triggerByTraceIds(event.traceIds(), event.workspaceId(), event.userName(), null)
+                    .subscribe(null, e -> log.error(errorMessage, e));
+            return;
+        }
+
+        // Split the mapped trace ids by project so each aggregation trigger targets a single project.
+        Map<UUID, Set<UUID>> traceIdsByProject = traceIdToProjectId.entrySet().stream()
+                .collect(Collectors.groupingBy(Map.Entry::getValue,
+                        Collectors.mapping(Map.Entry::getKey, Collectors.toSet())));
+        triggerByTraceIdsPerProject(traceIdsByProject, event.workspaceId(), event.userName(), errorMessage);
+
+        // The mapping may not cover every trace id in the event (e.g. getProjectIdsByTraceIds omitted some);
+        // route the uncovered ones through the workspace-scoped fallback so their aggregation isn't skipped.
+        Set<UUID> uncoveredTraceIds = event.traceIds().stream()
+                .filter(traceId -> !traceIdToProjectId.containsKey(traceId))
+                .collect(Collectors.toSet());
+        if (!uncoveredTraceIds.isEmpty()) {
+            triggerByTraceIds(uncoveredTraceIds, event.workspaceId(), event.userName(), null)
                     .subscribe(null, e -> log.error(errorMessage, e));
         }
     }
