@@ -3669,6 +3669,20 @@ class TraceDAOImpl implements TraceDAO {
      * trace_annotation_queue_ids), or sorting by feedback scores, span statistics, or experiments
      * ({@code page_ids} joins those aggregates).
      */
+    /**
+     * Applies the aggregate-keying decision shared by {@code getTracesByProjectId} and
+     * {@code findTraceStream}: page-keyed aggregates when they are enrichment-only, otherwise the narrowing
+     * trace id prefilter when filters allow it.
+     */
+    private void addAggregateKeyingFlags(ST template, TraceSearchCriteria criteria, boolean sortHasFeedbackScores,
+            boolean sortHasSpanStatistics, boolean sortHasExperiment) {
+        if (shouldPageKeyAggregates(template, sortHasFeedbackScores, sortHasSpanStatistics, sortHasExperiment)) {
+            template.add("page_keyed_aggregates", true);
+        } else if (shouldUseTraceIdPrefilter(criteria, template) && !sortHasFeedbackScores) {
+            template.add("trace_id_prefilter", true);
+        }
+    }
+
     private boolean shouldPageKeyAggregates(ST template, boolean sortHasFeedbackScores,
             boolean sortHasSpanStatistics, boolean sortHasExperiment) {
         boolean aggregatesDrivePageSelection = hasFeedbackScoreFilters(template)
@@ -3713,11 +3727,8 @@ class TraceDAOImpl implements TraceDAO {
                             .anyMatch(sortingField -> SortableFields.EXPERIMENT_ID.equals(sortingField.field())))
                     .orElse(false);
 
-            if (shouldPageKeyAggregates(template, sortHasFeedbackScores, sortHasSpanStatistics, sortHasExperiment)) {
-                template.add("page_keyed_aggregates", true);
-            } else if (shouldUseTraceIdPrefilter(traceSearchCriteria, template) && !sortHasFeedbackScores) {
-                template.add("trace_id_prefilter", true);
-            }
+            addAggregateKeyingFlags(template, traceSearchCriteria, sortHasFeedbackScores, sortHasSpanStatistics,
+                    sortHasExperiment);
 
             var finalTemplate = template;
             Optional.ofNullable(orderBySql)
@@ -4459,11 +4470,7 @@ class TraceDAOImpl implements TraceDAO {
             bindTemplateExcludeFieldVariables(criteria, template);
 
             // The stream has no custom sorting, so only filters can make aggregates drive page selection.
-            if (shouldPageKeyAggregates(template, false, false, false)) {
-                template.add("page_keyed_aggregates", true);
-            } else if (shouldUseTraceIdPrefilter(criteria, template)) {
-                template.add("trace_id_prefilter", true);
-            }
+            addAggregateKeyingFlags(template, criteria, false, false, false);
 
             addSortNeedsWideFlag(template, criteria.sortingFields());
 
