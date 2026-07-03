@@ -305,6 +305,18 @@ public class OptimizationResourceClient {
                 .get();
     }
 
+    public Response callDownloadStudioLogs(UUID id, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("studio")
+                .path(id.toString())
+                .path("logs")
+                .path("download")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
     public Response callFindByProject(UUID projectId, String apiKey, String workspaceName) {
         return client.target("%s/v1/private/projects/%s/optimizations".formatted(baseURI, projectId))
                 .request()

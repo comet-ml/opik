@@ -9,6 +9,7 @@ import com.comet.opik.api.OptimizationStudioLog;
 import com.comet.opik.api.OptimizationUpdate;
 import com.comet.opik.api.events.OptimizationCreated;
 import com.comet.opik.api.events.OptimizationsDeleted;
+import com.comet.opik.domain.attachment.FileService;
 import com.comet.opik.domain.attachment.PreSignerService;
 import com.comet.opik.domain.optimization.OptimizationLogSyncService;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -35,6 +36,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.io.InputStream;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.AbstractMap;
@@ -69,6 +71,8 @@ public interface OptimizationService {
 
     // Studio methods
     Mono<OptimizationStudioLog> generateStudioLogsResponse(UUID optimizationId);
+
+    InputStream downloadStudioLogs(UUID optimizationId, String workspaceId);
 }
 
 @Singleton
@@ -83,6 +87,7 @@ class OptimizationServiceImpl implements OptimizationService {
     private final @NonNull NameGenerator nameGenerator;
     private final @NonNull EventBus eventBus;
     private final @NonNull PreSignerService preSignerService;
+    private final @NonNull FileService fileService;
     private final @NonNull QueueProducer queueProducer;
     private final @NonNull WorkspaceNameService workspaceNameService;
     private final @NonNull OpikConfiguration config;
@@ -544,5 +549,23 @@ class OptimizationServiceImpl implements OptimizationService {
                     .expiresAt(expiresAt)
                     .build());
         });
+    }
+
+    @Override
+    public InputStream downloadStudioLogs(@NonNull UUID optimizationId, @NonNull String workspaceId) {
+        // Mirrors AttachmentService.downloadAttachment: MinIO deployments often
+        // aren't reachable from the browser (in-cluster host in the presigned
+        // URL), so the backend streams the file instead. Real S3 keeps using the
+        // presigned URL to avoid proxying download traffic through the backend.
+        if (!config.getS3Config().isMinIO()) {
+            log.warn("downloadStudioLogs is forbidden for S3");
+            throw new ClientErrorException(
+                    "Direct log download is forbidden for S3, please use presigned url",
+                    Response.Status.FORBIDDEN);
+        }
+
+        String s3Key = OptimizationLogSyncService.formatS3Key(workspaceId, optimizationId);
+        log.debug("Downloading Studio logs for optimization: '{}' in workspace: '{}'", optimizationId, workspaceId);
+        return fileService.download(s3Key);
     }
 }

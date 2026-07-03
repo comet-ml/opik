@@ -46,6 +46,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.io.InputStream;
 import java.util.List;
 import java.util.UUID;
 
@@ -238,6 +239,25 @@ public class OptimizationsResource {
                 .block();
 
         log.info("Generated logs URL for Studio optimization id: '{}'", id);
+        return Response.ok(logs).build();
+    }
+
+    @GET
+    @Path("/studio/{id}/logs/download")
+    @Produces("application/gzip")
+    @Operation(operationId = "downloadStudioOptimizationLogs", summary = "Download Studio optimization logs", description = "Download the gzipped optimization log file through the backend. MinIO installations only — the presigned URL may point at a host the browser cannot reach (e.g. in-cluster MinIO); S3 installations must use the presigned URL instead.", responses = {
+            @ApiResponse(responseCode = "200", description = "Gzipped log file", content = @Content(schema = @Schema(type = "string", format = "binary"))),
+            @ApiResponse(responseCode = "403", description = "Access forbidden", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    @RequiredPermissions(WorkspaceUserPermission.OPTIMIZATION_RUN_VIEW)
+    public Response studioDownloadLogs(@PathParam("id") UUID id) {
+        var workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Downloading logs for Studio optimization id: '{}' in workspace: '{}'", id, workspaceId);
+
+        InputStream logs = optimizationService.downloadStudioLogs(id, workspaceId);
+
+        log.info("Downloaded logs for Studio optimization id: '{}' in workspace: '{}'", id, workspaceId);
         return Response.ok(logs).build();
     }
 }
