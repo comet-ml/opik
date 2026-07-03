@@ -18,7 +18,8 @@ import java.util.List;
  *     <li>input: {@code user_prompt} (interaction), {@code tool_input} (tool),
  *     {@code model} / {@code system_prompt_preview} (llm; {@code tools} is mapped to input
  *     globally), {@code hook_event} / {@code hook_name} / {@code hook_definitions} (hook)</li>
- *     <li>output: {@code response.model_output} (llm; assistant text)</li>
+ *     <li>output: {@code response.model_output} (assistant text), {@code stop_reason},
+ *     {@code response.has_tool_call} (llm response)</li>
  *     <li>usage: {@code input_tokens} / {@code output_tokens} / {@code cache_*_tokens}</li>
  *     <li>thread: {@code session.id} (groups the interaction turns into one Opik thread)</li>
  * </ul>
@@ -48,8 +49,10 @@ public final class ClaudeCodeMappingRules {
             rule("hook_event", OpenTelemetryMappingRule.Outcome.INPUT),
             rule("hook_name", OpenTelemetryMappingRule.Outcome.INPUT),
             rule("hook_definitions", OpenTelemetryMappingRule.Outcome.INPUT),
-            // --- output ---
+            // --- output: the model's response ---
             rule("response.model_output", OpenTelemetryMappingRule.Outcome.OUTPUT),
+            rule("stop_reason", OpenTelemetryMappingRule.Outcome.OUTPUT),
+            rule("response.has_tool_call", OpenTelemetryMappingRule.Outcome.OUTPUT),
             // --- usage ---
             rule("input_tokens", OpenTelemetryMappingRule.Outcome.USAGE),
             rule("output_tokens", OpenTelemetryMappingRule.Outcome.USAGE),

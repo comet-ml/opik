@@ -1587,6 +1587,25 @@ class OpenTelemetryMapperTest {
         }
 
         @Test
+        void llmResponseFieldsMapToOutput() {
+            var span = enrich(List.of(
+                    str("response.model_output", "calling a tool"),
+                    str("stop_reason", "tool_use"),
+                    KeyValue.newBuilder().setKey("response.has_tool_call")
+                            .setValue(AnyValue.newBuilder().setBoolValue(true)).build(),
+                    str("request_id", "req_abc"),
+                    intVal("ttft_ms", 1230)),
+                    null, "claude_code.llm_request");
+
+            assertThat(span.output().get("stop_reason").asText()).isEqualTo("tool_use");
+            assertThat(span.output().get("response.has_tool_call").asBoolean()).isTrue();
+            // call identifiers / latency stay in metadata, not output
+            assertThat(span.output().has("request_id")).isFalse();
+            assertThat(span.metadata().get("request_id").asText()).isEqualTo("req_abc");
+            assertThat(span.metadata().get("ttft_ms").asInt()).isEqualTo(1230);
+        }
+
+        @Test
         void modelOutputTruncationSiblingsGoToMetadata() {
             var span = enrich(List.of(
                     str("response.model_output", "partial"),
