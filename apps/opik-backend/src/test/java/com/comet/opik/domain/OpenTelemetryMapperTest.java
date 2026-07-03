@@ -1630,12 +1630,15 @@ class OpenTelemetryMapperTest {
             var span = enrich(List.of(
                     intVal("input_tokens", 1234),
                     intVal("output_tokens", 26),
-                    intVal("cache_read_tokens", 100)),
+                    intVal("cache_read_tokens", 100),
+                    intVal("cache_creation_tokens", 50)),
                     null);
 
             assertThat(span.usage().get("prompt_tokens")).isEqualTo(1234);
             assertThat(span.usage().get("completion_tokens")).isEqualTo(26);
-            assertThat(span.usage().get("cache_read_tokens")).isEqualTo(100);
+            // Normalized to the names the Anthropic cache-cost calculator recognizes.
+            assertThat(span.usage().get("cache_read_input_tokens")).isEqualTo(100);
+            assertThat(span.usage().get("cache_creation_input_tokens")).isEqualTo(50);
             assertThat(span.input()).isNull();
             assertThat(span.output()).isNull();
         }

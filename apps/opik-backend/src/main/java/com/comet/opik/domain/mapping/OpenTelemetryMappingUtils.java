@@ -26,7 +26,11 @@ public class OpenTelemetryMappingUtils {
 
     private static final Map<String, String> USAGE_KEYS_MAPPING = Map.of(
             "input_tokens", "prompt_tokens",
-            "output_tokens", "completion_tokens");
+            "output_tokens", "completion_tokens",
+            // Claude Code emits short cache-token names; normalize to the names the Anthropic
+            // cache-cost path (SpanCostCalculator) recognizes, otherwise cache pricing is skipped.
+            "cache_read_tokens", "cache_read_input_tokens",
+            "cache_creation_tokens", "cache_creation_input_tokens");
 
     /**
      * Extracts a value from an AnyValue object and writes it to a specified JSON field in an ObjectNode.
