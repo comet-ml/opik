@@ -424,6 +424,7 @@ describe("explainStore", () => {
     expect(trackEvent).toHaveBeenCalledWith(OpikEvent.EXPLAIN_ERRORED, {
       kind: "trace.error",
       code: "timeout",
+      message: expect.stringMatching(/too long/i),
     });
     expect(emit).toHaveBeenCalledWith("explain:cancel", { explainId });
     // Route retired, so a late chunk that finally arrives is ignored.
@@ -485,6 +486,7 @@ describe("explainStore", () => {
     expect(trackEvent).toHaveBeenCalledWith(OpikEvent.EXPLAIN_ERRORED, {
       kind: "trace.error",
       code: "unavailable",
+      message: expect.stringMatching(/unavailable/i),
     });
     expect(entry.error).not.toBe("raw upstream text"); // friendly copy wins
     expect(entry.error).toMatch(/unavailable/i);
@@ -584,5 +586,12 @@ describe("explainStore", () => {
     expect(entry.phase).toBe("error");
     expect(typeof entry.error).toBe("string");
     expect(entry.error).toBe("boom"); // falls through to the raw message
+    // The raw upstream text also reaches telemetry — the diagnostic detail
+    // for codes with no friendly copy.
+    expect(trackEvent).toHaveBeenCalledWith(OpikEvent.EXPLAIN_ERRORED, {
+      kind: "trace.error",
+      code: "constructor",
+      message: "boom",
+    });
   });
 });
