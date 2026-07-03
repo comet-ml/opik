@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   computeCandidateStatuses,
   buildCandidateChartData,
+  buildTrendLineEdges,
   buildTrialCardModel,
   buildEdgePath,
   getUniqueSteps,
@@ -10,8 +11,22 @@ import {
   TRIAL_STATUS_COLORS,
   TRIAL_BEST_COLOR,
   TRIAL_BEST_RING_COLOR,
+  CandidateDataPoint,
 } from "./optimizationChartUtils";
 import { AggregatedCandidate } from "@/types/optimizations";
+
+const makePoint = (
+  overrides: Partial<CandidateDataPoint> & {
+    candidateId: string;
+    stepIndex: number;
+  },
+): CandidateDataPoint => ({
+  parentCandidateIds: [],
+  value: null,
+  status: "passed",
+  name: "test",
+  ...overrides,
+});
 
 const makeCandidate = (
   overrides: Partial<AggregatedCandidate> & {
@@ -439,6 +454,72 @@ describe("buildEdgePath", () => {
     expect(buildEdgePath({ cx: 0, cy: 0 }, { cx: 10, cy: 20 })).toBe(
       "M 0,0 C 5,0 5,20 10,20",
     );
+  });
+});
+
+describe("buildTrendLineEdges", () => {
+  it("connects the best passed trial of each step into a single path", () => {
+    const edges = buildTrendLineEdges([
+      makePoint({
+        candidateId: "base",
+        stepIndex: 0,
+        value: 0.2,
+        status: "baseline",
+      }),
+      makePoint({ candidateId: "s1-low", stepIndex: 1, value: 0.4 }),
+      makePoint({ candidateId: "s1-high", stepIndex: 1, value: 0.6 }),
+      makePoint({ candidateId: "s2", stepIndex: 2, value: 0.8 }),
+    ]);
+
+    // One line, no fork: baseline -> step 1 winner -> step 2.
+    expect(edges).toEqual([
+      { parentCandidateId: "base", childCandidateId: "s1-high" },
+      { parentCandidateId: "s1-high", childCandidateId: "s2" },
+    ]);
+  });
+
+  it("skips discarded, evaluating, and unscored trials", () => {
+    const edges = buildTrendLineEdges([
+      makePoint({
+        candidateId: "base",
+        stepIndex: 0,
+        value: 0.2,
+        status: "baseline",
+      }),
+      // Step 1 only has a discarded trial — the line bridges over it.
+      makePoint({
+        candidateId: "s1-pruned",
+        stepIndex: 1,
+        value: 0.9,
+        status: "pruned",
+      }),
+      makePoint({
+        candidateId: "s2-evaluating",
+        stepIndex: 2,
+        value: 0.7,
+        status: "evaluating",
+      }),
+      makePoint({ candidateId: "s2-unscored", stepIndex: 2, value: null }),
+      makePoint({ candidateId: "s2", stepIndex: 2, value: 0.5 }),
+    ]);
+
+    expect(edges).toEqual([
+      { parentCandidateId: "base", childCandidateId: "s2" },
+    ]);
+  });
+
+  it("returns no edges when fewer than two steps have a winner", () => {
+    expect(buildTrendLineEdges([])).toEqual([]);
+    expect(
+      buildTrendLineEdges([
+        makePoint({
+          candidateId: "base",
+          stepIndex: 0,
+          value: 0.2,
+          status: "baseline",
+        }),
+      ]),
+    ).toEqual([]);
   });
 });
 

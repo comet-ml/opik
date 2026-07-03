@@ -386,33 +386,42 @@ export const buildCandidateChartData = (
     }));
 };
 
+/** Statuses the trend line may pass through — the winning progression. */
+const TREND_LINE_STATUSES: ReadonlySet<TrialStatus> = new Set([
+  "baseline",
+  "passed",
+]);
+
 /**
- * Build parent-child edges from chart data.
- *
- * Only connects the winning progression: edges into a discarded (pruned) trial
- * are skipped so the line follows baseline → passed → best and the discarded
- * trials render as loose dots below it (matching Figma), instead of the line
- * diving down to every discarded child and back up.
+ * Edges of the trend line: ONE continuous path connecting the best-scoring
+ * baseline/passed trial of each step — baseline → step 1 winner → … (per
+ * Figma). Everything else (discarded, still-evaluating, non-winning passed
+ * trials) renders as loose dots off the line, so the line never forks even
+ * when a step has several passed trials. Steps without a scored winner are
+ * skipped — the line bridges straight to the next step that has one.
  */
-export const buildParentChildEdges = (
+export const buildTrendLineEdges = (
   data: CandidateDataPoint[],
 ): ParentChildEdge[] => {
-  const candidateIds = new Set(data.map((d) => d.candidateId));
-  const edges: ParentChildEdge[] = [];
-
+  const bestPerStep = new Map<number, CandidateDataPoint>();
   for (const point of data) {
-    if (point.status === "pruned") continue;
-    for (const parentId of point.parentCandidateIds) {
-      if (candidateIds.has(parentId)) {
-        edges.push({
-          parentCandidateId: parentId,
-          childCandidateId: point.candidateId,
-        });
-      }
+    if (!TREND_LINE_STATUSES.has(point.status) || point.value == null) {
+      continue;
+    }
+    const current = bestPerStep.get(point.stepIndex);
+    if (!current || point.value > current.value!) {
+      bestPerStep.set(point.stepIndex, point);
     }
   }
 
-  return edges;
+  const path = Array.from(bestPerStep.entries())
+    .sort(([stepA], [stepB]) => stepA - stepB)
+    .map(([, point]) => point);
+
+  return path.slice(1).map((point, index) => ({
+    parentCandidateId: path[index].candidateId,
+    childCandidateId: point.candidateId,
+  }));
 };
 
 /**

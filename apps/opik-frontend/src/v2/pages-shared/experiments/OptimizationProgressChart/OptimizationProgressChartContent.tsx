@@ -21,7 +21,7 @@ import {
   TRIAL_STATUS_LABELS,
   TRIAL_STATUS_ORDER,
   CandidateDataPoint,
-  buildParentChildEdges,
+  buildTrendLineEdges,
   getUniqueSteps,
 } from "./optimizationChartUtils";
 import type { InProgressInfo } from "./optimizationChartUtils";
@@ -165,7 +165,7 @@ const OptimizationProgressChartContent: React.FC<
     return map;
   }, [candidates]);
 
-  const edges = useMemo(() => buildParentChildEdges(chartData), [chartData]);
+  const edges = useMemo(() => buildTrendLineEdges(chartData), [chartData]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const dotPositionsRef = useRef<Map<string, DotPosition>>(new Map());
