@@ -28,6 +28,7 @@ import com.comet.opik.domain.experiments.aggregations.ExperimentAggregationPubli
 import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.eventbus.Subscribe;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -176,7 +177,8 @@ public class ExperimentAggregateEventListener {
     private void triggerByTraceIdsPerProject(Map<UUID, Set<UUID>> traceIdsByProject, String workspaceId,
             String userName, String errorMessage) {
         Flux.fromIterable(traceIdsByProject.entrySet())
-                .concatMap(entry -> triggerByTraceIds(entry.getValue(), workspaceId, userName, entry.getKey()))
+                .concatMap(entry -> triggerByTraceIds(entry.getValue(), workspaceId, userName, entry.getKey())
+                        .onErrorResume(e -> logAndContinue(errorMessage, e)))
                 .subscribe(null, e -> log.error(errorMessage, e));
     }
 
@@ -188,8 +190,15 @@ public class ExperimentAggregateEventListener {
             return;
         }
         Flux.fromIterable(projectIds)
-                .concatMap(projectId -> triggerByTraceIds(traceIds, workspaceId, userName, projectId))
+                .concatMap(projectId -> triggerByTraceIds(traceIds, workspaceId, userName, projectId)
+                        .onErrorResume(e -> logAndContinue(errorMessage, e)))
                 .subscribe(null, e -> log.error(errorMessage, e));
+    }
+
+    // Keeps the per-project fan-out going when one project's aggregation fails.
+    private Mono<Void> logAndContinue(String errorMessage, Throwable e) {
+        log.error(errorMessage, e);
+        return Mono.empty();
     }
 
     @Subscribe
@@ -240,7 +249,7 @@ public class ExperimentAggregateEventListener {
     }
 
     private Mono<Void> triggerByEntityIds(Set<UUID> entityIds, EntityType entityType, String workspaceId,
-            String userName, UUID projectId) {
+            String userName, @Nullable UUID projectId) {
         if (!config.isEnabled()) {
             log.debug(
                     "Ignoring entity aggregation trigger for entity type '{}': experiment denormalization config is disabled",
@@ -267,7 +276,8 @@ public class ExperimentAggregateEventListener {
                         .collect(Collectors.toSet()));
     }
 
-    private Mono<Void> triggerByTraceIds(Set<UUID> traceIds, String workspaceId, String userName, UUID projectId) {
+    private Mono<Void> triggerByTraceIds(Set<UUID> traceIds, String workspaceId, String userName,
+            @Nullable UUID projectId) {
         return triggerAggregation(traceIds, workspaceId, userName,
                 ids -> experimentItemService
                         .getExperimentRefsByTraceIds(ids, FINISHED_STATUSES, projectId)
@@ -275,7 +285,8 @@ public class ExperimentAggregateEventListener {
                         .collect(Collectors.toSet()));
     }
 
-    private Mono<Void> triggerBySpanIds(Set<UUID> spanIds, String workspaceId, String userName, UUID projectId) {
+    private Mono<Void> triggerBySpanIds(Set<UUID> spanIds, String workspaceId, String userName,
+            @Nullable UUID projectId) {
         return triggerAggregation(spanIds, workspaceId, userName,
                 ids -> experimentItemService
                         .getExperimentRefsBySpanIds(ids, FINISHED_STATUSES, projectId)

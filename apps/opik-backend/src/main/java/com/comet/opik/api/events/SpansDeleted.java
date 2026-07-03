@@ -1,6 +1,7 @@
 package com.comet.opik.api.events;
 
 import com.comet.opik.infrastructure.events.BaseEvent;
+import jakarta.annotation.Nullable;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.experimental.Accessors;
@@ -13,7 +14,7 @@ import java.util.UUID;
 public class SpansDeleted extends BaseEvent {
     private final @NonNull Set<UUID> traceIds;
     private final @NonNull Set<UUID> spanIds;
-    private final UUID projectId;
+    private final @Nullable UUID projectId;
 
     public SpansDeleted(@NonNull Set<UUID> spanIds, @NonNull Set<UUID> traceIds, @NonNull String workspaceId,
             @NonNull String userName) {
@@ -21,7 +22,7 @@ public class SpansDeleted extends BaseEvent {
     }
 
     public SpansDeleted(@NonNull Set<UUID> spanIds, @NonNull Set<UUID> traceIds, @NonNull String workspaceId,
-            @NonNull String userName, UUID projectId) {
+            @NonNull String userName, @Nullable UUID projectId) {
         super(workspaceId, userName);
         this.traceIds = traceIds;
         this.spanIds = spanIds;
