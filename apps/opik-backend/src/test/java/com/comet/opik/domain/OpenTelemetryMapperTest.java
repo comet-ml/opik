@@ -1587,30 +1587,20 @@ class OpenTelemetryMapperTest {
             assertThat(span.metadata().get("response.model_output_original_length").asInt()).isEqualTo(120);
         }
 
-        @Test
-        void toolOutputEventMapsToOutput() {
+        @ParameterizedTest
+        @CsvSource({
+                "output, AGENTS.md README.md",
+                "content, marker: OTEL-REPRO-MARKER-12345"
+        })
+        void toolOutputEventMapsToOutput(String contentKey, String value) {
             var event = io.opentelemetry.proto.trace.v1.Span.Event.newBuilder()
                     .setName("tool.output")
-                    .addAttributes(str("bash_command", "ls"))
-                    .addAttributes(str("output", "AGENTS.md\nREADME.md"))
-                    .build();
-
-            var span = enrich(List.of(str("tool_name", "Bash")), List.of(event));
-
-            assertThat(span.output().get("output").asText()).isEqualTo("AGENTS.md\nREADME.md");
-        }
-
-        @Test
-        void toolOutputEventContentAttributeMapsToOutput() {
-            var event = io.opentelemetry.proto.trace.v1.Span.Event.newBuilder()
-                    .setName("tool.output")
-                    .addAttributes(str("file_path", "/tmp/repro.txt"))
-                    .addAttributes(str("content", "marker: OTEL-REPRO-MARKER-12345"))
+                    .addAttributes(str(contentKey, value))
                     .build();
 
             var span = enrich(List.of(), List.of(event));
 
-            assertThat(span.output().get("content").asText()).isEqualTo("marker: OTEL-REPRO-MARKER-12345");
+            assertThat(span.output().get(contentKey).asText()).isEqualTo(value);
         }
     }
 }
