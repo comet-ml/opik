@@ -104,9 +104,10 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                     .switchIfEmpty(Mono.error(failWithNotFound("Trace", traceId)))
                     .flatMap(projectId -> getAuthor()
                             .flatMap(author -> dao.scoreEntity(EntityType.TRACE, traceId, score, projectId,
-                                    author.orElse(null))))
-                    .doOnSuccess(__ -> eventBus.post(
-                            new FeedbackScoresCreated(Set.of(traceId), EntityType.TRACE, workspaceId, userName)))
+                                    author.orElse(null)))
+                            .doOnSuccess(__ -> eventBus.post(
+                                    new FeedbackScoresCreated(Set.of(traceId), EntityType.TRACE, workspaceId, userName,
+                                            projectId))))
                     .then();
         });
     }
@@ -121,9 +122,10 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                     .switchIfEmpty(Mono.error(failWithNotFound("Span", spanId)))
                     .flatMap(projectId -> getAuthor()
                             .flatMap(author -> dao.scoreEntity(EntityType.SPAN, spanId, score, projectId,
-                                    author.orElse(null))))
-                    .doOnSuccess(__ -> eventBus.post(
-                            new FeedbackScoresCreated(Set.of(spanId), EntityType.SPAN, workspaceId, userName)))
+                                    author.orElse(null)))
+                            .doOnSuccess(__ -> eventBus.post(
+                                    new FeedbackScoresCreated(Set.of(spanId), EntityType.SPAN, workspaceId, userName,
+                                            projectId))))
                     .then();
         });
     }
@@ -365,7 +367,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
 
             return dao.deleteByEntityIds(EntityType.TRACE, traceIds, projectId)
                     .doOnSuccess(__ -> eventBus.post(
-                            new FeedbackScoresDeleted(traceIds, EntityType.TRACE, workspaceId, userName)));
+                            new FeedbackScoresDeleted(traceIds, EntityType.TRACE, workspaceId, userName, projectId)));
         });
     }
 
@@ -381,7 +383,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
 
             return dao.deleteByEntityIds(EntityType.SPAN, spanIds, projectId)
                     .doOnSuccess(__ -> eventBus.post(
-                            new FeedbackScoresDeleted(spanIds, EntityType.SPAN, workspaceId, userName)));
+                            new FeedbackScoresDeleted(spanIds, EntityType.SPAN, workspaceId, userName, projectId)));
         });
     }
 

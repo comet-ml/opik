@@ -14,11 +14,18 @@ import java.util.UUID;
 public class CommentsCreated extends BaseEvent {
     private final @NonNull Set<UUID> entityIds;
     private final @NonNull EntityType entityType;
+    private final UUID projectId;
 
     public CommentsCreated(@NonNull Set<UUID> entityIds, @NonNull EntityType entityType,
             @NonNull String workspaceId, @NonNull String userName) {
+        this(entityIds, entityType, workspaceId, userName, null);
+    }
+
+    public CommentsCreated(@NonNull Set<UUID> entityIds, @NonNull EntityType entityType,
+            @NonNull String workspaceId, @NonNull String userName, UUID projectId) {
         super(workspaceId, userName);
         this.entityIds = entityIds;
         this.entityType = entityType;
+        this.projectId = projectId;
     }
 }
