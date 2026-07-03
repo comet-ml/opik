@@ -1,4 +1,4 @@
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Optional, Tuple
 
 from opik.api_objects.span.span_data import SpanData
 
@@ -26,37 +26,26 @@ from .bounded_cache import DEFAULT_MAX_SIZE, BoundedCache
 # a short-circuiting before-callback or a model error) keeps its ``actions``
 # alive, so CPython can't reuse that id for a later call's ``EventActions``; and
 # if an id ever did collide, the identity check refuses the stale span rather
-# than finalizing it for the wrong call.
+# than returning it for the wrong call.
 #
 # It is size-bounded (see ``BoundedCache``) because those unclaimed entries must
-# not accumulate on a long-lived shared tracer. Because the bound cannot tell an
-# unclaimed entry from a still-in-flight one, eviction routes the dropped span to
-# ``on_evict_span`` (the tracer finalizes it) rather than discarding it, so an
-# evicted span is closed instead of being stranded in the ``started`` state.
+# not accumulate on a long-lived shared tracer. An evicted entry is dropped
+# WITHOUT mutating its span: eviction only happens under more than ``max_size``
+# concurrently-in-flight model calls, where the oldest may still be live, and
+# force-finalizing it would replace a normally-traceable call with an empty span
+# and block its real ``after_model_callback`` from finalizing it. Dropping the
+# entry instead leaves the span on the context stack, where the normal
+# stack-fallback still finalizes it (the detached-context recovery this registry
+# adds simply reverts to the pre-registry behavior beyond the bound).
 
 
 class PendingLlmSpanRegistry:
     """Bounded registry of in-flight LLM spans, keyed by the per-model-call
     ``EventActions`` object (by id, with an identity check).
-
-    ``on_evict_span`` is called with the ``SpanData`` of any entry the bound
-    drops, so the tracer can finalize a span whose ``after_model_callback`` will
-    never claim it instead of leaking it in the ``started`` state.
     """
 
-    def __init__(
-        self,
-        max_size: int = DEFAULT_MAX_SIZE,
-        on_evict_span: Optional[Callable[[SpanData], None]] = None,
-    ) -> None:
-        self._on_evict_span = on_evict_span
-        self._cache: BoundedCache[int, Tuple[Any, SpanData]] = BoundedCache(
-            max_size, on_evict=self._handle_evict
-        )
-
-    def _handle_evict(self, key: int, entry: Tuple[Any, SpanData]) -> None:
-        if self._on_evict_span is not None:
-            self._on_evict_span(entry[1])
+    def __init__(self, max_size: int = DEFAULT_MAX_SIZE) -> None:
+        self._cache: BoundedCache[int, Tuple[Any, SpanData]] = BoundedCache(max_size)
 
     def register(self, actions: Any, span_data: SpanData) -> None:
         self._cache.set(id(actions), (actions, span_data))

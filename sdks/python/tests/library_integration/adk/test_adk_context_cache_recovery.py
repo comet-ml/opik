@@ -143,21 +143,20 @@ def test_pending_llm_span_registry__recycled_id__stale_span_not_returned():
     assert registry.pop(live_actions) is None
 
 
-def test_pending_llm_span_registry__eviction__finalizes_dropped_span_only():
-    # The size bound can't tell an unclaimed pending span from a still-live one,
-    # so an evicted entry is handed to on_evict_span (the tracer finalizes it)
-    # instead of being silently dropped and stranded in the 'started' state. Only
-    # the evicted (oldest) span is finalized; survivors stay recoverable.
-    finalized = []
-    registry = PendingLlmSpanRegistry(max_size=2, on_evict_span=finalized.append)
+def test_pending_llm_span_registry__over_capacity__drops_oldest_without_mutation():
+    # Eviction drops the oldest entry silently and must NOT mutate/finalize its
+    # span: under more than max_size in-flight calls the oldest may still be live,
+    # and its real after_model_callback will finalize it via the stack fallback.
+    registry = PendingLlmSpanRegistry(max_size=2)
     actions = [object() for _ in range(3)]
-    spans = [object() for _ in range(3)]
+    spans = [types.SimpleNamespace(id=f"s{i}", end_time=None) for i in range(3)]
     for actions_obj, span_obj in zip(actions, spans):
         registry.register(actions_obj, span_obj)
 
-    assert finalized == [spans[0]]  # oldest evicted + finalized, exactly once
+    assert registry.get(actions[0]) is None  # oldest evicted
     assert registry.get(actions[1]) is spans[1]  # survivors still recoverable
     assert registry.get(actions[2]) is spans[2]
+    assert spans[0].end_time is None  # dropped span left untouched, not finalized
 
 
 # --- recovery (modern tracer) ----------------------------------------------
@@ -353,92 +352,3 @@ def test_after_model__empty_partial_chunk__keeps_span_for_final_response(fake_ba
     assert span.output is not None
     assert span.end_time is not None
     assert tracer._pending_llm_spans.get(ctx.actions) is None
-
-
-@helpers.pytest_skip_for_adk_older_than_1_3_0
-def test_finalize_evicted_llm_span__started_span__closed_idempotently(fake_backend):
-    # A span the registry evicts before after_model_callback claims it must be
-    # finalized (end time + ready-for-finalization status) instead of being left
-    # stuck in 'started', its TTFT bookkeeping dropped, and re-finalizing it must
-    # be a harmless no-op — this is what before_model_callback wires the registry
-    # to do on eviction.
-    context_storage.set_trace_data(TraceData(name="agent"))
-    tracer = OpikTracer(project_name="adk-test")
-    ctx = _callback_context("inv-1")
-
-    span = _start_model_call(tracer, ctx)
-    assert span.end_time is None  # created 'started' by before_model_callback
-    assert span.id in tracer._ttft_tracking
-
-    tracer._finalize_evicted_llm_span(span)
-
-    assert span.end_time is not None
-    assert (
-        span.metadata[llm_span_helpers.SPAN_STATUS]
-        == llm_span_helpers.LLMSpanStatus.READY_FOR_FINALIZATION.value
-    )
-    assert span.metadata["_opik_llm_span_force_closed_reason"] == "registry_eviction"
-    assert span.id not in tracer._ttft_tracking  # TTFT entry dropped, no leak
-
-    # Idempotent: an already-finalized span (its after_model_callback won the
-    # race) is left untouched and no exception escapes.
-    first_end_time = span.end_time
-    tracer._finalize_evicted_llm_span(span)
-    assert span.end_time == first_end_time
-
-
-# --- stale force-closed top-span cleanup (before_model guard) ----------------
-
-
-def _llm_span_on_stack(trace: TraceData, name: str, status) -> object:
-    span_data = trace.create_child_span_data(name=name)
-    span_data.type = "llm"
-    span_data.metadata = {llm_span_helpers.SPAN_STATUS: status}
-    context_storage.add_span_data(span_data)
-    return span_data
-
-
-@helpers.pytest_skip_for_adk_older_than_1_3_0
-def test_before_model__stale_force_closed_top_span__discarded_not_used_as_parent(
-    fake_backend,
-):
-    # A span force-closed in another async context (e.g. a registry eviction) can
-    # be left on this context's stack as READY_FOR_FINALIZATION. before_model
-    # creates its span directly (bypassing the OTel patcher's reclaim), so it must
-    # drop that stale top first -- otherwise the new span is mis-parented under an
-    # already-finalized span.
-    trace = TraceData(name="agent")
-    context_storage.set_trace_data(trace)
-    tracer = OpikTracer(project_name="adk-test")
-
-    stale = _llm_span_on_stack(
-        trace, "stale-llm", llm_span_helpers.LLMSpanStatus.READY_FOR_FINALIZATION.value
-    )
-    assert context_storage.top_span_data() is stale
-
-    new_span = _start_model_call(tracer, _callback_context("inv-1"))
-
-    # The new span is not nested under the finalized span...
-    assert new_span.parent_span_id != stale.id
-    # ...and the stale span is gone from the stack: popping the new span leaves
-    # only the trace, not the stale span.
-    context_storage.pop_span_data()
-    assert context_storage.top_span_data() is None
-
-
-@helpers.pytest_skip_for_adk_older_than_1_3_0
-def test_before_model__started_top_span__kept_as_parent(fake_backend):
-    # A STARTED span on top is a genuine in-flight parent and must NOT be
-    # discarded -- only already force-closed (READY_FOR_FINALIZATION) spans are.
-    trace = TraceData(name="agent")
-    context_storage.set_trace_data(trace)
-    tracer = OpikTracer(project_name="adk-test")
-
-    parent = _llm_span_on_stack(
-        trace, "parent-llm", llm_span_helpers.LLMSpanStatus.STARTED.value
-    )
-
-    new_span = _start_model_call(tracer, _callback_context("inv-1"))
-
-    # The STARTED parent survived and the new span nests under it.
-    assert new_span.parent_span_id == parent.id

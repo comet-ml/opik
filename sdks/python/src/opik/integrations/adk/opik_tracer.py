@@ -78,12 +78,8 @@ class OpikTracer:
         # In-flight LLM spans keyed by id(callback_context.actions) so
         # after_model_callback can recover the span created in
         # before_model_callback even when ContextCacheConfig detaches the
-        # contextvar span stack under SSE streaming (comet-ml/opik#5524). A span
-        # dropped by the registry's size bound is routed to
-        # _finalize_evicted_llm_span so it is closed rather than stranded.
-        self._pending_llm_spans = pending_llm_spans.PendingLlmSpanRegistry(
-            on_evict_span=self._finalize_evicted_llm_span
-        )
+        # contextvar span stack under SSE streaming (comet-ml/opik#5524).
+        self._pending_llm_spans = pending_llm_spans.PendingLlmSpanRegistry()
         # Track time-to-first-token: map span_id -> (request_start_time, first_token_time)
         self._ttft_tracking: Dict[str, Tuple[float, Optional[float]]] = {}
 
@@ -231,16 +227,6 @@ class OpikTracer:
         **kwargs: Any,
     ) -> None:
         try:
-            # If a previously force-closed LLM span is still on top of this
-            # context's stack, drop it before creating the new span so the new
-            # span is not mis-parented under an already-finalized one. This
-            # happens when a span was force-closed in a *different* async context
-            # (e.g. dropped by the pending-span registry's size bound during a
-            # concurrent call) and so could not be popped there. The OTel patcher
-            # reclaims such spans on start_as_current_span, but this direct span
-            # creation bypasses it, so mirror that reclaim here.
-            self._discard_stale_finalized_top_span()
-
             input = adk_helpers.convert_adk_base_model_to_dict(llm_request)
 
             provider, model = litellm_wrappers.parse_provider_and_model(
@@ -285,17 +271,17 @@ class OpikTracer:
             LOGGER.error(f"Failed during before_model_callback(): {e}", exc_info=True)
 
     def _force_close_llm_span(self, span_data: span.SpanData, reason: str) -> None:
-        """Close an in-flight LLM span that reached a terminal state without a
-        normal finalization -- dropped from the pending-span registry by its size
-        bound, or a terminal empty SSE response with nothing to record. Without
-        this the span stays stuck in the ``started`` state with no end time
-        (comet-ml/opik#5524).
+        """Close a recovered LLM span that reached a terminal state with nothing
+        to record -- a terminal empty SSE response (see after_model_callback).
+        Without this the span stays stuck in the ``started`` state with no end
+        time (comet-ml/opik#5524).
 
         Best-effort and idempotent: it skips a span already finalized (a normal
-        ``after_model_callback`` won the race) and never raises, since callers run
-        it from a cache-eviction callback or an early-return path. ``reason`` is
-        recorded in metadata so an incomplete span (no output/usage) is
-        distinguishable from a normally finalized one when inspecting traces.
+        ``after_model_callback`` won the race) and never raises, since it runs
+        from an early-return path. It pops the span off the context stack when it
+        is on top so a closed span never lingers to mis-parent later spans.
+        ``reason`` is recorded in metadata so an incomplete span (no output/usage)
+        is distinguishable from a normally finalized one when inspecting traces.
         """
         try:
             if span_data.end_time is not None:
@@ -307,11 +293,6 @@ class OpikTracer:
             )
             # Leading-underscore internal-metadata convention (cf. _OPIK_SPAN_STATUS).
             span_data.metadata["_opik_llm_span_force_closed_reason"] = reason
-            # Pop it off the current context stack if it is on top, so a closed
-            # span never lingers there to mis-parent later spans. (If it was
-            # created in a different async context -- an eviction from a
-            # concurrent call -- it isn't on this stack; before_model_callback's
-            # stale-top guard and the OTel patcher reclaim it there instead.)
             stack_top = context_storage.top_span_data()
             if stack_top is not None and stack_top.id == span_data.id:
                 context_storage.pop_span_data(ensure_id=span_data.id)
@@ -324,34 +305,6 @@ class OpikTracer:
             LOGGER.debug(
                 "Failed to force-close LLM span (reason=%s)", reason, exc_info=True
             )
-
-    def _discard_stale_finalized_top_span(self) -> None:
-        """Pop the context stack's top span if it is an LLM span we already
-        force-closed (``READY_FOR_FINALIZATION``) that was left behind -- e.g.
-        force-closed in a different async context, so it could not be popped
-        there. Leaving it on top would mis-parent the next directly-created span.
-        A ``STARTED`` span (a genuine in-flight parent) is never touched.
-        """
-        try:
-            stack_top = context_storage.top_span_data()
-            if (
-                stack_top is not None
-                and llm_span_helpers.is_externally_created_llm_span_ready_for_immediate_finalization(
-                    stack_top
-                )
-            ):
-                context_storage.pop_span_data(ensure_id=stack_top.id)
-        except Exception:
-            LOGGER.debug("Failed to discard stale finalized top span", exc_info=True)
-
-    def _finalize_evicted_llm_span(self, span_data: span.SpanData) -> None:
-        # Registry eviction: the bound dropped the oldest in-flight entry before
-        # after_model_callback claimed it -- overwhelmingly one whose callback
-        # never runs (a short-circuited before-callback or a failed/cancelled
-        # model call), and only under more than max_size truly-concurrent
-        # in-flight calls a still-live one. Either way, close it (see
-        # PendingLlmSpanRegistry, which wires this as on_evict_span).
-        self._force_close_llm_span(span_data, reason="registry_eviction")
 
     def after_model_callback(
         self,
