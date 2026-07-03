@@ -21,8 +21,10 @@ import java.util.List;
  *     <li>output: {@code response.model_output} (llm; assistant text)</li>
  *     <li>usage: {@code input_tokens} / {@code output_tokens} / {@code cache_*_tokens}</li>
  *     <li>thread: {@code session.id} (groups the interaction turns into one Opik thread)</li>
- *     <li>dropped: {@code new_context} (verbatim duplicate of the prompt / tool result)</li>
  * </ul>
+ * {@code new_context} is handled span-aware in {@code OpenTelemetryMapper}: it is the latest LLM
+ * message on {@code claude_code.llm_request} spans (→ input) and a duplicate of the prompt / tool
+ * result elsewhere (dropped).
  * The tool result is emitted as a {@code tool.output} span event and mapped to the tool span
  * output directly in {@code OpenTelemetryMapper}.
  */
@@ -54,9 +56,9 @@ public final class ClaudeCodeMappingRules {
             rule("cache_read_tokens", OpenTelemetryMappingRule.Outcome.USAGE),
             rule("cache_creation_tokens", OpenTelemetryMappingRule.Outcome.USAGE),
             // --- thread grouping ---
-            rule("session.id", OpenTelemetryMappingRule.Outcome.THREAD_ID),
-            // Verbatim duplicate of user_prompt (interaction) / the tool.output event (tool, llm).
-            rule("new_context", OpenTelemetryMappingRule.Outcome.DROP));
+            rule("session.id", OpenTelemetryMappingRule.Outcome.THREAD_ID));
+    // `new_context` is handled span-aware in OpenTelemetryMapper: it is the latest LLM message on
+    // llm_request spans (→ input) but a duplicate of the prompt / tool result elsewhere (dropped).
 
     public static List<OpenTelemetryMappingRule> getRules() {
         return RULES;

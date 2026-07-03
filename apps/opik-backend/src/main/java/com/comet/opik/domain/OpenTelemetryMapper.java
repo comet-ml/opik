@@ -104,7 +104,8 @@ public class OpenTelemetryMapper {
                 .endTime(Instant.ofEpochMilli(endTimeMs));
 
         List<Span.Event> events = otelSpan.getEventsList();
-        enrichSpanWithAttributes(spanBuilder, otelSpan.getAttributesList(), integrationName, events);
+        enrichSpanWithAttributes(spanBuilder, otelSpan.getAttributesList(), integrationName, events,
+                otelSpan.getName());
 
         extractErrorInfo(otelSpan).ifPresent(spanBuilder::errorInfo);
 
@@ -121,6 +122,14 @@ public class OpenTelemetryMapper {
      */
     public static void enrichSpanWithAttributes(SpanBuilder spanBuilder, List<KeyValue> attributes,
             String integrationName, List<Span.Event> events) {
+        enrichSpanWithAttributes(spanBuilder, attributes, integrationName, events, null);
+    }
+
+    private static final String CLAUDE_CODE_LLM_SPAN = "claude_code.llm_request";
+    private static final String NEW_CONTEXT_ATTR = "new_context";
+
+    public static void enrichSpanWithAttributes(SpanBuilder spanBuilder, List<KeyValue> attributes,
+            String integrationName, List<Span.Event> events, String spanName) {
         Map<String, Integer> usage = new HashMap<>();
         ObjectNode input = JsonUtils.createObjectNode();
         ObjectNode output = JsonUtils.createObjectNode();
@@ -145,6 +154,17 @@ public class OpenTelemetryMapper {
         for (KeyValue attribute : attributes) {
             var key = attribute.getKey();
             var value = attribute.getValue();
+
+            // Claude Code's `new_context` is the latest message fed to the model on llm_request
+            // spans (the real LLM input); on interaction/tool spans it just repeats the prompt /
+            // tool result, so it's dropped there.
+            if (isClaudeCode && NEW_CONTEXT_ATTR.equals(key)) {
+                if (CLAUDE_CODE_LLM_SPAN.equals(spanName)) {
+                    extractToJsonColumn(input, key, value);
+                }
+                continue;
+            }
+
             var ruleOpt = OpenTelemetryMappingRuleFactory.findRule(key, integrationName);
 
             if (ruleOpt.isEmpty()) {

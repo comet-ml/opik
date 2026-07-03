@@ -1535,12 +1535,17 @@ class OpenTelemetryMapperTest {
         private static final String CLAUDE_CODE = "com.anthropic.claude_code.tracing";
 
         private Span enrich(List<KeyValue> attributes, List<io.opentelemetry.proto.trace.v1.Span.Event> events) {
+            return enrich(attributes, events, "claude_code.interaction");
+        }
+
+        private Span enrich(List<KeyValue> attributes, List<io.opentelemetry.proto.trace.v1.Span.Event> events,
+                String spanName) {
             var spanBuilder = Span.builder()
                     .id(UUID.randomUUID())
                     .traceId(UUID.randomUUID())
                     .projectId(UUID.randomUUID())
                     .startTime(Instant.now());
-            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, CLAUDE_CODE, events);
+            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, CLAUDE_CODE, events, spanName);
             return spanBuilder.build();
         }
 
@@ -1688,11 +1693,19 @@ class OpenTelemetryMapperTest {
         }
 
         @Test
-        void newContextIsDropped() {
+        void newContextMapsToInputOnLlmRequestSpan() {
+            var span = enrich(List.of(str("new_context", "[TOOL RESULT: t1]\nAGENTS.md README.md")),
+                    null, "claude_code.llm_request");
+
+            assertThat(span.input().get("new_context").asText()).contains("AGENTS.md README.md");
+        }
+
+        @Test
+        void newContextIsDroppedOnNonLlmSpans() {
             var span = enrich(List.of(
                     str("user_prompt", "hello"),
                     str("new_context", "[USER PROMPT]\nhello")),
-                    null);
+                    null, "claude_code.interaction");
 
             assertThat(span.input().has("new_context")).isFalse();
             assertThat(span.metadata().has("new_context")).isFalse();
