@@ -6,7 +6,14 @@ import get from "lodash/get";
 
 import { Label } from "@/ui/label";
 import { Input } from "@/ui/input";
-import { FormControl, FormField, FormItem, FormMessage } from "@/ui/form";
+import {
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/ui/form";
 import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptModelSelect";
 import PromptModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
 import SelectBox from "@/shared/SelectBox/SelectBox";
@@ -251,7 +258,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
 
             return (
               <FormItem>
-                <Label>Max cost per evaluation (USD)</Label>
+                <FormLabel>Max cost per evaluation (USD)</FormLabel>
                 <FormControl>
                   <Input
                     type="number"
@@ -276,20 +283,25 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                       }
                     }}
                     onChange={(event) => {
+                      const raw = event.target.value;
+                      // Reject anything that isn't a plain positive decimal. Closes the gap where
+                      // pasted or IME input like "1e3" (a valid float to type=number) would slip past
+                      // onKeyDown and be accepted as 1000; the controlled value keeps its last valid state.
+                      if (raw !== "" && !/^\d*\.?\d*$/.test(raw)) {
+                        return;
+                      }
                       const value = event.target.valueAsNumber;
                       field.onChange(
-                        event.target.value === "" || Number.isNaN(value)
-                          ? null
-                          : value,
+                        raw === "" || Number.isNaN(value) ? null : value,
                       );
                     }}
                   />
                 </FormControl>
-                <div className="comet-body-xs text-muted-slate">
+                <FormDescription className="comet-body-xs text-muted-slate">
                   Once an evaluation&apos;s spend reaches this amount the judge
                   wraps up and returns its scores so far. Leave empty for no
                   limit.
-                </div>
+                </FormDescription>
                 <FormMessage />
               </FormItem>
             );

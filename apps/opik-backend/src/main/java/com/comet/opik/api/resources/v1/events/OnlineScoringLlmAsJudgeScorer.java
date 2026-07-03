@@ -260,11 +260,12 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 .map(chatResponse -> {
                     try (var logContext = wrapWithMdc(mdc)) {
                         if (costGuard.shouldWrapUp()) {
+                            // The budget_exceeded tag is flagged where the guard actually fires inside
+                            // ToolCallLoop (agentic path); here we only surface the user-facing signal.
                             userFacingLogger.warn(
                                     "Spend budget of '{}' USD reached for traceId '{}' (spent '{}'); "
                                             + "stopped investigating and wrapped up with the scores gathered so far.",
                                     costGuard.limitUsd(), trace.id(), costGuard.spentUsd());
-                            recorder.flagBudgetExceeded();
                         }
                         // When scoreNameMapping is empty (regular online scoring), names pass through unchanged.
                         var parsed = OnlineScoringEngine.toFeedbackScores(chatResponse);

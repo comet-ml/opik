@@ -36,7 +36,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ToolCallLoopTest {
@@ -198,6 +202,45 @@ class ToolCallLoopTest {
         // The natural-stop terminal AiMessage is retained as the last message (not dropped by the gate).
         assertThat(messages.getLast()).isInstanceOf(AiMessage.class);
         assertThat(((AiMessage) messages.getLast()).text()).isEqualTo("final reasoning");
+    }
+
+    @Test
+    void flagsBudgetExceededOnTheRecorderWhenTheBudgetTripsMidLoop() {
+        // The recorder must be flagged at the point the budget gate fires (so the monitoring trace is
+        // tagged even if the chain errors afterwards), not inferred later by the scorer.
+        var costGuard = overBudgetGuard();
+        ToolExecutionRequest toolReq = ToolExecutionRequest.builder()
+                .id("t").name(TOOL_NAME).arguments("{}").build();
+        ChatResponse toolCalling = ChatResponse.builder()
+                .aiMessage(AiMessage.from(List.of(toolReq)))
+                .tokenUsage(OpenAiTokenUsage.builder()
+                        .inputTokenCount(100_000).outputTokenCount(100_000).totalTokenCount(200_000).build())
+                .build();
+
+        EvaluationRecorder recorder = mock(EvaluationRecorder.class);
+        when(recorder.recordToolCall(anyString(), anyString(), any())).thenAnswer(i -> i.getArgument(2));
+
+        var messages = new ArrayList<ChatMessage>(List.of(UserMessage.from("score")));
+        ToolCallLoop.run(toolCalling, baseRequest(), followUpParams(), registry(stubTool(TOOL_NAME, "ok")),
+                req -> costGuard.track(Mono.just(toolCalling)),
+                messages, ctx(), new ToolCallLoop.Budget(), costGuard, "trace-id", Map.of(), recorder).block();
+
+        verify(recorder).flagBudgetExceeded();
+    }
+
+    @Test
+    void doesNotFlagBudgetExceededOnANaturalStopUnderBudget() {
+        // Model finishes on its own while under budget — the budget gate never fires, so the recorder
+        // must NOT be flagged (a natural stop is not a budget wrap-up).
+        ChatResponse naturalStop = ChatResponse.builder().aiMessage(AiMessage.from("done")).build();
+        EvaluationRecorder recorder = mock(EvaluationRecorder.class);
+
+        var messages = new ArrayList<ChatMessage>(List.of(UserMessage.from("score")));
+        ToolCallLoop.run(naturalStop, baseRequest(), followUpParams(), registry(stubTool(TOOL_NAME, "ok")),
+                req -> Mono.just(naturalStop), messages, ctx(), new ToolCallLoop.Budget(),
+                BudgetGuard.UNLIMITED, "trace-id", Map.of(), recorder).block();
+
+        verify(recorder, never()).flagBudgetExceeded();
     }
 
     @Test

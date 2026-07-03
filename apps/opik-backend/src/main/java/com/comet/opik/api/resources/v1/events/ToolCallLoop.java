@@ -210,8 +210,16 @@ final class ToolCallLoop {
         // runWithWrapUp will bridge via the forcing user message.
         if (round >= MAX_TOOL_CALL_ROUNDS || costGuard.shouldWrapUp()) {
             if (costGuard.shouldWrapUp() && round < MAX_TOOL_CALL_ROUNDS) {
-                log.info("Evaluation spend budget reached for '{}' (spent '{}' of '{}' USD);"
-                        + " wrapping up", logIdValue, costGuard.spentUsd(), costGuard.limitUsd());
+                // The spend budget (not the round cap) is cutting this agentic run short. Flag it here,
+                // at the authoritative point the guard actually fires, rather than inferring it later
+                // from shouldWrapUp(): a natural stop that merely crossed spend reaches the no-tool
+                // branch above (never here, so it isn't mislabelled), and flagging now means the
+                // monitoring trace is tagged budget_exceeded even if the wrap-up/scoring chain errors
+                // afterwards. Idempotent — the gate trips once. Demoted to debug (the user-facing warn
+                // in the scorer is the primary signal).
+                log.debug("Evaluation spend budget reached for '{}' (spent '{}' of '{}' USD); wrapping up",
+                        logIdValue, costGuard.spentUsd(), costGuard.limitUsd());
+                recorder.flagBudgetExceeded();
             }
             return Mono.just(currentResponse);
         }
