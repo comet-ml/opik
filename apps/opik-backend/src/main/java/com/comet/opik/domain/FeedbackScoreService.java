@@ -240,34 +240,42 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
 
     @Override
     public Mono<Void> deleteSpanScore(UUID id, DeleteFeedbackScore score) {
-        return Mono.deferContextual(ctx -> {
-            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            String userName = ctx.get(RequestContext.USER_NAME);
-
-            return spanDAO.getProjectIdFromSpan(id)
-                    .map(Optional::of)
-                    .defaultIfEmpty(Optional.empty())
-                    .flatMap(projectId -> dao.deleteScoreFrom(EntityType.SPAN, id, score)
-                            .doOnSuccess(__ -> eventBus.post(
-                                    new FeedbackScoresDeleted(Set.of(id), EntityType.SPAN, workspaceId, userName,
-                                            projectId.orElse(null)))));
-        });
+        return deleteScoreAndNotify(EntityType.SPAN, id, score);
     }
 
     @Override
     public Mono<Void> deleteTraceScore(UUID id, DeleteFeedbackScore score) {
+        return deleteScoreAndNotify(EntityType.TRACE, id, score);
+    }
+
+    // Deletes the score and emits FeedbackScoresDeleted carrying the entity's project (for per-project pruning).
+    // The project is resolved lazily at subscription time and best-effort: if it is empty or the lookup fails,
+    // the delete still runs with a null projectId (the listener falls back to the trace_id/id skip index).
+    private Mono<Void> deleteScoreAndNotify(EntityType entityType, UUID entityId, DeleteFeedbackScore score) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            return traceDAO.getProjectIdFromTrace(id)
+            return resolveProjectId(entityType, entityId)
                     .map(Optional::of)
                     .defaultIfEmpty(Optional.empty())
-                    .flatMap(projectId -> dao.deleteScoreFrom(EntityType.TRACE, id, score)
-                            .doOnSuccess(__ -> eventBus.post(
-                                    new FeedbackScoresDeleted(Set.of(id), EntityType.TRACE, workspaceId, userName,
-                                            projectId.orElse(null)))));
+                    .onErrorResume(e -> {
+                        log.warn("Failed to resolve projectId for {} '{}' before score delete; "
+                                + "continuing without project scope", entityType, entityId, e);
+                        return Mono.just(Optional.empty());
+                    })
+                    .flatMap(projectId -> dao.deleteScoreFrom(entityType, entityId, score)
+                            .doOnSuccess(__ -> eventBus.post(new FeedbackScoresDeleted(Set.of(entityId), entityType,
+                                    workspaceId, userName, projectId.orElse(null)))));
         });
+    }
+
+    private Mono<UUID> resolveProjectId(EntityType entityType, UUID entityId) {
+        return switch (entityType) {
+            case SPAN -> spanDAO.getProjectIdFromSpan(entityId);
+            case TRACE -> traceDAO.getProjectIdFromTrace(entityId);
+            default -> Mono.empty();
+        };
     }
 
     @Override
