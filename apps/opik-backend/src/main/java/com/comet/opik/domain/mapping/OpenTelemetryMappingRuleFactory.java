@@ -1,5 +1,6 @@
 package com.comet.opik.domain.mapping;
 
+import com.comet.opik.domain.mapping.otel.ClaudeCodeMappingRules;
 import com.comet.opik.domain.mapping.otel.GenAIMappingRules;
 import com.comet.opik.domain.mapping.otel.GeneralMappingRules;
 import com.comet.opik.domain.mapping.otel.LangFuseMappingRules;
@@ -23,6 +24,12 @@ import java.util.stream.Stream;
  */
 @UtilityClass
 public class OpenTelemetryMappingRuleFactory {
+
+    /**
+     * Instrumentation scope name Claude Code / Claude Agent SDK spans are tagged with.
+     * Claude Code rules are applied only for this integration (see {@link #findRule(String, String)}).
+     */
+    public static final String CLAUDE_CODE_INSTRUMENTATION = "com.anthropic.claude_code.tracing";
 
     private static final List<OpenTelemetryMappingRule> ALL_RULES = Stream.of(
             LogfireMappingRules.getRules(),
@@ -51,6 +58,34 @@ public class OpenTelemetryMappingRuleFactory {
         return ALL_RULES.stream()
                 .filter(rule -> rule.matches(key))
                 .findFirst();
+    }
+
+    /**
+     * Finds the matching rule for the given key, applying integration-specific rules first.
+     * Claude Code rules are scoped so their reclassification (e.g. session.id → thread, tokens →
+     * usage) doesn't affect other integrations. Falls back to the global rules.
+     *
+     * @param key the attribute key to find a rule for
+     * @param integrationName the detected instrumentation scope name (may be null)
+     * @return an Optional containing the matching rule, or empty if no rule matches
+     */
+    public static Optional<OpenTelemetryMappingRule> findRule(String key, String integrationName) {
+        if (isClaudeCode(integrationName)) {
+            var claudeCodeRule = ClaudeCodeMappingRules.getRules().stream()
+                    .filter(rule -> rule.matches(key))
+                    .findFirst();
+            if (claudeCodeRule.isPresent()) {
+                return claudeCodeRule;
+            }
+        }
+        return findRule(key);
+    }
+
+    /**
+     * Whether the detected integration is Claude Code / Claude Agent SDK.
+     */
+    public static boolean isClaudeCode(String integrationName) {
+        return CLAUDE_CODE_INSTRUMENTATION.equalsIgnoreCase(integrationName);
     }
 
     /**

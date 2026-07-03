@@ -135,16 +135,21 @@ public class OpenTelemetryMapper {
             metadata.put("integration", integrationName);
         }
 
+        // Claude Code spans carry a lot of session/config attributes that aren't input. For that
+        // integration the default bucket for unmapped attributes is metadata (not input), so only
+        // the explicitly promoted content attributes land in input/output/usage.
+        boolean isClaudeCode = OpenTelemetryMappingRuleFactory.isClaudeCode(integrationName);
+        ObjectNode defaultBucket = isClaudeCode ? metadata : input;
+
         // Iterate over each attribute key-value pair
         for (KeyValue attribute : attributes) {
             var key = attribute.getKey();
             var value = attribute.getValue();
-            var ruleOpt = OpenTelemetryMappingRuleFactory.findRule(key);
+            var ruleOpt = OpenTelemetryMappingRuleFactory.findRule(key, integrationName);
 
             if (ruleOpt.isEmpty()) {
-                // if it's not explicitly request to drop, we keep it in input
-                log.debug("No rule found for kv {} -> {}. Using for Input.", key, attribute.getValue());
-                extractToJsonColumn(input, key, value);
+                log.debug("No rule found for kv {} -> {}. Using default bucket.", key, attribute.getValue());
+                extractToJsonColumn(defaultBucket, key, value);
                 continue;
             }
 
@@ -204,6 +209,13 @@ public class OpenTelemetryMapper {
         // Process events and add them to metadata
         processEvents(events, metadata);
 
+        // Claude Code emits the tool result as a `tool.output` span event (Bash carries it on
+        // `output`, file tools on `content`). Surface it as the tool span's output instead of
+        // leaving it only in metadata.opentelemetry.events.
+        if (isClaudeCode) {
+            extractToolOutputEvent(events, output);
+        }
+
         // Rewrite Elastic Inference Service model/provider into the underlying provider so
         // that cost lookup and provider-based filtering see the real upstream. Records the
         // original values in metadata for traceability. Returns the (possibly unchanged) pair.
@@ -250,6 +262,29 @@ public class OpenTelemetryMapper {
         if (!tags.isEmpty()) {
             spanBuilder.tags(tags);
         }
+    }
+
+    private static final String TOOL_OUTPUT_EVENT_NAME = "tool.output";
+    private static final Set<String> TOOL_OUTPUT_CONTENT_KEYS = Set.of("output", "content");
+
+    /**
+     * Maps a Claude Code {@code tool.output} span event into the tool span's output. The event
+     * carries the tool result on {@code output} (Bash) or {@code content} (file tools). The last
+     * event wins if several are present.
+     *
+     * @param events the list of events extracted from the otel payload
+     * @param output the output node to populate
+     */
+    private static void extractToolOutputEvent(List<Span.Event> events, ObjectNode output) {
+        if (CollectionUtils.isEmpty(events)) {
+            return;
+        }
+        events.stream()
+                .filter(event -> TOOL_OUTPUT_EVENT_NAME.equals(event.getName()))
+                .reduce((first, second) -> second)
+                .ifPresent(event -> event.getAttributesList().stream()
+                        .filter(attribute -> TOOL_OUTPUT_CONTENT_KEYS.contains(attribute.getKey()))
+                        .forEach(attribute -> extractToJsonColumn(output, attribute.getKey(), attribute.getValue())));
     }
 
     private static final String EXCEPTION_EVENT_NAME = "exception";
