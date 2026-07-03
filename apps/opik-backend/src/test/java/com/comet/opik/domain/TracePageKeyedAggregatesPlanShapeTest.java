@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.utils.template.TemplateUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -14,8 +15,10 @@ import org.testcontainers.lifecycle.Startables;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -94,13 +97,43 @@ class TracePageKeyedAggregatesPlanShapeTest {
                     concat('span-', toString(number)), 'general'
                 FROM numbers(%d)
                 """.formatted(DATABASE_NAME, workspaceId, projectId, TRACE_COUNT, SPAN_COUNT));
+
+        // trace-level feedback scores (legacy + authored) and comments for every trace: those aggregate CTE
+        // paths must also be exercised so their pruning regressions surface in the plan-shape assertions
+        execute("""
+                INSERT INTO %s.feedback_scores (entity_id, entity_type, project_id, workspace_id, name, value, source)
+                SELECT
+                    toFixedString(concat('00000000-0000-0000-0001-', leftPad(toString(number), 12, '0')), 36),
+                    'trace', toFixedString('%s', 36), '%s', 'accuracy', toDecimal32(0.5, 4), 'sdk'
+                FROM numbers(%d)
+                """.formatted(DATABASE_NAME, projectId, workspaceId, TRACE_COUNT));
+        execute("""
+                INSERT INTO %s.authored_feedback_scores
+                    (entity_id, entity_type, project_id, workspace_id, author, name, value, source)
+                SELECT
+                    toFixedString(concat('00000000-0000-0000-0001-', leftPad(toString(number), 12, '0')), 36),
+                    'trace', toFixedString('%s', 36), '%s', 'author', 'relevance', toDecimal64(0.7, 9), 'ui'
+                FROM numbers(%d)
+                """.formatted(DATABASE_NAME, projectId, workspaceId, TRACE_COUNT));
+        execute("""
+                INSERT INTO %s.comments (id, entity_id, entity_type, project_id, workspace_id, text)
+                SELECT
+                    toFixedString(concat('00000000-0000-0000-0003-', leftPad(toString(number), 12, '0')), 36),
+                    toFixedString(concat('00000000-0000-0000-0001-', leftPad(toString(number), 12, '0')), 36),
+                    'trace', toFixedString('%s', 36), '%s', concat('comment-', toString(number))
+                FROM numbers(%d)
+                """.formatted(DATABASE_NAME, projectId, workspaceId, TRACE_COUNT));
     }
 
     @Test
     void pageKeyedAggregatesReadPageSizedSlicesAndCacheThePageIdScalar() throws SQLException {
         var query = renderPageKeyedQuery();
         assertThat(query).doesNotContain("trace_id_prefilter");
-        assertThat(query).contains("IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))");
+        // all nine aggregate CTE sites (trace + span feedback scores, guardrails, spans, comments, annotation
+        // queues, experiment items x2) must carry the page-keyed predicate; a bare contains() would pass even
+        // if the template dropped it from some of them
+        var pageKeyedPredicate = "IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))";
+        assertThat(StringUtils.countMatches(query, pageKeyedPredicate)).isEqualTo(9);
 
         int resultRows = 0;
         try (var statement = connection.createStatement()) {
@@ -156,8 +189,9 @@ class TracePageKeyedAggregatesPlanShapeTest {
     }
 
     private List<Long> queryLogRow(String columns) {
-        return await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(500))
-                .until(() -> {
+        var row = new AtomicReference<List<Long>>();
+        await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(500))
+                .untilAsserted(() -> {
                     execute("SYSTEM FLUSH LOGS");
                     try (var statement = connection.createStatement()) {
                         var resultSet = statement.executeQuery("""
@@ -165,16 +199,17 @@ class TracePageKeyedAggregatesPlanShapeTest {
                                 WHERE log_comment = '%s' AND type = 'QueryFinish'
                                 ORDER BY event_time_microseconds DESC LIMIT 1
                                 """.formatted(columns, logComment));
-                        if (!resultSet.next()) {
-                            return null;
-                        }
+                        assertThat(resultSet.next())
+                                .as("query_log entry for log_comment '%s'", logComment)
+                                .isTrue();
                         var columnCount = resultSet.getMetaData().getColumnCount();
-                        var values = new java.util.ArrayList<Long>(columnCount);
+                        var values = new ArrayList<Long>(columnCount);
                         for (int i = 1; i <= columnCount; i++) {
                             values.add(resultSet.getLong(i));
                         }
-                        return values;
+                        row.set(values);
                     }
-                }, java.util.Objects::nonNull);
+                });
+        return row.get();
     }
 }
