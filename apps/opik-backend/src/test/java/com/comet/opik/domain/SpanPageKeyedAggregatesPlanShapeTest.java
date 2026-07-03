@@ -15,8 +15,10 @@ import org.testcontainers.lifecycle.Startables;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -177,8 +179,9 @@ class SpanPageKeyedAggregatesPlanShapeTest {
     }
 
     private List<Long> queryLogRow(String columns) {
-        return await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(500))
-                .until(() -> {
+        var row = new AtomicReference<List<Long>>();
+        await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(500))
+                .untilAsserted(() -> {
                     execute("SYSTEM FLUSH LOGS");
                     try (var statement = connection.createStatement()) {
                         var resultSet = statement.executeQuery("""
@@ -186,16 +189,17 @@ class SpanPageKeyedAggregatesPlanShapeTest {
                                 WHERE log_comment = '%s' AND type = 'QueryFinish'
                                 ORDER BY event_time_microseconds DESC LIMIT 1
                                 """.formatted(columns, logComment));
-                        if (!resultSet.next()) {
-                            return null;
-                        }
+                        assertThat(resultSet.next())
+                                .as("query_log entry for log_comment '%s'", logComment)
+                                .isTrue();
                         var columnCount = resultSet.getMetaData().getColumnCount();
-                        var values = new java.util.ArrayList<Long>(columnCount);
+                        var values = new ArrayList<Long>(columnCount);
                         for (int i = 1; i <= columnCount; i++) {
                             values.add(resultSet.getLong(i));
                         }
-                        return values;
+                        row.set(values);
                     }
-                }, java.util.Objects::nonNull);
+                });
+        return row.get();
     }
 }
