@@ -31,6 +31,7 @@ import {
 } from "@/lib/llm";
 import { COMPOSED_PROVIDER_TYPE, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { safelyGetPromptMustacheTags } from "@/lib/prompt";
+import { cn } from "@/lib/utils";
 import { RESERVED_TRACE_EVALUATOR_VARIABLES } from "@/constants/llm";
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/AddEditRuleDialog/schema";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
@@ -254,15 +255,26 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                 <FormControl>
                   <Input
                     type="number"
-                    // Positive-only, matching the Zod `.positive()` rule — 0 is a meaningless
-                    // budget (would wrap up before any work), so the control must not offer it.
-                    min={0.000001}
                     step="any"
+                    inputMode="decimal"
                     placeholder="No limit"
                     value={field.value ?? ""}
-                    className={`max-w-40${
-                      validationErrors?.message ? " border-destructive" : ""
-                    }`}
+                    // Hide the number spinner arrows (webkit + Firefox).
+                    className={cn(
+                      "max-w-40 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
+                      {
+                        "border-destructive": Boolean(
+                          validationErrors?.message,
+                        ),
+                      },
+                    )}
+                    onKeyDown={(event) => {
+                      // Positive decimal only: block the symbols type=number would otherwise accept
+                      // (sign, exponent, and the comma thousands/decimal separator).
+                      if (["e", "E", "+", "-", ","].includes(event.key)) {
+                        event.preventDefault();
+                      }
+                    }}
                     onChange={(event) => {
                       const value = event.target.valueAsNumber;
                       field.onChange(
