@@ -244,9 +244,13 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            return dao.deleteScoreFrom(EntityType.SPAN, id, score)
-                    .doOnSuccess(__ -> eventBus.post(
-                            new FeedbackScoresDeleted(Set.of(id), EntityType.SPAN, workspaceId, userName)));
+            return spanDAO.getProjectIdFromSpan(id)
+                    .map(Optional::of)
+                    .defaultIfEmpty(Optional.empty())
+                    .flatMap(projectId -> dao.deleteScoreFrom(EntityType.SPAN, id, score)
+                            .doOnSuccess(__ -> eventBus.post(
+                                    new FeedbackScoresDeleted(Set.of(id), EntityType.SPAN, workspaceId, userName,
+                                            projectId.orElse(null)))));
         });
     }
 
@@ -256,9 +260,13 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            return dao.deleteScoreFrom(EntityType.TRACE, id, score)
-                    .doOnSuccess(__ -> eventBus.post(
-                            new FeedbackScoresDeleted(Set.of(id), EntityType.TRACE, workspaceId, userName)));
+            return traceDAO.getProjectIdFromTrace(id)
+                    .map(Optional::of)
+                    .defaultIfEmpty(Optional.empty())
+                    .flatMap(projectId -> dao.deleteScoreFrom(EntityType.TRACE, id, score)
+                            .doOnSuccess(__ -> eventBus.post(
+                                    new FeedbackScoresDeleted(Set.of(id), EntityType.TRACE, workspaceId, userName,
+                                            projectId.orElse(null)))));
         });
     }
 
