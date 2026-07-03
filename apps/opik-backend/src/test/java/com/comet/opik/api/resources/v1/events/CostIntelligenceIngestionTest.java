@@ -294,6 +294,7 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().userEmail()).isEqualTo("dev@acme.com");
                 assertThat(row.get().userDisplayName()).isEqualTo("Dev User");
                 assertThat(row.get().repository()).isEqualTo("git@github.com:acme/repo.git");
+                assertThat(row.get().sessionId()).isEqualTo("cc-session-abc");
                 assertThat(row.get().schemaVersion()).isEqualTo(3);
                 assertThat(row.get().projectId()).isNotBlank();
                 assertThat(row.get().startMs()).isEqualTo(cipxTrace.startTime().toEpochMilli());
@@ -379,6 +380,7 @@ class CostIntelligenceIngestionTest {
                   "cipx": {
                     "session": {
                       "schema_version": %d,
+                      "session_id": "cc-session-abc",
                       "repository": {"remote": "%s"},
                       "identity": {
                         "user_uuid": "%s",
@@ -438,7 +440,7 @@ class CostIntelligenceIngestionTest {
                 SELECT
                     project_id AS project_id,
                     toUnixTimestamp64Milli(start_time) AS start_ms,
-                    user_uuid, user_email, user_display_name, repository, schema_version
+                    user_uuid, user_email, user_display_name, repository, session_id, schema_version
                 FROM cipx_trace_identities FINAL
                 WHERE workspace_id = :workspace_id AND trace_id = :trace_id
                 """;
@@ -454,6 +456,7 @@ class CostIntelligenceIngestionTest {
                             row.get("user_email", String.class),
                             row.get("user_display_name", String.class),
                             row.get("repository", String.class),
+                            row.get("session_id", String.class),
                             row.get("schema_version", Integer.class)))));
         }).blockOptional();
     }
@@ -478,6 +481,6 @@ class CostIntelligenceIngestionTest {
     }
 
     private record CipxIdentityRow(String projectId, Long startMs, String userUuid, String userEmail,
-            String userDisplayName, String repository, Integer schemaVersion) {
+            String userDisplayName, String repository, String sessionId, Integer schemaVersion) {
     }
 }
