@@ -114,17 +114,17 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
 
   const openCreateDialog = useCallback(() => {
     setRuleToEdit(null);
-    onOpenChange(false);
+    openChangeHandler(false);
     setIsRuleDialogOpen(true);
-  }, [onOpenChange]);
+  }, [openChangeHandler]);
 
   const openEditDialog = useCallback(
     (rule: EvaluatorsRule) => {
       setRuleToEdit(rule);
-      onOpenChange(false);
+      openChangeHandler(false);
       setIsRuleDialogOpen(true);
     },
-    [onOpenChange],
+    [openChangeHandler],
   );
 
   const handleDialogOpenChange = useCallback((newOpen: boolean) => {
@@ -261,7 +261,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
                       tabIndex={-1}
                     />
                     <div className="min-w-0 flex-1">
-                      <div className="comet-body-s truncate">
+                      <div className="comet-body-s truncate tabular-nums">
                         {selectedCount} of {rules.length} selected
                       </div>
                     </div>
