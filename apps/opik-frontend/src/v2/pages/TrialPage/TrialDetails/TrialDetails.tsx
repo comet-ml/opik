@@ -15,11 +15,8 @@ import { getFeedbackScoreValue } from "@/lib/feedback-scores";
 import OptimizationConfigPill, {
   CONFIG_PILL_ICON_CLASS,
 } from "@/v2/pages-shared/optimizations/OptimizationConfigPill";
-import {
-  TRIAL_STATUS_COLORS,
-  TRIAL_STATUS_LABELS,
-  type TrialStatus,
-} from "@/v2/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
+import TrialStatusPill from "@/v2/pages-shared/optimizations/TrialStatusPill";
+import { type TrialStatus } from "@/v2/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
 
 type TrialDetailsProps = {
   optimization?: Optimization;
@@ -75,19 +72,7 @@ const TrialDetails: React.FC<TrialDetailsProps> = ({
     <div className="py-4">
       <div className="mb-2 flex min-h-8 items-center gap-1.5">
         <h1 className="comet-body-accented truncate break-words">{title}</h1>
-        {trialStatus && (
-          <OptimizationConfigPill
-            className="shrink-0 bg-primary-foreground pl-1 pr-1.5"
-            icon={
-              <span
-                className="size-1.5 shrink-0 rounded-full"
-                style={{ backgroundColor: TRIAL_STATUS_COLORS[trialStatus] }}
-              />
-            }
-          >
-            {TRIAL_STATUS_LABELS[trialStatus]}
-          </OptimizationConfigPill>
-        )}
+        {trialStatus && <TrialStatusPill status={trialStatus} />}
       </div>
       <div className="mb-1 flex items-center gap-2 overflow-x-auto">
         {experiment?.created_at && (

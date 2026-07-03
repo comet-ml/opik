@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 
 import {
+  CELL_HORIZONTAL_ALIGNMENT,
   COLUMN_ID_ID,
   COLUMN_NAME_ID,
   COLUMN_TYPE,
@@ -63,18 +64,18 @@ export const useOptimizationColumns = ({
     return [
       {
         id: COLUMN_NAME_ID,
-        label: "Trial #",
+        label: "Trial",
         type: COLUMN_TYPE.string,
-        size: 100,
-        cell: TrialNumberCell as never,
+        size: 80,
+        cell: TrialNumberCell,
       },
       {
         id: "step",
         label: "Step",
         type: COLUMN_TYPE.string,
-        size: 100,
+        size: 80,
         accessorFn: (row) => row.stepIndex,
-        cell: TrialStepCell as never,
+        cell: TrialStepCell,
       },
       {
         id: COLUMN_ID_ID,
@@ -82,12 +83,27 @@ export const useOptimizationColumns = ({
         type: COLUMN_TYPE.string,
       },
       {
+        id: "prompt",
+        label: "Prompt",
+        type: COLUMN_TYPE.string,
+        size: 322,
+        accessorFn: (row) => row.experimentIds?.[0],
+        cell: TrialPromptCell,
+        customMeta: {
+          experimentMap,
+          baselineExperiment,
+        },
+      },
+      {
         id: "objective_name",
         label: getObjectiveLabel(isTestSuite, objectiveName),
         type: COLUMN_TYPE.numberDictionary,
-        size: 160,
+        size: 130,
+        // numberDictionary defaults to start; the Figma table keys all metric
+        // columns to the right edge.
+        horizontalAlignment: CELL_HORIZONTAL_ALIGNMENT.end,
         accessorFn: (row) => row.score,
-        cell: TrialAccuracyCell as never,
+        cell: TrialAccuracyCell,
         customMeta: {
           baselineCandidate,
           isTestSuite,
@@ -95,11 +111,11 @@ export const useOptimizationColumns = ({
       },
       {
         id: "runtime_cost",
-        label: "Runtime cost",
+        label: "Opt. cost",
         type: COLUMN_TYPE.cost,
-        size: 160,
+        size: 130,
         accessorFn: (row) => row.runtimeCost,
-        cell: TrialCandidateCostCell as never,
+        cell: TrialCandidateCostCell,
         customMeta: {
           baselineCandidate,
         },
@@ -108,23 +124,11 @@ export const useOptimizationColumns = ({
         id: "latency",
         label: "Latency",
         type: COLUMN_TYPE.duration,
-        size: 160,
+        size: 130,
         accessorFn: (row) => row.latencyP50,
-        cell: TrialCandidateLatencyCell as never,
+        cell: TrialCandidateLatencyCell,
         customMeta: {
           baselineCandidate,
-        },
-      },
-      {
-        id: "prompt",
-        label: "Prompt",
-        type: COLUMN_TYPE.string,
-        size: 280,
-        accessorFn: (row) => row.experimentIds?.[0],
-        cell: TrialPromptCell as never,
-        customMeta: {
-          experimentMap,
-          baselineExperiment,
         },
       },
       {
@@ -140,7 +144,7 @@ export const useOptimizationColumns = ({
         type: COLUMN_TYPE.string,
         size: 120,
         accessorFn: () => undefined,
-        cell: TrialStatusCell as never,
+        cell: TrialStatusCell,
         customMeta: {
           candidates,
           bestCandidateId,
@@ -153,6 +157,8 @@ export const useOptimizationColumns = ({
         id: "created_at",
         label: "Created",
         type: COLUMN_TYPE.time,
+        size: 140,
+        // TimeCell is shared and typed for unknown rows; the one remaining cast.
         cell: TimeCell as never,
         customMeta: {
           timeMode: "absolute",

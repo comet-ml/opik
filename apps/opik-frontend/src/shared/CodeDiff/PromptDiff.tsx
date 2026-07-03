@@ -9,15 +9,24 @@ import {
 import TextDiff from "./TextDiff";
 import { Tag } from "@/ui/tag";
 
+/**
+ * "default" keeps the original muted cards with role tags. "panel" matches the
+ * trials-table diff popover (Figma 689:36080): primary-foreground cards with a
+ * plain muted role label, changes communicated by the inline highlight alone.
+ */
+type PromptDiffVariant = "default" | "panel";
+
 type PromptDiffProps = {
   baseline: unknown;
   current: unknown;
+  variant?: PromptDiffVariant;
 };
 
 const MessagesDiff: React.FC<{
   baseline: OpenAIMessage[];
   current: OpenAIMessage[];
-}> = ({ baseline, current }) => {
+  variant: PromptDiffVariant;
+}> = ({ baseline, current, variant }) => {
   const baselineByRole = useMemo(() => {
     const map = new Map<string, string>();
     baseline.forEach((msg) => {
@@ -67,16 +76,32 @@ const MessagesDiff: React.FC<{
           ] || role;
 
         return (
-          <div key={role} className="rounded-md border bg-muted/30 p-3">
+          <div
+            key={role}
+            className={
+              variant === "panel"
+                ? "rounded-md border bg-primary-foreground px-3 py-2"
+                : "rounded-md border bg-muted/30 p-3"
+            }
+          >
             <div className="mb-2 flex items-center gap-2">
-              <Tag variant="gray" size="sm" className="capitalize">
-                {roleName}
-              </Tag>
-              {hasChanged && baseContent && currContent && (
-                <Tag variant="orange" size="sm">
-                  Changed
+              {variant === "panel" ? (
+                <span className="comet-body-xs-accented capitalize text-muted-slate">
+                  {roleName}
+                </span>
+              ) : (
+                <Tag variant="gray" size="sm" className="capitalize">
+                  {roleName}
                 </Tag>
               )}
+              {variant !== "panel" &&
+                hasChanged &&
+                baseContent &&
+                currContent && (
+                  <Tag variant="orange" size="sm">
+                    Changed
+                  </Tag>
+                )}
               {!baseContent && currContent && (
                 <Tag variant="green" size="sm">
                   Added
@@ -109,7 +134,8 @@ const MessagesDiff: React.FC<{
 const NamedPromptsDiff: React.FC<{
   baseline: NamedPrompts;
   current: NamedPrompts;
-}> = ({ baseline, current }) => {
+  variant: PromptDiffVariant;
+}> = ({ baseline, current, variant }) => {
   const names = useMemo(() => {
     const s = new Set([...Object.keys(baseline), ...Object.keys(current)]);
     return Array.from(s).sort();
@@ -123,6 +149,7 @@ const NamedPromptsDiff: React.FC<{
           <MessagesDiff
             baseline={baseline[name] ?? []}
             current={current[name] ?? []}
+            variant={variant}
           />
         </div>
       ))}
@@ -133,6 +160,7 @@ const NamedPromptsDiff: React.FC<{
 const PromptDiff: React.FunctionComponent<PromptDiffProps> = ({
   baseline,
   current,
+  variant = "default",
 }) => {
   const baselineExtracted = useMemo(
     () => extractPromptData(baseline),
@@ -168,6 +196,7 @@ const PromptDiff: React.FunctionComponent<PromptDiffProps> = ({
       <MessagesDiff
         baseline={baselineExtracted.data}
         current={currentExtracted.data}
+        variant={variant}
       />
     );
   }
@@ -176,6 +205,7 @@ const PromptDiff: React.FunctionComponent<PromptDiffProps> = ({
     <NamedPromptsDiff
       baseline={baselineExtracted.data as NamedPrompts}
       current={currentExtracted.data as NamedPrompts}
+      variant={variant}
     />
   );
 };

@@ -4,6 +4,8 @@ import { useActiveProjectId } from "@/store/AppStore";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import Loader from "@/shared/Loader/Loader";
+import SearchInput from "@/shared/SearchInput/SearchInput";
+import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import OptimizationProgressChartContainer from "@/v2/pages-shared/experiments/OptimizationProgressChart";
 import BestTrialPrompt from "./BestTrialPrompt";
 import { IN_PROGRESS_OPTIMIZATION_STATUSES } from "@/lib/optimizations";
@@ -40,6 +42,13 @@ const OptimizationPage: React.FC = () => {
     rows,
     noDataText,
     sortableBy,
+    search,
+    setSearch,
+    total,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
 
     bestCandidate,
     baselineCandidate,
@@ -222,7 +231,14 @@ const OptimizationPage: React.FC = () => {
         </TabsContent>
 
         <TabsContent value={OPTIMIZATION_TAB.TRIALS} className="mt-0 pt-4">
-          <div className="flex items-center justify-end pb-4">
+          <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-4">
+            <SearchInput
+              searchText={search ?? ""}
+              setSearchText={setSearch}
+              placeholder="Search by trial name"
+              className="w-[320px]"
+              dimension="sm"
+            />
             <OptimizationTrialsControls
               onRefresh={handleRefresh}
               isFetching={isExperimentsFetching}
@@ -252,6 +268,15 @@ const OptimizationPage: React.FC = () => {
                 isExperimentsPlaceholderData && isExperimentsFetching
               }
             />
+            <div className="py-4">
+              <DataTablePagination
+                page={page}
+                pageChange={setPage}
+                size={pageSize}
+                sizeChange={setPageSize}
+                total={total}
+              />
+            </div>
           </div>
         </TabsContent>
       </Tabs>

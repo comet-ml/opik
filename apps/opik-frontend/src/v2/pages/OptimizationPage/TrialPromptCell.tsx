@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
 import get from "lodash/get";
 import isObject from "lodash/isObject";
@@ -8,7 +8,8 @@ import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import { AggregatedCandidate } from "@/types/optimizations";
 import { Experiment } from "@/types/datasets";
 import { ROW_HEIGHT } from "@/types/shared";
-import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/ui/hover-card";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import PromptDiff from "@/shared/CodeDiff/PromptDiff";
 import { extractMessages } from "@/lib/optimization-config";
 
@@ -46,13 +47,17 @@ const getPromptSingleLine = (prompt: unknown): string => {
   return "";
 };
 
-export const TrialPromptCell = (context: CellContext<unknown, unknown>) => {
-  const row = context.row.original as AggregatedCandidate;
+export const TrialPromptCell = (
+  context: CellContext<AggregatedCandidate, unknown>,
+) => {
+  const row = context.row.original;
   const { custom } = context.column.columnDef.meta ?? {};
   const { experimentMap, baselineExperiment } = (custom ?? {}) as {
     experimentMap: Map<string, Experiment>;
     baselineExperiment?: Experiment;
   };
+
+  const [diffOpen, setDiffOpen] = useState(false);
 
   const rowHeight =
     (context.table.options.meta as { rowHeight?: ROW_HEIGHT } | undefined)
@@ -105,27 +110,48 @@ export const TrialPromptCell = (context: CellContext<unknown, unknown>) => {
         </span>
       )}
       {showDiff && (
-        <Popover>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              onClick={(e) => e.stopPropagation()}
-              className="shrink-0 self-start text-muted-slate hover:text-foreground"
-            >
-              <GitCompareArrows className="size-4" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent
-            className="max-h-[400px] w-[500px] overflow-y-auto p-4"
+        <HoverCard
+          open={diffOpen}
+          onOpenChange={setDiffOpen}
+          openDelay={300}
+          closeDelay={150}
+        >
+          {/* Figma note 686:53223: the diff button only shows while hovering
+              the row (rows carry the `group/row` class), stays visible while
+              its popover is open, and carries the previously missing tooltip.
+              The popover opens on hover or click (689:36080). */}
+          <TooltipWrapper content="View diff vs baseline">
+            <HoverCardTrigger asChild>
+              <button
+                type="button"
+                aria-label="View diff vs baseline"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDiffOpen(true);
+                }}
+                className="shrink-0 self-start text-muted-slate opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover/row:opacity-100 data-[state=open]:opacity-100"
+              >
+                <GitCompareArrows className="size-4" />
+              </button>
+            </HoverCardTrigger>
+          </TooltipWrapper>
+          <HoverCardContent
             align="end"
+            className="w-[660px] max-w-[90vw] p-3 shadow-lg"
             onClick={(e) => e.stopPropagation()}
           >
-            <h4 className="comet-body-s-accented mb-3">
-              Prompt diff vs baseline
+            <h4 className="comet-body-s-accented mb-2 pl-1 text-foreground">
+              Diff vs baseline
             </h4>
-            <PromptDiff baseline={baselinePrompt} current={currentPrompt} />
-          </PopoverContent>
-        </Popover>
+            <div className="max-h-[420px] overflow-y-auto">
+              <PromptDiff
+                baseline={baselinePrompt}
+                current={currentPrompt}
+                variant="panel"
+              />
+            </div>
+          </HoverCardContent>
+        </HoverCard>
       )}
     </CellWrapper>
   );
