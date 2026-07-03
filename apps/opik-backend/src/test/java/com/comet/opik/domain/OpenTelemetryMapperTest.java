@@ -1652,6 +1652,42 @@ class OpenTelemetryMapperTest {
         }
 
         @Test
+        void hookIdentityMapsToInput() {
+            var span = enrich(List.of(
+                    str("hook_event", "UserPromptSubmit"),
+                    str("hook_name", "UserPromptSubmit"),
+                    str("hook_definitions", "[{\"type\":\"command\"}]"),
+                    intVal("num_hooks", 1),
+                    str("user.id", "user-1")),
+                    null);
+
+            assertThat(span.input().get("hook_event").asText()).isEqualTo("UserPromptSubmit");
+            assertThat(span.input().get("hook_name").asText()).isEqualTo("UserPromptSubmit");
+            assertThat(span.input().has("hook_definitions")).isTrue();
+            // counters and identity stay in metadata
+            assertThat(span.metadata().has("num_hooks")).isTrue();
+            assertThat(span.metadata().get("user.id").asText()).isEqualTo("user-1");
+        }
+
+        @Test
+        void llmRequestSetupMapsToInput() {
+            var span = enrich(List.of(
+                    str("model", "claude-sonnet-4-6"),
+                    str("system_prompt_preview", "You are a Claude agent..."),
+                    str("llm_request.context", "interaction"),
+                    str("query_source", "sdk"),
+                    str("user.id", "user-1")),
+                    null);
+
+            assertThat(span.input().get("model").asText()).isEqualTo("claude-sonnet-4-6");
+            assertThat(span.input().get("system_prompt_preview").asText()).contains("Claude agent");
+            // request classifiers / identity stay in metadata
+            assertThat(span.metadata().get("llm_request.context").asText()).isEqualTo("interaction");
+            assertThat(span.metadata().get("query_source").asText()).isEqualTo("sdk");
+            assertThat(span.metadata().get("user.id").asText()).isEqualTo("user-1");
+        }
+
+        @Test
         void newContextIsDropped() {
             var span = enrich(List.of(
                     str("user_prompt", "hello"),
