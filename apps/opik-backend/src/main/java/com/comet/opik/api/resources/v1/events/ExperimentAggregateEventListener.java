@@ -142,9 +142,10 @@ public class ExperimentAggregateEventListener {
                             Collectors.mapping(Map.Entry::getKey, Collectors.toSet())));
             triggerByTraceIdsPerProject(traceIdsByProject, event.workspaceId(), event.userName(), errorMessage);
         } else {
-            // Fallback for callers that don't carry the mapping: fan out per project with the full id set.
-            triggerByTraceIdsPerProject(event.projectIds(), event.traceIds(), event.workspaceId(), event.userName(),
-                    errorMessage);
+            // No per-trace -> project mapping available: fall back to a single workspace-scoped trigger that
+            // relies on the trace_id skip index, instead of re-scanning the full id set once per project.
+            triggerByTraceIds(event.traceIds(), event.workspaceId(), event.userName(), null)
+                    .subscribe(null, e -> log.error(errorMessage, e));
         }
     }
 
@@ -178,19 +179,6 @@ public class ExperimentAggregateEventListener {
             String userName, String errorMessage) {
         Flux.fromIterable(traceIdsByProject.entrySet())
                 .concatMap(entry -> triggerByTraceIds(entry.getValue(), workspaceId, userName, entry.getKey())
-                        .onErrorResume(e -> logAndContinue(errorMessage, e)))
-                .subscribe(null, e -> log.error(errorMessage, e));
-    }
-
-    private void triggerByTraceIdsPerProject(Set<UUID> projectIds, Set<UUID> traceIds, String workspaceId,
-            String userName, String errorMessage) {
-        if (CollectionUtils.isEmpty(projectIds)) {
-            triggerByTraceIds(traceIds, workspaceId, userName, null)
-                    .subscribe(null, e -> log.error(errorMessage, e));
-            return;
-        }
-        Flux.fromIterable(projectIds)
-                .concatMap(projectId -> triggerByTraceIds(traceIds, workspaceId, userName, projectId)
                         .onErrorResume(e -> logAndContinue(errorMessage, e)))
                 .subscribe(null, e -> log.error(errorMessage, e));
     }
