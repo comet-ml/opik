@@ -22,3 +22,4 @@ ORDER BY (source_table, event_time, deleted_id)
 TTL toDateTime(event_time + INTERVAL 2 YEAR);
 
 --rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.deletion_events_local ON CLUSTER '{cluster}';
+

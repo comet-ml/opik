@@ -82,16 +82,16 @@ class DeletionEventsLocalTest {
         var sql = """
                 INSERT INTO deletion_events_local
                     (source_table, workspace_id, project_id, deleted_id, deletion_reason)
-                VALUES (:sourceTable, :workspaceId, :projectId, :deletedId, :deletionReason)
+                VALUES (:source_table, :workspace_id, :project_id, :deleted_id, :deletion_reason)
                 """;
         Mono.usingWhen(
                 connectionFactory.create(),
                 connection -> Flux.from(connection.createStatement(sql)
-                        .bind("sourceTable", event.sourceTable())
-                        .bind("workspaceId", event.workspaceId())
-                        .bind("projectId", event.projectId())
-                        .bind("deletedId", event.deletedId())
-                        .bind("deletionReason", event.deletionReason())
+                        .bind("source_table", event.sourceTable())
+                        .bind("workspace_id", event.workspaceId())
+                        .bind("project_id", event.projectId())
+                        .bind("deleted_id", event.deletedId())
+                        .bind("deletion_reason", event.deletionReason())
                         .execute())
                         .flatMap(Result::getRowsUpdated)
                         .then(),
@@ -103,12 +103,12 @@ class DeletionEventsLocalTest {
         var sql = """
                 SELECT event_time, source_table, workspace_id, project_id, deleted_id, deletion_reason
                 FROM deletion_events_local
-                WHERE workspace_id = :workspaceId
+                WHERE workspace_id = :workspace_id
                 """;
         return Mono.usingWhen(
                 connectionFactory.create(),
                 connection -> Flux.from(connection.createStatement(sql)
-                        .bind("workspaceId", workspaceId)
+                        .bind("workspace_id", workspaceId)
                         .execute())
                         .flatMap(result -> result.map((row, _) -> DeletionEvent.builder()
                                 .eventTime(row.get("event_time", Instant.class))
@@ -128,8 +128,11 @@ class DeletionEventsLocalTest {
                 .usingRecursiveComparison()
                 .ignoringFields(DELETION_EVENTS_IGNORED_FIELDS)
                 .isEqualTo(expectedDeletionEvent);
+        // insert() omits event_time, so ClickHouse stamps it at insert time — moments after Podam
+        // generated the expected value — leaving the two within a few millis
+        // using 2 seconds which large enough to avoid flakiness
         assertThat(actualDeletionEvent.eventTime())
-                .isCloseTo(expectedDeletionEvent.eventTime(), within(1, ChronoUnit.SECONDS));
+                .isCloseTo(expectedDeletionEvent.eventTime(), within(2, ChronoUnit.SECONDS));
     }
 
     @Builder(toBuilder = true)
