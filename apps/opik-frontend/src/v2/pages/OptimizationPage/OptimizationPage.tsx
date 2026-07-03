@@ -4,6 +4,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import Loader from "@/shared/Loader/Loader";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
+import PageBodyScrollContainer from "@/v2/layout/PageBodyScrollContainer/PageBodyScrollContainer";
+import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import OptimizationProgressChartContainer from "@/v2/pages-shared/experiments/OptimizationProgressChart";
 import BestTrialPrompt from "./BestTrialPrompt";
 import { IN_PROGRESS_OPTIMIZATION_STATUSES } from "@/lib/optimizations";
@@ -168,8 +170,12 @@ const OptimizationPage: React.FC = () => {
     !IN_PROGRESS_OPTIMIZATION_STATUSES.includes(optimization.status);
 
   return (
-    <div className="flex min-h-full flex-col pt-4">
-      <div className="shrink-0 pb-4">
+    <PageBodyScrollContainer>
+      <PageBodyStickyContainer
+        className="py-4"
+        direction="horizontal"
+        limitWidth
+      >
         <OptimizationHeader
           optimization={optimization}
           status={optimization?.status}
@@ -177,82 +183,98 @@ const OptimizationPage: React.FC = () => {
           isStudioOptimization={Boolean(optimization?.studio_config)}
           canRerun={canRerun}
         />
-      </div>
+      </PageBodyStickyContainer>
 
       <Tabs
         value={activeTab}
         onValueChange={setActiveTab}
         className="flex flex-col"
       >
-        <TabsList variant="segmented-primary" className="shrink-0">
-          <TabsTrigger
-            variant="segmented-primary"
-            size="sm"
-            value={OPTIMIZATION_TAB.OVERVIEW}
+        <PageBodyStickyContainer direction="horizontal" limitWidth>
+          <TabsList variant="segmented-primary" className="shrink-0">
+            <TabsTrigger
+              variant="segmented-primary"
+              size="sm"
+              value={OPTIMIZATION_TAB.OVERVIEW}
+            >
+              Overview
+            </TabsTrigger>
+            <TabsTrigger
+              variant="segmented-primary"
+              size="sm"
+              value={OPTIMIZATION_TAB.TRIALS}
+            >
+              Trials
+            </TabsTrigger>
+          </TabsList>
+        </PageBodyStickyContainer>
+
+        <TabsContent value={OPTIMIZATION_TAB.OVERVIEW} className="mt-0">
+          <PageBodyStickyContainer
+            className="flex flex-col pt-4"
+            direction="horizontal"
+            limitWidth
           >
-            Overview
-          </TabsTrigger>
-          <TabsTrigger
-            variant="segmented-primary"
-            size="sm"
-            value={OPTIMIZATION_TAB.TRIALS}
-          >
-            Trials
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value={OPTIMIZATION_TAB.OVERVIEW} className="mt-0 pt-4">
-          {optimization &&
-            optimization.status === OPTIMIZATION_STATUS.ERROR && (
-              <div className="shrink-0 pb-4">
-                <RunErrorPanel optimization={optimization} />
-              </div>
-            )}
-          <div className="shrink-0 pb-4">
-            <OptimizationKPICards
-              experiments={experiments}
-              baselineCandidate={baselineCandidate}
-              bestCandidate={bestCandidate}
-              isTestSuite={isTestSuite}
-              objectiveName={optimization?.objective_name}
-              optimizationCreatedAt={optimization?.created_at}
-              optimizationLastUpdatedAt={optimization?.last_updated_at}
-              isInProgress={
-                !!optimization?.status &&
-                IN_PROGRESS_OPTIMIZATION_STATUSES.includes(optimization.status)
-              }
-            />
-          </div>
-
-          <div className="shrink-0 pb-4">
-            <OptimizationProgressChartContainer
-              candidates={candidates}
-              bestCandidateId={bestCandidate?.candidateId}
-              objectiveName={optimization?.objective_name}
-              status={optimization?.status}
-              onTrialClick={handleTrialClick}
-              isTestSuite={isTestSuite}
-              inProgressInfo={inProgressInfo}
-              isRunningMiniBatches={isRunningMiniBatches}
-              selectedTrialId={selectedTrialId}
-              onTrialSelect={setSelectedTrialId}
-            />
-          </div>
-
-          {bestCandidate && (
+            {optimization &&
+              optimization.status === OPTIMIZATION_STATUS.ERROR && (
+                <div className="shrink-0 pb-4">
+                  <RunErrorPanel optimization={optimization} />
+                </div>
+              )}
             <div className="shrink-0 pb-4">
-              <BestTrialPrompt
-                bestCandidate={bestCandidate}
-                candidates={candidates}
+              <OptimizationKPICards
                 experiments={experiments}
-                onViewTrial={() => handleTrialClick(bestCandidate.candidateId)}
+                baselineCandidate={baselineCandidate}
+                bestCandidate={bestCandidate}
+                isTestSuite={isTestSuite}
+                objectiveName={optimization?.objective_name}
+                optimizationCreatedAt={optimization?.created_at}
+                optimizationLastUpdatedAt={optimization?.last_updated_at}
+                isInProgress={
+                  !!optimization?.status &&
+                  IN_PROGRESS_OPTIMIZATION_STATUSES.includes(
+                    optimization.status,
+                  )
+                }
               />
             </div>
-          )}
+
+            <div className="shrink-0 pb-4">
+              <OptimizationProgressChartContainer
+                candidates={candidates}
+                bestCandidateId={bestCandidate?.candidateId}
+                objectiveName={optimization?.objective_name}
+                status={optimization?.status}
+                onTrialClick={handleTrialClick}
+                isTestSuite={isTestSuite}
+                inProgressInfo={inProgressInfo}
+                isRunningMiniBatches={isRunningMiniBatches}
+                selectedTrialId={selectedTrialId}
+                onTrialSelect={setSelectedTrialId}
+              />
+            </div>
+
+            {bestCandidate && (
+              <div className="shrink-0 pb-4">
+                <BestTrialPrompt
+                  bestCandidate={bestCandidate}
+                  candidates={candidates}
+                  experiments={experiments}
+                  onViewTrial={() =>
+                    handleTrialClick(bestCandidate.candidateId)
+                  }
+                />
+              </div>
+            )}
+          </PageBodyStickyContainer>
         </TabsContent>
 
-        <TabsContent value={OPTIMIZATION_TAB.TRIALS} className="mt-0 pt-4">
-          <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-4">
+        <TabsContent value={OPTIMIZATION_TAB.TRIALS} className="mt-0">
+          <PageBodyStickyContainer
+            className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
+            direction="bidirectional"
+            limitWidth
+          >
             <SearchInput
               searchText={search ?? ""}
               setSearchText={setSearch}
@@ -271,34 +293,36 @@ const OptimizationPage: React.FC = () => {
               columnsOrder={columnsOrder}
               onColumnsOrderChange={setColumnsOrder}
             />
-          </div>
+          </PageBodyStickyContainer>
 
-          <div className="pb-6">
-            <OptimizationTrialsTable
-              columns={columns}
-              rows={rows}
-              onRowClick={handleRowClick}
-              rowHeight={height}
-              noDataText={noDataText}
-              sortedColumns={sortedColumns}
-              onSortChange={setSortedColumns}
-              columnsWidth={columnsWidth}
-              onColumnsWidthChange={setColumnsWidth}
-              highlightedTrialId={selectedTrialId}
-              showLoadingOverlay={
-                isExperimentsPlaceholderData && isExperimentsFetching
-              }
+          <OptimizationTrialsTable
+            columns={columns}
+            rows={rows}
+            onRowClick={handleRowClick}
+            rowHeight={height}
+            noDataText={noDataText}
+            sortedColumns={sortedColumns}
+            onSortChange={setSortedColumns}
+            columnsWidth={columnsWidth}
+            onColumnsWidthChange={setColumnsWidth}
+            highlightedTrialId={selectedTrialId}
+            showLoadingOverlay={
+              isExperimentsPlaceholderData && isExperimentsFetching
+            }
+          />
+          <PageBodyStickyContainer
+            className="py-4"
+            direction="horizontal"
+            limitWidth
+          >
+            <DataTablePagination
+              page={page}
+              pageChange={setPage}
+              size={pageSize}
+              sizeChange={setPageSize}
+              total={total}
             />
-            <div className="py-4">
-              <DataTablePagination
-                page={page}
-                pageChange={setPage}
-                size={pageSize}
-                sizeChange={setPageSize}
-                total={total}
-              />
-            </div>
-          </div>
+          </PageBodyStickyContainer>
         </TabsContent>
       </Tabs>
 
@@ -330,7 +354,7 @@ const OptimizationPage: React.FC = () => {
           onTabChange={trialSidebar.setTab}
         />
       </TrialSidebar>
-    </div>
+    </PageBodyScrollContainer>
   );
 };
 
