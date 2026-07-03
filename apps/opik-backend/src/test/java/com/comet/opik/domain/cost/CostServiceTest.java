@@ -456,6 +456,32 @@ class CostServiceTest {
                         "0.00315"));
     }
 
+    /**
+     * Test for issue #5130: Bedrock model names carry a version-pin suffix like
+     * "anthropic.claude-opus-4-6-v1:0" while the pricing database stores the base name
+     * "anthropic.claude-opus-4-6-v1". Stripping the ":N" pin lets these price correctly.
+     */
+    @ParameterizedTest
+    @MethodSource("provideBedrockModelNamesWithVersionSuffix")
+    void calculateCost_shouldStripVersionSuffix_issue5130(String modelName) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost(modelName, "bedrock", usage, null);
+
+        assertThat(cost).isGreaterThan(BigDecimal.ZERO);
+    }
+
+    private static Stream<Arguments> provideBedrockModelNamesWithVersionSuffix() {
+        return Stream.of(
+                // Base key stored without ":0"; Bedrock appends the version pin.
+                Arguments.of("anthropic.claude-opus-4-6-v1:0"),
+                Arguments.of("us.anthropic.claude-opus-4-6-v1:0"),
+                // Provider prefix + version pin: prefix stripped first, then version suffix removed.
+                Arguments.of("bedrock/anthropic.claude-opus-4-6-v1:0"));
+    }
+
     private static Stream<Arguments> provideModelNamesWithDateSuffixes() {
         return Stream.of(
                 // 1. Stripped date on original name (base model has dots, date suffix removed before lookup)
