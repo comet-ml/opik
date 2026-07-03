@@ -1,6 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
-import { useActiveProjectId } from "@/store/AppStore";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import Loader from "@/shared/Loader/Loader";
@@ -18,6 +16,9 @@ import OptimizationTrialsControls from "./OptimizationTrialsControls";
 import OptimizationTrialsTable from "./OptimizationTrialsTable";
 import OptimizationKPICards from "./OptimizationKPICards";
 import RunErrorPanel from "./RunErrorPanel";
+import TrialSidebar from "./TrialSidebar/TrialSidebar";
+import TrialSidebarContent from "./TrialSidebar/TrialSidebarContent";
+import { computeCandidateStatuses } from "@/v2/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
 import { OPTIMIZATION_STATUS } from "@/types/optimizations";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
@@ -27,14 +28,11 @@ enum OPTIMIZATION_TAB {
 }
 
 const OptimizationPage: React.FC = () => {
-  const navigate = useNavigate();
-  const activeProjectId = useActiveProjectId();
   const {
     permissions: { canUseOptimizationStudio },
   } = usePermissions();
 
   const {
-    workspaceName,
     optimizationId,
     optimization,
     experiments,
@@ -74,6 +72,7 @@ const OptimizationPage: React.FC = () => {
 
     handleRowClick,
     handleRefresh,
+    trialSidebar,
   } = useOptimizationData();
 
   const [selectedTrialId, setSelectedTrialId] = useState<string | undefined>();
@@ -96,29 +95,51 @@ const OptimizationPage: React.FC = () => {
     setBreadcrumbParam,
   ]);
 
+  const { openTrial } = trialSidebar;
+
   const handleTrialClick = useCallback(
     (candidateId: string) => {
       const candidate = candidates.find((c) => c.candidateId === candidateId);
       if (!candidate) return;
-      navigate({
-        to: "/$workspaceName/projects/$projectId/optimizations/$optimizationId/trials",
-        params: {
-          optimizationId,
-          workspaceName,
-          projectId: activeProjectId!,
-        },
-        search: {
-          trials: candidate.experimentIds,
-          trialNumber: candidate.trialNumber,
-        },
-      });
+      openTrial(candidate);
     },
-    [candidates, navigate, optimizationId, workspaceName, activeProjectId],
+    [candidates, openTrial],
+  );
+
+  // The sidebar's experiments come from the run's already-loaded list — the
+  // sidebar itself fetches nothing.
+  const trialExperiments = useMemo(
+    () => experiments.filter((e) => trialSidebar.experimentIds.includes(e.id)),
+    [experiments, trialSidebar.experimentIds],
   );
 
   const isInProgress =
     !!optimization?.status &&
     IN_PROGRESS_OPTIMIZATION_STATUSES.includes(optimization.status);
+
+  // Single status source for the chart, the trials table, and the sidebar's
+  // status card.
+  const statusMap = useMemo(
+    () =>
+      computeCandidateStatuses(
+        candidates,
+        isTestSuite,
+        isInProgress,
+        inProgressInfo,
+      ),
+    [candidates, isTestSuite, isInProgress, inProgressInfo],
+  );
+
+  // The candidate behind the open sidebar; matched by trial number with an
+  // experiment-ids fallback for deep links minted before numbering.
+  const activeTrialCandidate = useMemo(
+    () =>
+      candidates.find((c) => c.trialNumber === trialSidebar.trialNumber) ??
+      candidates.find((c) =>
+        c.experimentIds.some((id) => trialSidebar.experimentIds.includes(id)),
+      ),
+    [candidates, trialSidebar.trialNumber, trialSidebar.experimentIds],
+  );
 
   const { columnsDef, columns } = useOptimizationColumns({
     candidates,
@@ -280,6 +301,35 @@ const OptimizationPage: React.FC = () => {
           </div>
         </TabsContent>
       </Tabs>
+
+      <TrialSidebar
+        open={trialSidebar.open}
+        onClose={trialSidebar.close}
+        trialNumber={trialSidebar.trialNumber}
+        trialExperiments={trialExperiments}
+      >
+        <TrialSidebarContent
+          optimization={optimization}
+          experimentIds={trialSidebar.experimentIds}
+          trialExperiments={trialExperiments}
+          allExperiments={experiments}
+          baselineExperiment={baselineExperiment}
+          isTestSuite={isTestSuite}
+          status={
+            activeTrialCandidate
+              ? statusMap.get(activeTrialCandidate.candidateId)
+              : undefined
+          }
+          isBest={
+            !!activeTrialCandidate &&
+            activeTrialCandidate.candidateId === bestCandidate?.candidateId
+          }
+          stepIndex={activeTrialCandidate?.stepIndex}
+          tab={trialSidebar.tab}
+          promptView={trialSidebar.promptView}
+          onTabChange={trialSidebar.setTab}
+        />
+      </TrialSidebar>
     </div>
   );
 };

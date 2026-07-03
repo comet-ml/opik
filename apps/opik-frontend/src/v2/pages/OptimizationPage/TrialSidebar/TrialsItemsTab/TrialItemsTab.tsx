@@ -141,7 +141,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
     updateType: "replaceIn",
   });
 
-  const [page = 1, setPage] = useQueryParam("page", NumberParam, {
+  const [page = 1, setPage] = useQueryParam("itemsPage", NumberParam, {
     updateType: "replaceIn",
   });
 

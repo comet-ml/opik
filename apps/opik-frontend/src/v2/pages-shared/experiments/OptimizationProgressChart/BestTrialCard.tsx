@@ -56,16 +56,25 @@ const useBestTrialCard = ({
 
     const bestPoint = chartData.find((d) => d.candidateId === bestCandidateId);
 
-    // Center the card under the dot, but clamp it inside the chart container —
-    // a dot near the chart's edge (e.g. a baseline-only run) must not push the
-    // card over the surrounding layout (side menu, adjacent panels).
-    const containerWidth = containerRef.current.clientWidth;
+    // Center the card under the dot, but clamp it so it never escapes the
+    // surrounding panel — a dot near the chart's edge (e.g. a baseline-only
+    // run) must not push the card over the side menu or adjacent panels. The
+    // clamp bound is the panel's border (data-chart-panel), so the card may
+    // overhang the chart's inner padding; fall back to the chart container
+    // itself when no panel wraps it.
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const panelRect = containerRef.current
+      .closest("[data-chart-panel]")
+      ?.getBoundingClientRect();
+    const minLeft = panelRect
+      ? panelRect.left - containerRect.left
+      : CARD_EDGE_GAP;
+    const maxLeft = panelRect
+      ? panelRect.right - containerRect.left - TRIAL_CARD_WIDTH
+      : containerRect.width - TRIAL_CARD_WIDTH - CARD_EDGE_GAP;
     const left = Math.max(
-      CARD_EDGE_GAP,
-      Math.min(
-        pos.cx - TRIAL_CARD_WIDTH / 2,
-        containerWidth - TRIAL_CARD_WIDTH - CARD_EDGE_GAP,
-      ),
+      minLeft,
+      Math.min(pos.cx - TRIAL_CARD_WIDTH / 2, maxLeft),
     );
 
     return createPortal(
