@@ -23,6 +23,7 @@ import {
 import { EXPERIMENT_ITEM_OUTPUT_PREFIX } from "@/constants/experiments";
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTableVirtualBody from "@/shared/DataTable/DataTableVirtualBody";
+import { DataTableWrapperProps } from "@/shared/DataTable/DataTableWrapper";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
@@ -116,6 +117,16 @@ const DEFAULT_COLUMNS: ColumnData<FlattenedTrialItem>[] = [
     size: 165,
   },
 ];
+
+// Sticky/virtualized table wrapper that keeps the full rounded border box
+// (the shared wrapper defaults to a bottom border only).
+const BorderedStickyTableWrapper: React.FC<DataTableWrapperProps> = ({
+  children,
+}) => (
+  <PageBodyStickyTableWrapper className="rounded-md border">
+    {children}
+  </PageBodyStickyTableWrapper>
+);
 
 export type TrialItemsTabProps = {
   objectiveName?: string;
@@ -672,7 +683,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
         getRowHeightStyle={getRowHeightStyle}
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={<DataTableNoData title={noDataText} />}
-        TableWrapper={PageBodyStickyTableWrapper}
+        TableWrapper={BorderedStickyTableWrapper}
         TableBody={DataTableVirtualBody}
         stickyHeader
         showSkeleton={isTableLoading}
