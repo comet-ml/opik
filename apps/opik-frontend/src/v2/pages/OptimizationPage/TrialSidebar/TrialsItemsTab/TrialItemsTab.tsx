@@ -22,8 +22,6 @@ import {
 } from "@/types/shared";
 import { EXPERIMENT_ITEM_OUTPUT_PREFIX } from "@/constants/experiments";
 import DataTable from "@/shared/DataTable/DataTable";
-import DataTableVirtualBody from "@/shared/DataTable/DataTableVirtualBody";
-import { DataTableWrapperProps } from "@/shared/DataTable/DataTableWrapper";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
@@ -54,7 +52,6 @@ import ExperimentsFeedbackScoresSelect from "@/v2/pages-shared/experiments/Exper
 import { calculateHeightStyle } from "@/shared/DataTable/utils";
 import SectionHeader from "@/shared/DataTableHeaders/SectionHeader";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
-import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { generateDistinctColorMap } from "@/v2/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
 import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
@@ -117,16 +114,6 @@ const DEFAULT_COLUMNS: ColumnData<FlattenedTrialItem>[] = [
     size: 165,
   },
 ];
-
-// Sticky/virtualized table wrapper that keeps the full rounded border box
-// (the shared wrapper defaults to a bottom border only).
-const BorderedStickyTableWrapper: React.FC<DataTableWrapperProps> = ({
-  children,
-}) => (
-  <PageBodyStickyTableWrapper className="rounded-md border">
-    {children}
-  </PageBodyStickyTableWrapper>
-);
 
 export type TrialItemsTabProps = {
   objectiveName?: string;
@@ -674,21 +661,26 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
           ></ColumnsButton>
         </div>
       </PageBodyStickyContainer>
-      <DataTable
-        columns={columns}
-        data={rows}
-        resizeConfig={resizeConfig}
-        getRowId={getRowId}
-        rowHeight={height as ROW_HEIGHT}
-        getRowHeightStyle={getRowHeightStyle}
-        columnPinning={DEFAULT_COLUMN_PINNING}
-        noData={<DataTableNoData title={noDataText} />}
-        TableWrapper={BorderedStickyTableWrapper}
-        TableBody={DataTableVirtualBody}
-        stickyHeader
-        showSkeleton={isTableLoading}
-        showLoadingOverlay={!isTableLoading && isPlaceholderData && isFetching}
-      />
+      <PageBodyStickyContainer
+        direction="horizontal"
+        limitWidth
+        className="mb-3"
+      >
+        <DataTable
+          columns={columns}
+          data={rows}
+          resizeConfig={resizeConfig}
+          getRowId={getRowId}
+          rowHeight={height as ROW_HEIGHT}
+          getRowHeightStyle={getRowHeightStyle}
+          columnPinning={DEFAULT_COLUMN_PINNING}
+          noData={<DataTableNoData title={noDataText} />}
+          showSkeleton={isTableLoading}
+          showLoadingOverlay={
+            !isTableLoading && isPlaceholderData && isFetching
+          }
+        />
+      </PageBodyStickyContainer>
       <PageBodyStickyContainer
         className="py-4"
         direction="horizontal"
