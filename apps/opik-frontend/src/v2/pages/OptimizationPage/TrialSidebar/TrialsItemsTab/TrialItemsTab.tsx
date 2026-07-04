@@ -682,7 +682,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
         />
       </PageBodyStickyContainer>
       <PageBodyStickyContainer
-        className="py-4"
+        className="pb-4"
         direction="horizontal"
         limitWidth
       >
