@@ -59,11 +59,6 @@ class SpanCostCalculator {
                 usage.getOrDefault("original_usage.input_tokens_details.cached_tokens",
                         usage.getOrDefault(CACHE_READ_INPUT_TOKENS_KEY, 0)));
 
-        // If we got cached tokens, substract them from the input tokens count
-        if (cachedReadInputTokens > 0) {
-            inputTokens = Math.max(0, inputTokens - cachedReadInputTokens);
-        }
-
         // Audio input tokens (OpenAI realtime models like gpt-4o-realtime-preview, gpt-realtime)
         // are billed at a separate rate when the model publishes input_cost_per_audio_token.
         // SDK 1.6.0+ logs them under original_usage.prompt_tokens_details.audio_tokens, with the
@@ -71,8 +66,24 @@ class SpanCostCalculator {
         int audioInputTokens = usage.getOrDefault("original_usage.prompt_tokens_details.audio_tokens",
                 usage.getOrDefault("prompt_tokens_details.audio_tokens", 0));
         BigDecimal inputAudioRate = modelPrice.inputAudioTokenPrice();
-        if (inputAudioRate.compareTo(BigDecimal.ZERO) > 0) {
-            inputTokens = Math.max(0, inputTokens - audioInputTokens);
+
+        // When the payload carries prompt_tokens_details.text_tokens explicitly (OpenAI Realtime
+        // publishes it, and LiteLLM's _calculate_input_cost consumes it directly), use it as the
+        // pure-text bucket. This avoids over-subtracting when cached and audio tokens overlap on
+        // realtime models — see baz-reviewer's note on the double-charge risk.
+        // Falls back to substracting cached + audio for the pre-realtime code path.
+        Integer explicitInputTextTokens = usage.getOrDefault(
+                "original_usage.prompt_tokens_details.text_tokens",
+                usage.get("prompt_tokens_details.text_tokens"));
+        if (explicitInputTextTokens != null) {
+            inputTokens = explicitInputTextTokens;
+        } else {
+            if (cachedReadInputTokens > 0) {
+                inputTokens = Math.max(0, inputTokens - cachedReadInputTokens);
+            }
+            if (inputAudioRate.compareTo(BigDecimal.ZERO) > 0) {
+                inputTokens = Math.max(0, inputTokens - audioInputTokens);
+            }
         }
 
         // Get the output tokens (SDK version below 1.6.0 logged completion_tokens, while 1.6.0+ logged original_usage.completion_tokens)
@@ -83,7 +94,14 @@ class SpanCostCalculator {
         int audioOutputTokens = usage.getOrDefault("original_usage.completion_tokens_details.audio_tokens",
                 usage.getOrDefault("completion_tokens_details.audio_tokens", 0));
         BigDecimal outputAudioRate = modelPrice.outputAudioTokenPrice();
-        if (outputAudioRate.compareTo(BigDecimal.ZERO) > 0) {
+
+        // Same explicit-text-tokens preference on the completion side.
+        Integer explicitOutputTextTokens = usage.getOrDefault(
+                "original_usage.completion_tokens_details.text_tokens",
+                usage.get("completion_tokens_details.text_tokens"));
+        if (explicitOutputTextTokens != null) {
+            outputTokens = explicitOutputTextTokens;
+        } else if (outputAudioRate.compareTo(BigDecimal.ZERO) > 0) {
             outputTokens = Math.max(0, outputTokens - audioOutputTokens);
         }
 

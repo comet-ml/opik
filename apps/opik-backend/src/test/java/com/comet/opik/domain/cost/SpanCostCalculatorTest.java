@@ -257,7 +257,36 @@ class SpanCostCalculatorTest {
                                 "cache_read_input_tokens", 200,
                                 "prompt_tokens_details.audio_tokens", 300,
                                 "completion_tokens_details.audio_tokens", 50),
-                        "11.00"));
+                        "11.00"),
+                // original_usage.* key path (SDK 1.6.0+): same expected math as the bare-key
+                // case above; guarantees the prefixed-key branch is exercised in regressions.
+                // 1000 - 200 cached - 300 audio = 500 input; 500 - 100 audio = 400 output
+                // 500*0.01 + 300*0.05 + 400*0.02 + 100*0.08 + 200*0.005 = 37.00
+                Arguments.of("audio rates set: original_usage.* prefixed keys",
+                        withAudioRates,
+                        Map.of("original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 500,
+                                "original_usage.prompt_tokens_details.cached_tokens", 200,
+                                "original_usage.prompt_tokens_details.audio_tokens", 300,
+                                "original_usage.completion_tokens_details.audio_tokens", 100),
+                        "37.00"),
+                // OpenAI Realtime payloads report prompt_tokens_details.text_tokens explicitly.
+                // When present, use it directly instead of substracting cached + audio from the
+                // total — this avoids over-substraction when the API reports cached-audio
+                // overlap (see baz-reviewer note on cached-audio double-charging).
+                // text_tokens = 480 (API-reported: 20 cached-audio overlap tokens are NOT text)
+                // 480*0.01 + 300*0.05 + 400*0.02 + 100*0.08 + 200*0.005 = 4.80 + 15 + 8 + 8 + 1
+                // = 36.80  (vs 37.00 in the subtraction path — 20-token overlap reflected)
+                Arguments.of("text_tokens present: preferred over subtraction",
+                        withAudioRates,
+                        Map.of("original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 500,
+                                "original_usage.prompt_tokens_details.cached_tokens", 200,
+                                "original_usage.prompt_tokens_details.audio_tokens", 300,
+                                "original_usage.prompt_tokens_details.text_tokens", 480,
+                                "original_usage.completion_tokens_details.audio_tokens", 100,
+                                "original_usage.completion_tokens_details.text_tokens", 400),
+                        "36.80"));
     }
 
     @ParameterizedTest(name = "{1}")
