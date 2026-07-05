@@ -71,8 +71,13 @@ public class AgentInsightsReportSubscriber extends BaseRedisSubscriber<AgentInsi
         log.info("Processing Agent Insights report trigger: reportId='{}', project='{}', workspace='{}'",
                 message.reportId(), message.projectId(), message.workspaceId());
 
+        // Default a null (legacy message queued before triggerSource existed) to the scheduled sweep.
+        String triggerSource = message.triggerSource() != null
+                ? message.triggerSource()
+                : AgentInsightsMetrics.SCHEDULED;
+
         return Mono.fromRunnable(() -> reportClient.triggerAgentInsights(message.reportId(), message.projectId(),
-                message.workspaceId(), message.periodStart(), message.periodEnd()))
+                message.workspaceId(), message.periodStart(), message.periodEnd(), triggerSource))
                 .subscribeOn(Schedulers.boundedElastic())
                 .then()
                 .doOnSuccess(unused -> {

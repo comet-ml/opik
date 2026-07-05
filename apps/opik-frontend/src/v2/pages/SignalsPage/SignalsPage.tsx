@@ -28,6 +28,7 @@ import useUpdateAgentInsightsJobMutation from "@/api/signals/useUpdateAgentInsig
 import useDiagnosticsRunState from "@/hooks/useDiagnosticsRunState";
 import useDiagnosticsSeen from "@/hooks/useDiagnosticsSeen";
 import { getRunFailureCopy } from "@/v2/pages/SignalsPage/runFailureCopy";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import { useToast } from "@/ui/use-toast";
 import SignalsStatsCards from "@/v2/pages/SignalsPage/SignalsStatsCards";
 import IssuesTab from "@/v2/pages/SignalsPage/IssuesTab/IssuesTab";
@@ -112,7 +113,7 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
   const { toast } = useToast();
   const triggerMutation = useTriggerAgentInsightsJobMutation();
   const updateJobMutation = useUpdateAgentInsightsJobMutation();
-  const { isRunning, baseline, failBaseline, startRun, endRun } =
+  const { isRunning, startedAt, baseline, failBaseline, startRun, endRun } =
     useDiagnosticsRunState(projectId);
   const { markSeen } = useDiagnosticsSeen(projectId);
 
@@ -170,22 +171,30 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
   useEffect(() => {
     if (!isRunning) return;
     if (maxUpdatedAt(issuesData?.content ?? []) > baseline) {
+      trackEvent(OpikEvent.DIAGNOSTICS_RUN_COMPLETED, {
+        project_id: projectId,
+        duration_ms: startedAt ? Date.now() - startedAt : undefined,
+      });
       endRun();
     }
-  }, [issuesData, isRunning, baseline, endRun]);
+  }, [issuesData, isRunning, baseline, startedAt, projectId, endRun]);
 
   // last_failed_at past the trigger baseline = this run failed: end it and toast once.
   useEffect(() => {
     if (!isRunning) return;
     const failedAt = job?.last_failed_at ? Date.parse(job.last_failed_at) : 0;
     if (failedAt > failBaseline) {
+      trackEvent(OpikEvent.DIAGNOSTICS_RUN_FAILED, {
+        project_id: projectId,
+        reason: job?.last_failure_reason,
+      });
       endRun();
       const { title, description } = getRunFailureCopy(
         job?.last_failure_reason,
       );
       toast({ title, description, variant: "destructive" });
     }
-  }, [job, isRunning, failBaseline, endRun, toast]);
+  }, [job, isRunning, failBaseline, projectId, endRun, toast]);
 
   const hasData = (issuesData?.content?.length ?? 0) > 0;
   const isActive = isJobEnabled || isRunning;
@@ -201,6 +210,11 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
   }
 
   const handleRunDiagnostic = () => {
+    trackEvent(OpikEvent.DIAGNOSTICS_RUN_CLICKED, {
+      project_id: projectId,
+      source: isJobEnabled || hasData ? "rerun" : "empty_state",
+      is_first_run: !hasData,
+    });
     const baselineNow = maxUpdatedAt(issuesData?.content ?? []);
     const failBaselineNow = job?.last_failed_at
       ? Date.parse(job.last_failed_at)
@@ -212,6 +226,10 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
   };
 
   const handleTurnOnAuto = () => {
+    trackEvent(OpikEvent.DIAGNOSTICS_AUTO_ENABLED, {
+      project_id: projectId,
+      source: "header",
+    });
     updateJobMutation.mutate({
       projectId,
       status: AGENT_INSIGHTS_JOB_STATUS.enabled,

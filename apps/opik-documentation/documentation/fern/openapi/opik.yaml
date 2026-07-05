@@ -99,6 +99,8 @@ tags:
   description: Project related resources
 - name: Prompts
   description: Prompt resources
+- name: Report Failures
+  description: Generic failure log for reports/jobs
 - name: Reports
   description: Ollie daily report management
 - name: Retention Rules
@@ -7332,6 +7334,88 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/report-failures:
+    get:
+      tags:
+      - Report Failures
+      summary: List failures for a project
+      description: "Returns failures for the given project id and type, most recent\
+        \ first."
+      operationId: findReportFailures
+      parameters:
+      - name: type
+        in: query
+        required: true
+        schema:
+          type: string
+          enum:
+          - agent_insights
+      - name: project_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      responses:
+        "200":
+          description: Failures page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportFailurePage"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    post:
+      tags:
+      - Report Failures
+      summary: Record a report/job failure
+      description: "Appends a failure row keyed by (project_id, type). Append-only\
+        \ — never overwrites earlier failures."
+      operationId: createReportFailure
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportFailure"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              style: simple
+              schema:
+                type: string
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/projects/{projectId}/reports/{reportId}/complete:
     post:
       tags:
@@ -10065,6 +10149,16 @@ components:
           type: string
           format: date-time
           readOnly: true
+        last_failure_reason:
+          type: string
+          readOnly: true
+        last_failure_detail:
+          type: string
+          readOnly: true
+        last_failed_at:
+          type: string
+          format: date-time
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -10122,6 +10216,13 @@ components:
         total_occurrences:
           type: integer
           description: SUM(count) over the requested window
+          format: int64
+        latest_count:
+          type: integer
+          description: "Occurrences on the latest report day in the window only. The\
+            \ issue's description/cause narrate that most recent run, so this is the\
+            \ count consistent with them; totalOccurrences instead sums every day\
+            \ in the window."
           format: int64
         total:
           type: integer
@@ -16636,6 +16737,7 @@ components:
           - experiment
           - playground
           - optimization
+          - evaluator
         environment:
           maxLength: 150
           minLength: 0
@@ -16770,6 +16872,7 @@ components:
           - experiment
           - playground
           - optimization
+          - evaluator
         environment:
           maxLength: 150
           minLength: 0
@@ -16969,6 +17072,7 @@ components:
           - experiment
           - playground
           - optimization
+          - evaluator
         environment:
           maxLength: 150
           minLength: 0
@@ -17022,6 +17126,7 @@ components:
           - experiment
           - playground
           - optimization
+          - evaluator
         environment:
           maxLength: 150
           minLength: 0
@@ -20722,6 +20827,60 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/RecentActivityItem_Public"
+    ReportFailure:
+      required:
+      - project_id
+      - reason
+      - type
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        type:
+          type: string
+          enum:
+          - agent_insights
+        project_id:
+          type: string
+          format: uuid
+        reason:
+          maxLength: 255
+          minLength: 0
+          type: string
+        detail:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+    ReportFailurePage:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReportFailure"
     ReportCompleteRequest:
       required:
       - status
@@ -20927,6 +21086,7 @@ components:
       - guardrailsEnabled
       - ollamaProviderEnabled
       - ollieEnabled
+      - onlineScoringTracingEnabled
       - openaiProviderEnabled
       - openrouterProviderEnabled
       - opikAIEnabled
@@ -20990,6 +21150,8 @@ components:
         agenticToolsEnabled:
           type: boolean
         agentInsightsEnabled:
+          type: boolean
+        onlineScoringTracingEnabled:
           type: boolean
         v2WorkspaceAllowlistIds:
           uniqueItems: true
@@ -21136,6 +21298,7 @@ components:
           - experiment
           - playground
           - optimization
+          - evaluator
         environment:
           maxLength: 150
           minLength: 0
@@ -21229,6 +21392,7 @@ components:
           - experiment
           - playground
           - optimization
+          - evaluator
         environment:
           maxLength: 150
           minLength: 0
@@ -21438,6 +21602,7 @@ components:
           - experiment
           - playground
           - optimization
+          - evaluator
         environment:
           maxLength: 150
           minLength: 0
@@ -21711,6 +21876,7 @@ components:
           - experiment
           - playground
           - optimization
+          - evaluator
         environment:
           maxLength: 150
           minLength: 0
@@ -21835,6 +22001,7 @@ components:
           - experiment
           - playground
           - optimization
+          - evaluator
         environment:
           maxLength: 150
           minLength: 0
@@ -22099,6 +22266,7 @@ components:
           - experiment
           - playground
           - optimization
+          - evaluator
         environment:
           maxLength: 150
           minLength: 0

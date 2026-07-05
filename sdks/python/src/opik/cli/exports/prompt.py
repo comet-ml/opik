@@ -79,6 +79,25 @@ def _get_prompt_type_string(prompt: Any) -> Optional[str]:
     return str(prompt_type).upper()
 
 
+def _safe_prompt_history(
+    client: opik.Opik,
+    prompt: Union[Prompt, ChatPrompt],
+    project_name: str,
+) -> List[Union[Prompt, ChatPrompt]]:
+    try:
+        if isinstance(prompt, ChatPrompt):
+            return list(
+                client.get_chat_prompt_history(prompt.name, project_name=project_name)
+            )
+        return list(client.get_prompt_history(prompt.name, project_name=project_name))
+    except Exception as e:
+        console.print(
+            f"[yellow]Warning: Could not fetch history for prompt '{prompt.name}': {e}. "
+            "Exporting current version only.[/yellow]"
+        )
+        return []
+
+
 def export_single_prompt(
     client: opik.Opik,
     prompt: Union[Prompt, ChatPrompt],
@@ -103,26 +122,7 @@ def export_single_prompt(
             return 0
 
         # Get prompt history (scoped to the prompt's project)
-        prompt_history: List[Union[Prompt, ChatPrompt]]
-        try:
-            if isinstance(prompt, ChatPrompt):
-                prompt_history = list(
-                    client.get_chat_prompt_history(
-                        prompt.name, project_name=project_name
-                    )
-                )
-            else:
-                prompt_history = list(
-                    client.get_prompt_history(prompt.name, project_name=project_name)
-                )
-        except (ValueError, Exception):
-            # Fall back to empty history so the current version is still exported.
-            if debug:
-                debug_print(
-                    f"Could not fetch history for prompt '{prompt.name}', exporting current version only",
-                    debug,
-                )
-            prompt_history = []
+        prompt_history = _safe_prompt_history(client, prompt, project_name)
 
         # Create prompt data structure
         prompt_data = {
@@ -255,7 +255,7 @@ def export_prompts_by_ids(
     format: str,
     debug: bool,
     force: bool,
-) -> tuple[int, int]:
+) -> tuple[int, int, int]:
     """Export prompts by their IDs.
 
     Args:
@@ -268,10 +268,11 @@ def export_prompts_by_ids(
         force: Re-download prompts even if they already exist locally
 
     Returns:
-        Tuple of (exported_count, skipped_count)
+        Tuple of (exported_count, skipped_count, error_count)
     """
     exported_count = 0
     skipped_count = 0
+    error_count = 0
 
     for prompt_id in prompt_ids:
         try:
@@ -369,6 +370,7 @@ def export_prompts_by_ids(
             exported_count += 1
 
         except Exception as e:
+            error_count += 1
             if debug:
                 console.print(
                     f"[yellow]Warning: Could not export prompt {prompt_id}: {e}[/yellow]"
@@ -377,7 +379,7 @@ def export_prompts_by_ids(
                 console.print(f"[red]Error exporting prompt {prompt_id}: {e}[/red]")
             continue
 
-    return exported_count, skipped_count
+    return exported_count, skipped_count, error_count
 
 
 def export_related_prompts_by_name(
@@ -477,22 +479,7 @@ def export_related_prompts_by_name(
                     continue
 
                 # Get prompt history - use appropriate method based on prompt type
-                prompt_history: List[Union[Prompt, ChatPrompt]]
-                try:
-                    if isinstance(prompt, ChatPrompt):
-                        prompt_history = list(
-                            client.get_chat_prompt_history(
-                                prompt.name, project_name=project_name
-                            )
-                        )
-                    else:
-                        prompt_history = list(
-                            client.get_prompt_history(
-                                prompt.name, project_name=project_name
-                            )
-                        )
-                except (ValueError, Exception):
-                    prompt_history = []
+                prompt_history = _safe_prompt_history(client, prompt, project_name)
 
                 # Create prompt data structure
                 prompt_data = {

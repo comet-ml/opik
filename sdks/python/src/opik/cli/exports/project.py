@@ -95,18 +95,23 @@ def _export_wait_duration(retry_state: tenacity.RetryCallState) -> float:
     the standard SDK decorator for other transient errors.
     """
     exc = retry_state.outcome.exception() if retry_state.outcome else None
+    if isinstance(exc, opik_exceptions.OpikCloudRequestsRateLimited):
+        # Attachment operations convert 429 ApiErrors into this exception and
+        # store the server's retry_after value directly on it.
+        seconds = min(exc.retry_after, _EXPORT_MAX_RETRY_AFTER_SECONDS)
+        jitter = random.uniform(0.0, _EXPORT_JITTER_MAX_SECONDS)
+        return seconds + jitter
     if isinstance(exc, ApiError) and exc.status_code == 429:
         headers = httpx.Headers(getattr(exc, "headers", {}) or {})
         # Prefer the standard Retry-After header, then fall back to
         # Opik-specific / draft-IETF rate-limit reset headers.
-        seconds = _parse_retry_after(headers)
-        if seconds is None:
-            seconds = _parse_rate_limit_reset(headers)
-        if seconds is None:
-            seconds = _EXPORT_DEFAULT_RETRY_AFTER_SECONDS
-        # Clamp to our maximum: respect the server's intent but never wait longer
-        # than _EXPORT_MAX_RETRY_AFTER_SECONDS.
-        seconds = min(seconds, _EXPORT_MAX_RETRY_AFTER_SECONDS)
+        parsed = _parse_retry_after(headers)
+        if parsed is None:
+            parsed = _parse_rate_limit_reset(headers)
+        seconds = min(
+            parsed if parsed is not None else _EXPORT_DEFAULT_RETRY_AFTER_SECONDS,
+            _EXPORT_MAX_RETRY_AFTER_SECONDS,
+        )
         # Jitter: avoid a thundering-herd if multiple export processes run in parallel.
         jitter = random.uniform(0.0, _EXPORT_JITTER_MAX_SECONDS)
         return seconds + jitter
@@ -116,10 +121,18 @@ def _export_wait_duration(retry_state: tenacity.RetryCallState) -> float:
     return min(base, 60.0)
 
 
+def _export_allowed_to_retry(exception: Exception) -> bool:
+    """Extend the standard retry predicate to also cover rate-limit exceptions
+    raised by attachment operations (``OpikCloudRequestsRateLimited``)."""
+    if isinstance(exception, opik_exceptions.OpikCloudRequestsRateLimited):
+        return True
+    return retry_decorator._allowed_to_retry(exception)
+
+
 _export_rest_retry = tenacity.retry(
     stop=tenacity.stop_after_attempt(8),
     wait=_export_wait_duration,
-    retry=tenacity.retry_if_exception(retry_decorator._allowed_to_retry),
+    retry=tenacity.retry_if_exception(_export_allowed_to_retry),
     reraise=True,
 )
 
@@ -295,6 +308,7 @@ def _handle_attachment_api_error(e: ApiError, context: str) -> None:
         raise
 
 
+@_export_rest_retry
 def _fetch_attachments(
     attachment_client: attachment_client.AttachmentClient,
     project_name: str,
@@ -341,6 +355,7 @@ def _fetch_attachments(
     return attachments
 
 
+@_export_rest_retry
 def _download_attachment_file(
     attachment_client: attachment_client.AttachmentClient,
     project_name: str,
@@ -804,7 +819,7 @@ def export_traces(
                             debug_print(f"Wrote JSON file: {file_path}", debug)
                     with manifest_lock:
                         already_downloaded.add(trace_id)
-                        if manifest is not None:
+                        if manifest is not None and attachment_download_ok:
                             manifest.mark_trace_downloaded(trace_id)
                     return True, not attachment_download_ok
                 except Exception as write_error:

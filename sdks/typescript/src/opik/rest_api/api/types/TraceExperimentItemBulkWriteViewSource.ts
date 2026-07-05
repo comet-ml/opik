@@ -5,6 +5,7 @@ export const TraceExperimentItemBulkWriteViewSource = {
     Experiment: "experiment",
     Playground: "playground",
     Optimization: "optimization",
+    Evaluator: "evaluator",
 } as const;
 export type TraceExperimentItemBulkWriteViewSource =
     (typeof TraceExperimentItemBulkWriteViewSource)[keyof typeof TraceExperimentItemBulkWriteViewSource];

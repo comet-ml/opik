@@ -89,41 +89,41 @@ export class PlaygroundPage {
     });
   }
 
-  /** Open the "Run experiment" dialog (when no suite/dataset is loaded). */
+  /** Open the "Run experiment" entry menu (when no suite/dataset is loaded). */
   async clickRunExperiment(): Promise<void> {
     return test.step('click Run experiment', async () => {
       await this.runExperimentTriggerButton().click();
-      await this.runExperimentDialog().waitFor({ state: 'visible' });
+      await this.page
+        .getByTestId('run-experiment-source-dataset')
+        .waitFor({ state: 'visible' });
     });
   }
 
   /**
-   * Fill and submit the "Run experiment" dialog. Switches between Dataset and
-   * Test suite mode via the toggle group, picks the source by name, then clicks
-   * "Use dataset" / "Use test suite".
+   * Pick a source from the inline "Run experiment" control. Chooses Dataset or
+   * Test suite from the entry menu, then selects the entity by name from the
+   * inline dropdown (which auto-opens). Selection is live — clicking the entity
+   * row picks its latest version and commits, so there is no submit button.
    */
-  async submitRunExperimentDialog(args: {
+  async selectRunExperimentSource(args: {
     mode: RunExperimentSourceMode;
     entityName: string;
   }): Promise<void> {
-    return test.step(`submit Run experiment dialog with ${args.mode} "${args.entityName}"`, async () => {
-      const dialog = this.runExperimentDialog();
-      const testid =
+    return test.step(`select ${args.mode} "${args.entityName}" for run experiment`, async () => {
+      const optionTestId =
         args.mode === 'test_suite'
-          ? 'run-experiment-dialog-source-suite'
-          : 'run-experiment-dialog-source-dataset';
-      await dialog.getByTestId(testid).click();
+          ? 'run-experiment-source-test-suite'
+          : 'run-experiment-source-dataset';
+      await this.page.getByTestId(optionTestId).click();
 
-      // Open the source selector combobox and pick the entity by name.
-      await dialog.getByRole('combobox').click();
+      // The inline source selector auto-opens. Search and pick the entity by
+      // name; clicking the row selects the latest version and commits.
       const listbox = this.page.getByRole('listbox');
       await listbox.waitFor({ state: 'visible' });
-      await listbox.getByPlaceholder(/^Search (dataset|test suite)/).fill(args.entityName);
+      await listbox.getByPlaceholder('Search').fill(args.entityName);
       await listbox.getByText(args.entityName, { exact: true }).first().click();
 
-      const submitLabel = args.mode === 'test_suite' ? 'Use test suite' : 'Use dataset';
-      await dialog.getByRole('button', { name: submitLabel, exact: true }).click();
-      await dialog.waitFor({ state: 'hidden' });
+      await expect(this.loadedSourcePill()).toContainText(args.entityName);
     });
   }
 
@@ -447,10 +447,6 @@ export class PlaygroundPage {
     return this.page
       .getByTestId('playground-run-button')
       .and(this.page.locator('[data-mode="run"], [data-mode="re-run"]'));
-  }
-
-  private runExperimentDialog(): Locator {
-    return this.page.getByTestId('run-experiment-dialog');
   }
 
   private resultsTable(): Locator {

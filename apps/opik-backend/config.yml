@@ -96,6 +96,16 @@ databaseAnalytics:
   #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
   healthCheckTimeout: ${ANALYTICS_DB_HEALTH_CHECK_TIMEOUT:-1s}
 
+# Description: Cutover toggles migrating the trace analytics columns to non-nullable, sentinel-defaulted form.
+databaseAnalyticsDataModel:
+  #  Default: false
+  #  Description: Leave false while the traces table still has Nullable end_time/duration/ttft columns; trace writes
+  #   bind null for absent end_time/ttft. Set true once replaced with sentinel-defaulted
+  #   non-nullable columns so writes bind the sentinels (end_time->epoch, ttft->NaN) instead. Gates reads too, so
+  #   while false a legitimate epoch end time round-trips unchanged instead of reading as null.
+  #   Flip in lockstep with the cutover EXCHANGE.
+  traceColumnsNonNullable: ${ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE:-false}
+
 # Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
 #   window, protecting data quality.
 uuidValidation:

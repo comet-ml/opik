@@ -249,7 +249,7 @@ class TestFetchAttachments:
 
         att_client = MagicMock()
         att_client.get_attachment_list.side_effect = ApiError(
-            status_code=503, body="unavailable"
+            status_code=400, body="bad request"
         )
 
         import pytest

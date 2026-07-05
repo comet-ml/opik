@@ -9,8 +9,11 @@ Domain-specific agent skills for the Opik monorepo. Each skill provides patterns
 | diagram-generation | `diagram-generation/` | Generate self-contained HTML architecture diagrams. Use when creating visual diagrams for PRs, task plans, or architectural explanations. |
 | documentation | `documentation/` | Feature documentation and release notes patterns. Use when documenting changes, writing PR descriptions, or preparing releases. |
 | local-dev | `local-dev/` | Local development environment setup and commands. Use when helping with dev server, Docker, or local testing. |
+| metrics-instrumentation | `metrics-instrumentation/` | Instrument an opik-backend workflow with operational OpenTelemetry metrics and a flow-ordered Grafana dashboard. Use when a pipeline is a black box and you need per-stage throughput/latency/error visibility plus a per-customer drill. Distinct from analytics-instrumentation (PostHog product events). |
 | opik-backend | `opik-backend/` | Java backend patterns for Opik. Use when working in `apps/opik-backend`, designing APIs, database operations, or services. |
+| opik-external-integrations | `opik-external-integrations/` | Build an Opik integration that lives outside this repo — a standalone `opik-*` package or Opik support contributed into a third-party project (LiteLLM, Dify, …). Activates only for external-repo targets. |
 | opik-frontend | `opik-frontend/` | React frontend patterns for Opik. Use when working in `apps/opik-frontend`, on components, state, or data fetching. |
+| opik-integrations | `opik-integrations/` | Build, update, test, and document Opik SDK integrations (Python & TypeScript) that ship under `sdks/`. Runs a questionnaire-first, autonomous workflow: investigate → design → implement → verify via the Opik MCP → test → document → report. |
 | playwright-pom-discovery | `playwright-pom-discovery/` | Choose stable selectors against the live UI when building a Page Object Model for the E2E suite (`tests_end_to_end/e2e/pom/`). Used as the discovery sub-step by `writing-e2e-tests`. |
 | python-sdk | `python-sdk/` | Python SDK patterns for Opik. Use when working in `sdks/python`, on SDK APIs, integrations, or message processing. |
 | typescript-sdk | `typescript-sdk/` | TypeScript SDK patterns for Opik. Use when working in `sdks/typescript`. |

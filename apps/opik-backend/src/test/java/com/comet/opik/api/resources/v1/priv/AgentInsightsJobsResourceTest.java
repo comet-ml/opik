@@ -75,13 +75,15 @@ class AgentInsightsJobsResourceTest {
     private static final String WORKSPACE_NAME_2 = "workspace" + RandomStringUtils.secure().nextAlphanumeric(36);
     private static final String USER_2 = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);
 
-    private record Trigger(UUID projectId, String workspaceId, Instant periodStart, Instant periodEnd) {
+    private record Trigger(UUID projectId, String workspaceId, Instant periodStart, Instant periodEnd,
+            String triggerSource) {
     }
 
     // Recording client bound in place of the platform default, to capture triggers fired via the queue.
     private static final List<Trigger> TRIGGERS = new CopyOnWriteArrayList<>();
     private static final AgentInsightsReportClient RECORDING_CLIENT = (reportId, projectId, workspaceId,
-            periodStart, periodEnd) -> TRIGGERS.add(new Trigger(projectId, workspaceId, periodStart, periodEnd));
+            periodStart, periodEnd, triggerSource) -> TRIGGERS.add(
+                    new Trigger(projectId, workspaceId, periodStart, periodEnd, triggerSource));
 
     // Full stack: creating projects via the API exercises ClickHouse, so analytics containers are required.
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
@@ -299,6 +301,7 @@ class AgentInsightsJobsResourceTest {
         var trigger = TRIGGERS.stream().filter(t -> t.projectId().equals(projectId)).findFirst().orElseThrow();
         assertThat(trigger.workspaceId()).isEqualTo(WORKSPACE_ID);
         assertThat(trigger.periodStart()).isBefore(trigger.periodEnd());
+        assertThat(trigger.triggerSource()).isEqualTo("manual");
     }
 
     // Failures are recorded through the report-failures endpoint (type=agent_insights, project_id=project),
@@ -435,5 +438,7 @@ class AgentInsightsJobsResourceTest {
 
         await().atMost(10, SECONDS).untilAsserted(() -> assertThat(
                 TRIGGERS.stream().filter(t -> t.projectId().equals(projectId)).toList()).hasSize(1));
+        var trigger = TRIGGERS.stream().filter(t -> t.projectId().equals(projectId)).findFirst().orElseThrow();
+        assertThat(trigger.triggerSource()).isEqualTo("scheduled");
     }
 }
