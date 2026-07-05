@@ -317,4 +317,19 @@ repos:
         # when a workflow that `uses:` them is linted. Matches actionlint's own
         # default files pattern.
         files: ^\.github/workflows/.+\.(yml|yaml)$
+
+  # ---------------------------------------------------------------------------
+  # Dockerfiles — hadolint. The docker-image hook needs only Docker (no local
+  # binary), matching CI runners. Config + baselined exceptions live in the
+  # repo-root .hadolint.yaml, which hadolint reads automatically.
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.14.0
+    hooks:
+      - id: hadolint-docker
+        name: 🐳 hadolint — dockerfiles
+        # Explicit files: regex (not the upstream `types: [dockerfile]`) so the
+        # CI matrix builder in scripts/precommit-detect-hooks.py can route a
+        # changed Dockerfile to this leg — it matches on paths, not content type.
+        files: (^|/)Dockerfile(\..+)?$
 ...
