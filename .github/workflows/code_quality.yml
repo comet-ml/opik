@@ -1,0 +1,337 @@
+name: '🐙 Code Quality'
+run-name: "🐙 Code Quality ${{ github.ref_name }} by @${{ github.actor }}"
+
+# Lint + format + typecheck across all languages, driven by the root
+# .pre-commit-config.yaml (the source of truth for which checks run on which
+# paths). Changed-files-only, mirroring local commits.
+#
+# Shape: one CI job PER LINTER that actually has work.
+#   detect  — replays pre-commit's path matching over the diff and emits one
+#             matrix leg per hook with ≥1 matching file (no skip-spam legs).
+#   lint    — fan-out matrix, one job per linter, fail-fast: false, so each
+#             linter is reported, retried, and made visible independently.
+#   summary — aggregates every leg's timing into one sticky PR comment and
+#             gates the workflow red if any leg failed.
+#
+# PRs lint the whole PR diff (base..head); pushes to main lint the push range.
+# A full-repo audit is available on demand via workflow_dispatch.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      all_files:
+        description: "Run all hooks against the whole repo (full audit)"
+        type: boolean
+        default: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  # Needed by the summary job to post/update the sticky timing comment on PRs.
+  # On fork PRs the token is read-only regardless, so that step is guarded.
+  pull-requests: write
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Resolve the diff range and emit one matrix leg per hook that has matching
+  # changed files. The matrix is built from CHANGED hooks only, so a linter that
+  # matches nothing never spawns a (skipped) job.
+  # ---------------------------------------------------------------------------
+  detect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      legs: ${{ steps.detect.outputs.legs }}
+      has_legs: ${{ steps.detect.outputs.has_legs }}
+      legs_count: ${{ steps.detect.outputs.legs_count }}
+      skipped: ${{ steps.detect.outputs.skipped }}
+      from: ${{ steps.range.outputs.from }}
+      to: ${{ steps.range.outputs.to }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          # Diff refs (base/head, push before/after) must be reachable.
+          fetch-depth: 0
+
+      - name: Resolve diff range
+        id: range
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+        run: |
+          case "$EVENT" in
+            pull_request) FROM="$PR_BASE"; TO="$PR_HEAD" ;;
+            push)
+              FROM="$PUSH_BEFORE"; TO="$PUSH_AFTER"
+              if [ "$FROM" = "0000000000000000000000000000000000000000" ]; then FROM="${TO}^"; fi ;;
+            *) FROM=""; TO="" ;;  # workflow_dispatch: full-repo audit
+          esac
+          echo "from=$FROM" >> "$GITHUB_OUTPUT"
+          echo "to=$TO" >> "$GITHUB_OUTPUT"
+
+      - name: Detect hooks with work
+        id: detect
+        env:
+          FROM: ${{ steps.range.outputs.from }}
+          TO: ${{ steps.range.outputs.to }}
+        run: |
+          set -o pipefail
+          if [ -n "$FROM" ]; then
+            # ACMR: added/copied/modified/renamed only. Exclude deletions —
+            # pre-commit lints files present in the worktree, so a deleted path
+            # would spawn a leg that finds "no files to check" and Skips.
+            mapfile -t changed < <(git diff --name-only --diff-filter=ACMR "$FROM..$TO")
+          else
+            # workflow_dispatch full audit: every tracked file is "changed".
+            mapfile -t changed < <(git ls-files)
+          fi
+          out="$(printf '%s\n' "${changed[@]}" \
+            | python3 scripts/precommit-detect-hooks.py .pre-commit-config.yaml)"
+          # Full {legs, skipped} JSON drives the matrix (.legs) and the summary
+          # (.skipped). legs_count lets the summary reconcile rendered rows
+          # against the jobs that should have produced timing.
+          echo "legs=$out" >> "$GITHUB_OUTPUT"
+          echo "skipped=$(echo "$out" | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["skipped"]))')" >> "$GITHUB_OUTPUT"
+          count="$(echo "$out" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["legs"]))')"
+          echo "legs_count=$count" >> "$GITHUB_OUTPUT"
+          if [ "$count" -gt 0 ]; then echo "has_legs=true" >> "$GITHUB_OUTPUT"; else echo "has_legs=false" >> "$GITHUB_OUTPUT"; fi
+          echo "Detected $count hook(s) with work."
+
+  # ---------------------------------------------------------------------------
+  # One job per linter. Each leg provisions only the toolchain it needs, runs
+  # its single hook over its matched files, and uploads a timing fragment for
+  # the summary. fail-fast: false so one red linter doesn't cancel the others
+  # (independent reporting + single-leg re-run).
+  # ---------------------------------------------------------------------------
+  lint:
+    needs: detect
+    if: needs.detect.outputs.has_legs == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        leg: ${{ fromJSON(needs.detect.outputs.legs).legs }}
+    name: "lint (${{ matrix.leg.name }})"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          # Shallow: the leg lints explicit files (paths come from detect's
+          # matrix value, not a git diff here), so it needs the worktree content
+          # at HEAD, not history. Avoids a full clone on every one of N legs.
+          fetch-depth: 1
+
+      - name: Set up JDK 25
+        if: matrix.leg.toolchain == 'java'
+        uses: actions/setup-java@v4
+        with:
+          java-version: "25"
+          distribution: "corretto"
+          cache: maven
+
+      - name: Set up Node.js
+        if: matrix.leg.toolchain == 'node-fe' || matrix.leg.toolchain == 'node-ts'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install frontend deps
+        if: matrix.leg.toolchain == 'node-fe'
+        run: npm ci
+        working-directory: apps/opik-frontend
+
+      - name: Install TypeScript SDK deps
+        if: matrix.leg.toolchain == 'node-ts'
+        run: npm ci
+        working-directory: sdks/typescript
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Cache pre-commit environments
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      # Run exactly this leg's hook over its matched files. Hook ids aren't
+      # unique across scopes, so `--files` narrows a shared id (e.g. ruff) to
+      # the one scope that matched; sibling hooks report "no files to check".
+      # Capture the verbose log and exit code, then filter the log to this
+      # hook's own result lines so the summary table shows one row per linter.
+      - name: Run hook
+        id: hook
+        env:
+          HOOK_ID: ${{ matrix.leg.id }}
+          HOOK_FILES: ${{ matrix.leg.files }}
+        run: |
+          set -o pipefail
+          set +e
+          # shellcheck disable=SC2086  # HOOK_FILES is an intentional word-split list
+          uvx pre-commit run "$HOOK_ID" --files $HOOK_FILES --show-diff-on-failure --verbose 2>&1 \
+            | tee /tmp/leg-raw.log
+          echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+          set -e
+          ./scripts/precommit-filter-leg-log.sh "$HOOK_ID" /tmp/leg-raw.log > /tmp/leg.log
+          cat /tmp/leg.log
+
+      - name: Sanitize artifact name
+        id: artifact
+        env:
+          HOOK_NAME: ${{ matrix.leg.name }}
+        run: |
+          # Artifact names can't contain emojis/spaces/slashes; derive a safe,
+          # collision-free one. The summary downloads with merge-multiple (all
+          # fragments flattened into one dir), so the FILE inside must be unique
+          # too — name it the same as the artifact, not a shared "leg.log".
+          safe="$(echo "$HOOK_NAME" | tr -cd '[:alnum:]_-' | head -c 80)"
+          [ -n "$safe" ] || safe="hook"
+          frag="timing-${safe}-${{ strategy.job-index }}"
+          echo "name=$frag" >> "$GITHUB_OUTPUT"
+          cp /tmp/leg.log "/tmp/${frag}.log"
+
+      - name: Upload timing fragment
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          path: /tmp/${{ steps.artifact.outputs.name }}.log
+          if-no-files-found: ignore
+          retention-days: 1
+
+      - name: Fail leg if hook failed
+        if: steps.hook.outputs.exit_code != '0'
+        run: |
+          echo "::error::${{ matrix.leg.name }} failed (exit ${{ steps.hook.outputs.exit_code }})."
+          exit 1
+
+  # ---------------------------------------------------------------------------
+  # Aggregate every leg's timing fragment into ONE slowest-first table, post it
+  # as a sticky PR comment (overwritten each run), and gate the workflow red if
+  # any leg failed. Runs even when legs fail (if: always) so the comment + the
+  # remediation always land. Also runs when detect found no work (posts a clean
+  # "nothing to lint" comment and passes).
+  # ---------------------------------------------------------------------------
+  summary:
+    needs: [detect, lint]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          # Only needs the render scripts + shared description TSV, not history.
+          fetch-depth: 1
+
+      - name: Download timing fragments
+        if: needs.detect.outputs.has_legs == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/fragments
+          pattern: timing-*
+          merge-multiple: true
+
+      - name: Render timing table
+        env:
+          HAS_LEGS: ${{ needs.detect.outputs.has_legs }}
+          LEGS_COUNT: ${{ needs.detect.outputs.legs_count }}
+          SKIPPED_JSON: ${{ needs.detect.outputs.skipped }}
+          LINT_RESULT: ${{ needs.lint.result }}
+        run: |
+          # Build the running-hooks table first so we can reconcile its row
+          # count against the number of jobs detect spawned: every running leg
+          # must contribute exactly one row. A shortfall means a leg ran but its
+          # fragment was empty (e.g. detect over-emitted a leg that Skipped at
+          # runtime) — surface it instead of silently under-reporting.
+          ran_rows=0
+          if [ "$HAS_LEGS" = "true" ]; then
+            cat /tmp/fragments/*.log > /tmp/precommit-output.log 2>/dev/null || true
+            if [ -s /tmp/precommit-output.log ]; then
+              ./scripts/precommit-timing-table.sh /tmp/precommit-output.log > /tmp/timing-rows.md
+              # Data rows = "| "-prefixed lines minus the header and Total rows.
+              # (The "|---" separator starts with "|-", so it isn't counted.)
+              ran_rows="$(grep -c '^| ' /tmp/timing-rows.md || true)"
+              ran_rows=$(( ran_rows - 2 ))
+              [ "$ran_rows" -lt 0 ] && ran_rows=0
+            fi
+          fi
+          {
+            # Hidden marker lets find-comment locate this PR's comment so it's
+            # updated in place each run (no per-commit spam).
+            echo "<!-- precommit-timing -->"
+            echo "### ⏱️ pre-commit per-hook timing"
+            echo ""
+            if [ "$HAS_LEGS" != "true" ]; then
+              echo "_No linted files changed — nothing to run._"
+            elif [ -s /tmp/timing-rows.md ]; then
+              cat /tmp/timing-rows.md
+            else
+              echo "_No pre-commit output captured._"
+            fi
+            # Reconcile: rendered rows must equal the jobs detect spawned.
+            if [ "$HAS_LEGS" = "true" ] && [ "${ran_rows}" -ne "${LEGS_COUNT:-0}" ]; then
+              echo ""
+              echo "> [!WARNING]"
+              echo "> Timing shows **${ran_rows}** of **${LEGS_COUNT}** lint jobs — $(( LEGS_COUNT - ran_rows )) produced no timing (ran but matched no files at runtime). detect over-emitted a leg; see \`scripts/precommit-detect-hooks.py\` (\`TYPED_IDS\`)."
+            fi
+            # Skipped checks — hooks with no matching files (no job ran).
+            ./scripts/precommit-skipped-table.sh "$SKIPPED_JSON"
+            # Remediation — only when a leg failed, so green runs stay clean.
+            if [ "$LINT_RESULT" = "failure" ]; then
+              echo ""
+              echo "> [!WARNING]"
+              echo "> **Lint failed.** Fix locally, then push again:"
+              echo "> \`\`\`bash"
+              echo "> pip install pre-commit   # or: brew install pre-commit"
+              echo "> make hooks               # install the git hook (once per clone)"
+              echo "> make precommit           # run the same checks on your changed files"
+              echo "> \`\`\`"
+              echo "> Formatters fix files in place — review the changes, \`git add\`, and commit."
+              echo "> Or apply the diff shown in the failed CI leg directly."
+            fi
+          } > /tmp/precommit-table.md
+          cat /tmp/precommit-table.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Find prior timing comment
+        id: find_comment
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
+        uses: peter-evans/find-comment@v3
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: github-actions[bot]
+          body-includes: "<!-- precommit-timing -->"
+
+      - name: Post or update timing comment
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-id: ${{ steps.find_comment.outputs.comment-id }}
+          edit-mode: replace
+          body-path: /tmp/precommit-table.md
+
+      # Gate: the workflow is red iff any lint leg failed. (detect/summary infra
+      # failures surface on their own.) Fork PRs get no sticky comment, so the
+      # remediation also lives in this step log — the one place every contributor
+      # can see.
+      - name: Gate on lint result
+        if: needs.lint.result == 'failure'
+        run: |
+          echo "::error::One or more linters failed. Fix locally:"
+          echo "  pip install pre-commit   # or: brew install pre-commit"
+          echo "  make hooks               # install the git hook (once per clone)"
+          echo "  make precommit           # run the same checks on your changed files"
+          echo "Formatters fix files in place — review, git add, and commit. Or apply the diff shown in the failed leg."
+          exit 1
