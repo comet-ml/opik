@@ -1,0 +1,107 @@
+---
+description: Install and configure the Hermes community plugin to export LLM,
+  tool, and agent traces to Opik.
+headline: Hermes | Opik Documentation
+og:description: Connect Hermes to Opik with the opik-hermes plugin.
+og:site_name: Opik Documentation
+og:title: Hermes Integration - Opik
+title: Observability for Hermes with Opik
+canonical-url: https://www.comet.com/docs/opik/integrations/hermes
+---
+
+The [Hermes agent](https://github.com/NousResearch/hermes-agent) can send trace data to Opik through the community plugin package `opik-hermes`, maintained at [comet-ml/opik-hermes](https://github.com/comet-ml/opik-hermes).
+
+This integration captures:
+
+- A **root trace** per agent turn (`Hermes turn`), grouped into Opik threads by Hermes `session_id`.
+- An **LLM span** (`type=llm`) per API call, with input messages, assistant output, model/provider, token usage, and USD cost.
+- A **tool span** (`type=tool`) per tool call, with arguments and results.
+
+## Prerequisites
+
+- A working [Hermes agent](https://github.com/NousResearch/hermes-agent) installation.
+- Opik project/workspace details (for cloud or enterprise deployments).
+
+## Setup
+
+<Steps>
+  <Step title="1. Install the plugin">
+    Install the package from PyPI into the same Python environment as Hermes. This pulls in the `opik` SDK automatically and registers the plugin via the `hermes_agent.plugins` entry point (name `opik`).
+
+    ```bash
+    pip install opik-hermes
+    ```
+  </Step>
+  <Step title="2. Enable the plugin">
+    Enable the plugin by adding it to `plugins.enabled` in `~/.hermes/config.yaml` (the entry-point name is `opik`):
+
+    ```yaml
+    # ~/.hermes/config.yaml
+    plugins:
+      enabled: [opik]
+    ```
+  </Step>
+  <Step title="3. Point Hermes at your Opik">
+    Set these in `~/.hermes/.env` (or via `hermes tools`). The Opik Python SDK reads the `OPIK_*` env vars directly — no interactive step is required. On Opik Cloud the SDK already defaults to the Cloud URL, so the API key is enough; for local or self-hosted Opik, set `OPIK_URL_OVERRIDE` to route traces there.
+
+    **Opik Cloud:**
+
+    ```bash
+    # ~/.hermes/.env
+    OPIK_URL_OVERRIDE=https://www.comet.com/opik/api
+    OPIK_API_KEY=your-api-key-here
+    OPIK_WORKSPACE=default
+    OPIK_PROJECT_NAME=hermes
+    ```
+
+    **Self-hosted / local (open-source Opik) — no API key required:**
+
+    ```bash
+    # ~/.hermes/.env
+    OPIK_URL_OVERRIDE=http://localhost:5173/api
+    OPIK_WORKSPACE=default
+    OPIK_PROJECT_NAME=hermes
+    ```
+
+    <Tip>
+      With no config at all, the SDK defaults to Opik Cloud and, without an API key, logs a repeated `API key must be specified` warning and sends nothing. The plugin still fails open (its hooks never crash Hermes) — so for any non-Cloud target, set `OPIK_URL_OVERRIDE` so traces are routed correctly.
+    </Tip>
+
+    As an interactive alternative for local setup, run the Opik SDK's CLI, which writes `~/.opik.config`:
+
+    ```bash
+    opik configure
+    ```
+  </Step>
+</Steps>
+
+## Validate setup
+
+<Steps>
+  <Step title="1. Send a message">
+    ```bash
+    hermes chat -q "hello"
+    ```
+
+    On startup the plugin logs `OPIK: Started logging traces to ...` once it's enabled and connected. You can also open the Hermes web UI at `http://localhost:9119` and use the Chat tab.
+  </Step>
+  <Step title="2. Verify traces in Opik">
+    Open Opik and look for a trace named after your message in the configured project (`hermes` by default), with an LLM span and a span per tool call.
+  </Step>
+</Steps>
+
+## Optional tuning
+
+Set these in `~/.hermes/.env` to adjust plugin behavior:
+
+```bash
+HERMES_OPIK_TAGS=production,team-x   # extra tags applied to every trace
+HERMES_OPIK_MAX_CHARS=12000          # max chars per field (default: 12000)
+HERMES_OPIK_DEBUG=true               # verbose plugin logging
+```
+
+For the full configuration reference, see the [opik-hermes](https://github.com/comet-ml/opik-hermes) repository.
+
+## Next step
+
+For OTEL-native pipelines, see [OpenTelemetry integration](/v1/integrations/opentelemetry).
