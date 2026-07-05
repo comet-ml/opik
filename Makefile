@@ -149,7 +149,11 @@ hooks:
 		echo "         git config --global --unset core.hooksPath  # if it was set globally"; \
 		exit 1; \
 	fi
-	@pre-commit install
+	@# -f: install only pre-commit's hook, never chain a pre-existing one in
+	@# "migration mode" (a stale chained hook breaks commits). See OPIK-7235.
+	@pre-commit install -f
+	@# Clear any legacy hook a prior non-force install left behind.
+	@rm -f "$$(git rev-parse --git-path hooks)/pre-commit.legacy"
 	@echo "pre-commit hook installed."
 
 # Uninstall the pre-commit framework hook.
