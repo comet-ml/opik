@@ -48,7 +48,11 @@ check_empty "no-arg is a no-op"      "$(scripts/precommit-spotless.sh 2>&1)"
 echo "precommit-fe-lint.sh:"
 out=$(scripts/precommit-fe-lint.sh apps/opik-frontend/src/a.tsx apps/opik-frontend/src/b.css 2>&1)
 check "routes .tsx to eslint"          "eslint"          "$out"
-check "eslint uses --no-warn-ignored"  "--no-warn-ignored" "$out"
+check "eslint uses --max-warnings=0"   "--max-warnings=0" "$out"
+# FE pins eslint v8.57.0, which rejects the v9-only --no-warn-ignored flag
+# (OPIK-7237). Assert the wrapper does NOT pass it.
+check_empty "fe eslint omits --no-warn-ignored" \
+	"$(printf '%s' "$out" | grep -o -- '--no-warn-ignored' || true)"
 check "routes .css to stylelint"       "stylelint"       "$out"
 
 echo "precommit-ts-sdk-lint.sh:"
