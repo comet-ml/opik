@@ -19,6 +19,7 @@ on:
           - langchain_legacy
           - llama_index
           - anthropic
+          - groq
           - aisuite
           - haystack
           # - guardrails  # disabled: guardrails-ai is on PyPI quarantine
@@ -130,6 +131,12 @@ jobs:
     uses: ./.github/workflows/lib-anthropic-tests.yml
     secrets: inherit
 
+  groq_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["groq", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-groq-tests.yml
+    secrets: inherit
+
   aisuite_tests:
     needs: [init_environment]
     if: contains(fromJSON('["aisuite", "all"]'), needs.init_environment.outputs.LIBS)
@@ -225,6 +232,7 @@ jobs:
       - langchain_legacy_tests
       - llama_index_tests
       - anthropic_tests
+      - groq_tests
       - aisuite_tests
       - haystack_tests
       # - guardrails_tests  # disabled: guardrails-ai is on PyPI quarantine
@@ -269,6 +277,7 @@ jobs:
               "LangChain Legacy": "${{ needs.langchain_legacy_tests.result }}",
               "LlamaIndex": "${{ needs.llama_index_tests.result }}",
               "Anthropic": "${{ needs.anthropic_tests.result }}",
+              "Groq": "${{ needs.groq_tests.result }}",
               "AISuite": "${{ needs.aisuite_tests.result }}",
               "Haystack": "${{ needs.haystack_tests.result }}",
               "DSPy": "${{ needs.dspy_tests.result }}",
