@@ -214,3 +214,19 @@ docker compose --profile opik down
 # or if running with otel profile
 docker compose --profile opik-otel down
 ```
+
+## Running on Raspberry Pi 4 / CM4 (Older ARMv8 architectures)
+
+By default, the ClickHouse and Opik backend images require an `ARMv8.2-A` instruction set. On older ARMv8.0-A hardware like the Raspberry Pi 4 or Raspberry Pi CM4, running the default containers will fail with `Illegal instruction` crashes.
+
+To resolve this, you can configure these services to run in emulation mode (using QEMU) by setting the platform environment variables before starting the stack:
+
+```bash
+export OPIK_CLICKHOUSE_PLATFORM=linux/amd64
+export OPIK_BACKEND_PLATFORM=linux/amd64
+export OPIK_PYTHON_BACKEND_PLATFORM=linux/amd64
+
+# Start Opik using the launcher script or docker compose
+./opik.sh
+```
+

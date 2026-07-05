@@ -44,6 +44,7 @@ services:
       "
   clickhouse:
     image: clickhouse/clickhouse-server:25.8.16.34-alpine
+    platform: ${OPIK_CLICKHOUSE_PLATFORM:-}
     pull_policy: always
     hostname: clickhouse
     environment:
@@ -137,6 +138,7 @@ services:
 
   backend:
     image: ghcr.io/comet-ml/opik/opik-backend:${OPIK_VERSION:-latest}
+    platform: ${OPIK_BACKEND_PLATFORM:-}
     pull_policy: ${OPIK_BACKEND_PULL_POLICY:-always}
     profiles:
       - backend
@@ -226,6 +228,7 @@ services:
 
   python-backend:
     image: ghcr.io/comet-ml/opik/opik-python-backend:${OPIK_VERSION:-latest}
+    platform: ${OPIK_PYTHON_BACKEND_PLATFORM:-}
     # change to 'build' when developing python-backend
     pull_policy: ${PYTHON_BACKEND_PULL_POLICY:-always}
     profiles:
