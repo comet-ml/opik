@@ -1,5 +1,7 @@
 {
   "compilerOptions": {
+    "incremental": true,
+    "tsBuildInfoFile": "./node_modules/.cache/tsbuildinfo/sdk.tsbuildinfo",
     "target": "ES2019",
     "module": "ESNext",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],

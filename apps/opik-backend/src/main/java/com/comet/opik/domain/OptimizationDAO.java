@@ -397,7 +397,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     sum(s.total_estimated_cost) AS total_estimated_cost
                 FROM experiment_items_final ei
                 LEFT JOIN (
-                    SELECT id, duration
+                    SELECT id, if(isNaN(duration), NULL, duration) AS duration
                     FROM traces
                     WHERE workspace_id = :workspace_id
                     AND id IN (SELECT trace_id FROM experiment_items_final)

@@ -46,6 +46,7 @@ public class CipxTraceIdentityDAO {
             @NonNull String userEmail,
             @NonNull String userDisplayName,
             @NonNull String repository,
+            @NonNull String sessionId,
             int schemaVersion) {
 
         public static TraceIdentityRow from(UUID traceId, UUID projectId, JsonNode metadata, Instant startTime) {
@@ -59,6 +60,7 @@ public class CipxTraceIdentityDAO {
                     .userEmail(identity.path("email").asText(""))
                     .userDisplayName(identity.path("display_name").asText(""))
                     .repository(session.path("repository").path("remote").asText(""))
+                    .sessionId(session.path("session_id").asText(""))
                     .schemaVersion(session.path("schema_version").asInt(0))
                     .build();
         }
@@ -70,7 +72,7 @@ public class CipxTraceIdentityDAO {
     private static final String INSERT = """
             INSERT INTO cipx_trace_identities
                 (workspace_id, project_id, trace_id, start_time, user_uuid,
-                 user_email, user_display_name, repository, schema_version)
+                 user_email, user_display_name, repository, session_id, schema_version)
             SETTINGS log_comment = '<log_comment>'
             FORMAT Values
                 <items:{item |
@@ -83,6 +85,7 @@ public class CipxTraceIdentityDAO {
                         :user_email<item.index>,
                         :user_display_name<item.index>,
                         :repository<item.index>,
+                        :session_id<item.index>,
                         :schema_version<item.index>
                     )
                     <if(item.hasNext)>,<endif>
@@ -120,6 +123,7 @@ public class CipxTraceIdentityDAO {
                     .bind("user_email" + i, row.userEmail())
                     .bind("user_display_name" + i, row.userDisplayName())
                     .bind("repository" + i, row.repository())
+                    .bind("session_id" + i, row.sessionId())
                     .bind("schema_version" + i, row.schemaVersion());
         }
 

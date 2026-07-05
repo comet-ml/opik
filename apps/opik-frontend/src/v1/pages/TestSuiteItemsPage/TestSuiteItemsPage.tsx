@@ -404,7 +404,7 @@ function TestSuiteItemsPage(): React.ReactElement {
                 {...tagListProps}
                 onAddTag={handleAddTag}
                 onDeleteTag={handleDeleteTag}
-                canAdd={canEditDatasets}
+                readOnly={!canEditDatasets}
                 align="start"
                 className="min-h-0 w-auto"
               />
