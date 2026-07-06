@@ -73,7 +73,11 @@ export interface BreakdownConfig {
 export interface ProjectMetricsWidget {
   type: WIDGET_TYPE.PROJECT_METRICS;
   config: {
+    // Single-project selection (per-project metrics endpoint).
     projectId?: string;
+    // Workspace-level selection (aggregate across projects). When present, the widget queries the
+    // workspace metrics endpoint; an empty array means "all projects in the workspace".
+    projectIds?: string[];
     metricType: string;
     chartType?: CHART_TYPE.line | CHART_TYPE.bar;
     traceFilters?: Filters;

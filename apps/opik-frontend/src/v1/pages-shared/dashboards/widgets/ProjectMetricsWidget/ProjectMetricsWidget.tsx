@@ -7,6 +7,7 @@ import {
   INTERVAL_TYPE,
   METRIC_NAME_TYPE,
 } from "@/api/projects/useProjectMetric";
+import { WORKSPACE_METRIC_NAMES } from "@/api/projects/useWorkspaceMetric";
 import {
   useDashboardStore,
   selectRuntimeConfig,
@@ -80,22 +81,44 @@ const ProjectMetricsWidget: React.FunctionComponent<
   }, [sectionId, widgetId, onAddEditWidgetCallback]);
 
   const widgetProjectId = widget?.config?.projectId as string | undefined;
+  const widgetProjectIds = widget?.config?.projectIds as string[] | undefined;
 
-  const { projectId, interval, intervalStart, intervalEnd } = useMemo(() => {
-    const resolvedProjectId =
-      runtimeContext.projectId || widgetProjectId || undefined;
+  // Resolve the configured selection into either a single project (per-project endpoint, all metrics) or a
+  // project set (workspace endpoint). A runtime project (e.g. the Insights tab) always pins to a single project.
+  // For projectIds: exactly one => single project; zero (all) or many => workspace aggregation.
+  const { projectId, projectIds, interval, intervalStart, intervalEnd } =
+    useMemo(() => {
+      const { interval, intervalStart, intervalEnd } = calculateIntervalConfig(
+        runtimeContext.dateRange,
+      );
+      const base = { interval, intervalStart, intervalEnd };
 
-    const { interval, intervalStart, intervalEnd } = calculateIntervalConfig(
+      if (runtimeContext.projectId) {
+        return {
+          ...base,
+          projectId: runtimeContext.projectId,
+          projectIds: undefined,
+        };
+      }
+      if (Array.isArray(widgetProjectIds)) {
+        return widgetProjectIds.length === 1
+          ? { ...base, projectId: widgetProjectIds[0], projectIds: undefined }
+          : { ...base, projectId: undefined, projectIds: widgetProjectIds };
+      }
+      return {
+        ...base,
+        projectId: widgetProjectId || undefined,
+        projectIds: undefined,
+      };
+    }, [
+      widgetProjectId,
+      widgetProjectIds,
+      runtimeContext.projectId,
       runtimeContext.dateRange,
-    );
+    ]);
 
-    return {
-      projectId: resolvedProjectId,
-      interval,
-      intervalStart,
-      intervalEnd,
-    };
-  }, [widgetProjectId, runtimeContext.projectId, runtimeContext.dateRange]);
+  const isWorkspaceMode = Array.isArray(projectIds);
+  const isConfigured = Boolean(projectId) || isWorkspaceMode;
 
   const metricType = widget?.config?.metricType as string | undefined;
   const metricName = metricType as METRIC_NAME_TYPE | undefined;
@@ -396,7 +419,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
     const threadFilters = widget.config?.threadFilters as Filter[] | undefined;
     const spanFilters = widget.config?.spanFilters as Filter[] | undefined;
 
-    if (!projectId) {
+    if (!isConfigured) {
       return (
         <DashboardWidget.EmptyState
           title="Project not configured"
@@ -411,6 +434,23 @@ const ProjectMetricsWidget: React.FunctionComponent<
         <DashboardWidget.EmptyState
           title="No metric selected"
           message="Choose a metric to display in this widget"
+          action={editAction}
+        />
+      );
+    }
+
+    // Aggregating across projects is only available for span metrics (see WORKSPACE_METRIC_NAMES).
+    if (
+      isWorkspaceMode &&
+      metricName &&
+      !WORKSPACE_METRIC_NAMES.includes(
+        metricName as (typeof WORKSPACE_METRIC_NAMES)[number],
+      )
+    ) {
+      return (
+        <DashboardWidget.EmptyState
+          title="Not available across projects"
+          message="This metric can only be shown for a single project. Select one project, or choose a span metric to aggregate across projects."
           action={editAction}
         />
       );
@@ -444,7 +484,8 @@ const ProjectMetricsWidget: React.FunctionComponent<
           isAggregateTotal={!!isAggregateTotal}
           intervalStart={intervalStart}
           intervalEnd={intervalEnd}
-          projectId={projectId!}
+          projectId={projectId}
+          projectIds={projectIds}
           chartType={chartType}
           traceFilters={validTraceFilters}
           threadFilters={validThreadFilters}

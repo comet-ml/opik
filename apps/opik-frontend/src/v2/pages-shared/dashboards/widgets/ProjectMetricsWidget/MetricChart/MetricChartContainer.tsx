@@ -16,6 +16,7 @@ import useProjectMetric, {
   INTERVAL_TYPE,
   METRIC_NAME_TYPE,
 } from "@/api/projects/useProjectMetric";
+import useWorkspaceMetric from "@/api/projects/useWorkspaceMetric";
 import { ChartTooltipRenderValueArguments } from "@/shared/Charts/ChartTooltipContent/ChartTooltipContent";
 import NoData from "@/shared/NoData/NoData";
 import { ValueType } from "recharts/types/component/DefaultTooltipContent";
@@ -40,7 +41,10 @@ interface MetricContainerChartProps {
   name: string;
   description: string;
   chartType: CHART_TYPE.line | CHART_TYPE.bar;
-  projectId: string;
+  // Single-project mode (per-project endpoint). Mutually exclusive with projectIds.
+  projectId?: string;
+  // Workspace mode (aggregate across projects). Empty array => all projects in the workspace.
+  projectIds?: string[];
   interval: INTERVAL_TYPE;
   intervalStart: string | undefined;
   intervalEnd: string | undefined;
@@ -92,6 +96,7 @@ const MetricContainerChart = ({
   description,
   metricName,
   projectId,
+  projectIds,
   interval,
   intervalStart,
   intervalEnd,
@@ -120,9 +125,11 @@ const MetricContainerChart = ({
   hideXAxis,
   hideYAxis,
 }: MetricContainerChartProps) => {
-  const { data: response, isPending } = useProjectMetric(
+  const isWorkspaceMode = Array.isArray(projectIds);
+
+  const projectQuery = useProjectMetric(
     {
-      projectId,
+      projectId: projectId ?? "",
       metricName,
       interval,
       intervalStart,
@@ -134,10 +141,29 @@ const MetricContainerChart = ({
       logsSource,
     },
     {
-      enabled: !!projectId,
+      enabled: !isWorkspaceMode && !!projectId,
       refetchInterval: 30000,
     },
   );
+
+  const workspaceQuery = useWorkspaceMetric(
+    {
+      projectIds: projectIds ?? [],
+      metricName,
+      interval,
+      intervalStart,
+      intervalEnd,
+      breakdown,
+    },
+    {
+      enabled: isWorkspaceMode,
+      refetchInterval: 30000,
+    },
+  );
+
+  const { data: response, isPending } = isWorkspaceMode
+    ? workspaceQuery
+    : projectQuery;
 
   const traces = response?.results;
 
