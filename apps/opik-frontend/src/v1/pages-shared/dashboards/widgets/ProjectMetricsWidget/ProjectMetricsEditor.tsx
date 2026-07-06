@@ -654,17 +654,21 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
           }}
         />
 
-        <ProjectMetricsBreakdownSection
-          control={form.control}
-          metricType={metricType}
-          projectId={projectId}
-          isSpanMetric={!!isSpanMetric}
-          breakdown={breakdown}
-          isGroupByDisabledForFeedbackScore={isGroupByDisabledForFeedbackScore}
-          isGroupByDisabledForDuration={isGroupByDisabledForDuration}
-          isGroupByDisabledForUsage={isGroupByDisabledForUsage}
-          onBreakdownChange={handleBreakdownChange}
-        />
+        {!(isMultiProject && isDurationMetric) && (
+          <ProjectMetricsBreakdownSection
+            control={form.control}
+            metricType={metricType}
+            projectId={projectId}
+            isSpanMetric={!!isSpanMetric}
+            breakdown={breakdown}
+            isGroupByDisabledForFeedbackScore={
+              isGroupByDisabledForFeedbackScore
+            }
+            isGroupByDisabledForDuration={isGroupByDisabledForDuration}
+            isGroupByDisabledForUsage={isGroupByDisabledForUsage}
+            onBreakdownChange={handleBreakdownChange}
+          />
+        )}
 
         <FormField
           control={form.control}

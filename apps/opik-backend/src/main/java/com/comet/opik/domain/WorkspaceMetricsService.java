@@ -113,10 +113,8 @@ class WorkspaceMetricsServiceImpl implements WorkspaceMetricsService {
                 throw new BadRequestException(
                         "'sub_metric' is required for token usage breakdown. It should be the usage key name (e.g., completion_tokens, prompt_tokens).");
             }
-            if (request.metricType() == MetricType.SPAN_DURATION
-                    && StringUtils.isBlank(request.breakdown().subMetric())) {
-                throw new BadRequestException(
-                        "'sub_metric' is required for duration breakdown. It should be a percentile (p50, p90, p99).");
+            if (request.metricType() == MetricType.SPAN_DURATION) {
+                throw new BadRequestException("Group by is not supported for duration metrics across projects.");
             }
         }
     }

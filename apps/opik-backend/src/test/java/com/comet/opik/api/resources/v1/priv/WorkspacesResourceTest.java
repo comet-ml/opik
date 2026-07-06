@@ -710,7 +710,7 @@ class WorkspacesResourceTest {
 
             var endTime = Instant.now();
             var startTime = endTime.minus(Duration.ofDays(1));
-            var filters = List.of(SpanFilter.builder()
+            List<SpanFilter> filters = List.of(SpanFilter.builder()
                     .field(SpanField.PROVIDER)
                     .operator(Operator.EQUAL)
                     .value("openai")
@@ -755,9 +755,9 @@ class WorkspacesResourceTest {
         }
 
         @Test
-        void durationBreakdown_withoutSubMetric_returnsBadRequest() {
+        void durationWithBreakdown_returnsBadRequest() {
             var startTime = Instant.now().minus(Duration.ofDays(1));
-            var breakdown = BreakdownConfig.builder().field(BreakdownField.PROVIDER).build();
+            var breakdown = BreakdownConfig.builder().field(BreakdownField.PROVIDER).subMetric("p50").build();
             var request = spanRequest(MetricType.SPAN_DURATION, null, startTime, Instant.now(), breakdown);
 
             try (var response = workspaceResourceClient.callGetWorkspaceSpanMetric(request, API_KEY, WORKSPACE_NAME)) {

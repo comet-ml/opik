@@ -45,7 +45,6 @@ import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.metrics.BreakdownQueryBuilder.getBreakdownGroupExpression;
-import static com.comet.opik.api.metrics.BreakdownQueryBuilder.mapQuantile;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
@@ -532,34 +531,6 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             SETTINGS log_comment = '<log_comment>';
             """.formatted(SPAN_FILTERED_PREFIX);
 
-    // Breakdown selects a single percentile via quantile(<sub_metric>), producing one series per group (provider/model),
-    // matching the per-project breakdown convention where each group is one series.
-    private static final String GET_SPAN_DURATION_WITH_BREAKDOWN = """
-            %s
-            , series AS (
-                SELECT bucket,
-                       group_name,
-                       toDecimal64(
-                         greatest(least(if(isFinite(v), v, 0), 999999999.999999999), -999999999.999999999),
-                         9
-                       ) AS value
-                FROM (
-                    SELECT <bucket> AS bucket,
-                           <group_expression> AS group_name,
-                           quantile(<sub_metric>)(duration) AS v
-                    FROM spans_filtered s
-                    GROUP BY bucket, group_name
-                )
-                ORDER BY group_name, bucket
-            )
-            SELECT NULL AS project_id,
-                   group_name AS name,
-                   groupArray(tuple(bucket, value)) AS data
-            FROM series
-            GROUP BY group_name
-            SETTINGS log_comment = '<log_comment>';
-            """.formatted(SPAN_FILTERED_PREFIX);
-
     private static final String WORKSPACE_METRIC_QUERY_NAME_PREFIX = "WorkspaceMetrics_";
 
     private static final Map<TimeInterval, String> INTERVAL_TO_SQL = Map.of(
@@ -633,8 +604,8 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
 
     @Override
     public Mono<List<WorkspaceMetricResponse.Result>> getSpanDuration(@NonNull WorkspaceSpanMetricRequest request) {
-        return template.nonTransaction(connection -> getSpanMetric(request, connection,
-                request.hasBreakdown() ? GET_SPAN_DURATION_WITH_BREAKDOWN : GET_SPAN_DURATION, "workspaceSpanDuration")
+        return template.nonTransaction(connection -> getSpanMetric(request, connection, GET_SPAN_DURATION,
+                "workspaceSpanDuration")
                 .flatMapMany(this::rowToDataPoint)
                 .collectList());
     }
@@ -663,11 +634,6 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             if (request.hasBreakdown()) {
                 stTemplate.add("group_expression",
                         getBreakdownGroupExpression(request.metricType(), request.breakdown()));
-                // SPAN_DURATION breakdown selects a single percentile via quantile(<sub_metric>); the percentile is a
-                // validated numeric literal, so it is substituted into the SQL rather than bound.
-                if (request.metricType() == MetricType.SPAN_DURATION) {
-                    stTemplate.add("sub_metric", mapQuantile(request.breakdown().subMetric()));
-                }
             }
 
             Optional.ofNullable(request.filters())
