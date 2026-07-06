@@ -1,0 +1,63 @@
+---
+canonical-url: https://www.comet.com/docs/opik/changelog/2026-06-23
+---
+
+## LLM-as-Judge Scorer Now Evaluates Trace Attachments
+
+Online LLM-as-judge scoring rules can now reason over files attached to traces — images, PDFs, documents, and other binary content — in addition to the trace's text fields. Previously, attachment-aware evaluation was only available for thread (conversation) scoring; single-trace scoring rules now share the same capability.
+
+When a trace carries attachments, the scorer automatically routes to an agentic tool-calling loop. The judge model receives a `ReadTool` that lists the attached files and a `GetAttachmentTool` that fetches each file as multimodal content. Up to eight attachments are injected per evaluation. When the configured provider does not support tool calls, a warning is surfaced rather than silently failing.
+
+## Project-Scoped `opik export` / `opik import`
+
+The `opik export` and `opik import` CLI commands now require a project argument, matching how Opik v2 organises data (every dataset, prompt, and experiment lives inside a project).
+
+**New command shape:**
+
+```bash
+opik export WORKSPACE PROJECT ITEM [NAME] [OPTIONS]
+```
+
+Where `ITEM` is one of `all`, `dataset`, `traces`, `experiment`, or `prompt`. On-disk output is written to `PATH/WORKSPACE/projects/<id>/` with a `project.json` name index, so the same `--path` value round-trips between export and import.
+
+Import gains a `--to-project` option that redirects items into a different project at import time.
+
+👉 [Export and import documentation](https://www.comet.com/docs/opik/tracing/export_data)
+
+## Bug Fixes & Improvements
+
+- **MCP server: `opik mcp status` command + auto-detection of hosted server** — `opik configure` and `opik mcp configure` now probe for a Comet-hosted MCP server (HTTP + OAuth) and fall back to the local `uvx opik-mcp` server only when the hosted one is unavailable. A new `opik mcp status` command (and the equivalent `opik configure status`) reports the active Opik configuration and which AI assistants have the MCP server registered, flagging any drift from `~/.opik.config`. Use `--local-server` to force the local path.
+
+- **Vercel AI SDK v7 and Vercel eve agent support** — `OpikExporter` now captures traces from AI SDK v4 through v7 and from the Vercel eve agent framework. Multi-turn eve conversations are automatically grouped into a single thread via the session ID, and cached-token usage is captured.
+
+- **`track_openai`: custom `provider` argument** — An optional `provider` parameter (`str` or `opik.LLMProvider`) can now be passed to `track_openai` to override the auto-detected provider on every span. Useful for OpenAI-compatible APIs where the hostname-derived default is not descriptive.
+
+  ```python
+  client = track_openai(openai.OpenAI(base_url="..."), provider="my-provider")
+  ```
+
+- **Configurable local runner poll interval** — The `opik connect` / `opik endpoint` runner polls for jobs every 0.5 s by default (~120 requests/min). Setting `OPIK_RUNNER_POLL_INTERVAL` (seconds) reduces this for environments where firewalls or proxies throttle sustained polling. Sustained failures now escalate to an actionable warning with a firewall/proxy note rather than going silent.
+
+- **Assertion scoring errors now shown in the UI** — When an LLM-as-judge assertion scorer fails (for example, because the configured model is unavailable), an orange **Scoring error** badge with an actionable tooltip is shown instead of a spinning indicator or a generic grey **Skipped** tag.
+
+- **Test suite items no longer lost after editing an assertion** — A ClickHouse parameter-escaping bug caused the `\n` sequences inside LLM-judge prompts to be unescaped to literal newlines, producing invalid stored JSON and silently dropping the row on read. Items now survive edit round-trips correctly.
+
+- **ChrF metric: `char_order` and `ignore_whitespace` now forwarded to NLTK** — These parameters were stored in the `ChrF` object but never passed to `nltk.translate.chrf_score.sentence_chrf`. `char_order` is now forwarded as `max_len` and `ignore_whitespace` is forwarded as-is.
+
+- **OpenAI audio models: audio input tokens billed at the correct rate** — For models such as `gpt-4o-audio-preview` and `gpt-4o-realtime`, audio input tokens are now charged at the `input_cost_per_audio_token` rate (up to 16× the standard text rate). Previously they were silently billed at the standard text input rate.
+
+- **`opik export` span fetch performance** — When exporting a filtered subset of traces, spans are now fetched with a `trace_id` range bound derived from the matched trace IDs rather than scanning the entire project. Large filtered exports that previously stalled now complete promptly.
+
+- **Optimization studio renamed to Optimization runs** — The v2 UI section previously called "Optimization studio" is now labelled **Optimization runs** everywhere.
+
+## Performance Improvements
+
+- **Attachment base64 detection is now O(n)** — The regex that detects whether an attachment payload is already base64-encoded was rewritten with a possessive quantifier, making it linear in the payload size and avoiding catastrophic backtracking on large binary attachments.
+
+- **Self-hosted: ClickHouse upgraded to 25.8 LTS** — The bundled ClickHouse instance (Helm chart, docker-compose, and testcontainers) is now pinned to 25.8 LTS and the operator to 0.27.1. This release requires no manual migration; existing data is read correctly by the new version.
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.0.73...2.1.5)
+
+_Releases_: `2.0.77`, `2.1.0`, `2.1.1`, `2.1.2`, `2.1.3`, `2.1.4`, `2.1.5`
