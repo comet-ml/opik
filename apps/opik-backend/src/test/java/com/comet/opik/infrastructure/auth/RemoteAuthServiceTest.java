@@ -1,15 +1,19 @@
 package com.comet.opik.infrastructure.auth;
 
+import com.codahale.metrics.MetricRegistry;
+import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.OpikVersion;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.domain.mcpoauth.ValidatedToken;
 import com.comet.opik.infrastructure.AuthenticationConfig;
+import com.comet.opik.infrastructure.http.HttpModule;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.dropwizard.client.JerseyClientBuilder;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.core.Cookie;
@@ -35,6 +39,11 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.ReactServiceErrorResponse.MISSING_API_KEY;
@@ -211,6 +220,74 @@ class RemoteAuthServiceTest {
                         .build()))
                 .isExactlyInstanceOf(expectedExceptionClass)
                 .hasMessage(expectedMessage);
+    }
+
+    @Test
+    void testAuth__whenRemoteMislabelsGzipResponses__thenIdentityEncodingAvoidsZipException() throws Exception {
+        var authResponse = podamFactory.manufacturePojo(RemoteAuthService.AuthResponse.class);
+        var apiKey = "apiKey-" + UUID.randomUUID();
+        var workspaceName = "workspace-" + UUID.randomUUID();
+        var responseJson = OBJECT_MAPPER.writeValueAsString(authResponse);
+
+        // Reproduces the mislabelled-gzip incident: unless the client explicitly requests identity
+        // encoding, the remote replies with 'Content-Encoding: gzip' while the body is NOT valid gzip
+        // (double-decompression / mislabelling by an intermediary). With the production client settings
+        // (gzipEnabled: true, unlike the shared test client which disables it), GZipDecoder trusts the
+        // response header and readEntity throws 'ZipException: Not in GZIP format', which escapes the
+        // auth filter as a ProcessingException and surfaces as a 500. Requesting identity encoding
+        // sidesteps the mislabelled responses entirely.
+        WIRE_MOCK.server().stubFor(post("/opik/auth")
+                .atPriority(5)
+                .willReturn(aResponse().withStatus(HttpStatus.SC_OK)
+                        .withHeader("Content-Type", "application/json")
+                        .withHeader(HttpHeaders.CONTENT_ENCODING, "gzip")
+                        .withBody(responseJson)));
+        WIRE_MOCK.server().stubFor(post("/opik/auth")
+                .atPriority(1)
+                .withHeader(HttpHeaders.ACCEPT_ENCODING, equalTo("identity"))
+                .willReturn(okJson(responseJson)));
+
+        var gzipEnabledAuthService = new RemoteAuthService(newGzipEnabledClient(),
+                new AuthenticationConfig.UrlConfig(WIRE_MOCK.server().url("")),
+                () -> requestContext,
+                new NoopCacheService());
+
+        gzipEnabledAuthService.authenticate(
+                getHeadersMock(workspaceName, apiKey), null,
+                ContextInfoHolder.builder()
+                        .uriInfo(createMockUriInfo("/priv/something"))
+                        .method("GET")
+                        .build());
+
+        assertThat(requestContext.getUserName()).isEqualTo(authResponse.user());
+        assertThat(requestContext.getWorkspaceId()).isEqualTo(authResponse.workspaceId());
+        assertThat(requestContext.getWorkspaceName()).isEqualTo(authResponse.workspaceName());
+    }
+
+    /**
+     * Builds a client with the production gzip settings ({@code gzipEnabled: true}, registering
+     * {@code GZipDecoder}). The shared {@link TestHttpClientUtils#client()} runs with
+     * {@code gzipEnabled: false} (see config-test.yml), which silently skips the response-decoding
+     * path under test here.
+     */
+    private jakarta.ws.rs.client.Client newGzipEnabledClient() throws Exception {
+        var jerseyConfig = TestConfigUtils.loadConfigTest().getJerseyClient();
+        jerseyConfig.setGzipEnabled(true);
+        var threadFactory = new ThreadFactory() {
+            private final AtomicLong counter = new AtomicLong();
+
+            @Override
+            public Thread newThread(Runnable runnable) {
+                var thread = new Thread(runnable, "gzip-test-client-" + counter.incrementAndGet());
+                thread.setDaemon(true);
+                return thread;
+            }
+        };
+        var executor = new ThreadPoolExecutor(2, 8, 60L, TimeUnit.SECONDS,
+                new ArrayBlockingQueue<>(64), threadFactory);
+        return HttpModule.buildClient(
+                new JerseyClientBuilder(new MetricRegistry()).using(executor),
+                jerseyConfig);
     }
 
     @Test
