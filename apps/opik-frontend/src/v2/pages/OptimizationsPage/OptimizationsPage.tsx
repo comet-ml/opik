@@ -11,145 +11,37 @@ import {
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
-import DatasetNameCell from "@/v2/pages/OptimizationsPage/DatasetNameCell";
-import OptimizationStatusCell from "@/v2/pages/OptimizationsPage/OptimizationStatusCell";
-import {
-  OptimizationPassRateCell,
-  OptimizationAccuracyCell,
-  OptimizationLatencyCell,
-  OptimizationCostCell,
-  OptimizationTotalCostCell,
-} from "@/v2/pages/OptimizationsPage/OptimizationMetricCells";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
-import TimeCell from "@/shared/DataTableCells/TimeCell";
-import { COLUMN_DATASET_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
+import { COLUMN_DATASET_ID } from "@/types/shared";
 import { Filter } from "@/types/filters";
 import { Optimization } from "@/types/optimizations";
-import { getFeedbackScore } from "@/lib/feedback-scores";
 import { convertColumnDataToColumn } from "@/lib/table";
-import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
 import AddOptimizationDialog from "@/v2/pages/OptimizationsPage/AddOptimizationDialog/AddOptimizationDialog";
-import OptimizationsActionsPanel from "@/v2/pages/OptimizationsPage/OptimizationsActionsPanel/OptimizationsActionsPanel";
 import DatasetSelectBox from "@/v2/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox";
-import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import OptimizationRowActionsCell from "@/v2/pages/OptimizationsPage/OptimizationRowActionsCell";
-import SearchInput from "@/shared/SearchInput/SearchInput";
-import RefreshButton from "@/shared/RefreshButton/RefreshButton";
-import { Separator } from "@/ui/separator";
 import {
   generateActionsColumDef,
   generateSelectColumDef,
 } from "@/shared/DataTable/utils";
 import OptimizationsEmptyState from "@/v2/pages/OptimizationsPage/OptimizationsEmptyState";
+import OptimizationsToolbar from "@/v2/pages/OptimizationsPage/OptimizationsToolbar";
 import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import emptyOptStudioLightUrl from "/images/empty-optimization-studio-light.svg";
 import emptyOptStudioDarkUrl from "/images/empty-optimization-studio-dark.svg";
 import StudioTemplates from "@/v2/pages-shared/optimizations/StudioTemplates";
+import { Separator } from "@/ui/separator";
 import { useOptimizationsView } from "@/hooks/useOptimizationsView";
+import { useOptimizationsExistence } from "@/hooks/useOptimizationsExistence";
 import { usePermissions } from "@/contexts/PermissionsContext";
-
-const SELECTED_COLUMNS_KEY = "optimizations-selected-columns-v1";
-const COLUMNS_WIDTH_KEY = "optimizations-columns-width-v1";
-const COLUMNS_ORDER_KEY = "optimizations-columns-order-v1";
-
-export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
-  {
-    id: "dataset_name",
-    label: "Dataset name",
-    type: COLUMN_TYPE.string,
-    cell: DatasetNameCell as never,
-    size: 200,
-  },
-  {
-    id: "created_at",
-    label: "Start time",
-    type: COLUMN_TYPE.time,
-    cell: TimeCell as never,
-    size: 140,
-  },
-  {
-    id: "status",
-    label: "Status",
-    type: COLUMN_TYPE.string,
-    cell: OptimizationStatusCell as never,
-    size: 120,
-  },
-  {
-    id: "pass_rate",
-    label: "Pass rate",
-    type: COLUMN_TYPE.numberDictionary,
-    size: 200,
-    accessorFn: (row) => row.best_objective_score,
-    cell: OptimizationPassRateCell as never,
-  },
-  {
-    id: "accuracy",
-    label: "Accuracy",
-    type: COLUMN_TYPE.numberDictionary,
-    size: 200,
-    accessorFn: (row) =>
-      getFeedbackScore(row.feedback_scores ?? [], row.objective_name),
-    cell: OptimizationAccuracyCell as never,
-  },
-  {
-    id: "latency",
-    label: "Latency",
-    type: COLUMN_TYPE.duration,
-    size: 180,
-    accessorFn: (row) => row.best_duration,
-    cell: OptimizationLatencyCell as never,
-  },
-  {
-    id: "cost",
-    label: "Cost",
-    type: COLUMN_TYPE.cost,
-    size: 180,
-    accessorFn: (row) => row.best_cost,
-    cell: OptimizationCostCell as never,
-  },
-  {
-    id: "opt_cost",
-    label: "Opt. cost",
-    type: COLUMN_TYPE.cost,
-    size: 120,
-    accessorFn: (row) => row.total_optimization_cost,
-    cell: OptimizationTotalCostCell as never,
-  },
-];
-
-export const FILTER_COLUMNS = [
-  {
-    id: COLUMN_DATASET_ID,
-    label: "Test suite",
-    type: COLUMN_TYPE.string,
-    disposable: true,
-  },
-];
-
-export const DEFAULT_SELECTED_COLUMNS: string[] = [
-  "dataset_name",
-  "created_at",
-  "status",
-  "pass_rate",
-  "accuracy",
-  "latency",
-  "cost",
-  "opt_cost",
-  "deploy",
-];
-
-const DEFAULT_COLUMNS_ORDER: string[] = [
-  "dataset_name",
-  "created_at",
-  "status",
-  "pass_rate",
-  "accuracy",
-  "latency",
-  "cost",
-  "opt_cost",
-  "deploy",
-];
+import {
+  DEFAULT_COLUMNS,
+  DEFAULT_COLUMNS_ORDER,
+  DEFAULT_SELECTED_COLUMNS,
+  SELECTED_COLUMNS_KEY,
+  COLUMNS_WIDTH_KEY,
+  COLUMNS_ORDER_KEY,
+} from "@/v2/pages/OptimizationsPage/OptimizationsColumns";
 
 const selectColumn = generateSelectColumDef();
 
@@ -209,8 +101,6 @@ const OptimizationsPage: React.FunctionComponent = () => {
     [activeProjectId],
   );
 
-  const noData = !search && filters.length === 0;
-
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
     {
@@ -247,6 +137,12 @@ const OptimizationsPage: React.FunctionComponent = () => {
     search: search || "",
     page: page || 1,
     rowSelection,
+    pollWhileInProgress: true,
+  });
+
+  const { isEmpty, isPending: isExistencePending } = useOptimizationsExistence({
+    workspaceName,
+    projectId: activeProjectId ?? undefined,
   });
 
   const hasOldTypeOptimizations = useMemo(
@@ -310,8 +206,9 @@ const OptimizationsPage: React.FunctionComponent = () => {
   }, []);
 
   const isTableLoading =
-    isPending || (isPlaceholderData && optimizations.length === 0);
-  const isEmpty = !isTableLoading && noData && optimizations.length === 0;
+    isExistencePending ||
+    isPending ||
+    (isPlaceholderData && optimizations.length === 0);
 
   const handleClearFilters = useCallback(() => {
     setSearch(undefined);
@@ -320,7 +217,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
 
   return (
     <div className="flex min-h-full flex-col pt-4">
-      <div className="mb-1 flex min-h-7 items-center justify-between">
+      <div className="mb-4 flex min-h-7 items-center justify-between">
         <h1 className="comet-body-accented truncate break-words">
           Optimization runs
         </h1>
@@ -343,48 +240,32 @@ const OptimizationsPage: React.FunctionComponent = () => {
         )
       ) : (
         <>
-          {canUseOptimizationStudio && <StudioTemplates />}
-          <div className="pt-4">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
-              <div className="flex items-center gap-2">
-                <SearchInput
-                  searchText={search!}
-                  setSearchText={setSearch}
-                  placeholder="Search by dataset name"
-                  className="w-[320px]"
-                  dimension="sm"
-                ></SearchInput>
-                {canViewDatasets && (
-                  <FiltersButton
-                    columns={FILTER_COLUMNS}
-                    config={filtersConfig as never}
-                    filters={filters}
-                    onChange={setFilters}
-                    layout="icon"
-                  />
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                {canDeleteOptimizationRuns && (
-                  <>
-                    <OptimizationsActionsPanel optimizations={selectedRows} />
-                    <Separator orientation="vertical" className="mx-2 h-4" />
-                  </>
-                )}
-                <RefreshButton
-                  tooltip="Refresh optimizations list"
-                  isFetching={isFetching}
-                  onRefresh={() => refetch()}
-                />
-                <ColumnsButton
-                  columns={visibleColumns}
-                  selectedColumns={selectedColumns}
-                  onSelectionChange={setSelectedColumns}
-                  order={columnsOrder}
-                  onOrderChange={setColumnsOrder}
-                ></ColumnsButton>
-              </div>
-            </div>
+          {canUseOptimizationStudio && !isTableLoading && (
+            <>
+              <StudioTemplates
+                onOptimizeViaSdkClick={handleNewOptimizationClick}
+              />
+              <Separator className="my-3" />
+            </>
+          )}
+          <div>
+            <OptimizationsToolbar
+              search={search!}
+              onSearchChange={setSearch}
+              filters={filters}
+              onFiltersChange={setFilters}
+              filtersConfig={filtersConfig}
+              canViewDatasets={canViewDatasets}
+              canDeleteOptimizationRuns={canDeleteOptimizationRuns}
+              selectedRows={selectedRows}
+              isFetching={isFetching}
+              onRefresh={() => refetch()}
+              columns={visibleColumns}
+              selectedColumns={selectedColumns}
+              onSelectedColumnsChange={setSelectedColumns}
+              columnsOrder={columnsOrder}
+              onColumnsOrderChange={setColumnsOrder}
+            />
             <DataTable
               columns={columns as never}
               data={optimizations as never}
