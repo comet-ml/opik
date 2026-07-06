@@ -391,6 +391,9 @@ public class CostService {
         BigDecimal inputAudioTokenPrice = Optional.ofNullable(modelCost.inputCostPerAudioToken())
                 .map(BigDecimal::new)
                 .orElse(BigDecimal.ZERO);
+        BigDecimal outputAudioTokenPrice = Optional.ofNullable(modelCost.outputCostPerAudioToken())
+                .map(BigDecimal::new)
+                .orElse(BigDecimal.ZERO);
         // Tier rates: above_200k_tokens variants. Models without a tier (most) leave these null
         // in the LiteLLM JSON; we default to zero and the effective-price helpers on ModelPrice
         // fall through to the base rate in that case.
@@ -422,6 +425,7 @@ public class CostService {
                 .videoOutputPrice(videoOutputPrice)
                 .audioInputCharacterPrice(audioInputCharacterPrice)
                 .inputAudioTokenPrice(inputAudioTokenPrice)
+                .outputAudioTokenPrice(outputAudioTokenPrice)
                 .calculator(calculator)
                 .inputPriceAbove200kTokens(inputPriceAbove200kTokens)
                 .outputPriceAbove200kTokens(outputPriceAbove200kTokens)

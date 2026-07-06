@@ -13,7 +13,7 @@ COPY src ./src
 ARG OPIK_VERSION
 ENV MAVEN_OPTS="-Xmx1G -XX:MaxMetaspaceSize=265m"
 RUN mvn versions:set -DnewVersion=${OPIK_VERSION} && \
-    mvn clean package -DskipTests
+    mvn clean package -DskipTests -Dspotless.skip=true
 
 ###############################
 FROM amazoncorretto:25.0.3-al2023
