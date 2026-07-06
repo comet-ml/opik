@@ -99,6 +99,8 @@ const ProjectStatsCardEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
     ? getWorkspaceStatMetric(metric)
     : null;
   const requiresUsageKey = Boolean(workspaceMetricDef?.requiresUsageKey);
+  // Multi-project aggregates span metrics, so filters are always span filters there; single-project follows source.
+  const useSpanFilters = isMultiProject || !isTraceSource;
 
   const { data, isPending } = useTracesOrSpansScoresColumns(
     {
@@ -343,24 +345,22 @@ const ProjectStatsCardEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
           />
         )}
 
-        {!isMultiProject && (
-          <ProjectWidgetFiltersSection
-            control={form.control}
-            fieldName={isTraceSource ? "traceFilters" : "spanFilters"}
-            projectId={projectId}
-            filterType={isTraceSource ? "trace" : "span"}
-            onFiltersChange={(filters) => {
-              updatePreviewWidget({
-                config: {
-                  ...config,
-                  ...(isTraceSource
-                    ? { traceFilters: filters }
-                    : { spanFilters: filters }),
-                },
-              });
-            }}
-          />
-        )}
+        <ProjectWidgetFiltersSection
+          control={form.control}
+          fieldName={useSpanFilters ? "spanFilters" : "traceFilters"}
+          projectId={projectId}
+          filterType={useSpanFilters ? "span" : "trace"}
+          onFiltersChange={(filters) => {
+            updatePreviewWidget({
+              config: {
+                ...config,
+                ...(useSpanFilters
+                  ? { spanFilters: filters }
+                  : { traceFilters: filters }),
+              },
+            });
+          }}
+        />
       </div>
     </Form>
   );

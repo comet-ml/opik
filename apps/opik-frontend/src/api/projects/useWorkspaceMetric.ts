@@ -1,6 +1,8 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { WORKSPACES_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { BreakdownConfig, BREAKDOWN_FIELD } from "@/types/dashboard";
+import { Filter } from "@/types/filters";
+import { processFiltersArray } from "@/lib/filters";
 import {
   INTERVAL_TYPE,
   METRIC_NAME_TYPE,
@@ -14,6 +16,7 @@ type UseWorkspaceMetricParams = {
   intervalStart: string | undefined;
   intervalEnd: string | undefined;
   breakdown?: BreakdownConfig;
+  spanFilters?: Filter[];
 };
 
 const processBreakdownConfig = (breakdown?: BreakdownConfig) => {
@@ -37,8 +40,10 @@ const getWorkspaceMetric = async (
     intervalStart,
     intervalEnd,
     breakdown,
+    spanFilters,
   }: UseWorkspaceMetricParams,
 ) => {
+  const processedFilters = processFiltersArray(spanFilters ?? []);
   const { data } = await api.post<ProjectMetricsResponse>(
     `${WORKSPACES_REST_ENDPOINT}metrics/spans`,
     {
@@ -49,6 +54,7 @@ const getWorkspaceMetric = async (
       // Empty => all projects in the workspace; otherwise only the selected set
       ...(projectIds.length > 0 && { project_ids: projectIds }),
       breakdown: processBreakdownConfig(breakdown),
+      ...(processedFilters.length > 0 && { filters: processedFilters }),
     },
     {
       signal,

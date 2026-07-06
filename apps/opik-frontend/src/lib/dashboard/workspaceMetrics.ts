@@ -7,6 +7,7 @@ export const WORKSPACE_METRIC_NAMES: METRIC_NAME_TYPE[] = [
   METRIC_NAME_TYPE.SPAN_COUNT,
   METRIC_NAME_TYPE.SPAN_TOKEN_USAGE,
   METRIC_NAME_TYPE.SPAN_COST,
+  METRIC_NAME_TYPE.SPAN_DURATION,
 ];
 
 export const isWorkspaceMetric = (metric?: string): boolean =>
@@ -27,6 +28,11 @@ export const WORKSPACE_TIME_SERIES_METRIC_OPTIONS = [
   {
     value: METRIC_NAME_TYPE.SPAN_COST,
     label: "Span cost",
+    filterType: "span" as const,
+  },
+  {
+    value: METRIC_NAME_TYPE.SPAN_DURATION,
+    label: "Duration",
     filterType: "span" as const,
   },
 ];

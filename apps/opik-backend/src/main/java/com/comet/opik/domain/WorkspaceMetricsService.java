@@ -86,6 +86,7 @@ class WorkspaceMetricsServiceImpl implements WorkspaceMetricsService {
             case SPAN_COUNT -> workspaceMetricsDAO.getSpanCount(request);
             case SPAN_TOKEN_USAGE -> workspaceMetricsDAO.getSpanTokenUsage(request);
             case SPAN_COST -> workspaceMetricsDAO.getSpanCost(request);
+            case SPAN_DURATION -> workspaceMetricsDAO.getSpanDuration(request);
             default -> throw new BadRequestException("Unsupported metric type '%s'".formatted(request.metricType()));
         };
     }
@@ -111,6 +112,11 @@ class WorkspaceMetricsServiceImpl implements WorkspaceMetricsService {
                     && StringUtils.isBlank(request.breakdown().subMetric())) {
                 throw new BadRequestException(
                         "'sub_metric' is required for token usage breakdown. It should be the usage key name (e.g., completion_tokens, prompt_tokens).");
+            }
+            if (request.metricType() == MetricType.SPAN_DURATION
+                    && StringUtils.isBlank(request.breakdown().subMetric())) {
+                throw new BadRequestException(
+                        "'sub_metric' is required for duration breakdown. It should be a percentile (p50, p90, p99).");
             }
         }
     }

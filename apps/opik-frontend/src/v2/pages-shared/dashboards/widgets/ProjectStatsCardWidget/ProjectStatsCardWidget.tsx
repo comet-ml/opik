@@ -164,6 +164,7 @@ const ProjectStatsCardWidget: React.FunctionComponent<
       interval: INTERVAL_TYPE.TOTAL,
       intervalStart,
       intervalEnd,
+      spanFilters: validSpanFilters,
     },
     { enabled: isMultiProject && Boolean(workspaceMetricDef) },
   );

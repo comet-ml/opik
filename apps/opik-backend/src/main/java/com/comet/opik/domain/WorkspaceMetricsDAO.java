@@ -10,6 +10,8 @@ import com.comet.opik.api.metrics.WorkspaceMetricResponse;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryRequest;
 import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
 import com.comet.opik.api.metrics.WorkspaceSpanMetricRequest;
+import com.comet.opik.domain.filter.FilterQueryBuilder;
+import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
 import com.comet.opik.utils.SentinelTranslation;
@@ -43,6 +45,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.metrics.BreakdownQueryBuilder.getBreakdownGroupExpression;
+import static com.comet.opik.api.metrics.BreakdownQueryBuilder.mapQuantile;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
@@ -55,7 +58,8 @@ public interface WorkspaceMetricsDAO {
     Set<MetricType> SUPPORTED_SPAN_METRICS = EnumSet.of(
             MetricType.SPAN_COUNT,
             MetricType.SPAN_TOKEN_USAGE,
-            MetricType.SPAN_COST);
+            MetricType.SPAN_COST,
+            MetricType.SPAN_DURATION);
 
     @Deprecated
     Mono<List<WorkspaceMetricsSummaryResponse.Result>> getFeedbackScoresSummary(WorkspaceMetricsSummaryRequest request);
@@ -72,6 +76,8 @@ public interface WorkspaceMetricsDAO {
     Mono<List<WorkspaceMetricResponse.Result>> getSpanTokenUsage(WorkspaceSpanMetricRequest request);
 
     Mono<List<WorkspaceMetricResponse.Result>> getSpanCost(WorkspaceSpanMetricRequest request);
+
+    Mono<List<WorkspaceMetricResponse.Result>> getSpanDuration(WorkspaceSpanMetricRequest request);
 }
 
 @Slf4j
@@ -486,6 +492,74 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             SETTINGS log_comment = '<log_comment>';
             """.formatted(SPAN_FILTERED_PREFIX);
 
+    // Duration is a distribution: like the per-project GET_SPAN_DURATION it computes quantiles(0.5, 0.9, 0.99) per
+    // bucket, then fans the array out into three series (span_duration.p50/.p90/.p99). Empty buckets (WITH FILL) yield
+    // an empty array, mapped to NULL so it matches the per-project null-on-empty semantics.
+    private static final String GET_SPAN_DURATION = """
+            %s
+            , series_raw AS (
+                SELECT <bucket> AS bucket,
+                       arrayMap(
+                         v -> toDecimal64(
+                                greatest(least(if(isFinite(v), v, 0), 999999999.999999999), -999999999.999999999),
+                                9
+                              ),
+                         quantiles(0.5, 0.9, 0.99)(duration)
+                       ) AS p_values
+                FROM spans_filtered
+                GROUP BY bucket
+                ORDER BY bucket
+                <if(with_fill)>WITH FILL
+                    FROM <fill_from>
+                    TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
+                    STEP <step><endif>
+            )
+            SELECT NULL AS project_id,
+                   name,
+                   groupArray(tuple(bucket, value)) AS data
+            FROM (
+                SELECT bucket, 'span_duration.p50' AS name, if(empty(p_values), NULL, p_values[1]) AS value
+                FROM series_raw
+                UNION ALL
+                SELECT bucket, 'span_duration.p90' AS name, if(empty(p_values), NULL, p_values[2]) AS value
+                FROM series_raw
+                UNION ALL
+                SELECT bucket, 'span_duration.p99' AS name, if(empty(p_values), NULL, p_values[3]) AS value
+                FROM series_raw
+            )
+            GROUP BY name
+            ORDER BY name
+            SETTINGS log_comment = '<log_comment>';
+            """.formatted(SPAN_FILTERED_PREFIX);
+
+    // Breakdown selects a single percentile via quantile(<sub_metric>), producing one series per group (provider/model),
+    // matching the per-project breakdown convention where each group is one series.
+    private static final String GET_SPAN_DURATION_WITH_BREAKDOWN = """
+            %s
+            , series AS (
+                SELECT bucket,
+                       group_name,
+                       toDecimal64(
+                         greatest(least(if(isFinite(v), v, 0), 999999999.999999999), -999999999.999999999),
+                         9
+                       ) AS value
+                FROM (
+                    SELECT <bucket> AS bucket,
+                           <group_expression> AS group_name,
+                           quantile(<sub_metric>)(duration) AS v
+                    FROM spans_filtered s
+                    GROUP BY bucket, group_name
+                )
+                ORDER BY group_name, bucket
+            )
+            SELECT NULL AS project_id,
+                   group_name AS name,
+                   groupArray(tuple(bucket, value)) AS data
+            FROM series
+            GROUP BY group_name
+            SETTINGS log_comment = '<log_comment>';
+            """.formatted(SPAN_FILTERED_PREFIX);
+
     private static final String WORKSPACE_METRIC_QUERY_NAME_PREFIX = "WorkspaceMetrics_";
 
     private static final Map<TimeInterval, String> INTERVAL_TO_SQL = Map.of(
@@ -557,6 +631,14 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                         .collectList());
     }
 
+    @Override
+    public Mono<List<WorkspaceMetricResponse.Result>> getSpanDuration(@NonNull WorkspaceSpanMetricRequest request) {
+        return template.nonTransaction(connection -> getSpanMetric(request, connection,
+                request.hasBreakdown() ? GET_SPAN_DURATION_WITH_BREAKDOWN : GET_SPAN_DURATION, "workspaceSpanDuration")
+                .flatMapMany(this::rowToDataPoint)
+                .collectList());
+    }
+
     private Mono<? extends Result> getSpanMetric(WorkspaceSpanMetricRequest request, Connection connection,
             String query, String segmentName) {
         return makeMonoContextAware((userName, workspaceId) -> {
@@ -581,7 +663,24 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             if (request.hasBreakdown()) {
                 stTemplate.add("group_expression",
                         getBreakdownGroupExpression(request.metricType(), request.breakdown()));
+                // SPAN_DURATION breakdown selects a single percentile via quantile(<sub_metric>); the percentile is a
+                // validated numeric literal, so it is substituted into the SQL rather than bound.
+                if (request.metricType() == MetricType.SPAN_DURATION) {
+                    stTemplate.add("sub_metric", mapQuantile(request.breakdown().subMetric()));
+                }
             }
+
+            Optional.ofNullable(request.filters())
+                    .ifPresent(filters -> {
+                        FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN)
+                                .ifPresent(spanFilters -> stTemplate.add("span_filters", spanFilters));
+                        FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN_FEEDBACK_SCORES)
+                                .ifPresent(scoresFilters -> stTemplate.add("span_feedback_scores_filters",
+                                        scoresFilters));
+                        FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY)
+                                .ifPresent(emptyFilters -> stTemplate.add("feedback_scores_empty_filters",
+                                        emptyFilters));
+                    });
 
             if (hasProjectIds) {
                 stTemplate.add("project_ids", true);
@@ -611,6 +710,13 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             if (request.hasBreakdown() && request.metricType() == MetricType.SPAN_TOKEN_USAGE) {
                 statement.bind("sub_metric", Optional.ofNullable(request.breakdown().subMetric()).orElse(""));
             }
+
+            Optional.ofNullable(request.filters())
+                    .ifPresent(filters -> {
+                        FilterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN);
+                        FilterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN_FEEDBACK_SCORES);
+                        FilterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY);
+                    });
 
             InstrumentAsyncUtils.Segment segment = startSegment(segmentName, "Clickhouse", "get");
 

@@ -60,6 +60,7 @@ const useMetricData = (
       intervalStart: params.intervalStart,
       intervalEnd: params.intervalEnd,
       breakdown: params.breakdown,
+      spanFilters: params.spanFilters,
     },
     {
       ...config,
