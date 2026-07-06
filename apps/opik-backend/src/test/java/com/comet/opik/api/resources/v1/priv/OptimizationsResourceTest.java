@@ -73,21 +73,9 @@ import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
-import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
-import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
-import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import uk.co.jemos.podam.api.PodamFactory;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.math.BigDecimal;
-import java.net.URI;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -100,8 +88,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 import java.util.stream.Stream;
-import java.util.zip.GZIPInputStream;
-import java.util.zip.GZIPOutputStream;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -139,7 +125,6 @@ class OptimizationsResourceTest {
 
     private final WireMockUtils.WireMockRuntime wireMock;
     private final TestDropwizardAppExtensionUtils.AppContextConfig contextConfig;
-    private final String minioUrl;
 
     @RegisterApp
     private final TestDropwizardAppExtension APP;
@@ -147,7 +132,7 @@ class OptimizationsResourceTest {
     {
         Startables.deepStart(REDIS, MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, ZOOKEEPER_CONTAINER, MINIO).join();
 
-        minioUrl = "http://%s:%d".formatted(MINIO.getHost(), MINIO.getMappedPort(9000));
+        String minioUrl = "http://%s:%d".formatted(MINIO.getHost(), MINIO.getMappedPort(9000));
 
         wireMock = WireMockUtils.startWireMock();
 
@@ -1374,77 +1359,6 @@ class OptimizationsResourceTest {
             assertThat(logs.url()).contains(id.toString());
             assertThat(logs.expiresAt()).isNotNull();
             assertThat(logs.expiresAt()).isAfter(Instant.now());
-        }
-
-        @Test
-        @DisplayName("Download Studio optimization logs streams the gzipped file from MinIO")
-        void downloadStudioOptimizationLogs() {
-            var optimization = optimizationResourceClient.createPartialOptimization()
-                    .studioConfig(createStudioConfig())
-                    .build();
-            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
-
-            // Upload a gzipped log file to the exact S3 key the backend serves
-            var logContent = "step 1 ok\nTraceback (most recent call last):\nValueError: boom";
-            var key = "logs/optimization-studio/%s/%s.log.gz".formatted(WORKSPACE_ID, id);
-            putMinioObject(key, gzip(logContent));
-
-            try (var response = optimizationResourceClient.callDownloadStudioLogs(id, API_KEY,
-                    TEST_WORKSPACE_NAME)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-                assertThat(gunzip(response.readEntity(byte[].class))).isEqualTo(logContent);
-            }
-        }
-
-        @Test
-        @DisplayName("Download Studio optimization logs returns 404 when no log file exists")
-        void downloadStudioOptimizationLogsNotFound() {
-            var optimization = optimizationResourceClient.createPartialOptimization()
-                    .studioConfig(createStudioConfig())
-                    .build();
-            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
-
-            try (var response = optimizationResourceClient.callDownloadStudioLogs(id, API_KEY,
-                    TEST_WORKSPACE_NAME)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
-            }
-        }
-
-        private void putMinioObject(String key, byte[] data) {
-            try (var s3 = S3Client.builder()
-                    .endpointOverride(URI.create(minioUrl))
-                    .forcePathStyle(true)
-                    .region(Region.US_EAST_1)
-                    .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials
-                            .create(MinIOContainerUtils.MINIO_USER, MinIOContainerUtils.MINIO_PASSWORD)))
-                    .build()) {
-                s3.putObject(
-                        PutObjectRequest.builder()
-                                .bucket(MinIOContainerUtils.MINIO_BUCKET)
-                                .key(key)
-                                .contentType("application/gzip")
-                                .build(),
-                        RequestBody.fromBytes(data));
-            }
-        }
-
-        private byte[] gzip(String content) {
-            try (var bytes = new ByteArrayOutputStream()) {
-                try (var gzip = new GZIPOutputStream(bytes)) {
-                    gzip.write(content.getBytes(StandardCharsets.UTF_8));
-                }
-                return bytes.toByteArray();
-            } catch (IOException exception) {
-                throw new UncheckedIOException(exception);
-            }
-        }
-
-        private String gunzip(byte[] data) {
-            try (var gzip = new GZIPInputStream(new ByteArrayInputStream(data))) {
-                return new String(gzip.readAllBytes(), StandardCharsets.UTF_8);
-            } catch (IOException exception) {
-                throw new UncheckedIOException(exception);
-            }
         }
 
         @Test

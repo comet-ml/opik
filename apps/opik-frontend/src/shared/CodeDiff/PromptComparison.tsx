@@ -14,10 +14,9 @@ import {
 } from "@/ui/dropdown-menu";
 import { PromptComparisonTarget } from "./promptComparisonTargets";
 import {
-  buildRoleDiffRows,
+  buildDiffRows,
+  buildPromptRows,
   getRoleLabel,
-  groupMessageContentByRole,
-  promptToText,
 } from "./promptMessageDiff";
 
 type PromptComparisonProps = {
@@ -80,6 +79,13 @@ const LineDiff: React.FC<{ base: string; current: string }> = ({
   );
 };
 
+const PlainText: React.FC<{ text: string }> = ({ text }) => (
+  <div className="comet-body-s whitespace-pre-wrap break-words text-foreground">
+    {text}
+  </div>
+);
+
+/** One per-role section: a labelled card wrapping either plain text or a diff. */
 const RoleCard: React.FC<{ role: string; children: React.ReactNode }> = ({
   role,
   children,
@@ -94,10 +100,76 @@ const RoleCard: React.FC<{ role: string; children: React.ReactNode }> = ({
   </div>
 );
 
-const PlainText: React.FC<{ text: string }> = ({ text }) => (
-  <div className="comet-body-s whitespace-pre-wrap break-words text-foreground">
-    {text}
-  </div>
+/**
+ * "[target] → [current]" picker: a dropdown to choose what the current prompt
+ * is diffed against, followed by the current side's label.
+ */
+const TargetPicker: React.FC<{
+  targets: PromptComparisonTarget[];
+  selected: PromptComparisonTarget;
+  currentLabel: string;
+  onSelect: (id: string) => void;
+}> = ({ targets, selected, currentLabel, onSelect }) => (
+  <>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="comet-body-s-accented inline-flex items-center gap-0.5 border-b border-foreground pb-px text-foreground outline-none"
+        >
+          {selected.label}
+          {selected.caption && (
+            <span className="comet-body-xs text-muted-slate">
+              {selected.caption}
+            </span>
+          )}
+          <ChevronDown className="size-3.5" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-[180px]">
+        <DropdownMenuLabel size="sm">Compare against</DropdownMenuLabel>
+        <DropdownMenuSeparator className="bg-border" />
+        {targets.map((target) => (
+          <DropdownMenuItem
+            key={target.id}
+            size="sm"
+            selected={target.id === selected.id}
+            onSelect={() => onSelect(target.id)}
+            className="justify-between gap-2"
+          >
+            <span>{target.label}</span>
+            {target.caption && (
+              <span className="comet-body-xs text-muted-slate">
+                {target.caption}
+              </span>
+            )}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+    <span className="comet-body-s-accented text-foreground">
+      → {currentLabel}
+    </span>
+  </>
+);
+
+/** Toggle between the diff view and the plain current-prompt view. */
+const DiffToggle: React.FC<{ showDiff: boolean; onToggle: () => void }> = ({
+  showDiff,
+  onToggle,
+}) => (
+  <button
+    type="button"
+    onClick={onToggle}
+    className="comet-body-s inline-flex items-center gap-1 text-foreground"
+  >
+    {showDiff ? (
+      <GitCompareOff className="size-3.5" />
+    ) : (
+      <GitCompare className="size-3.5" />
+    )}
+    {showDiff ? "Hide diff" : "Show diff"}
+  </button>
 );
 
 /**
@@ -117,11 +189,10 @@ const PromptComparison: React.FunctionComponent<PromptComparisonProps> = ({
   diff,
   className,
 }) => {
-  const fallbackId = targets[0]?.id;
   const initialId =
     defaultTargetId && targets.some((t) => t.id === defaultTargetId)
       ? defaultTargetId
-      : fallbackId;
+      : targets[0]?.id;
 
   const [selectedId, setSelectedId] = useState<string | undefined>(initialId);
   const [internalShowDiff, setShowDiff] = useState(defaultDiff);
@@ -137,54 +208,32 @@ const PromptComparison: React.FunctionComponent<PromptComparisonProps> = ({
   const hasTargets = targets.length > 0;
   const diffActive = hasTargets && showDiff && Boolean(selectedTarget);
 
-  const body = useMemo(() => {
+  const cards = useMemo(() => {
     if (diffActive && selectedTarget) {
-      const rows = buildRoleDiffRows(selectedTarget.prompt, current);
-      if (rows) {
-        return rows.map((row) => (
-          <RoleCard key={row.role} role={row.role}>
-            <LineDiff base={row.baseContent} current={row.currentContent} />
-          </RoleCard>
-        ));
-      }
-      return (
-        <RoleCard role="prompt">
-          <LineDiff
-            base={promptToText(selectedTarget.prompt)}
-            current={promptToText(current)}
-          />
-        </RoleCard>
-      );
-    }
-
-    const rows = groupMessageContentByRole(current);
-    if (rows) {
-      return rows.map((row) => (
+      return buildDiffRows(selectedTarget.prompt, current).map((row) => (
         <RoleCard key={row.role} role={row.role}>
-          <PlainText text={row.content} />
+          <LineDiff base={row.baseContent} current={row.currentContent} />
         </RoleCard>
       ));
     }
 
-    const text = promptToText(current);
-    return text ? (
-      <RoleCard role="prompt">
-        <PlainText text={text} />
+    return buildPromptRows(current).map((row) => (
+      <RoleCard key={row.role} role={row.role}>
+        <PlainText text={row.content} />
       </RoleCard>
-    ) : null;
+    ));
   }, [diffActive, selectedTarget, current]);
 
-  if (!body || (Array.isArray(body) && body.length === 0)) {
-    return null;
-  }
+  if (cards.length === 0) return null;
 
   // A plain title stands in for the target picker until diffing begins; without
   // a title the picker always shows (the original behavior).
   const showTitle = Boolean(title) && !diffActive;
+  const showControlBar = showControls && (hasTargets || showTitle);
 
   return (
     <div className={cn("flex flex-col gap-3", className)}>
-      {showControls && (hasTargets || showTitle) && (
+      {showControlBar && (
         <div className="flex items-center justify-between pl-1">
           <div className="flex items-center gap-1.5">
             {showTitle ? (
@@ -193,72 +242,24 @@ const PromptComparison: React.FunctionComponent<PromptComparisonProps> = ({
               </span>
             ) : (
               selectedTarget && (
-                <>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        className="comet-body-s-accented inline-flex items-center gap-0.5 border-b border-foreground pb-px text-foreground outline-none"
-                      >
-                        {selectedTarget.label}
-                        {selectedTarget.caption && (
-                          <span className="comet-body-xs text-muted-slate">
-                            {selectedTarget.caption}
-                          </span>
-                        )}
-                        <ChevronDown className="size-3.5" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align="start"
-                      className="min-w-[180px]"
-                    >
-                      <DropdownMenuLabel size="sm">
-                        Compare against
-                      </DropdownMenuLabel>
-                      <DropdownMenuSeparator className="bg-border" />
-                      {targets.map((target) => (
-                        <DropdownMenuItem
-                          key={target.id}
-                          size="sm"
-                          selected={target.id === selectedTarget.id}
-                          onSelect={() => setSelectedId(target.id)}
-                          className="justify-between gap-2"
-                        >
-                          <span>{target.label}</span>
-                          {target.caption && (
-                            <span className="comet-body-xs text-muted-slate">
-                              {target.caption}
-                            </span>
-                          )}
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  <span className="comet-body-s-accented text-foreground">
-                    → {currentLabel}
-                  </span>
-                </>
+                <TargetPicker
+                  targets={targets}
+                  selected={selectedTarget}
+                  currentLabel={currentLabel}
+                  onSelect={setSelectedId}
+                />
               )
             )}
           </div>
           {hasTargets && (
-            <button
-              type="button"
-              onClick={() => setShowDiff((prev) => !prev)}
-              className="comet-body-s inline-flex items-center gap-1 text-foreground"
-            >
-              {showDiff ? (
-                <GitCompareOff className="size-3.5" />
-              ) : (
-                <GitCompare className="size-3.5" />
-              )}
-              {showDiff ? "Hide diff" : "Show diff"}
-            </button>
+            <DiffToggle
+              showDiff={showDiff}
+              onToggle={() => setShowDiff((prev) => !prev)}
+            />
           )}
         </div>
       )}
-      <div className="flex flex-col gap-1.5">{body}</div>
+      <div className="flex flex-col gap-1.5">{cards}</div>
     </div>
   );
 };

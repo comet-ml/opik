@@ -139,3 +139,36 @@ export const buildRoleDiffRows = (
     currentContent: currentByRole.get(role) ?? "",
   }));
 };
+
+/** Role used for the single whole-prompt card when a prompt isn't a message array. */
+export const FALLBACK_ROLE = "prompt";
+
+/**
+ * Render-ready diff rows for `current` against a comparison `target`, always
+ * non-empty: when either side isn't a plain message array, collapses to a
+ * single whole-text row so the caller can render exactly one diff card.
+ */
+export const buildDiffRows = (
+  target: unknown,
+  current: unknown,
+): RoleDiffRow[] =>
+  buildRoleDiffRows(target, current) ?? [
+    {
+      role: FALLBACK_ROLE,
+      baseContent: promptToText(target),
+      currentContent: promptToText(current),
+    },
+  ];
+
+/**
+ * Render-ready role rows for a single prompt (no diff): the per-role grouping
+ * when it's a message array, otherwise a single whole-text row. Empty prompts
+ * yield an empty array so the caller can render nothing.
+ */
+export const buildPromptRows = (prompt: unknown): RoleContent[] => {
+  const rows = groupMessageContentByRole(prompt);
+  if (rows) return rows;
+
+  const text = promptToText(prompt);
+  return text ? [{ role: FALLBACK_ROLE, content: text }] : [];
+};

@@ -3,8 +3,11 @@ import { describe, it, expect } from "vitest";
 import {
   groupMessageContentByRole,
   buildRoleDiffRows,
+  buildDiffRows,
+  buildPromptRows,
   getRoleLabel,
   promptToText,
+  FALLBACK_ROLE,
 } from "./promptMessageDiff";
 
 describe("promptToText", () => {
@@ -138,5 +141,41 @@ describe("buildRoleDiffRows", () => {
 
     expect(buildRoleDiffRows("string baseline", messages)).toBeNull();
     expect(buildRoleDiffRows(messages, "string current")).toBeNull();
+  });
+});
+
+describe("buildDiffRows", () => {
+  it("delegates to per-role rows for message-array prompts", () => {
+    const target = [{ role: "system", content: "old" }];
+    const current = [{ role: "system", content: "new" }];
+
+    expect(buildDiffRows(target, current)).toEqual([
+      { role: "system", baseContent: "old", currentContent: "new" },
+    ]);
+  });
+
+  it("falls back to a single whole-text row when a side isn't a message array", () => {
+    expect(buildDiffRows("before", "after")).toEqual([
+      { role: FALLBACK_ROLE, baseContent: "before", currentContent: "after" },
+    ]);
+  });
+});
+
+describe("buildPromptRows", () => {
+  it("delegates to per-role grouping for message-array prompts", () => {
+    const prompt = [{ role: "user", content: "hi" }];
+
+    expect(buildPromptRows(prompt)).toEqual([{ role: "user", content: "hi" }]);
+  });
+
+  it("falls back to a single whole-text row for non-message prompts", () => {
+    expect(buildPromptRows("just a string")).toEqual([
+      { role: FALLBACK_ROLE, content: "just a string" },
+    ]);
+  });
+
+  it("returns an empty array for an empty prompt", () => {
+    expect(buildPromptRows(null)).toEqual([]);
+    expect(buildPromptRows("")).toEqual([]);
   });
 });
