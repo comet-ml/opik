@@ -834,6 +834,14 @@ public class SpanDAO {
      * picks the right page) and the final ORDER BY (so the page is returned in order); {@code page_wide}'s own order is
      * immaterial since it is id-bounded and {@code LIMIT 1 BY id}. Field exclusion ({@code exclude_fields}) and
      * truncation are layered on top without dropping the sort key.
+     * <p>
+     * When aggregates are enrichment-only ({@code page_keyed_aggregates}, see
+     * {@code shouldPageKeyAggregates}), the feedback-score and comment CTEs are keyed on
+     * {@code IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))} instead of
+     * {@code span_id_prefilter}: the inner scalar subquery is evaluated once and cached for the whole query,
+     * so each aggregate scans only the page's spans instead of the full filtered project. The aggregate CTEs
+     * referencing {@code page_ids} before its definition is fine — CTE names resolve independently of
+     * declaration order.
      */
     private static final String SELECT_BY_PROJECT_ID = """
             WITH <if(span_id_prefilter)>span_id_prefilter AS (
@@ -874,7 +882,8 @@ public class SpanDAO {
                 FROM comments
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                <if(span_id_prefilter)> AND entity_id IN (SELECT id FROM span_id_prefilter)
+                <if(page_keyed_aggregates)> AND entity_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                <elseif(span_id_prefilter)> AND entity_id IN (SELECT id FROM span_id_prefilter)
                 <else>
                 <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                 <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
@@ -915,7 +924,8 @@ public class SpanDAO {
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
-                      <if(span_id_prefilter)> AND entity_id IN (SELECT id FROM span_id_prefilter)
+                      <if(page_keyed_aggregates)> AND entity_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                      <elseif(span_id_prefilter)> AND entity_id IN (SELECT id FROM span_id_prefilter)
                       <else>
                       <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                       <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
@@ -938,7 +948,8 @@ public class SpanDAO {
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
-                      <if(span_id_prefilter)> AND entity_id IN (SELECT id FROM span_id_prefilter)
+                      <if(page_keyed_aggregates)> AND entity_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                      <elseif(span_id_prefilter)> AND entity_id IN (SELECT id FROM span_id_prefilter)
                       <else>
                       <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                       <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
@@ -2437,9 +2448,8 @@ public class SpanDAO {
         return makeFluxContextAware((userName, workspaceId) -> {
             var template = newFindTemplate(SELECT_BY_PROJECT_ID, criteria, "find_span_stream", workspaceId, userName);
 
-            if (shouldUseSpanIdPrefilter(criteria, template)) {
-                template.add("span_id_prefilter", true);
-            }
+            // The stream has no custom sorting, so only filters can make aggregates drive page selection.
+            addAggregateKeyingFlags(template, criteria, false);
 
             bindTemplateExcludeFieldVariables(criteria, template);
 
@@ -2486,9 +2496,7 @@ public class SpanDAO {
                     .map(sortFields -> sortFields.contains("feedback_scores"))
                     .orElse(false);
 
-            if (shouldUseSpanIdPrefilter(spanSearchCriteria, template) && !sortHasFeedbackScores) {
-                template.add("span_id_prefilter", true);
-            }
+            addAggregateKeyingFlags(template, spanSearchCriteria, sortHasFeedbackScores);
 
             var finalTemplate = template;
             Optional.ofNullable(orderBySql)
@@ -2636,6 +2644,45 @@ public class SpanDAO {
                 || template.getAttribute("filters") != null;
 
         return !hasFeedbackScoreFilters && hasNarrowingFilters;
+    }
+
+    /**
+     * Determines whether the enrichment aggregate CTEs (feedback scores, comments) can be keyed on the page ids
+     * instead of the full filtered span id set.
+     *
+     * <p>Those CTEs are joined to {@code page_wide} only to enrich the returned rows, so whenever neither
+     * filtering nor sorting reads them, computing them for every candidate span is wasted work that grows with
+     * project size: the final LEFT JOINs discard everything outside the page. Keying them on the page ids turns
+     * whole-project scans into page-sized, primary-key-prunable lookups.
+     *
+     * <p>The page ids are consumed via {@code IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))}:
+     * the inner scalar subquery is evaluated once and cached for the whole query, so the {@code page_ids} CTE is
+     * not re-executed at every reference (ClickHouse inlines plain CTE references), and the materialized constant
+     * array is usable for primary-key index analysis.
+     *
+     * <p>Must stay disabled whenever page selection depends on an aggregate: feedback-score filters
+     * ({@code spans_deduped} filters on feedback_scores_final/fsc) or sorting by feedback scores
+     * ({@code page_ids} joins feedback_scores_agg).
+     */
+    private boolean shouldPageKeyAggregates(ST template, boolean sortHasFeedbackScores) {
+        return !hasFeedbackScoreFilters(template) && !sortHasFeedbackScores;
+    }
+
+    /**
+     * Applies the aggregate-keying decision shared by {@code find} and {@code findSpanStream}: page-keyed
+     * aggregates when they are enrichment-only, otherwise the narrowing span id prefilter when filters allow it.
+     *
+     * <p>The prefilter branch fires for feedback-score-sorted queries with narrowing filters: page-keying is
+     * unsafe there (page selection reads feedback_scores_agg), but the prefilter set — all filtered span ids —
+     * is a superset of any page, so keying the aggregate CTEs on it preserves the sort while avoiding
+     * whole-project feedback-score and comment scans.
+     */
+    private void addAggregateKeyingFlags(ST template, SpanSearchCriteria criteria, boolean sortHasFeedbackScores) {
+        if (shouldPageKeyAggregates(template, sortHasFeedbackScores)) {
+            template.add("page_keyed_aggregates", true);
+        } else if (shouldUseSpanIdPrefilter(criteria, template)) {
+            template.add("span_id_prefilter", true);
+        }
     }
 
     private boolean hasFeedbackScoreFilters(ST template) {
