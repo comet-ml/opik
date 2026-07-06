@@ -1838,6 +1838,7 @@ class TestPlannerCascadePlacement:
             [
                 _Page([_DatasetRow(id="src-1", name="MyDataset")]),
                 _Page([]),
+                _Page([]),
             ]
         )
 

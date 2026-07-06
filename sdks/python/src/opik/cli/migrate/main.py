@@ -27,6 +27,8 @@ from .datasets.planner import (
     CascadeExperiments,
     CascadeOptimizations,
     CreateDestination,
+    DiscardStaleTemp,
+    PromoteDestination,
     RenameSource,
     ReplayVersions,
     build_dataset_plan,
@@ -342,14 +344,21 @@ def migrate_dataset_command(
 
     \b
     Steps performed (in order):
-        1. Rename source to "<name>_v1"
-        2. Create the destination dataset under --to-project
-        3. Replay every source version onto the destination (full history)
-        4. Cascade experiments + traces + spans into the destination project
+        1. Create the destination under a temp name ("<name>__migrating")
+        2. Replay every source version onto the destination (full history)
+        3. Cascade experiments + traces + spans into the destination project
+        4. Rename source to "<name>_v1", then promote the destination to
+           "<name>" — the name handoff runs only after the copy succeeds
 
-    Pass ``--exclude-experiments`` to stop after step 3: the dataset and its
-    versions migrate, but experiments and optimizations are skipped entirely
-    (no discovery pass runs).
+    The source keeps its original name for the entire copy, so an interrupted
+    run leaves the source untouched and only a discardable "<name>__migrating"
+    dataset behind. Re-running with the original name is therefore safe and
+    idempotent: a stale temp from a prior failed run is discarded and the
+    copy restarts from scratch (OPIK-7162).
+
+    Pass ``--exclude-experiments`` to stop before the cascade (step 3): the
+    dataset and its versions migrate, but experiments and optimizations are
+    skipped entirely (no discovery pass runs).
 
     Dataset names are workspace-unique on the BE
     (``UNIQUE (workspace_id, name)``); ``--from-project`` is an
@@ -559,18 +568,32 @@ def _print_plan(plan: Any) -> None:
 
     Handles both dataset and prompt action records. The two action sets
     share the same field names where they overlap (``from_name`` /
-    ``to_name`` on rename; ``name`` / ``project_name`` on create;
-    ``source_name_after_rename`` / ``dest_name`` on replay) so the table
-    rows are generated uniformly.
+    ``to_name`` on rename/promote; ``name`` / ``project_name`` on create).
+    The replay source-name attribute differs (datasets read the source's
+    original name — ``source_name`` — because OPIK-7162 defers the rename;
+    prompts still rename up-front and expose ``source_name_after_rename``),
+    so it's read with ``getattr`` fallback.
     """
     table = Table(title="Migration plan")
     table.add_column("#", justify="right")
     table.add_column("Action")
     table.add_column("Detail")
     for idx, action in enumerate(plan.actions, start=1):
-        if isinstance(action, (RenameSource, PromptRenameSource)):
+        if isinstance(action, DiscardStaleTemp):
+            table.add_row(
+                str(idx),
+                "discard stale temp",
+                f"delete leftover '{action.temp_name}'",
+            )
+        elif isinstance(action, (RenameSource, PromptRenameSource)):
             table.add_row(
                 str(idx), "rename source", f"{action.from_name} → {action.to_name}"
+            )
+        elif isinstance(action, PromoteDestination):
+            table.add_row(
+                str(idx),
+                "promote destination",
+                f"{action.from_name} → {action.to_name}",
             )
         elif isinstance(action, (CreateDestination, PromptCreateDestination)):
             table.add_row(
@@ -579,10 +602,13 @@ def _print_plan(plan: Any) -> None:
                 f"{action.name} (project: {action.project_name})",
             )
         elif isinstance(action, (ReplayVersions, PromptReplayVersions)):
+            replay_from = getattr(action, "source_name", None) or getattr(
+                action, "source_name_after_rename", None
+            )
             table.add_row(
                 str(idx),
                 "replay versions",
-                f"{action.source_name_after_rename} → {action.dest_name} (full history)",
+                f"{replay_from} → {action.dest_name} (full history)",
             )
         elif isinstance(action, CascadeOptimizations):
             table.add_row(

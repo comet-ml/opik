@@ -279,13 +279,128 @@ class TestMigrateHelp:
         on_disk = json.loads(audit_path.read_text())
         assert on_disk["status"] == "ok"
         assert on_disk["args"]["exclude_experiments"] is True
-        cascade_types = {
-            a.get("details", {}).get("type")
-            for a in on_disk["actions"]
-            if isinstance(a.get("details"), dict)
-        }
+        cascade_types = {a.get("type") for a in on_disk["actions"]}
         assert "cascade_experiments" not in cascade_types
         assert "cascade_optimizations" not in cascade_types
+
+
+class TestTempDestRenameOnSuccess:
+    """OPIK-7162 acceptance criteria, exercised through the public Click
+    entrypoint: the source keeps its name until the copy succeeds, then the
+    handoff runs (source -> _v1, temp -> original). A mid-run failure leaves
+    the source name untouched, and a re-run after failure is safe/idempotent.
+
+    All cases use ``--exclude-experiments`` so the plan is the minimal
+    Create -> Replay -> Rename -> Promote shape and the assertions stay
+    focused on the handoff, not the cascade.
+    """
+
+    def _run(self, client, tmp_path, extra_args=()):
+        audit_path = tmp_path / "audit.json"
+        runner = CliRunner()
+        with patch("opik.cli.migrate.main._build_client", return_value=client):
+            result = runner.invoke(
+                cli,
+                [
+                    "migrate",
+                    "dataset",
+                    "MyDataset",
+                    "--to-project",
+                    "B",
+                    "--exclude-experiments",
+                    "--audit-log",
+                    str(audit_path),
+                    *extra_args,
+                ],
+            )
+        return result, audit_path
+
+    def test_success__source_renamed_to_v1_and_dest_promoted_to_original(
+        self, tmp_path
+    ) -> None:
+        # AC: a successful migration leaves the destination under the
+        # original name and the source under the _v1 suffix. The two renames
+        # happen via update_dataset PUTs; the destination is created under
+        # the temp name first.
+        client, _, _ = _build_fake_client(
+            source_rows=[_DatasetRow(id="src-1", name="MyDataset")],
+            destination_rows=[],
+            items=[{"id": "item-a", "input": "hello"}],
+        )
+        result, audit_path = self._run(client, tmp_path)
+
+        assert result.exit_code == 0, result.output
+        rest = client.rest_client
+        # Destination created under the temp name (not the final name).
+        create_kwargs = rest.datasets.create_dataset.call_args.kwargs
+        assert create_kwargs["name"] == "MyDataset__migrating"
+        # Two rename PUTs: source -> _v1, then temp -> original.
+        rename_calls = [c.kwargs for c in rest.datasets.update_dataset.call_args_list]
+        source_rename = next(c for c in rename_calls if c["id"] == "src-1")
+        assert source_rename["name"] == "MyDataset_v1"
+        promote = next(c for c in rename_calls if c.get("name") == "MyDataset")
+        assert promote["name"] == "MyDataset"
+        # Audit ends ok and records the handoff actions in order.
+        on_disk = json.loads(audit_path.read_text())
+        assert on_disk["status"] == "ok"
+        ok_types = [a["type"] for a in on_disk["actions"] if a.get("status") == "ok"]
+        assert ok_types.index("rename_source") < ok_types.index("promote_destination")
+        assert ok_types.index("create_destination") < ok_types.index("rename_source")
+
+    def test_midrun_failure__source_name_untouched(self, tmp_path) -> None:
+        # AC: a migration interrupted mid-run leaves the source name
+        # untouched. Blow up the destination create (the first copy action);
+        # the source-rename PUT must never fire.
+        client, _, _ = _build_fake_client(
+            source_rows=[_DatasetRow(id="src-1", name="MyDataset")],
+            destination_rows=[],
+            items=[{"id": "item-a", "input": "hello"}],
+        )
+        client.rest_client.datasets.create_dataset.side_effect = RuntimeError(
+            "boom mid-copy"
+        )
+        result, audit_path = self._run(client, tmp_path)
+
+        assert result.exit_code == 1
+        # No update_dataset PUT touched the source id -> its name is intact.
+        source_touched = [
+            c
+            for c in client.rest_client.datasets.update_dataset.call_args_list
+            if c.kwargs.get("id") == "src-1"
+        ]
+        assert source_touched == []
+        on_disk = json.loads(audit_path.read_text())
+        assert on_disk["status"] == "failed"
+        # The handoff actions never reached ``ok``.
+        ok_types = {a["type"] for a in on_disk["actions"] if a.get("status") == "ok"}
+        assert "rename_source" not in ok_types
+        assert "promote_destination" not in ok_types
+
+    def test_rerun_after_failure__discards_stale_temp_then_completes(
+        self, tmp_path
+    ) -> None:
+        # AC: re-running after an interrupted run completes with no manual
+        # cleanup. A stale ``MyDataset__migrating`` from the prior failed run
+        # is discovered and deleted before the destination is recreated.
+        client, _, _ = _build_fake_client(
+            source_rows=[_DatasetRow(id="src-1", name="MyDataset")],
+            destination_rows=[],
+            items=[{"id": "item-a", "input": "hello"}],
+            stale_temp_rows=[_DatasetRow(id="stale-1", name="MyDataset__migrating")],
+        )
+        result, audit_path = self._run(client, tmp_path)
+
+        assert result.exit_code == 0, result.output
+        # The stale temp was deleted by id before recreate.
+        client.rest_client.datasets.delete_dataset.assert_called_once_with(id="stale-1")
+        on_disk = json.loads(audit_path.read_text())
+        assert on_disk["status"] == "ok"
+        action_types = [
+            a["type"] for a in on_disk["actions"] if a.get("status") == "ok"
+        ]
+        assert action_types.index("discard_stale_temp") < action_types.index(
+            "create_destination"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -294,19 +409,22 @@ class TestMigrateHelp:
 
 
 class TestPlanBuilding:
-    def test_build_dataset_plan__default_flow__orders_rename_create_replay_optimizations_experiments(
+    def test_build_dataset_plan__default_flow__orders_create_replay_cascades_then_handoff(
         self,
     ) -> None:
-        # The plan emits: rename source -> create destination -> replay
-        # versions -> cascade optimizations -> cascade experiments. The
-        # order is load-bearing: CascadeOptimizations populates
-        # plan.optimization_id_remap which CascadeExperiments reads when
-        # re-pointing each experiment's optimization_id FK. Pin the
-        # sequence so a future reorder can't break that contract
-        # silently.
+        # OPIK-7162: the plan builds the destination under a temp name FIRST
+        # (source keeps its name), runs the copy + cascades, then does the
+        # name handoff LAST: rename source -> <name>_v1, promote temp ->
+        # <name>. The order is load-bearing on two axes:
+        #   * CascadeOptimizations before CascadeExperiments (opt-id remap).
+        #   * RenameSource before PromoteDestination (source-away then
+        #     destination-in, so <name> is never held by two rows at once).
+        # Three find_datasets pages: source resolve, _v1 collision check,
+        # __migrating stale-temp lookup.
         rest_client = _planner_rest_client(
             [
                 _Page([_DatasetRow(id="src-1", name="MyDataset", description="d")]),
+                _Page([]),
                 _Page([]),
             ]
         )
@@ -319,15 +437,26 @@ class TestPlanBuilding:
 
         types = [type(a).__name__ for a in plan.actions]
         assert types == [
-            "RenameSource",
             "CreateDestination",
             "ReplayVersions",
             "CascadeOptimizations",
             "CascadeExperiments",
+            "RenameSource",
+            "PromoteDestination",
         ]
-        rename = plan.actions[0]
+        # Destination is created under the temp name, not the final name.
+        create = plan.actions[0]
+        assert create.name == "MyDataset__migrating"
+        replay = plan.actions[1]
+        assert replay.source_name == "MyDataset"
+        assert replay.dest_name == "MyDataset__migrating"
+        # Handoff: source away first, destination in second.
+        rename = plan.actions[4]
         assert rename.from_name == "MyDataset"
         assert rename.to_name == "MyDataset_v1"
+        promote = plan.actions[5]
+        assert promote.from_name == "MyDataset__migrating"
+        assert promote.to_name == "MyDataset"
         assert plan.target_name == "MyDataset"
         # New remap dict starts empty; _cascade_optimizations populates it.
         assert plan.optimization_id_remap == {}
@@ -337,11 +466,12 @@ class TestPlanBuilding:
     ) -> None:
         # OPIK-7161: --exclude-experiments drops the experiment stage AND
         # the optimization stage (optimizations are containers for the
-        # skipped experiments). The plan ends after ReplayVersions, so no
-        # experiment/optimization discovery ever runs.
+        # skipped experiments). No cascade actions, but the name handoff
+        # (rename + promote) still runs after the dataset + versions copy.
         rest_client = _planner_rest_client(
             [
                 _Page([_DatasetRow(id="src-1", name="MyDataset", description="d")]),
+                _Page([]),
                 _Page([]),
             ]
         )
@@ -355,9 +485,10 @@ class TestPlanBuilding:
 
         types = [type(a).__name__ for a in plan.actions]
         assert types == [
-            "RenameSource",
             "CreateDestination",
             "ReplayVersions",
+            "RenameSource",
+            "PromoteDestination",
         ]
         assert not any(
             isinstance(a, planner_module.CascadeExperiments) for a in plan.actions
@@ -376,6 +507,7 @@ class TestPlanBuilding:
             [
                 _Page([_DatasetRow(id="src-1", name="MyDataset")]),
                 _Page([]),
+                _Page([]),
             ]
         )
 
@@ -387,11 +519,12 @@ class TestPlanBuilding:
 
         types = [type(a).__name__ for a in plan.actions]
         assert types == [
-            "RenameSource",
             "CreateDestination",
             "ReplayVersions",
             "CascadeOptimizations",
             "CascadeExperiments",
+            "RenameSource",
+            "PromoteDestination",
         ]
 
     def test_build_dataset_plan__test_suite__type_forwarded_to_destination(
@@ -407,6 +540,7 @@ class TestPlanBuilding:
                     [_DatasetRow(id="src-1", name="MySuite", type="evaluation_suite")]
                 ),
                 _Page([]),
+                _Page([]),
             ]
         )
 
@@ -418,25 +552,27 @@ class TestPlanBuilding:
 
         types = [type(a).__name__ for a in plan.actions]
         assert types == [
-            "RenameSource",
             "CreateDestination",
             "ReplayVersions",
             "CascadeOptimizations",
             "CascadeExperiments",
+            "RenameSource",
+            "PromoteDestination",
         ]
-        replay = plan.actions[2]
+        replay = plan.actions[1]
         assert replay.is_test_suite is True
 
-    def test_build_dataset_plan__post_rename_name_collides_workspace_wide__raises_conflict(
+    def test_build_dataset_plan__rename_target_collides_workspace_wide__raises_conflict(
         self,
     ) -> None:
-        # Source rename frees the target name, but the post-rename name
-        # "<source>_v1" itself collides with another dataset in the
-        # workspace.
+        # The eventual source-rename target "<source>_v1" collides with
+        # another dataset in the workspace — caught up-front so a doomed run
+        # never does any copy work.
         rest_client = _planner_rest_client(
             [
                 _Page([_DatasetRow(id="src-1", name="MyDataset")]),
                 _Page([_DatasetRow(id="other-1", name="MyDataset_v1")]),
+                _Page([]),
             ]
         )
 
@@ -448,15 +584,16 @@ class TestPlanBuilding:
             )
         assert "MyDataset_v1" in str(exc_info.value)
 
-    def test_build_dataset_plan__post_rename_match_is_source_itself__no_conflict(
+    def test_build_dataset_plan__rename_target_match_is_source_itself__no_conflict(
         self,
     ) -> None:
-        # When find_datasets returns the source itself, we must not treat that
-        # as a collision — it's about to be renamed.
+        # When find_datasets returns the source itself for the _v1 check, we
+        # must not treat that as a collision — it's about to be renamed.
         rest_client = _planner_rest_client(
             [
                 _Page([_DatasetRow(id="src-1", name="MyDataset")]),
                 _Page([_DatasetRow(id="src-1", name="MyDataset_v1")]),
+                _Page([]),
             ]
         )
         # Should NOT raise: the only "match" is the source dataset itself.
@@ -466,6 +603,60 @@ class TestPlanBuilding:
             to_project="B",
         )
         assert plan.target_name == "MyDataset"
+
+    def test_build_dataset_plan__stale_temp_exists__prepends_discard_action(
+        self,
+    ) -> None:
+        # OPIK-7162 safe re-run: a leftover "<name>__migrating" from a prior
+        # failed run is detected and a DiscardStaleTemp action is prepended
+        # so the re-run starts clean (discard-and-restart).
+        rest_client = _planner_rest_client(
+            [
+                _Page([_DatasetRow(id="src-1", name="MyDataset")]),
+                _Page([]),
+                _Page([_DatasetRow(id="stale-1", name="MyDataset__migrating")]),
+            ]
+        )
+
+        plan = planner_module.build_dataset_plan(
+            client=_planner_client(rest_client),
+            name="MyDataset",
+            to_project="B",
+        )
+
+        types = [type(a).__name__ for a in plan.actions]
+        assert types == [
+            "DiscardStaleTemp",
+            "CreateDestination",
+            "ReplayVersions",
+            "CascadeOptimizations",
+            "CascadeExperiments",
+            "RenameSource",
+            "PromoteDestination",
+        ]
+        discard = plan.actions[0]
+        assert discard.temp_id == "stale-1"
+        assert discard.temp_name == "MyDataset__migrating"
+
+    def test_build_dataset_plan__no_stale_temp__no_discard_action(self) -> None:
+        # The common case: no leftover temp, so no DiscardStaleTemp emitted.
+        rest_client = _planner_rest_client(
+            [
+                _Page([_DatasetRow(id="src-1", name="MyDataset")]),
+                _Page([]),
+                _Page([]),
+            ]
+        )
+
+        plan = planner_module.build_dataset_plan(
+            client=_planner_client(rest_client),
+            name="MyDataset",
+            to_project="B",
+        )
+
+        assert not any(
+            isinstance(a, planner_module.DiscardStaleTemp) for a in plan.actions
+        )
 
     def test_build_dataset_plan__source_name_not_found__raises_dataset_not_found(
         self,
