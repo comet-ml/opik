@@ -28,7 +28,6 @@ import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
 import lombok.Builder;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
@@ -133,7 +132,6 @@ public interface ProjectService {
 
 @Slf4j
 @Singleton
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 class ProjectServiceImpl implements ProjectService {
 
     record ProjectRecordSet(List<Project> content, long total) {
@@ -148,15 +146,39 @@ class ProjectServiceImpl implements ProjectService {
     private static final Map<String, String> SORTING_FIELD_MAPPING = Map.of(
             SortableFields.LAST_UPDATED_TRACE_AT, LAST_UPDATED_TRACE_AT_SORT);
 
-    private final @NonNull TransactionTemplate template;
-    private final @NonNull IdGenerator idGenerator;
-    private final @NonNull Provider<RequestContext> requestContext;
-    private final @NonNull TraceDAO traceDAO;
-    private final @NonNull SortingFactoryProjects sortingFactory;
-    private final @NonNull SortingQueryBuilder sortingQueryBuilder;
-    private final @NonNull AnalyticsService analyticsService;
-    private final @NonNull RedissonReactiveClient redisClient;
-    private final @NonNull @Config("projectLastUpdatedFlush") ProjectLastUpdatedFlushConfig lastUpdatedFlushConfig;
+    private final TransactionTemplate template;
+    private final IdGenerator idGenerator;
+    private final Provider<RequestContext> requestContext;
+    private final TraceDAO traceDAO;
+    private final SortingFactoryProjects sortingFactory;
+    private final SortingQueryBuilder sortingQueryBuilder;
+    private final AnalyticsService analyticsService;
+    private final RedissonReactiveClient redisClient;
+    private final ProjectLastUpdatedFlushConfig lastUpdatedFlushConfig;
+
+    // Explicit constructor: @Config cannot be applied via Lombok's generated constructor, so it is placed directly
+    // on the parameter here.
+    @Inject
+    public ProjectServiceImpl(
+            @NonNull TransactionTemplate template,
+            @NonNull IdGenerator idGenerator,
+            @NonNull Provider<RequestContext> requestContext,
+            @NonNull TraceDAO traceDAO,
+            @NonNull SortingFactoryProjects sortingFactory,
+            @NonNull SortingQueryBuilder sortingQueryBuilder,
+            @NonNull AnalyticsService analyticsService,
+            @NonNull RedissonReactiveClient redisClient,
+            @NonNull @Config("projectLastUpdatedFlush") ProjectLastUpdatedFlushConfig lastUpdatedFlushConfig) {
+        this.template = template;
+        this.idGenerator = idGenerator;
+        this.requestContext = requestContext;
+        this.traceDAO = traceDAO;
+        this.sortingFactory = sortingFactory;
+        this.sortingQueryBuilder = sortingQueryBuilder;
+        this.analyticsService = analyticsService;
+        this.redisClient = redisClient;
+        this.lastUpdatedFlushConfig = lastUpdatedFlushConfig;
+    }
 
     private NotFoundException createNotFoundError() {
         String message = "Project not found";
