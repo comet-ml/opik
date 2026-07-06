@@ -213,12 +213,13 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
                         + " attachment discovery (online scoring will proceed without them)",
                 workspaceId, entityId, error));
 
-        boolean expectsAttachment = AttachmentUtils.hasAttachmentReferences(JsonUtils.getMapper(), bodyNodes);
-        if (!expectsAttachment) {
-            return fetch.map(OnlineScoringBaseScorer::preferPersistentAttachments).onErrorReturn(List.of());
+        Set<String> referencedNames = AttachmentUtils.collectAttachmentReferences(JsonUtils.getMapper(), bodyNodes);
+        if (referencedNames.isEmpty()) {
+            return fetch.map(attachments -> preferPersistentAttachments(attachments, referencedNames))
+                    .onErrorReturn(List.of());
         }
         return fetch
-                .map(OnlineScoringBaseScorer::preferPersistentAttachments)
+                .map(attachments -> preferPersistentAttachments(attachments, referencedNames))
                 .filter(OnlineScoringBaseScorer::hasPersistentAttachment)
                 .repeatWhenEmpty(onlineScoringConfig.getAttachmentFetchMaxRetries(),
                         repeats -> repeats.delayElements(
@@ -229,7 +230,7 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
                 // the raw coldFetch, so log its own failure here (the primary attempt's log above does not
                 // cover this second subscription) before degrading to an empty list.
                 .switchIfEmpty(Mono.defer(() -> coldFetch
-                        .map(OnlineScoringBaseScorer::preferPersistentAttachments)
+                        .map(attachments -> preferPersistentAttachments(attachments, referencedNames))
                         .doOnError(error -> log.warn(
                                 "Best-effort attachment re-read failed for workspace '{}', entity '{}';"
                                         + " online scoring will proceed without attachments",
@@ -254,18 +255,23 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
      * @param workspaceId               workspace id, for the failure log
      * @param traceId                   the trace id, for the failure log
      * @param spanIdsExpectingAttachment span ids whose body references an attachment (drives the retry)
+     * @param referencedNamesBySpan     per-span set of attachment filenames referenced in that span's body,
+     *                                  used to keep referenced auto-stripped copies (see
+     *                                  {@link #preferPersistentAttachments})
      */
     protected Mono<Map<UUID, List<AttachmentInfo>>> listSpanAttachmentsToleratingUploadRace(
             @NonNull Mono<List<AttachmentInfo>> coldBatchedFetch, String workspaceId, UUID traceId,
-            @NonNull Set<UUID> spanIdsExpectingAttachment) {
+            @NonNull Set<UUID> spanIdsExpectingAttachment,
+            @NonNull Map<UUID, Set<String>> referencedNamesBySpan) {
         Mono<List<AttachmentInfo>> logged = coldBatchedFetch.doOnError(error -> log.warn(
                 "Failed to list span attachments for trace '{}' (workspace '{}'); degrading to none",
                 traceId, workspaceId, error));
         if (spanIdsExpectingAttachment.isEmpty()) {
-            return logged.map(OnlineScoringBaseScorer::groupBySpanPreferringPersistent).onErrorReturn(Map.of());
+            return logged.map(attachments -> groupBySpanPreferringPersistent(attachments, referencedNamesBySpan))
+                    .onErrorReturn(Map.of());
         }
         return logged
-                .map(OnlineScoringBaseScorer::groupBySpanPreferringPersistent)
+                .map(attachments -> groupBySpanPreferringPersistent(attachments, referencedNamesBySpan))
                 .filter(bySpan -> spanIdsExpectingAttachment.stream()
                         .allMatch(id -> hasPersistentAttachment(bySpan.getOrDefault(id, List.of()))))
                 .repeatWhenEmpty(onlineScoringConfig.getAttachmentFetchMaxRetries(),
@@ -276,7 +282,7 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
                 // REST-ingested image): best-effort grouping. Raw fetch, so log its own failure here (the
                 // primary attempt's log does not cover this second subscription) before degrading to none.
                 .switchIfEmpty(Mono.defer(() -> coldBatchedFetch
-                        .map(OnlineScoringBaseScorer::groupBySpanPreferringPersistent)
+                        .map(attachments -> groupBySpanPreferringPersistent(attachments, referencedNamesBySpan))
                         .doOnError(error -> log.warn(
                                 "Best-effort span-attachment re-read failed for trace '{}' (workspace '{}');"
                                         + " online scoring will proceed without span attachments",
@@ -285,25 +291,41 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
     }
 
     private static Map<UUID, List<AttachmentInfo>> groupBySpanPreferringPersistent(
-            List<AttachmentInfo> attachments) {
+            List<AttachmentInfo> attachments, Map<UUID, Set<String>> referencedNamesBySpan) {
         return attachments.stream()
                 .filter(a -> a.entityId() != null)
                 .collect(Collectors.groupingBy(AttachmentInfo::entityId)).entrySet().stream()
-                .collect(Collectors.toMap(Map.Entry::getKey, e -> preferPersistentAttachments(e.getValue())));
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> preferPersistentAttachments(e.getValue(),
+                        referencedNamesBySpan.getOrDefault(e.getKey(), Set.of()))));
     }
 
     /**
-     * When both a transient auto-stripped copy and a persistent copy of an upload are present, drops the
-     * auto-stripped one (it is deleted once the persistent copy lands, so surfacing it hands the judge a
-     * name that 404s). When only auto-stripped copies exist (a backend-/REST-ingested image with no SDK
-     * copy), they are the real attachments and are kept as-is.
+     * Keeps every persistent attachment plus any auto-stripped attachment still referenced in the entity
+     * body, and drops only <em>orphaned</em> auto-stripped copies (no longer referenced). A superseded
+     * transient — one replaced by a persistent copy — is dropped because the body reference now points at
+     * the persistent name, so surfacing the transient (which 404s once it is cleaned up) is avoided.
+     *
+     * <p>This is a per-attachment decision keyed on the body reference rather than an entity-wide "any
+     * persistent ⇒ drop all auto-stripped" gate: the latter dropped a legitimate transient-only attachment
+     * (e.g. a REST-ingested image) whenever an <em>unrelated</em> persistent attachment coexisted on the
+     * same entity. Filenames can't pair a transient to its persistent twin (the backend transient name and
+     * the SDK {@code -sdk} name share no key), so the body reference is the reliable signal.
+     *
+     * @param referencedNames the attachment filenames referenced in the entity body (see
+     *                        {@link AttachmentUtils#collectAttachmentReferences})
      */
-    protected static List<AttachmentInfo> preferPersistentAttachments(List<AttachmentInfo> attachments) {
+    protected static List<AttachmentInfo> preferPersistentAttachments(List<AttachmentInfo> attachments,
+            Set<String> referencedNames) {
+        // When no persistent copy coexists, every auto-stripped copy is the real attachment (a backend-/
+        // REST-ingested image with no SDK replacement) — keep them all.
         if (!hasPersistentAttachment(attachments)) {
             return attachments;
         }
+        // A persistent copy coexists: keep every persistent attachment plus any auto-stripped copy still
+        // referenced in the body, and drop only orphaned auto-stripped copies (no longer referenced).
         return attachments.stream()
-                .filter(attachment -> !AttachmentUtils.isAutoStrippedAttachment(attachment.fileName()))
+                .filter(attachment -> !AttachmentUtils.isAutoStrippedAttachment(attachment.fileName())
+                        || referencedNames.contains(attachment.fileName()))
                 .collect(Collectors.toList());
     }
 

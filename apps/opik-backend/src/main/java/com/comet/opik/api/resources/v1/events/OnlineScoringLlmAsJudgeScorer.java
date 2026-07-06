@@ -288,12 +288,18 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         if (spanIds.isEmpty()) {
             return Mono.just(Map.of());
         }
-        // Spans whose body references an attachment are the ones whose attachment must be visible before
-        // we build the structure — they drive the upload-race retry.
-        Set<UUID> spanIdsExpectingAttachment = spans.stream()
-                .filter(span -> span.id() != null && AttachmentUtils.hasAttachmentReferences(
-                        JsonUtils.getMapper(), span.input(), span.output(), span.metadata()))
-                .map(Span::id)
+        // Per-span set of attachment filenames referenced in that span's body. Used both to drive the
+        // upload-race retry (spans expecting an attachment = non-empty set) and to keep referenced
+        // auto-stripped copies when grouping (see OnlineScoringBaseScorer#preferPersistentAttachments).
+        Map<UUID, Set<String>> referencedNamesBySpan = spans.stream()
+                .filter(span -> span.id() != null)
+                .collect(Collectors.toMap(Span::id,
+                        span -> AttachmentUtils.collectAttachmentReferences(
+                                JsonUtils.getMapper(), span.input(), span.output(), span.metadata()),
+                        (a, b) -> a));
+        Set<UUID> spanIdsExpectingAttachment = referencedNamesBySpan.entrySet().stream()
+                .filter(entry -> !entry.getValue().isEmpty())
+                .map(Map.Entry::getKey)
                 .collect(Collectors.toSet());
         Mono<List<AttachmentInfo>> coldBatchedFetch = attachmentService
                 .getAttachmentInfoByEntityIds(com.comet.opik.api.attachment.EntityType.SPAN, spanIds)
@@ -301,7 +307,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                         .put(RequestContext.WORKSPACE_ID, message.workspaceId())
                         .put(RequestContext.USER_NAME, message.userName()));
         return listSpanAttachmentsToleratingUploadRace(
-                coldBatchedFetch, message.workspaceId(), trace.id(), spanIdsExpectingAttachment);
+                coldBatchedFetch, message.workspaceId(), trace.id(), spanIdsExpectingAttachment,
+                referencedNamesBySpan);
     }
 
     private Mono<List<FeedbackScoreBatchItem>> evaluate(TraceToScoreLlmAsJudge message, List<Span> spans,

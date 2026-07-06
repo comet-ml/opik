@@ -213,6 +213,40 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
     }
 
     @Test
+    void spanKeepsBodyReferencedTransientAttachmentAlongsideUnrelatedPersistentOne() {
+        var code = JsonUtils.readValue(EVALUATOR_JSON_WITH_SPAN, SpanLlmAsJudgeCode.class);
+        // A transient (auto-stripped) attachment the span body references — e.g. a REST-ingested image
+        // whose only copy is auto-stripped and never gets an -sdk replacement.
+        String transientFileName = "input-attachment-1-1699999999999.png";
+        var span = createSpanReferencing(transientFileName);
+        var message = buildMessage(span, code);
+        var transientAttachment = AttachmentInfo.builder()
+                .entityId(span.id()).entityType(EntityType.SPAN).fileName(transientFileName).build();
+        // An UNRELATED persistent attachment on the same span.
+        var persistentAttachment = AttachmentInfo.builder()
+                .entityId(span.id()).entityType(EntityType.SPAN).fileName("diagram.png").build();
+
+        when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
+        when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
+        when(llmProviderFactory.getStructuredOutputStrategy("gpt-test")).thenReturn(new ToolCallingStrategy());
+        when(attachmentService.getAttachmentInfoByEntity(
+                any(), eq(EntityType.SPAN), any()))
+                .thenReturn(Mono.just(List.of(persistentAttachment, transientAttachment)));
+        ArgumentCaptor<ChatRequest> requestCaptor = ArgumentCaptor.forClass(ChatRequest.class);
+        when(aiProxyService.scoreTrace(requestCaptor.capture(), any(), any()))
+                .thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage(LLM_RESPONSE)).build());
+        when(feedbackScoreService.scoreBatchOfSpans(any())).thenReturn(Mono.empty());
+
+        scorer.score(message).block();
+
+        // The unrelated persistent attachment must NOT cause the body-referenced transient to be dropped:
+        // both file_names survive into the injected {{span}} structure.
+        String prompt = ((UserMessage) requestCaptor.getValue().messages().get(0)).singleText();
+        assertThat(prompt).contains(transientFileName);
+        assertThat(prompt).contains("diagram.png");
+    }
+
+    @Test
     void spanAttachmentFetchErrorStillScoresWithStructure() {
         var code = JsonUtils.readValue(EVALUATOR_JSON_WITH_SPAN, SpanLlmAsJudgeCode.class);
         var span = createSpan();
@@ -277,11 +311,13 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
     }
 
     @Test
-    void listAttachmentsDropsTransientCopyWhenPersistentCopyPresent() {
-        // Mid-race the listing carries BOTH the transient auto-stripped copy (which gets deleted) and the
-        // persistent -sdk copy. The helper must surface only the persistent one so the judge never fetches
-        // a name that 404s. Tested directly on the shared helper — the rendered prompt also echoes the
-        // body's [reference] placeholder, so the structure-level behavior is asserted here instead.
+    void listAttachmentsKeepsBodyReferencedTransientCopyWhenPersistentCopyPresent() {
+        // A body-referenced auto-stripped attachment is kept even when a persistent copy coexists: the
+        // body reference cannot tell a superseded twin apart from an unrelated attachment, and a transient
+        // coexisting with its own -sdk replacement is not a reachable state (the backend-strip and
+        // SDK-extract paths are mutually exclusive per upload). So we err toward keeping a referenced
+        // attachment rather than dropping a legitimate one. Only orphaned (unreferenced) auto-stripped
+        // copies are dropped when a persistent copy is present.
         var id = UUID.randomUUID();
         var transientAttachment = AttachmentInfo.builder()
                 .entityId(id).entityType(EntityType.SPAN)
@@ -295,7 +331,8 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
                 Mono.just(List.of(transientAttachment, persistentAttachment)), "ws-1", id, body).block();
 
         assertThat(result).extracting(a -> a.fileName())
-                .containsExactly("input-attachment-86584937-1782581642686-sdk.jpg");
+                .containsExactlyInAnyOrder("input-attachment-1-1782581642301.jpg",
+                        "input-attachment-86584937-1782581642686-sdk.jpg");
     }
 
     @Test

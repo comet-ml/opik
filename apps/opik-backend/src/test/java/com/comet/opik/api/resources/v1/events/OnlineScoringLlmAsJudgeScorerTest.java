@@ -709,6 +709,61 @@ class OnlineScoringLlmAsJudgeScorerTest {
         }
 
         @Test
+        void traceStructureKeepsBodyReferencedTransientSpanAttachmentAlongsideUnrelatedPersistentOne() {
+            var code = JsonUtils.readValue(EVALUATOR_JSON_WITH_TRACE, LlmAsJudgeCode.class);
+            var message = buildScoringMessage(code);
+
+            UUID spanId = UUID.randomUUID();
+            // The span body references a transient (auto-stripped) attachment; the span also carries an
+            // UNRELATED persistent attachment. The persistent one must not cause the referenced transient
+            // to be dropped from the {{trace}} structure (regression for the entity-wide-gate bug).
+            String transientFileName = "input-attachment-1-1699999999999.png";
+            Span span = Span.builder()
+                    .id(spanId)
+                    .projectId(message.trace().projectId())
+                    .traceId(message.trace().id())
+                    .name("span-" + RandomStringUtils.secure().nextAlphanumeric(8))
+                    .startTime(Instant.now())
+                    .input(JsonUtils.getJsonNodeFromString("{\"messages\":\"see [" + transientFileName + "]\"}"))
+                    .build();
+            var transientAttachment = com.comet.opik.api.attachment.AttachmentInfo.builder()
+                    .entityId(spanId)
+                    .entityType(com.comet.opik.api.attachment.EntityType.SPAN)
+                    .fileName(transientFileName)
+                    .build();
+            var persistentAttachment = com.comet.opik.api.attachment.AttachmentInfo.builder()
+                    .entityId(spanId)
+                    .entityType(com.comet.opik.api.attachment.EntityType.SPAN)
+                    .fileName("diagram.png")
+                    .build();
+
+            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
+            lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(1_000_000);
+            when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
+            when(llmProviderFactory.getStructuredOutputStrategy("gpt-test"))
+                    .thenReturn(new ToolCallingStrategy());
+            when(spanService.getByTraceIds(any())).thenReturn(Flux.just(span));
+            when(attachmentService.getAttachmentInfoByEntity(
+                    any(), eq(com.comet.opik.api.attachment.EntityType.TRACE), any()))
+                    .thenReturn(Mono.just(List.of()));
+            when(attachmentService.getAttachmentInfoByEntityIds(
+                    eq(com.comet.opik.api.attachment.EntityType.SPAN), any()))
+                    .thenReturn(Mono.just(List.of(persistentAttachment, transientAttachment)));
+            ArgumentCaptor<ChatRequest> requestCaptor = ArgumentCaptor.forClass(ChatRequest.class);
+            when(aiProxyService.scoreTrace(requestCaptor.capture(), any(), any()))
+                    .thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage(LLM_RESPONSE)).build());
+            when(feedbackScoreService.scoreBatchOfTraces(any())).thenReturn(Mono.empty());
+
+            scorer.score(message).block();
+
+            // Both file_names survive into the injected {{trace}} structure — the unrelated persistent
+            // attachment does not evict the body-referenced transient.
+            String prompt = ((UserMessage) requestCaptor.getValue().messages().get(0)).singleText();
+            assertThat(prompt).contains(transientFileName);
+            assertThat(prompt).contains("diagram.png");
+        }
+
+        @Test
         void traceVariableAttachmentFetchErrorStillScoresWithStructure() {
             var code = JsonUtils.readValue(EVALUATOR_JSON_WITH_TRACE, LlmAsJudgeCode.class);
             var message = buildScoringMessage(code);
