@@ -320,8 +320,9 @@ repos:
 
   # ---------------------------------------------------------------------------
   # Dockerfiles — hadolint. The docker-image hook needs only Docker (no local
-  # binary), matching CI runners. Config + baselined exceptions live in the
-  # repo-root .hadolint.yaml, which hadolint reads automatically.
+  # binary), matching CI runners. Runs hadolint's default rule set (failure
+  # threshold `info`); the few deliberate exceptions are `# hadolint ignore=`
+  # comments inline in the Dockerfiles, so no repo-level config file is needed.
   # ---------------------------------------------------------------------------
   - repo: https://github.com/hadolint/hadolint
     rev: v2.14.0
