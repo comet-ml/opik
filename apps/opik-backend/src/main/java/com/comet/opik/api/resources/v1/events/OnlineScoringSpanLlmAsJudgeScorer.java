@@ -68,7 +68,6 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
     private final LlmProviderFactory llmProviderFactory;
     private final ToolRegistry toolRegistry;
     private final AttachmentService attachmentService;
-    private final OnlineScoringConfig onlineScoringConfig;
     private final OnlineEvaluationRecorder onlineEvaluationRecorder;
 
     @Inject
@@ -89,7 +88,6 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
         this.llmProviderFactory = llmProviderFactory;
         this.toolRegistry = toolRegistry;
         this.attachmentService = attachmentService;
-        this.onlineScoringConfig = config;
         this.onlineEvaluationRecorder = onlineEvaluationRecorder;
     }
 
@@ -299,11 +297,11 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
                 .formatted(span.id(), span.id());
         ChatRequest scoreRequest = OnlineScoringEngine.prepareSpanLlmRequest(
                 message.llmAsJudgeCode(), span, new InstructionStrategy(),
-                MAX_PROMPT_FIELD_CHARS, drillDownHint, spanStructureJson);
+                onlineScoringConfig.getMaxPromptFieldChars(), drillDownHint, spanStructureJson);
         ChatRequest structuredRequest = OnlineScoringEngine.prepareSpanLlmRequest(
                 message.llmAsJudgeCode(), span,
                 llmProviderFactory.getStructuredOutputStrategy(modelName),
-                MAX_PROMPT_FIELD_CHARS, drillDownHint, spanStructureJson);
+                onlineScoringConfig.getMaxPromptFieldChars(), drillDownHint, spanStructureJson);
         // REQUIRED on the first call only forces ≥1 tool call; follow-ups switch to AUTO in
         // handleToolCalls so the model can decide when to stop investigating.
         scoreRequest = OnlineScoringEngine.addToolSpecs(scoreRequest, ToolChoice.REQUIRED, toolRegistry);
@@ -321,7 +319,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
         ChatRequest scoreRequest = OnlineScoringEngine.prepareSpanLlmRequest(
                 message.llmAsJudgeCode(), span,
                 llmProviderFactory.getStructuredOutputStrategy(modelName),
-                MAX_PROMPT_FIELD_CHARS, INLINE_TRUNCATION_HINT, spanStructureJson);
+                onlineScoringConfig.getMaxPromptFieldChars(), INLINE_TRUNCATION_HINT, spanStructureJson);
         return new LlmRequests(scoreRequest, scoreRequest);
     }
 

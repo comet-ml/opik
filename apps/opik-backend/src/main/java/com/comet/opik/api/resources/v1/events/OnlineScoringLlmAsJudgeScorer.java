@@ -72,7 +72,6 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     private final TraceCompressor traceCompressor;
     private final WorkspaceNameService workspaceNameService;
     private final OpikConfiguration opikConfiguration;
-    private final OnlineScoringConfig onlineScoringConfig;
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final OnlineEvaluationRecorder onlineEvaluationRecorder;
     private final AttachmentService attachmentService;
@@ -104,7 +103,6 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         this.traceCompressor = traceCompressor;
         this.workspaceNameService = workspaceNameService;
         this.opikConfiguration = opikConfiguration;
-        this.onlineScoringConfig = config;
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.onlineEvaluationRecorder = onlineEvaluationRecorder;
         this.attachmentService = attachmentService;
@@ -403,7 +401,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                             .formatted(trace.id(), trace.id());
                     scoreRequest = OnlineScoringEngine.prepareLlmRequest(
                             message.llmAsJudgeCode(), trace, new InstructionStrategy(),
-                            message.promptType(), MAX_PROMPT_FIELD_CHARS, drillDownHint, spans, traceStructureJson);
+                            message.promptType(), onlineScoringConfig.getMaxPromptFieldChars(), drillDownHint, spans,
+                            traceStructureJson);
                     // The post-tool-loop wrap-up must use the provider-native structured-output
                     // strategy (e.g. response_format=json_schema on OpenAI). InstructionStrategy
                     // is a soft prompt and Anthropic in particular often returns conversational
@@ -412,7 +411,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                     structuredRequest = OnlineScoringEngine.prepareLlmRequest(
                             message.llmAsJudgeCode(), trace,
                             llmProviderFactory.getStructuredOutputStrategy(modelName),
-                            message.promptType(), MAX_PROMPT_FIELD_CHARS, drillDownHint, spans, traceStructureJson);
+                            message.promptType(), onlineScoringConfig.getMaxPromptFieldChars(), drillDownHint, spans,
+                            traceStructureJson);
                 } else if (referencesTrace) {
                     // Inline fallback for a {{trace}} rule on a non-tool-calling provider: the structure was
                     // built at FULL tier for the (unavailable) tools path, and there are no read/jq tools to
@@ -422,7 +422,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                     scoreRequest = OnlineScoringEngine.prepareLlmRequest(
                             message.llmAsJudgeCode(), trace,
                             llmProviderFactory.getStructuredOutputStrategy(modelName),
-                            message.promptType(), MAX_PROMPT_FIELD_CHARS, INLINE_TRUNCATION_HINT, spans,
+                            message.promptType(), onlineScoringConfig.getMaxPromptFieldChars(), INLINE_TRUNCATION_HINT,
+                            spans,
                             traceStructureJson);
                     structuredRequest = scoreRequest;
                 } else {

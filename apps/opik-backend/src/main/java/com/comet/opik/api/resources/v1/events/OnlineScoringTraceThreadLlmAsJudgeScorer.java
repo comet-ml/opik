@@ -73,7 +73,6 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
     private final ProjectService projectService;
     private final AutomationRuleEvaluatorService automationRuleEvaluatorService;
     private final ToolRegistry toolRegistry;
-    private final OnlineScoringConfig onlineScoringConfig;
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final SpanService spanService;
     private final OnlineEvaluationRecorder onlineEvaluationRecorder;
@@ -102,7 +101,6 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
         this.projectService = projectService;
         this.automationRuleEvaluatorService = automationRuleEvaluatorService;
         this.toolRegistry = toolRegistry;
-        this.onlineScoringConfig = config;
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.spanService = spanService;
         this.onlineEvaluationRecorder = onlineEvaluationRecorder;

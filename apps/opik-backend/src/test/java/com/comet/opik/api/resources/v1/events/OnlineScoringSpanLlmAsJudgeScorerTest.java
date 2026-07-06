@@ -144,6 +144,9 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         lenient().when(onlineScoringConfig.getClaimIntervalRatio()).thenReturn(10);
         lenient().when(onlineScoringConfig.getPendingMessageDuration()).thenReturn(Duration.minutes(10));
         lenient().when(onlineScoringConfig.getMaxRetries()).thenReturn(3);
+        lenient().when(onlineScoringConfig.getMaxPromptFieldChars()).thenReturn(4_000);
+        lenient().when(onlineScoringConfig.getAttachmentFetchMaxRetries()).thenReturn(5);
+        lenient().when(onlineScoringConfig.getAttachmentFetchRetryDelay()).thenReturn(Duration.milliseconds(300));
 
         ToolRegistry toolRegistry = new ToolRegistry(Set.of(
                 stubTool(ReadTool.NAME, "{}"),

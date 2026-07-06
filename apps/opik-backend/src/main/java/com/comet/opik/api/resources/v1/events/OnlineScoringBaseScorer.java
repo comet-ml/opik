@@ -36,7 +36,6 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.math.BigDecimal;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -64,32 +63,11 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
     public static final int TRACE_PAGE_LIMIT = 2000;
 
     /**
-     * Per-variable substitution cap for the agentic-tools / structure-injection paths, shared by the
-     * trace- and span-level scorers. ≈ 4 KB chars (~ 1 K tokens via the {@code Tokens.estimate}
-     * convention) is large enough that small trace/span input/output renders inline (cheap, no tool
-     * round-trip) but small enough that a huge entity doesn't blow context — the agent fetches the rest
-     * via the {@code read} tool, or, on the no-tools inline fallback, the value is simply truncated.
-     */
-    protected static final int MAX_PROMPT_FIELD_CHARS = 4_000;
-
-    /**
      * Truncation marker hint for the no-tools inline {@code {{trace}}} / {@code {{span}}} fallback. There
      * are no {@code read}/{@code jq} tools to drill in, so the hint just flags that the value was
      * truncated rather than pointing at a (non-existent) follow-up tool.
      */
     protected static final String INLINE_TRUNCATION_HINT = "full content not shown";
-
-    /**
-     * Attachment-upload race tolerance for the {@code {{trace}}} / {@code {{span}}} structures. The SDK
-     * uploads an entity's attachment a short moment <em>after</em> the entity itself is ingested, so a
-     * scoring run triggered immediately can read the attachment table before the persistent copy lands.
-     * When the entity body references an attachment but the listing is still empty, the cold lookup is
-     * resubscribed up to {@link #ATTACHMENT_FETCH_MAX_RETRIES} times spaced by
-     * {@link #ATTACHMENT_FETCH_RETRY_DELAY} so the upload can complete (~0.3–1.5 s worst case, and only
-     * for entities that actually expect an attachment). See {@link #listAttachmentsToleratingUploadRace}.
-     */
-    private static final int ATTACHMENT_FETCH_MAX_RETRIES = 5;
-    private static final Duration ATTACHMENT_FETCH_RETRY_DELAY = Duration.ofMillis(300);
 
     private static final String ONLINE_SCORING_NAMESPACE = "online_scoring";
 
@@ -98,6 +76,7 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
      */
     private final Logger log = LoggerFactory.getLogger(this.getClass());
 
+    protected final OnlineScoringConfig onlineScoringConfig;
     protected final FeedbackScoreService feedbackScoreService;
     protected final TraceService traceService;
     protected final AutomationRuleEvaluatorType type;
@@ -113,6 +92,7 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
                 OnlineScoringConfig.PAYLOAD_FIELD,
                 ONLINE_SCORING_NAMESPACE,
                 metricsBaseName);
+        this.onlineScoringConfig = config;
         this.feedbackScoreService = feedbackScoreService;
         this.traceService = traceService;
         this.type = type;
@@ -198,9 +178,10 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
     }
 
     /**
-     * Lists an entity's attachments while tolerating the upload race (see
-     * {@link #ATTACHMENT_FETCH_MAX_RETRIES}). Shared by the trace- and span-level scorers when building
-     * the injected {@code {{trace}}} / {@code {{span}}} structure.
+     * Lists an entity's attachments while tolerating the upload race (bounded retry configured by
+     * {@link OnlineScoringConfig#getAttachmentFetchMaxRetries()} /
+     * {@link OnlineScoringConfig#getAttachmentFetchRetryDelay()}). Shared by the trace- and span-level
+     * scorers when building the injected {@code {{trace}}} / {@code {{span}}} structure.
      *
      * <p>An upload exists transiently as an <em>auto-stripped</em> copy ({@code input-attachment-N-ts.ext},
      * no {@code -sdk}) that is <strong>deleted</strong> once the persistent copy (e.g. {@code …-sdk.jpg})
@@ -239,8 +220,9 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
         return fetch
                 .map(OnlineScoringBaseScorer::preferPersistentAttachments)
                 .filter(OnlineScoringBaseScorer::hasPersistentAttachment)
-                .repeatWhenEmpty(ATTACHMENT_FETCH_MAX_RETRIES,
-                        repeats -> repeats.delayElements(ATTACHMENT_FETCH_RETRY_DELAY))
+                .repeatWhenEmpty(onlineScoringConfig.getAttachmentFetchMaxRetries(),
+                        repeats -> repeats.delayElements(
+                                onlineScoringConfig.getAttachmentFetchRetryDelay().toJavaDuration()))
                 .onErrorResume(error -> Mono.empty())
                 // Retries exhausted (no persistent copy will come): best-effort final read so a
                 // backend-/REST-only auto-stripped attachment is still surfaced rather than dropped. Uses
@@ -286,8 +268,9 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
                 .map(OnlineScoringBaseScorer::groupBySpanPreferringPersistent)
                 .filter(bySpan -> spanIdsExpectingAttachment.stream()
                         .allMatch(id -> hasPersistentAttachment(bySpan.getOrDefault(id, List.of()))))
-                .repeatWhenEmpty(ATTACHMENT_FETCH_MAX_RETRIES,
-                        repeats -> repeats.delayElements(ATTACHMENT_FETCH_RETRY_DELAY))
+                .repeatWhenEmpty(onlineScoringConfig.getAttachmentFetchMaxRetries(),
+                        repeats -> repeats.delayElements(
+                                onlineScoringConfig.getAttachmentFetchRetryDelay().toJavaDuration()))
                 .onErrorResume(error -> Mono.empty())
                 // Retries exhausted (some referenced attachment never got a persistent copy — e.g. a
                 // REST-ingested image): best-effort grouping. Raw fetch, so log its own failure here (the
