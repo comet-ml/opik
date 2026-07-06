@@ -1,0 +1,10 @@
+# Hadolint configuration for Opik's Dockerfiles.
+# Runs on every PR via the `hadolint` hook in .pre-commit-config.yaml (and the
+# unified 🐙 Code Quality workflow), and locally through `make precommit`.
+#
+# The default rule set is used as-is: every Dockerfile in the repo lints clean
+# against it. The few genuinely-undesirable rules (pinning rolling-channel OS
+# packages, which would rot as base-image repos update) are suppressed inline,
+# per-line, with a reason — not globally here — so the suppression stays visible
+# next to the code it applies to and no new violation is silently swallowed.
+failure-threshold: info
