@@ -1,5 +1,4 @@
 import { AggregatedFeedbackScore } from "@/types/shared";
-import { PROVIDER_MODEL_TYPE } from "./providers";
 
 export enum OPTIMIZATION_STATUS {
   RUNNING = "running",
@@ -19,7 +18,9 @@ export interface StudioPrompt {
 }
 
 export interface StudioLlmModel {
-  model: PROVIDER_MODEL_TYPE;
+  // Model ids come from the dynamic backend registry, not the legacy
+  // PROVIDER_MODEL_TYPE enum (which OPIK-5022 removes), so keep this a string.
+  model: string;
   parameters?: Record<string, unknown>;
 }
 

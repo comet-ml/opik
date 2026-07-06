@@ -4,8 +4,6 @@ import { EditorView } from "@codemirror/view";
 import GEvalField from "./GEvalField";
 import DatasetVariablesHint from "../DatasetVariablesHint";
 
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
-
 import { GEvalMetricParameters } from "@/types/optimizations";
 
 interface GEvalMetricConfigsProps {
@@ -38,11 +36,10 @@ const GEvalMetricConfigs = ({
   };
 
   return (
-    <div className="flex w-72 flex-col gap-6">
+    <div className="flex w-72 flex-col gap-3">
       <GEvalField
         id="task_introduction"
         label="Task introduction"
-        explainer={EXPLAINERS_MAP[EXPLAINER_ID.geval_task_introduction]}
         value={configs.task_introduction ?? ""}
         onChange={(value) => onChange({ ...configs, task_introduction: value })}
         placeholder="Describe the task context and what you're evaluating..."
@@ -52,25 +49,26 @@ const GEvalMetricConfigs = ({
         }}
       />
 
-      <GEvalField
-        id="evaluation_criteria"
-        label="Evaluation criteria"
-        explainer={EXPLAINERS_MAP[EXPLAINER_ID.geval_evaluation_criteria]}
-        value={configs.evaluation_criteria ?? ""}
-        onChange={(value) =>
-          onChange({ ...configs, evaluation_criteria: value })
-        }
-        placeholder="Define evaluation criteria: accuracy, completeness, relevance..."
-        editorRef={evalCriteriaEditorRef}
-        onFocus={() => {
-          lastFocusedEditorRef.current = evalCriteriaEditorRef.current;
-        }}
-      />
+      <div className="space-y-1">
+        <GEvalField
+          id="evaluation_criteria"
+          label="Evaluation criteria"
+          value={configs.evaluation_criteria ?? ""}
+          onChange={(value) =>
+            onChange({ ...configs, evaluation_criteria: value })
+          }
+          placeholder="Define evaluation criteria: accuracy, completeness, relevance..."
+          editorRef={evalCriteriaEditorRef}
+          onFocus={() => {
+            lastFocusedEditorRef.current = evalCriteriaEditorRef.current;
+          }}
+        />
 
-      <DatasetVariablesHint
-        datasetVariables={datasetVariables}
-        onSelect={handleVariableSelect}
-      />
+        <DatasetVariablesHint
+          datasetVariables={datasetVariables}
+          onSelect={handleVariableSelect}
+        />
+      </div>
     </div>
   );
 };
