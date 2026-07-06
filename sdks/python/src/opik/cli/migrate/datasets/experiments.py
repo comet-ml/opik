@@ -361,10 +361,12 @@ def _cleanup_in_flight_experiment(
 
     1. Delete the recorded destination traces (``traces.delete_traces``); the
        backend cascades their spans, so no separate span delete is needed.
-    2. Delete any destination experiment row matching the source experiment's
-       name under the destination dataset. ``recreate_experiment`` creates that
-       row as its last step, so it only exists if the interruption landed after
-       the trace/span writes; ``find_experiments(dataset_id, name)`` locates it.
+    2. Delete the destination experiment row by its recorded id. The cascade
+       mints and checkpoints ``dest_experiment_id`` before creating the row, so
+       cleanup targets that exact experiment -- never a same-named peer (names
+       are not unique in the destination dataset). ``dest_experiment_id`` is
+       ``None`` when the interruption landed before the experiment row was
+       created, in which case there is nothing to delete.
 
     No-op when nothing was in flight. Clears the in-flight record and flushes
     afterward so a crash *during* cleanup doesn't re-run deletes against ids
@@ -387,30 +389,13 @@ def _cleanup_in_flight_experiment(
             operation_name="delete_traces (resume cleanup)",
         )
 
-    if in_flight.dest_dataset_id and in_flight.experiment_name:
-        found = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-            lambda: rest_client.experiments.find_experiments(
-                dataset_id=in_flight.dest_dataset_id,
-                name=in_flight.experiment_name,
-                page=1,
-                size=_EXPERIMENT_PAGE_SIZE,
+    if in_flight.dest_experiment_id is not None:
+        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            lambda: rest_client.experiments.delete_experiments_by_id(
+                ids=[in_flight.dest_experiment_id]
             ),
-            operation_name="find_experiments (resume cleanup)",
+            operation_name="delete_experiments_by_id (resume cleanup)",
         )
-        # ``name`` is a contains-filter on the BE, so guard against deleting a
-        # differently-named experiment that merely shares the substring.
-        orphan_ids = [
-            exp.id
-            for exp in (found.content or [])
-            if exp.id is not None and exp.name == in_flight.experiment_name
-        ]
-        if orphan_ids:
-            rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-                lambda: rest_client.experiments.delete_experiments_by_id(
-                    ids=orphan_ids
-                ),
-                operation_name="delete_experiments_by_id (resume cleanup)",
-            )
 
     checkpoint.in_flight = None
     checkpoint.flush()
@@ -523,11 +508,11 @@ def cascade_one_experiment(
     inner = _InnerProgress(inner_progress_callback, inner_total)
     inner.tick(label="read items")
 
-    # Snapshot the destination trace ids that already exist in the remap
-    # (minted by earlier experiments in this run) so we can record only the
-    # ids THIS experiment adds on the checkpoint's in-flight record below.
-    dest_trace_ids_before = set(result.trace_id_remap.values())
-
+    # ``_copy_traces_and_spans`` records the destination trace ids on the
+    # checkpoint and flushes it to disk BEFORE it flushes those traces to the
+    # backend -- so a crash anywhere from the trace flush through the span-copy
+    # phase leaves the ids recorded for the next run's resume cleanup. Recording
+    # here (after the call returned) would leave that window uncovered.
     (
         traces_copied,
         spans_copied,
@@ -544,26 +529,12 @@ def cascade_one_experiment(
         trace_id_remap=result.trace_id_remap,
         assertion_results_by_source_trace=assertion_results_by_source_trace,
         inner_progress=inner,
+        checkpoint=checkpoint,
     )
     result.traces_migrated += traces_copied
     result.spans_migrated += spans_copied
     result.trace_comments_migrated += trace_comments_copied
     result.span_comments_migrated += span_comments_copied
-
-    if checkpoint is not None:
-        # Persist the destination trace ids this experiment added so a crash
-        # before ``recreate_experiment`` completes leaves them recorded for the
-        # next run's resume cleanup. Flush now (not only at experiment
-        # boundaries) because the heavy, hard-to-reconcile partial data --
-        # traces + spans -- exists on the backend as of this point.
-        new_dest_trace_ids = [
-            tid
-            for tid in result.trace_id_remap.values()
-            if tid not in dest_trace_ids_before
-        ]
-        if new_dest_trace_ids:
-            checkpoint.record_dest_trace_ids(new_dest_trace_ids)
-            checkpoint.flush()
 
     # Build the ExperimentData payload that recreate_experiment consumes.
     # Only the FK fields land on the destination ExperimentItem -- the
@@ -580,6 +551,16 @@ def cascade_one_experiment(
 
     target_version_id = version_remap.get(source_experiment.dataset_version_id or "")
 
+    # Mint the destination experiment id here (rather than letting
+    # ``create_experiment`` generate it) so we can record it on the checkpoint
+    # BEFORE the row is created. Resume then deletes that exact row on cleanup
+    # instead of matching by name -- experiment names are not unique in the
+    # destination dataset, so a name match could delete an unrelated peer.
+    dest_experiment_id = id_helpers_module.generate_id()
+    if checkpoint is not None:
+        checkpoint.record_dest_experiment_id(dest_experiment_id)
+        checkpoint.flush()
+
     recreated = recreate_experiment(
         client=client,
         experiment_data=experiment_data,
@@ -589,6 +570,7 @@ def cascade_one_experiment(
         target_project_name=target_project_name,
         target_dataset_name=target_dataset_name,
         target_dataset_version_id=target_version_id,
+        experiment_id=dest_experiment_id,
     )
     # Snap the inner bar to 100% so the executor's nested Rich bar
     # finishes cleanly even when our pre-computed ``inner_total`` ran a
@@ -854,6 +836,7 @@ def _copy_traces_and_spans(
     trace_id_remap: Dict[str, str],
     assertion_results_by_source_trace: Optional[Dict[str, List[Any]]] = None,
     inner_progress: Optional["_InnerProgress"] = None,
+    checkpoint: Optional[MigrationCheckpoint] = None,
 ) -> tuple[int, int, int, int]:
     """Re-emit traces + spans under ``target_project_name`` via the high-level
     Opik client's streamer infrastructure.
@@ -1023,6 +1006,17 @@ def _copy_traces_and_spans(
 
     trace_id_remap.update(source_to_new_trace)
     traces_copied = len(new_source_ids)
+
+    # Record the freshly-minted destination trace ids on the checkpoint and
+    # flush it to disk BEFORE the BE flush below. Ordering is the whole point:
+    # once ``client.flush()`` persists these traces, a crash (OOM SIGKILL) at
+    # any later point -- including the entire span-copy phase -- must find the
+    # ids already on disk so the next run's resume cleanup can delete them.
+    # Recording after ``_copy_traces_and_spans`` returned (the previous
+    # approach) left this window uncovered and duplicated the traces on resume.
+    if checkpoint is not None and source_to_new_trace:
+        checkpoint.record_dest_trace_ids(list(source_to_new_trace.values()))
+        checkpoint.flush()
 
     # Flush traces before writing trace-attached records (feedback scores,
     # assertion results, spans). The streamer batches writes without

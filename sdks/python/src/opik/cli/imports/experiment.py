@@ -392,6 +392,7 @@ def recreate_experiment(
     target_project_name: Optional[str] = None,
     target_dataset_name: Optional[str] = None,
     target_dataset_version_id: Optional[str] = None,
+    experiment_id: Optional[str] = None,
 ) -> bool:
     """Recreate a single experiment from exported data.
 
@@ -508,6 +509,8 @@ def recreate_experiment(
             "type": experiment_info.get("type", "regular"),
             "project_name": project_name,
         }
+        if experiment_id is not None:
+            create_kwargs["experiment_id"] = experiment_id
         if is_migrate_path:
             create_kwargs["evaluation_method"] = experiment_info.get(
                 "evaluation_method", "dataset"

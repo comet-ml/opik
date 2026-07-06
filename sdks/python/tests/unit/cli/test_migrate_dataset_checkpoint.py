@@ -131,6 +131,45 @@ class TestMigrationCheckpoint:
         assert cp.completed_count == 0
         assert cp.in_flight is None
 
+    def test_load_or_create__malformed_in_flight__starts_fresh(
+        self, tmp_path: Path
+    ) -> None:
+        # A checkpoint with the right schema_version but a wrong-shaped
+        # ``in_flight`` (here a bare string, or a dict missing the required
+        # ``source_experiment_id``) must fall back to fresh rather than crash
+        # the CLI with a TypeError/KeyError.
+        key = checkpoint_key("ws", "proj", "ds")
+        audit_path = tmp_path / "opik-migrate-x.json"
+        for bad_in_flight in ('"not-a-dict"', '{"experiment_name": "x"}'):
+            checkpoint_path(audit_path, key).write_text(
+                '{"schema_version": 1, "completed_experiment_ids": ["e1"], '
+                f'"in_flight": {bad_in_flight}}}'
+            )
+            cp = load_or_create(
+                audit_path=audit_path, workspace="ws", project="proj", dataset="ds"
+            )
+            assert cp.completed_count == 0
+            assert cp.in_flight is None
+
+    def test_flush_then_load__round_trips_dest_experiment_id(
+        self, tmp_path: Path
+    ) -> None:
+        audit_path = tmp_path / "opik-migrate-x.json"
+        cp = load_or_create(
+            audit_path=audit_path, workspace="ws", project="proj", dataset="ds"
+        )
+        cp.mark_in_flight(
+            "src-exp-2", experiment_name="exp-2", dest_dataset_id="dest-ds"
+        )
+        cp.record_dest_experiment_id("dest-exp-99")
+        cp.flush()
+
+        reloaded = load_or_create(
+            audit_path=audit_path, workspace="ws", project="proj", dataset="ds"
+        )
+        assert reloaded.in_flight is not None
+        assert reloaded.in_flight.dest_experiment_id == "dest-exp-99"
+
     def test_load_or_create__foreign_schema_version__starts_fresh(
         self, tmp_path: Path
     ) -> None:
@@ -305,23 +344,15 @@ class TestCascadeResume:
             project="DestProject",
             dataset="MyDataset",
         )
-        # exp-1 finished on the prior run; exp-2 was interrupted mid-flight
-        # with two destination traces + an orphaned destination experiment row.
+        # exp-1 finished on the prior run; exp-2 was interrupted mid-flight with
+        # two destination traces and its destination experiment row already
+        # created (id recorded before creation).
         cp.mark_completed("src-exp-1")
         cp.mark_in_flight(
             "src-exp-2", experiment_name="exp-2", dest_dataset_id="dest-dataset-1"
         )
         cp.record_dest_trace_ids(["stale-dest-trace-1", "stale-dest-trace-2"])
-
-        # The orphaned destination experiment is discoverable by name under the
-        # destination dataset.
-        orphan = MagicMock()
-        orphan.id = "stale-dest-exp"
-        orphan.name = "exp-2"
-        rest_client.experiments.find_experiments.side_effect = None
-        rest_client.experiments.find_experiments.return_value = MagicMock(
-            content=[orphan]
-        )
+        cp.record_dest_experiment_id("stale-dest-exp")
 
         _run_cascade(rest_client, client, cp)
 
@@ -330,7 +361,8 @@ class TestCascadeResume:
         rest_client.traces.delete_traces.assert_called_once()
         deleted_trace_ids = rest_client.traces.delete_traces.call_args.kwargs["ids"]
         assert set(deleted_trace_ids) == {"stale-dest-trace-1", "stale-dest-trace-2"}
-        # The orphaned destination experiment row was deleted.
+        # The exact recorded destination experiment row was deleted BY ID --
+        # cleanup never does a name lookup, so no same-named peer can be hit.
         rest_client.experiments.delete_experiments_by_id.assert_called_once()
         deleted_exp_ids = (
             rest_client.experiments.delete_experiments_by_id.call_args.kwargs["ids"]
@@ -339,12 +371,13 @@ class TestCascadeResume:
         # in_flight is cleared after cleanup so a further crash won't re-delete.
         assert cp.in_flight is None
 
-    def test_re_migrate_incomplete__name_substring_match_not_deleted(
+    def test_re_migrate_incomplete__no_experiment_row_yet__only_traces_deleted(
         self, tmp_path: Path
     ) -> None:
-        # ``find_experiments(name=...)`` is a contains-filter on the BE; a
-        # differently-named experiment that merely shares the substring must
-        # NOT be deleted.
+        # Interruption landed after traces were flushed but before the
+        # experiment row was created: dest_experiment_id is None, so cleanup
+        # deletes the traces and skips the experiment delete entirely (no
+        # name lookup that could hit a peer).
         rest_client, client = _two_experiment_rig()
         cp = load_or_create(
             audit_path=tmp_path / "opik-migrate-x.json",
@@ -353,21 +386,61 @@ class TestCascadeResume:
             dataset="MyDataset",
         )
         cp.mark_in_flight(
-            "src-exp-2", experiment_name="exp-2", dest_dataset_id="dest-dataset-1"
+            "src-exp-1", experiment_name="exp-1", dest_dataset_id="dest-dataset-1"
         )
         cp.record_dest_trace_ids(["stale-dest-trace-1"])
-
-        near_miss = MagicMock()
-        near_miss.id = "other-exp"
-        near_miss.name = "exp-2-but-different"
-        rest_client.experiments.find_experiments.side_effect = None
-        rest_client.experiments.find_experiments.return_value = MagicMock(
-            content=[near_miss]
-        )
+        # no record_dest_experiment_id -> dest_experiment_id stays None
 
         _run_cascade(rest_client, client, cp)
 
+        rest_client.traces.delete_traces.assert_called_once()
         rest_client.experiments.delete_experiments_by_id.assert_not_called()
+
+    def test_re_migrate_incomplete__records_dest_ids_before_backend_write(
+        self, tmp_path: Path
+    ) -> None:
+        # OPIK-7168 (#533/#536): the destination trace ids and experiment id
+        # must be flushed to the checkpoint BEFORE the backend write that
+        # persists them, so a crash in that window still leaves them recorded
+        # for the next run's cleanup. We assert the checkpoint file on disk
+        # already carries this experiment's dest trace ids by the time the
+        # trace-flush happens.
+        rest_client, client = _two_experiment_rig()
+        audit_path = tmp_path / "opik-migrate-x.json"
+        cp = load_or_create(
+            audit_path=audit_path,
+            workspace="ws",
+            project="DestProject",
+            dataset="MyDataset",
+        )
+
+        flushed_state: dict = {}
+        original_flush = client.flush
+
+        def _capture_on_first_flush() -> None:
+            # On the first client.flush() (the trace flush), read back the
+            # checkpoint from disk and snapshot its in-flight trace ids.
+            if "dest_trace_ids" not in flushed_state:
+                reloaded = load_or_create(
+                    audit_path=audit_path,
+                    workspace="ws",
+                    project="DestProject",
+                    dataset="MyDataset",
+                )
+                flushed_state["dest_trace_ids"] = (
+                    list(reloaded.in_flight.dest_trace_ids)
+                    if reloaded.in_flight
+                    else []
+                )
+            return original_flush()
+
+        client.flush = MagicMock(side_effect=_capture_on_first_flush)
+
+        _run_cascade(rest_client, client, cp)
+
+        # By the time the backend trace flush ran, the checkpoint on disk had
+        # already recorded this experiment's destination trace id.
+        assert len(flushed_state["dest_trace_ids"]) == 1
 
     def test_progress_seeded__resumed_run_starts_at_completed_count(
         self, tmp_path: Path

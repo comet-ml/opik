@@ -74,15 +74,19 @@ class InFlightExperiment:
     written for it, so a resume can clean up its partial data first.
 
     ``dest_trace_ids`` accumulates as destination traces are minted; deleting
-    them on resume cascades their spans on the backend. ``dest_dataset_id`` +
-    ``experiment_name`` let resume find and delete a possibly-orphaned
-    destination experiment row (``recreate_experiment`` creates it as the last
-    step, so it only exists if the interruption landed after trace/span writes).
+    them on resume cascades their spans on the backend. ``dest_experiment_id``
+    is the destination experiment row created by ``recreate_experiment`` (its
+    last step, so it's only set if the interruption landed after trace/span
+    writes) -- resume deletes that exact row rather than matching by name, since
+    experiment names are not unique in the destination dataset and a name match
+    could delete an unrelated peer experiment. ``dest_dataset_id`` +
+    ``experiment_name`` are retained for diagnostics/logging.
     """
 
     source_experiment_id: str
     experiment_name: Optional[str] = None
     dest_dataset_id: Optional[str] = None
+    dest_experiment_id: Optional[str] = None
     dest_trace_ids: List[str] = field(default_factory=list)
 
 
@@ -135,6 +139,15 @@ class MigrationCheckpoint:
         if self.in_flight is None:
             return
         self.in_flight.dest_trace_ids.extend(trace_ids)
+
+    def record_dest_experiment_id(self, dest_experiment_id: str) -> None:
+        """Record the destination experiment id on the in-flight record so a
+        resume can delete that exact row instead of matching by (non-unique)
+        name. No-op when nothing is in flight.
+        """
+        if self.in_flight is None:
+            return
+        self.in_flight.dest_experiment_id = dest_experiment_id
 
     def mark_completed(self, source_experiment_id: str) -> None:
         self.completed_experiment_ids.add(source_experiment_id)
@@ -223,24 +236,40 @@ def load_or_create(
         )
         return fresh
 
-    in_flight_data = data.get("in_flight")
-    in_flight = (
-        InFlightExperiment(
-            source_experiment_id=in_flight_data["source_experiment_id"],
-            experiment_name=in_flight_data.get("experiment_name"),
-            dest_dataset_id=in_flight_data.get("dest_dataset_id"),
-            dest_trace_ids=list(in_flight_data.get("dest_trace_ids", [])),
+    # Reconstruct the structured fields defensively: a hand-edited or
+    # partially-written checkpoint can carry the right schema_version but a
+    # wrong-typed ``in_flight`` (e.g. a string, or a dict missing
+    # ``source_experiment_id``) or a non-iterable ``completed_experiment_ids``.
+    # Any such shape mismatch falls back to ``fresh`` -- same recovery contract
+    # as the unreadable/corrupt-JSON and foreign-schema paths above -- rather
+    # than crashing the CLI with a KeyError/TypeError.
+    try:
+        in_flight_data = data.get("in_flight")
+        in_flight = (
+            InFlightExperiment(
+                source_experiment_id=in_flight_data["source_experiment_id"],
+                experiment_name=in_flight_data.get("experiment_name"),
+                dest_dataset_id=in_flight_data.get("dest_dataset_id"),
+                dest_experiment_id=in_flight_data.get("dest_experiment_id"),
+                dest_trace_ids=list(in_flight_data.get("dest_trace_ids", [])),
+            )
+            if in_flight_data
+            else None
         )
-        if in_flight_data
-        else None
-    )
-    return MigrationCheckpoint(
-        key=key,
-        workspace=workspace,
-        project=project,
-        dataset=dataset,
-        path=path,
-        total_experiments=int(data.get("total_experiments", 0)),
-        completed_experiment_ids=set(data.get("completed_experiment_ids", [])),
-        in_flight=in_flight,
-    )
+        return MigrationCheckpoint(
+            key=key,
+            workspace=workspace,
+            project=project,
+            dataset=dataset,
+            path=path,
+            total_experiments=int(data.get("total_experiments", 0)),
+            completed_experiment_ids=set(data.get("completed_experiment_ids", [])),
+            in_flight=in_flight,
+        )
+    except (TypeError, KeyError, ValueError) as exc:
+        LOGGER.warning(
+            "Ignoring malformed migrate checkpoint at %s (%s); starting fresh.",
+            path,
+            exc,
+        )
+        return fresh
