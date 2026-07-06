@@ -10,7 +10,7 @@ ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items ON CLUSTER '{cluster}
 
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items ON CLUSTER '{cluster}' DROP INDEX IF EXISTS idx_experiment_items_trace_id;
 
---changeset thiagoh:000097_add_minmax_index_spans_id
+--changeset thiagohora:000097_add_minmax_index_spans_id
 --comment: Add minmax skip index on spans.id so span-id lookups prune granules instead of a generic-exclusion scan over the workspace (OPIK-7230)
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans ON CLUSTER '{cluster}'

@@ -190,10 +190,12 @@ public class ExperimentAggregateEventListener {
 
     private void triggerByTraceIdsPerProject(Map<UUID, Set<UUID>> traceIdsByProject, String workspaceId,
             String userName, String errorMessage) {
+        // Each per-project trigger logs and recovers via onErrorResume, so one project's failure doesn't
+        // abort the rest and no error reaches the terminal subscriber.
         Flux.fromIterable(traceIdsByProject.entrySet())
                 .concatMap(entry -> triggerByTraceIds(entry.getValue(), workspaceId, userName, entry.getKey())
                         .onErrorResume(e -> logAndContinue(errorMessage, e)))
-                .subscribe(null, e -> log.error(errorMessage, e));
+                .subscribe();
     }
 
     // Keeps the per-project fan-out going when one project's aggregation fails.
