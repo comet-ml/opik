@@ -180,6 +180,9 @@ class TestSkipAndResultHelpers:
         assert result.initial_score == 0.75
         assert result.history == []
         assert result.details["stopped_early"] is True
+        # OPIK-7038: an early/baseline-only result IS the baseline, so the flag
+        # must be True (this covers the perfect-score early-stop path).
+        assert result.details["reused_baseline"] is True
 
 
 class TestMetricRequiredFields:

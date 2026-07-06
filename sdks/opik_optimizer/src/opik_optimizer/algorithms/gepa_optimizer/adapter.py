@@ -15,6 +15,7 @@ from ...base_optimizer import _OPTIMIZER_VERSION
 from ...core import evaluation as task_evaluator
 from ...utils.toolcalling.core import metadata as tool_metadata
 from ...utils.toolcalling.core import segment_updates
+from ...utils.scoring import improves_over
 from ...core import runtime
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
@@ -370,7 +371,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                     score = float(metric_result.score)  # type: ignore[arg-type]
                 else:
                     score = float(metric_result)  # type: ignore[arg-type]
-                if score > best_score:
+                if improves_over(score, best_score):
                     best_score = score
                     best_output = candidate
 

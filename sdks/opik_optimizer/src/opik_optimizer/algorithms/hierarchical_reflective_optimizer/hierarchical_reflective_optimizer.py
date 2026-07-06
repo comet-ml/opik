@@ -17,6 +17,7 @@ from ...utils.prompt_library import PromptOverrides
 from ...utils.prompt_roles import apply_role_constraints, count_disallowed_role_updates
 from ...utils.toolcalling.ops import toolcalling as toolcalling_utils
 from ...utils.toolcalling.core import segment_updates
+from ...utils.scoring import improves_over
 
 from .rootcause_ops import HierarchicalRootCauseAnalyzer
 from .types import (
@@ -557,7 +558,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 post_extras=None,
                 post_metrics=None,
             )
-            if improved_score > best_score_local:
+            # Tie policy (OPIK-7038): strict improvement only.
+            if improves_over(improved_score, best_score_local):
                 best_score_local = improved_score
                 best_prompt_bundle = improved_chat_prompts
                 best_result = improved_experiment_result
@@ -702,9 +704,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
         # finish_reason, stopped_early, stop_reason are handled by base class
         # Align with context in case trial accounting updated current_best_score.
-        if context.current_best_score is not None and (
-            best_score is None or context.current_best_score > best_score
-        ):
+        if best_score is None or improves_over(context.current_best_score, best_score):
             best_score = context.current_best_score
         history_entries = self.get_history_entries()
         for entry in history_entries:
