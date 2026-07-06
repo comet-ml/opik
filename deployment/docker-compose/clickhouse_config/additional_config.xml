@@ -4,6 +4,13 @@
          (dev-runner with TOGGLE_AGENT_INSIGHTS_ENABLED=true, or prod via OPIK-6846). No effect otherwise. -->
     <custom_settings_prefixes>SQL_</custom_settings_prefixes>
 
+    <!-- Local-dev memory guard. The Docker VM is small (~8 GiB) and shared with
+         MySQL/Redis/Minio/Zookeeper/python-backend, but ClickHouse defaults to
+         0.9 * RAM (~7.5 GiB) for itself, so any spike OOM-kills the container
+         (exit 137). Cap it to ~55% so a heavy query errors instead of taking the
+         whole server down, leaving headroom for the rest of the stack. -->
+    <max_server_memory_usage_to_ram_ratio>0.55</max_server_memory_usage_to_ram_ratio>
+
     <macros>
         <shard>1</shard>
         <replica>clickhouse</replica>
