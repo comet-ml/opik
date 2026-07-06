@@ -265,7 +265,9 @@ component:
       # redis.enabled is false (the wait is already skipped in that case).
       enabled: true
       redis:
-        host: opik-redis-master
+        # Empty by default so the template falls back to redis.fullnameOverride
+        # (then "opik-redis-master"). Set explicitly to target a different host.
+        host: ""
         port: 6379
       image:
         registry: docker.io
