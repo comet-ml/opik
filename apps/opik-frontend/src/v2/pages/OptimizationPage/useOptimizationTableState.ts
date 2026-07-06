@@ -127,12 +127,17 @@ export const useOptimizationTableState = ({
 
   const total = filteredRows.length;
 
+  // Clamp the page against the current row count: when `total` shrinks (a new
+  // search, deleted trials) the URL can still carry a now-out-of-range page,
+  // which would slice an empty window even though rows exist.
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const safePage = Math.min(Math.max(page ?? 1, 1), pageCount);
+
   // Client-side pagination: all trials are already in memory, so paging is a
   // slice over the filtered + sorted list.
   const rows = useMemo(() => {
-    const safePage = Math.max(page ?? 1, 1);
     return filteredRows.slice((safePage - 1) * pageSize, safePage * pageSize);
-  }, [filteredRows, page, pageSize]);
+  }, [filteredRows, safePage, pageSize]);
 
   return {
     search,
@@ -140,7 +145,7 @@ export const useOptimizationTableState = ({
     noDataText,
     rows,
     total,
-    page: page ?? 1,
+    page: safePage,
     setPage,
     pageSize,
     setPageSize,

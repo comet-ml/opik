@@ -1,12 +1,11 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import { ArrowUpRight, GitCompare } from "lucide-react";
 
 import GitCompareOff from "@/icons/git-compare-off.svg?react";
 import { AggregatedCandidate } from "@/types/optimizations";
 import { Experiment } from "@/types/datasets";
 import PromptComparison from "@/shared/CodeDiff/PromptComparison";
-import { buildPromptComparisonTargets } from "@/shared/CodeDiff/promptComparisonTargets";
-import { getCandidatePrompt, toComparisonCandidate } from "./candidatePrompt";
+import { usePromptComparisonTargets } from "./usePromptComparisonTargets";
 
 type BestTrialPromptProps = {
   bestCandidate: AggregatedCandidate;
@@ -26,33 +25,10 @@ const BestTrialPrompt: React.FC<BestTrialPromptProps> = ({
   experiments,
   onViewTrial,
 }) => {
-  const experimentsById = useMemo(
-    () => new Map(experiments.map((e) => [e.id, e])),
-    [experiments],
-  );
-  const candidatesById = useMemo(
-    () => new Map(candidates.map((c) => [c.candidateId, c])),
-    [candidates],
-  );
-
-  const current = useMemo(
-    () => getCandidatePrompt(bestCandidate, experimentsById),
-    [bestCandidate, experimentsById],
-  );
-
-  const targets = useMemo(
-    () =>
-      buildPromptComparisonTargets({
-        candidate: toComparisonCandidate(bestCandidate),
-        candidates: candidates.map(toComparisonCandidate),
-        getPrompt: (cc) => {
-          const original = candidatesById.get(cc.id);
-          return original
-            ? getCandidatePrompt(original, experimentsById)
-            : null;
-        },
-      }),
-    [bestCandidate, candidates, candidatesById, experimentsById],
+  const { current, targets } = usePromptComparisonTargets(
+    bestCandidate,
+    candidates,
+    experiments,
   );
 
   const [showDiff, setShowDiff] = useState(false);

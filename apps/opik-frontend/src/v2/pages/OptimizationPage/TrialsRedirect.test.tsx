@@ -43,6 +43,48 @@ describe("TrialsRedirect", () => {
     });
   });
 
+  it("translates the legacy `page` param to `itemsPage`", () => {
+    mockSearch = { trials: ["exp-1"], trialNumber: 1, page: 3 };
+
+    render(<TrialsRedirect />);
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        search: { trials: ["exp-1"], trialNumber: 1, itemsPage: 3 },
+      }),
+    );
+  });
+
+  it("translates the legacy `diff=true` param to `trialTab=diff`", () => {
+    mockSearch = { trials: ["exp-1"], diff: true };
+
+    render(<TrialsRedirect />);
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        search: { trials: ["exp-1"], trialTab: "diff" },
+      }),
+    );
+  });
+
+  it("does not override an existing `itemsPage`/`trialTab` when translating", () => {
+    mockSearch = {
+      trials: ["exp-1"],
+      page: 3,
+      itemsPage: 5,
+      diff: true,
+      trialTab: "prompt",
+    };
+
+    render(<TrialsRedirect />);
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        search: { trials: ["exp-1"], itemsPage: 5, trialTab: "prompt" },
+      }),
+    );
+  });
+
   it("omits search when there are no query params", () => {
     render(<TrialsRedirect />);
 

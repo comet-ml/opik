@@ -1,10 +1,9 @@
-import React, { useMemo } from "react";
+import React from "react";
 
 import { AggregatedCandidate } from "@/types/optimizations";
 import { Experiment } from "@/types/datasets";
 import PromptComparison from "@/shared/CodeDiff/PromptComparison";
-import { buildPromptComparisonTargets } from "@/shared/CodeDiff/promptComparisonTargets";
-import { getCandidatePrompt, toComparisonCandidate } from "./candidatePrompt";
+import { usePromptComparisonTargets } from "./usePromptComparisonTargets";
 
 type TrialPromptSectionProps = {
   /** The open trial's candidate; carries the lineage for the diff targets. */
@@ -29,31 +28,11 @@ const TrialPromptSection: React.FC<TrialPromptSectionProps> = ({
   experiments,
   defaultDiff = false,
 }) => {
-  const experimentsById = useMemo(
-    () => new Map(experiments.map((e) => [e.id, e])),
-    [experiments],
+  const { current, targets } = usePromptComparisonTargets(
+    candidate,
+    candidates,
+    experiments,
   );
-  const candidatesById = useMemo(
-    () => new Map(candidates.map((c) => [c.candidateId, c])),
-    [candidates],
-  );
-
-  const current = useMemo(
-    () => (candidate ? getCandidatePrompt(candidate, experimentsById) : null),
-    [candidate, experimentsById],
-  );
-
-  const targets = useMemo(() => {
-    if (!candidate) return [];
-    return buildPromptComparisonTargets({
-      candidate: toComparisonCandidate(candidate),
-      candidates: candidates.map(toComparisonCandidate),
-      getPrompt: (cc) => {
-        const original = candidatesById.get(cc.id);
-        return original ? getCandidatePrompt(original, experimentsById) : null;
-      },
-    });
-  }, [candidate, candidates, candidatesById, experimentsById]);
 
   if (current == null) {
     return (

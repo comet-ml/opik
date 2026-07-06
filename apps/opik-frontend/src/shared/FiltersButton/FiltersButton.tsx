@@ -92,6 +92,7 @@ const FiltersButton = <TColumnData,>({
       <TooltipWrapper content={isIconLayout ? tooltip ?? "Filters" : undefined}>
         <PopoverTrigger asChild>
           <Button
+            variant={variant}
             size={buttonSize}
             className={cn(
               isIconLayout && validFilters.length && "w-auto px-3",
