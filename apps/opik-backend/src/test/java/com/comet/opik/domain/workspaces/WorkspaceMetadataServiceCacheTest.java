@@ -9,8 +9,10 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppCon
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.cache.CacheManager;
 import com.google.inject.AbstractModule;
 import com.redis.testcontainers.RedisContainer;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,13 +23,13 @@ import org.testcontainers.mysql.MySQLContainer;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.api.resources.utils.TestUtils.waitForMillis;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -44,8 +46,6 @@ class WorkspaceMetadataServiceCacheTest {
     private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(ZOOKEEPER_CONTAINER);
-
-    private static final long CACHE_ASYNC_WAIT_MILLIS = 100;
 
     private static final AtomicInteger PROJECT_METADATA_DAO_CALLS = new AtomicInteger();
 
@@ -101,7 +101,8 @@ class WorkspaceMetadataServiceCacheTest {
     }
 
     @Test
-    void getProjectMetadata__repeatedCallsAreServedFromCache(WorkspaceMetadataService service) {
+    void getProjectMetadata__repeatedCallsAreServedFromCache(WorkspaceMetadataService service,
+            CacheManager cacheManager) {
         var impl = (WorkspaceMetadataServiceImpl) service;
         var workspaceId = UUID.randomUUID().toString();
         var projectId = UUID.randomUUID();
@@ -111,8 +112,12 @@ class WorkspaceMetadataServiceCacheTest {
         assertThat(first).isNotNull();
         assertThat(PROJECT_METADATA_DAO_CALLS.get()).isEqualTo(1);
 
-        // wait for the cache put async to complete
-        waitForMillis(CACHE_ASYNC_WAIT_MILLIS);
+        // the cache put is async and its completion signal is dropped, so wait until the entry is
+        // actually readable before asserting the second call is served from the cache
+        var cacheKey = "project_metadata:--%s-%s".formatted(workspaceId, projectId);
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(5))
+                .until(() -> Boolean.TRUE.equals(cacheManager.contains(cacheKey).block()));
 
         // same key: served from cache, the DAO must not be called again
         var second = impl.getProjectMetadata(workspaceId, projectId).block();
