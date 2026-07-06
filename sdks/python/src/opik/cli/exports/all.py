@@ -19,13 +19,14 @@ from rich.progress import (
 )
 
 import opik
+from opik import exceptions as opik_exceptions
 from opik.api_objects.prompt import Prompt, ChatPrompt
 from .dataset import export_single_dataset
 from .experiment import (
     export_experiment_by_id,
     export_collected_trace_ids,
 )
-from .project import export_single_project
+from .project import export_single_project, _export_rest_retry
 from .prompt import export_single_prompt
 from .utils import (
     console,
@@ -56,6 +57,7 @@ def _paginate(list_fn: Any, **kwargs: Any) -> Iterator:
         page += 1
 
 
+@_export_rest_retry
 def _fetch_experiments_page_raw(
     client: opik.Opik, page: int, project_id: Optional[str]
 ) -> tuple[list, int]:
@@ -64,6 +66,8 @@ def _fetch_experiments_page_raw(
     Used as a fallback when the typed client fails pydantic validation because
     some experiments lack required fields (e.g. dataset_name).
     Returns (items, total) where items are SimpleNamespace objects with id and name.
+    Raises on 429 (converted to OpikCloudRequestsRateLimited for retry) or other
+    HTTP/network errors after retry exhaustion.
     """
     httpx_client = (
         client.rest_client.experiments._raw_client._client_wrapper.httpx_client
@@ -71,26 +75,25 @@ def _fetch_experiments_page_raw(
     params: dict = {"page": page, "size": PAGE_SIZE}
     if project_id is not None:
         params["project_id"] = project_id
+    response = httpx_client.request(
+        "v1/private/experiments",
+        method="GET",
+        params=params,
+    )
     try:
-        response = httpx_client.request(
-            "v1/private/experiments",
-            method="GET",
-            params=params,
-        )
         response.raise_for_status()
-        data = response.json()
-    except (httpx.ConnectError, httpx.TimeoutException) as e:
-        console.print(
-            f"[yellow]Warning: transient network error fetching experiments page {page}: {e}. "
-            "Skipping page.[/yellow]"
-        )
-        return [], 0
     except httpx.HTTPStatusError as e:
-        console.print(
-            f"[yellow]Warning: HTTP error fetching experiments page {page}: {e}. "
-            "Skipping page.[/yellow]"
-        )
-        return [], 0
+        if e.response.status_code == 429:
+            try:
+                retry_after = float(e.response.headers.get("Retry-After", 30.0))
+            except (ValueError, TypeError):
+                retry_after = 30.0
+            raise opik_exceptions.OpikCloudRequestsRateLimited(
+                headers=dict(e.response.headers),
+                retry_after=retry_after,
+            )
+        raise
+    data = response.json()
     total = data.get("total", 0)
     items = [
         SimpleNamespace(id=raw.get("id"), name=raw.get("name", ""))
@@ -194,10 +197,11 @@ def _export_all_prompts(
     force: bool,
     debug: bool,
     format: str,
-) -> tuple[int, int]:
-    """Export all prompts in the project. Returns (exported, skipped)."""
+) -> tuple[int, int, int]:
+    """Export all prompts in the project. Returns (exported, skipped, errors)."""
     exported = 0
     skipped = 0
+    errors = 0
 
     try:
         all_prompts = list(
@@ -205,11 +209,11 @@ def _export_all_prompts(
         )
     except Exception as e:
         console.print(f"[red]Error listing prompts: {e}[/red]")
-        return 0, 0
+        return 0, 0, 1
 
     if not all_prompts:
         console.print("[yellow]No prompts found.[/yellow]")
-        return 0, 0
+        return 0, 0, 0
 
     console.print(f"[blue]Found {len(all_prompts)} prompt(s)[/blue]")
 
@@ -263,13 +267,14 @@ def _export_all_prompts(
                     else:
                         skipped += 1
             except Exception as e:
+                errors += 1
                 console.print(
                     f"[red]Error exporting prompt '{prompt_public.name}': {e}[/red]"
                 )
             finally:
                 progress.advance(task)
 
-    return exported, skipped
+    return exported, skipped, errors
 
 
 def _export_project_traces(
@@ -468,7 +473,7 @@ def export_all(
             console.print("\n[bold blue]--- Exporting Prompts ---[/bold blue]")
             prompts_dir = project_root / "prompts"
             prompts_dir.mkdir(parents=True, exist_ok=True)
-            pr_exp, pr_skip = _export_all_prompts(
+            pr_exp, pr_skip, pr_errors = _export_all_prompts(
                 client,
                 prompts_dir,
                 project_name,
@@ -480,6 +485,8 @@ def export_all(
             )
             total_stats["prompts"] = pr_exp
             total_stats["prompts_skipped"] = pr_skip
+            if pr_errors:
+                any_errors = True
 
         # Phase 3: Traces
         if "traces" in include:

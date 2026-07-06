@@ -39,6 +39,7 @@ public class CostService {
             Map.entry("jina_ai", "jina_ai"),
             Map.entry("elastic", "elastic"),
             Map.entry("microsoft", "azure"),
+            Map.entry("azure", "azure"),
             Map.entry("mistral", "mistral"));
     public static final String MODEL_PRICES_FILE = "model_prices_and_context_window.json";
     public static final String MODEL_PRICES_OVERRIDES_FILE = "model_prices_overrides.json";
@@ -47,6 +48,7 @@ public class CostService {
     private static final Map<String, BiFunction<ModelPrice, Map<String, Integer>, BigDecimal>> PROVIDERS_CACHE_COST_CALCULATOR = Map
             .of("anthropic", SpanCostCalculator::textGenerationWithCacheCostAnthropic,
                     "openai", SpanCostCalculator::textGenerationWithCacheCostOpenAI,
+                    "azure", SpanCostCalculator::textGenerationWithCacheCostOpenAI,
                     "bedrock", SpanCostCalculator::textGenerationWithCacheCostBedrock,
                     "bedrock_converse", SpanCostCalculator::textGenerationWithCacheCostBedrock,
                     "vertex_ai-language-models", SpanCostCalculator::textGenerationWithCacheCostGoogle,
@@ -342,6 +344,9 @@ public class CostService {
         BigDecimal inputAudioTokenPrice = Optional.ofNullable(modelCost.inputCostPerAudioToken())
                 .map(BigDecimal::new)
                 .orElse(BigDecimal.ZERO);
+        BigDecimal outputAudioTokenPrice = Optional.ofNullable(modelCost.outputCostPerAudioToken())
+                .map(BigDecimal::new)
+                .orElse(BigDecimal.ZERO);
         // Tier rates: above_200k_tokens variants. Models without a tier (most) leave these null
         // in the LiteLLM JSON; we default to zero and the effective-price helpers on ModelPrice
         // fall through to the base rate in that case.
@@ -373,6 +378,7 @@ public class CostService {
                 .videoOutputPrice(videoOutputPrice)
                 .audioInputCharacterPrice(audioInputCharacterPrice)
                 .inputAudioTokenPrice(inputAudioTokenPrice)
+                .outputAudioTokenPrice(outputAudioTokenPrice)
                 .calculator(calculator)
                 .inputPriceAbove200kTokens(inputPriceAbove200kTokens)
                 .outputPriceAbove200kTokens(outputPriceAbove200kTokens)

@@ -2,4 +2,6 @@
 
 import typing
 
-TracePublicSource = typing.Union[typing.Literal["sdk", "experiment", "playground", "optimization"], typing.Any]
+TracePublicSource = typing.Union[
+    typing.Literal["sdk", "experiment", "playground", "optimization", "evaluator"], typing.Any
+]

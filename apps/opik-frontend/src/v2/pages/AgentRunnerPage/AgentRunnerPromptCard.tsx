@@ -78,7 +78,7 @@ const AgentRunnerPromptCard = forwardRef<
   const activeProjectId = useActiveProjectId();
   const { toast } = useToast();
   const {
-    permissions: { canCreatePrompts },
+    permissions: { canEditPrompts },
   } = usePermissions();
 
   const [isOpen, setIsOpen] = useState(true);
@@ -152,7 +152,7 @@ const AgentRunnerPromptCard = forwardRef<
 
   const handleSave = useCallback(
     async (changeDescription: string) => {
-      if (!hasUnsavedChanges || !canCreatePrompts) return;
+      if (!hasUnsavedChanges || !canEditPrompts) return;
       const template = isChatPrompt
         ? serializeChatTemplate(draftMessages)
         : draftTemplate;
@@ -177,7 +177,7 @@ const AgentRunnerPromptCard = forwardRef<
     },
     [
       hasUnsavedChanges,
-      canCreatePrompts,
+      canEditPrompts,
       createVersionAsync,
       prompt.name,
       prompt.template_structure,
@@ -196,7 +196,7 @@ const AgentRunnerPromptCard = forwardRef<
     () => ({
       prepareMask: async () => {
         if (hasUnsavedChanges) {
-          if (!canCreatePrompts) {
+          if (!canEditPrompts) {
             toast({
               title: "Cannot save prompt changes",
               description: `Missing permission to create new versions of ${prompt.name}`,
@@ -236,7 +236,7 @@ const AgentRunnerPromptCard = forwardRef<
     [
       hasUnsavedChanges,
       pickedVersionId,
-      canCreatePrompts,
+      canEditPrompts,
       isChatPrompt,
       draftMessages,
       draftTemplate,
@@ -375,24 +375,22 @@ const AgentRunnerPromptCard = forwardRef<
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {hasUnsavedChanges && (
+        {hasUnsavedChanges && canEditPrompts && (
           <div className="ml-auto flex items-center gap-1">
             <span className="comet-body-xs flex items-center gap-1 text-light-slate">
               <span className="size-1.5 rounded-full bg-destructive" />
               {PROMPT_UNSAVED_CHANGES_LABEL}
             </span>
-            {canCreatePrompts && (
-              <TooltipWrapper content={PROMPT_SAVE_NEW_VERSION_TOOLTIP}>
-                <Button
-                  variant="minimal"
-                  size="icon-2xs"
-                  disabled={isSaving}
-                  onClick={() => setIsSaveDialogOpen(true)}
-                >
-                  <Save />
-                </Button>
-              </TooltipWrapper>
-            )}
+            <TooltipWrapper content={PROMPT_SAVE_NEW_VERSION_TOOLTIP}>
+              <Button
+                variant="minimal"
+                size="icon-2xs"
+                disabled={isSaving}
+                onClick={() => setIsSaveDialogOpen(true)}
+              >
+                <Save />
+              </Button>
+            </TooltipWrapper>
           </div>
         )}
       </div>

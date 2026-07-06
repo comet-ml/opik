@@ -81,6 +81,50 @@ class CostServiceTest {
                         "original_usage.prompt_tokens_details.audio_tokens", "0.00027"));
     }
 
+    /**
+     * Covers every branch of the new audio-completion handling in
+     * {@link SpanCostCalculator#textGenerationCost}:
+     * <ul>
+     *   <li>{@code gpt-4o-audio-preview} publishes {@code output_cost_per_audio_token} (8e-5),
+     *       which is 8x the standard output rate (1e-5). The Python SDK
+     *       ({@code openai_chat_completions_usage.CompletionTokensDetails.audio_tokens}) flattens
+     *       the count under {@code original_usage.completion_tokens_details.audio_tokens}; the
+     *       bare OTel key {@code completion_tokens_details.audio_tokens} is the documented
+     *       fallback.</li>
+     *   <li>{@code gpt-4o-mini} has no {@code output_cost_per_audio_token}, so
+     *       {@code outputAudioRate == 0} and the audio token key in usage is ignored — every
+     *       completion token bills at the standard output rate.</li>
+     * </ul>
+     */
+    @ParameterizedTest(name = "{0} with key={1}")
+    @MethodSource("provideAudioCompletionTokenCases")
+    void calculateCostBillsAudioCompletionTokensAtTheConfiguredRate(
+            String model, String audioUsageKey, String expectedCost) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 200,
+                "completion_tokens", 500,
+                audioUsageKey, 200);
+
+        BigDecimal cost = CostService.calculateCost(model, "openai", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideAudioCompletionTokenCases() {
+        // gpt-4o-audio-preview: input 2.5e-6, output 1e-5, output_audio 8e-5
+        // non-audio completion = 500 - 200 = 300
+        // 200 * 2.5e-6 + 300 * 1e-5 + 200 * 8e-5 = 0.0005 + 0.003 + 0.016 = 0.0195
+        // gpt-4o-mini: input 1.5e-7, output 6e-7 (no audio rate; audio key is ignored)
+        // 200 * 1.5e-7 + 500 * 6e-7 = 0.00003 + 0.0003 = 0.00033
+        return Stream.of(
+                Arguments.of("gpt-4o-audio-preview",
+                        "original_usage.completion_tokens_details.audio_tokens", "0.0195"),
+                Arguments.of("gpt-4o-audio-preview",
+                        "completion_tokens_details.audio_tokens", "0.0195"),
+                Arguments.of("gpt-4o-mini",
+                        "original_usage.completion_tokens_details.audio_tokens", "0.00033"));
+    }
+
     @Test
     void calculateCostUsesAnthropicCacheCalculatorForClaudeOnVertexAI() {
         // Claude models hosted on Google Vertex AI ship under the litellm_provider
@@ -416,6 +460,44 @@ class CostServiceTest {
         BigDecimal cost = CostService.calculateCost("multilingual-e5-large", "azure", usage, null);
 
         assertThat(cost).isGreaterThan(BigDecimal.ZERO);
+    }
+
+    /**
+     * Covers both branches of registering {@code azure} as a canonical provider so that the 199
+     * Azure-tagged entries in {@code model_prices_and_context_window.json} (e.g. {@code azure/gpt-4.1},
+     * {@code azure/command-r-plus}, all {@code azure/gpt-4o*} and {@code azure/gpt-5*} variants) are
+     * no longer silently dropped at load time:
+     * <ul>
+     *   <li>Azure model with no cache rates falls through to {@link SpanCostCalculator#textGenerationCost}.</li>
+     *   <li>Azure model with cache rates routes through
+     *       {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI} — Azure-hosted OpenAI models share
+     *       the OpenAI usage shape, so cached_tokens are subtracted from prompt_tokens before billing the
+     *       remainder at the standard input rate.</li>
+     * </ul>
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideAzureProviderCases")
+    void calculateCostHandlesAzureHostedModels(String description, String model, Map<String, Integer> usage,
+            String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, "azure", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideAzureProviderCases() {
+        // azure/command-r-plus: input 3e-6, output 1.5e-5 (no cache rates) -> textGenerationCost
+        // 1000 * 3e-6 + 200 * 1.5e-5 = 0.003 + 0.003 = 0.006
+        // azure/gpt-4.1: input 2e-6, output 8e-6, cache_read 5e-7 -> textGenerationWithCacheCostOpenAI
+        // non-cached input = 1000 - 300 = 700
+        // 700 * 2e-6 + 200 * 8e-6 + 300 * 5e-7 = 0.0014 + 0.0016 + 0.00015 = 0.00315
+        return Stream.of(
+                Arguments.of("plain text-generation route", "azure/command-r-plus",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.006"),
+                Arguments.of("cache-aware route via OpenAI calc", "azure/gpt-4.1",
+                        Map.of("original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 200,
+                                "original_usage.prompt_tokens_details.cached_tokens", 300),
+                        "0.00315"));
     }
 
     private static Stream<Arguments> provideModelNamesWithDateSuffixes() {

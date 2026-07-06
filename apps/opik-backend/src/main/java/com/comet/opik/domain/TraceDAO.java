@@ -67,6 +67,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.ErrorInfo.ERROR_INFO_TYPE;
 import static com.comet.opik.api.Trace.TracePage;
@@ -84,6 +85,10 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+import static com.comet.opik.utils.SentinelTranslation.epochToNull;
+import static com.comet.opik.utils.SentinelTranslation.nanToNull;
+import static com.comet.opik.utils.SentinelTranslation.nullToEpoch;
+import static com.comet.opik.utils.SentinelTranslation.nullToNaN;
 import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
 import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolder;
 import static java.util.function.Predicate.not;
@@ -121,6 +126,8 @@ public interface TraceDAO {
     Mono<UUID> getProjectIdFromTrace(UUID traceId);
 
     Mono<Map<UUID, UUID>> getProjectIdsByTraceIds(List<UUID> traceIds);
+
+    Mono<Map<UUID, Instant>> getStartTimesByTraceIds(Set<UUID> traceIds, String workspaceId);
 
     Flux<BiInformation> getTraceBIInformation(Map<UUID, Instant> excludedProjectIds);
 
@@ -302,7 +309,7 @@ class TraceDAOImpl implements TraceDAO {
                     new_trace.start_time
                 ) as start_time,
                 multiIf(
-                    isNotNull(old_trace.end_time), old_trace.end_time,
+                    notEquals(old_trace.end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) AND old_trace.end_time >= toDateTime64('1970-01-01 00:00:00.000', 9), old_trace.end_time,
                     new_trace.end_time
                 ) as end_time,
                 multiIf(
@@ -352,7 +359,7 @@ class TraceDAOImpl implements TraceDAO {
                     new_trace.output_slim
                 ) as output_slim,
                 multiIf(
-                    isNotNull(old_trace.ttft), old_trace.ttft,
+                    old_trace.id != '' AND NOT isNaN(old_trace.ttft), old_trace.ttft,
                     new_trace.ttft
                 ) as ttft,
                 multiIf(
@@ -370,7 +377,7 @@ class TraceDAOImpl implements TraceDAO {
                     :workspace_id as workspace_id,
                     :name as name,
                     parseDateTime64BestEffort(:start_time, 9) as start_time,
-                    <if(end_time)> parseDateTime64BestEffort(:end_time, 9) as end_time, <else> null as end_time, <endif>
+                    parseDateTime64BestEffort(:end_time, 9) as end_time,
                     :input as input,
                     :output as output,
                     :metadata as metadata,
@@ -851,6 +858,19 @@ class TraceDAOImpl implements TraceDAO {
      * Each {@code traces} id-range bound carries a parallel {@code toMonday(id_at)} bound: a strict consequence of
      * the id-range — and, unlike a {@code created_at} predicate, safe against late-arriving rows since it derives
      * from {@code id} — that lets the planner prune partitions once {@code traces} is partitioned.
+     * <p>
+     * When aggregates are enrichment-only ({@code page_keyed_aggregates}, see
+     * {@code shouldPageKeyAggregates}), the aggregate CTEs are keyed on
+     * {@code IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))} instead of
+     * {@code trace_id_prefilter}: the inner scalar subquery is evaluated once and cached for the whole query,
+     * so every aggregate scans only the page's traces instead of the full filtered project. The aggregate CTEs
+     * referencing {@code page_ids} before its definition is fine — CTE names resolve independently of
+     * declaration order.
+     * <p>
+     * A ClickHouse upgrade must re-verify the three behaviors this mode relies on (validated on 25.3 and 25.8):
+     * forward CTE resolution, scalar-subquery caching (one evaluation reused across all reference sites — if the
+     * cache stops applying, results stay correct but every aggregate silently regresses to a whole-project scan),
+     * and primary-key pruning of the materialized IN-set.
      */
     private static final String SELECT_BY_PROJECT_ID = """
             WITH <if(trace_id_prefilter)>trace_id_prefilter AS (
@@ -900,7 +920,8 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
-                      <if(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
+                      <if(page_keyed_aggregates)> AND entity_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                      <elseif(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
                       <else>
                       <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                       <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
@@ -925,7 +946,8 @@ class TraceDAOImpl implements TraceDAO {
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
                       <if(annotation_queue_id)>AND source_queue_id = :annotation_queue_id<endif>
-                      <if(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
+                      <if(page_keyed_aggregates)> AND entity_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                      <elseif(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
                       <else>
                       <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                       <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
@@ -1002,7 +1024,8 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
                     AND project_id = :project_id
-                    <if(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
+                    <if(page_keyed_aggregates)> AND entity_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                    <elseif(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
                     <else>
                     <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                     <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
@@ -1016,7 +1039,8 @@ class TraceDAOImpl implements TraceDAO {
                 FROM spans
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                <if(trace_id_prefilter)>AND trace_id IN (SELECT id FROM trace_id_prefilter)
+                <if(page_keyed_aggregates)>AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                <elseif(trace_id_prefilter)>AND trace_id IN (SELECT id FROM trace_id_prefilter)
                 <else>
                 <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
                 <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
@@ -1164,7 +1188,8 @@ class TraceDAOImpl implements TraceDAO {
                 FROM spans FINAL
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                <if(trace_id_prefilter)>AND trace_id IN (SELECT id FROM trace_id_prefilter)
+                <if(page_keyed_aggregates)>AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                <elseif(trace_id_prefilter)>AND trace_id IN (SELECT id FROM trace_id_prefilter)
                 <else>
                 <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
                 <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
@@ -1190,7 +1215,8 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     <if(annotation_queue_id)>AND source_queue_id = :annotation_queue_id<endif>
-                    <if(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
+                    <if(page_keyed_aggregates)> AND entity_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                    <elseif(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
                     <else>
                     <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                     <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
@@ -1209,7 +1235,8 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE aq.scope = 'trace'
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
-                      <if(trace_id_prefilter)> AND aqi.item_id IN (SELECT id FROM trace_id_prefilter)
+                      <if(page_keyed_aggregates)> AND aqi.item_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                      <elseif(trace_id_prefilter)> AND aqi.item_id IN (SELECT id FROM trace_id_prefilter)
                       <else>
                       <if(uuid_from_time)> AND aqi.item_id >= :uuid_from_time <endif>
                       <if(uuid_to_time)> AND aqi.item_id \\<= :uuid_to_time <endif>
@@ -1229,7 +1256,8 @@ class TraceDAOImpl implements TraceDAO {
                     SELECT DISTINCT experiment_id, trace_id, dataset_item_id
                     FROM experiment_items
                     WHERE workspace_id = :workspace_id
-                    <if(trace_id_prefilter)> AND trace_id IN (SELECT id FROM trace_id_prefilter)
+                    <if(page_keyed_aggregates)> AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                    <elseif(trace_id_prefilter)> AND trace_id IN (SELECT id FROM trace_id_prefilter)
                     <else>
                     <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                     <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
@@ -1242,7 +1270,8 @@ class TraceDAOImpl implements TraceDAO {
                     AND id IN (
                         SELECT dataset_item_id FROM experiment_items
                         WHERE workspace_id = :workspace_id
-                        <if(trace_id_prefilter)> AND trace_id IN (SELECT id FROM trace_id_prefilter)
+                        <if(page_keyed_aggregates)> AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                        <elseif(trace_id_prefilter)> AND trace_id IN (SELECT id FROM trace_id_prefilter)
                         <else>
                         <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                         <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
@@ -1945,8 +1974,8 @@ class TraceDAOImpl implements TraceDAO {
                     new_trace.output_slim
                 ) as output_slim,
                 multiIf(
-                    isNotNull(new_trace.ttft), new_trace.ttft,
-                    isNotNull(old_trace.ttft), old_trace.ttft,
+                    NOT isNaN(new_trace.ttft), new_trace.ttft,
+                    old_trace.id != '' AND NOT isNaN(old_trace.ttft), old_trace.ttft,
                     new_trace.ttft
                 ) as ttft,
                 multiIf(
@@ -1964,7 +1993,7 @@ class TraceDAOImpl implements TraceDAO {
                     :workspace_id as workspace_id,
                     <if(name)> :name <else> '' <endif> as name,
                     toDateTime64('1970-01-01 00:00:00.000', 9) as start_time,
-                    <if(end_time)> parseDateTime64BestEffort(:end_time, 9) <else> null <endif> as end_time,
+                    parseDateTime64BestEffort(:end_time, 9) as end_time,
                     <if(input)> :input <else> '' <endif> as input,
                     <if(output)> :output <else> '' <endif> as output,
                     <if(metadata)> :metadata <else> '' <endif> as metadata,
@@ -1978,7 +2007,7 @@ class TraceDAOImpl implements TraceDAO {
                     :truncation_threshold as truncation_threshold,
                     <if(input)> :input_slim <else> '' <endif> as input_slim,
                     <if(output)> :output_slim <else> '' <endif> as output_slim,
-                    <if(ttft)> :ttft <else> null <endif> as ttft,
+                    :ttft as ttft,
                     :source as source,
                     <if(environment)> :environment <else> '' <endif> as environment
             ) as new_trace
@@ -2038,6 +2067,19 @@ class TraceDAOImpl implements TraceDAO {
             WHERE id IN :trace_ids
             AND workspace_id = :workspace_id
             GROUP BY id
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    private static final String SELECT_START_TIMES_BY_TRACE_IDS = """
+            SELECT
+                id,
+                start_time
+            FROM traces
+            WHERE id IN :ids
+            AND workspace_id = :workspace_id
+            ORDER BY id, last_updated_at DESC
+            LIMIT 1 BY id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -3007,12 +3049,23 @@ class TraceDAOImpl implements TraceDAO {
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull WorkspacesService workspacesService;
 
+    /**
+     * Sort mapping applied under {@code traceColumnsNonNullable}: {@code nullIf} restores an absent (epoch)
+     * {@code end_time} to {@code NULL} so it sorts last in ASC like a Nullable column did. {@code duration} needs no
+     * entry — ClickHouse sorts {@code NaN} like {@code NULL}. Merged with the experiment-id mapping the listing passes.
+     */
+    private static final Map<String, String> SORT_FIELD_MAPPING_END_TIME_SENTINEL = Stream
+            .concat(TraceSortingFactory.EXPERIMENT_FIELD_MAPPING.entrySet().stream(),
+                    Stream.of(Map.entry(SortableFields.END_TIME,
+                            "nullIf(end_time, toDateTime64('1970-01-01 00:00:00.000', 9))")))
+            .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
+
     @Override
     @WithSpan
     public Mono<UUID> insert(@NonNull Trace trace, @NonNull Connection connection) {
 
         return makeMonoContextAware((userName, workspaceId) -> {
-            var template = buildInsertTemplate(trace, workspaceId, userName);
+            var template = getSTWithLogComment(INSERT, "insert_trace", workspaceId, userName, "");
 
             Statement statement = buildInsertStatement(trace, connection, template);
             bindUserNameAndWorkspace(statement, userName, workspaceId);
@@ -3036,9 +3089,7 @@ class TraceDAOImpl implements TraceDAO {
 
         bindInputOutputMetadataAndSlim(statement, trace, null);
 
-        if (trace.endTime() != null) {
-            statement.bind("end_time", trace.endTime().toString());
-        }
+        bindEpochSentinel(statement, "end_time", trace.endTime());
 
         if (trace.tags() != null) {
             statement.bind("tags", trace.tags().toArray(String[]::new));
@@ -3068,13 +3119,41 @@ class TraceDAOImpl implements TraceDAO {
 
         TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
 
-        if (trace.ttft() != null) {
-            statement.bind("ttft", trace.ttft());
-        } else {
-            statement.bindNull("ttft", Double.class);
-        }
+        bindNanSentinel(statement, "ttft", trace.ttft());
 
         return statement;
+    }
+
+    /**
+     * Binds a {@code DateTime64} write parameter, applying the epoch sentinel for an absent value once the column is
+     * non-nullable (a {@code null} bind would be rejected); while still Nullable an absent value binds {@code null}.
+     */
+    private void bindEpochSentinel(Statement statement, String parameter, Instant value) {
+        if (traceColumnsNonNullable()) {
+            statement.bind(parameter, ClickHouseDateTimeFormat.formatNanos(nullToEpoch(value)));
+        } else if (value != null) {
+            statement.bind(parameter, ClickHouseDateTimeFormat.formatNanos(value));
+        } else {
+            statement.bindNull(parameter, String.class);
+        }
+    }
+
+    /**
+     * Binds a {@code Float64} write parameter, applying the {@code NaN} sentinel for an absent value once the column is
+     * non-nullable; while still Nullable an absent value binds {@code null}.
+     */
+    private void bindNanSentinel(Statement statement, String parameter, Double value) {
+        if (traceColumnsNonNullable()) {
+            statement.bind(parameter, nullToNaN(value));
+        } else if (value != null) {
+            statement.bind(parameter, value);
+        } else {
+            statement.bindNull(parameter, Double.class);
+        }
+    }
+
+    private boolean traceColumnsNonNullable() {
+        return configuration.getDatabaseAnalyticsDataModel().traceColumnsNonNullable();
     }
 
     /**
@@ -3097,17 +3176,6 @@ class TraceDAOImpl implements TraceDAO {
                 .bind("metadata" + suffix, metadataValue)
                 .bind("input_slim" + suffix, TruncationUtils.createSlimJsonString(inputValue))
                 .bind("output_slim" + suffix, TruncationUtils.createSlimJsonString(outputValue));
-    }
-
-    private ST buildInsertTemplate(Trace trace, String workspaceId, String userName) {
-        var template = getSTWithLogComment(INSERT, "insert_trace", workspaceId, userName, "");
-
-        Optional.ofNullable(trace.endTime())
-                .ifPresent(endTime -> template.add("end_time", endTime));
-        Optional.ofNullable(trace.ttft())
-                .ifPresent(ttft -> template.add("ttft", ttft));
-
-        return template;
     }
 
     @Override
@@ -3387,7 +3455,7 @@ class TraceDAOImpl implements TraceDAO {
                 .name(StringUtils.defaultIfBlank(
                         getValue(exclude, Trace.TraceField.NAME, row, "name", String.class), null))
                 .startTime(getValue(exclude, Trace.TraceField.START_TIME, row, "start_time", Instant.class))
-                .endTime(getValue(exclude, Trace.TraceField.END_TIME, row, "end_time", Instant.class))
+                .endTime(readEpochSentinel(exclude, Trace.TraceField.END_TIME, row, "end_time"))
                 .input(Optional.ofNullable(getValue(exclude, Trace.TraceField.INPUT, row, "input", String.class))
                         .filter(str -> !str.isBlank())
                         .map(value -> TruncationUtils.getJsonNodeOrTruncatedString(rowMetadata, "input_truncated",
@@ -3460,8 +3528,8 @@ class TraceDAOImpl implements TraceDAO {
                 .createdBy(getValue(exclude, Trace.TraceField.CREATED_BY, row, "created_by", String.class))
                 .lastUpdatedBy(
                         getValue(exclude, Trace.TraceField.LAST_UPDATED_BY, row, "last_updated_by", String.class))
-                .duration(getValue(exclude, Trace.TraceField.DURATION, row, "duration", Double.class))
-                .ttft(getValue(exclude, Trace.TraceField.TTFT, row, "ttft", Double.class))
+                .duration(readNanSentinel(exclude, Trace.TraceField.DURATION, row, "duration"))
+                .ttft(readNanSentinel(exclude, Trace.TraceField.TTFT, row, "ttft"))
                 .threadId(StringUtils.defaultIfBlank(
                         getValue(exclude, Trace.TraceField.THREAD_ID, row, "thread_id", String.class), null))
                 .visibilityMode(Optional.ofNullable(
@@ -3475,6 +3543,28 @@ class TraceDAOImpl implements TraceDAO {
                 .environment(getValue(exclude, Trace.TraceField.ENVIRONMENT, row, "environment", String.class))
                 .experiment(mapExperiment(exclude, row))
                 .build();
+    }
+
+    /**
+     * Reads a {@code DateTime64} column, translating the epoch sentinel to {@code null} only once the columns are
+     * non-nullable. While still {@code Nullable}, the value is returned as-is: {@code null} stays {@code null} and a
+     * (legitimate) epoch timestamp is preserved — the column distinguishes the two, so translating unconditionally
+     * would corrupt a client-supplied {@code 1970-01-01} value. Symmetric with the flag-gated write binding.
+     */
+    private Instant readEpochSentinel(Set<Trace.TraceField> exclude, Trace.TraceField field, Row row,
+            String fieldName) {
+        var value = getValue(exclude, field, row, fieldName, Instant.class);
+        return traceColumnsNonNullable() ? epochToNull(value) : value;
+    }
+
+    /**
+     * Reads a {@code Float64} column and maps the {@code NaN} sentinel to {@code null}. No flag is needed (unlike
+     * {@code end_time}): neither {@code duration} (materialized, never {@code NaN} today) nor {@code ttft} (cannot
+     * arrive as {@code NaN} via JSON) is ever {@code NaN} while the column is still {@code Nullable}, so the
+     * translation is always a no-op today and correct once the column is non-nullable.
+     */
+    private Double readNanSentinel(Set<Trace.TraceField> exclude, Trace.TraceField field, Row row, String fieldName) {
+        return nanToNull(getValue(exclude, field, row, fieldName, Double.class));
     }
 
     private List<GuardrailsValidation> mapGuardrails(List<List<Object>> guardrails) {
@@ -3562,6 +3652,11 @@ class TraceDAOImpl implements TraceDAO {
             bindUserNameAndWorkspace(statement, userName, workspaceId);
             bindUpdateParams(traceUpdate, statement);
 
+            // INSERT_UPDATE builds the full new_trace row, so end_time/ttft are referenced unconditionally and must
+            // always be bound (sentinel or null for an absent value) — unlike the conditional UPDATE keep-column path.
+            bindEpochSentinel(statement, "end_time", traceUpdate.endTime());
+            bindNanSentinel(statement, "ttft", traceUpdate.ttft());
+
             if (traceUpdate.source() != null) {
                 statement.bind("source", traceUpdate.source().getValue());
             } else {
@@ -3610,6 +3705,53 @@ class TraceDAOImpl implements TraceDAO {
         return !hasCteDependentFilters && hasNarrowingFilters;
     }
 
+    /**
+     * Determines whether the aggregate CTEs (feedback scores, spans, comments, guardrails, annotation queues,
+     * experiments) can be keyed on the page ids instead of the full filtered trace id set.
+     *
+     * <p>Those CTEs are joined to {@code page_wide} only to enrich the returned rows, so whenever neither
+     * filtering nor sorting reads them, computing them for every candidate trace is wasted work that grows with
+     * project size: the final LEFT JOINs discard everything outside the page. Keying them on the page ids turns
+     * whole-project scans (spans, feedback_scores, ...) into page-sized, primary-key-prunable lookups.
+     *
+     * <p>The page ids are consumed via {@code IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))}:
+     * the inner scalar subquery is evaluated once and cached for the whole query, so the {@code page_ids} CTE is
+     * not re-executed at every reference (ClickHouse inlines plain CTE references), and the materialized constant
+     * array is usable for primary-key index analysis.
+     *
+     * <p>Must stay disabled whenever page selection depends on an aggregate: feedback-score filters
+     * ({@code traces_deduped} filters on feedback_scores_final/fsc/sfsc), guardrails filters (join on
+     * guardrails_agg), trace aggregation filters (spans_agg), annotation queue filters/id (join on
+     * trace_annotation_queue_ids), or sorting by feedback scores, span statistics, or experiments
+     * ({@code page_ids} joins those aggregates).
+     */
+    /**
+     * Applies the aggregate-keying decision shared by {@code getTracesByProjectId} and
+     * {@code findTraceStream}: page-keyed aggregates when they are enrichment-only, otherwise the narrowing
+     * trace id prefilter when filters allow it.
+     */
+    private void addAggregateKeyingFlags(ST template, TraceSearchCriteria criteria, boolean sortHasFeedbackScores,
+            boolean sortHasSpanStatistics, boolean sortHasExperiment) {
+        if (shouldPageKeyAggregates(template, sortHasFeedbackScores, sortHasSpanStatistics, sortHasExperiment)) {
+            template.add("page_keyed_aggregates", true);
+        } else if (shouldUseTraceIdPrefilter(criteria, template) && !sortHasFeedbackScores) {
+            template.add("trace_id_prefilter", true);
+        }
+    }
+
+    private boolean shouldPageKeyAggregates(ST template, boolean sortHasFeedbackScores,
+            boolean sortHasSpanStatistics, boolean sortHasExperiment) {
+        boolean aggregatesDrivePageSelection = hasFeedbackScoreFilters(template)
+                || template.getAttribute("guardrails_filters") != null
+                || template.getAttribute("trace_aggregation_filters") != null
+                || template.getAttribute("annotation_queue_filters") != null
+                || template.getAttribute("annotation_queue_id") != null
+                || sortHasFeedbackScores
+                || sortHasSpanStatistics
+                || sortHasExperiment;
+        return !aggregatesDrivePageSelection;
+    }
+
     private Mono<? extends Result> getTracesByProjectId(
             int size, int page, TraceSearchCriteria traceSearchCriteria, Connection connection) {
 
@@ -3618,7 +3760,8 @@ class TraceDAOImpl implements TraceDAO {
         return makeMonoContextAware((userName, workspaceId) -> {
             var logComment = getLogComment("find_traces_by_project_id", workspaceId, userName,
                     "page:" + page + ":size:" + size + ":" + traceSearchCriteria.toString());
-            var template = newTraceThreadFindTemplate(SELECT_BY_PROJECT_ID, traceSearchCriteria, TRACE_SEARCH_CLAUSE);
+            var template = newTraceThreadFindTemplate(
+                    SELECT_BY_PROJECT_ID, traceSearchCriteria, TRACE_SEARCH_CLAUSE, traceColumnsNonNullable());
 
             bindTemplateExcludeFieldVariables(traceSearchCriteria, template);
 
@@ -3628,14 +3771,23 @@ class TraceDAOImpl implements TraceDAO {
             addSortNeedsWideFlag(template, traceSearchCriteria.sortingFields());
 
             var orderBySql = sortingQueryBuilder.toOrderBySql(traceSearchCriteria.sortingFields(),
-                    TraceSortingFactory.EXPERIMENT_FIELD_MAPPING);
+                    traceColumnsNonNullable()
+                            ? SORT_FIELD_MAPPING_END_TIME_SENTINEL
+                            : TraceSortingFactory.EXPERIMENT_FIELD_MAPPING);
             boolean sortHasFeedbackScores = Optional.ofNullable(orderBySql)
                     .map(sortFields -> sortFields.contains("feedback_scores"))
                     .orElse(false);
+            boolean sortHasSpanStatistics = hasSpanStatistics(orderBySql);
+            // Structured check on the requested sort fields rather than a substring match on the rendered
+            // ORDER BY SQL: this now gates page-keyed aggregates, so it must track the experiment sort exactly
+            // even if EXPERIMENT_FIELD_MAPPING changes what SQL the field renders to.
+            boolean sortHasExperiment = Optional.ofNullable(traceSearchCriteria.sortingFields())
+                    .map(sortingFields -> sortingFields.stream()
+                            .anyMatch(sortingField -> SortableFields.EXPERIMENT_ID.equals(sortingField.field())))
+                    .orElse(false);
 
-            if (shouldUseTraceIdPrefilter(traceSearchCriteria, template) && !sortHasFeedbackScores) {
-                template.add("trace_id_prefilter", true);
-            }
+            addAggregateKeyingFlags(template, traceSearchCriteria, sortHasFeedbackScores, sortHasSpanStatistics,
+                    sortHasExperiment);
 
             var finalTemplate = template;
             Optional.ofNullable(orderBySql)
@@ -3644,11 +3796,11 @@ class TraceDAOImpl implements TraceDAO {
                             finalTemplate.add("sort_has_feedback_scores", true);
                         }
 
-                        if (hasSpanStatistics(sortFields)) {
+                        if (sortHasSpanStatistics) {
                             finalTemplate.add("sort_has_span_statistics", true);
                         }
 
-                        if (sortFields.contains("experiment_id") || sortFields.contains("eaag.experiment")) {
+                        if (sortHasExperiment) {
                             finalTemplate.add("sort_has_experiment", true);
                         }
 
@@ -3744,7 +3896,8 @@ class TraceDAOImpl implements TraceDAO {
         return makeMonoContextAware((userName, workspaceId) -> {
             var logComment = getLogComment("count_traces_by_project", workspaceId, userName,
                     traceSearchCriteria.toString());
-            var template = newTraceThreadFindTemplate(COUNT_BY_PROJECT_ID, traceSearchCriteria, TRACE_SEARCH_CLAUSE);
+            var template = newTraceThreadFindTemplate(
+                    COUNT_BY_PROJECT_ID, traceSearchCriteria, TRACE_SEARCH_CLAUSE, traceColumnsNonNullable());
             template.add("log_comment", logComment);
 
             var statement = connection.createStatement(template.render())
@@ -3826,11 +3979,7 @@ class TraceDAOImpl implements TraceDAO {
 
                 bindInputOutputMetadataAndSlim(statement, trace, i);
 
-                if (trace.endTime() != null) {
-                    statement.bind("end_time" + i, ClickHouseDateTimeFormat.formatNanos(trace.endTime()));
-                } else {
-                    statement.bindNull("end_time" + i, String.class);
-                }
+                bindEpochSentinel(statement, "end_time" + i, trace.endTime());
 
                 // Format the timestamp client-side so the SQL contains a plain string literal in the
                 // last_updated_at cell. Fall back to "now" when the client did not provide a value —
@@ -3845,11 +3994,7 @@ class TraceDAOImpl implements TraceDAO {
 
                 TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold" + i, configuration);
 
-                if (trace.ttft() != null) {
-                    statement.bind("ttft" + i, trace.ttft());
-                } else {
-                    statement.bindNull("ttft" + i, Double.class);
-                }
+                bindNanSentinel(statement, "ttft" + i, trace.ttft());
 
                 if (trace.source() != null) {
                     statement.bind("source" + i, trace.source().getValue());
@@ -3955,8 +4100,8 @@ class TraceDAOImpl implements TraceDAO {
 
                     Mono<ProjectStats> tracesSpansMono = asyncTemplate.nonTransaction(connection -> {
                         var logComment = getLogComment("get_trace_stats_traces_spans", workspaceId, userName, "");
-                        var template = newTraceThreadFindTemplate(SELECT_TRACES_SPANS_STATS, criteria,
-                                TRACE_SEARCH_CLAUSE);
+                        var template = newTraceThreadFindTemplate(
+                                SELECT_TRACES_SPANS_STATS, criteria, TRACE_SEARCH_CLAUSE, traceColumnsNonNullable());
                         template.add("log_comment", logComment);
                         template.add("has_legacy_scores", hasLegacyScores);
 
@@ -3998,7 +4143,8 @@ class TraceDAOImpl implements TraceDAO {
     private Statement buildFeedbackStatementForCriteria(Connection connection, TraceSearchCriteria criteria,
             String workspaceId, String userName, boolean hasLegacyScores) {
         var logComment = getLogComment("get_trace_stats_feedback_scores", workspaceId, userName, "");
-        var template = newTraceThreadFindTemplate(SELECT_FEEDBACK_SCORES_STATS, criteria, TRACE_SEARCH_CLAUSE);
+        var template = newTraceThreadFindTemplate(
+                SELECT_FEEDBACK_SCORES_STATS, criteria, TRACE_SEARCH_CLAUSE, traceColumnsNonNullable());
         template.add("log_comment", logComment);
         if (hasAnyTraceFilter(template)) {
             template.add("filters_present", true);
@@ -4024,7 +4170,7 @@ class TraceDAOImpl implements TraceDAO {
         var template = TemplateUtils.newST(SELECT_FEEDBACK_SCORES_STATS).add("log_comment", logComment);
         template.add("has_legacy_scores", hasLegacyScores);
         if (!CollectionUtils.isEmpty(filters)) {
-            FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE)
+            FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE, traceColumnsNonNullable())
                     .ifPresent(traceFilters -> {
                         template.add("filters", traceFilters);
                         template.add("filters_present", true);
@@ -4112,7 +4258,8 @@ class TraceDAOImpl implements TraceDAO {
                         template.add("project_stats", true);
                         template.add("has_legacy_scores", hasLegacyScores);
                         if (!CollectionUtils.isEmpty(filters)) {
-                            FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE)
+                            FilterQueryBuilder
+                                    .toAnalyticsDbFilters(filters, FilterStrategy.TRACE, traceColumnsNonNullable())
                                     .ifPresent(traceFilters -> template.add("filters", traceFilters));
                         }
                         var statement = connection.createStatement(template.render())
@@ -4256,6 +4403,31 @@ class TraceDAOImpl implements TraceDAO {
         }));
     }
 
+    // Resolves trace -> stored start_time, keyed off workspaceId explicitly so it can run from the Cost
+    // Intelligence subscriber (no request scope). start_time must come from the trace (not the UUIDv7 timestamp)
+    // so a cipx identity update doesn't rewrite it for backfilled/imported traces. Deduped with LIMIT 1 BY id
+    // (latest last_updated_at wins) rather than FINAL, so it stays cheap on the ingestion path.
+    @Override
+    @WithSpan
+    public Mono<Map<UUID, Instant>> getStartTimesByTraceIds(@NonNull Set<UUID> traceIds, @NonNull String workspaceId) {
+        if (traceIds.isEmpty()) {
+            return Mono.just(Map.of());
+        }
+        log.info("Getting start_times for '{}' trace_ids", traceIds.size());
+        return Mono.from(connectionFactory.create())
+                .flatMap(connection -> {
+                    var template = getSTWithLogComment(SELECT_START_TIMES_BY_TRACE_IDS, "get_start_times_by_trace_ids",
+                            workspaceId, "", traceIds.size());
+                    var statement = connection.createStatement(template.render())
+                            .bind("ids", traceIds.toArray(UUID[]::new))
+                            .bind("workspace_id", workspaceId);
+                    return Flux.from(statement.execute())
+                            .flatMap(result -> result.map((row, metadata) -> Map.entry(
+                                    row.get("id", UUID.class), row.get("start_time", Instant.class))))
+                            .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+                });
+    }
+
     @Override
     @WithSpan
     public Mono<Set<UUID>> getTraceIdsByThreadIds(@NonNull UUID projectId, @NonNull List<String> threadIds,
@@ -4346,14 +4518,14 @@ class TraceDAOImpl implements TraceDAO {
         return makeFluxContextAware((userName, workspaceId) -> {
             var logComment = getLogComment("find_trace_stream", workspaceId, userName,
                     "limit:" + limit + ":" + criteria);
-            var template = newTraceThreadFindTemplate(SELECT_BY_PROJECT_ID, criteria, TRACE_SEARCH_CLAUSE);
+            var template = newTraceThreadFindTemplate(
+                    SELECT_BY_PROJECT_ID, criteria, TRACE_SEARCH_CLAUSE, traceColumnsNonNullable());
             template.add("log_comment", logComment);
 
             bindTemplateExcludeFieldVariables(criteria, template);
 
-            if (shouldUseTraceIdPrefilter(criteria, template)) {
-                template.add("trace_id_prefilter", true);
-            }
+            // The stream has no custom sorting, so only filters can make aggregates drive page selection.
+            addAggregateKeyingFlags(template, criteria, false, false, false);
 
             addSortNeedsWideFlag(template, criteria.sortingFields());
 

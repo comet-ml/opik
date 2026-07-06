@@ -37,7 +37,7 @@ const FiltersButton = <TColumnData,>({
   onChange,
   layout = "standard",
   variant = "outline",
-  size = "sm",
+  size,
   align = "start",
   disabled,
   deferOnChange = false,
@@ -47,6 +47,7 @@ const FiltersButton = <TColumnData,>({
   const [filters, setFilters] = useState<Filters>(initialFilters);
   const [open, setOpen] = useState(false);
   const isIconLayout = layout === "icon";
+  const buttonSize = size ?? (isIconLayout ? "icon-sm" : "sm");
 
   const validFilters = useDeepMemo(() => {
     return filters.filter(isFilterValid);
@@ -91,16 +92,16 @@ const FiltersButton = <TColumnData,>({
       <TooltipWrapper content={isIconLayout ? tooltip ?? "Filters" : undefined}>
         <PopoverTrigger asChild>
           <Button
-            variant={variant}
-            size={size}
+            size={buttonSize}
             className={cn(
-              isIconLayout && !validFilters.length && "size-8 px-0",
-              isIconLayout && validFilters.length && "px-3",
+              isIconLayout && validFilters.length && "w-auto px-3",
               className,
             )}
             disabled={disabled}
           >
-            <FilterIcon className="size-3.5 shrink-0" />
+            <FilterIcon
+              className={cn("shrink-0", !isIconLayout && "size-3.5")}
+            />
             {isIconLayout ? (
               validFilters.length ? (
                 <span className="ml-1.5">{validFilters.length}</span>

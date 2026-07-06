@@ -5,5 +5,6 @@ export const SpanPublicSource = {
     Experiment: "experiment",
     Playground: "playground",
     Optimization: "optimization",
+    Evaluator: "evaluator",
 } as const;
 export type SpanPublicSource = (typeof SpanPublicSource)[keyof typeof SpanPublicSource];

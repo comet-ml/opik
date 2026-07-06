@@ -5,5 +5,6 @@ export const SpanUpdateSource = {
     Experiment: "experiment",
     Playground: "playground",
     Optimization: "optimization",
+    Evaluator: "evaluator",
 } as const;
 export type SpanUpdateSource = (typeof SpanUpdateSource)[keyof typeof SpanUpdateSource];
