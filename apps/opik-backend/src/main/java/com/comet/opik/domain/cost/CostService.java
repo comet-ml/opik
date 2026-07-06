@@ -45,6 +45,7 @@ public class CostService {
     public static final String MODEL_PRICES_OVERRIDES_FILE = "model_prices_overrides.json";
     private static final String BEDROCK_PROVIDER = "bedrock";
     private static final String DATE_SUFFIX_PATTERN = "-\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$";
+    private static final String VERSION_SUFFIX_PATTERN = ":\\d+$";
     private static final Map<String, BiFunction<ModelPrice, Map<String, Integer>, BigDecimal>> PROVIDERS_CACHE_COST_CALCULATOR = Map
             .of("anthropic", SpanCostCalculator::textGenerationWithCacheCostAnthropic,
                     "openai", SpanCostCalculator::textGenerationWithCacheCostOpenAI,
@@ -91,6 +92,10 @@ public class CostService {
      *
      * Fixes issue #5621: Handles model names with provider prefix like "openai/gpt-4o"
      * sent by LiteLLM via gen_ai.request.model, by stripping the prefix before lookup.
+     *
+     * Fixes issue #5130: Handles Bedrock model names with a version-pin suffix like
+     * "anthropic.claude-opus-4-6-v1:0" by stripping the ":N" pin and falling back to the
+     * base model name (e.g. "anthropic.claude-opus-4-6-v1") used in the pricing database.
      *
      * @param modelName The model name (may contain dots or provider prefix, e.g., "openai/gpt-4o")
      * @param provider The provider name (e.g., "anthropic")
@@ -154,6 +159,34 @@ public class CostService {
             }
         }
 
+        // Try stripping version-pin suffix from original name with dots preserved
+        // (e.g., "anthropic.claude-opus-4-6-v1:0" -> "anthropic.claude-opus-4-6-v1")
+        String baseOriginalVersionName = stripVersionSuffix(modelName);
+        if (!baseOriginalVersionName.equalsIgnoreCase(modelName)) {
+            String normalizedKey = createModelProviderKey(baseOriginalVersionName, provider);
+            ModelPrice normalizedMatch = modelProviderPrices.get(normalizedKey);
+            if (normalizedMatch != null) {
+                log.debug(
+                        "Found model price using original base name after stripping version suffix. Original: '{}', Base: '{}'",
+                        modelName, baseOriginalVersionName);
+                return normalizedMatch;
+            }
+        }
+
+        // Try stripping version-pin suffix from normalized name
+        // (e.g., "anthropic-claude-opus-4-6-v1:0" -> "anthropic-claude-opus-4-6-v1")
+        String baseNormalizedVersionName = stripVersionSuffix(normalizedModelName);
+        if (!baseNormalizedVersionName.equalsIgnoreCase(normalizedModelName)) {
+            String normalizedKey = createModelProviderKey(baseNormalizedVersionName, provider);
+            ModelPrice normalizedMatch = modelProviderPrices.get(normalizedKey);
+            if (normalizedMatch != null) {
+                log.debug(
+                        "Found model price using normalized base name after stripping version suffix. Original: '{}', Base: '{}'",
+                        modelName, baseNormalizedVersionName);
+                return normalizedMatch;
+            }
+        }
+
         log.debug("No model price found for model: '{}' with provider: '{}'", modelName, provider);
         return DEFAULT_COST;
     }
@@ -183,6 +216,20 @@ public class CostService {
      */
     private static String stripDateSuffix(String modelName) {
         return modelName.toLowerCase(Locale.ROOT).replaceFirst(DATE_SUFFIX_PATTERN, "");
+    }
+
+    /**
+     * Strips version-pin suffixes from model names to enable fallback pricing lookup.
+     * Bedrock sends versioned names (e.g., "anthropic.claude-opus-4-6-v1:0") while the
+     * pricing database stores the base name (e.g., "anthropic.claude-opus-4-6-v1").
+     *
+     * Version pattern recognized: ":N" (one or more digits) at the end of the model name.
+     *
+     * @param modelName The model name
+     * @return Lowercase model name with version suffix removed if present, otherwise lowercase original name
+     */
+    private static String stripVersionSuffix(String modelName) {
+        return modelName.toLowerCase(Locale.ROOT).replaceFirst(VERSION_SUFFIX_PATTERN, "");
     }
 
     public static BigDecimal getCostFromMetadata(JsonNode metadata) {
