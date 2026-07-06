@@ -21,9 +21,9 @@ import {
 } from "@/v2/pages/OptimizationPage/TrialMetricCells";
 import { TrialPromptCell } from "@/v2/pages/OptimizationPage/TrialPromptCell";
 import { getObjectiveLabel } from "@/lib/optimizations";
+import { type TrialStatus } from "@/v2/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
 
 type UseOptimizationColumnsParams = {
-  candidates: AggregatedCandidate[];
   experiments: Experiment[];
   baselineExperiment?: Experiment;
   columnsOrder: string[];
@@ -32,17 +32,12 @@ type UseOptimizationColumnsParams = {
   bestCandidateId?: string;
   baselineCandidate?: AggregatedCandidate;
   isTestSuite?: boolean;
-  isInProgress?: boolean;
-  inProgressInfo?: {
-    candidateId: string;
-    stepIndex: number;
-    parentCandidateIds: string[];
-  };
+  /** Whole-run status map (computed once on the page) keyed by candidate id. */
+  statusMap: Map<string, TrialStatus>;
   objectiveName?: string;
 };
 
 export const useOptimizationColumns = ({
-  candidates,
   experiments,
   baselineExperiment,
   columnsOrder,
@@ -51,8 +46,7 @@ export const useOptimizationColumns = ({
   bestCandidateId,
   baselineCandidate,
   isTestSuite,
-  isInProgress,
-  inProgressInfo,
+  statusMap,
   objectiveName,
 }: UseOptimizationColumnsParams) => {
   const experimentMap = useMemo(
@@ -146,11 +140,8 @@ export const useOptimizationColumns = ({
         accessorFn: () => undefined,
         cell: TrialStatusCell,
         customMeta: {
-          candidates,
+          statusMap,
           bestCandidateId,
-          isTestSuite,
-          isInProgress,
-          inProgressInfo,
         },
       },
       {
@@ -166,14 +157,12 @@ export const useOptimizationColumns = ({
       },
     ];
   }, [
-    candidates,
     experimentMap,
     baselineExperiment,
     bestCandidateId,
     baselineCandidate,
     isTestSuite,
-    isInProgress,
-    inProgressInfo,
+    statusMap,
     objectiveName,
   ]);
 

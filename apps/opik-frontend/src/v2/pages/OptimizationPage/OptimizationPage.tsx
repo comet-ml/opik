@@ -144,7 +144,6 @@ const OptimizationPage: React.FC = () => {
   );
 
   const { columnsDef, columns } = useOptimizationColumns({
-    candidates,
     experiments,
     baselineExperiment,
     columnsOrder,
@@ -153,8 +152,7 @@ const OptimizationPage: React.FC = () => {
     bestCandidateId: bestCandidate?.candidateId,
     baselineCandidate,
     isTestSuite,
-    isInProgress,
-    inProgressInfo,
+    statusMap,
     objectiveName: optimization?.objective_name,
   });
 

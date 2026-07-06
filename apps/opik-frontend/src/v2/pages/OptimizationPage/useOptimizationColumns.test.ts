@@ -6,11 +6,11 @@ import { useOptimizationColumns } from "./useOptimizationColumns";
 const renderColumns = () =>
   renderHook(() =>
     useOptimizationColumns({
-      candidates: [],
       experiments: [],
       columnsOrder: [],
       selectedColumns: [],
       sortableBy: [],
+      statusMap: new Map(),
     }),
   );
 
@@ -23,13 +23,13 @@ describe("useOptimizationColumns", () => {
     expect(ids).toContain("trace_count");
   });
 
-  it("passes the status inputs through column meta", () => {
+  it("passes the shared status map through column meta", () => {
     const { result } = renderColumns();
     const statusColumn = result.current.columnsDef.find(
       (c) => c.id === "trial_status",
     );
     expect(statusColumn?.customMeta).toMatchObject({
-      candidates: expect.any(Array),
+      statusMap: expect.any(Map),
     });
   });
 

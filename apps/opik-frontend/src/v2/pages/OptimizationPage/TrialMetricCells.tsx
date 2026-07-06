@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React from "react";
 import { CellContext } from "@tanstack/react-table";
 import isNumber from "lodash/isNumber";
 
@@ -17,21 +17,22 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 
 type TrialCellContext = CellContext<AggregatedCandidate, unknown>;
 
-const useBaselinePercentage = (
+// Plain helper (not memoized): call sites pass fresh inline accessors each
+// render, so a useMemo here would never hit its cache — and the calc is a
+// single arithmetic op, so caching buys nothing.
+const getBaselinePercentage = (
   baseline: AggregatedCandidate | undefined,
   candidateId: string,
   value: number | undefined,
   baselineAccessor: (c: AggregatedCandidate) => number | undefined,
   formatter?: (v: number) => string,
 ): number | undefined => {
-  return useMemo(() => {
-    if (candidateId === baseline?.candidateId) return undefined;
-    return calcFormatterAwarePercentage(
-      value,
-      baseline ? baselineAccessor(baseline) : undefined,
-      formatter,
-    );
-  }, [baseline, candidateId, value, baselineAccessor, formatter]);
+  if (candidateId === baseline?.candidateId) return undefined;
+  return calcFormatterAwarePercentage(
+    value,
+    baseline ? baselineAccessor(baseline) : undefined,
+    formatter,
+  );
 };
 
 type TrialMetricCellProps = {
@@ -99,7 +100,7 @@ export const TrialAccuracyCell = (context: TrialCellContext) => {
     isTestSuite?: boolean;
   };
 
-  const percentage = useBaselinePercentage(
+  const percentage = getBaselinePercentage(
     baselineCandidate,
     row.candidateId,
     row.score,
@@ -135,7 +136,7 @@ export const TrialCandidateCostCell = (context: TrialCellContext) => {
     baselineCandidate?: AggregatedCandidate;
   };
 
-  const percentage = useBaselinePercentage(
+  const percentage = getBaselinePercentage(
     baselineCandidate,
     row.candidateId,
     row.runtimeCost,
@@ -166,7 +167,7 @@ export const TrialCandidateLatencyCell = (context: TrialCellContext) => {
     baselineCandidate?: AggregatedCandidate;
   };
 
-  const percentage = useBaselinePercentage(
+  const percentage = getBaselinePercentage(
     baselineCandidate,
     row.candidateId,
     row.latencyP50,
