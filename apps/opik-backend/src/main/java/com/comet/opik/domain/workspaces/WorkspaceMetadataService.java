@@ -44,8 +44,10 @@ class WorkspaceMetadataServiceImpl implements WorkspaceMetadataService {
                 .flatMap(resolvedProjectId -> getProjectMetadata(workspaceId, resolvedProjectId));
     }
 
+    // Package-private, not private: Guice method interception (which implements @Cacheable) cannot
+    // intercept private methods, so a private modifier silently disables the cache.
     @Cacheable(name = "project_metadata", key = "'-'+ $workspaceId + '-' + $projectId", returnType = ScopeMetadata.class)
-    private Mono<ScopeMetadata> getProjectMetadata(String workspaceId, UUID projectId) {
+    Mono<ScopeMetadata> getProjectMetadata(String workspaceId, UUID projectId) {
         return workspaceMetadataDAO.getProjectMetadata(workspaceId, projectId);
     }
 
