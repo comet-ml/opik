@@ -598,21 +598,36 @@ class ProjectServiceImpl implements ProjectService {
     @Override
     public Mono<Long> flushLastUpdatedTraces() {
         var pending = lastUpdatedTracePendingSet();
+        var flushing = lastUpdatedTraceFlushingSet();
+
+        // Atomically move the live buffer aside so concurrent recordLastUpdatedTrace calls (addIfGreater) immediately
+        // populate a fresh live key while we drain the snapshot. This removes the read-then-remove race: the drain
+        // below owns the snapshot exclusively. renamenx is a no-op when a snapshot from a previous interrupted flush
+        // still exists — that leftover is drained instead (idempotent, since the DB write only moves forward).
+        return pending.isExists()
+                .flatMap(exists -> Boolean.TRUE.equals(exists)
+                        ? pending.renamenx(ProjectLastUpdatedFlushConfig.FLUSHING_SET_KEY)
+                        : Mono.just(false))
+                .then(drainFlushingSnapshot(flushing));
+    }
+
+    private Mono<Long> drainFlushingSnapshot(RScoredSortedSetReactive<String> flushing) {
         int batchSize = lastUpdatedFlushConfig.getJobBatchSize();
-        // Cap iterations so a member that repeatedly fails to be removed can't spin the drain forever.
+        // Only the flusher touches the snapshot key, so paging by re-reading the lowest entries and removing each
+        // processed batch is safe (no concurrent writer). Cap iterations as a safety net against a stuck removal.
         int maxIterations = Math.max(1, batchSize);
 
-        return pending.entryRange(0, batchSize - 1)
+        return flushing.entryRange(0, batchSize - 1)
                 .expand(entries -> entries.size() < batchSize
                         ? Mono.empty()
-                        : pending.entryRange(0, batchSize - 1))
+                        : flushing.entryRange(0, batchSize - 1))
                 .take(maxIterations)
                 .filter(entries -> !entries.isEmpty())
-                .concatMap(entries -> flushLastUpdatedTraceBatch(pending, entries))
+                .concatMap(entries -> flushLastUpdatedTraceBatch(flushing, entries))
                 .reduce(0L, Long::sum);
     }
 
-    private Mono<Long> flushLastUpdatedTraceBatch(RScoredSortedSetReactive<String> pending,
+    private Mono<Long> flushLastUpdatedTraceBatch(RScoredSortedSetReactive<String> flushing,
             Collection<ScoredEntry<String>> entries) {
         // Group by workspace so each MySQL batch write targets a single workspace_id (matches the DAO binding).
         var byWorkspace = entries.stream()
@@ -631,10 +646,9 @@ class ProjectServiceImpl implements ProjectService {
 
         return Mono.fromRunnable(() -> byWorkspace.forEach(this::writeLastUpdatedTraceToDb))
                 .subscribeOn(Schedulers.boundedElastic())
-                // Remove processed members only after the MySQL write succeeds. A member re-bumped between read and
-                // removal may lose a single increment; it self-heals on the project's next trace and never regresses
-                // the marker (the MySQL write only moves last_updated_trace_at forward).
-                .then(pending.removeAll(members))
+                // Safe on the snapshot: it is exclusively owned by this drain, so no concurrent addIfGreater can
+                // re-bump a member between the read above and this removal.
+                .then(flushing.removeAll(members))
                 .thenReturn((long) byWorkspace.values().stream().mapToInt(Collection::size).sum());
     }
 
@@ -648,6 +662,10 @@ class ProjectServiceImpl implements ProjectService {
 
     private RScoredSortedSetReactive<String> lastUpdatedTracePendingSet() {
         return redisClient.getScoredSortedSet(ProjectLastUpdatedFlushConfig.PENDING_SET_KEY, StringCodec.INSTANCE);
+    }
+
+    private RScoredSortedSetReactive<String> lastUpdatedTraceFlushingSet() {
+        return redisClient.getScoredSortedSet(ProjectLastUpdatedFlushConfig.FLUSHING_SET_KEY, StringCodec.INSTANCE);
     }
 
     private static String lastUpdatedTraceMember(String workspaceId, UUID projectId) {

@@ -64,6 +64,8 @@ class ProjectServiceLastUpdatedTraceTest {
     private RedissonReactiveClient redisClient;
     @Mock
     private RScoredSortedSetReactive<String> pendingSet;
+    @Mock
+    private RScoredSortedSetReactive<String> flushingSet;
 
     private ProjectLastUpdatedFlushConfig config;
     private ProjectServiceImpl service;
@@ -82,6 +84,18 @@ class ProjectServiceLastUpdatedTraceTest {
     private void stubPendingSet() {
         doReturn(pendingSet).when(redisClient)
                 .getScoredSortedSet(eq(ProjectLastUpdatedFlushConfig.PENDING_SET_KEY), any(Codec.class));
+    }
+
+    // Route the live (PENDING) and snapshot (FLUSHING) keys to distinct mocks. flush() moves the live buffer into
+    // the snapshot via renamenx, then drains the snapshot — so the drain reads/removes against flushingSet.
+    private void stubFlushSets(boolean liveHasData) {
+        stubPendingSet();
+        doReturn(flushingSet).when(redisClient)
+                .getScoredSortedSet(eq(ProjectLastUpdatedFlushConfig.FLUSHING_SET_KEY), any(Codec.class));
+        when(pendingSet.isExists()).thenReturn(Mono.just(liveHasData));
+        if (liveHasData) {
+            when(pendingSet.renamenx(ProjectLastUpdatedFlushConfig.FLUSHING_SET_KEY)).thenReturn(Mono.just(true));
+        }
     }
 
     @Nested
@@ -134,7 +148,7 @@ class ProjectServiceLastUpdatedTraceTest {
         @Test
         @DisplayName("Groups a workspace's projects into a single MySQL write and removes flushed members")
         void flush__singleWorkspace__writesOnceAndRemoves() {
-            stubPendingSet();
+            stubFlushSets(true);
 
             var workspaceId = UUID.randomUUID().toString();
             var projectId1 = UUID.randomUUID();
@@ -142,32 +156,33 @@ class ProjectServiceLastUpdatedTraceTest {
             var member1 = workspaceId + ":" + projectId1;
             var member2 = workspaceId + ":" + projectId2;
 
-            when(pendingSet.entryRange(anyInt(), anyInt())).thenReturn(Mono.just(List.of(
+            when(flushingSet.entryRange(anyInt(), anyInt())).thenReturn(Mono.just(List.of(
                     new ScoredEntry<>(1_000d, member1),
                     new ScoredEntry<>(2_000d, member2))));
-            when(pendingSet.removeAll(any())).thenReturn(Mono.just(true));
+            when(flushingSet.removeAll(any())).thenReturn(Mono.just(true));
 
             Long written = service.flushLastUpdatedTraces().block();
 
             assertThat(written).isEqualTo(2L);
+            verify(pendingSet).renamenx(ProjectLastUpdatedFlushConfig.FLUSHING_SET_KEY);
             verify(template, times(1)).inTransaction(eq(WRITE), any());
-            verify(pendingSet).removeAll(Set.of(member1, member2));
+            verify(flushingSet).removeAll(Set.of(member1, member2));
         }
 
         @Test
         @DisplayName("Writes one MySQL batch per distinct workspace")
         void flush__multipleWorkspaces__writesPerWorkspace() {
-            stubPendingSet();
+            stubFlushSets(true);
 
             var workspace1 = UUID.randomUUID().toString();
             var workspace2 = UUID.randomUUID().toString();
             var member1 = workspace1 + ":" + UUID.randomUUID();
             var member2 = workspace2 + ":" + UUID.randomUUID();
 
-            when(pendingSet.entryRange(anyInt(), anyInt())).thenReturn(Mono.just(List.of(
+            when(flushingSet.entryRange(anyInt(), anyInt())).thenReturn(Mono.just(List.of(
                     new ScoredEntry<>(1_000d, member1),
                     new ScoredEntry<>(2_000d, member2))));
-            when(pendingSet.removeAll(any())).thenReturn(Mono.just(true));
+            when(flushingSet.removeAll(any())).thenReturn(Mono.just(true));
 
             Long written = service.flushLastUpdatedTraces().block();
 
@@ -178,35 +193,36 @@ class ProjectServiceLastUpdatedTraceTest {
         @Test
         @DisplayName("When buffer is empty, performs no MySQL write and returns 0")
         void flush__emptyBuffer__writesNothing() {
-            stubPendingSet();
-            when(pendingSet.entryRange(anyInt(), anyInt())).thenReturn(Mono.just(List.of()));
+            stubFlushSets(false); // live buffer absent → no rename; snapshot empty
+            when(flushingSet.entryRange(anyInt(), anyInt())).thenReturn(Mono.just(List.of()));
 
             Long written = service.flushLastUpdatedTraces().block();
 
             assertThat(written).isZero();
+            verify(pendingSet, never()).renamenx(any());
             verify(template, never()).inTransaction(any(), any());
-            verify(pendingSet, never()).removeAll(any());
+            verify(flushingSet, never()).removeAll(any());
         }
 
         @Test
         @DisplayName("Skips a malformed member but still removes it from the buffer")
         void flush__malformedMember__skippedButRemoved() {
-            stubPendingSet();
+            stubFlushSets(true);
 
             var workspaceId = UUID.randomUUID().toString();
             var validMember = workspaceId + ":" + UUID.randomUUID();
             var malformedMember = workspaceId + ":not-a-uuid";
 
-            when(pendingSet.entryRange(anyInt(), anyInt())).thenReturn(Mono.just(List.of(
+            when(flushingSet.entryRange(anyInt(), anyInt())).thenReturn(Mono.just(List.of(
                     new ScoredEntry<>(1_000d, validMember),
                     new ScoredEntry<>(2_000d, malformedMember))));
-            when(pendingSet.removeAll(any())).thenReturn(Mono.just(true));
+            when(flushingSet.removeAll(any())).thenReturn(Mono.just(true));
 
             Long written = service.flushLastUpdatedTraces().block();
 
             assertThat(written).isEqualTo(1L);
             verify(template, times(1)).inTransaction(eq(WRITE), any());
-            verify(pendingSet).removeAll(Set.of(validMember, malformedMember));
+            verify(flushingSet).removeAll(Set.of(validMember, malformedMember));
         }
     }
 

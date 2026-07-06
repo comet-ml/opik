@@ -28,6 +28,9 @@ import java.util.concurrent.TimeUnit;
 public class ProjectLastUpdatedFlushConfig {
 
     public static final String PENDING_SET_KEY = "project:last-updated-trace:pending";
+    // Snapshot the live buffer is atomically renamed to while a flush drains it (renamenx), so writers keep
+    // populating PENDING_SET_KEY and the drain owns its data exclusively.
+    public static final String FLUSHING_SET_KEY = "project:last-updated-trace:flushing";
     public static final String MEMBER_SEPARATOR = ":";
 
     // When disabled, ProjectEventListener writes MySQL synchronously (legacy behavior).
