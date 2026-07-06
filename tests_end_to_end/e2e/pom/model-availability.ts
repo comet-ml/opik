@@ -34,19 +34,21 @@ export async function ensureModelAvailable(page: Page): Promise<string> {
   if (openai && (await cfg.ensureProviderConfigured('OpenAI', openai))) {
     return 'GPT 4o Mini';
   }
-  if (openrouter) {
-    await cfg.ensureCustomProviderConfigured({
+  if (
+    openrouter &&
+    (await cfg.ensureCustomProviderConfigured({
       providerName: 'openrouter',
       baseUrl: 'https://openrouter.ai/api/v1',
       apiKey: openrouter,
       models: 'openai/gpt-4o-mini',
-    });
+    }))
+  ) {
     return 'openai/gpt-4o-mini';
   }
 
   test.skip(
     true,
-    'No configured provider is offered by this deployment (built-ins absent and OPENROUTER_API_KEY not set)',
+    'No configured provider is offered by this deployment (none of Anthropic, OpenAI, or the OpenRouter Custom Provider is available for the keys present)',
   );
   return '';
 }
