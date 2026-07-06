@@ -248,9 +248,12 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
         return deleteScoreAndNotify(EntityType.TRACE, id, score);
     }
 
-    // Deletes the score and emits FeedbackScoresDeleted carrying the entity's project (for per-project pruning).
-    // The project is resolved lazily at subscription time and best-effort: if it is empty or the lookup fails,
-    // the delete still runs with a null projectId (the listener falls back to the trace_id/id skip index).
+    /**
+     * Deletes the score and emits {@link FeedbackScoresDeleted} carrying the entity's project (for per-project
+     * pruning downstream). The project is resolved lazily at subscription time and best-effort: if it is empty or
+     * the lookup fails, the delete still runs with a {@code null} projectId (the listener then falls back to the
+     * {@code trace_id}/{@code id} skip index).
+     */
     private Mono<Void> deleteScoreAndNotify(EntityType entityType, UUID entityId, DeleteFeedbackScore score) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);

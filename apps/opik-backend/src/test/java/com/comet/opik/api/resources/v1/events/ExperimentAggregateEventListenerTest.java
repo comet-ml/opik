@@ -140,7 +140,8 @@ class ExperimentAggregateEventListenerTest {
         void publishWhenFinishedExperimentsFound() {
             when(config.isEnabled()).thenReturn(true);
             var experimentId = UUID.randomUUID();
-            when(experimentItemService.filterExperimentIdsByStatus(eq(Set.of(experimentId)), any()))
+            when(experimentItemService.filterExperimentIdsByStatus(eq(Set.of(experimentId)),
+                    eq(ExperimentAggregateEventListener.FINISHED_STATUSES)))
                     .thenReturn(Flux.just(experimentId));
 
             listener.onExperimentItemsCreated(
@@ -154,7 +155,8 @@ class ExperimentAggregateEventListenerTest {
         void doesNotPublishWhenNoFinishedExperimentsFound() {
             when(config.isEnabled()).thenReturn(true);
             var experimentId = UUID.randomUUID();
-            when(experimentItemService.filterExperimentIdsByStatus(eq(Set.of(experimentId)), any()))
+            when(experimentItemService.filterExperimentIdsByStatus(eq(Set.of(experimentId)),
+                    eq(ExperimentAggregateEventListener.FINISHED_STATUSES)))
                     .thenReturn(Flux.empty());
 
             listener.onExperimentItemsCreated(
@@ -184,7 +186,8 @@ class ExperimentAggregateEventListenerTest {
             when(config.isEnabled()).thenReturn(true);
             var experimentId = UUID.randomUUID();
             var itemId = UUID.randomUUID();
-            when(experimentItemService.filterExperimentIdsByStatus(eq(Set.of(experimentId)), any()))
+            when(experimentItemService.filterExperimentIdsByStatus(eq(Set.of(experimentId)),
+                    eq(ExperimentAggregateEventListener.FINISHED_STATUSES)))
                     .thenReturn(Flux.just(experimentId));
             when(experimentAggregatesService.deleteItemAggregatesByItemIds(eq(experimentId), eq(Set.of(itemId))))
                     .thenReturn(Mono.just(0L));
@@ -209,7 +212,8 @@ class ExperimentAggregateEventListenerTest {
             var projectId = UUID.randomUUID();
             var experimentId = UUID.randomUUID();
             var trace = podamFactory.manufacturePojo(Trace.class).toBuilder().id(traceId).projectId(projectId).build();
-            when(experimentItemService.getExperimentRefsByTraceIds(eq(Set.of(traceId)), any(), eq(projectId)))
+            when(experimentItemService.getExperimentRefsByTraceIds(eq(Set.of(traceId)),
+                    eq(ExperimentAggregateEventListener.FINISHED_STATUSES), eq(projectId)))
                     .thenReturn(Flux.just(new ExperimentTraceRef(experimentId, traceId)));
 
             listener.onTracesCreated(new TracesCreated(List.of(trace), WORKSPACE_ID, USER_NAME));
@@ -224,7 +228,8 @@ class ExperimentAggregateEventListenerTest {
             var traceId = UUID.randomUUID();
             var projectId = UUID.randomUUID();
             var trace = podamFactory.manufacturePojo(Trace.class).toBuilder().id(traceId).projectId(projectId).build();
-            when(experimentItemService.getExperimentRefsByTraceIds(eq(Set.of(traceId)), any(), eq(projectId)))
+            when(experimentItemService.getExperimentRefsByTraceIds(eq(Set.of(traceId)),
+                    eq(ExperimentAggregateEventListener.FINISHED_STATUSES), eq(projectId)))
                     .thenReturn(Flux.empty());
 
             listener.onTracesCreated(new TracesCreated(List.of(trace), WORKSPACE_ID, USER_NAME));
@@ -262,7 +267,8 @@ class ExperimentAggregateEventListenerTest {
             var traceId = UUID.randomUUID();
             var projectId = UUID.randomUUID();
             var experimentId = UUID.randomUUID();
-            when(experimentItemService.getExperimentRefsByTraceIds(eq(Set.of(traceId)), any(), eq(projectId)))
+            when(experimentItemService.getExperimentRefsByTraceIds(eq(Set.of(traceId)),
+                    eq(ExperimentAggregateEventListener.FINISHED_STATUSES), eq(projectId)))
                     .thenReturn(Flux.just(new ExperimentTraceRef(experimentId, traceId)));
 
             listener.onTracesUpdated(
@@ -293,7 +299,8 @@ class ExperimentAggregateEventListenerTest {
             var traceId = UUID.randomUUID();
             var projectId = UUID.randomUUID();
             var experimentId = UUID.randomUUID();
-            when(experimentItemService.getExperimentRefsByTraceIds(eq(Set.of(traceId)), any(), eq(projectId)))
+            when(experimentItemService.getExperimentRefsByTraceIds(eq(Set.of(traceId)),
+                    eq(ExperimentAggregateEventListener.FINISHED_STATUSES), eq(projectId)))
                     .thenReturn(Flux.just(new ExperimentTraceRef(experimentId, traceId)));
 
             listener.onTracesDeleted(new TracesDeleted(Set.of(traceId), projectId, WORKSPACE_ID, USER_NAME));
@@ -322,7 +329,8 @@ class ExperimentAggregateEventListenerTest {
             var experimentId = UUID.randomUUID();
             var span = podamFactory.manufacturePojo(Span.class).toBuilder().traceId(traceId).projectId(projectId)
                     .build();
-            when(experimentItemService.getExperimentRefsByTraceIds(eq(Set.of(traceId)), any(), eq(projectId)))
+            when(experimentItemService.getExperimentRefsByTraceIds(eq(Set.of(traceId)),
+                    eq(ExperimentAggregateEventListener.FINISHED_STATUSES), eq(projectId)))
                     .thenReturn(Flux.just(new ExperimentTraceRef(experimentId, traceId)));
 
             listener.onSpansCreated(new SpansCreated(List.of(span), WORKSPACE_ID, USER_NAME));
@@ -349,7 +357,8 @@ class ExperimentAggregateEventListenerTest {
             var traceId = UUID.randomUUID();
             var experimentId = UUID.randomUUID();
             // SpansUpdated carries no project, so the listener threads a null projectId (skip-index backstop).
-            when(experimentItemService.getExperimentRefsByTraceIds(eq(Set.of(traceId)), any(), isNull()))
+            when(experimentItemService.getExperimentRefsByTraceIds(eq(Set.of(traceId)),
+                    eq(ExperimentAggregateEventListener.FINISHED_STATUSES), isNull()))
                     .thenReturn(Flux.just(new ExperimentTraceRef(experimentId, traceId)));
 
             listener.onSpansUpdated(new SpansUpdated(Set.of(traceId), WORKSPACE_ID, USER_NAME));
@@ -376,7 +385,8 @@ class ExperimentAggregateEventListenerTest {
             var traceId = UUID.randomUUID();
             var projectId = UUID.randomUUID();
             var experimentId = UUID.randomUUID();
-            when(experimentItemService.getExperimentRefsByTraceIds(eq(Set.of(traceId)), any(), eq(projectId)))
+            when(experimentItemService.getExperimentRefsByTraceIds(eq(Set.of(traceId)),
+                    eq(ExperimentAggregateEventListener.FINISHED_STATUSES), eq(projectId)))
                     .thenReturn(Flux.just(new ExperimentTraceRef(experimentId, traceId)));
 
             listener.onSpansDeleted(
@@ -431,10 +441,12 @@ class ExperimentAggregateEventListenerTest {
 
             if (expectPublish) {
                 if (entityType == EntityType.TRACE) {
-                    when(experimentItemService.getExperimentRefsByTraceIds(eq(Set.of(entityId)), any(), eq(projectId)))
+                    when(experimentItemService.getExperimentRefsByTraceIds(eq(Set.of(entityId)),
+                            eq(ExperimentAggregateEventListener.FINISHED_STATUSES), eq(projectId)))
                             .thenReturn(Flux.just(new ExperimentTraceRef(experimentId, entityId)));
                 } else {
-                    when(experimentItemService.getExperimentRefsBySpanIds(eq(Set.of(entityId)), any(), eq(projectId)))
+                    when(experimentItemService.getExperimentRefsBySpanIds(eq(Set.of(entityId)),
+                            eq(ExperimentAggregateEventListener.FINISHED_STATUSES), eq(projectId)))
                             .thenReturn(Flux.just(new ExperimentTraceRef(experimentId, UUID.randomUUID())));
                 }
             }
@@ -469,10 +481,12 @@ class ExperimentAggregateEventListenerTest {
 
             if (expectPublish) {
                 if (entityType == EntityType.TRACE) {
-                    when(experimentItemService.getExperimentRefsByTraceIds(eq(Set.of(entityId)), any(), eq(projectId)))
+                    when(experimentItemService.getExperimentRefsByTraceIds(eq(Set.of(entityId)),
+                            eq(ExperimentAggregateEventListener.FINISHED_STATUSES), eq(projectId)))
                             .thenReturn(Flux.just(new ExperimentTraceRef(experimentId, entityId)));
                 } else {
-                    when(experimentItemService.getExperimentRefsBySpanIds(eq(Set.of(entityId)), any(), eq(projectId)))
+                    when(experimentItemService.getExperimentRefsBySpanIds(eq(Set.of(entityId)),
+                            eq(ExperimentAggregateEventListener.FINISHED_STATUSES), eq(projectId)))
                             .thenReturn(Flux.just(new ExperimentTraceRef(experimentId, UUID.randomUUID())));
                 }
             }
@@ -507,10 +521,12 @@ class ExperimentAggregateEventListenerTest {
 
             if (expectPublish) {
                 if (entityType == EntityType.TRACE) {
-                    when(experimentItemService.getExperimentRefsByTraceIds(eq(Set.of(entityId)), any(), eq(projectId)))
+                    when(experimentItemService.getExperimentRefsByTraceIds(eq(Set.of(entityId)),
+                            eq(ExperimentAggregateEventListener.FINISHED_STATUSES), eq(projectId)))
                             .thenReturn(Flux.just(new ExperimentTraceRef(experimentId, entityId)));
                 } else {
-                    when(experimentItemService.getExperimentRefsBySpanIds(eq(Set.of(entityId)), any(), eq(projectId)))
+                    when(experimentItemService.getExperimentRefsBySpanIds(eq(Set.of(entityId)),
+                            eq(ExperimentAggregateEventListener.FINISHED_STATUSES), eq(projectId)))
                             .thenReturn(Flux.just(new ExperimentTraceRef(experimentId, UUID.randomUUID())));
                 }
             }
@@ -545,10 +561,12 @@ class ExperimentAggregateEventListenerTest {
 
             if (expectPublish) {
                 if (entityType == EntityType.TRACE) {
-                    when(experimentItemService.getExperimentRefsByTraceIds(eq(Set.of(entityId)), any(), eq(projectId)))
+                    when(experimentItemService.getExperimentRefsByTraceIds(eq(Set.of(entityId)),
+                            eq(ExperimentAggregateEventListener.FINISHED_STATUSES), eq(projectId)))
                             .thenReturn(Flux.just(new ExperimentTraceRef(experimentId, entityId)));
                 } else {
-                    when(experimentItemService.getExperimentRefsBySpanIds(eq(Set.of(entityId)), any(), eq(projectId)))
+                    when(experimentItemService.getExperimentRefsBySpanIds(eq(Set.of(entityId)),
+                            eq(ExperimentAggregateEventListener.FINISHED_STATUSES), eq(projectId)))
                             .thenReturn(Flux.just(new ExperimentTraceRef(experimentId, UUID.randomUUID())));
                 }
             }
@@ -583,10 +601,12 @@ class ExperimentAggregateEventListenerTest {
 
             if (expectPublish) {
                 if (entityType == EntityType.TRACE) {
-                    when(experimentItemService.getExperimentRefsByTraceIds(eq(Set.of(entityId)), any(), eq(projectId)))
+                    when(experimentItemService.getExperimentRefsByTraceIds(eq(Set.of(entityId)),
+                            eq(ExperimentAggregateEventListener.FINISHED_STATUSES), eq(projectId)))
                             .thenReturn(Flux.just(new ExperimentTraceRef(experimentId, entityId)));
                 } else {
-                    when(experimentItemService.getExperimentRefsBySpanIds(eq(Set.of(entityId)), any(), eq(projectId)))
+                    when(experimentItemService.getExperimentRefsBySpanIds(eq(Set.of(entityId)),
+                            eq(ExperimentAggregateEventListener.FINISHED_STATUSES), eq(projectId)))
                             .thenReturn(Flux.just(new ExperimentTraceRef(experimentId, UUID.randomUUID())));
                 }
             }
@@ -624,9 +644,11 @@ class ExperimentAggregateEventListenerTest {
 
             await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS).untilAsserted(() -> {
                 verify(experimentItemService)
-                        .getExperimentRefsByTraceIds(eq(Set.of(t1.id(), t2.id())), any(), eq(projectA));
+                        .getExperimentRefsByTraceIds(eq(Set.of(t1.id(), t2.id())),
+                                eq(ExperimentAggregateEventListener.FINISHED_STATUSES), eq(projectA));
                 verify(experimentItemService)
-                        .getExperimentRefsByTraceIds(eq(Set.of(t3.id())), any(), eq(projectB));
+                        .getExperimentRefsByTraceIds(eq(Set.of(t3.id())),
+                                eq(ExperimentAggregateEventListener.FINISHED_STATUSES), eq(projectB));
                 verify(experimentItemService, times(2)).getExperimentRefsByTraceIds(any(), any(), any());
             });
         }
@@ -645,8 +667,10 @@ class ExperimentAggregateEventListenerTest {
                     List.of(spanIn(projectA, traceA), spanIn(projectB, traceB)), WORKSPACE_ID, USER_NAME));
 
             await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS).untilAsserted(() -> {
-                verify(experimentItemService).getExperimentRefsByTraceIds(eq(Set.of(traceA)), any(), eq(projectA));
-                verify(experimentItemService).getExperimentRefsByTraceIds(eq(Set.of(traceB)), any(), eq(projectB));
+                verify(experimentItemService).getExperimentRefsByTraceIds(eq(Set.of(traceA)),
+                        eq(ExperimentAggregateEventListener.FINISHED_STATUSES), eq(projectA));
+                verify(experimentItemService).getExperimentRefsByTraceIds(eq(Set.of(traceB)),
+                        eq(ExperimentAggregateEventListener.FINISHED_STATUSES), eq(projectB));
             });
         }
 
@@ -665,8 +689,10 @@ class ExperimentAggregateEventListenerTest {
                     Map.of(traceA, projectA, traceB, projectB)));
 
             await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS).untilAsserted(() -> {
-                verify(experimentItemService).getExperimentRefsByTraceIds(eq(Set.of(traceA)), any(), eq(projectA));
-                verify(experimentItemService).getExperimentRefsByTraceIds(eq(Set.of(traceB)), any(), eq(projectB));
+                verify(experimentItemService).getExperimentRefsByTraceIds(eq(Set.of(traceA)),
+                        eq(ExperimentAggregateEventListener.FINISHED_STATUSES), eq(projectA));
+                verify(experimentItemService).getExperimentRefsByTraceIds(eq(Set.of(traceB)),
+                        eq(ExperimentAggregateEventListener.FINISHED_STATUSES), eq(projectB));
             });
         }
 
@@ -687,7 +713,8 @@ class ExperimentAggregateEventListenerTest {
                 // Mapped id is pruned by its project; the uncovered id still runs via the workspace-scoped fallback.
                 verify(experimentItemService).getExperimentRefsByTraceIds(eq(Set.of(mappedTraceId)), any(),
                         eq(projectA));
-                verify(experimentItemService).getExperimentRefsByTraceIds(eq(Set.of(unmappedTraceId)), any(), isNull());
+                verify(experimentItemService).getExperimentRefsByTraceIds(eq(Set.of(unmappedTraceId)),
+                        eq(ExperimentAggregateEventListener.FINISHED_STATUSES), isNull());
             });
         }
 
@@ -702,7 +729,8 @@ class ExperimentAggregateEventListenerTest {
             listener.onTracesDeleted(new TracesDeleted(Set.of(traceId), projectId, WORKSPACE_ID, USER_NAME));
 
             await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS).untilAsserted(() -> verify(experimentItemService)
-                    .getExperimentRefsByTraceIds(eq(Set.of(traceId)), any(), eq(projectId)));
+                    .getExperimentRefsByTraceIds(eq(Set.of(traceId)),
+                            eq(ExperimentAggregateEventListener.FINISHED_STATUSES), eq(projectId)));
         }
 
         @Test
@@ -717,7 +745,8 @@ class ExperimentAggregateEventListenerTest {
                     new SpansDeleted(Set.of(UUID.randomUUID()), Set.of(traceId), WORKSPACE_ID, USER_NAME, projectId));
 
             await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS).untilAsserted(() -> verify(experimentItemService)
-                    .getExperimentRefsByTraceIds(eq(Set.of(traceId)), any(), eq(projectId)));
+                    .getExperimentRefsByTraceIds(eq(Set.of(traceId)),
+                            eq(ExperimentAggregateEventListener.FINISHED_STATUSES), eq(projectId)));
         }
 
         @Test
@@ -732,7 +761,8 @@ class ExperimentAggregateEventListenerTest {
                     new FeedbackScoresCreated(Set.of(spanId), EntityType.SPAN, WORKSPACE_ID, USER_NAME, projectId));
 
             await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS).untilAsserted(() -> verify(experimentItemService)
-                    .getExperimentRefsBySpanIds(eq(Set.of(spanId)), any(), eq(projectId)));
+                    .getExperimentRefsBySpanIds(eq(Set.of(spanId)),
+                            eq(ExperimentAggregateEventListener.FINISHED_STATUSES), eq(projectId)));
         }
 
         private Trace traceIn(UUID projectId) {
