@@ -7,7 +7,6 @@ import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.api.resources.v1.events.tools.CompressionTier;
 import com.comet.opik.api.resources.v1.events.tools.EntityRef;
 import com.comet.opik.api.resources.v1.events.tools.EntityType;
-import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
 import com.comet.opik.api.resources.v1.events.tools.TraceCompressor;
 import com.comet.opik.api.resources.v1.events.tools.TraceToolContext;
 import com.comet.opik.domain.FeedbackScoreService;
@@ -68,7 +67,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     private final LlmProviderFactory llmProviderFactory;
     private final TestSuiteAssertionCounterService testSuiteAssertionCounterService;
     private final SpanService spanService;
-    private final ToolRegistry toolRegistry;
+    private final AgenticScoringService agenticScoringService;
     private final TraceCompressor traceCompressor;
     private final WorkspaceNameService workspaceNameService;
     private final OpikConfiguration opikConfiguration;
@@ -86,7 +85,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             @NonNull TestSuiteAssertionCounterService testSuiteAssertionCounterService,
             @NonNull LlmProviderFactory llmProviderFactory,
             @NonNull SpanService spanService,
-            @NonNull ToolRegistry toolRegistry,
+            @NonNull AgenticScoringService agenticScoringService,
             @NonNull TraceCompressor traceCompressor,
             @NonNull WorkspaceNameService workspaceNameService,
             @NonNull OpikConfiguration opikConfiguration,
@@ -99,7 +98,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         this.llmProviderFactory = llmProviderFactory;
         this.testSuiteAssertionCounterService = testSuiteAssertionCounterService;
         this.spanService = spanService;
-        this.toolRegistry = toolRegistry;
+        this.agenticScoringService = agenticScoringService;
         this.traceCompressor = traceCompressor;
         this.workspaceNameService = workspaceNameService;
         this.opikConfiguration = opikConfiguration;
@@ -240,7 +239,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                         .put(RequestContext.USER_NAME, message.userName()));
         // Trace's own attachments: race-tolerant (may not be uploaded yet), gated on the trace body
         // referencing an attachment.
-        Mono<List<AttachmentInfo>> traceAttachmentsMono = listAttachmentsToleratingUploadRace(
+        Mono<List<AttachmentInfo>> traceAttachmentsMono = agenticScoringService.listAttachmentsToleratingUploadRace(
                 traceColdFetch, message.workspaceId(), trace.id(),
                 trace.input(), trace.output(), trace.metadata());
 
@@ -277,7 +276,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
      * persisted and visible (so the injected {@code {{trace}}} payload isn't missing span-level
      * {@code file_name}s when scoring is enqueued immediately on trace create/update); transient
      * auto-stripped copies are dropped per span when a persistent copy exists. See
-     * {@link #listSpanAttachmentsToleratingUploadRace}.
+     * {@link AgenticScoringService#listSpanAttachmentsToleratingUploadRace}.
      */
     private Mono<Map<UUID, List<AttachmentInfo>>> gatherSpanAttachments(
             Trace trace, List<Span> spans, TraceToScoreLlmAsJudge message) {
@@ -290,7 +289,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         }
         // Per-span set of attachment filenames referenced in that span's body. Used both to drive the
         // upload-race retry (spans expecting an attachment = non-empty set) and to keep referenced
-        // auto-stripped copies when grouping (see OnlineScoringBaseScorer#preferPersistentAttachments).
+        // auto-stripped copies when grouping (see AgenticScoringService#preferPersistentAttachments).
         Map<UUID, Set<String>> referencedNamesBySpan = spans.stream()
                 .filter(span -> span.id() != null)
                 .collect(Collectors.toMap(Span::id,
@@ -306,7 +305,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, message.workspaceId())
                         .put(RequestContext.USER_NAME, message.userName()));
-        return listSpanAttachmentsToleratingUploadRace(
+        return agenticScoringService.listSpanAttachmentsToleratingUploadRace(
                 coldBatchedFetch, message.workspaceId(), trace.id(), spanIdsExpectingAttachment,
                 referencedNamesBySpan);
     }
@@ -333,7 +332,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                             .doOnNext(withMdc(mdc, chatResponse -> {
                                 if (userFacingLogger.isInfoEnabled()) {
                                     userFacingLogger.info("Received response for traceId '{}': '{}'",
-                                            trace.id(), OnlineScoringEngine.summarizeResponse(chatResponse));
+                                            trace.id(), agenticScoringService.summarizeResponse(chatResponse));
                                 }
                             }))
                             .flatMap(initialResponse -> prepared.useTools()
@@ -387,7 +386,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             JsonNode fullJson = prebuiltFullJson != null
                     ? prebuiltFullJson
                     : traceCompressor.buildFullJson(trace, spans);
-            int estimatedContextTokens = OnlineScoringEngine.estimateTokensFromJson(
+            int estimatedContextTokens = agenticScoringService.estimateTokensFromJson(
                     fullJson, onlineScoringConfig.getAgenticToolsCharsPerToken());
             boolean useTools = shouldUseAgenticTools(message, estimatedContextTokens, modelName,
                     referencesTrace);
@@ -455,14 +454,14 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 // AUTO so the model can decide when it has enough info to stop investigating;
                 // a uniform REQUIRED would loop forever because the wrap-up turn would also
                 // be forced to call a tool.
-                scoreRequest = OnlineScoringEngine.addToolSpecs(scoreRequest, ToolChoice.REQUIRED, toolRegistry);
+                scoreRequest = agenticScoringService.addToolSpecs(scoreRequest, ToolChoice.REQUIRED);
             }
 
             // summarizeRequest is cheap (no per-message toString streaming since the chars-count
             // field was removed). At INFO so operators watching their rule's UI logs see a
             // matching "Sending" line between "Evaluating" and "Received response".
             userFacingLogger.info("Sending traceId '{}' to LLM: {}",
-                    trace.id(), OnlineScoringEngine.summarizeRequest(scoreRequest,
+                    trace.id(), agenticScoringService.summarizeRequest(scoreRequest,
                             message.llmAsJudgeCode().model().name(), useTools));
 
             // fullJson is only useful downstream on the agentic-tools path (handleToolCalls
@@ -522,7 +521,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     // Package-private for unit tests.
     boolean shouldFetchSpans(TraceToScoreLlmAsJudge message) {
         String modelName = message.llmAsJudgeCode().model().name();
-        boolean agenticToolsPathPossible = OnlineScoringEngine.supportsToolCalling(
+        boolean agenticToolsPathPossible = agenticScoringService.supportsToolCalling(
                 llmProviderFactory.getLlmProvider(modelName))
                 && (LlmAsJudgeToolsMode.shouldUseTools(message)
                         || serviceTogglesConfig.isAgenticToolsEnabled());
@@ -558,7 +557,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     boolean shouldUseAgenticTools(TraceToScoreLlmAsJudge message, int estimatedContextTokens, String modelName,
             boolean referencesTrace) {
         boolean experimentIdPath = LlmAsJudgeToolsMode.shouldUseTools(message);
-        boolean providerSupportsTools = OnlineScoringEngine.supportsToolCalling(
+        boolean providerSupportsTools = agenticScoringService.supportsToolCalling(
                 llmProviderFactory.getLlmProvider(modelName));
         boolean overSizeThreshold = serviceTogglesConfig.isAgenticToolsEnabled()
                 && estimatedContextTokens >= onlineScoringConfig.getAgenticToolsThresholdTokens();
@@ -612,7 +611,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         // context seeding. The cache is pre-seeded with the JSON prepareEvaluation already built for the
         // size estimate (saves a rebuild on big traces); fall back to rebuilding when the caller didn't
         // supply one (e.g. unit tests that call handleToolCalls directly).
-        return runToolCallLoop(chatResponse, toolRequest, structuredRequest,
+        return agenticScoringService.runToolCallLoop(chatResponse, toolRequest, structuredRequest,
                 () -> {
                     var ctx = TraceToolContext.forActiveTrace(trace, spans, message.workspaceId(),
                             message.userName(), onlineScoringConfig.getAgenticToolsMaxInjectedBytes());
@@ -620,8 +619,9 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                             fullJson != null ? fullJson : traceCompressor.buildFullJson(trace, spans));
                     return ctx;
                 },
-                toolRegistry, request -> scoreTraceReactive(request, message, recorder),
-                message.llmAsJudgeCode().model().name(), trace.id().toString(), userFacingLogger, mdc, recorder);
+                request -> scoreTraceReactive(request, message, recorder),
+                () -> message.llmAsJudgeCode().model().name(), trace.id().toString(), userFacingLogger, mdc,
+                recorder);
     }
 
     /**

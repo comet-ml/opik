@@ -1,6 +1,5 @@
 package com.comet.opik.api.resources.v1.events;
 
-import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
@@ -11,8 +10,6 @@ import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessageContent;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.comet.opik.api.resources.v1.events.tools.StringTruncator;
-import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
-import com.comet.opik.api.resources.v1.events.tools.TraceCompressor;
 import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.infrastructure.log.LogContextAware;
@@ -25,7 +22,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import com.google.api.gax.rpc.InvalidArgumentException;
-import com.google.common.base.Preconditions;
 import com.jayway.jsonpath.JsonPath;
 import dev.langchain4j.data.message.AudioContent;
 import dev.langchain4j.data.message.ChatMessage;
@@ -35,8 +31,6 @@ import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.data.message.VideoContent;
 import dev.langchain4j.model.chat.request.ChatRequest;
-import dev.langchain4j.model.chat.request.ChatRequestParameters;
-import dev.langchain4j.model.chat.request.ToolChoice;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -1105,64 +1099,6 @@ public class OnlineScoringEngine {
     }
 
     /**
-     * Rough character-based token estimate for the {@code {trace, spans}} composite. Used by
-     * {@code OnlineScoringLlmAsJudgeScorer} to decide whether a trace is big enough that the
-     * inline-rendered prompt would risk overflowing the model's window — which flips the
-     * scorer into the read/jq/search agentic-tools path.
-     *
-     * <p>{@code charsPerToken} is the chars-per-token ratio operators configure via
-     * {@code onlineScoring.agenticToolsCharsPerToken} (default 4 = natural-language English).
-     * Workloads that skew toward code/JSON should lower the ratio (~ 2) to pull the size-based
-     * branch in earlier. Accuracy isn't precision-critical because the threshold itself has
-     * slack (default 50K tokens vs typical 128K windows), and the per-call and cumulative
-     * output caps in {@link com.comet.opik.api.resources.v1.events.tools.ReadTool} pick up
-     * any slack on the agentic-tools side.
-     */
-    public static int estimateTraceContextTokens(@NonNull Trace trace, @NonNull List<Span> spans,
-            @NonNull TraceCompressor traceCompressor, int charsPerToken) {
-        return estimateTokensFromJson(traceCompressor.buildFullJson(trace, spans), charsPerToken);
-    }
-
-    /**
-     * Same as {@link #estimateTraceContextTokens} but skips the JSON build. Used when the
-     * caller already has the full {@code {trace, spans}} JSON in hand (e.g. when it's going
-     * to be pre-seeded into the tool context's cache anyway) — avoids serializing the trace
-     * twice on big-trace evaluations where every redundant {@code buildFullJson} burns CPU
-     * and GC churn.
-     */
-    public static int estimateTokensFromJson(@NonNull JsonNode fullJson, int charsPerToken) {
-        Preconditions.checkArgument(charsPerToken >= 1, "charsPerToken must be >= 1, got %s", charsPerToken);
-        return fullJson.toString().length() / charsPerToken;
-    }
-
-    /**
-     * Rough character-based token estimate for the thread context as it would be
-     * rendered on the inline path. Estimates the enriched shape — trace input/output
-     * plus the assistant turn's child spans (tool calls + I/O) — so the agentic-tools
-     * routing decision reflects what {@link #prepareThreadLlmRequest} will actually
-     * serialize. Pass an empty {@code spans} list when the toggle is off; the
-     * enriched serializer omits the {@code spans} field via {@code @JsonInclude(NON_NULL)},
-     * so the estimate then matches the original trace-bodies-only shape exactly.
-     *
-     * <p>Used by {@code OnlineScoringTraceThreadLlmAsJudgeScorer} to decide whether
-     * a thread is big enough to switch to the agentic-tools path (skeleton +
-     * drill-down via ReadTool).
-     *
-     * <p>Same {@code charsPerToken} contract as {@link #estimateTraceContextTokens}:
-     * configurable via {@code onlineScoring.agenticToolsCharsPerToken}.
-     */
-    public static int estimateThreadContextTokens(
-            @NonNull List<Trace> traces, @NonNull List<Span> spans, int charsPerToken) {
-        Preconditions.checkArgument(charsPerToken >= 1, "charsPerToken must be >= 1, got %s", charsPerToken);
-        try {
-            return OBJECT_MAPPER.writeValueAsString(fromTraceToThreadEnriched(traces, spans)).length()
-                    / charsPerToken;
-        } catch (JsonProcessingException ex) {
-            throw new UncheckedIOException(ex);
-        }
-    }
-
-    /**
      * Shared "evaluate → prepare → log" wrapper used by the trace and span Python scorers.
      * Eliminates the boilerplate that duplicated the MDC scope, the "Evaluating X 'id' sampled
      * by rule 'name'" entry log, the "Sending X 'id' to Python evaluator: '<summary>'" exit
@@ -1222,12 +1158,6 @@ public class OnlineScoringEngine {
     }
 
     /**
-     * Whether the given provider is known to support tool-calling. Used to gate the
-     * agentic-tools path: providers that don't support tools fall back to the inline path
-     * even when the context exceeds the size threshold (which may overflow the model's
-     * window — in that case the operator should pick a different model for those workloads).
-     */
-    /**
      * Shared error-logging helper for the {@code prepareEvaluation} catch blocks on the trace
      * and thread scorers. The two loggers are intentional:
      * <ul>
@@ -1257,67 +1187,4 @@ public class OnlineScoringEngine {
         return templateMessages.stream().anyMatch(m -> !m.isStringContent());
     }
 
-    public static boolean supportsToolCalling(@NonNull LlmProvider provider) {
-        return switch (provider) {
-            case OPEN_AI, ANTHROPIC, GEMINI, OPEN_ROUTER, VERTEX_AI, BEDROCK -> true;
-            case OLLAMA, CUSTOM_LLM, OPIK_FREE -> false;
-        };
-    }
-
-    /**
-     * Build a sanitized one-line description of the outgoing LLM request for user-facing logs.
-     * The full {@link ChatRequest} contains the rendered prompt, the user message with the
-     * trace's input/output, request parameters, and tool specs — surfacing all of it in a
-     * stored log lands trace content (and any tokens or PII it carries) in clear text
-     * downstream of whatever sinks the log feeds. Shape-only summary instead.
-     */
-    public static String summarizeRequest(@NonNull ChatRequest request, @NonNull String modelName,
-            boolean useTools) {
-        // Intentionally NOT computing total chars: m.toString() on a multi-MB rendered prompt
-        // allocates the full string just to measure its length, which would add ~2x prompt-size
-        // heap churn per evaluation. Message count + tool count are enough to identify what's
-        // happening; an operator who needs byte-level detail can hit the rule's debug log.
-        int messageCount = request.messages() == null ? 0 : request.messages().size();
-        int toolSpecCount = request.toolSpecifications() == null ? 0 : request.toolSpecifications().size();
-        return String.format("model='%s', messages=%d, tools=%d, toolsEnabled=%s",
-                modelName, messageCount, toolSpecCount, useTools);
-    }
-
-    /**
-     * Build a sanitized one-line description of the LLM response. The full {@link ChatResponse}
-     * carries the assistant text and any tool-call arguments, both of which can echo trace
-     * content the model is reasoning about — surfacing the raw response in a user-facing log
-     * lands trace content (and any tokens or PII it carries) downstream of whatever sinks the
-     * log feeds. Shape-only summary instead.
-     */
-    public static String summarizeResponse(@NonNull ChatResponse response) {
-        var ai = response.aiMessage();
-        int textLength = ai.text() == null ? 0 : ai.text().length();
-        int toolCallCount = ai.toolExecutionRequests() == null ? 0 : ai.toolExecutionRequests().size();
-        var finishReason = response.metadata() == null ? null : response.metadata().finishReason();
-        return String.format("textChars=%d, toolCalls=%d, finishReason=%s",
-                textLength, toolCallCount, finishReason);
-    }
-
-    /**
-     * Attach the tool specs from {@code toolRegistry} and the given {@code toolChoice} to
-     * {@code request}'s parameters. Tool specs live inside {@link ChatRequestParameters}, so
-     * we copy the existing parameters via {@code overrideWith} and layer tool specs on top —
-     * setting {@code toolSpecifications} directly on the {@link ChatRequest} builder would
-     * conflict with parameters. {@code toBuilder()} (rather than a fresh builder + .messages())
-     * preserves any other top-level fields on ChatRequest, present or future, guarding against
-     * a "silently dropped fields" regression between the initial scoring call and the
-     * structured re-issue in the tool-call wrap-up.
-     */
-    public static ChatRequest addToolSpecs(@NonNull ChatRequest request, @NonNull ToolChoice toolChoice,
-            @NonNull ToolRegistry toolRegistry) {
-        var parameters = ChatRequestParameters.builder()
-                .overrideWith(request.parameters())
-                .toolSpecifications(toolRegistry.specs())
-                .toolChoice(toolChoice)
-                .build();
-        return request.toBuilder()
-                .parameters(parameters)
-                .build();
-    }
 }

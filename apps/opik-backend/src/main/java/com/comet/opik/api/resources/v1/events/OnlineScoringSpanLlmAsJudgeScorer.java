@@ -7,7 +7,6 @@ import com.comet.opik.api.events.SpanToScoreLlmAsJudge;
 import com.comet.opik.api.resources.v1.events.tools.AttachmentSummaries;
 import com.comet.opik.api.resources.v1.events.tools.EntityRef;
 import com.comet.opik.api.resources.v1.events.tools.EntityType;
-import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
 import com.comet.opik.api.resources.v1.events.tools.TraceToolContext;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.TraceService;
@@ -66,7 +65,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
     private final ChatCompletionService aiProxyService;
     private final Logger userFacingLogger;
     private final LlmProviderFactory llmProviderFactory;
-    private final ToolRegistry toolRegistry;
+    private final AgenticScoringService agenticScoringService;
     private final AttachmentService attachmentService;
     private final OnlineEvaluationRecorder onlineEvaluationRecorder;
 
@@ -78,7 +77,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
             @NonNull ChatCompletionService aiProxyService,
             @NonNull TraceService traceService,
             @NonNull LlmProviderFactory llmProviderFactory,
-            @NonNull ToolRegistry toolRegistry,
+            @NonNull AgenticScoringService agenticScoringService,
             @NonNull AttachmentService attachmentService,
             @NonNull OnlineEvaluationRecorder onlineEvaluationRecorder) {
         super(config, redisson, feedbackScoreService, traceService, SPAN_LLM_AS_JUDGE, Constants.SPAN_LLM_AS_JUDGE);
@@ -86,7 +85,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
         this.aiProxyService = aiProxyService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringSpanLlmAsJudgeScorer.class);
         this.llmProviderFactory = llmProviderFactory;
-        this.toolRegistry = toolRegistry;
+        this.agenticScoringService = agenticScoringService;
         this.attachmentService = attachmentService;
         this.onlineEvaluationRecorder = onlineEvaluationRecorder;
     }
@@ -176,7 +175,8 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
 
     /**
      * Lists the span's own attachments, tolerating the upload race via
-     * {@link #listAttachmentsToleratingUploadRace} (gated on the span body referencing an attachment).
+     * {@link AgenticScoringService#listAttachmentsToleratingUploadRace} (gated on the span body
+     * referencing an attachment).
      */
     private Mono<List<AttachmentInfo>> fetchSpanAttachments(Span span, SpanToScoreLlmAsJudge message) {
         Mono<List<AttachmentInfo>> fetch = attachmentService
@@ -185,7 +185,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, message.workspaceId())
                         .put(RequestContext.USER_NAME, message.userName()));
-        return listAttachmentsToleratingUploadRace(fetch, message.workspaceId(), span.id(),
+        return agenticScoringService.listAttachmentsToleratingUploadRace(fetch, message.workspaceId(), span.id(),
                 span.input(), span.output(), span.metadata());
     }
 
@@ -206,7 +206,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
                             .doOnNext(withMdc(mdc, chatResponse -> {
                                 if (userFacingLogger.isInfoEnabled()) {
                                     userFacingLogger.info("Received response for spanId '{}': '{}'",
-                                            span.id(), OnlineScoringEngine.summarizeResponse(chatResponse));
+                                            span.id(), agenticScoringService.summarizeResponse(chatResponse));
                                 }
                             }))
                             .flatMap(initialResponse -> prepared.useTools()
@@ -237,7 +237,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
 
             String modelName = message.llmAsJudgeCode().model().name();
             boolean agenticToolsEnabled = serviceTogglesConfig.isAgenticToolsEnabled();
-            boolean providerSupportsTools = OnlineScoringEngine.supportsToolCalling(
+            boolean providerSupportsTools = agenticScoringService.supportsToolCalling(
                     llmProviderFactory.getLlmProvider(modelName));
             // Tools require the {{span}} trigger AND the agentic-tools toggle AND a tool-calling provider.
             // The {{span}} substitution itself is independent of tools — see the inline branch below.
@@ -273,7 +273,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
             }
 
             userFacingLogger.info("Sending spanId '{}' to LLM: {}",
-                    span.id(), OnlineScoringEngine.summarizeRequest(requests.score(), modelName, useTools));
+                    span.id(), agenticScoringService.summarizeRequest(requests.score(), modelName, useTools));
 
             return new PreparedEvaluation(requests.score(), requests.structured(), useTools);
         }
@@ -304,7 +304,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
                 onlineScoringConfig.getMaxPromptFieldChars(), drillDownHint, spanStructureJson);
         // REQUIRED on the first call only forces ≥1 tool call; follow-ups switch to AUTO in
         // handleToolCalls so the model can decide when to stop investigating.
-        scoreRequest = OnlineScoringEngine.addToolSpecs(scoreRequest, ToolChoice.REQUIRED, toolRegistry);
+        scoreRequest = agenticScoringService.addToolSpecs(scoreRequest, ToolChoice.REQUIRED);
         return new LlmRequests(scoreRequest, structuredRequest);
     }
 
@@ -365,7 +365,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
         // Shared loop orchestration lives in the base scorer; here we provide only the span-specific
         // context seeding — pre-seed the active span so read(type=span) / jq(type=span) resolve it
         // without a re-fetch.
-        return runToolCallLoop(chatResponse, toolRequest, structuredRequest,
+        return agenticScoringService.runToolCallLoop(chatResponse, toolRequest, structuredRequest,
                 () -> {
                     var ctx = TraceToolContext.forActiveSpan(span, message.workspaceId(),
                             message.userName(), onlineScoringConfig.getAgenticToolsMaxInjectedBytes());
@@ -373,8 +373,9 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
                             JsonUtils.getMapper().valueToTree(span));
                     return ctx;
                 },
-                toolRegistry, request -> scoreSpanReactive(request, message, recorder),
-                message.llmAsJudgeCode().model().name(), span.id().toString(), userFacingLogger, mdc, recorder);
+                request -> scoreSpanReactive(request, message, recorder),
+                () -> message.llmAsJudgeCode().model().name(), span.id().toString(), userFacingLogger, mdc,
+                recorder);
     }
 
     /**

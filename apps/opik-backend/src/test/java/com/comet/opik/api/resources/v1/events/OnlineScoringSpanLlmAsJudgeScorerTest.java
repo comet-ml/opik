@@ -85,6 +85,7 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
 
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
     private OnlineScoringSpanLlmAsJudgeScorer scorer;
+    private AgenticScoringService agenticScoringService;
 
     // Evaluator whose prompt references {{span}} — the declarative agentic trigger for span scope. No
     // variable binds it, so the backend's implicit detection injects the span structure.
@@ -151,6 +152,7 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         ToolRegistry toolRegistry = new ToolRegistry(Set.of(
                 stubTool(ReadTool.NAME, "{}"),
                 stubTool(GetAttachmentTool.NAME, "{}")));
+        agenticScoringService = new AgenticScoringServiceImpl(onlineScoringConfig, toolRegistry);
 
         scorer = new OnlineScoringSpanLlmAsJudgeScorer(
                 onlineScoringConfig,
@@ -160,7 +162,7 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
                 aiProxyService,
                 traceService,
                 llmProviderFactory,
-                toolRegistry,
+                agenticScoringService,
                 attachmentService,
                 onlineEvaluationRecorder);
     }
@@ -327,7 +329,7 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
                 .fileName("input-attachment-86584937-1782581642686-sdk.jpg").build();
         var body = JsonUtils.getJsonNodeFromString("{\"q\":\"see [input-attachment-1-1782581642301.jpg]\"}");
 
-        var result = scorer.listAttachmentsToleratingUploadRace(
+        var result = agenticScoringService.listAttachmentsToleratingUploadRace(
                 Mono.just(List.of(transientAttachment, persistentAttachment)), "ws-1", id, body).block();
 
         assertThat(result).extracting(a -> a.fileName())
@@ -343,7 +345,7 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
                 .entityId(UUID.randomUUID()).entityType(EntityType.SPAN)
                 .fileName("input-attachment-1-1782581642301.jpg").build();
 
-        var result = scorer.listAttachmentsToleratingUploadRace(
+        var result = agenticScoringService.listAttachmentsToleratingUploadRace(
                 Mono.just(List.of(auto)), "ws-1", UUID.randomUUID()).block();
 
         assertThat(result).extracting(a -> a.fileName()).containsExactly("input-attachment-1-1782581642301.jpg");
@@ -359,7 +361,7 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
                 .fileName("input-attachment-1-1782581642301.jpg").build();
         var body = JsonUtils.getJsonNodeFromString("{\"q\":\"see [input-attachment-1-1782581642301.jpg]\"}");
 
-        var result = scorer.listAttachmentsToleratingUploadRace(
+        var result = agenticScoringService.listAttachmentsToleratingUploadRace(
                 Mono.just(List.of(auto)), "ws-1", UUID.randomUUID(), body).block();
 
         assertThat(result).extracting(a -> a.fileName()).containsExactly("input-attachment-1-1782581642301.jpg");

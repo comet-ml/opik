@@ -144,6 +144,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
         ToolRegistry toolRegistry = new ToolRegistry(Set.of(
                 stubTool(GetTraceSpansTool.NAME, "{}"),
                 stubTool(ReadTool.NAME, "{}")));
+        AgenticScoringService agenticScoringService = new AgenticScoringServiceImpl(onlineScoringConfig,
+                toolRegistry);
         TraceCompressor traceCompressor = new TraceCompressor();
 
         scorer = new OnlineScoringLlmAsJudgeScorer(
@@ -156,7 +158,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 testSuiteAssertionCounterService,
                 llmProviderFactory,
                 spanService,
-                toolRegistry,
+                agenticScoringService,
                 traceCompressor,
                 workspaceNameService,
                 opikConfiguration,
@@ -326,10 +328,11 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 .parameters(params)
                 .build();
 
-        ChatRequest withTools = OnlineScoringEngine.addToolSpecs(original, ToolChoice.REQUIRED,
+        AgenticScoringService agenticScoringService = new AgenticScoringServiceImpl(onlineScoringConfig,
                 new ToolRegistry(Set.of(
                         stubTool(GetTraceSpansTool.NAME, "{}"),
                         stubTool(ReadTool.NAME, "{}"))));
+        ChatRequest withTools = agenticScoringService.addToolSpecs(original, ToolChoice.REQUIRED);
 
         // Tool specs come from the registry (sorted alphabetically by ToolRegistry).
         assertThat(withTools.toolSpecifications())
@@ -567,7 +570,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
             var error = new RuntimeException("original error");
             var logger = mock(Logger.class);
 
-            assertThatThrownBy(() -> OnlineScoringBaseScorer.surfaceInjectedMediaFailure(
+            assertThatThrownBy(() -> AgenticScoringServiceImpl.surfaceInjectedMediaFailure(
                     error, ctx, UUID.randomUUID().toString(), logger, Map.of()).block())
                     .isSameAs(error);
             verifyNoInteractions(logger);
@@ -585,7 +588,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
             var error = new RuntimeException("model rejected media");
             var logger = mock(Logger.class);
 
-            assertThatThrownBy(() -> OnlineScoringBaseScorer.surfaceInjectedMediaFailure(
+            assertThatThrownBy(() -> AgenticScoringServiceImpl.surfaceInjectedMediaFailure(
                     error, ctx, UUID.randomUUID().toString(), logger, Map.of()).block())
                     .isSameAs(error);
             verify(logger, times(1)).error(anyString(), any(), any(), any());

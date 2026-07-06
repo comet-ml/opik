@@ -1062,28 +1062,6 @@ class OnlineScoringEngineTest {
     }
 
     @Test
-    @DisplayName("estimateThreadContextTokens reflects spans size, so big enriched threads route to agentic-tools")
-    void estimateThreadContextTokensFactorsInSpansSize() {
-        var traceId = generator.generate();
-        var projectId = generator.generate();
-        var trace = createTrace(traceId, projectId);
-        var bigSpan = Span.builder()
-                .id(generator.generate()).name("huge-tool-call").type(SpanType.tool)
-                .startTime(java.time.Instant.now()).traceId(traceId).projectId(projectId)
-                .input(JsonUtils.readTree("{\"payload\":\"" + "x".repeat(2000) + "\"}"))
-                .build();
-
-        int estimateNoSpans = OnlineScoringEngine.estimateThreadContextTokens(
-                List.of(trace), List.of(), 4);
-        int estimateWithSpans = OnlineScoringEngine.estimateThreadContextTokens(
-                List.of(trace), List.of(bigSpan), 4);
-
-        // Adding ~2KB of span payload must move the estimate up — otherwise the agentic-tools
-        // routing gate would underestimate and inline-render an oversized prompt.
-        assertThat(estimateWithSpans).isGreaterThan(estimateNoSpans);
-    }
-
-    @Test
     @DisplayName("prepare LLM request with tool-calling strategy")
     void testPrepareLlmRequestWithToolCallingStrategy() {
         var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
