@@ -44,35 +44,46 @@ jobs:
               run: |
                 echo -e "\n\n" >> preview_url.txt
 
-                # linkinator's own retry flags handle the transient failures we used to see:
-                #   --retry        honors Retry-After on 429s (HuggingFace throttling the burst)
-                #   --retry-errors retries 5xx and network/"unknown" responses (Fern erroring
-                #                  under crawl load, dropped-socket crashes), with backoff+jitter
-                # so we no longer re-verify links ourselves. --concurrency 25 keeps the burst
-                # small enough to avoid saturating the preview CDN in the first place.
-                npx linkinator ${{ steps.generate-docs.outputs.URL }} \
-                  --recurse \
-                  --concurrency 25 \
-                  --retry \
-                  --retry-errors \
-                  --retry-errors-count 3 \
-                  --retry-errors-jitter 2000 \
-                  --skip "search\/v2\/key" \
-                  --skip "https://ai.google.dev/gemini-api" \
-                  --skip "https://ai.google.dev/aistudio" \
-                  --skip "chat.comet.com" \
-                  --skip "http://localhost" \
-                  --skip "http://localhost:5173" \
-                  --skip "googletagmanager.com" \
-                  --skip "insights/script.js" \
-                  --format json > linkinator_results.json 2>/dev/null || true
+                # --retry/--retry-errors handle per-link transience (429 Retry-After, 5xx and
+                # network/"unknown" responses) with backoff+jitter, so we don't re-verify links
+                # ourselves. But they can't rescue a crawl that CRASHES: linkinator emits an
+                # unhandled 'error' event on a dropped socket ("SocketError: other side closed"),
+                # which throws and kills the process with no JSON written — there is no per-link
+                # result left to retry. So we also retry the whole crawl once, and send stderr to
+                # the step log (NOT /dev/null) so a crash is diagnosable. --concurrency 25 keeps
+                # the burst small enough to make the crash rare in the first place.
+                crawl() {
+                  npx linkinator ${{ steps.generate-docs.outputs.URL }} \
+                    --recurse \
+                    --concurrency 25 \
+                    --retry \
+                    --retry-errors \
+                    --retry-errors-count 3 \
+                    --retry-errors-jitter 2000 \
+                    --skip "search\/v2\/key" \
+                    --skip "https://ai.google.dev/gemini-api" \
+                    --skip "https://ai.google.dev/aistudio" \
+                    --skip "chat.comet.com" \
+                    --skip "http://localhost" \
+                    --skip "http://localhost:5173" \
+                    --skip "googletagmanager.com" \
+                    --skip "insights/script.js" \
+                    --format json > linkinator_results.json || true
+                }
+                json_ok() { jq -e 'type == "object" and (.links | type == "array")' linkinator_results.json > /dev/null 2>&1; }
+
+                crawl
+                if ! json_ok; then
+                  echo "Crawl produced no valid JSON (likely a dropped-socket crash); retrying once..."
+                  crawl
+                fi
 
                 PREVIEW_ORIGIN=$(echo "${{ steps.generate-docs.outputs.URL }}" | grep -oE '^https?://[^/]+')
 
                 # linkinator exits non-zero both when it finds broken links and when it
                 # crashes mid-crawl (e.g. unhandled ECONNRESET), so trust the output, not
                 # the exit code: invalid/missing JSON means the crawl didn't complete.
-                if ! jq -e 'type == "object" and (.links | type == "array")' linkinator_results.json > /dev/null 2>&1; then
+                if ! json_ok; then
                   {
                     echo "⚠️ The link check did not complete (likely a crawl crash or timeout). Please re-run this check."
                     echo ""
