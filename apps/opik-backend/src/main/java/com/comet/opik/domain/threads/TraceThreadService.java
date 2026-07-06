@@ -330,11 +330,17 @@ class TraceThreadServiceImpl implements TraceThreadService {
         // The lookback bound must be at least as wide as any window the enqueuing scan
         // (getProjectsWithPendingClosureThreads) may have used, so minLookback here should be the
         // cold-start lookback: a thread visible to the enqueuer but outside this window would be
-        // re-enqueued on every job run and never closed.
+        // re-enqueued on every job run and never closed. Both scans read the same Redis-backed
+        // cached max timeout, so their windows stay consistent; the clamp below additionally
+        // guarantees a well-formed window (lookback before cutoff) even if that cached value lags
+        // a workspace timeout increase for up to its TTL.
         return getWorkspaceTimeout(now, defaultTimeoutToMarkThreadAsInactive)
                 .zipWith(getPendingClosureLookbackBound(now, defaultTimeoutToMarkThreadAsInactive, minLookback))
-                .flatMapMany(bounds -> traceThreadDAO.streamPendingClosureThreads(projectId, bounds.getT1(),
-                        bounds.getT2()))
+                .flatMapMany(bounds -> {
+                    Instant lastUpdatedAt = bounds.getT1();
+                    Instant lookbackBound = bounds.getT2().isBefore(lastUpdatedAt) ? bounds.getT2() : lastUpdatedAt;
+                    return traceThreadDAO.streamPendingClosureThreads(projectId, lastUpdatedAt, lookbackBound);
+                })
                 .flatMap(threads -> {
 
                     if (threads.isEmpty()) {
