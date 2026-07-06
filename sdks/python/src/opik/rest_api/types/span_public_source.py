@@ -2,4 +2,6 @@
 
 import typing
 
-SpanPublicSource = typing.Union[typing.Literal["sdk", "experiment", "playground", "optimization"], typing.Any]
+SpanPublicSource = typing.Union[
+    typing.Literal["sdk", "experiment", "playground", "optimization", "evaluator"], typing.Any
+]

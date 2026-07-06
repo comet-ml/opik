@@ -413,12 +413,10 @@ from .guardrail_write_name import GuardrailWriteName
 from .guardrail_write_result import GuardrailWriteResult
 from .guardrails_validation import GuardrailsValidation
 from .guardrails_validation_public import GuardrailsValidationPublic
-from .harness_entry import HarnessEntry
 from .ids_holder import IdsHolder
 from .image_url import ImageUrl
 from .image_url_public import ImageUrlPublic
 from .image_url_write import ImageUrlWrite
-from .item import Item
 from .item_lock_info import ItemLockInfo
 from .json_list_string import JsonListString
 from .json_list_string_compare import JsonListStringCompare
@@ -434,7 +432,6 @@ from .json_schema import JsonSchema
 from .kpi_card_response import KpiCardResponse
 from .kpi_metric import KpiMetric
 from .kpi_metric_type import KpiMetricType
-from .lane import Lane
 from .llm_as_judge_code import LlmAsJudgeCode
 from .llm_as_judge_code_public import LlmAsJudgeCodePublic
 from .llm_as_judge_code_write import LlmAsJudgeCodeWrite
@@ -477,7 +474,6 @@ from .manual_evaluation_request import ManualEvaluationRequest
 from .manual_evaluation_request_entity_type import ManualEvaluationRequestEntityType
 from .manual_evaluation_response import ManualEvaluationResponse
 from .message import Message
-from .model_tiers import ModelTiers
 from .multipart_upload_part import MultipartUploadPart
 from .numerical_feedback_definition import NumericalFeedbackDefinition
 from .numerical_feedback_definition_create import NumericalFeedbackDefinitionCreate
@@ -569,6 +565,9 @@ from .provider_api_key_public_provider import ProviderApiKeyPublicProvider
 from .recent_activity_item_public import RecentActivityItemPublic
 from .recent_activity_item_public_type import RecentActivityItemPublicType
 from .recent_activity_page_public import RecentActivityPagePublic
+from .report_failure import ReportFailure
+from .report_failure_page import ReportFailurePage
+from .report_failure_type import ReportFailureType
 from .report_preference import ReportPreference
 from .reported_issue import ReportedIssue
 from .reported_issue_severity import ReportedIssueSeverity
@@ -583,7 +582,6 @@ from .retention_rule_public_retention import RetentionRulePublicRetention
 from .score_name import ScoreName
 from .score_name_public import ScoreNamePublic
 from .service_toggles_config import ServiceTogglesConfig
-from .side import Side
 from .span import Span
 from .span_batch import SpanBatch
 from .span_enrichment_options import SpanEnrichmentOptions
@@ -615,13 +613,6 @@ from .span_write import SpanWrite
 from .span_write_source import SpanWriteSource
 from .span_write_type import SpanWriteType
 from .spans_count_response import SpansCountResponse
-from .spend_breakdown_response import SpendBreakdownResponse
-from .spend_breakdowns_response import SpendBreakdownsResponse
-from .spend_composition_response import SpendCompositionResponse
-from .spend_metric_request import SpendMetricRequest
-from .spend_summary_response import SpendSummaryResponse
-from .spend_user_page import SpendUserPage
-from .spend_user_row import SpendUserRow
 from .start_multipart_upload_response import StartMultipartUploadResponse
 from .stream_options import StreamOptions
 from .studio_evaluation import StudioEvaluation
@@ -1094,12 +1085,10 @@ __all__ = [
     "GuardrailWriteResult",
     "GuardrailsValidation",
     "GuardrailsValidationPublic",
-    "HarnessEntry",
     "IdsHolder",
     "ImageUrl",
     "ImageUrlPublic",
     "ImageUrlWrite",
-    "Item",
     "ItemLockInfo",
     "JsonListString",
     "JsonListStringCompare",
@@ -1115,7 +1104,6 @@ __all__ = [
     "KpiCardResponse",
     "KpiMetric",
     "KpiMetricType",
-    "Lane",
     "LlmAsJudgeCode",
     "LlmAsJudgeCodePublic",
     "LlmAsJudgeCodeWrite",
@@ -1158,7 +1146,6 @@ __all__ = [
     "ManualEvaluationRequestEntityType",
     "ManualEvaluationResponse",
     "Message",
-    "ModelTiers",
     "MultipartUploadPart",
     "NumericalFeedbackDefinition",
     "NumericalFeedbackDefinitionCreate",
@@ -1248,6 +1235,9 @@ __all__ = [
     "RecentActivityItemPublic",
     "RecentActivityItemPublicType",
     "RecentActivityPagePublic",
+    "ReportFailure",
+    "ReportFailurePage",
+    "ReportFailureType",
     "ReportPreference",
     "ReportedIssue",
     "ReportedIssueSeverity",
@@ -1262,7 +1252,6 @@ __all__ = [
     "ScoreName",
     "ScoreNamePublic",
     "ServiceTogglesConfig",
-    "Side",
     "Span",
     "SpanBatch",
     "SpanEnrichmentOptions",
@@ -1294,13 +1283,6 @@ __all__ = [
     "SpanWriteSource",
     "SpanWriteType",
     "SpansCountResponse",
-    "SpendBreakdownResponse",
-    "SpendBreakdownsResponse",
-    "SpendCompositionResponse",
-    "SpendMetricRequest",
-    "SpendSummaryResponse",
-    "SpendUserPage",
-    "SpendUserRow",
     "StartMultipartUploadResponse",
     "StreamOptions",
     "StudioEvaluation",

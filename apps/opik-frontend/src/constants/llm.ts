@@ -21,7 +21,7 @@ export const PLAYGROUND_SELECTED_DATASET_VERSION_KEY =
   "playground-selected-dataset-version";
 
 export const PLAYGROUND_PROMPT_COLORS = [
-  { bg: "#b8e54a", text: "#1a1a1a" },
+  { bg: "#6bdf93", text: "#1a1a1a" },
   { bg: "#a6ddfe", text: "#1a1a1a" },
   { bg: "#6e3de8", text: "#ffffff" },
   { bg: "#be48ea", text: "#ffffff" },
@@ -163,6 +163,14 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
     thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7]: {
+    supportsSamplingParams: false,
+    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5]: {
+    supportsSamplingParams: false,
+    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5]: {
     supportsSamplingParams: false,
     thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
   },

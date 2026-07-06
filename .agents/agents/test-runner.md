@@ -79,8 +79,8 @@ cd sdks/typescript && npm test                        # All tests
 cd sdks/typescript && npm test -- --run               # Run once
 
 # E2E Tests
-cd tests_end_to_end/typescript-tests && npx playwright test
-cd tests_end_to_end/typescript-tests && npx playwright test --ui  # UI mode
+cd tests_end_to_end/e2e && npx playwright test
+cd tests_end_to_end/e2e && npx playwright test --ui  # UI mode
 ```
 
 ## Workflow

@@ -3,7 +3,6 @@
 import { AgentConfigsClient } from "./api/resources/agentConfigs/client/Client.js";
 import { AgentInsightsClient } from "./api/resources/agentInsights/client/Client.js";
 import { AgentInsightsJobsClient } from "./api/resources/agentInsightsJobs/client/Client.js";
-import { AiSpendClient } from "./api/resources/aiSpend/client/Client.js";
 import { AlertsClient } from "./api/resources/alerts/client/Client.js";
 import { AnnotationQueuesClient } from "./api/resources/annotationQueues/client/Client.js";
 import { AssertionResultsClient } from "./api/resources/assertionResults/client/Client.js";
@@ -30,6 +29,7 @@ import { PairingClient } from "./api/resources/pairing/client/Client.js";
 import { ProjectsClient } from "./api/resources/projects/client/Client.js";
 import { PromptsClient } from "./api/resources/prompts/client/Client.js";
 import { RedirectClient } from "./api/resources/redirect/client/Client.js";
+import { ReportFailuresClient } from "./api/resources/reportFailures/client/Client.js";
 import { ReportsClient } from "./api/resources/reports/client/Client.js";
 import { RetentionRulesClient } from "./api/resources/retentionRules/client/Client.js";
 import { RunnersClient } from "./api/resources/runners/client/Client.js";
@@ -63,7 +63,6 @@ export class OpikApiClient {
     protected _agentConfigs: AgentConfigsClient | undefined;
     protected _agentInsightsJobs: AgentInsightsJobsClient | undefined;
     protected _agentInsights: AgentInsightsClient | undefined;
-    protected _aiSpend: AiSpendClient | undefined;
     protected _alerts: AlertsClient | undefined;
     protected _annotationQueues: AnnotationQueuesClient | undefined;
     protected _assertionResults: AssertionResultsClient | undefined;
@@ -89,6 +88,7 @@ export class OpikApiClient {
     protected _pairing: PairingClient | undefined;
     protected _projects: ProjectsClient | undefined;
     protected _prompts: PromptsClient | undefined;
+    protected _reportFailures: ReportFailuresClient | undefined;
     protected _reports: ReportsClient | undefined;
     protected _retentionRules: RetentionRulesClient | undefined;
     protected _serviceToggles: ServiceTogglesClient | undefined;
@@ -125,10 +125,6 @@ export class OpikApiClient {
 
     public get agentInsights(): AgentInsightsClient {
         return (this._agentInsights ??= new AgentInsightsClient(this._options));
-    }
-
-    public get aiSpend(): AiSpendClient {
-        return (this._aiSpend ??= new AiSpendClient(this._options));
     }
 
     public get alerts(): AlertsClient {
@@ -229,6 +225,10 @@ export class OpikApiClient {
 
     public get prompts(): PromptsClient {
         return (this._prompts ??= new PromptsClient(this._options));
+    }
+
+    public get reportFailures(): ReportFailuresClient {
+        return (this._reportFailures ??= new ReportFailuresClient(this._options));
     }
 
     public get reports(): ReportsClient {

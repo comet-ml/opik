@@ -17,6 +17,7 @@ import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
+import com.comet.opik.api.events.TraceCostIntelligenceChanged;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.events.TracesDeleted;
 import com.comet.opik.api.events.TracesUpdated;
@@ -332,7 +333,12 @@ class TraceServiceImpl implements TraceService {
                                                 ctx.get(RequestContext.WORKSPACE_ID),
                                                 ctx.get(RequestContext.USER_NAME),
                                                 traceUpdate,
-                                                ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "")))))))
+                                                ctx.getOrDefault(RequestContext.WORKSPACE_NAME, ""),
+                                                Map.of(id, project.id()))))
+                                        .doOnSuccess(__ -> eventBus.post(new TraceCostIntelligenceChanged(
+                                                Map.of(id, project.id()), traceUpdate,
+                                                ctx.get(RequestContext.WORKSPACE_ID),
+                                                ctx.get(RequestContext.USER_NAME)))))))
                         .then()));
     }
 
@@ -354,7 +360,9 @@ class TraceServiceImpl implements TraceService {
                                 .doOnSuccess(__ -> {
                                     log.info("Completed batch update for '{}' traces", batchUpdate.ids().size());
                                     eventBus.post(new TracesUpdated(projectIds, batchUpdate.ids(), workspaceId,
-                                            userName, batchUpdate.update(), workspaceName));
+                                            userName, batchUpdate.update(), workspaceName, traceToProjectMap));
+                                    eventBus.post(new TraceCostIntelligenceChanged(traceToProjectMap,
+                                            batchUpdate.update(), workspaceId, userName));
                                 });
                     });
         });
