@@ -585,19 +585,20 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     @Override
     public Flux<List<TraceThreadModel>> streamPendingClosureThreads(@NonNull UUID projectId,
             @NonNull Instant lastUpdatedAt, @NonNull Instant lookbackBound) {
-        return asyncTemplate.stream(connection -> {
+        return asyncTemplate.stream(connection -> makeFluxContextAware((userName, workspaceId) -> {
 
             var template = getSTWithLogComment(GET_RECENT_CLOSED_THREADS_PER_PROJECT,
-                    "stream_pending_closure_threads", "", "", "");
+                    "stream_pending_closure_threads", workspaceId, userName, projectId);
             var statement = connection.createStatement(template.render())
+                    .bind("workspace_id", workspaceId)
                     .bind("project_id", projectId)
                     .bind("last_updated_at", lastUpdatedAt.truncatedTo(ChronoUnit.MICROS).toString())
                     .bind("lookback_bound", lookbackBound.truncatedTo(ChronoUnit.MICROS).toString())
                     .bind("status", TraceThreadStatus.ACTIVE.getValue());
 
-            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+            return Flux.from(statement.execute())
                     .flatMap(result -> result.map((row, rowMetadata) -> TraceThreadMapper.INSTANCE.mapFromRow(row)));
-        }).buffer(1000);
+        })).buffer(1000);
     }
 
     private void bindTemplateParam(TraceThreadCriteria criteria, ST template) {
