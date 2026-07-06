@@ -1104,7 +1104,18 @@ public class SpanDAO {
 
     private static final String COUNT_BY_PROJECT_ID = """
             <if(feedback_scores_filters || feedback_scores_empty_filters)>
-            WITH feedback_scores_deduped AS (
+            WITH <if(span_id_prefilter)>span_id_prefilter AS (
+                SELECT DISTINCT id
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                <if(trace_id)> AND trace_id = :trace_id <endif>
+                <if(type)> AND type = :type <endif>
+                <if(filters)> AND <filters> <endif>
+                <if(search_text)> AND <search_text> <endif>
+            ), <endif>feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -1124,8 +1135,11 @@ public class SpanDAO {
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
+                      <if(span_id_prefilter)> AND entity_id IN (SELECT id FROM span_id_prefilter)
+                      <else>
                       <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                       <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                      <endif>
                     UNION ALL
                     SELECT workspace_id,
                            project_id,
@@ -1138,8 +1152,11 @@ public class SpanDAO {
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
+                      <if(span_id_prefilter)> AND entity_id IN (SELECT id FROM span_id_prefilter)
+                      <else>
                       <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                       <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                      <endif>
                 )
                 ORDER BY last_updated_at DESC
                 LIMIT 1 BY workspace_id, project_id, entity_id, name, author
@@ -2582,6 +2599,10 @@ public class SpanDAO {
             var template = newFindTemplate(COUNT_BY_PROJECT_ID, spanSearchCriteria, "count_spans_by_project_id",
                     workspaceId, userName);
 
+            if (shouldUseSpanIdPrefilter(spanSearchCriteria, template)) {
+                template.add("span_id_prefilter", true);
+            }
+
             var statement = connection.createStatement(template.render())
                     .bind("project_id", spanSearchCriteria.projectId())
                     .bind("workspace_id", workspaceId);
@@ -2634,16 +2655,18 @@ public class SpanDAO {
      * uuidFromTime/uuidToTime are excluded because the if/else fallback applies them directly
      * to feedback_scores; lastReceivedSpanId is excluded because it's a pagination cursor,
      * not a semantic filter.
+     *
+     * <p>Feedback score filters use separate template variables ({@code feedback_scores_filters})
+     * and are NOT injected into {@code <filters>}, so the prefilter CTE is safe to use
+     * alongside them (OPIK-7076).
      */
     private boolean shouldUseSpanIdPrefilter(SpanSearchCriteria criteria, ST template) {
-        boolean hasFeedbackScoreFilters = hasFeedbackScoreFilters(template);
-
         boolean hasNarrowingFilters = criteria.traceId() != null
                 || criteria.type() != null
                 || criteria.searchText() != null
                 || template.getAttribute("filters") != null;
 
-        return !hasFeedbackScoreFilters && hasNarrowingFilters;
+        return hasNarrowingFilters;
     }
 
     /**
