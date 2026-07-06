@@ -28,12 +28,14 @@ import java.util.concurrent.TimeUnit;
 public class ProjectLastUpdatedFlushConfig {
 
     public static final String PENDING_SET_KEY = "project:last-updated-trace:pending";
-    // Snapshot the live buffer is atomically renamed to while a flush drains it (renamenx), so writers keep
-    // populating PENDING_SET_KEY and the drain owns its data exclusively.
+    /**
+     * Snapshot the live buffer is atomically renamed to while a flush drains it ({@code renamenx}), so writers keep
+     * populating {@link #PENDING_SET_KEY} and the drain owns its data exclusively.
+     */
     public static final String FLUSHING_SET_KEY = "project:last-updated-trace:flushing";
     public static final String MEMBER_SEPARATOR = ":";
 
-    // When disabled, ProjectEventListener writes MySQL synchronously (legacy behavior).
+    /** When disabled, {@code ProjectEventListener} writes MySQL synchronously (legacy behavior). */
     @JsonProperty
     private boolean enabled = false;
 
@@ -41,7 +43,7 @@ public class ProjectLastUpdatedFlushConfig {
     @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS)
     private Duration jobInterval = Duration.seconds(30);
 
-    // Kept below jobInterval so the hold-until-expiry lock releases naturally before the next cycle.
+    /** Kept below {@link #jobInterval} so the hold-until-expiry lock releases naturally before the next cycle. */
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS)
     private Duration jobLockTime = Duration.seconds(25);

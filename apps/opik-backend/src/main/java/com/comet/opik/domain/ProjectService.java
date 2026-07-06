@@ -26,6 +26,7 @@ import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -572,6 +573,15 @@ class ProjectServiceImpl implements ProjectService {
         });
     }
 
+    /**
+     * When buffering is enabled, records the per-project maximum timestamp in a Redis ZSET (member
+     * {@code "workspaceId:projectId"}, score = epoch millis) so the high-frequency ingestion path stays off the
+     * contended {@code projects} row; {@code addIfGreater} keeps only the cluster-wide max and
+     * {@link #flushLastUpdatedTraces()} persists it to MySQL periodically. When disabled, writes MySQL synchronously.
+     * <p>
+     * Buffering is best-effort and fails open: the marker is only a sort hint, so a Redis error is logged and
+     * swallowed rather than allowed to break trace ingestion.
+     */
     @Override
     public void recordLastUpdatedTrace(String workspaceId, Collection<ProjectIdLastUpdated> lastUpdatedTraces) {
         if (!lastUpdatedFlushConfig.isEnabled()) {
@@ -579,15 +589,11 @@ class ProjectServiceImpl implements ProjectService {
             return;
         }
 
-        // Buffer the per-project maximum timestamp in a Redis ZSET (member "workspaceId:projectId", score = epoch
-        // millis) so the high-frequency ingestion path stays off the contended `projects` row. addIfGreater keeps
-        // only the cluster-wide max; flushLastUpdatedTraces() persists it to MySQL periodically.
         var pending = lastUpdatedTracePendingSet();
         Flux.fromIterable(lastUpdatedTraces)
                 .flatMap(project -> pending.addIfGreater(
                         project.lastUpdatedAt().toEpochMilli(), lastUpdatedTraceMember(workspaceId, project.id())))
                 .subscribeOn(Schedulers.boundedElastic())
-                // Fail-open: the marker is a best-effort sort hint, a Redis blip must not break trace ingestion.
                 .subscribe(
                         __ -> {
                         },
@@ -595,15 +601,18 @@ class ProjectServiceImpl implements ProjectService {
                                 workspaceId, error));
     }
 
+    /**
+     * Atomically moves the live buffer aside ({@code renamenx} to the snapshot key) so concurrent
+     * {@link #recordLastUpdatedTrace} calls immediately populate a fresh live key, then drains the snapshot. Moving
+     * the data aside is what removes the read-then-remove race — the drain owns the snapshot exclusively. When a
+     * snapshot from a previously interrupted flush still exists, {@code renamenx} is a no-op and that leftover is
+     * drained instead (idempotent, since the DB write only moves the marker forward).
+     */
     @Override
     public Mono<Long> flushLastUpdatedTraces() {
         var pending = lastUpdatedTracePendingSet();
         var flushing = lastUpdatedTraceFlushingSet();
 
-        // Atomically move the live buffer aside so concurrent recordLastUpdatedTrace calls (addIfGreater) immediately
-        // populate a fresh live key while we drain the snapshot. This removes the read-then-remove race: the drain
-        // below owns the snapshot exclusively. renamenx is a no-op when a snapshot from a previous interrupted flush
-        // still exists — that leftover is drained instead (idempotent, since the DB write only moves forward).
         return pending.isExists()
                 .flatMap(exists -> Boolean.TRUE.equals(exists)
                         ? pending.renamenx(ProjectLastUpdatedFlushConfig.FLUSHING_SET_KEY)
@@ -612,24 +621,38 @@ class ProjectServiceImpl implements ProjectService {
     }
 
     private Mono<Long> drainFlushingSnapshot(RScoredSortedSetReactive<String> flushing) {
-        int batchSize = lastUpdatedFlushConfig.getJobBatchSize();
-        // Only the flusher touches the snapshot key, so paging by re-reading the lowest entries and removing each
-        // processed batch is safe (no concurrent writer). Cap iterations as a safety net against a stuck removal.
-        int maxIterations = Math.max(1, batchSize);
-
-        return flushing.entryRange(0, batchSize - 1)
-                .expand(entries -> entries.size() < batchSize
-                        ? Mono.empty()
-                        : flushing.entryRange(0, batchSize - 1))
-                .take(maxIterations)
-                .filter(entries -> !entries.isEmpty())
-                .concatMap(entries -> flushLastUpdatedTraceBatch(flushing, entries))
-                .reduce(0L, Long::sum);
+        return drainFlushingSnapshot(flushing, 0L);
     }
 
+    /**
+     * Drains the snapshot one page at a time, reading the next page only after the current page's write and
+     * {@code removeAll} complete. Re-reading the lowest range advances because each processed page is removed first;
+     * gating the next read on removal (rather than {@link reactor.core.publisher.Flux#expand}, which pre-fetches the
+     * next read before removal runs) is what prevents the same top entries from being read and written to MySQL
+     * repeatedly. Removal guarantees progress, so no iteration cap is needed.
+     */
+    private Mono<Long> drainFlushingSnapshot(RScoredSortedSetReactive<String> flushing, long writtenSoFar) {
+        int batchSize = lastUpdatedFlushConfig.getJobBatchSize();
+        return flushing.entryRange(0, batchSize - 1)
+                .flatMap(entries -> {
+                    if (entries.isEmpty()) {
+                        return Mono.just(writtenSoFar);
+                    }
+                    return flushLastUpdatedTraceBatch(flushing, entries)
+                            .flatMap(written -> entries.size() < batchSize
+                                    ? Mono.just(writtenSoFar + written)
+                                    : Mono.defer(() -> drainFlushingSnapshot(flushing, writtenSoFar + written)));
+                });
+    }
+
+    /**
+     * Writes one page of snapshot entries, grouped by workspace so each MySQL batch write targets a single
+     * {@code workspace_id} (matching the DAO binding), then removes the processed members. The removal is safe
+     * because the snapshot is owned exclusively by this drain — no concurrent {@code addIfGreater} can re-bump a
+     * member between the read and the removal.
+     */
     private Mono<Long> flushLastUpdatedTraceBatch(RScoredSortedSetReactive<String> flushing,
             Collection<ScoredEntry<String>> entries) {
-        // Group by workspace so each MySQL batch write targets a single workspace_id (matches the DAO binding).
         var byWorkspace = entries.stream()
                 .map(ProjectServiceImpl::parseLastUpdatedTraceMember)
                 .filter(Objects::nonNull)
@@ -646,8 +669,6 @@ class ProjectServiceImpl implements ProjectService {
 
         return Mono.fromRunnable(() -> byWorkspace.forEach(this::writeLastUpdatedTraceToDb))
                 .subscribeOn(Schedulers.boundedElastic())
-                // Safe on the snapshot: it is exclusively owned by this drain, so no concurrent addIfGreater can
-                // re-bump a member between the read above and this removal.
                 .then(flushing.removeAll(members))
                 .thenReturn((long) byWorkspace.values().stream().mapToInt(Collection::size).sum());
     }
@@ -681,17 +702,20 @@ class ProjectServiceImpl implements ProjectService {
             return null;
         }
         try {
-            return new ParsedLastUpdatedTrace(
-                    value.substring(0, separatorIndex),
-                    UUID.fromString(value.substring(separatorIndex + 1)),
-                    Instant.ofEpochMilli(entry.getScore().longValue()));
+            return ParsedLastUpdatedTrace.builder()
+                    .workspaceId(value.substring(0, separatorIndex))
+                    .projectId(UUID.fromString(value.substring(separatorIndex + 1)))
+                    .lastUpdatedAt(Instant.ofEpochMilli(entry.getScore().longValue()))
+                    .build();
         } catch (IllegalArgumentException e) {
             log.warn("Skipping last-updated-trace buffer member with invalid project id: '{}'", value);
             return null;
         }
     }
 
-    private record ParsedLastUpdatedTrace(String workspaceId, UUID projectId, Instant lastUpdatedAt) {
+    @Builder(toBuilder = true)
+    private record ParsedLastUpdatedTrace(@NonNull String workspaceId, @NonNull UUID projectId,
+            @NonNull Instant lastUpdatedAt) {
     }
 
     @Override
