@@ -18,6 +18,14 @@
              so fresh installs need this enabled to replay the migration chain. -->
         <default>
             <enable_time_time64_type>1</enable_time_time64_type>
+            <!-- Distributed-layer settings the Hyperscale slices (OPIK-6874) depend on. All three
+                 are no-ops on the current single-shard schema, but tests must run with them active
+                 so the Slice 2 Distributed/_local table shape is exercised under the same profile
+                 as production (rolled out via OPIK-6881). Note: ClickHouse only reads <profiles>
+                 from users.d, not config.d, hence they live here rather than in clickhouse.xml. -->
+            <optimize_skip_unused_shards>1</optimize_skip_unused_shards>
+            <do_not_merge_across_partitions_select_final>1</do_not_merge_across_partitions_select_final>
+            <distributed_product_mode>local</distributed_product_mode>
         </default>
         <comet_llm_readonly_freeform_sql_profile>
             <readonly>1</readonly>
