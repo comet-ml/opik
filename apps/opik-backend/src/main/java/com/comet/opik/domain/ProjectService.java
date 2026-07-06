@@ -14,6 +14,7 @@ import com.comet.opik.api.sorting.SortingFactoryProjects;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
+import com.comet.opik.infrastructure.ProjectLastUpdatedFlushConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.utils.BinaryOperatorUtils;
@@ -30,8 +31,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
+import org.redisson.api.RScoredSortedSetReactive;
+import org.redisson.api.RedissonReactiveClient;
+import org.redisson.client.codec.StringCodec;
+import org.redisson.client.protocol.ScoredEntry;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
@@ -39,6 +46,7 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
@@ -97,6 +105,9 @@ public interface ProjectService {
 
     void recordLastUpdatedTrace(String workspaceId, Collection<ProjectIdLastUpdated> lastUpdatedTraces);
 
+    /** Drains the Redis-buffered last-updated-trace maxima to MySQL. Returns the number of project markers written. */
+    Mono<Long> flushLastUpdatedTraces();
+
     Mono<Optional<UUID>> resolveProjectIdOrCreate(@Nullable UUID projectId, @Nullable String projectName);
 
     Mono<UUID> resolveProjectIdAndVerifyVisibility(UUID projectId, String projectName);
@@ -143,6 +154,8 @@ class ProjectServiceImpl implements ProjectService {
     private final @NonNull SortingFactoryProjects sortingFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull AnalyticsService analyticsService;
+    private final @NonNull RedissonReactiveClient redisClient;
+    private final @NonNull @Config("projectLastUpdatedFlush") ProjectLastUpdatedFlushConfig lastUpdatedFlushConfig;
 
     private NotFoundException createNotFoundError() {
         String message = "Project not found";
@@ -561,8 +574,106 @@ class ProjectServiceImpl implements ProjectService {
 
     @Override
     public void recordLastUpdatedTrace(String workspaceId, Collection<ProjectIdLastUpdated> lastUpdatedTraces) {
+        if (!lastUpdatedFlushConfig.isEnabled()) {
+            writeLastUpdatedTraceToDb(workspaceId, lastUpdatedTraces);
+            return;
+        }
+
+        // Buffer the per-project maximum timestamp in a Redis ZSET (member "workspaceId:projectId", score = epoch
+        // millis) so the high-frequency ingestion path stays off the contended `projects` row. addIfGreater keeps
+        // only the cluster-wide max; flushLastUpdatedTraces() persists it to MySQL periodically.
+        var pending = lastUpdatedTracePendingSet();
+        Flux.fromIterable(lastUpdatedTraces)
+                .flatMap(project -> pending.addIfGreater(
+                        project.lastUpdatedAt().toEpochMilli(), lastUpdatedTraceMember(workspaceId, project.id())))
+                .subscribeOn(Schedulers.boundedElastic())
+                // Fail-open: the marker is a best-effort sort hint, a Redis blip must not break trace ingestion.
+                .subscribe(
+                        __ -> {
+                        },
+                        error -> log.warn("Failed to buffer last-updated-trace marker for workspace '{}'",
+                                workspaceId, error));
+    }
+
+    @Override
+    public Mono<Long> flushLastUpdatedTraces() {
+        var pending = lastUpdatedTracePendingSet();
+        int batchSize = lastUpdatedFlushConfig.getJobBatchSize();
+        // Cap iterations so a member that repeatedly fails to be removed can't spin the drain forever.
+        int maxIterations = Math.max(1, batchSize);
+
+        return pending.entryRange(0, batchSize - 1)
+                .expand(entries -> entries.size() < batchSize
+                        ? Mono.empty()
+                        : pending.entryRange(0, batchSize - 1))
+                .take(maxIterations)
+                .filter(entries -> !entries.isEmpty())
+                .concatMap(entries -> flushLastUpdatedTraceBatch(pending, entries))
+                .reduce(0L, Long::sum);
+    }
+
+    private Mono<Long> flushLastUpdatedTraceBatch(RScoredSortedSetReactive<String> pending,
+            Collection<ScoredEntry<String>> entries) {
+        // Group by workspace so each MySQL batch write targets a single workspace_id (matches the DAO binding).
+        var byWorkspace = entries.stream()
+                .map(ProjectServiceImpl::parseLastUpdatedTraceMember)
+                .filter(Objects::nonNull)
+                .collect(Collectors.groupingBy(
+                        ParsedLastUpdatedTrace::workspaceId,
+                        Collectors.mapping(
+                                parsed -> ProjectIdLastUpdated.builder()
+                                        .id(parsed.projectId())
+                                        .lastUpdatedAt(parsed.lastUpdatedAt())
+                                        .build(),
+                                Collectors.toUnmodifiableSet())));
+
+        var members = entries.stream().map(ScoredEntry::getValue).collect(Collectors.toUnmodifiableSet());
+
+        return Mono.fromRunnable(() -> byWorkspace.forEach(this::writeLastUpdatedTraceToDb))
+                .subscribeOn(Schedulers.boundedElastic())
+                // Remove processed members only after the MySQL write succeeds. A member re-bumped between read and
+                // removal may lose a single increment; it self-heals on the project's next trace and never regresses
+                // the marker (the MySQL write only moves last_updated_trace_at forward).
+                .then(pending.removeAll(members))
+                .thenReturn((long) byWorkspace.values().stream().mapToInt(Collection::size).sum());
+    }
+
+    private void writeLastUpdatedTraceToDb(String workspaceId, Collection<ProjectIdLastUpdated> lastUpdatedTraces) {
+        if (lastUpdatedTraces.isEmpty()) {
+            return;
+        }
         template.inTransaction(WRITE,
                 handle -> handle.attach(ProjectDAO.class).recordLastUpdatedTrace(workspaceId, lastUpdatedTraces));
+    }
+
+    private RScoredSortedSetReactive<String> lastUpdatedTracePendingSet() {
+        return redisClient.getScoredSortedSet(ProjectLastUpdatedFlushConfig.PENDING_SET_KEY, StringCodec.INSTANCE);
+    }
+
+    private static String lastUpdatedTraceMember(String workspaceId, UUID projectId) {
+        return workspaceId + ProjectLastUpdatedFlushConfig.MEMBER_SEPARATOR + projectId;
+    }
+
+    // Member is "workspaceId:projectId"; projectId is a UUID with no separator, so split on the last separator.
+    private static ParsedLastUpdatedTrace parseLastUpdatedTraceMember(ScoredEntry<String> entry) {
+        String value = entry.getValue();
+        int separatorIndex = value.lastIndexOf(ProjectLastUpdatedFlushConfig.MEMBER_SEPARATOR);
+        if (separatorIndex <= 0 || separatorIndex == value.length() - 1) {
+            log.warn("Skipping malformed last-updated-trace buffer member: '{}'", value);
+            return null;
+        }
+        try {
+            return new ParsedLastUpdatedTrace(
+                    value.substring(0, separatorIndex),
+                    UUID.fromString(value.substring(separatorIndex + 1)),
+                    Instant.ofEpochMilli(entry.getScore().longValue()));
+        } catch (IllegalArgumentException e) {
+            log.warn("Skipping last-updated-trace buffer member with invalid project id: '{}'", value);
+            return null;
+        }
+    }
+
+    private record ParsedLastUpdatedTrace(String workspaceId, UUID projectId, Instant lastUpdatedAt) {
     }
 
     @Override
