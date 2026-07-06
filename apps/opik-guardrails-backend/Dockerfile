@@ -25,10 +25,10 @@ RUN ln -sf /usr/bin/python3.10 /usr/bin/python && \
 WORKDIR /opt/opik-guardrails-backend
 
 COPY requirements.txt .
-# DL3013: pip itself is upgraded to latest by design; requirements.txt pins the
-# actual dependency versions.
-# hadolint ignore=DL3013
-RUN pip install --no-cache-dir -U pip && \
+# Ubuntu 22.04 ships pip ~22; the pinned torch/transformers/hf_xet wheels need a
+# newer resolver. Float pip forward from a >=24 floor (no rot — it's a lower
+# bound, not a frozen version); dependency versions themselves are in requirements.txt.
+RUN pip install --no-cache-dir -U "pip>=24.0" && \
     pip install --no-cache-dir --disable-pip-version-check -r requirements.txt
 
 COPY entrypoint.sh .
