@@ -4454,6 +4454,107 @@ class FindSpansResourceTest {
                     sortingFields, List.of());
         }
 
+        @ParameterizedTest
+        @EnumSource(Direction.class)
+        void whenSortingByFeedbackScoresWithNarrowingFilter__thenReturnSpansSorted(Direction direction) {
+            // black-box coverage for the span_id_prefilter branch: a feedback-score sort disables page-keyed
+            // aggregates, while the narrowing filter activates the prefilter that keys the feedback-score and
+            // comment CTEs — the returned page must be correctly sorted and fully enriched
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var nameMarker = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+                    .stream()
+                    .map(span -> span.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .name(nameMarker + "-" + span.name())
+                            .usage(null)
+                            .feedbackScores(null)
+                            .endTime(span.startTime().plus(randomNumber(), ChronoUnit.MILLIS))
+                            .comments(null)
+                            .build())
+                    .map(span -> span.toBuilder()
+                            .duration(span.startTime().until(span.endTime(), ChronoUnit.MICROS) / 1000.0)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            List<FeedbackScoreItem.FeedbackScoreBatchItem> scoreForSpan = PodamFactoryUtils.manufacturePojoList(
+                    podamFactory,
+                    FeedbackScoreItem.FeedbackScoreBatchItem.class);
+
+            List<FeedbackScoreItem.FeedbackScoreBatchItem> allScores = new ArrayList<>();
+            for (Span span : spans) {
+                for (FeedbackScoreItem.FeedbackScoreBatchItem item : scoreForSpan) {
+
+                    if (spans.getLast().equals(span) && scoreForSpan.getFirst().equals(item)) {
+                        continue;
+                    }
+
+                    allScores.add(item.toBuilder()
+                            .id(span.id())
+                            .projectName(span.projectName())
+                            .value(podamFactory.manufacturePojo(BigDecimal.class).abs())
+                            .build());
+                }
+            }
+
+            spanResourceClient.feedbackScores(allScores, apiKey, workspaceName);
+
+            var sortingField = new SortingField(
+                    "feedback_scores.%s".formatted(scoreForSpan.getFirst().name()),
+                    direction);
+
+            var filters = List.of(SpanFilter.builder()
+                    .field(SpanField.NAME)
+                    .operator(Operator.CONTAINS)
+                    .value(nameMarker)
+                    .build());
+
+            Comparator<Span> comparing = Comparator.comparing((Span span) -> Optional.ofNullable(span.feedbackScores())
+                    .orElse(List.of())
+                    .stream()
+                    .filter(score -> score.name().equals(scoreForSpan.getFirst().name()))
+                    .findFirst()
+                    .map(FeedbackScore::value)
+                    .orElse(null),
+                    direction == Direction.ASC
+                            ? Comparator.nullsFirst(Comparator.naturalOrder())
+                            : Comparator.nullsLast(Comparator.reverseOrder()))
+                    .thenComparing(Comparator.comparing(Span::id).reversed());
+
+            var expectedSpans = spans.stream()
+                    .map(span -> span.toBuilder()
+                            .feedbackScores(
+                                    allScores
+                                            .stream()
+                                            .filter(score -> score.id().equals(span.id()))
+                                            .map(scores -> FeedbackScore.builder()
+                                                    .name(scores.name())
+                                                    .value(scores.value())
+                                                    .categoryName(scores.categoryName())
+                                                    .source(scores.source())
+                                                    .reason(scores.reason())
+                                                    .build())
+                                            .toList())
+                            .build())
+                    .sorted(comparing)
+                    .toList();
+
+            List<SortingField> sortingFields = List.of(sortingField);
+
+            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans, List.of(), apiKey,
+                    sortingFields, List.of());
+        }
+
         @Test
         void search__whenFilterIsInvalid__thenReturnProperStatusCode() {
 
