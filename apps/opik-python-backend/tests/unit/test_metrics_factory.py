@@ -591,6 +591,61 @@ class TestReferenceKeyValidation:
                 dataset_items_provider=lambda: dataset_items,
             )
 
+    def test_build_passes_when_field_present_but_null(self):
+        # A field that exists on every item but holds null is a data-quality
+        # issue, not a key misconfiguration -> the metric must still build
+        # (regression guard: this previously hard-failed the run with a
+        # self-contradictory "did not resolve ... available fields: answer"
+        # message).
+        dataset_items = [{"answer": None}, {"answer": None}]
+        metric_fn = MetricFactory.build(
+            "equals",
+            {"reference_key": "answer"},
+            "model",
+            dataset_items_provider=lambda: dataset_items,
+        )
+        assert callable(metric_fn)
+
+    def test_build_does_not_crash_on_non_dict_items(self):
+        # Malformed dataset items must yield a clean InvalidMetricError, not an
+        # AttributeError from .get()/.keys() on a non-dict.
+        dataset_items = [None, "scalar", 42]
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build(
+                "equals",
+                {"reference_key": "answer"},
+                "model",
+                dataset_items_provider=lambda: dataset_items,
+            )
+        assert "did not resolve" in str(exc_info.value)
+
+    def test_numerical_similarity_raises_when_references_non_numeric(self):
+        # The key resolves for every item, but to non-numeric text -> every item
+        # would score 0 (silent flat-0). numerical_similarity must fail loudly
+        # (OPIK-7160), unlike equals/levenshtein for which any resolved value is
+        # scoreable.
+        dataset_items = [{"answer": "positive"}, {"answer": "negative"}]
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build(
+                "numerical_similarity",
+                {"reference_key": "answer"},
+                "model",
+                dataset_items_provider=lambda: dataset_items,
+            )
+        assert "no dataset item held a numeric value" in str(exc_info.value)
+
+    def test_numerical_similarity_builds_with_one_numeric_reference(self):
+        # Sparse numeric data: only some items are numeric. Build succeeds
+        # (there is at least one numeric reference to work with).
+        dataset_items = [{"score": 3}, {"score": "n/a"}]
+        metric_fn = MetricFactory.build(
+            "numerical_similarity",
+            {"reference_key": "score"},
+            "model",
+            dataset_items_provider=lambda: dataset_items,
+        )
+        assert callable(metric_fn)
+
 
 class TestMissingReferencePerItem:
     """Per-item feedback when a reference key is absent on a specific item."""
@@ -609,6 +664,14 @@ class TestMissingReferencePerItem:
         result = metric_fn({"other": "x"}, "x")
         assert result.value == 0.0
         assert "Missing reference value" in result.reason
+
+    def test_present_empty_string_reference_matches_empty_output(self):
+        # A field that is present but holds "" is a real reference value, not a
+        # missing one: empty output should still score a perfect match. Only a
+        # genuinely absent field short-circuits to the missing-reference result.
+        metric_fn = MetricFactory.build("equals", {"reference_key": "answer"}, "model")
+        result = metric_fn({"answer": ""}, "")
+        assert result.value == 1.0
 
 
 class TestNumericalSimilarityMetric:
