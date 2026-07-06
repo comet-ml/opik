@@ -12,11 +12,11 @@ import { formatNumericData } from "@/lib/utils";
 
 import { TransformedData } from "@/types/projects";
 import useChartConfig from "@/hooks/useChartConfig";
-import useProjectMetric, {
+import {
   INTERVAL_TYPE,
   METRIC_NAME_TYPE,
 } from "@/api/projects/useProjectMetric";
-import useWorkspaceMetric from "@/api/projects/useWorkspaceMetric";
+import useMetricData from "@/api/projects/useMetricData";
 import { ChartTooltipRenderValueArguments } from "@/shared/Charts/ChartTooltipContent/ChartTooltipContent";
 import NoData from "@/shared/NoData/NoData";
 import { ValueType } from "recharts/types/component/DefaultTooltipContent";
@@ -125,11 +125,10 @@ const MetricContainerChart = ({
   hideXAxis,
   hideYAxis,
 }: MetricContainerChartProps) => {
-  const isWorkspaceMode = Array.isArray(projectIds);
-
-  const projectQuery = useProjectMetric(
+  const { data: response, isPending } = useMetricData(
     {
-      projectId: projectId ?? "",
+      projectId,
+      projectIds,
       metricName,
       interval,
       intervalStart,
@@ -140,30 +139,8 @@ const MetricContainerChart = ({
       breakdown,
       logsSource,
     },
-    {
-      enabled: !isWorkspaceMode && !!projectId,
-      refetchInterval: 30000,
-    },
+    { refetchInterval: 30000 },
   );
-
-  const workspaceQuery = useWorkspaceMetric(
-    {
-      projectIds: projectIds ?? [],
-      metricName,
-      interval,
-      intervalStart,
-      intervalEnd,
-      breakdown,
-    },
-    {
-      enabled: isWorkspaceMode,
-      refetchInterval: 30000,
-    },
-  );
-
-  const { data: response, isPending } = isWorkspaceMode
-    ? workspaceQuery
-    : projectQuery;
 
   const traces = response?.results;
 

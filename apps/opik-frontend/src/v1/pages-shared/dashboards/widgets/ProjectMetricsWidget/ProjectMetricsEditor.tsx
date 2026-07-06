@@ -34,6 +34,11 @@ import {
 import get from "lodash/get";
 
 import { METRIC_NAME_TYPE } from "@/api/projects/useProjectMetric";
+import {
+  WORKSPACE_TIME_SERIES_METRIC_OPTIONS,
+  isWorkspaceMetric,
+  isMultiProjectSelection,
+} from "@/lib/dashboard/workspaceMetrics";
 import useProjectTokenUsageNames from "@/api/projects/useProjectTokenUsageNames";
 import { DEFAULT_DATE_PRESET } from "@/v1/pages-shared/traces/MetricDateRangeSelect/constants";
 import {
@@ -124,32 +129,6 @@ const DURATION_METRIC_OPTIONS = [
   { value: "p99", label: "P99" },
 ];
 
-// Aggregating across projects is span-only (provider/model breakdown is a span dimension), so when more than one
-// project is selected the metric list narrows to these.
-const WORKSPACE_METRIC_VALUES: METRIC_NAME_TYPE[] = [
-  METRIC_NAME_TYPE.SPAN_COUNT,
-  METRIC_NAME_TYPE.SPAN_TOKEN_USAGE,
-  METRIC_NAME_TYPE.SPAN_COST,
-];
-
-const WORKSPACE_METRIC_OPTIONS = [
-  {
-    value: METRIC_NAME_TYPE.SPAN_COUNT,
-    label: "Number of spans",
-    filterType: "span" as const,
-  },
-  {
-    value: METRIC_NAME_TYPE.SPAN_TOKEN_USAGE,
-    label: "Span token usage",
-    filterType: "span" as const,
-  },
-  {
-    value: METRIC_NAME_TYPE.SPAN_COST,
-    label: "Span cost",
-    filterType: "span" as const,
-  },
-];
-
 const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
   const widgetData = useDashboardStore(
     (state) => state.previewWidget!,
@@ -214,9 +193,12 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
   const projectId = runtimeContext.projectId || localProjectIds[0] || "";
 
   // Selecting more than one project aggregates across projects, which only supports span metrics.
-  const isMultiProject = !hasRuntimeProjectId && localProjectIds.length >= 2;
+  const isMultiProject = isMultiProjectSelection(
+    runtimeContext.projectId,
+    localProjectIds,
+  );
   const metricOptions = isMultiProject
-    ? WORKSPACE_METRIC_OPTIONS
+    ? WORKSPACE_TIME_SERIES_METRIC_OPTIONS
     : METRIC_OPTIONS;
 
   const selectedMetric = METRIC_OPTIONS.find((m) => m.value === metricType);
@@ -375,11 +357,11 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
 
     // Aggregating across projects only supports span metrics. If the selection becomes multi-project while a
     // non-span metric is chosen, fall back to span token usage and clear metric-specific selections.
-    const becomesMultiProject = !hasRuntimeProjectId && projectIds.length >= 2;
-    if (
-      becomesMultiProject &&
-      !WORKSPACE_METRIC_VALUES.includes(metricType as METRIC_NAME_TYPE)
-    ) {
+    const becomesMultiProject = isMultiProjectSelection(
+      runtimeContext.projectId,
+      projectIds,
+    );
+    if (becomesMultiProject && !isWorkspaceMetric(metricType)) {
       nextConfig.metricType = METRIC_NAME_TYPE.SPAN_TOKEN_USAGE;
       nextConfig.traceFilters = [];
       nextConfig.threadFilters = [];

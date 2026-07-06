@@ -7,7 +7,10 @@ import {
   INTERVAL_TYPE,
   METRIC_NAME_TYPE,
 } from "@/api/projects/useProjectMetric";
-import { WORKSPACE_METRIC_NAMES } from "@/api/projects/useWorkspaceMetric";
+import {
+  isWorkspaceMetric,
+  resolveProjectSelection,
+} from "@/lib/dashboard/workspaceMetrics";
 import {
   useDashboardStore,
   selectRuntimeConfig,
@@ -83,39 +86,20 @@ const ProjectMetricsWidget: React.FunctionComponent<
   const widgetProjectId = widget?.config?.projectId as string | undefined;
   const widgetProjectIds = widget?.config?.projectIds as string[] | undefined;
 
-  // Resolve the configured selection into either a single project (per-project endpoint, all metrics) or a
-  // project set (workspace endpoint). A runtime project (e.g. the Insights tab) always pins to a single project.
-  // For projectIds: exactly one => single project; zero (all) or many => workspace aggregation.
-  const { projectId, projectIds, interval, intervalStart, intervalEnd } =
-    useMemo(() => {
-      const { interval, intervalStart, intervalEnd } = calculateIntervalConfig(
-        runtimeContext.dateRange,
-      );
-      const base = { interval, intervalStart, intervalEnd };
+  const { projectId, projectIds } = useMemo(
+    () =>
+      resolveProjectSelection({
+        runtimeProjectId: runtimeContext.projectId,
+        projectId: widgetProjectId,
+        projectIds: widgetProjectIds,
+      }),
+    [widgetProjectId, widgetProjectIds, runtimeContext.projectId],
+  );
 
-      if (runtimeContext.projectId) {
-        return {
-          ...base,
-          projectId: runtimeContext.projectId,
-          projectIds: undefined,
-        };
-      }
-      if (Array.isArray(widgetProjectIds)) {
-        return widgetProjectIds.length === 1
-          ? { ...base, projectId: widgetProjectIds[0], projectIds: undefined }
-          : { ...base, projectId: undefined, projectIds: widgetProjectIds };
-      }
-      return {
-        ...base,
-        projectId: widgetProjectId || undefined,
-        projectIds: undefined,
-      };
-    }, [
-      widgetProjectId,
-      widgetProjectIds,
-      runtimeContext.projectId,
-      runtimeContext.dateRange,
-    ]);
+  const { interval, intervalStart, intervalEnd } = useMemo(
+    () => calculateIntervalConfig(runtimeContext.dateRange),
+    [runtimeContext.dateRange],
+  );
 
   const isWorkspaceMode = Array.isArray(projectIds);
   const isConfigured = Boolean(projectId) || isWorkspaceMode;
@@ -440,13 +424,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
     }
 
     // Aggregating across projects is only available for span metrics (see WORKSPACE_METRIC_NAMES).
-    if (
-      isWorkspaceMode &&
-      metricName &&
-      !WORKSPACE_METRIC_NAMES.includes(
-        metricName as (typeof WORKSPACE_METRIC_NAMES)[number],
-      )
-    ) {
+    if (isWorkspaceMode && metricName && !isWorkspaceMetric(metricName)) {
       return (
         <DashboardWidget.EmptyState
           title="Not available across projects"

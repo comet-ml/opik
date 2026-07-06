@@ -101,8 +101,12 @@ export interface ProjectStatsCardWidget {
   type: WIDGET_TYPE.PROJECT_STATS_CARD;
   config: {
     source: TRACE_DATA_TYPE;
-    projectId: string;
+    // Single-project selection (stats endpoint). Workspace/multi-project selection uses projectIds.
+    projectId?: string;
+    projectIds?: string[];
     metric: string;
+    // Selected token-usage key when metric is the workspace span-token-usage total.
+    usageMetric?: string;
     traceFilters?: Filters;
     spanFilters?: Filters;
   } & Record<string, unknown>;

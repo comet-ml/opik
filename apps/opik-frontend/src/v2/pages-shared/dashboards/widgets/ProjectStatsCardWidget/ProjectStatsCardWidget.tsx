@@ -15,6 +15,11 @@ import { calculateIntervalConfig } from "@/v2/pages-shared/traces/MetricDateRang
 import { DEFAULT_DATE_PRESET } from "@/v2/pages-shared/traces/MetricDateRangeSelect/constants";
 import useTracesStatistic from "@/api/traces/useTracesStatistic";
 import useSpansStatistic from "@/api/traces/useSpansStatistic";
+import useWorkspaceMetric from "@/api/projects/useWorkspaceMetric";
+import {
+  INTERVAL_TYPE,
+  METRIC_NAME_TYPE,
+} from "@/api/projects/useProjectMetric";
 import { ColumnStatistic } from "@/types/shared";
 import { Skeleton } from "@/ui/skeleton";
 import { TRACE_DATA_TYPE } from "@/constants/traces";
@@ -26,6 +31,11 @@ import {
   isFeedbackScoreMetric,
   extractFeedbackScoreName,
 } from "./metrics";
+import {
+  getWorkspaceStatMetric,
+  resolveProjectSelection,
+  DEFAULT_WORKSPACE_USAGE_METRIC,
+} from "@/lib/dashboard/workspaceMetrics";
 import { formatScoreDisplay } from "@/lib/feedback-scores";
 
 const renderMetricDisplay = (
@@ -81,24 +91,32 @@ const ProjectStatsCardWidget: React.FunctionComponent<
   }, [sectionId, widgetId, onAddEditWidgetCallback]);
 
   const widgetProjectId = widget?.config?.projectId as string | undefined;
+  const widgetProjectIds = widget?.config?.projectIds as string[] | undefined;
 
-  const { projectId, intervalStart, intervalEnd } = useMemo(() => {
-    const resolvedProjectId =
-      runtimeContext.projectId || widgetProjectId || undefined;
+  const { projectId, projectIds } = useMemo(
+    () =>
+      resolveProjectSelection({
+        runtimeProjectId: runtimeContext.projectId,
+        projectId: widgetProjectId,
+        projectIds: widgetProjectIds,
+      }),
+    [widgetProjectId, widgetProjectIds, runtimeContext.projectId],
+  );
 
-    const { intervalStart, intervalEnd } = calculateIntervalConfig(
-      runtimeContext.dateRange,
-    );
+  const { intervalStart, intervalEnd } = useMemo(
+    () => calculateIntervalConfig(runtimeContext.dateRange),
+    [runtimeContext.dateRange],
+  );
 
-    return {
-      projectId: resolvedProjectId,
-      intervalStart,
-      intervalEnd,
-    };
-  }, [widgetProjectId, runtimeContext.projectId, runtimeContext.dateRange]);
+  const isMultiProject = Array.isArray(projectIds);
+  const isConfigured = Boolean(projectId) || isMultiProject;
 
   const source = widget?.config?.source as TRACE_DATA_TYPE | undefined;
   const metric = widget?.config?.metric as string | undefined;
+  const usageMetric = widget?.config?.usageMetric as string | undefined;
+  const workspaceMetricDef = isMultiProject
+    ? getWorkspaceStatMetric(metric ?? "")
+    : null;
   const traceFilters = widget?.config?.traceFilters as Filter[] | undefined;
   const spanFilters = widget?.config?.spanFilters as Filter[] | undefined;
 
@@ -119,7 +137,10 @@ const ProjectStatsCardWidget: React.FunctionComponent<
       toTime: intervalEnd,
       logsSource: LOGS_SOURCE.sdk,
     },
-    { enabled: source === TRACE_DATA_TYPE.traces && !!projectId },
+    {
+      enabled:
+        !isMultiProject && source === TRACE_DATA_TYPE.traces && !!projectId,
+    },
   );
 
   const spansStatistic = useSpansStatistic(
@@ -130,7 +151,21 @@ const ProjectStatsCardWidget: React.FunctionComponent<
       toTime: intervalEnd,
       logsSource: LOGS_SOURCE.sdk,
     },
-    { enabled: source === TRACE_DATA_TYPE.spans && !!projectId },
+    {
+      enabled:
+        !isMultiProject && source === TRACE_DATA_TYPE.spans && !!projectId,
+    },
+  );
+
+  const workspaceMetric = useWorkspaceMetric(
+    {
+      projectIds: projectIds ?? [],
+      metricName: (metric as METRIC_NAME_TYPE) ?? METRIC_NAME_TYPE.SPAN_COUNT,
+      interval: INTERVAL_TYPE.TOTAL,
+      intervalStart,
+      intervalEnd,
+    },
+    { enabled: isMultiProject && Boolean(workspaceMetricDef) },
   );
 
   const { data, isLoading, error } = useMemo(
@@ -151,8 +186,50 @@ const ProjectStatsCardWidget: React.FunctionComponent<
       />
     ) : undefined;
 
+  const renderMultiProjectContent = () => {
+    if (!metric || !workspaceMetricDef) {
+      return (
+        <DashboardWidget.EmptyState
+          title="No metric selected"
+          message="Choose a metric to display in this widget"
+          action={editAction}
+        />
+      );
+    }
+
+    if (workspaceMetric.isLoading) {
+      return (
+        <div className="flex h-full items-center justify-center p-6">
+          <div className="w-full space-y-3">
+            <Skeleton className="h-8 w-32" />
+            <Skeleton className="h-16 w-full" />
+          </div>
+        </div>
+      );
+    }
+
+    const results = workspaceMetric.data?.results ?? [];
+    // Token usage returns one series per usage key; pick the selected key. Count/cost return a single series.
+    const series = workspaceMetricDef.requiresUsageKey
+      ? results.find(
+          (r) => r.name === (usageMetric || DEFAULT_WORKSPACE_USAGE_METRIC),
+        )
+      : results[0];
+    const value = series?.data?.[0]?.value;
+
+    return renderMetricDisplay(
+      workspaceMetricDef.label,
+      value !== undefined && value !== null
+        ? workspaceMetricDef.formatter(Number(value))
+        : "-",
+      value !== undefined && value !== null
+        ? workspaceMetricDef.tooltipFormatter?.(Number(value))
+        : undefined,
+    );
+  };
+
   const renderCardContent = () => {
-    if (!projectId) {
+    if (!isConfigured) {
       return (
         <DashboardWidget.EmptyState
           title="Project not configured"
@@ -160,6 +237,10 @@ const ProjectStatsCardWidget: React.FunctionComponent<
           action={editAction}
         />
       );
+    }
+
+    if (isMultiProject) {
+      return renderMultiProjectContent();
     }
 
     if (!source || !metric) {

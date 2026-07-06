@@ -7,13 +7,6 @@ import {
   ProjectMetricsResponse,
 } from "@/api/projects/useProjectMetric";
 
-// The workspace endpoint only serves span metrics (provider/model breakdown is span-only)
-export const WORKSPACE_METRIC_NAMES = [
-  METRIC_NAME_TYPE.SPAN_COUNT,
-  METRIC_NAME_TYPE.SPAN_TOKEN_USAGE,
-  METRIC_NAME_TYPE.SPAN_COST,
-] as const;
-
 type UseWorkspaceMetricParams = {
   projectIds: string[];
   metricName: METRIC_NAME_TYPE;
