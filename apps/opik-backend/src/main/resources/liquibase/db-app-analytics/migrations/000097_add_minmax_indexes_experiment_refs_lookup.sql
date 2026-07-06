@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset thiagoh:000097_add_minmax_index_experiment_items_trace_id
+--changeset thiagohora:000097_add_minmax_index_experiment_items_trace_id
 --comment: Add minmax skip index on experiment_items.trace_id so experiment-refs lookups by trace_id prune granules instead of a generic-exclusion scan (OPIK-7230)
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items ON CLUSTER '{cluster}'
