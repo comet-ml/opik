@@ -35,7 +35,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -79,13 +81,13 @@ public interface AgenticScoringService {
      *                        tool call is recorded (OPIK-6994); pass {@link EvaluationRecorder#NOOP} when
      *                        monitoring is off
      */
-    Mono<ChatResponse> runToolCallLoop(@NonNull ChatResponse initialResponse,
-            @NonNull ChatRequest toolRequest, @NonNull ChatRequest structuredRequest,
-            @NonNull Supplier<TraceToolContext> contextSupplier,
-            @NonNull Function<ChatRequest, Mono<ChatResponse>> scoreFn,
-            @NonNull Supplier<String> modelNameSupplier, String logId,
-            @NonNull Logger userFacingLogger, @NonNull Map<String, String> mdc,
-            @NonNull EvaluationRecorder recorder);
+    Mono<ChatResponse> runToolCallLoop(ChatResponse initialResponse,
+            ChatRequest toolRequest, ChatRequest structuredRequest,
+            Supplier<TraceToolContext> contextSupplier,
+            Function<ChatRequest, Mono<ChatResponse>> scoreFn,
+            Supplier<String> modelNameSupplier, String logId,
+            Logger userFacingLogger, Map<String, String> mdc,
+            EvaluationRecorder recorder);
 
     /**
      * Lists an entity's attachments while tolerating the upload race (bounded retry configured by
@@ -114,7 +116,7 @@ public interface AgenticScoringService {
      * @param bodyNodes   the entity's content nodes scanned for attachment references
      */
     Mono<List<AttachmentInfo>> listAttachmentsToleratingUploadRace(
-            @NonNull Mono<List<AttachmentInfo>> coldFetch, String workspaceId, UUID entityId,
+            Mono<List<AttachmentInfo>> coldFetch, String workspaceId, UUID entityId,
             JsonNode... bodyNodes);
 
     /**
@@ -138,9 +140,9 @@ public interface AgenticScoringService {
      *                                   used to keep referenced auto-stripped copies
      */
     Mono<Map<UUID, List<AttachmentInfo>>> listSpanAttachmentsToleratingUploadRace(
-            @NonNull Mono<List<AttachmentInfo>> coldBatchedFetch, String workspaceId, UUID traceId,
-            @NonNull Set<UUID> spanIdsExpectingAttachment,
-            @NonNull Map<UUID, Set<String>> referencedNamesBySpan);
+            Mono<List<AttachmentInfo>> coldBatchedFetch, String workspaceId, UUID traceId,
+            Set<UUID> spanIdsExpectingAttachment,
+            Map<UUID, Set<String>> referencedNamesBySpan);
 
     /**
      * Whether the given provider is known to support tool-calling. Used to gate the agentic-tools
@@ -148,7 +150,7 @@ public interface AgenticScoringService {
      * exceeds the size threshold (which may overflow the model's window — in that case the operator
      * should pick a different model for those workloads).
      */
-    boolean supportsToolCalling(@NonNull LlmProvider provider);
+    boolean supportsToolCalling(LlmProvider provider);
 
     /**
      * Attach the tool specs from the registered {@link ToolRegistry} and the given {@code toolChoice} to
@@ -159,7 +161,7 @@ public interface AgenticScoringService {
      * top-level fields on ChatRequest, present or future, guarding against a "silently dropped fields"
      * regression between the initial scoring call and the structured re-issue in the tool-call wrap-up.
      */
-    ChatRequest addToolSpecs(@NonNull ChatRequest request, @NonNull ToolChoice toolChoice);
+    ChatRequest addToolSpecs(ChatRequest request, ToolChoice toolChoice);
 
     /**
      * Rough character-based token estimate for a pre-built JSON payload. Used to decide whether the
@@ -169,7 +171,7 @@ public interface AgenticScoringService {
      * <p>{@code charsPerToken} is the chars-per-token ratio operators configure via
      * {@code onlineScoring.agenticToolsCharsPerToken} (default 4 = natural-language English).
      */
-    int estimateTokensFromJson(@NonNull JsonNode fullJson, int charsPerToken);
+    int estimateTokensFromJson(JsonNode fullJson, int charsPerToken);
 
     /**
      * Same as {@link #estimateTokensFromJson} but builds the {@code {trace, spans}} JSON first. Prefer
@@ -177,8 +179,8 @@ public interface AgenticScoringService {
      * because it's going to be pre-seeded into the tool context's cache anyway) — avoids serializing the
      * trace twice on big-trace evaluations.
      */
-    int estimateTraceContextTokens(@NonNull Trace trace, @NonNull List<Span> spans,
-            @NonNull TraceCompressor traceCompressor, int charsPerToken);
+    int estimateTraceContextTokens(Trace trace, List<Span> spans,
+            TraceCompressor traceCompressor, int charsPerToken);
 
     /**
      * Rough character-based token estimate for the thread context as it would be rendered on the inline
@@ -190,7 +192,7 @@ public interface AgenticScoringService {
      *
      * <p>Same {@code charsPerToken} contract as {@link #estimateTraceContextTokens}.
      */
-    int estimateThreadContextTokens(@NonNull List<Trace> traces, @NonNull List<Span> spans, int charsPerToken);
+    int estimateThreadContextTokens(List<Trace> traces, List<Span> spans, int charsPerToken);
 
     /**
      * Build a sanitized one-line description of the outgoing LLM request for user-facing logs. The full
@@ -199,7 +201,7 @@ public interface AgenticScoringService {
      * any tokens or PII it carries) in clear text downstream of whatever sinks the log feeds. Shape-only
      * summary instead.
      */
-    String summarizeRequest(@NonNull ChatRequest request, @NonNull String modelName, boolean useTools);
+    String summarizeRequest(ChatRequest request, String modelName, boolean useTools);
 
     /**
      * Build a sanitized one-line description of the LLM response. The full {@link ChatResponse} carries
@@ -207,7 +209,7 @@ public interface AgenticScoringService {
      * reasoning about — surfacing the raw response in a user-facing log lands trace content (and any
      * tokens or PII it carries) downstream of whatever sinks the log feeds. Shape-only summary instead.
      */
-    String summarizeResponse(@NonNull ChatResponse response);
+    String summarizeResponse(ChatResponse response);
 }
 
 @Singleton
@@ -277,9 +279,9 @@ class AgenticScoringServiceImpl implements AgenticScoringService {
                     .orElse(error.getMessage());
             try (var logContext = wrapWithMdc(mdc)) {
                 userFacingLogger.error(
-                        "Scoring failed after loading attachment(s) {}; the judge model '{}' may not support this"
-                                + " attachment type. Use a model that supports the attachment's media type. Details: {}",
-                        attachments, modelName, detail);
+                        "Scoring failed after loading attachment(s) '{}'; the judge model '{}' may not support this"
+                                + " attachment type. Use a model that supports the attachment's media type. Details: '{}'",
+                        attachments, modelName, detail, error);
             }
         }
         return Mono.error(error);
@@ -297,28 +299,17 @@ class AgenticScoringServiceImpl implements AgenticScoringService {
                 workspaceId, entityId, error));
 
         Set<String> referencedNames = AttachmentUtils.collectAttachmentReferences(JsonUtils.getMapper(), bodyNodes);
+        Function<List<AttachmentInfo>, List<AttachmentInfo>> group = attachments -> preferPersistentAttachments(
+                attachments, referencedNames);
         if (referencedNames.isEmpty()) {
-            return fetch.map(attachments -> preferPersistentAttachments(attachments, referencedNames))
-                    .onErrorReturn(List.of());
+            return fetch.map(group).onErrorReturn(List.of());
         }
-        return fetch
-                .map(attachments -> preferPersistentAttachments(attachments, referencedNames))
-                .filter(AgenticScoringServiceImpl::hasPersistentAttachment)
-                .repeatWhenEmpty(onlineScoringConfig.getAttachmentFetchMaxRetries(),
-                        repeats -> repeats.delayElements(
-                                onlineScoringConfig.getAttachmentFetchRetryDelay().toJavaDuration()))
-                .onErrorResume(error -> Mono.empty())
-                // Retries exhausted (no persistent copy will come): best-effort final read so a
-                // backend-/REST-only auto-stripped attachment is still surfaced rather than dropped. Uses
-                // the raw coldFetch, so log its own failure here (the primary attempt's log above does not
-                // cover this second subscription) before degrading to an empty list.
-                .switchIfEmpty(Mono.defer(() -> coldFetch
-                        .map(attachments -> preferPersistentAttachments(attachments, referencedNames))
-                        .doOnError(error -> log.warn(
-                                "Best-effort attachment re-read failed for workspace '{}', entity '{}';"
-                                        + " online scoring will proceed without attachments",
-                                workspaceId, entityId, error))
-                        .onErrorReturn(List.of())));
+        return resolveWithUploadRaceTolerance(fetch, coldFetch, group,
+                AgenticScoringServiceImpl::hasPersistentAttachment, List.of(),
+                error -> log.warn(
+                        "Best-effort attachment re-read failed for workspace '{}', entity '{}';"
+                                + " online scoring will proceed without attachments",
+                        workspaceId, entityId, error));
     }
 
     @Override
@@ -329,28 +320,58 @@ class AgenticScoringServiceImpl implements AgenticScoringService {
         Mono<List<AttachmentInfo>> logged = coldBatchedFetch.doOnError(error -> log.warn(
                 "Failed to list span attachments for trace '{}' (workspace '{}'); degrading to none",
                 traceId, workspaceId, error));
+        Function<List<AttachmentInfo>, Map<UUID, List<AttachmentInfo>>> group = attachments -> groupBySpanPreferringPersistent(
+                attachments, referencedNamesBySpan);
         if (spanIdsExpectingAttachment.isEmpty()) {
-            return logged.map(attachments -> groupBySpanPreferringPersistent(attachments, referencedNamesBySpan))
-                    .onErrorReturn(Map.of());
+            return logged.map(group).onErrorReturn(Map.of());
         }
-        return logged
-                .map(attachments -> groupBySpanPreferringPersistent(attachments, referencedNamesBySpan))
-                .filter(bySpan -> spanIdsExpectingAttachment.stream()
-                        .allMatch(id -> hasPersistentAttachment(bySpan.getOrDefault(id, List.of()))))
+        return resolveWithUploadRaceTolerance(logged, coldBatchedFetch, group,
+                bySpan -> spanIdsExpectingAttachment.stream()
+                        .allMatch(id -> hasPersistentAttachment(bySpan.getOrDefault(id, List.of()))),
+                Map.of(),
+                error -> log.warn(
+                        "Best-effort span-attachment re-read failed for trace '{}' (workspace '{}');"
+                                + " online scoring will proceed without span attachments",
+                        traceId, workspaceId, error));
+    }
+
+    /**
+     * Shared retry/best-effort pipeline behind {@link #listAttachmentsToleratingUploadRace} and
+     * {@link #listSpanAttachmentsToleratingUploadRace} — the two differ only in the grouping shape (a
+     * single entity's list vs. a per-span map) and their logging identifiers, so both delegate here to
+     * keep the retry-budget / fallback plumbing from drifting between them.
+     *
+     * <p>Resubscribes {@code fetch} (the caller's already-failure-logged cold fetch) via
+     * {@code repeatWhenEmpty} until {@code group}'s output satisfies {@code isSatisfied}, up to
+     * {@link OnlineScoringConfig#getAttachmentFetchMaxRetries()} attempts. If the budget is exhausted,
+     * falls back to one more best-effort raw {@code coldFetch} read — logged via
+     * {@code onBestEffortFailure} — before degrading to {@code emptyResult}.
+     *
+     * @param fetch              the primary-failure-logged cold fetch driving the retry loop
+     * @param coldFetch          the raw cold fetch, resubscribed for the best-effort final read
+     * @param group              maps the raw attachment list to the caller's shape
+     * @param isSatisfied        whether {@code group}'s output means the expected attachment(s) landed
+     * @param emptyResult        degraded value once retries are exhausted and the final read also fails
+     * @param onBestEffortFailure logs the best-effort re-read failure with the caller's own identifiers
+     */
+    private <T> Mono<T> resolveWithUploadRaceTolerance(
+            @NonNull Mono<List<AttachmentInfo>> fetch, @NonNull Mono<List<AttachmentInfo>> coldFetch,
+            @NonNull Function<List<AttachmentInfo>, T> group, @NonNull Predicate<T> isSatisfied,
+            @NonNull T emptyResult, @NonNull Consumer<Throwable> onBestEffortFailure) {
+        return fetch
+                .map(group)
+                .filter(isSatisfied)
                 .repeatWhenEmpty(onlineScoringConfig.getAttachmentFetchMaxRetries(),
                         repeats -> repeats.delayElements(
                                 onlineScoringConfig.getAttachmentFetchRetryDelay().toJavaDuration()))
                 .onErrorResume(error -> Mono.empty())
-                // Retries exhausted (some referenced attachment never got a persistent copy — e.g. a
-                // REST-ingested image): best-effort grouping. Raw fetch, so log its own failure here (the
-                // primary attempt's log does not cover this second subscription) before degrading to none.
-                .switchIfEmpty(Mono.defer(() -> coldBatchedFetch
-                        .map(attachments -> groupBySpanPreferringPersistent(attachments, referencedNamesBySpan))
-                        .doOnError(error -> log.warn(
-                                "Best-effort span-attachment re-read failed for trace '{}' (workspace '{}');"
-                                        + " online scoring will proceed without span attachments",
-                                traceId, workspaceId, error))
-                        .onErrorReturn(Map.of())));
+                // Retries exhausted: best-effort final read (raw coldFetch, so it needs its own failure
+                // log — the primary attempt's log above does not cover this second subscription) rather
+                // than dropping the attachment(s) outright.
+                .switchIfEmpty(Mono.defer(() -> coldFetch
+                        .map(group)
+                        .doOnError(onBestEffortFailure)
+                        .onErrorReturn(emptyResult)));
     }
 
     private static Map<UUID, List<AttachmentInfo>> groupBySpanPreferringPersistent(

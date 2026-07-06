@@ -591,7 +591,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
             assertThatThrownBy(() -> AgenticScoringServiceImpl.surfaceInjectedMediaFailure(
                     error, ctx, UUID.randomUUID().toString(), logger, Map.of()).block())
                     .isSameAs(error);
-            verify(logger, times(1)).error(anyString(), any(), any(), any());
+            verify(logger, times(1)).error(anyString(), any(), any(), any(), any());
         }
     }
 
