@@ -333,7 +333,8 @@ class TraceServiceImpl implements TraceService {
                                                 ctx.get(RequestContext.WORKSPACE_ID),
                                                 ctx.get(RequestContext.USER_NAME),
                                                 traceUpdate,
-                                                ctx.getOrDefault(RequestContext.WORKSPACE_NAME, ""))))
+                                                ctx.getOrDefault(RequestContext.WORKSPACE_NAME, ""),
+                                                Map.of(id, project.id()))))
                                         .doOnSuccess(__ -> eventBus.post(new TraceCostIntelligenceChanged(
                                                 Map.of(id, project.id()), traceUpdate,
                                                 ctx.get(RequestContext.WORKSPACE_ID),
@@ -359,7 +360,7 @@ class TraceServiceImpl implements TraceService {
                                 .doOnSuccess(__ -> {
                                     log.info("Completed batch update for '{}' traces", batchUpdate.ids().size());
                                     eventBus.post(new TracesUpdated(projectIds, batchUpdate.ids(), workspaceId,
-                                            userName, batchUpdate.update(), workspaceName));
+                                            userName, batchUpdate.update(), workspaceName, traceToProjectMap));
                                     eventBus.post(new TraceCostIntelligenceChanged(traceToProjectMap,
                                             batchUpdate.update(), workspaceId, userName));
                                 });
