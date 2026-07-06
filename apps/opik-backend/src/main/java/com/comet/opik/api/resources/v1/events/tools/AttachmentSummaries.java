@@ -39,7 +39,7 @@ public class AttachmentSummaries {
         for (var info : attachments) {
             String mime = StringUtils.isNotBlank(info.mimeType()) ? info.mimeType() : TIKA.detect(info.fileName());
             ObjectNode item = array.addObject();
-            item.put("type", info.entityType().name().toLowerCase());
+            item.put("type", info.entityType().getValue());
             item.put("id", info.entityId().toString());
             item.put("file_name", info.fileName());
             item.put("mime_type", mime);

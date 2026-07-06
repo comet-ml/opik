@@ -61,8 +61,9 @@ public final class TraceCompressor implements EntityCompressor {
             @NonNull Trace trace,
             @NonNull List<Span> spans,
             CompressionTier forcedTier) {
-        return compress(fullJson, trace, spans, forcedTier, PathAwareTruncator.SuffixStyle.WITH_JQ_HINT,
-                Map.of(), List.of());
+        // Delegate to the attachments overload (which owns the WITH_JQ_HINT default) rather than
+        // re-specifying the suffix here, so the default lives in exactly one place.
+        return compress(fullJson, trace, spans, forcedTier, Map.of(), List.of());
     }
 
     /**

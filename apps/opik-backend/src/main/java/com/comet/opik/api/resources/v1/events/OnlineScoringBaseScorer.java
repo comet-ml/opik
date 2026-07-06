@@ -244,9 +244,14 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
                 .onErrorResume(error -> Mono.empty())
                 // Retries exhausted (no persistent copy will come): best-effort final read so a
                 // backend-/REST-only auto-stripped attachment is still surfaced rather than dropped. Uses
-                // the raw coldFetch — any failure on the primary attempt above was already logged.
+                // the raw coldFetch, so log its own failure here (the primary attempt's log above does not
+                // cover this second subscription) before degrading to an empty list.
                 .switchIfEmpty(Mono.defer(() -> coldFetch
                         .map(OnlineScoringBaseScorer::preferPersistentAttachments)
+                        .doOnError(error -> log.warn(
+                                "Best-effort attachment re-read failed for workspace '{}', entity '{}';"
+                                        + " online scoring will proceed without attachments",
+                                workspaceId, entityId, error))
                         .onErrorReturn(List.of())));
     }
 
@@ -285,9 +290,14 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
                         repeats -> repeats.delayElements(ATTACHMENT_FETCH_RETRY_DELAY))
                 .onErrorResume(error -> Mono.empty())
                 // Retries exhausted (some referenced attachment never got a persistent copy — e.g. a
-                // REST-ingested image): best-effort grouping. Raw fetch — the primary attempt already logged.
+                // REST-ingested image): best-effort grouping. Raw fetch, so log its own failure here (the
+                // primary attempt's log does not cover this second subscription) before degrading to none.
                 .switchIfEmpty(Mono.defer(() -> coldBatchedFetch
                         .map(OnlineScoringBaseScorer::groupBySpanPreferringPersistent)
+                        .doOnError(error -> log.warn(
+                                "Best-effort span-attachment re-read failed for trace '{}' (workspace '{}');"
+                                        + " online scoring will proceed without span attachments",
+                                traceId, workspaceId, error))
                         .onErrorReturn(Map.of())));
     }
 

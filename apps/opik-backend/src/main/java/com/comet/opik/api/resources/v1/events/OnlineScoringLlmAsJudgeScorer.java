@@ -35,6 +35,7 @@ import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.request.ToolChoice;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.inject.Inject;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonReactiveClient;
@@ -265,7 +266,10 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                     envelope.put("trace_id", trace.id() != null ? trace.id().toString() : null);
                     envelope.put("tier", compressed.tier().name());
                     envelope.set("data", compressed.payload());
-                    return new TraceStructure(envelope.toString(), fullJson);
+                    return TraceStructure.builder()
+                            .envelopeJson(envelope.toString())
+                            .fullJson(fullJson)
+                            .build();
                 }).subscribeOn(Schedulers.parallel()));
     }
 
@@ -628,7 +632,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
      * {@code {trace, spans}} composite built alongside it, threaded down so {@link #prepareEvaluation}
      * reuses it for the size estimate / tool-cache pre-seed instead of serializing the trace again.
      */
-    private record TraceStructure(String envelopeJson, JsonNode fullJson) {
+    @Builder(toBuilder = true)
+    private record TraceStructure(@NonNull String envelopeJson, @NonNull JsonNode fullJson) {
     }
 
 }

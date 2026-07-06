@@ -25,6 +25,7 @@ import jakarta.ws.rs.core.UriBuilder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.tika.Tika;
 import reactor.core.publisher.Mono;
@@ -447,8 +448,8 @@ class AttachmentServiceImpl implements AttachmentService {
     @Override
     @WithSpan
     public Mono<List<AttachmentInfo>> getAttachmentInfoByEntityIds(@NonNull EntityType entityType,
-            @NonNull Set<UUID> entityIds) {
-        if (entityIds.isEmpty()) {
+            Set<UUID> entityIds) {
+        if (CollectionUtils.isEmpty(entityIds)) {
             return Mono.just(List.of());
         }
         return attachmentDAO.getAttachmentsByEntityIds(entityType, entityIds);

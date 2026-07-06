@@ -257,50 +257,16 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
                         span.id(), modelName);
             }
 
-            ChatRequest scoreRequest;
-            ChatRequest structuredRequest;
+            LlmRequests requests;
             try {
                 if (useTools) {
-                    String drillDownHint = ("call read(type=span, id=%s, tier=MEDIUM) for the full span"
-                            + " with per-string truncation hints, or jq(type=span, id=%s,"
-                            + " expression='<path>') for a specific section")
-                            .formatted(span.id(), span.id());
-                    // Tool-loop request uses the soft InstructionStrategy; the wrap-up uses the
-                    // provider-native structured-output strategy (same asymmetry as the trace scorer —
-                    // Anthropic in particular returns prose at the wrap-up turn under InstructionStrategy).
-                    scoreRequest = OnlineScoringEngine.prepareSpanLlmRequest(
-                            message.llmAsJudgeCode(), span, new InstructionStrategy(),
-                            MAX_PROMPT_FIELD_CHARS, drillDownHint, spanStructureJson);
-                    structuredRequest = OnlineScoringEngine.prepareSpanLlmRequest(
-                            message.llmAsJudgeCode(), span,
-                            llmProviderFactory.getStructuredOutputStrategy(modelName),
-                            MAX_PROMPT_FIELD_CHARS, drillDownHint, spanStructureJson);
-                    // REQUIRED on the first call only forces ≥1 tool call; follow-ups switch to AUTO in
-                    // handleToolCalls so the model can decide when to stop investigating.
-                    scoreRequest = OnlineScoringEngine.addToolSpecs(scoreRequest, ToolChoice.REQUIRED, toolRegistry);
+                    requests = buildToolCallingRequests(message, span, modelName, spanStructureJson);
                 } else if (referencesSpan && spanStructureJson != null) {
-                    // Inline fallback: {{span}} on a non-tool-calling provider (toggle ON, real structure).
-                    // No read/jq tools to drill in, so cap the substitutions to bound the context window —
-                    // otherwise a large span would inject uncapped and could overflow the model's context.
-                    // No drill-down hint: the model can't act on one, so over-cap values are just truncated.
-                    scoreRequest = OnlineScoringEngine.prepareSpanLlmRequest(
-                            message.llmAsJudgeCode(), span,
-                            llmProviderFactory.getStructuredOutputStrategy(modelName),
-                            MAX_PROMPT_FIELD_CHARS, INLINE_TRUNCATION_HINT, spanStructureJson);
-                    structuredRequest = scoreRequest;
+                    requests = buildInlineStructureRequests(message, span, modelName, spanStructureJson);
                 } else if (referencesSpan) {
-                    // Inline path that still injects the {{span}} structure so the variable renders rather
-                    // than leaking the bare sentinel. Toggle OFF: spanStructureJson is null → renders "{}"
-                    // (tiny, no cap needed; user variables stay uncapped as on the normal inline path).
-                    scoreRequest = OnlineScoringEngine.prepareSpanLlmRequest(
-                            message.llmAsJudgeCode(), span,
-                            llmProviderFactory.getStructuredOutputStrategy(modelName), spanStructureJson);
-                    structuredRequest = scoreRequest;
+                    requests = buildSentinelStructureRequests(message, span, modelName, spanStructureJson);
                 } else {
-                    scoreRequest = OnlineScoringEngine.prepareSpanLlmRequest(
-                            message.llmAsJudgeCode(), span,
-                            llmProviderFactory.getStructuredOutputStrategy(modelName));
-                    structuredRequest = scoreRequest;
+                    requests = buildPlainRequests(message, span, modelName);
                 }
             } catch (Exception exception) {
                 userFacingLogger.error("Error preparing LLM request for spanId '{}':",
@@ -309,10 +275,75 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
             }
 
             userFacingLogger.info("Sending spanId '{}' to LLM: {}",
-                    span.id(), OnlineScoringEngine.summarizeRequest(scoreRequest, modelName, useTools));
+                    span.id(), OnlineScoringEngine.summarizeRequest(requests.score(), modelName, useTools));
 
-            return new PreparedEvaluation(scoreRequest, structuredRequest, useTools);
+            return new PreparedEvaluation(requests.score(), requests.structured(), useTools);
         }
+    }
+
+    /** Score and structured-output requests produced by one of the {@code build*Requests} branches. */
+    private record LlmRequests(ChatRequest score, ChatRequest structured) {
+    }
+
+    /**
+     * {@code useTools}: {{span}} + agentic tools + tool-calling provider. The tool-loop request uses the
+     * soft InstructionStrategy; the wrap-up uses the provider-native structured-output strategy (same
+     * asymmetry as the trace scorer — Anthropic in particular returns prose at the wrap-up turn under
+     * InstructionStrategy).
+     */
+    private LlmRequests buildToolCallingRequests(SpanToScoreLlmAsJudge message, Span span, String modelName,
+            String spanStructureJson) {
+        String drillDownHint = ("call read(type=span, id=%s, tier=MEDIUM) for the full span"
+                + " with per-string truncation hints, or jq(type=span, id=%s,"
+                + " expression='<path>') for a specific section")
+                .formatted(span.id(), span.id());
+        ChatRequest scoreRequest = OnlineScoringEngine.prepareSpanLlmRequest(
+                message.llmAsJudgeCode(), span, new InstructionStrategy(),
+                MAX_PROMPT_FIELD_CHARS, drillDownHint, spanStructureJson);
+        ChatRequest structuredRequest = OnlineScoringEngine.prepareSpanLlmRequest(
+                message.llmAsJudgeCode(), span,
+                llmProviderFactory.getStructuredOutputStrategy(modelName),
+                MAX_PROMPT_FIELD_CHARS, drillDownHint, spanStructureJson);
+        // REQUIRED on the first call only forces ≥1 tool call; follow-ups switch to AUTO in
+        // handleToolCalls so the model can decide when to stop investigating.
+        scoreRequest = OnlineScoringEngine.addToolSpecs(scoreRequest, ToolChoice.REQUIRED, toolRegistry);
+        return new LlmRequests(scoreRequest, structuredRequest);
+    }
+
+    /**
+     * Inline fallback: {{span}} on a non-tool-calling provider (toggle ON, real structure). No read/jq
+     * tools to drill in, so cap the substitutions to bound the context window — otherwise a large span
+     * would inject uncapped and could overflow the model's context. No drill-down hint: the model can't
+     * act on one, so over-cap values are just truncated.
+     */
+    private LlmRequests buildInlineStructureRequests(SpanToScoreLlmAsJudge message, Span span,
+            String modelName, String spanStructureJson) {
+        ChatRequest scoreRequest = OnlineScoringEngine.prepareSpanLlmRequest(
+                message.llmAsJudgeCode(), span,
+                llmProviderFactory.getStructuredOutputStrategy(modelName),
+                MAX_PROMPT_FIELD_CHARS, INLINE_TRUNCATION_HINT, spanStructureJson);
+        return new LlmRequests(scoreRequest, scoreRequest);
+    }
+
+    /**
+     * Inline path that still injects the {{span}} structure so the variable renders rather than leaking
+     * the bare sentinel. Toggle OFF: spanStructureJson is null → renders "{}" (tiny, no cap needed; user
+     * variables stay uncapped as on the normal inline path).
+     */
+    private LlmRequests buildSentinelStructureRequests(SpanToScoreLlmAsJudge message, Span span,
+            String modelName, String spanStructureJson) {
+        ChatRequest scoreRequest = OnlineScoringEngine.prepareSpanLlmRequest(
+                message.llmAsJudgeCode(), span,
+                llmProviderFactory.getStructuredOutputStrategy(modelName), spanStructureJson);
+        return new LlmRequests(scoreRequest, scoreRequest);
+    }
+
+    /** Normal inline path: no {{span}} reference, so no structure injection. */
+    private LlmRequests buildPlainRequests(SpanToScoreLlmAsJudge message, Span span, String modelName) {
+        ChatRequest scoreRequest = OnlineScoringEngine.prepareSpanLlmRequest(
+                message.llmAsJudgeCode(), span,
+                llmProviderFactory.getStructuredOutputStrategy(modelName));
+        return new LlmRequests(scoreRequest, scoreRequest);
     }
 
     /**

@@ -2,19 +2,26 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.attachment.AttachmentInfo;
+import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode;
 import com.comet.opik.api.events.SpanToScoreLlmAsJudge;
 import com.comet.opik.api.resources.v1.events.tools.GetAttachmentTool;
 import com.comet.opik.api.resources.v1.events.tools.ReadTool;
+import com.comet.opik.api.resources.v1.events.tools.ToolExecutor;
 import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
+import com.comet.opik.api.resources.v1.events.tools.TraceToolContext;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.TraceService;
+import com.comet.opik.domain.attachment.AttachmentService;
+import com.comet.opik.domain.evaluation.OnlineEvaluationRecorder;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
+import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.UserMessage;
@@ -33,6 +40,7 @@ import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Mono;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Instant;
 import java.util.List;
@@ -69,9 +77,11 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
     @Mock
     private LlmProviderFactory llmProviderFactory;
     @Mock
-    private com.comet.opik.domain.attachment.AttachmentService attachmentService;
+    private AttachmentService attachmentService;
     @Mock
-    private com.comet.opik.domain.evaluation.OnlineEvaluationRecorder onlineEvaluationRecorder;
+    private OnlineEvaluationRecorder onlineEvaluationRecorder;
+
+    private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
     private OnlineScoringSpanLlmAsJudgeScorer scorer;
@@ -169,9 +179,9 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         // get_attachment(type=span, id=<span_id>, file_name=...).
         String fileName = "input-attachment-" + RandomUtils.secure().randomInt(1, 99999999) + "-"
                 + RandomUtils.secure().randomLong(1L, 9999999999999L) + ".jpg";
-        var spanAttachment = com.comet.opik.api.attachment.AttachmentInfo.builder()
+        var spanAttachment = AttachmentInfo.builder()
                 .entityId(span.id())
-                .entityType(com.comet.opik.api.attachment.EntityType.SPAN)
+                .entityType(EntityType.SPAN)
                 .fileName(fileName)
                 .build();
 
@@ -179,7 +189,7 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OPEN_AI);
         when(llmProviderFactory.getStructuredOutputStrategy("gpt-test")).thenReturn(new ToolCallingStrategy());
         when(attachmentService.getAttachmentInfoByEntity(
-                any(), eq(com.comet.opik.api.attachment.EntityType.SPAN), any()))
+                any(), eq(EntityType.SPAN), any()))
                 .thenReturn(Mono.just(List.of(spanAttachment)));
         // Plain (no tool calls) response so handleToolCalls returns immediately.
         ArgumentCaptor<ChatRequest> requestCaptor = ArgumentCaptor.forClass(ChatRequest.class);
@@ -211,7 +221,7 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         // Attachment listing fails — onErrorReturn(List.of()) degrades to a structure without attachment
         // entries rather than blocking scoring.
         when(attachmentService.getAttachmentInfoByEntity(
-                any(), eq(com.comet.opik.api.attachment.EntityType.SPAN), any()))
+                any(), eq(EntityType.SPAN), any()))
                 .thenReturn(Mono.error(new RuntimeException("DB unavailable")));
         ArgumentCaptor<ChatRequest> requestCaptor = ArgumentCaptor.forClass(ChatRequest.class);
         when(aiProxyService.scoreTrace(requestCaptor.capture(), any(), any()))
@@ -234,9 +244,9 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         String fileName = "input-attachment-86584937-1782579409975-sdk.jpg";
         var span = createSpanReferencing(fileName);
         var message = buildMessage(span, code);
-        var spanAttachment = com.comet.opik.api.attachment.AttachmentInfo.builder()
+        var spanAttachment = AttachmentInfo.builder()
                 .entityId(span.id())
-                .entityType(com.comet.opik.api.attachment.EntityType.SPAN)
+                .entityType(EntityType.SPAN)
                 .fileName(fileName)
                 .build();
 
@@ -246,9 +256,9 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         // Cold lookup: first subscription sees the not-yet-uploaded state (empty), the retry sees it land.
         AtomicInteger subscriptions = new AtomicInteger();
         when(attachmentService.getAttachmentInfoByEntity(
-                any(), eq(com.comet.opik.api.attachment.EntityType.SPAN), any()))
+                any(), eq(EntityType.SPAN), any()))
                 .thenReturn(Mono.defer(() -> Mono.just(subscriptions.getAndIncrement() == 0
-                        ? List.<com.comet.opik.api.attachment.AttachmentInfo>of()
+                        ? List.<AttachmentInfo>of()
                         : List.of(spanAttachment))));
         ArgumentCaptor<ChatRequest> requestCaptor = ArgumentCaptor.forClass(ChatRequest.class);
         when(aiProxyService.scoreTrace(requestCaptor.capture(), any(), any()))
@@ -270,11 +280,11 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         // a name that 404s. Tested directly on the shared helper — the rendered prompt also echoes the
         // body's [reference] placeholder, so the structure-level behavior is asserted here instead.
         var id = UUID.randomUUID();
-        var transientAttachment = com.comet.opik.api.attachment.AttachmentInfo.builder()
-                .entityId(id).entityType(com.comet.opik.api.attachment.EntityType.SPAN)
+        var transientAttachment = AttachmentInfo.builder()
+                .entityId(id).entityType(EntityType.SPAN)
                 .fileName("input-attachment-1-1782581642301.jpg").build();
-        var persistentAttachment = com.comet.opik.api.attachment.AttachmentInfo.builder()
-                .entityId(id).entityType(com.comet.opik.api.attachment.EntityType.SPAN)
+        var persistentAttachment = AttachmentInfo.builder()
+                .entityId(id).entityType(EntityType.SPAN)
                 .fileName("input-attachment-86584937-1782581642686-sdk.jpg").build();
         var body = JsonUtils.getJsonNodeFromString("{\"q\":\"see [input-attachment-1-1782581642301.jpg]\"}");
 
@@ -289,8 +299,8 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
     void listAttachmentsKeepsAutoStrippedCopyWhenItIsTheOnlyOne() {
         // A backend-/REST-ingested image's only copy is auto-stripped and never replaced — it is the real
         // attachment and must be kept. No body reference here, so no retry latency.
-        var auto = com.comet.opik.api.attachment.AttachmentInfo.builder()
-                .entityId(UUID.randomUUID()).entityType(com.comet.opik.api.attachment.EntityType.SPAN)
+        var auto = AttachmentInfo.builder()
+                .entityId(UUID.randomUUID()).entityType(EntityType.SPAN)
                 .fileName("input-attachment-1-1782581642301.jpg").build();
 
         var result = scorer.listAttachmentsToleratingUploadRace(
@@ -304,8 +314,8 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         // API/REST upload: the body references the attachment (so the retry engages), but only the
         // auto-stripped copy ever exists. After the retry budget is exhausted we must fall back to that
         // copy rather than drop it — otherwise the API user's attachment would never be surfaced.
-        var auto = com.comet.opik.api.attachment.AttachmentInfo.builder()
-                .entityId(UUID.randomUUID()).entityType(com.comet.opik.api.attachment.EntityType.SPAN)
+        var auto = AttachmentInfo.builder()
+                .entityId(UUID.randomUUID()).entityType(EntityType.SPAN)
                 .fileName("input-attachment-1-1782581642301.jpg").build();
         var body = JsonUtils.getJsonNodeFromString("{\"q\":\"see [input-attachment-1-1782581642301.jpg]\"}");
 
@@ -364,7 +374,7 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         when(llmProviderFactory.getLlmProvider("gpt-test")).thenReturn(LlmProvider.OLLAMA);
         when(llmProviderFactory.getStructuredOutputStrategy("gpt-test")).thenReturn(new ToolCallingStrategy());
         when(attachmentService.getAttachmentInfoByEntity(
-                any(), eq(com.comet.opik.api.attachment.EntityType.SPAN), any()))
+                any(), eq(EntityType.SPAN), any()))
                 .thenReturn(Mono.just(List.of()));
         ArgumentCaptor<ChatRequest> requestCaptor = ArgumentCaptor.forClass(ChatRequest.class);
         when(aiProxyService.scoreTrace(requestCaptor.capture(), any(), any()))
@@ -404,28 +414,22 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
         verifyNoInteractions(attachmentService);
     }
 
+    // Podam manufactures a fully-populated Span; toBuilder then pins only the fields these tests assert on
+    // (id for attachment lookups, input/output for the injected {{span}} structure). Other fields keep
+    // their random Podam values.
     private Span createSpan() {
-        return Span.builder()
+        return podamFactory.manufacturePojo(Span.class).toBuilder()
                 .id(UUID.randomUUID())
-                .projectId(UUID.randomUUID())
-                .projectName("project-" + RandomStringUtils.secure().nextAlphanumeric(8))
-                .traceId(UUID.randomUUID())
-                .name("span-" + RandomStringUtils.secure().nextAlphanumeric(8))
-                .startTime(Instant.now())
                 .input(JsonUtils.getJsonNodeFromString("{\"messages\":\"hi\"}"))
                 .output(JsonUtils.getJsonNodeFromString("{\"reply\":\"hello\"}"))
                 .build();
     }
 
     private Span createSpanReferencing(String fileName) {
-        return Span.builder()
+        return podamFactory.manufacturePojo(Span.class).toBuilder()
                 .id(UUID.randomUUID())
-                .projectId(UUID.randomUUID())
-                .projectName("project-" + RandomStringUtils.secure().nextAlphanumeric(8))
-                .traceId(UUID.randomUUID())
-                .name("span-" + RandomStringUtils.secure().nextAlphanumeric(8))
-                .startTime(Instant.now())
                 .input(JsonUtils.getJsonNodeFromString("{\"messages\":\"see [" + fileName + "]\"}"))
+                .output(null)
                 .build();
     }
 
@@ -440,8 +444,8 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
                 .build();
     }
 
-    private static com.comet.opik.api.resources.v1.events.tools.ToolExecutor stubTool(String name, String result) {
-        return new com.comet.opik.api.resources.v1.events.tools.ToolExecutor() {
+    private static ToolExecutor stubTool(String name, String result) {
+        return new ToolExecutor() {
             @Override
             public String name() {
                 return name;
@@ -457,7 +461,7 @@ class OnlineScoringSpanLlmAsJudgeScorerTest {
 
             @Override
             public Mono<String> execute(String arguments,
-                    com.comet.opik.api.resources.v1.events.tools.TraceToolContext ctx) {
+                    TraceToolContext ctx) {
                 return Mono.just(result);
             }
         };
