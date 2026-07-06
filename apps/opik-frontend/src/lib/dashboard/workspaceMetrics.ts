@@ -1,13 +1,9 @@
 import { METRIC_NAME_TYPE } from "@/api/projects/useProjectMetric";
-import { formatCost } from "@/lib/money";
 
-// Metrics supported when aggregating across projects via the workspace endpoint
-// (POST /v1/private/workspaces/metrics/spans). Provider/model breakdown is span-only, so only span metrics qualify.
+// Metric supported when aggregating across projects via the workspace endpoint
+// (POST /v1/private/workspaces/metrics/spans). Scoped to span token usage, with provider/model breakdown and filters.
 export const WORKSPACE_METRIC_NAMES: METRIC_NAME_TYPE[] = [
-  METRIC_NAME_TYPE.SPAN_COUNT,
   METRIC_NAME_TYPE.SPAN_TOKEN_USAGE,
-  METRIC_NAME_TYPE.SPAN_COST,
-  METRIC_NAME_TYPE.SPAN_DURATION,
 ];
 
 export const isWorkspaceMetric = (metric?: string): boolean =>
@@ -16,23 +12,8 @@ export const isWorkspaceMetric = (metric?: string): boolean =>
 // Metric options for the time-series widget editor when multiple projects are selected.
 export const WORKSPACE_TIME_SERIES_METRIC_OPTIONS = [
   {
-    value: METRIC_NAME_TYPE.SPAN_COUNT,
-    label: "Number of spans",
-    filterType: "span" as const,
-  },
-  {
     value: METRIC_NAME_TYPE.SPAN_TOKEN_USAGE,
     label: "Span token usage",
-    filterType: "span" as const,
-  },
-  {
-    value: METRIC_NAME_TYPE.SPAN_COST,
-    label: "Span cost",
-    filterType: "span" as const,
-  },
-  {
-    value: METRIC_NAME_TYPE.SPAN_DURATION,
-    label: "Duration",
     filterType: "span" as const,
   },
 ];
@@ -50,22 +31,10 @@ export type WorkspaceStatMetricDefinition = {
 
 export const WORKSPACE_STAT_METRICS: WorkspaceStatMetricDefinition[] = [
   {
-    value: METRIC_NAME_TYPE.SPAN_COUNT,
-    label: "Total span count",
-    formatter: (value: number) => value.toLocaleString(),
-  },
-  {
     value: METRIC_NAME_TYPE.SPAN_TOKEN_USAGE,
     label: "Total span token usage",
     formatter: (value: number) => value.toLocaleString(),
     requiresUsageKey: true,
-  },
-  {
-    value: METRIC_NAME_TYPE.SPAN_COST,
-    label: "Total span cost",
-    formatter: formatCost,
-    tooltipFormatter: (value: number) =>
-      formatCost(value, { modifier: "full" }),
   },
 ];
 

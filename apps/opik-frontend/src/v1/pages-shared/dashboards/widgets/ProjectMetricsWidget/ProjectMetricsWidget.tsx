@@ -145,11 +145,6 @@ const ProjectMetricsWidget: React.FunctionComponent<
       return undefined;
     }
 
-    // Aggregating duration across projects is percentile-only; group by is not supported there.
-    if (isWorkspaceMode && metricName === METRIC_NAME_TYPE.SPAN_DURATION) {
-      return undefined;
-    }
-
     // Check if METADATA field without metadataKey
     if (
       breakdown.field === BREAKDOWN_FIELD.METADATA &&
@@ -204,8 +199,6 @@ const ProjectMetricsWidget: React.FunctionComponent<
     return breakdown;
   }, [
     breakdown,
-    isWorkspaceMode,
-    metricName,
     isFeedbackScoreMetric,
     feedbackScores,
     isDurationMetric,

@@ -54,11 +54,7 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 @ImplementedBy(WorkspaceMetricsDAOImpl.class)
 public interface WorkspaceMetricsDAO {
 
-    Set<MetricType> SUPPORTED_SPAN_METRICS = EnumSet.of(
-            MetricType.SPAN_COUNT,
-            MetricType.SPAN_TOKEN_USAGE,
-            MetricType.SPAN_COST,
-            MetricType.SPAN_DURATION);
+    Set<MetricType> SUPPORTED_SPAN_METRICS = EnumSet.of(MetricType.SPAN_TOKEN_USAGE);
 
     @Deprecated
     Mono<List<WorkspaceMetricsSummaryResponse.Result>> getFeedbackScoresSummary(WorkspaceMetricsSummaryRequest request);
@@ -70,13 +66,7 @@ public interface WorkspaceMetricsDAO {
 
     Mono<List<WorkspaceMetricResponse.Result>> getCostsDaily(WorkspaceMetricRequest request);
 
-    Mono<List<WorkspaceMetricResponse.Result>> getSpanCount(WorkspaceSpanMetricRequest request);
-
     Mono<List<WorkspaceMetricResponse.Result>> getSpanTokenUsage(WorkspaceSpanMetricRequest request);
-
-    Mono<List<WorkspaceMetricResponse.Result>> getSpanCost(WorkspaceSpanMetricRequest request);
-
-    Mono<List<WorkspaceMetricResponse.Result>> getSpanDuration(WorkspaceSpanMetricRequest request);
 }
 
 @Slf4j
@@ -372,48 +362,10 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             )
             """;
 
-    // Span span filtering is reused from ProjectMetricsDAO's SPAN_FILTERED_PREFIX (above), but the output is shaped in
-    // the workspace-native style like GET_COSTS_DAILY: each row is a finished series {project_id, name, data}, where
-    // data is a groupArray(tuple(bucket, value)). No breakdown => a single aggregate series (project_id NULL); with a
-    // provider/model breakdown => one series per group, mirroring how GET_COSTS_DAILY_BY_PROJECT groups by project.
-    private static final String GET_SPAN_COUNT = """
-            %s
-            , series AS (
-                SELECT <bucket> AS bucket,
-                       count(DISTINCT id) AS value
-                FROM spans_filtered
-                GROUP BY bucket
-                ORDER BY bucket
-                <if(with_fill)>WITH FILL
-                    FROM <fill_from>
-                    TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
-                    STEP <step><endif>
-            )
-            SELECT NULL AS project_id,
-                   'spans' AS name,
-                   groupArray(tuple(bucket, value)) AS data
-            FROM series
-            SETTINGS log_comment = '<log_comment>';
-            """.formatted(SPAN_FILTERED_PREFIX);
-
-    private static final String GET_SPAN_COUNT_WITH_BREAKDOWN = """
-            %s
-            , series AS (
-                SELECT <bucket> AS bucket,
-                       <group_expression> AS group_name,
-                       count(DISTINCT id) AS value
-                FROM spans_filtered s
-                GROUP BY bucket, group_name
-                ORDER BY group_name, bucket
-            )
-            SELECT NULL AS project_id,
-                   group_name AS name,
-                   groupArray(tuple(bucket, value)) AS data
-            FROM series
-            GROUP BY group_name
-            SETTINGS log_comment = '<log_comment>';
-            """.formatted(SPAN_FILTERED_PREFIX);
-
+    // Span filtering is reused from ProjectMetricsDAO's SPAN_FILTERED_PREFIX (above), but the output is shaped in the
+    // workspace-native style like GET_COSTS_DAILY: each row is a finished series {project_id, name, data}, where data is
+    // a groupArray(tuple(bucket, value)). No breakdown => one series per usage key; with a provider/model breakdown =>
+    // one series per group, mirroring how GET_COSTS_DAILY_BY_PROJECT groups by project.
     private static final String GET_SPAN_TOKEN_USAGE = """
             %s, spans_usage AS (
                 SELECT span_time,
@@ -469,68 +421,6 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             SETTINGS log_comment = '<log_comment>';
             """.formatted(SPAN_FILTERED_PREFIX);
 
-    // Cost has no breakdown variant in the per-project path (SPAN_COST is absent from BreakdownField.SPAN_METRICS),
-    // so the workspace path also serves cost as a single aggregate series.
-    private static final String GET_SPAN_COST = """
-            %s
-            , series AS (
-                SELECT <bucket> AS bucket,
-                       sum(total_estimated_cost) AS value
-                FROM spans_filtered
-                GROUP BY bucket
-                ORDER BY bucket
-                <if(with_fill)>WITH FILL
-                    FROM <fill_from>
-                    TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
-                    STEP <step><endif>
-            )
-            SELECT NULL AS project_id,
-                   'span_cost' AS name,
-                   groupArray(tuple(bucket, value)) AS data
-            FROM series
-            SETTINGS log_comment = '<log_comment>';
-            """.formatted(SPAN_FILTERED_PREFIX);
-
-    // Duration is a distribution: like the per-project GET_SPAN_DURATION it computes quantiles(0.5, 0.9, 0.99) per
-    // bucket, then fans the array out into three series (span_duration.p50/.p90/.p99). Empty buckets (WITH FILL) yield
-    // an empty array, mapped to NULL so it matches the per-project null-on-empty semantics.
-    private static final String GET_SPAN_DURATION = """
-            %s
-            , series_raw AS (
-                SELECT <bucket> AS bucket,
-                       arrayMap(
-                         v -> toDecimal64(
-                                greatest(least(if(isFinite(v), v, 0), 999999999.999999999), -999999999.999999999),
-                                9
-                              ),
-                         quantiles(0.5, 0.9, 0.99)(duration)
-                       ) AS p_values
-                FROM spans_filtered
-                GROUP BY bucket
-                ORDER BY bucket
-                <if(with_fill)>WITH FILL
-                    FROM <fill_from>
-                    TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
-                    STEP <step><endif>
-            )
-            SELECT NULL AS project_id,
-                   name,
-                   groupArray(tuple(bucket, value)) AS data
-            FROM (
-                SELECT bucket, 'span_duration.p50' AS name, if(empty(p_values), NULL, p_values[1]) AS value
-                FROM series_raw
-                UNION ALL
-                SELECT bucket, 'span_duration.p90' AS name, if(empty(p_values), NULL, p_values[2]) AS value
-                FROM series_raw
-                UNION ALL
-                SELECT bucket, 'span_duration.p99' AS name, if(empty(p_values), NULL, p_values[3]) AS value
-                FROM series_raw
-            )
-            GROUP BY name
-            ORDER BY name
-            SETTINGS log_comment = '<log_comment>';
-            """.formatted(SPAN_FILTERED_PREFIX);
-
     private static final String WORKSPACE_METRIC_QUERY_NAME_PREFIX = "WorkspaceMetrics_";
 
     private static final Map<TimeInterval, String> INTERVAL_TO_SQL = Map.of(
@@ -578,34 +468,10 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
     }
 
     @Override
-    public Mono<List<WorkspaceMetricResponse.Result>> getSpanCount(@NonNull WorkspaceSpanMetricRequest request) {
-        return template.nonTransaction(connection -> getSpanMetric(request, connection,
-                request.hasBreakdown() ? GET_SPAN_COUNT_WITH_BREAKDOWN : GET_SPAN_COUNT, "workspaceSpanCount")
-                .flatMapMany(this::rowToDataPoint)
-                .collectList());
-    }
-
-    @Override
     public Mono<List<WorkspaceMetricResponse.Result>> getSpanTokenUsage(@NonNull WorkspaceSpanMetricRequest request) {
         return template.nonTransaction(connection -> getSpanMetric(request, connection,
                 request.hasBreakdown() ? GET_SPAN_TOKEN_USAGE_WITH_BREAKDOWN : GET_SPAN_TOKEN_USAGE,
                 "workspaceSpanTokenUsage")
-                .flatMapMany(this::rowToDataPoint)
-                .collectList());
-    }
-
-    @Override
-    public Mono<List<WorkspaceMetricResponse.Result>> getSpanCost(@NonNull WorkspaceSpanMetricRequest request) {
-        return template
-                .nonTransaction(connection -> getSpanMetric(request, connection, GET_SPAN_COST, "workspaceSpanCost")
-                        .flatMapMany(this::rowToDataPoint)
-                        .collectList());
-    }
-
-    @Override
-    public Mono<List<WorkspaceMetricResponse.Result>> getSpanDuration(@NonNull WorkspaceSpanMetricRequest request) {
-        return template.nonTransaction(connection -> getSpanMetric(request, connection, GET_SPAN_DURATION,
-                "workspaceSpanDuration")
                 .flatMapMany(this::rowToDataPoint)
                 .collectList());
     }
