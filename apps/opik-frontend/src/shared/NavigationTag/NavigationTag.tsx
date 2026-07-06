@@ -1,4 +1,5 @@
 import React from "react";
+import { type LucideIcon } from "lucide-react";
 
 import ResourceLink, {
   RESOURCE_TYPE,
@@ -16,6 +17,7 @@ type NavigationTagProps = {
   isSmall?: boolean;
   prefix?: string;
   suffix?: React.ReactNode;
+  icon?: LucideIcon;
 };
 
 const NavigationTag: React.FunctionComponent<NavigationTagProps> = ({
@@ -28,6 +30,7 @@ const NavigationTag: React.FunctionComponent<NavigationTagProps> = ({
   isSmall = false,
   prefix,
   suffix,
+  icon,
 }) => {
   const resourceLabel = RESOURCE_MAP[resource].label;
   const defaultTooltipContent = `Navigate to ${resourceLabel}: ${name}`;
@@ -44,6 +47,7 @@ const NavigationTag: React.FunctionComponent<NavigationTagProps> = ({
       isSmall={isSmall}
       prefix={prefix}
       suffix={suffix}
+      icon={icon}
     />
   );
 };

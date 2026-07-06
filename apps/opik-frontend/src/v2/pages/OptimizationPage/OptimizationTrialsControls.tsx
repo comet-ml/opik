@@ -3,6 +3,7 @@ import { ColumnData, ROW_HEIGHT } from "@/types/shared";
 import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
 import RefreshButton from "@/shared/RefreshButton/RefreshButton";
+import { Separator } from "@/ui/separator";
 import { AggregatedCandidate } from "@/types/optimizations";
 
 interface OptimizationTrialsControlsProps {
@@ -17,6 +18,7 @@ interface OptimizationTrialsControlsProps {
   onColumnsOrderChange: (order: string[]) => void;
 }
 
+// Control order: Row size · Columns · | · Refresh.
 const OptimizationTrialsControls: React.FC<OptimizationTrialsControlsProps> = ({
   onRefresh,
   isFetching,
@@ -30,11 +32,6 @@ const OptimizationTrialsControls: React.FC<OptimizationTrialsControlsProps> = ({
 }) => {
   return (
     <div className="flex items-center gap-2">
-      <RefreshButton
-        tooltip="Refresh trials list"
-        isFetching={isFetching}
-        onRefresh={onRefresh}
-      />
       <DataTableRowHeightSelector
         type={rowHeight}
         setType={onRowHeightChange}
@@ -45,6 +42,12 @@ const OptimizationTrialsControls: React.FC<OptimizationTrialsControlsProps> = ({
         onSelectionChange={onSelectedColumnsChange}
         order={columnsOrder}
         onOrderChange={onColumnsOrderChange}
+      />
+      <Separator orientation="vertical" className="mx-1 h-4" />
+      <RefreshButton
+        tooltip="Refresh trials list"
+        isFetching={isFetching}
+        onRefresh={onRefresh}
       />
     </div>
   );
