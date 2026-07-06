@@ -1,0 +1,412 @@
+"""Tests for ``opik migrate dataset`` checkpoint/resume (OPIK-7168).
+
+Two layers:
+
+* ``TestMigrationCheckpoint`` -- the checkpoint store in isolation
+  (``opik.cli.migrate.checkpoint``): key derivation, atomic round-trip,
+  in-flight tracking, corrupt/foreign-schema tolerance, delete lifecycle.
+
+* ``TestCascadeResume`` -- the cascade's resume behaviour
+  (``cascade_experiments`` with a ``checkpoint``): skip already-completed
+  experiments, re-migrate an interrupted experiment after deleting its partial
+  destination data, and seed the progress callback so a resumed run reports the
+  right completed count instead of starting at 0.
+
+The cascade tests reuse the elaborate REST/client fakes from
+``test_migrate_dataset_experiments_cascade`` so the resume behaviour is
+exercised against the same call surface the real cascade drives.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any, List, Tuple
+from unittest.mock import MagicMock
+
+from opik.cli.migrate.checkpoint import (
+    MigrationCheckpoint,
+    checkpoint_key,
+    checkpoint_path,
+    load_or_create,
+)
+from opik.cli.migrate.datasets.experiments import cascade_experiments
+
+from .test_migrate_dataset_experiments_cascade import (
+    _Experiment,
+    _ExperimentItem,
+    _Trace,
+    _audit,
+    _cascade_rest_client,
+    _client_with_recreate_capture,
+)
+
+
+# ---------------------------------------------------------------------------
+# Checkpoint store (unit)
+# ---------------------------------------------------------------------------
+
+
+class TestMigrationCheckpoint:
+    def test_checkpoint_key__stable_and_distinct_per_tuple(self) -> None:
+        key = checkpoint_key("ws", "proj", "ds")
+        # Deterministic: same tuple -> same key across calls.
+        assert key == checkpoint_key("ws", "proj", "ds")
+        # Distinct tuples -> distinct keys, including the ambiguous shift of a
+        # separator across the three components (the \x00 join prevents
+        # "a"+"bc" colliding with "ab"+"c").
+        assert checkpoint_key("a", "bc", "d") != checkpoint_key("ab", "c", "d")
+
+    def test_checkpoint_path__adjacent_to_audit_log(self) -> None:
+        audit_path = Path("/tmp/run/opik-migrate-20260101T000000Z.json")
+        key = checkpoint_key("ws", "proj", "ds")
+        path = checkpoint_path(audit_path, key)
+        assert path.parent == audit_path.parent
+        assert path.name == f"opik-migrate-checkpoint-{key}.json"
+
+    def test_load_or_create__no_file__starts_fresh(self, tmp_path: Path) -> None:
+        cp = load_or_create(
+            audit_path=tmp_path / "opik-migrate-x.json",
+            workspace="ws",
+            project="proj",
+            dataset="ds",
+        )
+        assert cp.completed_count == 0
+        assert cp.in_flight is None
+        assert not cp.path.exists()
+
+    def test_flush_then_load__round_trips_completed_and_in_flight(
+        self, tmp_path: Path
+    ) -> None:
+        audit_path = tmp_path / "opik-migrate-x.json"
+        cp = load_or_create(
+            audit_path=audit_path, workspace="ws", project="proj", dataset="ds"
+        )
+        cp.total_experiments = 3
+        cp.mark_in_flight(
+            "src-exp-2", experiment_name="exp-2", dest_dataset_id="dest-ds"
+        )
+        cp.record_dest_trace_ids(["dest-trace-a", "dest-trace-b"])
+        cp.mark_completed("src-exp-1")
+        cp.flush()
+
+        reloaded = load_or_create(
+            audit_path=audit_path, workspace="ws", project="proj", dataset="ds"
+        )
+        assert reloaded.total_experiments == 3
+        assert reloaded.completed_experiment_ids == {"src-exp-1"}
+        # ``mark_completed`` clears in_flight, so only the completed set survives.
+        assert reloaded.in_flight is None
+
+    def test_flush_preserves_in_flight_when_not_completed(self, tmp_path: Path) -> None:
+        audit_path = tmp_path / "opik-migrate-x.json"
+        cp = load_or_create(
+            audit_path=audit_path, workspace="ws", project="proj", dataset="ds"
+        )
+        cp.mark_in_flight(
+            "src-exp-2", experiment_name="exp-2", dest_dataset_id="dest-ds"
+        )
+        cp.record_dest_trace_ids(["dest-trace-a"])
+        cp.flush()
+
+        reloaded = load_or_create(
+            audit_path=audit_path, workspace="ws", project="proj", dataset="ds"
+        )
+        assert reloaded.in_flight is not None
+        assert reloaded.in_flight.source_experiment_id == "src-exp-2"
+        assert reloaded.in_flight.experiment_name == "exp-2"
+        assert reloaded.in_flight.dest_dataset_id == "dest-ds"
+        assert reloaded.in_flight.dest_trace_ids == ["dest-trace-a"]
+
+    def test_load_or_create__corrupt_file__starts_fresh(self, tmp_path: Path) -> None:
+        # A truncated / unparseable checkpoint (e.g. an interrupted write on a
+        # filesystem without atomic replace) must be treated as "no progress",
+        # not crash the migration.
+        key = checkpoint_key("ws", "proj", "ds")
+        audit_path = tmp_path / "opik-migrate-x.json"
+        checkpoint_path(audit_path, key).write_text('{"schema_version": 1, "comp')
+
+        cp = load_or_create(
+            audit_path=audit_path, workspace="ws", project="proj", dataset="ds"
+        )
+        assert cp.completed_count == 0
+        assert cp.in_flight is None
+
+    def test_load_or_create__foreign_schema_version__starts_fresh(
+        self, tmp_path: Path
+    ) -> None:
+        key = checkpoint_key("ws", "proj", "ds")
+        audit_path = tmp_path / "opik-migrate-x.json"
+        checkpoint_path(audit_path, key).write_text(
+            '{"schema_version": 999, "completed_experiment_ids": ["src-exp-1"]}'
+        )
+
+        cp = load_or_create(
+            audit_path=audit_path, workspace="ws", project="proj", dataset="ds"
+        )
+        # A newer schema we can't interpret is ignored -> fresh start.
+        assert cp.completed_count == 0
+
+    def test_delete__removes_file_and_is_idempotent(self, tmp_path: Path) -> None:
+        audit_path = tmp_path / "opik-migrate-x.json"
+        cp = load_or_create(
+            audit_path=audit_path, workspace="ws", project="proj", dataset="ds"
+        )
+        cp.flush()
+        assert cp.path.exists()
+        cp.delete()
+        assert not cp.path.exists()
+        # Idempotent: deleting again is a no-op, not an error.
+        cp.delete()
+
+    def test_flush__atomic__no_stray_tmp_file_left(self, tmp_path: Path) -> None:
+        audit_path = tmp_path / "opik-migrate-x.json"
+        cp = load_or_create(
+            audit_path=audit_path, workspace="ws", project="proj", dataset="ds"
+        )
+        cp.flush()
+        # The temp file used for the atomic write must have been renamed away.
+        tmp_files = list(tmp_path.glob("*.tmp"))
+        assert tmp_files == []
+
+
+# ---------------------------------------------------------------------------
+# Cascade resume behaviour
+# ---------------------------------------------------------------------------
+
+
+def _two_experiment_rig() -> Tuple[Any, Any]:
+    """Two source experiments, each with one item/trace, wired end-to-end.
+
+    Returns ``(rest_client, client)`` ready to pass to ``cascade_experiments``.
+    """
+    exp1 = _Experiment(id="src-exp-1", name="exp-1", dataset_version_id="src-v-1")
+    exp2 = _Experiment(id="src-exp-2", name="exp-2", dataset_version_id="src-v-1")
+    item1 = _ExperimentItem(
+        id="i1",
+        experiment_id="src-exp-1",
+        trace_id="src-trace-1",
+        dataset_item_id="src-ds-item-1",
+    )
+    item2 = _ExperimentItem(
+        id="i2",
+        experiment_id="src-exp-2",
+        trace_id="src-trace-2",
+        dataset_item_id="src-ds-item-1",
+    )
+    rest_client = _cascade_rest_client(
+        experiments_by_dataset={"src-dataset-1": [exp1, exp2]},
+        items_by_experiment={"exp-1": [item1], "exp-2": [item2]},
+        traces_by_id={
+            "src-trace-1": _Trace(id="src-trace-1"),
+            "src-trace-2": _Trace(id="src-trace-2"),
+        },
+        spans_by_trace={"src-trace-1": [], "src-trace-2": []},
+    )
+    client = _client_with_recreate_capture(rest_client)
+    return rest_client, client
+
+
+def _run_cascade(
+    rest_client: Any, client: Any, checkpoint: MigrationCheckpoint, **overrides: Any
+) -> Tuple[Any, List[Tuple[int, int, str]]]:
+    """Run ``cascade_experiments`` with a progress-capturing callback."""
+    progress_calls: List[Tuple[int, int, str]] = []
+
+    kwargs: dict = dict(
+        source_dataset_id="src-dataset-1",
+        target_dataset_name="MyDataset",
+        target_project_name="DestProject",
+        target_dataset_id="dest-dataset-1",
+        version_remap={"src-v-1": "dest-v-1"},
+        item_id_remap={"src-ds-item-1": "dest-ds-item-1"},
+        audit=_audit(),
+        checkpoint=checkpoint,
+        progress_callback=lambda c, t, label: progress_calls.append((c, t, label)),
+    )
+    kwargs.update(overrides)
+    result = cascade_experiments(client, rest_client, **kwargs)
+    return result, progress_calls
+
+
+class TestCascadeResume:
+    def test_skip_completed__does_not_recreate_already_done_experiment(
+        self, tmp_path: Path
+    ) -> None:
+        rest_client, client = _two_experiment_rig()
+        cp = load_or_create(
+            audit_path=tmp_path / "opik-migrate-x.json",
+            workspace="ws",
+            project="DestProject",
+            dataset="MyDataset",
+        )
+        # Pretend exp-1 already migrated on a prior run.
+        cp.mark_completed("src-exp-1")
+
+        result, _ = _run_cascade(rest_client, client, cp)
+
+        # Only the not-yet-done experiment is recreated.
+        assert result.experiments_migrated == 1
+        assert client.create_experiment.call_count == 1
+        created_names = [
+            call.kwargs["name"] for call in client.create_experiment.call_args_list
+        ]
+        assert created_names == ["exp-2"]
+
+    def test_skip_completed__all_done__no_recreation(self, tmp_path: Path) -> None:
+        rest_client, client = _two_experiment_rig()
+        cp = load_or_create(
+            audit_path=tmp_path / "opik-migrate-x.json",
+            workspace="ws",
+            project="DestProject",
+            dataset="MyDataset",
+        )
+        cp.mark_completed("src-exp-1")
+        cp.mark_completed("src-exp-2")
+
+        result, _ = _run_cascade(rest_client, client, cp)
+
+        assert result.experiments_migrated == 0
+        client.create_experiment.assert_not_called()
+
+    def test_happyflow__marks_each_experiment_completed_and_flushes(
+        self, tmp_path: Path
+    ) -> None:
+        rest_client, client = _two_experiment_rig()
+        audit_path = tmp_path / "opik-migrate-x.json"
+        cp = load_or_create(
+            audit_path=audit_path,
+            workspace="ws",
+            project="DestProject",
+            dataset="MyDataset",
+        )
+
+        result, _ = _run_cascade(rest_client, client, cp)
+
+        assert result.experiments_migrated == 2
+        assert cp.completed_experiment_ids == {"src-exp-1", "src-exp-2"}
+        # in_flight is cleared once the last experiment completes.
+        assert cp.in_flight is None
+        # Progress was flushed to disk (a re-run would see both done).
+        reloaded = load_or_create(
+            audit_path=audit_path,
+            workspace="ws",
+            project="DestProject",
+            dataset="MyDataset",
+        )
+        assert reloaded.completed_experiment_ids == {"src-exp-1", "src-exp-2"}
+
+    def test_re_migrate_incomplete__deletes_partial_dest_data_before_rerun(
+        self, tmp_path: Path
+    ) -> None:
+        rest_client, client = _two_experiment_rig()
+        cp = load_or_create(
+            audit_path=tmp_path / "opik-migrate-x.json",
+            workspace="ws",
+            project="DestProject",
+            dataset="MyDataset",
+        )
+        # exp-1 finished on the prior run; exp-2 was interrupted mid-flight
+        # with two destination traces + an orphaned destination experiment row.
+        cp.mark_completed("src-exp-1")
+        cp.mark_in_flight(
+            "src-exp-2", experiment_name="exp-2", dest_dataset_id="dest-dataset-1"
+        )
+        cp.record_dest_trace_ids(["stale-dest-trace-1", "stale-dest-trace-2"])
+
+        # The orphaned destination experiment is discoverable by name under the
+        # destination dataset.
+        orphan = MagicMock()
+        orphan.id = "stale-dest-exp"
+        orphan.name = "exp-2"
+        rest_client.experiments.find_experiments.side_effect = None
+        rest_client.experiments.find_experiments.return_value = MagicMock(
+            content=[orphan]
+        )
+
+        _run_cascade(rest_client, client, cp)
+
+        # Partial traces were deleted (spans cascade on the BE), so they don't
+        # duplicate on the re-run.
+        rest_client.traces.delete_traces.assert_called_once()
+        deleted_trace_ids = rest_client.traces.delete_traces.call_args.kwargs["ids"]
+        assert set(deleted_trace_ids) == {"stale-dest-trace-1", "stale-dest-trace-2"}
+        # The orphaned destination experiment row was deleted.
+        rest_client.experiments.delete_experiments_by_id.assert_called_once()
+        deleted_exp_ids = (
+            rest_client.experiments.delete_experiments_by_id.call_args.kwargs["ids"]
+        )
+        assert deleted_exp_ids == ["stale-dest-exp"]
+        # in_flight is cleared after cleanup so a further crash won't re-delete.
+        assert cp.in_flight is None
+
+    def test_re_migrate_incomplete__name_substring_match_not_deleted(
+        self, tmp_path: Path
+    ) -> None:
+        # ``find_experiments(name=...)`` is a contains-filter on the BE; a
+        # differently-named experiment that merely shares the substring must
+        # NOT be deleted.
+        rest_client, client = _two_experiment_rig()
+        cp = load_or_create(
+            audit_path=tmp_path / "opik-migrate-x.json",
+            workspace="ws",
+            project="DestProject",
+            dataset="MyDataset",
+        )
+        cp.mark_in_flight(
+            "src-exp-2", experiment_name="exp-2", dest_dataset_id="dest-dataset-1"
+        )
+        cp.record_dest_trace_ids(["stale-dest-trace-1"])
+
+        near_miss = MagicMock()
+        near_miss.id = "other-exp"
+        near_miss.name = "exp-2-but-different"
+        rest_client.experiments.find_experiments.side_effect = None
+        rest_client.experiments.find_experiments.return_value = MagicMock(
+            content=[near_miss]
+        )
+
+        _run_cascade(rest_client, client, cp)
+
+        rest_client.experiments.delete_experiments_by_id.assert_not_called()
+
+    def test_progress_seeded__resumed_run_starts_at_completed_count(
+        self, tmp_path: Path
+    ) -> None:
+        rest_client, client = _two_experiment_rig()
+        cp = load_or_create(
+            audit_path=tmp_path / "opik-migrate-x.json",
+            workspace="ws",
+            project="DestProject",
+            dataset="MyDataset",
+        )
+        cp.mark_completed("src-exp-1")
+
+        _, progress_calls = _run_cascade(rest_client, client, cp)
+
+        # First progress tick reports 1 already-completed of 2 total (not 0),
+        # so the bar opens at 50% rather than restarting.
+        assert progress_calls[0] == (1, 2, "exp-2")
+        # Final tick snaps to total/total "done".
+        assert progress_calls[-1] == (2, 2, "done")
+
+    def test_no_checkpoint__cascade_unchanged(self) -> None:
+        # Without a checkpoint the cascade behaves exactly as before: both
+        # experiments migrate, no delete calls, progress counts from 0.
+        rest_client, client = _two_experiment_rig()
+        progress_calls: List[Tuple[int, int, str]] = []
+
+        result = cascade_experiments(
+            client,
+            rest_client,
+            source_dataset_id="src-dataset-1",
+            target_dataset_name="MyDataset",
+            target_project_name="DestProject",
+            version_remap={"src-v-1": "dest-v-1"},
+            item_id_remap={"src-ds-item-1": "dest-ds-item-1"},
+            audit=_audit(),
+            progress_callback=lambda c, t, label: progress_calls.append((c, t, label)),
+        )
+
+        assert result.experiments_migrated == 2
+        rest_client.traces.delete_traces.assert_not_called()
+        assert progress_calls[0] == (0, 2, "exp-1")
