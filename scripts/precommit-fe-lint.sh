@@ -19,10 +19,7 @@ done
 cd "$prefix"
 status=0
 if [ "${#js_files[@]}" -gt 0 ]; then
-	# --no-warn-ignored: a changed file the eslint config ignores would otherwise
-	# emit a "File ignored …" warning — and with --max-warnings=0 that would FAIL
-	# the commit. ESLint still skips ignored files; this just drops the notice.
-	npx eslint --fix --max-warnings=0 --no-warn-ignored "${js_files[@]}" || status=1
+	npx eslint --fix --max-warnings=0 "${js_files[@]}" || status=1
 fi
 if [ "${#style_files[@]}" -gt 0 ]; then
 	npx stylelint --fix "${style_files[@]}" || status=1
