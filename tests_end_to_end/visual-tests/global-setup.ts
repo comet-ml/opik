@@ -1,6 +1,6 @@
 import { chromium, FullConfig } from '@playwright/test';
-import { getEnvironmentConfig } from '../typescript-tests/config/env.config';
-import { TestHelperClient } from '../typescript-tests/helpers/test-helper-client';
+import { getEnvironmentConfig } from './config/env.config';
+import { TestHelperClient } from './helpers/test-helper-client';
 import * as path from 'path';
 import * as fs from 'fs';
 

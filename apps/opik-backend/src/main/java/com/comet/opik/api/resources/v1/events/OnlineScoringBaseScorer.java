@@ -3,7 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
-import com.comet.opik.api.events.WorkspaceScopedMessage;
+import com.comet.opik.api.events.RedisSubscriberMessage;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
@@ -14,10 +14,6 @@ import com.comet.opik.domain.TraceService;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OnlineScoringStreamConfigurationAdapter;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import io.opentelemetry.api.GlobalOpenTelemetry;
-import io.opentelemetry.api.common.AttributeKey;
-import io.opentelemetry.api.common.Attributes;
-import io.opentelemetry.api.metrics.LongCounter;
 import jakarta.validation.constraints.NotNull;
 import lombok.NonNull;
 import org.apache.commons.lang3.StringUtils;
@@ -47,12 +43,10 @@ import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
  * persistence. The Reactor pipeline owned by {@link BaseRedisSubscriber} schedules execution on the per-stream
  * worker scheduler; subclasses should NOT call {@code .block()} from {@code score()}.
  */
-public abstract class OnlineScoringBaseScorer<M extends WorkspaceScopedMessage> extends BaseRedisSubscriber<M> {
+public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> extends BaseRedisSubscriber<M> {
 
     public static final int TRACE_PAGE_LIMIT = 2000;
     private static final String ONLINE_SCORING_NAMESPACE = "online_scoring";
-    private static final AttributeKey<String> WORKSPACE_ID_KEY = AttributeKey.stringKey("workspace_id");
-    private static final AttributeKey<String> WORKSPACE_NAME_KEY = AttributeKey.stringKey("workspace_name");
 
     /**
      * Logger for the actual subclass, in order to have the correct class name in the logs.
@@ -62,13 +56,6 @@ public abstract class OnlineScoringBaseScorer<M extends WorkspaceScopedMessage> 
     protected final FeedbackScoreService feedbackScoreService;
     protected final TraceService traceService;
     protected final AutomationRuleEvaluatorType type;
-
-    /**
-     * Per-workspace count of messages successfully processed (scored) by this stream. Together with
-     * {@code online_scoring_<scorer>_processing_errors_total} (failures) this gives the consumer-side
-     * processed-vs-failed split per workspace. Exported as {@code online_scoring_<scorer>_processed_total}.
-     */
-    private final LongCounter processedCounter;
 
     protected OnlineScoringBaseScorer(@NonNull @Config OnlineScoringConfig config,
             @NonNull RedissonReactiveClient redisson,
@@ -84,10 +71,6 @@ public abstract class OnlineScoringBaseScorer<M extends WorkspaceScopedMessage> 
         this.feedbackScoreService = feedbackScoreService;
         this.traceService = traceService;
         this.type = type;
-        this.processedCounter = GlobalOpenTelemetry.getMeter(ONLINE_SCORING_NAMESPACE)
-                .counterBuilder("%s_%s_processed".formatted(ONLINE_SCORING_NAMESPACE, metricsBaseName))
-                .setDescription("Messages successfully processed (scored), by workspace")
-                .build();
     }
 
     /**
@@ -121,18 +104,16 @@ public abstract class OnlineScoringBaseScorer<M extends WorkspaceScopedMessage> 
     }
 
     /**
-     * Defers the subscription of {@link #score(Object)} so any synchronous work in implementations
-     * runs at subscription time on the per-stream worker scheduler.
+     * Propagates the workspace/user the message belongs to onto the reactive context for the whole
+     * scoring chain (feedback-score persistence reads it). Per-message throughput and error metrics are
+     * attributed automatically by {@link BaseRedisSubscriber} from {@link #messageContext(Object)}.
      */
     @Override
     protected final Mono<Void> processEvent(M message) {
         var workspaceName = StringUtils.defaultIfBlank(message.workspaceName(), message.workspaceId());
         return doScore(message)
-                .doOnSuccess(ignored -> processedCounter.add(1, Attributes.of(
-                        WORKSPACE_ID_KEY, message.workspaceId(),
-                        WORKSPACE_NAME_KEY, workspaceName)))
-                // Carry both workspace id and name on the reactive context for the whole chain, sourced
-                // from the message (resolved from RequestContext.WORKSPACE_NAME at trace-event publish time).
+                // Sourced from the message (resolved from RequestContext.WORKSPACE_NAME at trace-event
+                // publish time).
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, message.workspaceId())
                         .put(RequestContext.WORKSPACE_NAME, workspaceName)
@@ -143,27 +124,11 @@ public abstract class OnlineScoringBaseScorer<M extends WorkspaceScopedMessage> 
      * Full per-message processing chain. Defaults to {@link #score(Object)}, deferred so any
      * synchronous work runs at subscription time on the per-stream worker scheduler. Subclasses
      * that need post-scoring steps (e.g. test-suite assertion finalization) override this — not
-     * {@code processEvent} — so the processed-success counter fires only once the whole chain
-     * completes successfully.
+     * {@code processEvent} — so the base class records the message as processed only once the whole
+     * chain completes successfully.
      */
     protected Mono<Void> doScore(M message) {
         return Mono.defer(() -> score(message));
-    }
-
-    /**
-     * Attributes processing-error metrics to the workspace/user the message belongs to. Without this
-     * override the base class falls back to {@link MessageContext#UNKNOWN}, which is why
-     * {@code online_scoring_*_processing_errors_total} historically reported {@code workspace_id="unknown"}.
-     * The workspace name is carried on the message (resolved from RequestContext.WORKSPACE_NAME at
-     * trace-event publish time); falls back to the id when absent.
-     */
-    @Override
-    protected MessageContext messageContext(M message) {
-        return MessageContext.builder()
-                .workspaceId(message.workspaceId())
-                .workspaceName(StringUtils.defaultIfBlank(message.workspaceName(), message.workspaceId()))
-                .userName(message.userName())
-                .build();
     }
 
     /**

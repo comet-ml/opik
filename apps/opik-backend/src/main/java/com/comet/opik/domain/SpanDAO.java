@@ -36,6 +36,7 @@ import io.r2dbc.spi.RowMetadata;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -610,6 +611,21 @@ public class SpanDAO {
             ;
             """;
 
+    private static final String SELECT_SPAN_REFS_BY_SPAN_IDS = """
+            SELECT
+                id,
+                project_id,
+                trace_id,
+                start_time
+            FROM spans
+            WHERE workspace_id = :workspace_id
+            AND id IN :ids
+            ORDER BY id, last_updated_at DESC
+            LIMIT 1 BY id
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
     private static final String SELECT_BY_IDS = """
             WITH feedback_scores_deduped AS (
                 SELECT workspace_id,
@@ -687,7 +703,7 @@ public class SpanDAO {
                     entries[1].4 AS source,
                     mapFromArrays(
                             arrayMap(e -> e.5, entries),
-                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9), entries)
+                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, '', '', '', e.5), entries)
                     ) AS value_by_author,
                     arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
                     arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
@@ -698,7 +714,15 @@ public class SpanDAO {
             SELECT
                 s.*,
                 s.project_id as project_id,
-                groupArray(tuple(c.*)) AS comments,
+                groupArray(tuple(
+                    c.comment_id,
+                    c.text,
+                    c.comment_created_at,
+                    c.comment_last_updated_at,
+                    c.comment_created_by,
+                    c.comment_last_updated_by,
+                    c.source_queue_id
+                )) AS comments,
                 any(fs.feedback_scores) as feedback_scores_list
             FROM (
                 SELECT
@@ -719,6 +743,7 @@ public class SpanDAO {
                     last_updated_at AS comment_last_updated_at,
                     created_by AS comment_created_by,
                     last_updated_by AS comment_last_updated_by,
+                    source_queue_id,
                     entity_id
                 FROM comments
                 WHERE workspace_id = :workspace_id
@@ -831,7 +856,8 @@ public class SpanDAO {
                        created_at AS comment_created_at,
                        last_updated_at AS comment_last_updated_at,
                        created_by AS comment_created_by,
-                       last_updated_by AS comment_last_updated_by
+                       last_updated_by AS comment_last_updated_by,
+                       source_queue_id
                    )) as comments
               FROM (
                 SELECT
@@ -841,6 +867,7 @@ public class SpanDAO {
                     last_updated_at,
                     created_by,
                     last_updated_by,
+                    source_queue_id,
                     entity_id,
                     workspace_id,
                     project_id
@@ -940,7 +967,7 @@ public class SpanDAO {
                     entries[1].4 AS source,
                     mapFromArrays(
                             arrayMap(e -> e.5, entries),
-                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9), entries)
+                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, '', '', '', e.5), entries)
                     ) AS value_by_author,
                     arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
                     arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
@@ -1311,7 +1338,7 @@ public class SpanDAO {
                     entries[1].4 AS source,
                     mapFromArrays(
                             arrayMap(e -> e.5, entries),
-                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9), entries)
+                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, '', '', '', e.5), entries)
                     ) AS value_by_author,
                     arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
                     arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
@@ -2139,10 +2166,45 @@ public class SpanDAO {
                 .flatMap(this::mapToDto);
     }
 
+    /** A persisted span's project, trace, and start_time — the fields needed to build its cipx_spends row.
+     *  project_id/trace_id are immutable (sort key); start_time is the stored value, not derived. */
+    @Builder(toBuilder = true)
+    public record SpanRef(@NonNull UUID projectId, @NonNull UUID traceId, @NonNull Instant startTime) {
+    }
+
     /**
-     * Get target project IDs from spans for the given span IDs.
-     * This is executed as a separate query to reduce spans table scans in the main query.
+     * Resolves span -> (project_id, trace_id, start_time) for the given spans, keyed off {@code workspaceId}
+     * explicitly rather than the reactive request context, so it can run from the Cost Intelligence subscriber (an
+     * async event listener with no request scope). A batch span update matches spans by id + workspace and carries
+     * none of these per span, and start_time must come from the stored span (not the UUIDv7 timestamp) so a cipx
+     * update doesn't rewrite it for backfilled/imported spans. Deduped with LIMIT 1 BY id (latest last_updated_at
+     * wins) rather than FINAL, so it stays cheap on the ingestion path. Spans missing from ClickHouse are absent.
      */
+    @WithSpan
+    public Mono<Map<UUID, SpanRef>> getSpanRefsBySpanIds(@NonNull Set<UUID> spanIds, @NonNull String workspaceId) {
+        if (spanIds.isEmpty()) {
+            return Mono.just(Map.of());
+        }
+        log.info("Getting span refs for '{}' span_ids", spanIds.size());
+        return Mono.from(connectionFactory.create())
+                .flatMap(connection -> {
+                    var template = getSTWithLogComment(SELECT_SPAN_REFS_BY_SPAN_IDS,
+                            "get_span_refs_by_span_ids", workspaceId, "", spanIds.size());
+                    var statement = connection.createStatement(template.render())
+                            .bind("ids", spanIds.toArray(UUID[]::new))
+                            .bind("workspace_id", workspaceId);
+                    return Flux.from(statement.execute())
+                            .flatMap(result -> result.map((row, metadata) -> Map.entry(
+                                    row.get("id", UUID.class),
+                                    SpanRef.builder()
+                                            .projectId(row.get("project_id", UUID.class))
+                                            .traceId(row.get("trace_id", UUID.class))
+                                            .startTime(row.get("start_time", Instant.class))
+                                            .build())))
+                            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                });
+    }
+
     private Mono<List<UUID>> getTargetProjectIdsForSpans(Set<UUID> ids) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);

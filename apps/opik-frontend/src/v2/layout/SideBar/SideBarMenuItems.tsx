@@ -19,6 +19,9 @@ const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
   const activeProjectId = useActiveProjectId();
   const AssistantSidebar = usePluginsStore((state) => state.AssistantSidebar);
   const ollieEnabled = useIsFeatureEnabled(FeatureToggleKeys.OLLIE_ENABLED);
+  const agentInsightsEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.AGENT_INSIGHTS_ENABLED,
+  );
   const projectHomepageEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.PROJECT_HOMEPAGE_ENABLED,
   );
@@ -27,8 +30,12 @@ const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
       canViewExperiments,
       canViewDatasets,
       canViewDashboards,
+      canViewPrompts,
       canUsePlayground,
+      canViewAgentPlayground,
       canViewOptimizationRuns,
+      canViewOnlineEvaluationRules,
+      canViewAlerts,
     },
   } = usePermissions();
 
@@ -37,10 +44,15 @@ const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
     canViewExperiments,
     canViewDatasets,
     canViewDashboards,
+    canViewPrompts,
     canUsePlayground,
+    canViewAgentPlayground,
     canViewOptimizationRuns,
+    canViewOnlineEvaluationRules,
+    canViewAlerts,
     showHomePage: projectHomepageEnabled,
     showOlliePage: !!AssistantSidebar && ollieEnabled,
+    showDiagnostics: !!AssistantSidebar && ollieEnabled && agentInsightsEnabled,
   });
 
   const renderItems = (items: MenuItem[]) => {

@@ -26,6 +26,7 @@ export type FeedbackScoreTableProps = {
     name: string,
     author?: string,
     spanId?: string,
+    sourceQueueId?: string,
   ) => void;
   onAddHumanReview: () => void;
   feedbackScores?: TraceFeedbackScore[];
@@ -83,7 +84,12 @@ const FeedbackScoreTable: React.FunctionComponent<FeedbackScoreTableProps> = ({
       if (!onDeleteFeedbackScore) return;
       if (dontAskAgain) {
         // For child rows grouped by span type, pass span_id
-        onDeleteFeedbackScore(row.name, row.author, row.span_id);
+        onDeleteFeedbackScore(
+          row.name,
+          row.author,
+          row.span_id,
+          row.source_queue_id,
+        );
       } else {
         setRowToDelete(row);
       }

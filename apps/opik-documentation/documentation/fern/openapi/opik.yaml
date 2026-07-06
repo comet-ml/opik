@@ -46,8 +46,6 @@ tags:
   description: "Per-(workspace, project) Agent Insights report configuration"
 - name: Agent Insights
   description: Agent Insights report results
-- name: AI Spend
-  description: Coding-agent spend analytics
 - name: Alerts
   description: Alert resources
 - name: Annotation Queues
@@ -99,6 +97,8 @@ tags:
   description: Project related resources
 - name: Prompts
   description: Prompt resources
+- name: Report Failures
+  description: Generic failure log for reports/jobs
 - name: Reports
   description: Ollie daily report management
 - name: Retention Rules
@@ -1263,162 +1263,6 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage"
         "401":
           description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/ai-spend/composition/breakdowns:
-    post:
-      tags:
-      - AI Spend
-      summary: Get all spend lane breakdowns
-      description: Get the per-item breakdown for every composition lane in one request
-      operationId: getSpendAllBreakdowns
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SpendMetricRequest"
-      responses:
-        "200":
-          description: Lane breakdowns
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SpendBreakdownsResponse"
-        "400":
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/ai-spend/composition:
-    post:
-      tags:
-      - AI Spend
-      summary: Get spend composition
-      description: Get coding-agent token-flow composition (Sankey)
-      operationId: getSpendComposition
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SpendMetricRequest"
-      responses:
-        "200":
-          description: Spend composition
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SpendCompositionResponse"
-        "400":
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/ai-spend/composition/{laneKey}/breakdown:
-    post:
-      tags:
-      - AI Spend
-      summary: Get spend lane breakdown
-      description: Get the per-item breakdown for a composition lane
-      operationId: getSpendLaneBreakdown
-      parameters:
-      - name: laneKey
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SpendMetricRequest"
-      responses:
-        "200":
-          description: Lane breakdown
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SpendBreakdownResponse"
-        "400":
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/ai-spend/summary:
-    post:
-      tags:
-      - AI Spend
-      summary: Get spend summary
-      description: Get coding-agent spend KPI summary
-      operationId: getSpendSummary
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SpendMetricRequest"
-      responses:
-        "200":
-          description: Spend summary
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SpendSummaryResponse"
-        "400":
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/ai-spend/users:
-    post:
-      tags:
-      - AI Spend
-      summary: Get spend user leaderboard
-      description: Get coding-agent spend per user
-      operationId: getSpendUsers
-      parameters:
-      - name: page
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 1
-      - name: size
-        in: query
-        schema:
-          maximum: 1000
-          minimum: 1
-          type: integer
-          format: int32
-          default: 25
-      - name: sorting
-        in: query
-        schema:
-          type: string
-      - name: name
-        in: query
-        schema:
-          type: string
-          description: "Filter users by name or email (partial match, case insensitive)"
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SpendMetricRequest"
-      responses:
-        "200":
-          description: User leaderboard
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SpendUserPage"
-        "400":
-          description: Bad Request
           content:
             application/json:
               schema:
@@ -7332,6 +7176,88 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/report-failures:
+    get:
+      tags:
+      - Report Failures
+      summary: List failures for a project
+      description: "Returns failures for the given project id and type, most recent\
+        \ first."
+      operationId: findReportFailures
+      parameters:
+      - name: type
+        in: query
+        required: true
+        schema:
+          type: string
+          enum:
+          - agent_insights
+      - name: project_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      responses:
+        "200":
+          description: Failures page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportFailurePage"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    post:
+      tags:
+      - Report Failures
+      summary: Record a report/job failure
+      description: "Appends a failure row keyed by (project_id, type). Append-only\
+        \ — never overwrites earlier failures."
+      operationId: createReportFailure
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportFailure"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              style: simple
+              schema:
+                type: string
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/projects/{projectId}/reports/{reportId}/complete:
     post:
       tags:
@@ -10065,6 +9991,16 @@ components:
           type: string
           format: date-time
           readOnly: true
+        last_failure_reason:
+          type: string
+          readOnly: true
+        last_failure_detail:
+          type: string
+          readOnly: true
+        last_failed_at:
+          type: string
+          format: date-time
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -10122,6 +10058,13 @@ components:
         total_occurrences:
           type: integer
           description: SUM(count) over the requested window
+          format: int64
+        latest_count:
+          type: integer
+          description: "Occurrences on the latest report day in the window only. The\
+            \ issue's description/cause narrate that most recent run, so this is the\
+            \ count consistent with them; totalOccurrences instead sums every day\
+            \ in the window."
           format: int64
         total:
           type: integer
@@ -10318,226 +10261,6 @@ components:
           - open
           - resolved
           - closed
-    Item:
-      type: object
-      properties:
-        label:
-          type: string
-        total_tokens:
-          type: integer
-          format: int64
-        definition_tokens:
-          type: integer
-          format: int64
-        usage_tokens:
-          type: integer
-          format: int64
-        by_model:
-          type: array
-          items:
-            $ref: "#/components/schemas/ModelTiers"
-        count:
-          type: integer
-          format: int64
-    ModelTiers:
-      type: object
-      properties:
-        model:
-          type: string
-        input_tokens:
-          type: integer
-          format: int64
-        cache_read_tokens:
-          type: integer
-          format: int64
-        cache_creation_tokens:
-          type: integer
-          format: int64
-        output_tokens:
-          type: integer
-          format: int64
-    SpendBreakdownResponse:
-      type: object
-      properties:
-        lane_key:
-          type: string
-        title:
-          type: string
-        subtitle:
-          type: string
-        total_tokens:
-          type: integer
-          format: int64
-        by_model:
-          type: array
-          items:
-            $ref: "#/components/schemas/ModelTiers"
-        item_count:
-          type: integer
-          format: int32
-        item_unit:
-          type: string
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/Item"
-    SpendBreakdownsResponse:
-      type: object
-      properties:
-        breakdowns:
-          type: array
-          items:
-            $ref: "#/components/schemas/SpendBreakdownResponse"
-    SpendMetricRequest:
-      required:
-      - interval_end
-      - interval_start
-      type: object
-      properties:
-        project_id:
-          type: string
-          format: uuid
-        project_name:
-          type: string
-        interval_start:
-          type: string
-          format: date-time
-        interval_end:
-          type: string
-          format: date-time
-        user_id:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
-          type: string
-        start_before_end:
-          type: boolean
-        project_provided:
-          type: boolean
-    HarnessEntry:
-      type: object
-      properties:
-        key:
-          type: string
-        label:
-          type: string
-    Lane:
-      type: object
-      properties:
-        key:
-          type: string
-        label:
-          type: string
-        total_tokens:
-          type: integer
-          format: int64
-        by_model:
-          type: array
-          items:
-            $ref: "#/components/schemas/ModelTiers"
-        has_breakdown:
-          type: boolean
-    Side:
-      type: object
-      properties:
-        total_tokens:
-          type: integer
-          format: int64
-        lanes:
-          type: array
-          items:
-            $ref: "#/components/schemas/Lane"
-    SpendCompositionResponse:
-      type: object
-      properties:
-        input:
-          $ref: "#/components/schemas/Side"
-        harness:
-          type: array
-          items:
-            $ref: "#/components/schemas/HarnessEntry"
-        output:
-          $ref: "#/components/schemas/Side"
-    Result:
-      type: object
-      properties:
-        name:
-          type: string
-        current:
-          type: number
-          format: double
-        previous:
-          type: number
-          format: double
-    SpendSummaryResponse:
-      type: object
-      properties:
-        results:
-          type: array
-          items:
-            $ref: "#/components/schemas/Result"
-        spend_current:
-          type: array
-          items:
-            $ref: "#/components/schemas/ModelTiers"
-        spend_previous:
-          type: array
-          items:
-            $ref: "#/components/schemas/ModelTiers"
-    SpendUserPage:
-      type: object
-      properties:
-        page:
-          type: integer
-          format: int32
-        size:
-          type: integer
-          format: int32
-        total:
-          type: integer
-          format: int64
-        content:
-          type: array
-          items:
-            $ref: "#/components/schemas/SpendUserRow"
-        sortable_by:
-          type: array
-          items:
-            type: string
-    SpendUserRow:
-      type: object
-      properties:
-        user_uuid:
-          type: string
-        user_email:
-          type: string
-        user_display_name:
-          type: string
-        by_model:
-          type: array
-          items:
-            $ref: "#/components/schemas/ModelTiers"
-        total_tokens:
-          type: integer
-          format: int64
-        requests:
-          type: integer
-          format: int64
-        skills:
-          type: integer
-          format: int64
-        mcps:
-          type: integer
-          format: int64
-        mcp_calls:
-          type: integer
-          format: int64
-        repositories:
-          type: array
-          items:
-            type: string
-        flags:
-          type: array
-          items:
-            type: string
     Alert:
       required:
       - webhook
@@ -14421,6 +14144,10 @@ components:
           type: string
         span_id:
           type: string
+        source_queue_id:
+          type: string
+        author:
+          type: string
       readOnly: true
     DatasetItemBatch_Write:
       required:
@@ -15155,6 +14882,10 @@ components:
         span_type:
           type: string
         span_id:
+          type: string
+        source_queue_id:
+          type: string
+        author:
           type: string
       readOnly: true
     DatasetPage_Public:
@@ -16628,6 +16359,7 @@ components:
           - experiment
           - playground
           - optimization
+          - evaluator
         environment:
           maxLength: 150
           minLength: 0
@@ -16762,6 +16494,7 @@ components:
           - experiment
           - playground
           - optimization
+          - evaluator
         environment:
           maxLength: 150
           minLength: 0
@@ -16961,6 +16694,7 @@ components:
           - experiment
           - playground
           - optimization
+          - evaluator
         environment:
           maxLength: 150
           minLength: 0
@@ -17014,6 +16748,7 @@ components:
           - experiment
           - playground
           - optimization
+          - evaluator
         environment:
           maxLength: 150
           minLength: 0
@@ -17041,6 +16776,10 @@ components:
         span_type:
           type: string
         span_id:
+          type: string
+        source_queue_id:
+          type: string
+        author:
           type: string
       readOnly: true
     AssertionScoreAverage_Public:
@@ -20710,6 +20449,60 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/RecentActivityItem_Public"
+    ReportFailure:
+      required:
+      - project_id
+      - reason
+      - type
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        type:
+          type: string
+          enum:
+          - agent_insights
+        project_id:
+          type: string
+          format: uuid
+        reason:
+          maxLength: 255
+          minLength: 0
+          type: string
+        detail:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+    ReportFailurePage:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReportFailure"
     ReportCompleteRequest:
       required:
       - status
@@ -20915,6 +20708,7 @@ components:
       - guardrailsEnabled
       - ollamaProviderEnabled
       - ollieEnabled
+      - onlineScoringTracingEnabled
       - openaiProviderEnabled
       - openrouterProviderEnabled
       - opikAIEnabled
@@ -20978,6 +20772,8 @@ components:
         agenticToolsEnabled:
           type: boolean
         agentInsightsEnabled:
+          type: boolean
+        onlineScoringTracingEnabled:
           type: boolean
         v2WorkspaceAllowlistIds:
           uniqueItems: true
@@ -21124,6 +20920,7 @@ components:
           - experiment
           - playground
           - optimization
+          - evaluator
         environment:
           maxLength: 150
           minLength: 0
@@ -21217,6 +21014,7 @@ components:
           - experiment
           - playground
           - optimization
+          - evaluator
         environment:
           maxLength: 150
           minLength: 0
@@ -21426,6 +21224,7 @@ components:
           - experiment
           - playground
           - optimization
+          - evaluator
         environment:
           maxLength: 150
           minLength: 0
@@ -21451,6 +21250,10 @@ components:
         span_type:
           type: string
         span_id:
+          type: string
+        source_queue_id:
+          type: string
+        author:
           type: string
       readOnly: true
     SpanPage_Public:
@@ -21695,6 +21498,7 @@ components:
           - experiment
           - playground
           - optimization
+          - evaluator
         environment:
           maxLength: 150
           minLength: 0
@@ -21819,6 +21623,7 @@ components:
           - experiment
           - playground
           - optimization
+          - evaluator
         environment:
           maxLength: 150
           minLength: 0
@@ -22083,6 +21888,7 @@ components:
           - experiment
           - playground
           - optimization
+          - evaluator
         environment:
           maxLength: 150
           minLength: 0
@@ -22422,6 +22228,17 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Permission"
+    Result:
+      type: object
+      properties:
+        name:
+          type: string
+        current:
+          type: number
+          format: double
+        previous:
+          type: number
+          format: double
     WorkspaceMetricsSummaryRequest:
       required:
       - interval_end

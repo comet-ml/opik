@@ -24,6 +24,10 @@ public class OpikConfiguration extends JobConfiguration {
     private DatabaseAnalyticsFactory databaseAnalytics = new DatabaseAnalyticsFactory();
 
     @Valid @NotNull @JsonProperty
+    private DatabaseAnalyticsDataModelConfig databaseAnalyticsDataModel = DatabaseAnalyticsDataModelConfig.builder()
+            .build();
+
+    @Valid @NotNull @JsonProperty
     private DatabaseAnalyticsReadOnlyFreeFormSqlConfig databaseAnalyticsReadOnlyFreeFormSql = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
 
     @Valid @NotNull @JsonProperty

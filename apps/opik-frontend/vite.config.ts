@@ -22,6 +22,12 @@ export default defineConfig(({ mode }) => {
   );
   const assistantPort = parseInt(env.VITE_ASSISTANT_SIDEBAR_PORT || "3333", 10);
   const assistantApiPort = parseInt(env.VITE_ASSISTANT_API_PORT || "9080", 10);
+  // ai-cost-backend (cost-api) — serves the AI Spend API. dev-runner sets the
+  // port; default matches cost-api's own default.
+  const aiCostBackendPort = parseInt(
+    env.VITE_AI_COST_BACKEND_PORT || "8000",
+    10,
+  );
 
   return {
     base: env.VITE_BASE_URL || "/",
@@ -56,6 +62,15 @@ export default defineConfig(({ mode }) => {
       // Proxy /api/* to backend, stripping the /api prefix (mirrors production nginx)
       // Example: /api/v1/projects -> http://localhost:8080/v1/projects
       proxy: {
+        // AI Spend → local cost-api. Declared before /api so this longer
+        // prefix wins (mirrors the prod nginx ai-spend divert). The plugin
+        // always targets cost-api; the opik-backend ai-spend endpoints are
+        // being retired. /api/v1/private/ai-spend/X -> :port/cost-api/v1/private/ai-spend/X
+        "/api/v1/private/ai-spend": {
+          target: `http://localhost:${aiCostBackendPort}`,
+          changeOrigin: true,
+          rewrite: (p) => p.replace(/^\/api/, "/cost-api"),
+        },
         "/api": {
           target: `http://localhost:${backendPort}`,
           changeOrigin: true,

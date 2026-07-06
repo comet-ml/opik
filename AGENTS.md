@@ -28,9 +28,9 @@ This repository is a multi-module Opik codebase. Main areas:
 - `cd apps/opik-backend && mvn test` — backend unit/integration tests.
 - `cd apps/opik-backend && mvn spotless:apply` — apply Java formatting.
 - `cd sdks/python && pip install -r tests/test_requirements.txt && pip install -r tests/unit/test_requirements.txt && pytest tests/unit tests/e2e` — Python SDK test suites.
-- `make precommit-sdks` — run module-specific pre-commit checks across all SDKs from their local docs (do not duplicate SDK-specific command lines in multiple places).
+- `make precommit` — run pre-commit hooks on changed files (vs origin/main) from the root `.pre-commit-config.yaml` across all modules (do not duplicate per-module command lines in multiple places).
 - `cd sdks/typescript && npm run lint && npm run test && npm run build` — TS SDK checks.
-- `cd tests_end_to_end/typescript-tests && TEST_SUITE=sanity npm test` — cross-stack Playwright sanity suite.
+- `cd tests_end_to_end/e2e && npx playwright test` — cross-stack Playwright E2E suite.
 
 ## Coding Style & Naming Conventions
 - Use existing module formatters/conventions and keep edits scoped; avoid blanket reformatting.
@@ -46,7 +46,7 @@ This repository is a multi-module Opik codebase. Main areas:
 - For SDK integration tests requiring external services, document any required keys in the PR.
 - For end-to-end execution across backend/frontend, use:
   - `./opik.sh` or `scripts/dev-runner.sh` to start local services
-  - `tests_end_to_end/typescript-tests/README.md` for suite-specific command and helper-service setup
+  - `tests_end_to_end/e2e/README.md` for suite-specific command and setup
 
 ## Agent Contribution Workflow
 - This repository is a monorepo; submodule `AGENTS.md` files inherit this workflow by default.

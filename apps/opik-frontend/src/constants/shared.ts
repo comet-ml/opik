@@ -1,6 +1,7 @@
 import React from "react";
 import { CellContext } from "@tanstack/react-table";
 import {
+  CELL_HORIZONTAL_ALIGNMENT,
   CELL_VERTICAL_ALIGNMENT,
   COLUMN_TYPE,
   ROW_HEIGHT,
@@ -24,6 +25,9 @@ export const INSTALL_OPIK_DEFAULT_DESCRIPTION =
 export const INSTALL_SDK_SECTION_TITLE = "2. Install the SDK";
 
 export const TRUNCATION_DISABLED_MAX_PAGE_SIZE = 10;
+
+export const TOOLTIP_DELAY_DURATION = 500;
+export const TOOLTIP_SKIP_DELAY_DURATION = 0;
 
 export const TABLE_HEADER_Z_INDEX = 2;
 export const TABLE_ROW_Z_INDEX = 0;
@@ -73,15 +77,56 @@ export const CELL_VERTICAL_ALIGNMENT_MAP = {
   [CELL_VERTICAL_ALIGNMENT.end]: "items-end",
 };
 
-export const CELL_HORIZONTAL_ALIGNMENT_MAP: Record<COLUMN_TYPE, string> = {
-  [COLUMN_TYPE.number]: "justify-end",
-  [COLUMN_TYPE.cost]: "justify-end",
-  [COLUMN_TYPE.duration]: "justify-end",
-  [COLUMN_TYPE.string]: "justify-start",
-  [COLUMN_TYPE.list]: "justify-start",
-  [COLUMN_TYPE.time]: "justify-start",
-  [COLUMN_TYPE.dictionary]: "justify-start",
-  [COLUMN_TYPE.numberDictionary]: "justify-start",
-  [COLUMN_TYPE.category]: "justify-start",
-  [COLUMN_TYPE.errors]: "justify-start",
+// Single source of truth: the default horizontal alignment a column type renders
+// at. Numeric-style values sit on the right; everything else on the left.
+export const DEFAULT_HORIZONTAL_ALIGNMENT_BY_TYPE: Record<
+  COLUMN_TYPE,
+  CELL_HORIZONTAL_ALIGNMENT
+> = {
+  [COLUMN_TYPE.number]: CELL_HORIZONTAL_ALIGNMENT.end,
+  [COLUMN_TYPE.cost]: CELL_HORIZONTAL_ALIGNMENT.end,
+  [COLUMN_TYPE.duration]: CELL_HORIZONTAL_ALIGNMENT.end,
+  [COLUMN_TYPE.string]: CELL_HORIZONTAL_ALIGNMENT.start,
+  [COLUMN_TYPE.list]: CELL_HORIZONTAL_ALIGNMENT.start,
+  [COLUMN_TYPE.time]: CELL_HORIZONTAL_ALIGNMENT.start,
+  [COLUMN_TYPE.dictionary]: CELL_HORIZONTAL_ALIGNMENT.start,
+  [COLUMN_TYPE.numberDictionary]: CELL_HORIZONTAL_ALIGNMENT.start,
+  [COLUMN_TYPE.category]: CELL_HORIZONTAL_ALIGNMENT.start,
+  [COLUMN_TYPE.errors]: CELL_HORIZONTAL_ALIGNMENT.start,
 };
+
+export const CELL_HORIZONTAL_ALIGNMENT_CLASS_MAP: Record<
+  CELL_HORIZONTAL_ALIGNMENT,
+  string
+> = {
+  [CELL_HORIZONTAL_ALIGNMENT.start]: "justify-start",
+  [CELL_HORIZONTAL_ALIGNMENT.end]: "justify-end",
+};
+
+/**
+ * Resolve a column's horizontal alignment from its meta. An explicit
+ * `horizontalAlignment` override wins; otherwise the per-type default; otherwise
+ * `start`. This is the one place alignment is decided — the cell renderer and the
+ * Explain button both call it, so a column declares its alignment once (via type
+ * or an explicit override) and no consumer hardcodes column types.
+ */
+export const resolveHorizontalAlignment = (meta?: {
+  type?: COLUMN_TYPE;
+  horizontalAlignment?: CELL_HORIZONTAL_ALIGNMENT;
+}): CELL_HORIZONTAL_ALIGNMENT =>
+  meta?.horizontalAlignment ??
+  (meta?.type ? DEFAULT_HORIZONTAL_ALIGNMENT_BY_TYPE[meta.type] : undefined) ??
+  CELL_HORIZONTAL_ALIGNMENT.start;
+
+// Back-compat lookup by column type (derived from the source of truth above) for
+// consumers that only key off `type` (split-cell/header wrappers).
+export const CELL_HORIZONTAL_ALIGNMENT_MAP = Object.fromEntries(
+  (Object.keys(DEFAULT_HORIZONTAL_ALIGNMENT_BY_TYPE) as COLUMN_TYPE[]).map(
+    (type) => [
+      type,
+      CELL_HORIZONTAL_ALIGNMENT_CLASS_MAP[
+        DEFAULT_HORIZONTAL_ALIGNMENT_BY_TYPE[type]
+      ],
+    ],
+  ),
+) as Record<COLUMN_TYPE, string>;

@@ -99,10 +99,24 @@ import {
 } from "@/shared/filter-chips/chips/QueryBuilderChip/operators";
 import { useTagsOptions } from "@/v2/pages-shared/TagsAutocomplete/useTagsOptions";
 import ListCell from "@/shared/DataTableCells/ListCell";
+import { withExplain } from "@/v2/pages/LogsPage/explain/withExplain";
+import {
+  buildThreadCostTarget,
+  buildThreadDurationTarget,
+} from "@/v2/pages/LogsPage/ThreadsTab/explainTargets";
 
 const getRowId = (d: Thread) => d.id;
 
 const REFETCH_INTERVAL = 30000;
+
+// Duration/Cost cells get the Ollie Explain button (OPIK-6425). Threads never
+// change entity type, so the builders are bound once at module scope (unlike
+// the per-view wrapping in TracesSpansTab). No-op in OSS (empty PluginsStore).
+const DurationExplainCell = withExplain(
+  DurationCell as never,
+  buildThreadDurationTarget,
+);
+const CostExplainCell = withExplain(CostCell as never, buildThreadCostTarget);
 
 const SHARED_COLUMNS: ColumnData<Thread>[] = [
   {
@@ -138,7 +152,7 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     id: "duration",
     label: "Duration",
     type: COLUMN_TYPE.duration,
-    cell: DurationCell as never,
+    cell: DurationExplainCell as never,
     statisticDataFormater: formatDuration,
     statisticTooltipFormater: formatDuration,
     supportsPercentiles: true,
@@ -212,7 +226,7 @@ const DEFAULT_COLUMNS: ColumnData<Thread>[] = [
     id: "total_estimated_cost",
     label: "Estimated cost",
     type: COLUMN_TYPE.cost,
-    cell: CostCell as never,
+    cell: CostExplainCell as never,
     explainer: EXPLAINERS_MAP[EXPLAINER_ID.hows_the_thread_cost_estimated],
     size: 160,
     statisticKey: "total_estimated_cost",

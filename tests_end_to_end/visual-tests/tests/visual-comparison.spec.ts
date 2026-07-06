@@ -1,6 +1,6 @@
 import { test } from '@playwright/test';
-import { getEnvironmentConfig } from '../../typescript-tests/config/env.config';
-import { TestHelperClient } from '../../typescript-tests/helpers/test-helper-client';
+import { getEnvironmentConfig } from '../config/env.config';
+import { TestHelperClient } from '../helpers/test-helper-client';
 import { ProjectsPage } from '../page-objects/projects.page';
 import { LogsPage } from '../page-objects/logs.page';
 import { DatasetsPage } from '../page-objects/datasets.page';

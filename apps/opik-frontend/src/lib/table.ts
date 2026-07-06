@@ -143,6 +143,9 @@ export const mapColumnDataFields = <TColumnData, TData>(
       ...(columnData.verticalAlignment && {
         verticalAlignment: columnData.verticalAlignment,
       }),
+      ...(columnData.horizontalAlignment && {
+        horizontalAlignment: columnData.horizontalAlignment,
+      }),
       ...(columnData.overrideRowHeight && {
         overrideRowHeight: columnData.overrideRowHeight,
       }),

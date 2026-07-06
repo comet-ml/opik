@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo } from "react";
 import sortBy from "lodash/sortBy";
 import isNumber from "lodash/isNumber";
-import { CircleCheck, Database, GitCommitVertical } from "lucide-react";
+import { CircleCheck, GitCommitVertical } from "lucide-react";
 
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
+import BackButton from "@/shared/BackButton/BackButton";
+import CompareExperimentsButton from "@/v2/pages/CompareExperimentsPage/CompareExperimentsButton/CompareExperimentsButton";
 import { Experiment } from "@/types/datasets";
 import { Tag } from "@/ui/tag";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
@@ -21,7 +23,6 @@ import {
 import { getScoreDisplayName } from "@/lib/feedback-scores";
 import { generateExperimentIdsFilter } from "@/lib/filters";
 import { isTestSuiteExperiment } from "@/lib/experiments";
-import { LOGS_SOURCE } from "@/types/traces";
 import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton";
 import ExperimentTagsList from "@/v2/pages/CompareExperimentsPage/ExperimentTagsList";
 
@@ -82,7 +83,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
         );
 
       return (
-        <div className="flex h-11 items-center gap-2">
+        <div className="mt-1 flex items-center gap-2">
           <span className="text-nowrap">Baseline of</span>
           <ExperimentTag experimentName={experiment?.name} />
           <span className="text-nowrap">compared against</span>
@@ -91,15 +92,22 @@ const CompareExperimentsDetails: React.FunctionComponent<
       );
     }
 
-    return <FeedbackScoresList scores={experimentScores} />;
+    return <FeedbackScoresList className="mt-1" scores={experimentScores} />;
   };
 
   return (
     <div className="py-4">
-      <div className="mb-4 flex min-h-8 items-center justify-between">
-        <h1 className="comet-title-xs truncate break-words">{title}</h1>
+      <div className="mb-3 flex min-h-8 items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <BackButton
+            to="/$workspaceName/projects/$projectId/experiments"
+            tooltip="Back to experiments"
+          />
+          <h1 className="comet-body-accented truncate break-words">{title}</h1>
+        </div>
+        <CompareExperimentsButton />
       </div>
-      <div className="mb-1 flex gap-2 overflow-x-auto">
+      <div className="mb-1 flex gap-1.5 overflow-x-auto">
         {!isCompare && (
           <DateTag
             date={experiment?.created_at}
@@ -107,49 +115,40 @@ const CompareExperimentsDetails: React.FunctionComponent<
           />
         )}
         {experiment?.dataset_id && (
-          <TooltipWrapper
-            content={[
-              isTestSuiteExperiment(experiment) ? "Test suite" : "Dataset",
-              ": ",
-              experiment.dataset_name || "Deleted",
-              experiment.dataset_version_summary?.version_name
-                ? ` ${experiment.dataset_version_summary.version_name}`
-                : "",
-            ].join("")}
-          >
-            <Tag
-              size="md"
-              variant="transparent"
-              className="flex shrink-0 items-center gap-1"
-            >
-              <Database
-                className="size-3 shrink-0"
-                style={{ color: "var(--color-yellow)" }}
-              />
-              <span className="comet-body-s-accented truncate text-muted-slate">
-                {experiment.dataset_name || "Deleted test suite"}
-              </span>
-              {experiment.dataset_version_summary?.version_name && (
+          <NavigationTag
+            id={experiment.dataset_id}
+            name={experiment.dataset_name}
+            tooltipContent={false}
+            resource={
+              isTestSuiteExperiment(experiment)
+                ? RESOURCE_TYPE.testSuite
+                : RESOURCE_TYPE.dataset
+            }
+            prefix={
+              isTestSuiteExperiment(experiment) ? "Test suite" : "Dataset"
+            }
+            suffix={
+              experiment.dataset_version_summary?.version_name ? (
                 <span className="flex items-center gap-0 pt-px text-xs text-muted-slate">
                   <GitCommitVertical className="size-[10px]" />
                   {experiment.dataset_version_summary.version_name}
                 </span>
-              )}
-            </Tag>
-          </TooltipWrapper>
+              ) : undefined
+            }
+          />
         )}
         {experiment?.prompt_versions &&
           experiment.prompt_versions.length > 0 && (
             <NavigationTag
               id={experiment.prompt_versions[0].prompt_id}
-              name={`Go to ${experiment.prompt_versions[0].prompt_name}`}
+              name={experiment.prompt_versions[0].prompt_name}
               resource={RESOURCE_TYPE.prompt}
+              prefix="Prompt"
             />
           )}
         {experiment?.project_id && (
           <TraceLogsSidebarButton
             projectId={experiment.project_id}
-            logsSource={LOGS_SOURCE.experiment}
             sourceFilters={experimentSourceFilters}
             title="Experiment logs"
           />

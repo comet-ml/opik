@@ -39,6 +39,7 @@ public class CostService {
             Map.entry("jina_ai", "jina_ai"),
             Map.entry("elastic", "elastic"),
             Map.entry("microsoft", "azure"),
+            Map.entry("azure", "azure"),
             Map.entry("mistral", "mistral"));
     public static final String MODEL_PRICES_FILE = "model_prices_and_context_window.json";
     public static final String MODEL_PRICES_OVERRIDES_FILE = "model_prices_overrides.json";
@@ -47,6 +48,7 @@ public class CostService {
     private static final Map<String, BiFunction<ModelPrice, Map<String, Integer>, BigDecimal>> PROVIDERS_CACHE_COST_CALCULATOR = Map
             .of("anthropic", SpanCostCalculator::textGenerationWithCacheCostAnthropic,
                     "openai", SpanCostCalculator::textGenerationWithCacheCostOpenAI,
+                    "azure", SpanCostCalculator::textGenerationWithCacheCostOpenAI,
                     "bedrock", SpanCostCalculator::textGenerationWithCacheCostBedrock,
                     "bedrock_converse", SpanCostCalculator::textGenerationWithCacheCostBedrock,
                     "vertex_ai-language-models", SpanCostCalculator::textGenerationWithCacheCostGoogle,

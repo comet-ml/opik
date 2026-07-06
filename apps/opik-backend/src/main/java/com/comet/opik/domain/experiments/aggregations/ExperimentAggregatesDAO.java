@@ -711,7 +711,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             SELECT
                 id as trace_id,
                 project_id,
-                duration,
+                if(isNaN(duration), NULL, duration) AS duration,
                 metadata,
                 input,
                 output,
@@ -768,7 +768,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     last_updated_by,
                     created_at,
                     last_updated_at,
-                    author
+                    author,
+                    source_queue_id
                 FROM (
                     SELECT
                         workspace_id,
@@ -783,7 +784,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                         last_updated_by,
                         created_at,
                         last_updated_at,
-                        feedback_scores.last_updated_by AS author
+                        feedback_scores.last_updated_by AS author,
+                        CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
@@ -803,7 +805,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                         last_updated_by,
                         created_at,
                         last_updated_at,
-                        author
+                        author,
+                        source_queue_id
                     FROM authored_feedback_scores
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
@@ -811,12 +814,12 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     AND entity_id IN :trace_ids
                 )
                 ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ), feedback_scores_grouped_agg AS (
                 SELECT
                     entity_id,
                     name,
-                    count(DISTINCT author) AS n,
+                    count(*) AS n,
                     avg(value) AS avg_value,
                     any(value) AS any_value,
                     any(reason) AS any_reason,
@@ -828,8 +831,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     min(created_at) AS created_at_min,
                     max(last_updated_at) AS last_updated_at_max,
                     mapFromArrays(
-                        groupArray(author),
-                        groupArray(tuple(value, reason, category_name, source, last_updated_at))
+                        groupArray(if(source_queue_id = '', author, concat(author, '_', toString(source_queue_id)))),
+                        groupArray(tuple(value, reason, category_name, source, last_updated_at, '', '', source_queue_id, author))
                     ) AS value_by_author
                 FROM feedback_scores_deduped
                 GROUP BY entity_id, name

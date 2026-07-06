@@ -9,6 +9,7 @@ import {
   House,
   LayoutDashboard,
   ListChecks,
+  Radar,
   Rows3,
   Settings2,
   Sparkles,
@@ -21,24 +22,35 @@ import {
   MENU_ITEM_TYPE,
   MenuItemGroup,
 } from "@/v2/layout/SideBar/MenuItem/SidebarMenuItem";
+import DiagnosticsNavBadge from "@/v2/layout/SideBar/MenuItem/DiagnosticsNavBadge";
 const getMenuItems = ({
   projectId,
   canViewExperiments,
   canViewDatasets,
   canViewDashboards,
+  canViewPrompts,
   canUsePlayground,
+  canViewAgentPlayground,
   canViewOptimizationRuns,
+  canViewOnlineEvaluationRules,
+  canViewAlerts,
   showHomePage,
   showOlliePage,
+  showDiagnostics,
 }: {
   projectId: string | null;
   canViewExperiments: boolean;
   canViewDatasets: boolean;
   canViewDashboards: boolean;
+  canViewPrompts: boolean;
   canUsePlayground: boolean;
+  canViewAgentPlayground: boolean;
   canViewOptimizationRuns: boolean;
+  canViewOnlineEvaluationRules: boolean;
+  canViewAlerts: boolean;
   showHomePage: boolean;
   showOlliePage: boolean;
+  showDiagnostics: boolean;
 }): MenuItemGroup[] => {
   const projectPrefix = projectId
     ? "/$workspaceName/projects/$projectId"
@@ -89,6 +101,19 @@ const getMenuItems = ({
           label: "Logs",
           disabled: !projectPrefix,
         },
+        ...(showDiagnostics
+          ? [
+              {
+                id: "diagnostics",
+                path: projectPath("/diagnostics"),
+                type: MENU_ITEM_TYPE.router as const,
+                icon: Radar,
+                label: "Diagnostics",
+                disabled: !projectPrefix,
+                badge: DiagnosticsNavBadge,
+              },
+            ]
+          : []),
         ...(canViewDashboards
           ? [
               {
@@ -107,22 +132,30 @@ const getMenuItems = ({
       id: "development",
       label: "Development",
       items: [
-        {
-          id: "prompts",
-          path: projectPath("/prompts"),
-          type: MENU_ITEM_TYPE.router,
-          icon: FileTerminal,
-          label: "Prompt library",
-          disabled: !projectPrefix,
-        },
-        {
-          id: "agent_runner",
-          path: projectPath("/agent-playground"),
-          type: MENU_ITEM_TYPE.router,
-          icon: GitBranch,
-          label: "Agent playground",
-          disabled: !projectPrefix,
-        },
+        ...(canViewPrompts
+          ? [
+              {
+                id: "prompts",
+                path: projectPath("/prompts"),
+                type: MENU_ITEM_TYPE.router as const,
+                icon: FileTerminal,
+                label: "Prompt library",
+                disabled: !projectPrefix,
+              },
+            ]
+          : []),
+        ...(canViewAgentPlayground
+          ? [
+              {
+                id: "agent_runner",
+                path: projectPath("/agent-playground"),
+                type: MENU_ITEM_TYPE.router as const,
+                icon: GitBranch,
+                label: "Agent playground",
+                disabled: !projectPrefix,
+              },
+            ]
+          : []),
         ...(canUsePlayground
           ? [
               {
@@ -199,22 +232,30 @@ const getMenuItems = ({
       id: "production",
       label: "Production",
       items: [
-        {
-          id: "online_evaluation",
-          path: projectPath("/online-evaluation"),
-          type: MENU_ITEM_TYPE.router,
-          icon: Brain,
-          label: "Online evaluation",
-          disabled: !projectPrefix,
-        },
-        {
-          id: "alerts",
-          path: projectPath("/alerts"),
-          type: MENU_ITEM_TYPE.router,
-          icon: Bell,
-          label: "Alerts",
-          disabled: !projectPrefix,
-        },
+        ...(canViewOnlineEvaluationRules
+          ? [
+              {
+                id: "online_evaluation",
+                path: projectPath("/online-evaluation"),
+                type: MENU_ITEM_TYPE.router as const,
+                icon: Brain,
+                label: "Online evaluation",
+                disabled: !projectPrefix,
+              },
+            ]
+          : []),
+        ...(canViewAlerts
+          ? [
+              {
+                id: "alerts",
+                path: projectPath("/alerts"),
+                type: MENU_ITEM_TYPE.router as const,
+                icon: Bell,
+                label: "Alerts",
+                disabled: !projectPrefix,
+              },
+            ]
+          : []),
       ],
     },
   ].filter((group) => group.items.length > 0);

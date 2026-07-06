@@ -61,7 +61,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   search,
 }) => {
   const {
-    permissions: { canAnnotateTraceSpanThread },
+    permissions: { canAnnotateTraceSpanThread, canViewPrompts },
   } = usePermissions();
 
   const rootScrollRef = useRef<HTMLDivElement>(null);
@@ -76,7 +76,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   const hasSpanAgentGraph =
     Boolean(agentGraphData) && type !== TRACE_TYPE_FOR_TREE;
 
-  const hasPrompts = Boolean(getRawPrompts(data));
+  const hasPrompts = Boolean(getRawPrompts(data)) && canViewPrompts;
 
   const { media, transformedInput, transformedOutput } = useUnifiedMedia(data);
 
@@ -136,12 +136,18 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   const feedbackScoreDeleteMutation = useTraceFeedbackScoreDeleteMutation();
 
   const onDeleteFeedbackScore = useCallback(
-    (name: string, author?: string, spanIdToDelete?: string) => {
+    (
+      name: string,
+      author?: string,
+      spanIdToDelete?: string,
+      sourceQueueId?: string,
+    ) => {
       feedbackScoreDeleteMutation.mutate({
         traceId,
         spanId: spanIdToDelete ?? spanId,
         name,
         author,
+        sourceQueueId,
       });
     },
     [traceId, spanId, feedbackScoreDeleteMutation],
