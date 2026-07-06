@@ -8,6 +8,10 @@ import {
   METRIC_NAME_TYPE,
 } from "@/api/projects/useProjectMetric";
 import {
+  isWorkspaceMetric,
+  resolveProjectSelection,
+} from "@/lib/dashboard/workspaceMetrics";
+import {
   useDashboardStore,
   selectRuntimeConfig,
   selectReadOnly,
@@ -80,22 +84,25 @@ const ProjectMetricsWidget: React.FunctionComponent<
   }, [sectionId, widgetId, onAddEditWidgetCallback]);
 
   const widgetProjectId = widget?.config?.projectId as string | undefined;
+  const widgetProjectIds = widget?.config?.projectIds as string[] | undefined;
 
-  const { projectId, interval, intervalStart, intervalEnd } = useMemo(() => {
-    const resolvedProjectId =
-      runtimeContext.projectId || widgetProjectId || undefined;
+  const { projectId, projectIds } = useMemo(
+    () =>
+      resolveProjectSelection({
+        runtimeProjectId: runtimeContext.projectId,
+        projectId: widgetProjectId,
+        projectIds: widgetProjectIds,
+      }),
+    [widgetProjectId, widgetProjectIds, runtimeContext.projectId],
+  );
 
-    const { interval, intervalStart, intervalEnd } = calculateIntervalConfig(
-      runtimeContext.dateRange,
-    );
+  const { interval, intervalStart, intervalEnd } = useMemo(
+    () => calculateIntervalConfig(runtimeContext.dateRange),
+    [runtimeContext.dateRange],
+  );
 
-    return {
-      projectId: resolvedProjectId,
-      interval,
-      intervalStart,
-      intervalEnd,
-    };
-  }, [widgetProjectId, runtimeContext.projectId, runtimeContext.dateRange]);
+  const isWorkspaceMode = Array.isArray(projectIds);
+  const isConfigured = Boolean(projectId) || isWorkspaceMode;
 
   const metricType = widget?.config?.metricType as string | undefined;
   const metricName = metricType as METRIC_NAME_TYPE | undefined;
@@ -135,6 +142,11 @@ const ProjectMetricsWidget: React.FunctionComponent<
   // For duration metrics, we need exactly one percentile selected to add it as subMetric
   const effectiveBreakdown = useMemo(() => {
     if (!breakdown || breakdown.field === BREAKDOWN_FIELD.NONE) {
+      return undefined;
+    }
+
+    // Aggregating duration across projects is percentile-only; group by is not supported there.
+    if (isWorkspaceMode && metricName === METRIC_NAME_TYPE.SPAN_DURATION) {
       return undefined;
     }
 
@@ -192,6 +204,8 @@ const ProjectMetricsWidget: React.FunctionComponent<
     return breakdown;
   }, [
     breakdown,
+    isWorkspaceMode,
+    metricName,
     isFeedbackScoreMetric,
     feedbackScores,
     isDurationMetric,
@@ -396,7 +410,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
     const threadFilters = widget.config?.threadFilters as Filter[] | undefined;
     const spanFilters = widget.config?.spanFilters as Filter[] | undefined;
 
-    if (!projectId) {
+    if (!isConfigured) {
       return (
         <DashboardWidget.EmptyState
           title="Project not configured"
@@ -411,6 +425,17 @@ const ProjectMetricsWidget: React.FunctionComponent<
         <DashboardWidget.EmptyState
           title="No metric selected"
           message="Choose a metric to display in this widget"
+          action={editAction}
+        />
+      );
+    }
+
+    // Aggregating across projects is only available for span metrics (see WORKSPACE_METRIC_NAMES).
+    if (isWorkspaceMode && metricName && !isWorkspaceMetric(metricName)) {
+      return (
+        <DashboardWidget.EmptyState
+          title="Not available across projects"
+          message="This metric can only be shown for a single project. Select one project, or choose a span metric to aggregate across projects."
           action={editAction}
         />
       );
@@ -444,7 +469,8 @@ const ProjectMetricsWidget: React.FunctionComponent<
           isAggregateTotal={!!isAggregateTotal}
           intervalStart={intervalStart}
           intervalEnd={intervalEnd}
-          projectId={projectId!}
+          projectId={projectId}
+          projectIds={projectIds}
           chartType={chartType}
           traceFilters={validTraceFilters}
           threadFilters={validThreadFilters}
