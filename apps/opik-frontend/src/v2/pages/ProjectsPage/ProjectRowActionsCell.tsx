@@ -10,7 +10,7 @@ import { MoreHorizontal, Pencil, Trash } from "lucide-react";
 import React, { useCallback, useRef, useState } from "react";
 import { DEFAULT_PROJECT_NAME, Project } from "@/types/projects";
 import { CellContext } from "@tanstack/react-table";
-import AddEditProjectDialog from "@/v2/pages/ProjectsPage/AddEditProjectDialog";
+import AddEditProjectDialog from "@/v2/pages-shared/ProjectsPage/AddEditProjectDialog";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import useProjectDeleteMutation from "@/api/projects/useProjectDeleteMutation";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";

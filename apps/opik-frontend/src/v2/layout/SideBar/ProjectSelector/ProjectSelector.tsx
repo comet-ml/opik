@@ -9,7 +9,7 @@ import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { Spinner } from "@/ui/spinner";
 import useProjectById from "@/api/projects/useProjectById";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import AddEditProjectDialog from "@/v2/pages/ProjectsPage/AddEditProjectDialog";
+import AddEditProjectDialog from "@/v2/pages-shared/ProjectsPage/AddEditProjectDialog";
 import ProjectAvatar from "@/shared/ProjectIcon/ProjectAvatar";
 import ProjectMenuContent from "@/v2/layout/ProjectMenu/ProjectMenuContent";
 

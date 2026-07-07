@@ -95,14 +95,20 @@ const ProjectMenuContent: React.FC<ProjectMenuContentProps> = ({
     [pinProject, unpinProject],
   );
 
-  const handleActiveProjectDeleted = useCallback(() => {
-    setActiveProject(workspaceName, null);
-    onClose();
-    navigate({
-      to: "/$workspaceName/projects",
-      params: { workspaceName },
-    });
-  }, [navigate, onClose, workspaceName]);
+  const handleProjectDeleted = useCallback(
+    (projectId: string) => {
+      unpinProject(projectId);
+      if (projectId === activeProjectId) {
+        setActiveProject(workspaceName, null);
+        onClose();
+        navigate({
+          to: "/$workspaceName/projects",
+          params: { workspaceName },
+        });
+      }
+    },
+    [unpinProject, activeProjectId, navigate, onClose, workspaceName],
+  );
 
   const handleViewAll = useCallback(() => {
     onClose();
@@ -122,9 +128,7 @@ const ProjectMenuContent: React.FC<ProjectMenuContentProps> = ({
       workspaceName={workspaceName}
       onSelect={handleSelect}
       onTogglePin={handleTogglePin}
-      onDeleted={
-        project.id === activeProjectId ? handleActiveProjectDeleted : undefined
-      }
+      onDeleted={() => handleProjectDeleted(project.id)}
     />
   );
 

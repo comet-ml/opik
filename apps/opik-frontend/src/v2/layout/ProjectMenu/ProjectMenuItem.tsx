@@ -15,7 +15,7 @@ import { usePermissions } from "@/contexts/PermissionsContext";
 import { DEFAULT_PROJECT_NAME, Project } from "@/types/projects";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import AddEditProjectDialog from "@/v2/pages/ProjectsPage/AddEditProjectDialog";
+import AddEditProjectDialog from "@/v2/pages-shared/ProjectsPage/AddEditProjectDialog";
 import ProjectAvatar from "@/shared/ProjectIcon/ProjectAvatar";
 import useProjectDeleteMutation from "@/api/projects/useProjectDeleteMutation";
 

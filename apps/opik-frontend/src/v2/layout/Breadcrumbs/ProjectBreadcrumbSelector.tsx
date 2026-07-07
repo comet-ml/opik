@@ -6,7 +6,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
-import AddEditProjectDialog from "@/v2/pages/ProjectsPage/AddEditProjectDialog";
+import AddEditProjectDialog from "@/v2/pages-shared/ProjectsPage/AddEditProjectDialog";
 import ProjectMenuContent from "@/v2/layout/ProjectMenu/ProjectMenuContent";
 
 interface ProjectBreadcrumbSelectorProps {
