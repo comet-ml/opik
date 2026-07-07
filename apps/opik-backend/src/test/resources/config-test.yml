@@ -389,6 +389,12 @@ onlineScoring:
   agenticToolsCharsPerToken: 4
   agenticToolsMaxInjectedBytes: 52428800
   agenticToolsS3PresignTtlSeconds: 120
+  # Per-variable substitution cap (chars) for the {{trace}}/{{span}} structure-injection / agentic paths.
+  maxPromptFieldChars: 4000
+  # Attachment-upload race tolerance for the {{trace}}/{{span}} structures (retries + delay). Interim guard
+  # pending the pre-evaluation dispatch delay (OPIK-7224).
+  attachmentFetchMaxRetries: 5
+  attachmentFetchRetryDelay: 300ms
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
