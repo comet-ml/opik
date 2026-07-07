@@ -880,10 +880,6 @@ start_backend() {
     export REDIS_URL="${REDIS_URL:-redis://:opik@localhost:${REDIS_PORT}/0}"
     export ANALYTICS_DB_PORT="${CLICKHOUSE_HTTP_PORT}"
 
-    # Platform mode: authenticate + resolve Comet workspaces via comet-backend
-    # (no-op unless PLATFORM_ENABLED). See dev-runner-em.sh.
-    em_prepare_opik_backend_auth_env
-
     # Agent Insights (read-only freeform SQL) — opt-in for local dev. When enabled, provision the restricted
     # read-only ClickHouse user (via the shared script also used by the docker-compose backend container) and export
     # its credentials so the locally-launched backend connects as that user. Default off: behavior unchanged. The
@@ -1354,6 +1350,9 @@ start_services() {
     log_info "Step 2/6: Running DB migrations..."
     run_db_migrations
     log_info "Step 3/6: Starting backend process..."
+    # Platform auth for the Opik backend — full FE+BE flows only (BE-only can't host
+    # the EM stack). Set before start_backend so its JVM inherits it. See dev-runner-em.sh.
+    em_prepare_opik_backend_auth_env
     start_backend
     log_info "Step 4/6: Starting ollie-assist (optional)..."
     start_ollie_local || log_warning "ollie-assist startup failed; continuing without sidebar"
@@ -1420,6 +1419,7 @@ restart_services() {
     log_info "Step 8/12: Running DB migrations..."
     run_db_migrations
     log_info "Step 9/12: Starting backend process..."
+    em_prepare_opik_backend_auth_env
     start_backend
     log_info "Step 10/12: Starting ollie-assist (optional)..."
     start_ollie_local || log_warning "ollie-assist startup failed; continuing without sidebar"
@@ -1455,6 +1455,7 @@ quick_restart_services() {
     log_info "Step 4/8: Building backend..."
     build_backend
     log_info "Step 5/8: Starting backend..."
+    em_prepare_opik_backend_auth_env
     start_backend
 
     log_info "Step 6/8: Ensuring ollie-assist is running (optional)..."
