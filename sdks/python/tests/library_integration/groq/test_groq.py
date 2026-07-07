@@ -1,7 +1,11 @@
 import asyncio
+import json
+from typing import Any, Dict, List
 
 import groq
+import httpx
 import pytest
+from groq.types.chat import chat_completion_chunk
 from groq.types.chat.chat_completion import ChatCompletion, Choice
 from groq.types.chat.chat_completion_message import ChatCompletionMessage
 from groq.types.completion_usage import CompletionUsage
@@ -19,6 +23,71 @@ from ...testlib import (
 )
 
 MODEL = "llama-3.3-70b-versatile"
+
+STREAM_CHUNKS = [
+    {
+        "id": "chatcmpl-1",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": MODEL,
+        "choices": [
+            {
+                "index": 0,
+                "delta": {"role": "assistant", "content": ""},
+                "finish_reason": None,
+            }
+        ],
+    },
+    {
+        "id": "chatcmpl-1",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": MODEL,
+        "choices": [
+            {
+                "index": 0,
+                "delta": {"content": "Blue, due to Rayleigh scattering."},
+                "finish_reason": None,
+            }
+        ],
+    },
+    {
+        "id": "chatcmpl-1",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": MODEL,
+        "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+        # Groq places usage stats on the terminal chunk under x_groq.usage.
+        "x_groq": {
+            "usage": {"prompt_tokens": 10, "completion_tokens": 8, "total_tokens": 18}
+        },
+    },
+]
+
+STREAM_EXPECTED_OUTPUT = {
+    "choices": [
+        {
+            "index": 0,
+            "message": {
+                "role": "assistant",
+                "content": "Blue, due to Rayleigh scattering.",
+            },
+            "finish_reason": "stop",
+        }
+    ]
+}
+
+
+def _mock_stream_response(chunks: List[Dict[str, Any]]) -> httpx.Response:
+    body = "".join(f"data: {json.dumps(chunk)}\n\n" for chunk in chunks)
+    body += "data: [DONE]\n\n"
+    return httpx.Response(
+        200,
+        content=body.encode("utf-8"),
+        request=httpx.Request(
+            "POST", "https://api.groq.com/openai/v1/chat/completions"
+        ),
+    )
 
 
 def _mock_completion(
@@ -129,6 +198,131 @@ def test_groq_chat_completions_create__async__happyflow(fake_backend, monkeypatc
     assert span.provider == "groq"
     assert span.type == "llm"
     assert span.model == MODEL
+
+
+def test_groq_chat_completions_create__stream_mode_is_on__generator_tracked_correctly(
+    fake_backend, monkeypatch
+):
+    client = groq.Groq(api_key="fake-api-key")
+    wrapped_client = track_groq(client)
+    monkeypatch.setattr(
+        client.chat.completions,
+        "_post",
+        lambda *args, **kwargs: groq.Stream(
+            cast_to=chat_completion_chunk.ChatCompletionChunk,
+            response=_mock_stream_response(STREAM_CHUNKS),
+            client=client,
+        ),
+    )
+
+    messages = [{"role": "user", "content": "Why is the sky blue?"}]
+    stream = wrapped_client.chat.completions.create(
+        model=MODEL, messages=messages, stream=True
+    )
+    for _ in stream:
+        pass
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="chat_completion_stream",
+        input={"messages": messages},
+        output=STREAM_EXPECTED_OUTPUT,
+        tags=["groq"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        project_name=OPIK_PROJECT_DEFAULT_NAME,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="chat_completion_stream",
+                input={"messages": messages},
+                output=STREAM_EXPECTED_OUTPUT,
+                tags=["groq"],
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=OPIK_PROJECT_DEFAULT_NAME,
+                type="llm",
+                usage=ANY_DICT,
+                model=MODEL,
+                provider="groq",
+                spans=[],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_groq_chat_completions_create__async__stream_mode_is_on__generator_tracked_correctly(
+    fake_backend, monkeypatch
+):
+    client = groq.AsyncGroq(api_key="fake-api-key")
+    wrapped_client = track_groq(client)
+
+    async def _mock_post(*args, **kwargs):
+        return groq.AsyncStream(
+            cast_to=chat_completion_chunk.ChatCompletionChunk,
+            response=_mock_stream_response(STREAM_CHUNKS),
+            client=client,
+        )
+
+    monkeypatch.setattr(client.chat.completions, "_post", _mock_post)
+
+    messages = [{"role": "user", "content": "Why is the sky blue?"}]
+
+    async def run() -> None:
+        stream = await wrapped_client.chat.completions.create(
+            model=MODEL, messages=messages, stream=True
+        )
+        async for _ in stream:
+            pass
+
+    asyncio.run(run())
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="chat_completion_stream",
+        input={"messages": messages},
+        output=STREAM_EXPECTED_OUTPUT,
+        tags=["groq"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        project_name=OPIK_PROJECT_DEFAULT_NAME,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="chat_completion_stream",
+                input={"messages": messages},
+                output=STREAM_EXPECTED_OUTPUT,
+                tags=["groq"],
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=OPIK_PROJECT_DEFAULT_NAME,
+                type="llm",
+                usage=ANY_DICT,
+                model=MODEL,
+                provider="groq",
+                spans=[],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
 def test_groq_chat_completions_create__error__span_and_trace_finished_gracefully(
