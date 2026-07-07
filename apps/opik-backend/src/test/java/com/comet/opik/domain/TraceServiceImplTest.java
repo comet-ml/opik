@@ -8,6 +8,7 @@ import com.comet.opik.domain.attachment.AttachmentReinjectorService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
 import com.comet.opik.infrastructure.DatabaseAnalyticsDataModelConfig;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -96,6 +97,8 @@ class TraceServiceImplTest {
     }
 
     private TraceServiceImpl newTraceService(DatabaseAnalyticsDataModelConfig databaseAnalyticsDataModelConfig) {
+        var opikConfiguration = new OpikConfiguration();
+        opikConfiguration.setDatabaseAnalyticsDataModel(databaseAnalyticsDataModelConfig);
         return new TraceServiceImpl(
                 traceDao,
                 deletionEventDAO,
@@ -108,7 +111,7 @@ class TraceServiceImplTest {
                 attachmentStripperService,
                 attachmentService,
                 attachmentReinjectorService,
-                databaseAnalyticsDataModelConfig);
+                opikConfiguration);
     }
 
     @Nested

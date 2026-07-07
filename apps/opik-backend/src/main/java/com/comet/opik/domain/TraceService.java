@@ -26,7 +26,7 @@ import com.comet.opik.domain.attachment.AttachmentReinjectorService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
 import com.comet.opik.domain.attachment.AttachmentUtils;
-import com.comet.opik.infrastructure.DatabaseAnalyticsDataModelConfig;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -134,7 +134,7 @@ class TraceServiceImpl implements TraceService {
     private final @NonNull AttachmentStripperService attachmentStripperService;
     private final @NonNull AttachmentService attachmentService;
     private final @NonNull AttachmentReinjectorService attachmentReinjectorService;
-    private final @NonNull @Config DatabaseAnalyticsDataModelConfig dataModelConfig;
+    private final @NonNull @Config OpikConfiguration config;
 
     @Override
     @WithSpan
@@ -513,7 +513,7 @@ class TraceServiceImpl implements TraceService {
      */
     private Mono<Void> captureDeletions(Set<UUID> ids, UUID projectId, String workspaceId, String userName) {
         return Mono.defer(() -> {
-            if (!dataModelConfig.traceDeletionEventsCaptureEnabled()) {
+            if (!config.getDatabaseAnalyticsDataModel().traceDeletionEventsCaptureEnabled()) {
                 return Mono.empty();
             }
             var events = ids.stream()
