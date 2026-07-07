@@ -1,10 +1,6 @@
 import React from "react";
-import { Label } from "@/ui/label";
-import { Input } from "@/ui/input";
 import { NumericalSimilarityMetricParameters } from "@/types/optimizations";
-import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
-import DatasetVariablesHint from "../DatasetVariablesHint";
+import ReferenceKeyField from "../ReferenceKeyField";
 
 interface NumericalSimilarityMetricConfigsProps {
   configs: Partial<NumericalSimilarityMetricParameters>;
@@ -20,30 +16,12 @@ const NumericalSimilarityMetricConfigs = ({
   return (
     <div className="flex w-72 flex-col gap-6">
       <div className="space-y-4">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <Label htmlFor="reference_key" className="text-sm">
-              Reference key
-            </Label>
-            <ExplainerIcon
-              {...EXPLAINERS_MAP[EXPLAINER_ID.metric_reference_key]}
-            />
-          </div>
-          <Input
-            id="reference_key"
-            placeholder="e.g., score or $.feedback_scores[?(@.name=='Useful')].value"
-            value={configs.reference_key ?? ""}
-            onChange={(e) =>
-              onChange({ ...configs, reference_key: e.target.value })
-            }
-          />
-          <DatasetVariablesHint
-            datasetVariables={datasetVariables}
-            onSelect={(variable) =>
-              onChange({ ...configs, reference_key: variable })
-            }
-          />
-        </div>
+        <ReferenceKeyField
+          value={configs.reference_key ?? ""}
+          onChange={(value) => onChange({ ...configs, reference_key: value })}
+          datasetVariables={datasetVariables}
+          placeholder="e.g., score or $.feedback_scores[?(@.name=='Useful')].value"
+        />
       </div>
     </div>
   );

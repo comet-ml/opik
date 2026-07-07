@@ -48,6 +48,7 @@ import emptyOptStudioDarkUrl from "/images/empty-optimization-studio-dark.svg";
 import StudioTemplates from "@/v2/pages-shared/optimizations/StudioTemplates";
 import { useOptimizationsView } from "@/hooks/useOptimizationsView";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import NewRunSidebar from "@/v2/pages/OptimizationsPage/OptimizationsNewPage/NewRunSidebar";
 
 const SELECTED_COLUMNS_KEY = "optimizations-selected-columns-v1";
 const COLUMNS_WIDTH_KEY = "optimizations-columns-width-v1";
@@ -181,6 +182,18 @@ const OptimizationsPage: React.FunctionComponent = () => {
   });
 
   const [page = 1, setPage] = useQueryParam("page", NumberParam, {
+    updateType: "replaceIn",
+  });
+
+  const [newRunFlag, setNewRunFlag] = useQueryParam("new", StringParam, {
+    updateType: "replaceIn",
+  });
+  const [templateParam, setTemplateParam] = useQueryParam(
+    "template",
+    StringParam,
+    { updateType: "replaceIn" },
+  );
+  const [rerunParam, setRerunParam] = useQueryParam("rerun", StringParam, {
     updateType: "replaceIn",
   });
 
@@ -318,6 +331,12 @@ const OptimizationsPage: React.FunctionComponent = () => {
     setFilters([]);
   }, [setSearch, setFilters]);
 
+  const handleCloseNewRun = useCallback(() => {
+    setNewRunFlag(undefined);
+    setTemplateParam(undefined);
+    setRerunParam(undefined);
+  }, [setNewRunFlag, setTemplateParam, setRerunParam]);
+
   return (
     <div className="flex min-h-full flex-col pt-4">
       <div className="mb-1 flex min-h-7 items-center justify-between">
@@ -419,6 +438,14 @@ const OptimizationsPage: React.FunctionComponent = () => {
             </div>
           </div>
         </>
+      )}
+      {canUseOptimizationStudio && (
+        <NewRunSidebar
+          open={Boolean(newRunFlag)}
+          onClose={handleCloseNewRun}
+          templateId={templateParam ?? undefined}
+          rerunId={rerunParam ?? undefined}
+        />
       )}
       <AddOptimizationDialog
         key={resetDialogKeyRef.current}
