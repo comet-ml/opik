@@ -64,6 +64,12 @@ STREAM_CHUNKS = [
     },
 ]
 
+STREAM_EXPECTED_USAGE = {
+    "prompt_tokens": 10,
+    "completion_tokens": 8,
+    "total_tokens": 18,
+}
+
 STREAM_EXPECTED_OUTPUT = {
     "choices": [
         {
@@ -247,7 +253,7 @@ def test_groq_chat_completions_create__stream_mode_is_on__generator_tracked_corr
                 end_time=ANY_BUT_NONE,
                 project_name=OPIK_PROJECT_DEFAULT_NAME,
                 type="llm",
-                usage=ANY_DICT,
+                usage=ANY_DICT.containing(STREAM_EXPECTED_USAGE),
                 model=MODEL,
                 provider="groq",
                 spans=[],
@@ -311,7 +317,7 @@ def test_groq_chat_completions_create__async__stream_mode_is_on__generator_track
                 end_time=ANY_BUT_NONE,
                 project_name=OPIK_PROJECT_DEFAULT_NAME,
                 type="llm",
-                usage=ANY_DICT,
+                usage=ANY_DICT.containing(STREAM_EXPECTED_USAGE),
                 model=MODEL,
                 provider="groq",
                 spans=[],
