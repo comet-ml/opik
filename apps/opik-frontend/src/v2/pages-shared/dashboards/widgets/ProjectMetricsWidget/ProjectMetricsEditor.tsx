@@ -34,6 +34,11 @@ import {
 import get from "lodash/get";
 
 import { METRIC_NAME_TYPE } from "@/api/projects/useProjectMetric";
+import {
+  WORKSPACE_TIME_SERIES_METRIC_OPTIONS,
+  isWorkspaceMetric,
+  isMultiProjectSelection,
+} from "@/lib/dashboard/workspaceMetrics";
 import useProjectTokenUsageNames from "@/api/projects/useProjectTokenUsageNames";
 import { DEFAULT_DATE_PRESET } from "@/v2/pages-shared/traces/MetricDateRangeSelect/constants";
 import {
@@ -134,6 +139,12 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
   const metricType = config.metricType || "";
   const chartType = config.chartType || CHART_TYPE.line;
   const localProjectId = config.projectId;
+  const localProjectIds = useMemo<string[]>(
+    () =>
+      (config.projectIds as string[] | undefined) ??
+      (localProjectId ? [localProjectId] : []),
+    [config.projectIds, localProjectId],
+  );
 
   const traceFilters = useMemo<Filter[]>(
     () => (config.traceFilters as Filter[] | undefined) || [],
@@ -177,7 +188,18 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
     };
   });
   const hasRuntimeProjectId = !!runtimeContext.projectId;
-  const projectId = runtimeContext.projectId || localProjectId || "";
+  // Representative project for loading option lists (usage keys, feedback scores, filter/breakdown autocompletes)
+  // and the preview: the runtime project, else the first selected project.
+  const projectId = runtimeContext.projectId || localProjectIds[0] || "";
+
+  // Selecting more than one project aggregates across projects, which only supports span metrics.
+  const isMultiProject = isMultiProjectSelection(
+    runtimeContext.projectId,
+    localProjectIds,
+  );
+  const metricOptions = isMultiProject
+    ? WORKSPACE_TIME_SERIES_METRIC_OPTIONS
+    : METRIC_OPTIONS;
 
   const selectedMetric = METRIC_OPTIONS.find((m) => m.value === metricType);
   const isTraceMetric = !metricType || selectedMetric?.filterType === "trace";
@@ -240,7 +262,7 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
     defaultValues: {
       metricType,
       chartType,
-      projectId,
+      projectIds: localProjectIds,
       traceFilters,
       threadFilters,
       spanFilters,
@@ -327,13 +349,38 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
     });
   };
 
-  const handleProjectChange = (projectId: string) => {
-    updatePreviewWidget({
-      config: {
-        ...config,
-        projectId,
-      },
-    });
+  const handleProjectsChange = (projectIds: string[]) => {
+    // projectIds is the single source of truth for selection; drop the legacy single-project field.
+    const nextConfig = { ...config, projectIds };
+    delete nextConfig.projectId;
+    form.setValue("projectIds", projectIds);
+
+    // Aggregating across projects only supports span metrics. If the selection becomes multi-project while a
+    // non-span metric is chosen, fall back to span token usage and clear metric-specific selections.
+    const becomesMultiProject = isMultiProjectSelection(
+      runtimeContext.projectId,
+      projectIds,
+    );
+    if (becomesMultiProject && !isWorkspaceMetric(metricType)) {
+      nextConfig.metricType = METRIC_NAME_TYPE.SPAN_TOKEN_USAGE;
+      nextConfig.traceFilters = [];
+      nextConfig.threadFilters = [];
+      nextConfig.spanFilters = [];
+      nextConfig.feedbackScores = [];
+      nextConfig.durationMetrics = [];
+      nextConfig.usageMetrics = [];
+      nextConfig.breakdown = { field: BREAKDOWN_FIELD.NONE };
+      form.setValue("metricType", METRIC_NAME_TYPE.SPAN_TOKEN_USAGE);
+      form.setValue("breakdown.field", BREAKDOWN_FIELD.NONE);
+      form.setValue("traceFilters", []);
+      form.setValue("threadFilters", []);
+      form.setValue("spanFilters", []);
+      form.setValue("feedbackScores", []);
+      form.setValue("durationMetrics", []);
+      form.setValue("usageMetrics", []);
+    }
+
+    updatePreviewWidget({ config: nextConfig });
   };
 
   const handleFeedbackScoresChange = (newFeedbackScores: string[]) => {
@@ -408,9 +455,9 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
       <div className="space-y-4">
         <FormField
           control={form.control}
-          name="projectId"
+          name="projectIds"
           render={({ field, formState }) => {
-            const validationErrors = get(formState.errors, ["projectId"]);
+            const validationErrors = get(formState.errors, ["projectIds"]);
             return (
               <FormItem>
                 <FormLabel>Project</FormLabel>
@@ -419,10 +466,13 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
                     className={cn("flex-1", {
                       "border-destructive": Boolean(validationErrors?.message),
                     })}
-                    value={field.value || ""}
+                    multiselect
+                    showSelectAll
+                    selectAllLabel="All projects"
+                    value={field.value || []}
                     onValueChange={(value) => {
                       field.onChange(value);
-                      handleProjectChange(value);
+                      handleProjectsChange(value);
                     }}
                     disabled={hasRuntimeProjectId}
                   />
@@ -451,7 +501,7 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
                       field.onChange(value);
                       handleMetricTypeChange(value);
                     }}
-                    options={METRIC_OPTIONS}
+                    options={metricOptions}
                     placeholder="Select a metric type"
                   />
                 </FormControl>
