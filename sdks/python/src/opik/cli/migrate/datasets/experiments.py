@@ -163,7 +163,14 @@ def _maybe_crash_for_resume_test(processed_index: int) -> None:
     target = os.environ.get(_CRASH_AFTER_EXPERIMENT_ENV)
     if target is None:
         return
-    if processed_index == int(target):
+    try:
+        target_index = int(target)
+    except ValueError:
+        # A non-integer value is treated as unset rather than raising -- this is
+        # a test-only knob, and a malformed value must never abort a real
+        # migration mid-cascade.
+        return
+    if processed_index == target_index:
         os._exit(137)  # 128 + SIGKILL(9): uncatchable, no flush/atexit
 
 
