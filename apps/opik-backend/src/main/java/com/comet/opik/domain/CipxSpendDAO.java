@@ -1,10 +1,8 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
-import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Result;
@@ -27,24 +25,24 @@ import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolder;
 
 /**
- * Writes the cipx_spends table from cipx LLM-call spans. Triggered asynchronously off span
- * create/update events; never reads the spans or cipx_spends tables. The cipx fields are parsed from
- * metadata in Java ({@link SpanRow#from}); the listener only passes rows it has already gated to cipx.
+ * Writes the cipx_spends table from cipx LLM-call spans: span-level call data only (model + usage
+ * counters); the blocks land in cipx_spend_blocks via {@link CipxSpendBlockDAO}. Triggered
+ * asynchronously off span create events; never reads the spans or cipx_spends tables. The cipx fields
+ * are parsed from metadata in Java ({@link SpanRow#from}); the listener only passes rows it has
+ * already gated to cipx.
  *
- * <p>This is a plain INSERT: the incoming row is complete (cipx metadata is wholesale, project_id is
- * the resolved id, start_time is the source span's stored start — resolved from the spans table on
- * both create and update), so the ReplacingMergeTree merges by its sorting key — a create followed by
- * an update produces one row (latest last_updated_at wins on FINAL reads), with no self-merge needed.
- * last_updated_at is left to the column DEFAULT now64(6).
- * project_id must be non-empty for the row to land under the correct key, so blank rows are dropped.
+ * <p>This is a plain INSERT: ingestion is create-only (cipx data is complete on the create event and
+ * immutable), so the ReplacingMergeTree is only a safeguard against replayed events — a replay
+ * produces the same sorting key and dedups at merge time. last_updated_at is left to the column
+ * DEFAULT now64(6). project_id must be non-empty for the row to land under the correct key, so blank
+ * rows are dropped.
  */
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 public class CipxSpendDAO {
 
-    /** A cipx_spends row constructed from a span's metadata. blocksJson is the cipx.blocks array with
-     *  identity_context blocks already dropped in Java. */
+    /** A cipx_spends row constructed from a span's metadata. */
     @Builder(toBuilder = true)
     public record SpanRow(
             @NonNull String spanId,
@@ -55,23 +53,11 @@ public class CipxSpendDAO {
             long uInput,
             long uCacheRead,
             long uCacheCreation,
-            long uOutput,
-            @NonNull String blocksJson) {
+            long uOutput) {
 
         public static SpanRow from(UUID spanId, UUID traceId, UUID projectId, JsonNode metadata, Instant startTime) {
             JsonNode call = metadata.path("cipx").path("call");
             JsonNode usage = call.path("usage");
-            JsonNode blocks = metadata.path("cipx").path("blocks");
-            ArrayNode kept = JsonUtils.createArrayNode();
-            if (blocks.isArray()) {
-                for (JsonNode block : blocks) {
-                    boolean identity = "identity_context".equals(block.path("category").asText())
-                            && "identity_context".equals(block.path("parent_category").asText());
-                    if (!identity) {
-                        kept.add(block);
-                    }
-                }
-            }
             return SpanRow.builder()
                     .spanId(spanId.toString())
                     .traceId(traceId.toString())
@@ -82,21 +68,16 @@ public class CipxSpendDAO {
                     .uCacheRead(usage.path("cache_read_input_tokens").asLong(0))
                     .uCacheCreation(usage.path("cache_creation_input_tokens").asLong(0))
                     .uOutput(usage.path("output_tokens").asLong(0))
-                    .blocksJson(kept.toString())
                     .build();
         }
     }
 
-    // One tuple per row (mirrors SpanDAO.BULK_INSERT). start_time is bound from Java (the source span's
-    // stored start, resolved from the spans table on both create and update); blocks is bound as the pre-filtered JSON string
-    // and parsed into the typed Array(Tuple) by ClickHouse. The r2dbc driver inlines bound values into the
-    // FORMAT Values text, so a native Array(Tuple) can't be bound here — JSONExtract of one JSON literal is
-    // what the Values parser accepts. The exact metadata->column mapping (this projection) is the initial
-    // extraction, finalized later.
+    // One tuple per row (mirrors SpanDAO.BULK_INSERT). start_time is bound from Java (the source
+    // span's stored start).
     private static final String INSERT = """
             INSERT INTO cipx_spends
                 (workspace_id, project_id, trace_id, span_id, start_time, model,
-                 u_input, u_cache_read, u_cache_creation, u_output, blocks)
+                 u_input, u_cache_read, u_cache_creation, u_output)
             SETTINGS log_comment = '<log_comment>'
             FORMAT Values
                 <items:{item |
@@ -110,8 +91,7 @@ public class CipxSpendDAO {
                         :u_input<item.index>,
                         :u_cache_read<item.index>,
                         :u_cache_creation<item.index>,
-                        :u_output<item.index>,
-                        JSONExtract(:blocks_json<item.index>, 'Array(Tuple(category String, side String, cache_status String, parent_category String, chars Int64, tool_name String, tool_server String, tool_use_id String, resource String, kind String))')
+                        :u_output<item.index>
                     )
                     <if(item.hasNext)>,<endif>
                 }>
@@ -120,7 +100,7 @@ public class CipxSpendDAO {
 
     private final @NonNull ConnectionFactory connectionFactory;
 
-    public Mono<Long> upsert(@NonNull List<SpanRow> rows, @NonNull String workspaceId, @NonNull String userName) {
+    public Mono<Long> insert(@NonNull List<SpanRow> rows, @NonNull String workspaceId, @NonNull String userName) {
         if (rows.isEmpty()) {
             return Mono.just(0L);
         }
@@ -148,8 +128,7 @@ public class CipxSpendDAO {
                     .bind("u_input" + i, row.uInput())
                     .bind("u_cache_read" + i, row.uCacheRead())
                     .bind("u_cache_creation" + i, row.uCacheCreation())
-                    .bind("u_output" + i, row.uOutput())
-                    .bind("blocks_json" + i, row.blocksJson());
+                    .bind("u_output" + i, row.uOutput());
         }
 
         return statement.execute();
