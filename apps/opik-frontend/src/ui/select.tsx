@@ -119,6 +119,9 @@ interface SelectItemProps
   withoutCheck?: boolean;
   wrapperAsChild?: boolean;
   description?: React.ReactNode;
+  // "sm" matches the compact list-item rhythm used by the newer menus
+  // (e.g. the projects switcher): tighter vertical padding.
+  size?: "default" | "sm";
 }
 
 const SelectItem = React.forwardRef<
@@ -132,6 +135,7 @@ const SelectItem = React.forwardRef<
       withoutCheck = false,
       wrapperAsChild = false,
       description,
+      size = "default",
       ...props
     },
     ref,
@@ -139,7 +143,8 @@ const SelectItem = React.forwardRef<
     <SelectPrimitive.Item
       ref={ref}
       className={cn(
-        "relative flex flex-col w-full cursor-default select-none justify-stretch rounded-sm py-1.5 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+        "relative flex flex-col w-full cursor-default select-none justify-stretch rounded-sm pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+        size === "sm" ? "py-1" : "py-1.5",
         withoutCheck ? "pl-2" : "pl-8",
         className,
       )}

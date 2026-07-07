@@ -41,7 +41,6 @@ const OptimizationsNewPageContent: React.FC<
     handleModelChange,
     submitOptimization,
     handleNameChange,
-    getFirstMetricParamsError,
   } = useOptimizationsNewFormHandlers();
 
   const hasMissingVariables = missingDatasetVariables.length > 0;
@@ -69,7 +68,7 @@ const OptimizationsNewPageContent: React.FC<
   return (
     <div className="flex size-full flex-col">
       <form id={FORM_ID} onSubmit={handleFormSubmit} />
-      <div className="flex flex-1 flex-col gap-6 overflow-y-auto px-6 pb-6 pt-4 xl:flex-row">
+      <div className="flex flex-1 flex-col gap-6 overflow-y-auto px-5 py-4 xl:flex-row">
         <OptimizationsNewPromptSection
           form={form}
           projectId={activeProjectId!}
@@ -94,11 +93,10 @@ const OptimizationsNewPageContent: React.FC<
           onOptimizerParamsChange={handleOptimizerParamsChange}
           onMetricTypeChange={handleMetricTypeChange}
           onMetricParamsChange={handleMetricParamsChange}
-          getFirstMetricParamsError={getFirstMetricParamsError}
         />
       </div>
 
-      <div className="flex flex-col gap-2 border-t px-6 py-4">
+      <div className="flex flex-col gap-2 border-t px-5 py-4">
         {isDatasetError && (
           <span className="comet-body-s text-destructive">
             Couldn&apos;t load the selected item source. Pick another or try
@@ -118,6 +116,7 @@ const OptimizationsNewPageContent: React.FC<
           <Button
             type="submit"
             form={FORM_ID}
+            size="sm"
             disabled={
               isSubmitting ||
               isPreparingDataset ||
@@ -137,6 +136,7 @@ const OptimizationsNewPageContent: React.FC<
           </Button>
           <Button
             variant="outline"
+            size="sm"
             type="button"
             onClick={onCancel}
             disabled={isSubmitting}

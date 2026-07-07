@@ -9,6 +9,7 @@ import {
   FormMessage,
 } from "@/ui/form";
 import { Button } from "@/ui/button";
+import { Label } from "@/ui/label";
 import { Separator } from "@/ui/separator";
 import { SelectItem } from "@/ui/select";
 import SelectBox from "@/shared/SelectBox/SelectBox";
@@ -18,6 +19,7 @@ import {
   METRIC_TYPE,
   OptimizerParameters,
   MetricParameters,
+  MetricParamErrors,
 } from "@/types/optimizations";
 import DatasetSelectBox from "@/v2/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox";
 import AlgorithmConfigs from "@/v2/pages-shared/optimizations/AlgorithmSettings/AlgorithmConfigs";
@@ -57,7 +59,6 @@ type OptimizationsNewConfigSidebarProps = {
   onOptimizerParamsChange: (params: Partial<OptimizerParameters>) => void;
   onMetricTypeChange: (type: METRIC_TYPE) => void;
   onMetricParamsChange: (params: Partial<MetricParameters>) => void;
-  getFirstMetricParamsError: () => string | null;
 };
 
 const OptimizationsNewConfigSidebar: React.FC<
@@ -75,15 +76,14 @@ const OptimizationsNewConfigSidebar: React.FC<
   onOptimizerParamsChange,
   onMetricTypeChange,
   onMetricParamsChange,
-  getFirstMetricParamsError,
 }) => {
   return (
-    <div className="w-full space-y-3 xl:w-[500px] xl:shrink-0">
+    <div className="w-full space-y-3 xl:w-2/5 xl:min-w-[320px]">
       <FormField
         control={form.control}
         name="optimizerType"
         render={({ field }) => (
-          <FormItem className="space-y-1">
+          <FormItem className="gap-1.5">
             <FormLabel className="comet-body-s-accented">Algorithm</FormLabel>
             <FormControl>
               <div className="flex h-8 items-center rounded-md border border-input bg-background transition-shadow focus-within:border-primary hover:shadow-sm">
@@ -115,6 +115,7 @@ const OptimizationsNewConfigSidebar: React.FC<
                       key={option.value}
                       value={option.value}
                       description={option.description}
+                      size="sm"
                     >
                       {renderIconLabel(
                         ALGORITHM_ICON_MAP[option.value as OPTIMIZER_TYPE],
@@ -137,6 +138,7 @@ const OptimizationsNewConfigSidebar: React.FC<
                         paramsField.value as Partial<OptimizerParameters>
                       }
                       onChange={onOptimizerParamsChange}
+                      promptModel={form.watch("modelName")}
                     />
                   )}
                 />
@@ -152,7 +154,7 @@ const OptimizationsNewConfigSidebar: React.FC<
           control={form.control}
           name="datasetId"
           render={({ field }) => (
-            <FormItem className="space-y-1">
+            <FormItem className="gap-1.5">
               <FormLabel className="comet-body-s-accented">
                 Item source
               </FormLabel>
@@ -190,13 +192,13 @@ const OptimizationsNewConfigSidebar: React.FC<
           control={form.control}
           name="metricType"
           render={({ field }) => (
-            <FormItem className="space-y-1">
+            <FormItem className="gap-1.5">
               <div className="flex items-center justify-between gap-2">
                 <FormLabel className="comet-body-s-accented">Metric</FormLabel>
                 <Button
-                  variant="link"
-                  size="sm"
-                  className="comet-body-s h-auto shrink-0 p-0 text-muted-slate"
+                  variant="ghost"
+                  size="2xs"
+                  className="comet-body-xs shrink-0 text-muted-slate"
                   asChild
                 >
                   <a
@@ -207,7 +209,7 @@ const OptimizationsNewConfigSidebar: React.FC<
                     rel="noreferrer"
                   >
                     Go to docs
-                    <ExternalLink className="ml-1 size-3.5" />
+                    <ExternalLink className="ml-1 size-3.5 shrink-0" />
                   </a>
                 </Button>
               </div>
@@ -237,6 +239,7 @@ const OptimizationsNewConfigSidebar: React.FC<
                       key={option.value}
                       value={option.value}
                       description={option.description}
+                      size="sm"
                     >
                       {renderIconLabel(
                         METRIC_ICON_MAP[option.value as METRIC_TYPE],
@@ -255,10 +258,11 @@ const OptimizationsNewConfigSidebar: React.FC<
           control={form.control}
           name="metricParams"
           render={({ field: paramsField }) => (
-            <FormItem className="space-y-1">
-              <FormLabel className="comet-body-s-accented">
-                Metric settings
-              </FormLabel>
+            <FormItem className="gap-1.5">
+              {/* Plain Label (not FormLabel): this is a section title for a
+                  group of sub-fields that surface their own errors, so it must
+                  not turn red when metricParams has a validation error. */}
+              <Label className="comet-body-s-accented">Metric settings</Label>
               <div className="rounded-md border border-border bg-soft-background px-3 py-2">
                 <MetricConfigs
                   inline
@@ -266,12 +270,12 @@ const OptimizationsNewConfigSidebar: React.FC<
                   configs={paramsField.value as Partial<MetricParameters>}
                   onChange={onMetricParamsChange}
                   datasetVariables={datasetVariables}
+                  errors={
+                    form.formState.errors.metricParams as
+                      | MetricParamErrors
+                      | undefined
+                  }
                 />
-                {form.formState.errors.metricParams && (
-                  <p className="comet-body-s mt-2 text-destructive">
-                    {getFirstMetricParamsError()}
-                  </p>
-                )}
               </div>
             </FormItem>
           )}

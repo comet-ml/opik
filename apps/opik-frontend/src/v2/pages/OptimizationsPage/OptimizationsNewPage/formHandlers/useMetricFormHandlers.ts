@@ -26,7 +26,9 @@ export const useMetricFormHandlers = (
       form.setValue(
         "metricParams",
         newParams as OptimizationConfigFormType["metricParams"],
-        { shouldDirty: true },
+        // Revalidate on change so a required-field error clears as soon as the
+        // user fills it — an imperative setValue doesn't trigger reValidateMode.
+        { shouldDirty: true, shouldValidate: true },
       );
     },
     [form],

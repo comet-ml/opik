@@ -205,17 +205,37 @@ export const convertOptimizationStudioToFormData = (
     ? { ...defaultConfig, ...existingConfig }
     : defaultConfig;
 
+  // Leave the algorithm model unset unless the saved run explicitly used a model
+  // the workspace can still run. An unset model inherits the prompt model at
+  // runtime (surfaced in the picker as "Same as prompt · <model>"). We must not
+  // force-seed it to the prompt model: that overrode intentional inheritance and
+  // could submit a stale/unavailable model behind an "inherited" label.
+  const baseOptimizerParams =
+    optimization?.studio_config?.optimizer.parameters ||
+    getDefaultOptimizerConfig(optimizerType);
+  const savedOptimizerModel = (baseOptimizerParams as { model?: string }).model;
+  const optimizerParams = {
+    ...baseOptimizerParams,
+    model:
+      savedOptimizerModel && availableModels.includes(savedOptimizerModel)
+        ? savedOptimizerModel
+        : undefined,
+  };
+
   return {
     name: optimization?.name || "Optimization studio run",
     datasetId: optimization?.dataset_id || "",
     optimizerType,
-    optimizerParams:
-      optimization?.studio_config?.optimizer.parameters ||
-      getDefaultOptimizerConfig(optimizerType),
+    optimizerParams,
     metricType,
-    metricParams:
-      optimization?.studio_config?.evaluation?.metrics?.[0]?.parameters ||
-      getDefaultMetricConfig(metricType),
+    // Merge saved params over the metric defaults so required fields the saved
+    // config omitted (e.g. EQUALS `case_sensitive`) are still present. Otherwise
+    // Zod rejects the missing field, no inline error renders for it, and Create
+    // silently no-ops. Mirrors the modelConfig merge above.
+    metricParams: {
+      ...getDefaultMetricConfig(metricType),
+      ...optimization?.studio_config?.evaluation?.metrics?.[0]?.parameters,
+    },
     messages,
     modelName,
     modelConfig,

@@ -33,6 +33,11 @@ export const useModelFormHandlers = (
         adjustedConfig as OptimizationConfigFormType["modelConfig"],
         { shouldDirty: true },
       );
+
+      // The algorithm model is left untouched here: an unset algorithm model
+      // inherits the (new) prompt model at runtime, and an explicitly-set one is
+      // the user's deliberate choice — syncing it to the prompt model would
+      // silently discard that choice.
     },
     [form, calculateModelProvider],
   );

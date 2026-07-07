@@ -1,19 +1,24 @@
 import React from "react";
 import { Label } from "@/ui/label";
 import { Checkbox } from "@/ui/checkbox";
-import { LevenshteinMetricParameters } from "@/types/optimizations";
+import {
+  LevenshteinMetricParameters,
+  MetricParamErrors,
+} from "@/types/optimizations";
 import ReferenceKeyField from "../ReferenceKeyField";
 
 interface LevenshteinMetricConfigsProps {
   configs: Partial<LevenshteinMetricParameters>;
   onChange: (configs: Partial<LevenshteinMetricParameters>) => void;
   datasetVariables?: string[];
+  errors?: MetricParamErrors;
 }
 
 const LevenshteinMetricConfigs = ({
   configs,
   onChange,
   datasetVariables = [],
+  errors,
 }: LevenshteinMetricConfigsProps) => {
   return (
     <div className="flex w-72 flex-col gap-6">
@@ -22,6 +27,7 @@ const LevenshteinMetricConfigs = ({
           value={configs.reference_key ?? ""}
           onChange={(value) => onChange({ ...configs, reference_key: value })}
           datasetVariables={datasetVariables}
+          error={errors?.reference_key?.message}
         />
 
         <div className="flex items-center space-x-2">

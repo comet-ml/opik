@@ -1,19 +1,24 @@
 import React from "react";
 import { Label } from "@/ui/label";
 import { Checkbox } from "@/ui/checkbox";
-import { EqualsMetricParameters } from "@/types/optimizations";
+import {
+  EqualsMetricParameters,
+  MetricParamErrors,
+} from "@/types/optimizations";
 import ReferenceKeyField from "../ReferenceKeyField";
 
 interface EqualsMetricConfigsProps {
   configs: Partial<EqualsMetricParameters>;
   onChange: (configs: Partial<EqualsMetricParameters>) => void;
   datasetVariables?: string[];
+  errors?: MetricParamErrors;
 }
 
 const EqualsMetricConfigs = ({
   configs,
   onChange,
   datasetVariables = [],
+  errors,
 }: EqualsMetricConfigsProps) => {
   return (
     <div className="flex w-72 flex-col gap-6">
@@ -22,6 +27,7 @@ const EqualsMetricConfigs = ({
           value={configs.reference_key ?? ""}
           onChange={(value) => onChange({ ...configs, reference_key: value })}
           datasetVariables={datasetVariables}
+          error={errors?.reference_key?.message}
         />
 
         <div className="flex items-center space-x-2">

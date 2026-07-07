@@ -186,7 +186,7 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
             <TooltipWrapper content="Load prompt">
               <Button
                 variant="minimal"
-                size="icon-sm"
+                size="icon-2xs"
                 disabled={disabled}
                 data-testid="load-text-prompt-button"
               >

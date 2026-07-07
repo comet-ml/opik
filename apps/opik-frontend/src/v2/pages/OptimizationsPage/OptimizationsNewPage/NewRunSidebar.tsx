@@ -15,8 +15,10 @@ import { OPTIMIZATION_DEMO_TEMPLATES } from "@/constants/optimizations";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import { useModelOptions } from "@/v2/pages-shared/llm/PromptModelSelect/useModelOptions";
+import { X } from "lucide-react";
+import { Button } from "@/ui/button";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
-import ResizableSidePanelTopBar from "@/shared/ResizableSidePanel/ResizableSidePanelTopBar";
 import Loader from "@/shared/Loader/Loader";
 import OptimizationsNewPageContent from "./OptimizationsNewPageContent";
 
@@ -221,13 +223,20 @@ const NewRunSidebar: React.FC<NewRunSidebarProps> = ({
       initialWidth={0.7}
       minWidth={640}
       header={
-        <ResizableSidePanelTopBar
-          variant="form"
-          title={
-            <span className="comet-body-s-accented">New optimization run</span>
-          }
-          onClose={onClose}
-        />
+        // Custom header (not the shared ResizableSidePanelTopBar) to hit the
+        // Figma spec: 16px left to the ✕ (the panel wrapper's pl-2 + this pl-2)
+        // and 12px between the ✕ and the title.
+        <div className="flex flex-auto items-center gap-3 pl-1">
+          <TooltipWrapper content="Close panel">
+            <Button variant="ghost" size="icon-2xs" onClick={onClose}>
+              <X />
+              <span className="sr-only">Close</span>
+            </Button>
+          </TooltipWrapper>
+          <span className="comet-body-s-accented truncate">
+            New optimization run
+          </span>
+        </div>
       }
     >
       {open && (

@@ -68,6 +68,13 @@ export type MetricParameters =
   | NumericalSimilarityMetricParameters
   | CodeMetricParameters;
 
+// Per-field validation errors for metric params, keyed by param name
+// (e.g. reference_key, task_introduction). Rendered inline by each metric form.
+export type MetricParamErrors = Record<
+  string,
+  { message?: string } | undefined
+>;
+
 export interface StudioMetric {
   type: METRIC_TYPE;
   parameters?: MetricParameters;

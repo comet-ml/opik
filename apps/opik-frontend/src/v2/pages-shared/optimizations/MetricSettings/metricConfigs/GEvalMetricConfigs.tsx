@@ -4,18 +4,23 @@ import { EditorView } from "@codemirror/view";
 import GEvalField from "./GEvalField";
 import DatasetVariablesHint from "../DatasetVariablesHint";
 
-import { GEvalMetricParameters } from "@/types/optimizations";
+import {
+  GEvalMetricParameters,
+  MetricParamErrors,
+} from "@/types/optimizations";
 
 interface GEvalMetricConfigsProps {
   configs: Partial<GEvalMetricParameters>;
   onChange: (configs: Partial<GEvalMetricParameters>) => void;
   datasetVariables?: string[];
+  errors?: MetricParamErrors;
 }
 
 const GEvalMetricConfigs = ({
   configs,
   onChange,
   datasetVariables = [],
+  errors,
 }: GEvalMetricConfigsProps) => {
   const taskIntroEditorRef = useRef<EditorView | null>(null);
   const evalCriteriaEditorRef = useRef<EditorView | null>(null);
@@ -42,11 +47,12 @@ const GEvalMetricConfigs = ({
         label="Task introduction"
         value={configs.task_introduction ?? ""}
         onChange={(value) => onChange({ ...configs, task_introduction: value })}
-        placeholder="Describe the task context and what you're evaluating..."
+        placeholder="Describe the task you're evaluating"
         editorRef={taskIntroEditorRef}
         onFocus={() => {
           lastFocusedEditorRef.current = taskIntroEditorRef.current;
         }}
+        error={errors?.task_introduction?.message}
       />
 
       <div className="space-y-1">
@@ -57,11 +63,12 @@ const GEvalMetricConfigs = ({
           onChange={(value) =>
             onChange({ ...configs, evaluation_criteria: value })
           }
-          placeholder="Define evaluation criteria: accuracy, completeness, relevance..."
+          placeholder="Define your evaluation criteria"
           editorRef={evalCriteriaEditorRef}
           onFocus={() => {
             lastFocusedEditorRef.current = evalCriteriaEditorRef.current;
           }}
+          error={errors?.evaluation_criteria?.message}
         />
 
         <DatasetVariablesHint

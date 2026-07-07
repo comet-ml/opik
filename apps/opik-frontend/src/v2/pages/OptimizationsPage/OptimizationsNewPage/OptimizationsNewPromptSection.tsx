@@ -140,18 +140,18 @@ const OptimizationsNewPromptSection: React.FC<
   );
 
   return (
-    <div className="min-w-0 flex-1 space-y-6">
+    <div className="min-w-0 flex-1 space-y-2">
       <FormField
         control={form.control}
         name="name"
         render={({ field }) => (
-          <FormItem>
+          <FormItem className="gap-1.5">
             <FormLabel className="comet-body-s-accented">Name</FormLabel>
             <FormControl>
               <Input
                 {...field}
                 onChange={(e) => onNameChange(e.target.value)}
-                placeholder="Enter optimization name, or the name will be generated automatically"
+                placeholder="Name (auto-generated if left blank)"
                 dimension="sm"
               />
             </FormControl>
@@ -161,7 +161,7 @@ const OptimizationsNewPromptSection: React.FC<
       />
 
       <div>
-        <div className="mb-2 flex h-8 items-center justify-between gap-2">
+        <div className="flex h-8 items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-1">
             <Label className="comet-body-s-accented shrink-0">Prompt</Label>
             <Separator orientation="vertical" className="mx-1 h-4" />
@@ -185,7 +185,7 @@ const OptimizationsNewPromptSection: React.FC<
                     model={model}
                     configs={config}
                     onChange={onModelConfigChange}
-                    size="icon-xs"
+                    size="icon-2xs"
                     variant="ghost"
                   />
                 </FormItem>
@@ -193,7 +193,7 @@ const OptimizationsNewPromptSection: React.FC<
             />
           </div>
 
-          <div className="flex shrink-0 items-center gap-0.5">
+          <div className="flex shrink-0 items-center">
             {selectedChatPromptId ? (
               <LoadedPromptDisplay
                 name={chatPromptData?.name}
@@ -222,7 +222,7 @@ const OptimizationsNewPromptSection: React.FC<
                     <TooltipWrapper content="Load prompt">
                       <Button
                         variant="minimal"
-                        size="icon-sm"
+                        size="icon-2xs"
                         type="button"
                         data-testid="load-prompt-button"
                       >
@@ -243,7 +243,7 @@ const OptimizationsNewPromptSection: React.FC<
               >
                 <Button
                   variant="minimal"
-                  size="icon-sm"
+                  size="icon-2xs"
                   onClick={handleSaveChatPrompt}
                   disabled={!canCreatePrompts && !selectedChatPromptId}
                   badge={hasUnsavedChatPromptChanges}
@@ -262,7 +262,7 @@ const OptimizationsNewPromptSection: React.FC<
             const fieldMessages = field.value;
 
             return (
-              <FormItem>
+              <FormItem className="gap-0">
                 <LLMPromptMessages
                   messages={fieldMessages}
                   possibleTypes={OPTIMIZATION_MESSAGE_TYPE_OPTIONS}
@@ -281,7 +281,7 @@ const OptimizationsNewPromptSection: React.FC<
                     ])
                   }
                 />
-                <FormMessage />
+                <FormMessage className="mt-1.5" />
               </FormItem>
             );
           }}
