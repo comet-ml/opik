@@ -151,6 +151,40 @@ class TestMigrationCheckpoint:
             assert cp.completed_count == 0
             assert cp.in_flight is None
 
+    def test_load_or_create__corrupt_completed_ids__starts_fresh(
+        self, tmp_path: Path
+    ) -> None:
+        # ``set("abc")`` / ``set([1, 2])`` don't raise, so a corrupt
+        # ``completed_experiment_ids`` (a bare string, or a list with non-string
+        # entries) would silently seed the wrong completed set and make the
+        # cascade skip/re-run the wrong experiments. It must fall back to fresh.
+        key = checkpoint_key("ws", "proj", "ds")
+        audit_path = tmp_path / "opik-migrate-x.json"
+        for bad in ('"abc"', "[1, 2, 3]", "{}"):
+            checkpoint_path(audit_path, key).write_text(
+                f'{{"schema_version": 1, "completed_experiment_ids": {bad}}}'
+            )
+            cp = load_or_create(
+                audit_path=audit_path, workspace="ws", project="proj", dataset="ds"
+            )
+            assert cp.completed_experiment_ids == set()
+
+    def test_load_or_create__corrupt_dest_trace_ids__starts_fresh(
+        self, tmp_path: Path
+    ) -> None:
+        # Same silent-corruption guard for the in-flight trace-id list.
+        key = checkpoint_key("ws", "proj", "ds")
+        audit_path = tmp_path / "opik-migrate-x.json"
+        checkpoint_path(audit_path, key).write_text(
+            '{"schema_version": 1, "in_flight": '
+            '{"source_experiment_id": "e2", "dest_trace_ids": "trace-1"}}'
+        )
+        cp = load_or_create(
+            audit_path=audit_path, workspace="ws", project="proj", dataset="ds"
+        )
+        assert cp.in_flight is None
+        assert cp.completed_count == 0
+
     def test_flush_then_load__round_trips_dest_experiment_id(
         self, tmp_path: Path
     ) -> None:

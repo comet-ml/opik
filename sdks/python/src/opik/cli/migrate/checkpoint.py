@@ -190,6 +190,20 @@ class MigrationCheckpoint:
             pass
 
 
+def _require_str_list(value: Any, field_name: str) -> List[str]:
+    """Return ``value`` as a list of strings, or raise ``ValueError``.
+
+    Guards the id collections loaded from a checkpoint: ``set()``/``list()``
+    happily consume a bare string by splitting it into characters, so a
+    corrupt ``"abc"`` would become ``{"a", "b", "c"}`` and silently corrupt
+    resume. Callers catch the ``ValueError`` and fall back to a fresh
+    checkpoint, matching the corrupt-JSON recovery path.
+    """
+    if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+        raise ValueError(f"{field_name} must be a list of strings, got {value!r}")
+    return value
+
+
 def load_or_create(
     *,
     audit_path: Path,
@@ -239,11 +253,19 @@ def load_or_create(
     # Reconstruct the structured fields defensively: a hand-edited or
     # partially-written checkpoint can carry the right schema_version but a
     # wrong-typed ``in_flight`` (e.g. a string, or a dict missing
-    # ``source_experiment_id``) or a non-iterable ``completed_experiment_ids``.
-    # Any such shape mismatch falls back to ``fresh`` -- same recovery contract
-    # as the unreadable/corrupt-JSON and foreign-schema paths above -- rather
-    # than crashing the CLI with a KeyError/TypeError.
+    # ``source_experiment_id``) or a wrong-typed id list. Any such shape
+    # mismatch falls back to ``fresh`` -- same recovery contract as the
+    # unreadable/corrupt-JSON and foreign-schema paths above -- rather than
+    # silently corrupting resume or crashing the CLI.
     try:
+        # ``set(...)`` / ``list(...)`` accept a bare string and split it into
+        # characters WITHOUT raising, which would silently seed the completed
+        # set (or trace-id list) with wrong values -- making the cascade skip
+        # or re-run the wrong experiments. Validate the id collections are
+        # lists of strings up front and raise (caught below -> fresh) otherwise.
+        completed_ids = _require_str_list(
+            data.get("completed_experiment_ids", []), "completed_experiment_ids"
+        )
         in_flight_data = data.get("in_flight")
         in_flight = (
             InFlightExperiment(
@@ -251,7 +273,9 @@ def load_or_create(
                 experiment_name=in_flight_data.get("experiment_name"),
                 dest_dataset_id=in_flight_data.get("dest_dataset_id"),
                 dest_experiment_id=in_flight_data.get("dest_experiment_id"),
-                dest_trace_ids=list(in_flight_data.get("dest_trace_ids", [])),
+                dest_trace_ids=_require_str_list(
+                    in_flight_data.get("dest_trace_ids", []), "dest_trace_ids"
+                ),
             )
             if in_flight_data
             else None
@@ -263,7 +287,7 @@ def load_or_create(
             dataset=dataset,
             path=path,
             total_experiments=int(data.get("total_experiments", 0)),
-            completed_experiment_ids=set(data.get("completed_experiment_ids", [])),
+            completed_experiment_ids=set(completed_ids),
             in_flight=in_flight,
         )
     except (TypeError, KeyError, ValueError) as exc:
