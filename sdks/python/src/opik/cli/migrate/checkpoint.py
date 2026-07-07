@@ -309,6 +309,16 @@ def load_or_create(
             if in_flight_data
             else None
         )
+        # ``dataset_phase_done`` gates the whole resume-vs-full-plan decision,
+        # so a truthy non-bool (the string "false", a non-empty list) must NOT
+        # be coerced to True and silently force a resume plan that skips
+        # rename/create/replay. Require a real bool; anything else is malformed
+        # -> fall back to fresh (same contract as the id-list validation).
+        dataset_phase_done = data.get("dataset_phase_done", False)
+        if not isinstance(dataset_phase_done, bool):
+            raise ValueError(
+                f"dataset_phase_done must be a bool, got {dataset_phase_done!r}"
+            )
         return MigrationCheckpoint(
             key=key,
             workspace=workspace,
@@ -316,7 +326,7 @@ def load_or_create(
             dataset=dataset,
             path=path,
             total_experiments=int(data.get("total_experiments", 0)),
-            dataset_phase_done=bool(data.get("dataset_phase_done", False)),
+            dataset_phase_done=dataset_phase_done,
             source_dataset_id=data.get("source_dataset_id"),
             source_name_after_rename=data.get("source_name_after_rename"),
             completed_experiment_ids=set(completed_ids),

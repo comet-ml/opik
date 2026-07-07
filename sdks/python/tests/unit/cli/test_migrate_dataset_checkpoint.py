@@ -131,6 +131,24 @@ class TestMigrationCheckpoint:
         assert cp.completed_count == 0
         assert cp.in_flight is None
 
+    def test_load_or_create__non_bool_dataset_phase_done__starts_fresh(
+        self, tmp_path: Path
+    ) -> None:
+        # ``dataset_phase_done`` gates resume-vs-full-plan, so a truthy non-bool
+        # (the string "false", a non-empty list) must NOT be coerced to True and
+        # force a resume that skips rename/create/replay. A non-bool is
+        # malformed -> fresh.
+        key = checkpoint_key("ws", "proj", "ds")
+        audit_path = tmp_path / "opik-migrate-x.json"
+        for bad in ('"false"', "[1]", "1"):
+            checkpoint_path(audit_path, key).write_text(
+                f'{{"schema_version": 1, "dataset_phase_done": {bad}}}'
+            )
+            cp = load_or_create(
+                audit_path=audit_path, workspace="ws", project="proj", dataset="ds"
+            )
+            assert cp.dataset_phase_done is False
+
     def test_load_or_create__malformed_in_flight__starts_fresh(
         self, tmp_path: Path
     ) -> None:

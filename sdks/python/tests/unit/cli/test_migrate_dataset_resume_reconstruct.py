@@ -121,7 +121,7 @@ def patch_stream(monkeypatch: pytest.MonkeyPatch):
     return registry
 
 
-def test_reconstruct__pairs_versions_by_index_and_identity_items(
+def test_reconstruct__paired_versions_and_identity_items__remaps_built(
     patch_stream: Dict[str, List[_Item]],
 ) -> None:
     source_versions = [_Version("sv1", "h1"), _Version("sv2", "h2")]
@@ -154,7 +154,7 @@ def test_reconstruct__pairs_versions_by_index_and_identity_items(
     assert remaps.item_id_remap == {"i1": "i1", "i2": "i2", "i3": "i3"}
 
 
-def test_reconstruct__content_hash_fallback_when_ids_differ(
+def test_reconstruct__dest_ids_differ__content_hash_fallback_maps_them(
     patch_stream: Dict[str, List[_Item]],
 ) -> None:
     # First-version read-back case: dest item id was minted fresh, so identity
@@ -183,7 +183,7 @@ def test_reconstruct__content_hash_fallback_when_ids_differ(
     assert remaps.item_id_remap == {"src-i1": "dst-i1"}
 
 
-def test_reconstruct__version_count_mismatch__raises(
+def test_reconstruct__version_count_mismatch__raises_reconstruction_error(
     patch_stream: Dict[str, List[_Item]],
 ) -> None:
     # Destination has fewer versions than source (e.g. crash mid-replay) — must
@@ -206,7 +206,7 @@ def test_reconstruct__version_count_mismatch__raises(
         )
 
 
-def test_reconstruct__optimizations_matched_by_name(
+def test_reconstruct__optimizations__matched_by_name_into_remap(
     patch_stream: Dict[str, List[_Item]],
 ) -> None:
     source_versions = [_Version("sv1", "h1")]

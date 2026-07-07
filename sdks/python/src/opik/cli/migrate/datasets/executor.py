@@ -119,6 +119,22 @@ def _apply_action(
         _replay_versions(client, rest_client, action, plan=plan, audit=audit)
     elif isinstance(action, CascadeOptimizations):
         _cascade_optimizations(rest_client, action, plan=plan, audit=audit)
+        # The dataset-level phases (rename/create/replay/optimizations) are all
+        # done as of here -- CascadeOptimizations is always the last one before
+        # CascadeExperiments. Mark it on the checkpoint NOW, before the cascade
+        # boundary, so a crash between this point and the first experiment still
+        # leaves ``dataset_phase_done=True``; otherwise the next run would take
+        # the full-plan branch and collide on the already-applied rename.
+        if (
+            checkpoint is not None
+            and not plan.is_resume
+            and not checkpoint.dataset_phase_done
+        ):
+            checkpoint.mark_dataset_phase_done(
+                source_dataset_id=action.source_dataset_id,
+                source_name_after_rename=plan.source_name_after_rename,
+            )
+            checkpoint.flush()
     elif isinstance(action, CascadeExperiments):
         _cascade_experiments(
             client, rest_client, action, plan=plan, audit=audit, checkpoint=checkpoint
@@ -289,24 +305,10 @@ def _cascade_experiments(
     When ``checkpoint`` is supplied, it is threaded into the cascade for
     resume support and the outer bar is seeded with the first callback's
     ``completed`` value so a resumed run renders at the right percentage
-    (OPIK-7168) rather than starting from 0.
+    (OPIK-7168) rather than starting from 0. The dataset phase is marked done
+    by ``_apply_action`` right after ``CascadeOptimizations`` (before this
+    cascade boundary), so it isn't touched here.
     """
-    # Mark the dataset phase (rename/create/replay/optimizations) done exactly
-    # once, when the cascade first starts on a FRESH run. This is the point
-    # where all of those have completed; recording it now means a subsequent
-    # crash+resume skips them and reconstructs their remaps instead of colliding
-    # on the rename. Skipped on a resume run (``plan.is_resume``) -- the flag is
-    # already set and the source dataset was renamed on the prior run.
-    if (
-        checkpoint is not None
-        and not plan.is_resume
-        and not checkpoint.dataset_phase_done
-    ):
-        checkpoint.mark_dataset_phase_done(
-            source_dataset_id=action.source_dataset_id,
-            source_name_after_rename=plan.source_name_after_rename,
-        )
-        checkpoint.flush()
 
     with Progress(
         TextColumn("[bold blue]Cascading experiments"),
