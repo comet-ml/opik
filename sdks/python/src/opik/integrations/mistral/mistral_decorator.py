@@ -87,11 +87,8 @@ class MistralTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         opik_usage = None
         if result_dict.get("usage") is not None:
-            # Mistral's usage payload matches the OpenAI completions format, so it
-            # is parsed with the OpenAI converter. This denotes the usage payload
-            # format, not the span provider (which is "mistral").
             opik_usage = llm_usage.try_build_opik_usage_or_log_error(
-                provider=LLMProvider.OPENAI,
+                provider=LLMProvider.MISTRALAI,
                 usage=result_dict["usage"],
                 logger=LOGGER,
                 error_message="Failed to log token usage from mistral call",
