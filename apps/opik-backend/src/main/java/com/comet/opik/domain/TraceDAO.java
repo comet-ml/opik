@@ -858,6 +858,19 @@ class TraceDAOImpl implements TraceDAO {
      * Each {@code traces} id-range bound carries a parallel {@code toMonday(id_at)} bound: a strict consequence of
      * the id-range — and, unlike a {@code created_at} predicate, safe against late-arriving rows since it derives
      * from {@code id} — that lets the planner prune partitions once {@code traces} is partitioned.
+     * <p>
+     * When aggregates are enrichment-only ({@code page_keyed_aggregates}, see
+     * {@code shouldPageKeyAggregates}), the aggregate CTEs are keyed on
+     * {@code IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))} instead of
+     * {@code trace_id_prefilter}: the inner scalar subquery is evaluated once and cached for the whole query,
+     * so every aggregate scans only the page's traces instead of the full filtered project. The aggregate CTEs
+     * referencing {@code page_ids} before its definition is fine — CTE names resolve independently of
+     * declaration order.
+     * <p>
+     * A ClickHouse upgrade must re-verify the three behaviors this mode relies on (validated on 25.3 and 25.8):
+     * forward CTE resolution, scalar-subquery caching (one evaluation reused across all reference sites — if the
+     * cache stops applying, results stay correct but every aggregate silently regresses to a whole-project scan),
+     * and primary-key pruning of the materialized IN-set.
      */
     private static final String SELECT_BY_PROJECT_ID = """
             WITH <if(trace_id_prefilter)>trace_id_prefilter AS (
@@ -907,7 +920,8 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
-                      <if(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
+                      <if(page_keyed_aggregates)> AND entity_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                      <elseif(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
                       <else>
                       <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                       <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
@@ -932,7 +946,8 @@ class TraceDAOImpl implements TraceDAO {
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
                       <if(annotation_queue_id)>AND source_queue_id = :annotation_queue_id<endif>
-                      <if(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
+                      <if(page_keyed_aggregates)> AND entity_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                      <elseif(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
                       <else>
                       <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                       <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
@@ -1009,7 +1024,8 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
                     AND project_id = :project_id
-                    <if(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
+                    <if(page_keyed_aggregates)> AND entity_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                    <elseif(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
                     <else>
                     <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                     <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
@@ -1023,7 +1039,8 @@ class TraceDAOImpl implements TraceDAO {
                 FROM spans
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                <if(trace_id_prefilter)>AND trace_id IN (SELECT id FROM trace_id_prefilter)
+                <if(page_keyed_aggregates)>AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                <elseif(trace_id_prefilter)>AND trace_id IN (SELECT id FROM trace_id_prefilter)
                 <else>
                 <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
                 <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
@@ -1171,7 +1188,8 @@ class TraceDAOImpl implements TraceDAO {
                 FROM spans FINAL
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                <if(trace_id_prefilter)>AND trace_id IN (SELECT id FROM trace_id_prefilter)
+                <if(page_keyed_aggregates)>AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                <elseif(trace_id_prefilter)>AND trace_id IN (SELECT id FROM trace_id_prefilter)
                 <else>
                 <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
                 <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
@@ -1197,7 +1215,8 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     <if(annotation_queue_id)>AND source_queue_id = :annotation_queue_id<endif>
-                    <if(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
+                    <if(page_keyed_aggregates)> AND entity_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                    <elseif(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
                     <else>
                     <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                     <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
@@ -1216,7 +1235,8 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE aq.scope = 'trace'
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
-                      <if(trace_id_prefilter)> AND aqi.item_id IN (SELECT id FROM trace_id_prefilter)
+                      <if(page_keyed_aggregates)> AND aqi.item_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                      <elseif(trace_id_prefilter)> AND aqi.item_id IN (SELECT id FROM trace_id_prefilter)
                       <else>
                       <if(uuid_from_time)> AND aqi.item_id >= :uuid_from_time <endif>
                       <if(uuid_to_time)> AND aqi.item_id \\<= :uuid_to_time <endif>
@@ -1236,7 +1256,8 @@ class TraceDAOImpl implements TraceDAO {
                     SELECT DISTINCT experiment_id, trace_id, dataset_item_id
                     FROM experiment_items
                     WHERE workspace_id = :workspace_id
-                    <if(trace_id_prefilter)> AND trace_id IN (SELECT id FROM trace_id_prefilter)
+                    <if(page_keyed_aggregates)> AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                    <elseif(trace_id_prefilter)> AND trace_id IN (SELECT id FROM trace_id_prefilter)
                     <else>
                     <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                     <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
@@ -1249,7 +1270,8 @@ class TraceDAOImpl implements TraceDAO {
                     AND id IN (
                         SELECT dataset_item_id FROM experiment_items
                         WHERE workspace_id = :workspace_id
-                        <if(trace_id_prefilter)> AND trace_id IN (SELECT id FROM trace_id_prefilter)
+                        <if(page_keyed_aggregates)> AND trace_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                        <elseif(trace_id_prefilter)> AND trace_id IN (SELECT id FROM trace_id_prefilter)
                         <else>
                         <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
                         <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
@@ -1458,7 +1480,18 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     private static final String COUNT_BY_PROJECT_ID = """
-            WITH feedback_scores_deduped AS (
+            WITH <if(trace_id_prefilter)>trace_id_prefilter AS (
+                SELECT DISTINCT id
+                FROM traces
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                <if(uuid_from_time)> AND id >= :uuid_from_time
+                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time
+                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                <if(filters)> AND <filters> <endif>
+                <if(search_text)> AND <search_text> <endif>
+            ), <endif>feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -1478,8 +1511,11 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
+                      <if(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
+                      <else>
                       <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                       <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                      <endif>
                     UNION ALL
                     SELECT workspace_id,
                            project_id,
@@ -1494,8 +1530,11 @@ class TraceDAOImpl implements TraceDAO {
                        AND workspace_id = :workspace_id
                        AND project_id = :project_id
                        <if(annotation_queue_id)>AND source_queue_id = :annotation_queue_id<endif>
+                       <if(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
+                       <else>
                        <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                        <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                       <endif>
                 )
                 ORDER BY last_updated_at DESC
                 LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
@@ -1520,8 +1559,11 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
                     AND project_id = :project_id
+                    <if(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
+                    <else>
                     <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                     <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                    <endif>
                     ORDER BY (workspace_id, project_id, entity_type, entity_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY entity_id, id
                 )
@@ -1536,8 +1578,11 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE aq.scope = 'trace'
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
+                      <if(trace_id_prefilter)> AND aqi.item_id IN (SELECT id FROM trace_id_prefilter)
+                      <else>
                       <if(uuid_from_time)> AND aqi.item_id >= :uuid_from_time <endif>
                       <if(uuid_to_time)> AND aqi.item_id \\<= :uuid_to_time <endif>
+                      <endif>
                  ) AS annotation_queue_ids_with_trace_id
                  GROUP BY trace_id
             ), target_spans AS (
@@ -1545,8 +1590,11 @@ class TraceDAOImpl implements TraceDAO {
                 FROM spans
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
+                <if(trace_id_prefilter)>AND trace_id IN (SELECT id FROM trace_id_prefilter)
+                <else>
                 <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
                 <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
+                <endif>
             ),
             span_feedback_scores_deduped AS (
                 SELECT workspace_id,
@@ -3672,15 +3720,66 @@ class TraceDAOImpl implements TraceDAO {
      * <p>Guardrails filters inject {@code gagg.guardrails_result} into the {@code <filters>}
      * template variable, which references the guardrails_agg CTE alias. Since the prefilter
      * CTE only queries the traces table, these references would fail. Guard against them.
+     *
+     * <p>Feedback score filters use separate template variables ({@code feedback_scores_filters},
+     * {@code span_feedback_scores_filters}) and are NOT injected into {@code <filters>}, so
+     * the prefilter CTE is safe to use alongside them. Enabling it dramatically reduces
+     * feedback score scan volume when trace-column filters are also present (OPIK-7076).
      */
     private boolean shouldUseTraceIdPrefilter(TraceSearchCriteria criteria, ST template) {
-        boolean hasCteDependentFilters = hasFeedbackScoreFilters(template)
-                || template.getAttribute("guardrails_filters") != null;
+        boolean hasGuardrailsInFilters = template.getAttribute("guardrails_filters") != null;
 
         boolean hasNarrowingFilters = criteria.searchText() != null
                 || template.getAttribute("filters") != null;
 
-        return !hasCteDependentFilters && hasNarrowingFilters;
+        return !hasGuardrailsInFilters && hasNarrowingFilters;
+    }
+
+    /**
+     * Determines whether the aggregate CTEs (feedback scores, spans, comments, guardrails, annotation queues,
+     * experiments) can be keyed on the page ids instead of the full filtered trace id set.
+     *
+     * <p>Those CTEs are joined to {@code page_wide} only to enrich the returned rows, so whenever neither
+     * filtering nor sorting reads them, computing them for every candidate trace is wasted work that grows with
+     * project size: the final LEFT JOINs discard everything outside the page. Keying them on the page ids turns
+     * whole-project scans (spans, feedback_scores, ...) into page-sized, primary-key-prunable lookups.
+     *
+     * <p>The page ids are consumed via {@code IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))}:
+     * the inner scalar subquery is evaluated once and cached for the whole query, so the {@code page_ids} CTE is
+     * not re-executed at every reference (ClickHouse inlines plain CTE references), and the materialized constant
+     * array is usable for primary-key index analysis.
+     *
+     * <p>Must stay disabled whenever page selection depends on an aggregate: feedback-score filters
+     * ({@code traces_deduped} filters on feedback_scores_final/fsc/sfsc), guardrails filters (join on
+     * guardrails_agg), trace aggregation filters (spans_agg), annotation queue filters/id (join on
+     * trace_annotation_queue_ids), or sorting by feedback scores, span statistics, or experiments
+     * ({@code page_ids} joins those aggregates).
+     */
+    /**
+     * Applies the aggregate-keying decision shared by {@code getTracesByProjectId} and
+     * {@code findTraceStream}: page-keyed aggregates when they are enrichment-only, otherwise the narrowing
+     * trace id prefilter when filters allow it.
+     */
+    private void addAggregateKeyingFlags(ST template, TraceSearchCriteria criteria, boolean sortHasFeedbackScores,
+            boolean sortHasSpanStatistics, boolean sortHasExperiment) {
+        if (shouldPageKeyAggregates(template, sortHasFeedbackScores, sortHasSpanStatistics, sortHasExperiment)) {
+            template.add("page_keyed_aggregates", true);
+        } else if (shouldUseTraceIdPrefilter(criteria, template) && !sortHasFeedbackScores) {
+            template.add("trace_id_prefilter", true);
+        }
+    }
+
+    private boolean shouldPageKeyAggregates(ST template, boolean sortHasFeedbackScores,
+            boolean sortHasSpanStatistics, boolean sortHasExperiment) {
+        boolean aggregatesDrivePageSelection = hasFeedbackScoreFilters(template)
+                || template.getAttribute("guardrails_filters") != null
+                || template.getAttribute("trace_aggregation_filters") != null
+                || template.getAttribute("annotation_queue_filters") != null
+                || template.getAttribute("annotation_queue_id") != null
+                || sortHasFeedbackScores
+                || sortHasSpanStatistics
+                || sortHasExperiment;
+        return !aggregatesDrivePageSelection;
     }
 
     private Mono<? extends Result> getTracesByProjectId(
@@ -3708,10 +3807,17 @@ class TraceDAOImpl implements TraceDAO {
             boolean sortHasFeedbackScores = Optional.ofNullable(orderBySql)
                     .map(sortFields -> sortFields.contains("feedback_scores"))
                     .orElse(false);
+            boolean sortHasSpanStatistics = hasSpanStatistics(orderBySql);
+            // Structured check on the requested sort fields rather than a substring match on the rendered
+            // ORDER BY SQL: this now gates page-keyed aggregates, so it must track the experiment sort exactly
+            // even if EXPERIMENT_FIELD_MAPPING changes what SQL the field renders to.
+            boolean sortHasExperiment = Optional.ofNullable(traceSearchCriteria.sortingFields())
+                    .map(sortingFields -> sortingFields.stream()
+                            .anyMatch(sortingField -> SortableFields.EXPERIMENT_ID.equals(sortingField.field())))
+                    .orElse(false);
 
-            if (shouldUseTraceIdPrefilter(traceSearchCriteria, template) && !sortHasFeedbackScores) {
-                template.add("trace_id_prefilter", true);
-            }
+            addAggregateKeyingFlags(template, traceSearchCriteria, sortHasFeedbackScores, sortHasSpanStatistics,
+                    sortHasExperiment);
 
             var finalTemplate = template;
             Optional.ofNullable(orderBySql)
@@ -3720,11 +3826,11 @@ class TraceDAOImpl implements TraceDAO {
                             finalTemplate.add("sort_has_feedback_scores", true);
                         }
 
-                        if (hasSpanStatistics(sortFields)) {
+                        if (sortHasSpanStatistics) {
                             finalTemplate.add("sort_has_span_statistics", true);
                         }
 
-                        if (sortFields.contains("experiment_id") || sortFields.contains("eaag.experiment")) {
+                        if (sortHasExperiment) {
                             finalTemplate.add("sort_has_experiment", true);
                         }
 
@@ -3823,6 +3929,10 @@ class TraceDAOImpl implements TraceDAO {
             var template = newTraceThreadFindTemplate(
                     COUNT_BY_PROJECT_ID, traceSearchCriteria, TRACE_SEARCH_CLAUSE, traceColumnsNonNullable());
             template.add("log_comment", logComment);
+
+            if (shouldUseTraceIdPrefilter(traceSearchCriteria, template)) {
+                template.add("trace_id_prefilter", true);
+            }
 
             var statement = connection.createStatement(template.render())
                     .bind("project_id", traceSearchCriteria.projectId())
@@ -4448,9 +4558,8 @@ class TraceDAOImpl implements TraceDAO {
 
             bindTemplateExcludeFieldVariables(criteria, template);
 
-            if (shouldUseTraceIdPrefilter(criteria, template)) {
-                template.add("trace_id_prefilter", true);
-            }
+            // The stream has no custom sorting, so only filters can make aggregates drive page selection.
+            addAggregateKeyingFlags(template, criteria, false, false, false);
 
             addSortNeedsWideFlag(template, criteria.sortingFields());
 

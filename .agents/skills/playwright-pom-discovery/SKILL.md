@@ -134,6 +134,18 @@ Common gotchas:
 
 The browser MCP needs an authenticated page. Against local OSS (`http://localhost:5173`, workspace `default`) there's no login wall — navigate straight to the page. Against an authenticated deployment, reuse the suite's storage state: `global-setup` mints `.auth/user.json` the first time you run a Playwright test, and the browser MCP can load it as its `storageState`. Don't script a full login flow during discovery — it's a distraction.
 
+**Arm the dialog handler before your first navigation (below).** Several Opik pages guard against data loss with a native `beforeunload` "Leave site?" confirm — it fires the moment you navigate (or reload) with unsaved state: a staged draft on the Dataset Items page (`useNavigationBlocker`), a dirty form, an open editor. A native dialog is **not** in the accessibility snapshot, so `browser_navigate` just silently blocks on it until it times out — you won't see why. Do this before the navigation step below, not after. Guard against it two ways, both cheap:
+
+1. **Register an auto-accept handler at the start of the session**, before your first navigation:
+
+   ```
+   mcp__Playwright__browser_handle_dialog(accept=true)
+   ```
+
+   This dismisses any `beforeunload`/`confirm` that appears so navigation never hangs. (If one has *already* blocked you, call the same tool to clear it, then carry on.)
+
+2. **Leave the page clean.** Before navigating away, clear unsaved state through the UI the way a user would — commit or **discard** the draft, close the editor, reset the form. This is also what the POM method itself must do, so doing it in discovery validates that path. Don't rely on the auto-handler alone: a discarded draft leaves the page in a real, testable state; a force-dismissed dialog leaves stale draft state behind.
+
 **Standard discovery navigation:**
 
 ```
@@ -262,6 +274,7 @@ These are red flags that mean you skipped a step:
 | "I'll use `page.locator('.button:nth-child(3)')` — it's fine" | Step 9 — flag missing testids and add them to the FE. Brittle selectors are the #1 source of E2E flake. |
 | "The test id I see is generic, like `button-1` — I'll use that" | Step 5 + 9 — generic test ids are nearly as bad as no test id. Rename it to something descriptive in the same change. |
 | "I'll add the POM but skip the seed because the test will create state" | Step 2 — even during the test, you're now writing untested POM code against a page state you've never seen. |
+| "`browser_navigate` is hanging / timing out for no reason" | Step 3 — a native "Leave site?" dialog is blocking (unsaved draft/form). It's not in the snapshot. Arm `browser_handle_dialog(accept=true)` up front, and discard the draft in-app before leaving. |
 
 ## Where this fits
 
