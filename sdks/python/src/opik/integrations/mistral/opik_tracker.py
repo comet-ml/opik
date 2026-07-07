@@ -1,10 +1,33 @@
+import importlib.metadata
 from typing import Optional, Union
 
 from mistralai import Mistral
 
+import opik.semantic_version as semantic_version
 from opik.types import LLMProvider
 
 from . import chat_completion_chunks_aggregator, mistral_decorator
+
+# First mistralai release whose public API this integration targets: the
+# `EventStream` / `EventStreamAsync` streaming classes were introduced in 1.3.0.
+MINIMUM_MISTRALAI_VERSION = "1.3.0"
+
+
+def _assert_supported_mistralai_version() -> None:
+    try:
+        installed_version = importlib.metadata.version("mistralai")
+    except importlib.metadata.PackageNotFoundError:
+        return
+
+    if (
+        semantic_version.SemanticVersion.parse(installed_version)
+        < MINIMUM_MISTRALAI_VERSION
+    ):
+        raise RuntimeError(
+            f"Opik supports mistralai>={MINIMUM_MISTRALAI_VERSION}, but version "
+            f"{installed_version} is installed. Please upgrade with "
+            f'`pip install "mistralai>={MINIMUM_MISTRALAI_VERSION},<2"`.'
+        )
 
 
 def track_mistral(
@@ -40,6 +63,8 @@ def track_mistral(
     Returns:
         The modified Mistral client with Opik tracking enabled.
     """
+    _assert_supported_mistralai_version()
+
     if hasattr(mistral_client, "opik_tracked"):
         return mistral_client
 

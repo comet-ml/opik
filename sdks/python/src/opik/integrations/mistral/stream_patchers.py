@@ -1,8 +1,5 @@
-import functools
 import logging
 from typing import Any, AsyncIterator, Callable, Iterator, List, Optional
-
-from mistralai.utils import eventstreaming
 
 from opik.api_objects import span, trace
 from opik.decorator import error_info_collector, generator_wrappers
@@ -10,71 +7,69 @@ from opik.types import ErrorInfoDict
 
 LOGGER = logging.getLogger(__name__)
 
-# Captured once, before any patching. Mistral's EventStream.__iter__ returns
-# ``self`` and iteration is driven by __next__ (which pulls from an internal
-# generator), so unlike the openai/anthropic streams we cannot wrap __iter__ by
-# re-iterating it — we drive the original __next__ instead.
-original_event_stream_next_method = eventstreaming.EventStream.__next__
-original_event_stream_async_anext_method = eventstreaming.EventStreamAsync.__anext__
+# The stream classes (mistralai's EventStream / EventStreamAsync) live in an
+# internal module, so instead of importing them we operate on ``type(stream)``
+# of the object chat.stream()/stream_async() returns. Their ``__iter__`` /
+# ``__aiter__`` return ``self`` and iteration is driven by ``__next__`` /
+# ``__anext__`` (pulling from an internal generator), so we can't wrap the
+# iterator by re-iterating it — we drive the original ``__next__`` instead.
+# ``__next__`` is never patched, so reading it off the class each call always
+# yields the genuine method.
 
 
 def patch_sync_event_stream(
-    stream: eventstreaming.EventStream,
+    stream: Any,
     span_to_end: span.SpanData,
     trace_to_end: Optional[trace.TraceData],
     generations_aggregator: Callable[[List[Any]], Optional[Any]],
     finally_callback: generator_wrappers.FinishGeneratorCallback,
-) -> eventstreaming.EventStream:
-    """Patch ``client.chat.stream(...)``.
+) -> Any:
+    """Patch a sync event stream returned by ``client.chat.stream(...)``.
 
     Covers both ``for event in stream:`` and ``with stream as s: for event in s:``
-    since EventStream is its own iterator and context manager.
+    since the stream is its own iterator and context manager.
     """
+    stream_cls = type(stream)
+    original_next = stream_cls.__next__
 
-    def EventStream__iter__decorator(dunder_next_func: Callable) -> Callable:
-        @functools.wraps(eventstreaming.EventStream.__iter__)
-        def wrapper(self: eventstreaming.EventStream) -> Iterator[Any]:
-            accumulated_items: List[Any] = []
-            error_info: Optional[ErrorInfoDict] = None
-            try:
-                while True:
-                    try:
-                        item = dunder_next_func(self)
-                    except StopIteration:
-                        break
-                    accumulated_items.append(item)
-                    yield item
-            except Exception as exception:
-                LOGGER.debug(
-                    "Exception raised from mistralai EventStream.",
-                    str(exception),
-                    exc_info=True,
-                )
-                error_info = error_info_collector.collect(exception)
-                raise exception
-            finally:
-                if not hasattr(self, "opik_tracked_instance"):
-                    return
+    def wrapper(self: Any) -> Iterator[Any]:
+        accumulated_items: List[Any] = []
+        error_info: Optional[ErrorInfoDict] = None
+        try:
+            while True:
+                try:
+                    item = original_next(self)
+                except StopIteration:
+                    break
+                accumulated_items.append(item)
+                yield item
+        except Exception as exception:
+            LOGGER.debug(
+                "Exception raised from mistralai event stream.",
+                str(exception),
+                exc_info=True,
+            )
+            error_info = error_info_collector.collect(exception)
+            raise exception
+        finally:
+            if not hasattr(self, "opik_tracked_instance"):
+                return
 
-                delattr(self, "opik_tracked_instance")
-                output = (
-                    generations_aggregator(accumulated_items)
-                    if error_info is None
-                    else None
-                )
-                finally_callback(
-                    output=output,
-                    error_info=error_info,
-                    capture_output=True,
-                    generators_span_to_end=self.span_to_end,
-                    generators_trace_to_end=self.trace_to_end,
-                )
+            delattr(self, "opik_tracked_instance")
+            output = (
+                generations_aggregator(accumulated_items)
+                if error_info is None
+                else None
+            )
+            finally_callback(
+                output=output,
+                error_info=error_info,
+                capture_output=True,
+                generators_span_to_end=self.span_to_end,
+                generators_trace_to_end=self.trace_to_end,
+            )
 
-        return wrapper
-
-    eventstreaming.EventStream.__iter__ = EventStream__iter__decorator(
-        original_event_stream_next_method
-    )
+    stream_cls.__iter__ = wrapper
 
     stream.opik_tracked_instance = True
     stream.span_to_end = span_to_end
@@ -84,60 +79,54 @@ def patch_sync_event_stream(
 
 
 def patch_async_event_stream(
-    stream: eventstreaming.EventStreamAsync,
+    stream: Any,
     span_to_end: span.SpanData,
     trace_to_end: Optional[trace.TraceData],
     generations_aggregator: Callable[[List[Any]], Optional[Any]],
     finally_callback: generator_wrappers.FinishGeneratorCallback,
-) -> eventstreaming.EventStreamAsync:
-    """Patch ``client.chat.stream_async(...)``."""
+) -> Any:
+    """Patch an async event stream returned by ``client.chat.stream_async(...)``."""
+    stream_cls = type(stream)
+    original_anext = stream_cls.__anext__
 
-    def EventStreamAsync__aiter__decorator(dunder_anext_func: Callable) -> Callable:
-        @functools.wraps(eventstreaming.EventStreamAsync.__aiter__)
-        async def wrapper(
-            self: eventstreaming.EventStreamAsync,
-        ) -> AsyncIterator[Any]:
-            accumulated_items: List[Any] = []
-            error_info: Optional[ErrorInfoDict] = None
-            try:
-                while True:
-                    try:
-                        item = await dunder_anext_func(self)
-                    except StopAsyncIteration:
-                        break
-                    accumulated_items.append(item)
-                    yield item
-            except Exception as exception:
-                LOGGER.debug(
-                    "Exception raised from mistralai EventStreamAsync.",
-                    str(exception),
-                    exc_info=True,
-                )
-                error_info = error_info_collector.collect(exception)
-                raise exception
-            finally:
-                if not hasattr(self, "opik_tracked_instance"):
-                    return
+    async def wrapper(self: Any) -> AsyncIterator[Any]:
+        accumulated_items: List[Any] = []
+        error_info: Optional[ErrorInfoDict] = None
+        try:
+            while True:
+                try:
+                    item = await original_anext(self)
+                except StopAsyncIteration:
+                    break
+                accumulated_items.append(item)
+                yield item
+        except Exception as exception:
+            LOGGER.debug(
+                "Exception raised from mistralai async event stream.",
+                str(exception),
+                exc_info=True,
+            )
+            error_info = error_info_collector.collect(exception)
+            raise exception
+        finally:
+            if not hasattr(self, "opik_tracked_instance"):
+                return
 
-                delattr(self, "opik_tracked_instance")
-                output = (
-                    generations_aggregator(accumulated_items)
-                    if error_info is None
-                    else None
-                )
-                finally_callback(
-                    output=output,
-                    error_info=error_info,
-                    capture_output=True,
-                    generators_span_to_end=self.span_to_end,
-                    generators_trace_to_end=self.trace_to_end,
-                )
+            delattr(self, "opik_tracked_instance")
+            output = (
+                generations_aggregator(accumulated_items)
+                if error_info is None
+                else None
+            )
+            finally_callback(
+                output=output,
+                error_info=error_info,
+                capture_output=True,
+                generators_span_to_end=self.span_to_end,
+                generators_trace_to_end=self.trace_to_end,
+            )
 
-        return wrapper
-
-    eventstreaming.EventStreamAsync.__aiter__ = EventStreamAsync__aiter__decorator(
-        original_event_stream_async_anext_method
-    )
+    stream_cls.__aiter__ = wrapper
 
     stream.opik_tracked_instance = True
     stream.span_to_end = span_to_end

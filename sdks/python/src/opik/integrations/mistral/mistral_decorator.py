@@ -1,8 +1,7 @@
 import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from mistralai.models import chatcompletionresponse
-from mistralai.utils import eventstreaming
+from mistralai import ChatCompletionResponse
 from typing_extensions import override
 
 import opik.dict_utils as dict_utils
@@ -78,7 +77,7 @@ class MistralTrackDecorator(base_track_decorator.BaseTrackDecorator):
         assert isinstance(
             output,
             (
-                chatcompletionresponse.ChatCompletionResponse,
+                ChatCompletionResponse,
                 chat_completion_chunks_aggregator.MistralChatCompletionChunksAggregated,
             ),
         )
@@ -117,9 +116,14 @@ class MistralTrackDecorator(base_track_decorator.BaseTrackDecorator):
             "Mistral decorator will always get aggregator function as input"
         )
 
-        if isinstance(output, eventstreaming.EventStream):
+        # Detect the stream by its iterator protocol rather than importing the
+        # concrete class from mistralai's internal ``utils.eventstreaming``
+        # module. chat.stream() returns a self-iterator (``__next__`` + context
+        # manager); chat.stream_async() an async one (``__anext__``). The
+        # non-stream ChatCompletionResponse has neither.
+        if hasattr(output, "__anext__"):
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
-            return stream_patchers.patch_sync_event_stream(
+            return stream_patchers.patch_async_event_stream(
                 stream=output,
                 span_to_end=span_to_end,
                 trace_to_end=trace_to_end,
@@ -127,9 +131,9 @@ class MistralTrackDecorator(base_track_decorator.BaseTrackDecorator):
                 finally_callback=self._after_call,
             )
 
-        if isinstance(output, eventstreaming.EventStreamAsync):
+        if hasattr(output, "__next__"):
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
-            return stream_patchers.patch_async_event_stream(
+            return stream_patchers.patch_sync_event_stream(
                 stream=output,
                 span_to_end=span_to_end,
                 trace_to_end=trace_to_end,

@@ -549,3 +549,14 @@ def test_mistral_chat_complete__called_in_tracked_function__span_nested_under_tr
 
     assert len(fake_backend.trace_trees) == 1
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track_mistral__unsupported_old_version__raises(monkeypatch):
+    from opik.integrations.mistral import opik_tracker
+
+    monkeypatch.setattr(
+        opik_tracker.importlib.metadata, "version", lambda _pkg: "1.2.0"
+    )
+
+    with pytest.raises(RuntimeError, match=r"mistralai>=1\.3\.0"):
+        track_mistral(mistralai.Mistral(api_key="dummy-key"))
