@@ -4,6 +4,10 @@ import com.comet.opik.api.ProjectIdLastUpdated;
 import com.comet.opik.infrastructure.ProjectLastUpdatedFlushConfig;
 import com.comet.opik.infrastructure.redis.StringRedisClient;
 import com.google.inject.ImplementedBy;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.LongCounter;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Builder;
@@ -19,6 +23,8 @@ import java.util.Collection;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
+
+import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 /**
  * Owns the {@code projects.last_updated_trace_at} buffering: the ingestion-path write that keeps the marker off the
@@ -48,9 +54,15 @@ class ProjectLastUpdatedTraceBufferServiceImpl implements ProjectLastUpdatedTrac
     static final String FLUSHING_SET_KEY = "project:last-updated-trace:flushing";
     private static final String MEMBER_SEPARATOR = ":";
 
+    static final String METER_NAME = "opik.project_last_updated_flush";
+    private static final AttributeKey<String> RESULT_KEY = stringKey("result");
+
     private final ProjectLastUpdatedFlushConfig config;
     private final StringRedisClient redisClient;
     private final ProjectService projectService;
+
+    private final LongCounter bufferedRecords;
+    private final LongCounter flushedMarkers;
 
     @Inject
     public ProjectLastUpdatedTraceBufferServiceImpl(
@@ -60,6 +72,16 @@ class ProjectLastUpdatedTraceBufferServiceImpl implements ProjectLastUpdatedTrac
         this.config = config;
         this.redisClient = redisClient;
         this.projectService = projectService;
+
+        var meter = GlobalOpenTelemetry.get().getMeter(METER_NAME);
+        this.bufferedRecords = meter
+                .counterBuilder("opik.project_last_updated_flush.buffered")
+                .setDescription("Project last-updated markers buffered to Redis on the ingestion path, by result")
+                .build();
+        this.flushedMarkers = meter
+                .counterBuilder("opik.project_last_updated_flush.markers")
+                .setDescription("Project last-updated markers processed by the flush")
+                .build();
     }
 
     @Override
@@ -78,7 +100,9 @@ class ProjectLastUpdatedTraceBufferServiceImpl implements ProjectLastUpdatedTrac
             RScoredSortedSet<String> pending = redisClient.getScoredSortedSet(PENDING_SET_KEY);
             lastUpdatedTraces.forEach(project -> pending.addIfGreater(
                     project.lastUpdatedAt().toEpochMilli(), member(workspaceId, project.id())));
+            bufferedRecords.add(lastUpdatedTraces.size(), Attributes.of(RESULT_KEY, "ok"));
         } catch (RuntimeException e) {
+            bufferedRecords.add(lastUpdatedTraces.size(), Attributes.of(RESULT_KEY, "error"));
             log.warn("Failed to buffer last-updated-trace marker for workspace '{}'", workspaceId, e);
         }
     }
@@ -106,6 +130,9 @@ class ProjectLastUpdatedTraceBufferServiceImpl implements ProjectLastUpdatedTrac
             if (entries.size() < batchSize) {
                 break;
             }
+        }
+        if (written > 0) {
+            flushedMarkers.add(written);
         }
         return written;
     }

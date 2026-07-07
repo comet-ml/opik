@@ -23,10 +23,16 @@ class EventInterceptor implements MethodInterceptor {
 
     private static final AttributeKey<String> LISTENER_KEY = stringKey("listener");
 
+    private final LongCounter consumedCounter;
     private final LongCounter errorCounter;
 
     EventInterceptor() {
-        this.errorCounter = GlobalOpenTelemetry.get().getMeter(TRACER_NAME)
+        var meter = GlobalOpenTelemetry.get().getMeter(TRACER_NAME);
+        this.consumedCounter = meter
+                .counterBuilder("opik.event.consumed")
+                .setDescription("Events successfully consumed, by listener")
+                .build();
+        this.errorCounter = meter
                 .counterBuilder("opik.event.error")
                 .setDescription("Event processing errors, by listener and error type")
                 .build();
@@ -56,6 +62,7 @@ class EventInterceptor implements MethodInterceptor {
 
         try (Scope scope = span.makeCurrent()) {
             Object result = methodInvocation.proceed();
+            consumedCounter.add(1, Attributes.of(LISTENER_KEY, listenerName));
             log.info("Event intercepted: {}", event);
             return result;
         } catch (Throwable e) {
