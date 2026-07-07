@@ -78,6 +78,8 @@ A framework-specific OTel **tracer wrapper** (see `adk/patchers/adk_otel_tracer/
 
 For callback integrations, span/trace creation goes through `span_creation_handler` too; map each framework run id → `SpanData`/`TraceData` and set `metadata["created_from"] = "<name>"`.
 
+**Add a dedicated usage format — don't piggyback on another provider's parser.** Even when a provider's token-usage payload looks OpenAI-shaped, give it its own format in the `llm_usage` namespace rather than passing `provider=LLMProvider.OPENAI` to `try_build_opik_usage_or_log_error`. Reusing another provider's converter couples you to *its* schema changes and misattributes the parsed shape. The steps (see the Mistral change for the worked example): (1) add `llm_usage/<name>_usage.py` with a `class <Name>Usage(BaseOriginalProviderUsage)` declaring the token fields (+ nested details classes) and `from_original_usage_dict`; (2) add it to the `ProviderUsage` union and a `OpikUsage.from_<name>_dict` classmethod in `llm_usage/opik_usage.py`; (3) register `LLMProvider.<NAME>: [OpikUsage.from_<name>_dict]` in `llm_usage/opik_usage_factory.py`; (4) in the decorator, parse with `provider=LLMProvider.<NAME>`. Non-int fields (e.g. `prompt_audio_seconds`) are dropped from the backend flat dict automatically. Add unit tests under `tests/unit/llm_usage/test_<name>_usage.py` (parser + `build_opik_usage` factory path).
+
 ## Dependencies & imports
 
 - The framework library is **imported inside the integration module** (`import mistralai` at the top of `opik_tracker.py`). That is safe because the module is only reached when a user does `from opik.integrations.<name> import ...`. Never import an integration from the `opik` package top level.
