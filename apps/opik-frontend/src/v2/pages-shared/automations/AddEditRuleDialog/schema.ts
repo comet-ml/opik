@@ -213,11 +213,11 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
       .string()
       .min(1, { message: "Key is required" })
       // Allow the standard JSONPath form (input/output/metadata.[...]) OR a reserved
-      // bare sentinel like `spans` — see RESERVED_TRACE_EVALUATOR_VARIABLES. The
-      // backend's OnlineScoringEngine substitutes the sentinel with the JSON-
-      // serialized spans list at render time.
-      .regex(/^(input|output|metadata)(\.|$)|^spans$/, {
-        message: `Key is invalid, it should be "input", "output", "metadata" (e.g. "input.message" or just "input" for the whole object), or the reserved word "spans" to inject the trace's spans list`,
+      // bare sentinel like `spans` / `trace` — see RESERVED_TRACE_LLM_JUDGE_VARIABLES.
+      // The backend's OnlineScoringEngine substitutes `spans` with the JSON-serialized
+      // spans list and `trace` with the trace skeleton (ids + attachments) at render time.
+      .regex(/^(input|output|metadata)(\.|$)|^spans$|^trace$/, {
+        message: `Key is invalid, it should be "input", "output", "metadata" (e.g. "input.message" or just "input" for the whole object), the reserved word "spans" to inject the trace's spans list, or "trace" to inject the trace skeleton with attachments`,
       }),
   ),
 }).superRefine((data, ctx) => {
@@ -267,8 +267,12 @@ export const LLMJudgeDetailsSpanFormSchema = LLMJudgeBaseSchema.extend({
     z
       .string()
       .min(1, { message: "Key is required" })
-      .regex(/^(input|output|metadata)(\.|$)/, {
-        message: `Key is invalid, it should be "input", "output", "metadata", and follow this format: "input.[PATH]" For example: "input.message" or just "input" for the whole object`,
+      // Allow the standard JSONPath form (input/output/metadata.[...]) OR the reserved
+      // bare sentinel `span` — see RESERVED_SPAN_LLM_JUDGE_VARIABLES. The backend's
+      // OnlineScoringEngine substitutes `span` with the span structure (span id +
+      // attachment file_names) at render time.
+      .regex(/^(input|output|metadata)(\.|$)|^span$/, {
+        message: `Key is invalid, it should be "input", "output", "metadata" (e.g. "input.message" or just "input" for the whole object), or the reserved word "span" to inject the span with its attachments`,
       }),
   ),
 }).superRefine((data, ctx) => {
