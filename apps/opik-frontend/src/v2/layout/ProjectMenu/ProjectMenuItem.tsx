@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from "react";
-import { MoreHorizontal, Pencil, Pin, Trash } from "lucide-react";
+import { MoreHorizontal, Pencil, Pin, PinOff, Trash } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
 import { cn } from "@/lib/utils";
@@ -153,10 +153,8 @@ const ProjectMenuItem: React.FC<ProjectMenuItemProps> = ({
               size="icon-2xs"
               aria-label={isPinned ? "Unpin project" : "Pin project"}
               className={cn(
-                "rounded hover:text-foreground",
-                isPinned
-                  ? "visible text-foreground"
-                  : "invisible text-light-slate group-hover:visible",
+                "group/pin rounded text-light-slate",
+                isPinned ? "visible" : "invisible group-hover:visible",
               )}
               onClick={(e) => {
                 e.preventDefault();
@@ -164,7 +162,14 @@ const ProjectMenuItem: React.FC<ProjectMenuItemProps> = ({
                 onTogglePin(project, !isPinned);
               }}
             >
-              <Pin className={cn("size-3.5", isPinned && "fill-current")} />
+              {isPinned ? (
+                <>
+                  <Pin className="group-hover/pin:hidden" />
+                  <PinOff className="hidden group-hover/pin:block" />
+                </>
+              ) : (
+                <Pin />
+              )}
             </Button>
           </TooltipWrapper>
         </div>

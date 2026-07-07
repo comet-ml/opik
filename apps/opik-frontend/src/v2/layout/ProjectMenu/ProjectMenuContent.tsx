@@ -192,7 +192,7 @@ const ProjectMenuContent: React.FC<ProjectMenuContentProps> = ({
       {renderSections()}
       <DropdownMenuSeparator className="my-1" />
       <ListAction variant="default" size="sm" onClick={handleViewAll}>
-        <span className="flex-1 text-left">View all projects</span>
+        <span>View all projects</span>
         <ArrowUpRight className="size-3.5 shrink-0 text-light-slate" />
       </ListAction>
     </>
