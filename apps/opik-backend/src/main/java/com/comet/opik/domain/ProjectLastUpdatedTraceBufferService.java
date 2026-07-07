@@ -95,16 +95,19 @@ class ProjectLastUpdatedTraceBufferServiceImpl implements ProjectLastUpdatedTrac
             return;
         }
 
-        // The metric observes the outcome, but the exception itself still propagates to the caller (the event bus),
-        // which owns the handling — Redis failures are no longer swallowed here (see #7361 review feedback).
-        try {
-            RScoredSortedSet<String> pending = redisClient.getScoredSortedSet(PENDING_SET_KEY);
-            lastUpdatedTraces.forEach(project -> pending.addIfGreater(
-                    project.lastUpdatedAt().toEpochMilli(), member(workspaceId, project.id())));
-            bufferedRecords.add(lastUpdatedTraces.size(), Attributes.of(RESULT_KEY, "ok"));
-        } catch (RuntimeException e) {
-            bufferedRecords.add(lastUpdatedTraces.size(), Attributes.of(RESULT_KEY, "error"));
-            throw e;
+        // Count each marker once by its actual outcome so a mid-batch Redis failure doesn't mislabel the whole batch:
+        // the failing marker is "error", already-buffered ones stay "ok", and the un-attempted remainder isn't counted.
+        // The exception still propagates to the caller (the event bus), which owns the handling — Redis failures are
+        // no longer swallowed here (see #7361 review feedback).
+        RScoredSortedSet<String> pending = redisClient.getScoredSortedSet(PENDING_SET_KEY);
+        for (ProjectIdLastUpdated project : lastUpdatedTraces) {
+            try {
+                pending.addIfGreater(project.lastUpdatedAt().toEpochMilli(), member(workspaceId, project.id()));
+                bufferedRecords.add(1, Attributes.of(RESULT_KEY, "ok"));
+            } catch (RuntimeException e) {
+                bufferedRecords.add(1, Attributes.of(RESULT_KEY, "error"));
+                throw e;
+            }
         }
     }
 
