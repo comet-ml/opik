@@ -45,6 +45,10 @@ Each method is wrapped by a `BaseTrackDecorator` subclass (`<name>_decorator.py`
 
 Wrapped calls check `opik.is_tracing_active()` at call time and no-op the telemetry if tracing is off, while still running the underlying call.
 
+**Delegating methods (patch the primitive, name from kwargs).** When a higher-level method calls a lower-level one you patch (Mistral's `chat.parse` → `chat.complete`, `parse_stream` → `stream`; openai's older `beta…stream` → `create`), do **not** patch both — that produces two spans and double-counts cost. Patch **only the primitive**, and distinguish the calling mode from a kwarg the delegating method forwards. openai names the stream span via `if kwargs.get("stream") is True: name = "chat_completion_stream"`; the Mistral integration names the parse span via `if kwargs.get("response_format") is not None: name = "chat_completion_parse"` inside `_start_span_inputs_preprocessor`. This uses only the existing `track()` API — no reentrancy flags, no `contextvars`, no `set_tracing_active` (which is process-wide and racy). Trade-off: the span carries the primitive's raw response (e.g. no deserialized `.parsed` field, though the structured JSON is in the output content). Verify in Phase 5 that the delegating call yields a single correctly-named span with un-doubled cost. Only if a kwarg can't distinguish the modes should you consider a heavier mechanism.
+
+**Env var mismatch.** A provider SDK's client may not auto-read its own API-key env var (e.g. `mistralai.Mistral()` ignores `MISTRAL_API_KEY`). In tests and examples, pass the key explicitly — `Mistral(api_key=os.environ["MISTRAL_API_KEY"])` — rather than relying on the bare constructor.
+
 ### OpenTelemetry (backend-first)
 
 When the target already emits OpenTelemetry, most of the work lives on the **backend**: Opik exposes an OTLP ingestion endpoint that maps OTel spans to Opik traces. Many OTel "integrations" are therefore *docs-only* — the user points their framework's OTLP exporter at Opik with auth headers and writes no SDK code. Always check whether that covers the need before writing code.
@@ -104,5 +108,7 @@ def test_<name>_<method>__happyflow(fake_backend):
 ```
 
 - Real API calls are gated by an `ensure_<name>_configured` fixture (skip if the key is missing) — add one to `conftest.py` mirroring `ensure_openai_configured`.
-- Cover: happy flow, streaming, custom `provider`, and an error case.
+- Cover: happy flow, streaming, `parse`/structured-output (+ its single-span/no-double-cost assertion), custom `provider`, nested-under-`@track`, and an error case.
+- Centralize the model id in `tests/llm_constants.py`; add a `requirements.txt` in the test dir with the framework package.
 - Imports: `from tests.testlib import TraceModel, SpanModel, ANY_BUT_NONE, ANY_DICT, ANY_STRING, assert_equal`.
+- **Wire the tests into CI** — create `.github/workflows/lib-<name>-tests.yml` (single Python version unless asked otherwise) and register it in `lib-integration-tests-runner.yml`. See Phase 6 of [workflow.md](workflow.md); unregistered tests never run.
