@@ -1676,6 +1676,7 @@ class Opik:
         tags: Optional[List[str]] = None,
         dataset_version_id: Optional[str] = None,
         project_name: Optional[str] = None,
+        experiment_id: Optional[str] = None,
     ) -> experiment.Experiment:
         """
         Creates a new experiment using the given dataset name and optional parameters.
@@ -1692,11 +1693,14 @@ class Opik:
             tags: Optional list of tags to associate with the experiment.
             dataset_version_id: Optional ID of the dataset version to associate with the experiment.
             project_name: Optional name of the project to associate the experiment with.
+            experiment_id: Optional explicit id for the experiment. When None a fresh id is
+                generated. Callers that must know the id before creation (e.g. the migrate
+                cascade, which records it for crash-safe cleanup) can supply their own.
 
         Returns:
             experiment.Experiment: The newly created experiment object.
         """
-        id = id_helpers.generate_id()
+        id = experiment_id or id_helpers.generate_id()
 
         checked_prompts = experiment_helpers.handle_prompt_args(
             prompt=prompt,
