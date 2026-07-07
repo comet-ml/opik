@@ -115,7 +115,6 @@ const OptimizationsNewConfigSidebar: React.FC<
                       key={option.value}
                       value={option.value}
                       description={option.description}
-                      size="sm"
                     >
                       {renderIconLabel(
                         ALGORITHM_ICON_MAP[option.value as OPTIMIZER_TYPE],
@@ -239,7 +238,6 @@ const OptimizationsNewConfigSidebar: React.FC<
                       key={option.value}
                       value={option.value}
                       description={option.description}
-                      size="sm"
                     >
                       {renderIconLabel(
                         METRIC_ICON_MAP[option.value as METRIC_TYPE],
