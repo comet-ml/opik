@@ -571,6 +571,13 @@ experimentDenormalization:
   streamMaxLen: 10000
   streamTrimLimit: 100
 
+projectLastUpdatedFlush:
+  enabled: false
+  jobInterval: 30s
+  jobLockTime: 25s
+  jobLockWaitTime: 500ms
+  jobBatchSize: 500
+
 # Configuration AWS S3
 s3Config:
   s3Region: 'us-east-1'
