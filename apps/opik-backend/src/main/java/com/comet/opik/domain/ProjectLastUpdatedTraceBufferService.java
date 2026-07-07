@@ -95,7 +95,8 @@ class ProjectLastUpdatedTraceBufferServiceImpl implements ProjectLastUpdatedTrac
             return;
         }
 
-        // Fail-open: the marker is a best-effort sort hint, a Redis blip must not break trace ingestion.
+        // The metric observes the outcome, but the exception itself still propagates to the caller (the event bus),
+        // which owns the handling — Redis failures are no longer swallowed here (see #7361 review feedback).
         try {
             RScoredSortedSet<String> pending = redisClient.getScoredSortedSet(PENDING_SET_KEY);
             lastUpdatedTraces.forEach(project -> pending.addIfGreater(
@@ -103,7 +104,7 @@ class ProjectLastUpdatedTraceBufferServiceImpl implements ProjectLastUpdatedTrac
             bufferedRecords.add(lastUpdatedTraces.size(), Attributes.of(RESULT_KEY, "ok"));
         } catch (RuntimeException e) {
             bufferedRecords.add(lastUpdatedTraces.size(), Attributes.of(RESULT_KEY, "error"));
-            log.warn("Failed to buffer last-updated-trace marker for workspace '{}'", workspaceId, e);
+            throw e;
         }
     }
 
@@ -120,17 +121,16 @@ class ProjectLastUpdatedTraceBufferServiceImpl implements ProjectLastUpdatedTrac
         RScoredSortedSet<String> flushing = redisClient.getScoredSortedSet(FLUSHING_SET_KEY);
         int batchSize = config.getJobBatchSize();
         long written = 0;
-        // Read the next page only after the current page is written and removed; removal guarantees progress.
-        while (true) {
+        // Drain a page at a time, removing each page before reading the next so removal guarantees forward progress.
+        // Loop while a full page comes back (there may be more); a short or empty page means the snapshot is drained.
+        int pageSize;
+        do {
             Collection<ScoredEntry<String>> entries = flushing.entryRange(0, batchSize - 1);
-            if (entries.isEmpty()) {
-                break;
+            pageSize = entries.size();
+            if (pageSize > 0) {
+                written += flushBatch(flushing, entries);
             }
-            written += flushBatch(flushing, entries);
-            if (entries.size() < batchSize) {
-                break;
-            }
-        }
+        } while (pageSize == batchSize);
         if (written > 0) {
             flushedMarkers.add(written);
         }

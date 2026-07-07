@@ -1,179 +1,187 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectIdLastUpdated;
-import com.comet.opik.infrastructure.ProjectLastUpdatedFlushConfig;
+import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
+import com.comet.opik.api.resources.utils.MigrationUtils;
+import com.comet.opik.api.resources.utils.MySQLContainerUtils;
+import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
+import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.redis.StringRedisClient;
-import io.dropwizard.util.Duration;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
+import com.comet.opik.podam.PodamFactoryUtils;
+import com.redis.testcontainers.RedisContainer;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.redisson.api.RScoredSortedSet;
-import org.redisson.client.protocol.ScoredEntry;
+import org.testcontainers.clickhouse.ClickHouseContainer;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.mysql.MySQLContainer;
+import ru.vyarus.dropwizard.guice.test.ClientSupport;
+import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
-import static com.comet.opik.domain.ProjectLastUpdatedTraceBufferServiceImpl.FLUSHING_SET_KEY;
+import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
+import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.domain.ProjectLastUpdatedTraceBufferServiceImpl.PENDING_SET_KEY;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
 
-@ExtendWith(MockitoExtension.class)
-@DisplayName("ProjectLastUpdatedTraceBufferService Tests")
+/**
+ * Integration coverage for the enabled (Redis-buffered) path: {@code record} buffers per-project maxima and
+ * {@code flush} drains them to {@code projects.last_updated_trace_at}, asserted through the public project API.
+ * The disabled/synchronous fallback is exercised by {@code ProjectsResourceTest} (feature off by default), so it is
+ * intentionally not repeated here. {@code jobEnabled} is off so tests drive {@code flush()} directly.
+ */
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@ExtendWith(DropwizardAppExtensionProvider.class)
 class ProjectLastUpdatedTraceBufferServiceTest {
 
-    @Mock
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
+    private final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils
+            .newClickHouseContainer(ZOOKEEPER_CONTAINER);
+    private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
+
+    private final WireMockUtils.WireMockRuntime wireMock;
+
+    @RegisterApp
+    private final TestDropwizardAppExtension app;
+
+    {
+        Startables.deepStart(REDIS, CLICKHOUSE_CONTAINER, MYSQL, ZOOKEEPER_CONTAINER).join();
+
+        wireMock = WireMockUtils.startWireMock();
+
+        var databaseAnalyticsFactory = ClickHouseContainerUtils
+                .newDatabaseAnalyticsFactory(CLICKHOUSE_CONTAINER, DATABASE_NAME);
+
+        MigrationUtils.runMysqlDbMigration(MYSQL);
+        MigrationUtils.runClickhouseDbMigration(CLICKHOUSE_CONTAINER);
+
+        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
+                AppContextConfig.builder()
+                        .jdbcUrl(MYSQL.getJdbcUrl())
+                        .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                        .runtimeInfo(wireMock.runtimeInfo())
+                        .redisUrl(REDIS.getRedisURI())
+                        .customConfigs(List.of(
+                                new CustomConfig("projectLastUpdatedFlush.enabled", "true"),
+                                new CustomConfig("projectLastUpdatedFlush.jobEnabled", "false")))
+                        .build());
+    }
+
+    private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
+
+    private ProjectResourceClient projectResourceClient;
+    private ProjectLastUpdatedTraceBufferService bufferService;
     private StringRedisClient redisClient;
-    @Mock
-    private ProjectService projectService;
-    @Mock
-    private RScoredSortedSet<String> pendingSet;
-    @Mock
-    private RScoredSortedSet<String> flushingSet;
 
-    private ProjectLastUpdatedTraceBufferServiceImpl newService(boolean enabled) {
-        return new ProjectLastUpdatedTraceBufferServiceImpl(buildConfig(enabled), redisClient, projectService);
+    @BeforeAll
+    void setUpAll(ClientSupport clientSupport, ProjectLastUpdatedTraceBufferService bufferService,
+            StringRedisClient redisClient) {
+        var baseUrl = TestUtils.getBaseUrl(clientSupport);
+
+        projectResourceClient = new ProjectResourceClient(clientSupport, baseUrl, factory);
+        this.bufferService = bufferService;
+        this.redisClient = redisClient;
     }
 
-    @Nested
-    @DisplayName("record")
-    class Record {
+    @Test
+    void recordThenFlushPersistsMarkerToProject() {
+        var seeded = seedWorkspaceWithProject();
+        var lastUpdatedAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
 
-        @Test
-        @DisplayName("When disabled, writes to MySQL synchronously and never touches Redis")
-        void whenDisabled__writesToDb() {
-            var workspaceId = UUID.randomUUID().toString();
-            var traces = List.of(ProjectIdLastUpdated.builder()
-                    .id(UUID.randomUUID())
-                    .lastUpdatedAt(Instant.now())
-                    .build());
+        bufferService.record(seeded.workspaceId(), List.of(projectMarker(seeded.projectId(), lastUpdatedAt)));
+        bufferService.flush();
 
-            newService(false).record(workspaceId, traces);
-
-            verify(projectService).recordLastUpdatedTrace(workspaceId, traces);
-            verifyNoInteractions(redisClient);
-        }
-
-        @Test
-        @DisplayName("When enabled, buffers each project in Redis with addIfGreater and never writes MySQL")
-        void whenEnabled__buffersInRedis() {
-            doReturn(pendingSet).when(redisClient).getScoredSortedSet(PENDING_SET_KEY);
-
-            var workspaceId = UUID.randomUUID().toString();
-            var projectId1 = UUID.randomUUID();
-            var projectId2 = UUID.randomUUID();
-
-            newService(true).record(workspaceId, List.of(
-                    ProjectIdLastUpdated.builder().id(projectId1).lastUpdatedAt(Instant.ofEpochMilli(1_000)).build(),
-                    ProjectIdLastUpdated.builder().id(projectId2).lastUpdatedAt(Instant.ofEpochMilli(2_000)).build()));
-
-            verify(pendingSet).addIfGreater(1_000d, workspaceId + ":" + projectId1);
-            verify(pendingSet).addIfGreater(2_000d, workspaceId + ":" + projectId2);
-            verify(projectService, never()).recordLastUpdatedTrace(anyString(), any());
-        }
-
-        @Test
-        @DisplayName("Null or empty input is a no-op")
-        void whenNullOrEmpty__doesNothing() {
-            var service = newService(true);
-
-            service.record(UUID.randomUUID().toString(), null);
-            service.record(UUID.randomUUID().toString(), List.of());
-
-            verifyNoInteractions(redisClient);
-            verifyNoInteractions(projectService);
-        }
+        assertLastUpdatedTraceAt(seeded, lastUpdatedAt);
     }
 
-    @Nested
-    @DisplayName("flush")
-    class Flush {
+    @Test
+    void recordKeepsClusterWideMaxAcrossCalls() {
+        var seeded = seedWorkspaceWithProject();
+        var newest = Instant.now().truncatedTo(ChronoUnit.MILLIS);
 
-        @Test
-        @DisplayName("Snapshots the live buffer, writes one MySQL batch per workspace, and removes members")
-        void snapshotsAndWritesPerWorkspace() {
-            doReturn(pendingSet).when(redisClient).getScoredSortedSet(PENDING_SET_KEY);
-            doReturn(flushingSet).when(redisClient).getScoredSortedSet(FLUSHING_SET_KEY);
-            when(pendingSet.isExists()).thenReturn(true);
+        // addIfGreater must keep only the highest timestamp regardless of the order records arrive in.
+        bufferService.record(seeded.workspaceId(), List.of(projectMarker(seeded.projectId(), newest.minusSeconds(10))));
+        bufferService.record(seeded.workspaceId(), List.of(projectMarker(seeded.projectId(), newest)));
+        bufferService.record(seeded.workspaceId(), List.of(projectMarker(seeded.projectId(), newest.minusSeconds(5))));
+        bufferService.flush();
 
-            var workspaceId = UUID.randomUUID().toString();
-            var projectId1 = UUID.randomUUID();
-            var projectId2 = UUID.randomUUID();
-            var member1 = workspaceId + ":" + projectId1;
-            var member2 = workspaceId + ":" + projectId2;
-
-            when(flushingSet.entryRange(anyInt(), anyInt())).thenReturn(List.of(
-                    new ScoredEntry<>(1_000d, member1),
-                    new ScoredEntry<>(2_000d, member2)));
-
-            long written = newService(true).flush();
-
-            assertThat(written).isEqualTo(2L);
-            verify(pendingSet).renamenx(FLUSHING_SET_KEY);
-            verify(projectService, times(1)).recordLastUpdatedTrace(eq(workspaceId), any());
-            verify(flushingSet).removeAll(Set.of(member1, member2));
-        }
-
-        @Test
-        @DisplayName("When there is nothing buffered, performs no MySQL write and no removal")
-        void whenEmpty__writesNothing() {
-            doReturn(pendingSet).when(redisClient).getScoredSortedSet(PENDING_SET_KEY);
-            doReturn(flushingSet).when(redisClient).getScoredSortedSet(FLUSHING_SET_KEY);
-            when(pendingSet.isExists()).thenReturn(false);
-            when(flushingSet.entryRange(anyInt(), anyInt())).thenReturn(List.of());
-
-            long written = newService(true).flush();
-
-            assertThat(written).isZero();
-            verify(pendingSet, never()).renamenx(any());
-            verify(projectService, never()).recordLastUpdatedTrace(any(), any());
-            verify(flushingSet, never()).removeAll(any());
-        }
-
-        @Test
-        @DisplayName("Malformed member is skipped for the DB write but still removed from the snapshot")
-        void malformedMember__skippedButRemoved() {
-            doReturn(pendingSet).when(redisClient).getScoredSortedSet(PENDING_SET_KEY);
-            doReturn(flushingSet).when(redisClient).getScoredSortedSet(FLUSHING_SET_KEY);
-            when(pendingSet.isExists()).thenReturn(true);
-
-            var workspaceId = UUID.randomUUID().toString();
-            var validMember = workspaceId + ":" + UUID.randomUUID();
-            var malformedMember = workspaceId + ":not-a-uuid";
-
-            when(flushingSet.entryRange(anyInt(), anyInt())).thenReturn(List.of(
-                    new ScoredEntry<>(1_000d, validMember),
-                    new ScoredEntry<>(2_000d, malformedMember)));
-
-            long written = newService(true).flush();
-
-            assertThat(written).isEqualTo(1L);
-            verify(projectService, times(1)).recordLastUpdatedTrace(eq(workspaceId), any());
-            verify(flushingSet).removeAll(Set.of(validMember, malformedMember));
-        }
+        assertLastUpdatedTraceAt(seeded, newest);
     }
 
-    private static ProjectLastUpdatedFlushConfig buildConfig(boolean enabled) {
-        var config = new ProjectLastUpdatedFlushConfig();
-        config.setEnabled(enabled);
-        config.setJobInterval(Duration.seconds(30));
-        config.setJobLockTime(Duration.seconds(25));
-        config.setJobLockWaitTime(Duration.milliseconds(500));
-        config.setJobBatchSize(500);
-        return config;
+    @Test
+    void flushWritesOneBatchPerWorkspace() {
+        var seededA = seedWorkspaceWithProject();
+        var seededB = seedWorkspaceWithProject();
+        var lastUpdatedAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+
+        bufferService.record(seededA.workspaceId(), List.of(projectMarker(seededA.projectId(), lastUpdatedAt)));
+        bufferService.record(seededB.workspaceId(), List.of(projectMarker(seededB.projectId(), lastUpdatedAt)));
+        bufferService.flush();
+
+        assertLastUpdatedTraceAt(seededA, lastUpdatedAt);
+        assertLastUpdatedTraceAt(seededB, lastUpdatedAt);
+    }
+
+    @Test
+    void flushSkipsMalformedMemberButDrainsBuffer() {
+        var seeded = seedWorkspaceWithProject();
+        var lastUpdatedAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+
+        bufferService.record(seeded.workspaceId(), List.of(projectMarker(seeded.projectId(), lastUpdatedAt)));
+        // Inject a member that cannot be parsed back to a workspace/projectId pair; it must not fail the flush.
+        redisClient.getScoredSortedSet(PENDING_SET_KEY)
+                .add(lastUpdatedAt.toEpochMilli(), seeded.workspaceId() + ":not-a-uuid");
+
+        bufferService.flush();
+
+        assertLastUpdatedTraceAt(seeded, lastUpdatedAt);
+        // Both the valid and the malformed members are removed, leaving nothing buffered.
+        assertThat(redisClient.getScoredSortedSet(PENDING_SET_KEY).size()).isZero();
+    }
+
+    private SeededProject seedWorkspaceWithProject() {
+        var apiKey = randomName("api-key");
+        var workspaceName = randomName("workspace");
+        var workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
+
+        var projectId = projectResourceClient.createProject(
+                factory.manufacturePojo(Project.class).toBuilder().name(randomName("project")).build(),
+                apiKey, workspaceName);
+        return new SeededProject(apiKey, workspaceName, workspaceId, projectId);
+    }
+
+    private void assertLastUpdatedTraceAt(SeededProject seeded, Instant expected) {
+        var project = projectResourceClient.getProject(seeded.projectId(), seeded.apiKey(), seeded.workspaceName());
+        assertThat(project.lastUpdatedTraceAt()).isNotNull();
+        assertThat(project.lastUpdatedTraceAt().toEpochMilli()).isEqualTo(expected.toEpochMilli());
+    }
+
+    private static ProjectIdLastUpdated projectMarker(UUID projectId, Instant lastUpdatedAt) {
+        return ProjectIdLastUpdated.builder().id(projectId).lastUpdatedAt(lastUpdatedAt).build();
+    }
+
+    private static String randomName(String prefix) {
+        return "%s-%s".formatted(prefix, RandomStringUtils.secure().nextAlphanumeric(32));
+    }
+
+    private record SeededProject(String apiKey, String workspaceName, String workspaceId, UUID projectId) {
     }
 }

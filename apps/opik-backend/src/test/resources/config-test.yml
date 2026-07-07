@@ -573,6 +573,7 @@ experimentDenormalization:
 
 projectLastUpdatedFlush:
   enabled: false
+  jobEnabled: false
   jobInterval: 30s
   jobLockTime: 25s
   jobLockWaitTime: 500ms

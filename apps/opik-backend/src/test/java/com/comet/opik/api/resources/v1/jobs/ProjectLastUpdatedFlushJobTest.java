@@ -1,99 +1,147 @@
 package com.comet.opik.api.resources.v1.jobs;
 
-import com.comet.opik.domain.ProjectLastUpdatedTraceBufferService;
-import com.comet.opik.infrastructure.ProjectLastUpdatedFlushConfig;
-import com.comet.opik.infrastructure.lock.LockService;
-import io.dropwizard.util.Duration;
-import org.junit.jupiter.api.DisplayName;
+import com.comet.opik.api.Project;
+import com.comet.opik.api.Trace;
+import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
+import com.comet.opik.api.resources.utils.MigrationUtils;
+import com.comet.opik.api.resources.utils.MySQLContainerUtils;
+import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
+import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.podam.PodamFactoryUtils;
+import com.google.inject.Injector;
+import com.redis.testcontainers.RedisContainer;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.awaitility.Awaitility;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.quartz.JobExecutionContext;
-import reactor.core.publisher.Mono;
+import org.testcontainers.clickhouse.ClickHouseContainer;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.mysql.MySQLContainer;
+import ru.vyarus.dropwizard.guice.test.ClientSupport;
+import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
+import uk.co.jemos.podam.api.PodamFactory;
 
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
+import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
+import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.timeout;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
-@ExtendWith(MockitoExtension.class)
-@DisplayName("ProjectLastUpdatedFlushJob Tests")
+/**
+ * Happy-path black-box coverage for the flush job: ingest a trace via the public API so {@code ProjectEventListener}
+ * buffers the marker, then invoke {@link ProjectLastUpdatedFlushJob} manually until the project API reflects the
+ * flushed timestamp. {@code jobEnabled} is off so the Quartz schedule stays idle and the job is driven deterministically.
+ */
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@ExtendWith(DropwizardAppExtensionProvider.class)
 class ProjectLastUpdatedFlushJobTest {
 
-    @Mock
-    private ProjectLastUpdatedTraceBufferService bufferService;
-    @Mock
-    private LockService lockService;
-    @Mock
-    private JobExecutionContext jobContext;
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
+    private final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils
+            .newClickHouseContainer(ZOOKEEPER_CONTAINER);
+    private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
 
-    private ProjectLastUpdatedFlushJob newJob(boolean enabled) {
-        return new ProjectLastUpdatedFlushJob(buildConfig(enabled), bufferService, lockService);
+    private final WireMockUtils.WireMockRuntime wireMock;
+
+    @RegisterApp
+    private final TestDropwizardAppExtension app;
+
+    {
+        Startables.deepStart(REDIS, CLICKHOUSE_CONTAINER, MYSQL, ZOOKEEPER_CONTAINER).join();
+
+        wireMock = WireMockUtils.startWireMock();
+
+        var databaseAnalyticsFactory = ClickHouseContainerUtils
+                .newDatabaseAnalyticsFactory(CLICKHOUSE_CONTAINER, DATABASE_NAME);
+
+        MigrationUtils.runMysqlDbMigration(MYSQL);
+        MigrationUtils.runClickhouseDbMigration(CLICKHOUSE_CONTAINER);
+
+        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
+                AppContextConfig.builder()
+                        .jdbcUrl(MYSQL.getJdbcUrl())
+                        .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                        .runtimeInfo(wireMock.runtimeInfo())
+                        .redisUrl(REDIS.getRedisURI())
+                        .customConfigs(List.of(
+                                new CustomConfig("projectLastUpdatedFlush.enabled", "true"),
+                                new CustomConfig("projectLastUpdatedFlush.jobEnabled", "false")))
+                        .build());
+    }
+
+    private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
+
+    private ProjectResourceClient projectResourceClient;
+    private TraceResourceClient traceResourceClient;
+    private ProjectLastUpdatedFlushJob flushJob;
+
+    @BeforeAll
+    void setUpAll(ClientSupport clientSupport, Injector injector) {
+        var baseUrl = TestUtils.getBaseUrl(clientSupport);
+
+        projectResourceClient = new ProjectResourceClient(clientSupport, baseUrl, factory);
+        traceResourceClient = new TraceResourceClient(clientSupport, baseUrl);
+        flushJob = injector.getInstance(ProjectLastUpdatedFlushJob.class);
     }
 
     @Test
-    @DisplayName("When disabled, skips locking and flushing entirely")
-    void doJob__whenDisabled__skips() {
-        newJob(false).doJob(jobContext);
+    void jobFlushesBufferedMarkerToProject() {
+        var seeded = seedWorkspaceWithProject();
+        var lastUpdatedAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+        traceResourceClient.createTrace(
+                factory.manufacturePojo(Trace.class).toBuilder()
+                        .id(null)
+                        .projectName(seeded.projectName())
+                        .projectId(null)
+                        .startTime(Instant.now())
+                        .lastUpdatedAt(lastUpdatedAt)
+                        .feedbackScores(null)
+                        .usage(null)
+                        .build(),
+                seeded.apiKey(), seeded.workspaceName());
 
-        verify(lockService, never()).bestEffortLock(any(), any(), any(), any(), any(), anyBoolean());
-        verify(bufferService, never()).flush();
+        // The event listener buffers the marker asynchronously; re-invoke the job on each poll tick until it lands
+        // (avoids depending on the buffer service's internal Redis key, which lives in a different package).
+        Awaitility.await().atMost(15, TimeUnit.SECONDS).pollInterval(100, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+            flushJob.doJob(null);
+            var project = projectResourceClient.getProject(seeded.projectId(), seeded.apiKey(), seeded.workspaceName());
+            assertThat(project.lastUpdatedTraceAt()).isNotNull();
+            assertThat(project.lastUpdatedTraceAt().toEpochMilli()).isEqualTo(lastUpdatedAt.toEpochMilli());
+        });
     }
 
-    @Test
-    @DisplayName("When the lock cannot be acquired, does not flush")
-    void doJob__whenLockNotAcquired__doesNotFlush() {
-        when(lockService.bestEffortLock(any(), any(), any(), any(), any(), anyBoolean()))
-                .thenAnswer(invocation -> invocation.<Mono<Void>>getArgument(2));
+    private SeededProject seedWorkspaceWithProject() {
+        var apiKey = randomName("api-key");
+        var workspaceName = randomName("workspace");
+        var workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
 
-        newJob(true).doJob(jobContext);
-
-        verify(bufferService, never()).flush();
+        var project = factory.manufacturePojo(Project.class).toBuilder().name(randomName("project")).build();
+        var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+        return new SeededProject(apiKey, workspaceName, workspaceId, projectId, project.name());
     }
 
-    @Test
-    @DisplayName("When the lock is acquired, delegates to the buffer service flush")
-    void doJob__whenLockAcquired__flushes() {
-        when(bufferService.flush()).thenReturn(3L);
-        when(lockService.bestEffortLock(any(), any(), any(), any(), any(), anyBoolean()))
-                .thenAnswer(invocation -> invocation.<Mono<Void>>getArgument(1));
-
-        newJob(true).doJob(jobContext);
-
-        // flush() runs on boundedElastic (fire-and-forget subscribe), so await it.
-        verify(bufferService, timeout(1_000)).flush();
+    private static String randomName(String prefix) {
+        return "%s-%s".formatted(prefix, RandomStringUtils.secure().nextAlphanumeric(32));
     }
 
-    @Test
-    @DisplayName("interrupt() cancels an in-flight flush subscription")
-    void interrupt__cancelsInFlightFlush() throws Exception {
-        var cancelled = new AtomicBoolean(false);
-        // A flush that never completes; disposing its subscription must trigger the cancel signal.
-        doReturn(Mono.<Void>never().doOnCancel(() -> cancelled.set(true)))
-                .when(lockService).bestEffortLock(any(), any(), any(), any(), any(), anyBoolean());
-
-        var job = newJob(true);
-        job.doJob(jobContext);
-
-        assertThat(cancelled).isFalse();
-        job.interrupt();
-        assertThat(cancelled).isTrue();
-    }
-
-    private static ProjectLastUpdatedFlushConfig buildConfig(boolean enabled) {
-        var config = new ProjectLastUpdatedFlushConfig();
-        config.setEnabled(enabled);
-        config.setJobInterval(Duration.seconds(30));
-        config.setJobLockTime(Duration.seconds(25));
-        config.setJobLockWaitTime(Duration.milliseconds(500));
-        config.setJobBatchSize(500);
-        return config;
+    private record SeededProject(String apiKey, String workspaceName, String workspaceId, UUID projectId,
+            String projectName) {
     }
 }

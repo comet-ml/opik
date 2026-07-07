@@ -31,6 +31,9 @@ public class ProjectLastUpdatedFlushConfig {
     @JsonProperty
     private boolean enabled;
 
+    @JsonProperty
+    private boolean jobEnabled;
+
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS)
     @MaxDuration(value = 1, unit = TimeUnit.HOURS)
