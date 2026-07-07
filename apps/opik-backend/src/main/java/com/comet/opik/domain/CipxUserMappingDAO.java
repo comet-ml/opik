@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import lombok.Builder;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
 import org.jdbi.v3.sqlobject.statement.SqlBatch;
 
@@ -14,6 +15,7 @@ import java.util.List;
  */
 public interface CipxUserMappingDAO {
 
+    @Builder(toBuilder = true)
     record UserMapping(String userEmail, String userUuid) {
     }
 

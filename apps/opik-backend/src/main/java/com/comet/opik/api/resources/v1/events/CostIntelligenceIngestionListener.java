@@ -158,7 +158,7 @@ public class CostIntelligenceIngestionListener {
 
         List<UserMapping> mappings = withProject.stream()
                 .filter(row -> !row.userEmail().isEmpty() && !row.userUuid().isEmpty())
-                .map(row -> new UserMapping(row.userEmail(), row.userUuid()))
+                .map(row -> UserMapping.builder().userEmail(row.userEmail()).userUuid(row.userUuid()).build())
                 .distinct()
                 .toList();
         if (!mappings.isEmpty()) {
