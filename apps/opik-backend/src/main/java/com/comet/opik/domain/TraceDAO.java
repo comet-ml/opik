@@ -112,6 +112,9 @@ public interface TraceDAO {
 
     Mono<TracePage> find(int size, int page, TraceSearchCriteria traceSearchCriteria, Connection connection);
 
+    Mono<Boolean> existsByProjectId(TraceSearchCriteria traceSearchCriteria, boolean threadScoped,
+            Connection connection);
+
     Mono<Void> partialInsert(UUID projectId, TraceUpdate traceUpdate, UUID traceId, Connection connection);
 
     Mono<List<WorkspaceAndResourceId>> getTraceWorkspace(Set<UUID> traceIds, Connection connection);
@@ -1477,6 +1480,22 @@ class TraceDAOImpl implements TraceDAO {
             GROUP BY workspace_id, created_by
             SETTINGS log_comment = '<log_comment>'
             ;
+            """;
+
+    /**
+     * Cheap "does the project have any trace?" probe for the Logs empty state. Deliberately minimal —
+     * project scope plus an optional {@code thread_only} clause (thread_id set) — so it is always a
+     * primary-key-prunable {@code LIMIT 1}. It intentionally does not support arbitrary filters, search, or
+     * time ranges: no consumer needs them, and adding them back would reintroduce a full-project COUNT fallback.
+     */
+    private static final String EXISTS_BY_PROJECT_ID = """
+            SELECT 1 AS exist
+            FROM traces
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            <if(thread_only)> AND thread_id != '' <endif>
+            LIMIT 1
+            SETTINGS log_comment = '<log_comment>'
             """;
 
     private static final String COUNT_BY_PROJECT_ID = """
@@ -3656,6 +3675,30 @@ class TraceDAOImpl implements TraceDAO {
                         .collectList()
                         .map(traces -> new TracePage(page, traces.size(), total, traces,
                                 sortingFactory.getSortableFields())));
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Boolean> existsByProjectId(@NonNull TraceSearchCriteria traceSearchCriteria, boolean threadScoped,
+            @NonNull Connection connection) {
+        return makeMonoContextAware((userName, workspaceId) -> {
+            var template = getSTWithLogComment(EXISTS_BY_PROJECT_ID, "exists_traces_by_project_id", workspaceId,
+                    userName, "");
+            if (threadScoped) {
+                template.add("thread_only", true);
+            }
+
+            var statement = connection.createStatement(template.render())
+                    .bind("project_id", traceSearchCriteria.projectId())
+                    .bind("workspace_id", workspaceId);
+
+            Segment segment = startSegment("traces", "Clickhouse", "existsByProjectId");
+
+            return Mono.from(statement.execute())
+                    .doFinally(signalType -> endSegment(segment));
+        })
+                .flatMap(result -> Mono.from(result.map((row, metadata) -> true)))
+                .defaultIfEmpty(false);
     }
 
     @Override

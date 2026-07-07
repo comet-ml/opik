@@ -345,6 +345,37 @@ class SpansResourceTest {
     }
 
     @Nested
+    @DisplayName("Spans existence probe")
+    class SpansExistence {
+
+        @Test
+        @DisplayName("returns true when the project has spans and false when it only has traces")
+        void existsByProject() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var spanProject = "span-exists-" + UUID.randomUUID();
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(spanProject)
+                    .build();
+            spanResourceClient.createSpan(span, apiKey, workspaceName);
+
+            assertThat(spanResourceClient.existsSpans(spanProject, apiKey, workspaceName)).isTrue();
+
+            // A project that has traces but no spans must report no spans (span existence is not trace existence).
+            var traceOnlyProject = "span-empty-" + UUID.randomUUID();
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(traceOnlyProject)
+                    .build();
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+            assertThat(spanResourceClient.existsSpans(traceOnlyProject, apiKey, workspaceName)).isFalse();
+        }
+    }
+
+    @Nested
     @DisplayName("Required permissions")
     class RequiredPermissionsTest {
 

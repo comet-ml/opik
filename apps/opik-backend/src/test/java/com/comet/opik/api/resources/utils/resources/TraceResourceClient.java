@@ -6,6 +6,7 @@ import com.comet.opik.api.Comment;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.DeleteThreadFeedbackScores;
 import com.comet.opik.api.DeleteTraceThreads;
+import com.comet.opik.api.ExistenceResponse;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
@@ -522,6 +523,25 @@ public class TraceResourceClient extends BaseCommentResourceClient {
 
         assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
         return actualResponse.readEntity(ProjectStats.class);
+    }
+
+    public boolean existsTraces(UUID projectId, boolean threadOnly, String apiKey, String workspaceName) {
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("exists")
+                .queryParam("project_id", projectId);
+
+        if (threadOnly) {
+            webTarget = webTarget.queryParam("thread_only", true);
+        }
+
+        try (var actualResponse = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+            assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return actualResponse.readEntity(ExistenceResponse.class).exists();
+        }
     }
 
     public ProjectStats getTraceThreadStats(String projectName, UUID projectId, String apiKey, String workspaceName,

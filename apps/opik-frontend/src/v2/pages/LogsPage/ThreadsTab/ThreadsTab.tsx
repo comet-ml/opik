@@ -71,6 +71,7 @@ import TimeCell from "@/shared/DataTableCells/TimeCell";
 import ThreadsActionsPanel from "@/v2/pages/LogsPage/ThreadsTab/ThreadsActionsPanel";
 import SelectionActionBar from "@/v2/components/SelectionActionBar/SelectionActionBar";
 import useThreadList from "@/api/traces/useThreadsList";
+import useTracesExist from "@/api/traces/useTracesExist";
 import useThreadsStatistic from "@/api/traces/useThreadsStatistic";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import FeedbackScoreHeader from "@/shared/DataTableHeaders/FeedbackScoreHeader";
@@ -616,18 +617,19 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     },
   );
 
-  const { data: existenceData } = useThreadList(
+  // Cheap "does this project have any thread?" probe for the empty-state decision. Threads are
+  // traces with a thread_id, so this hits the LIMIT-1 trace existence endpoint scoped to
+  // thread_id != '' — avoiding the size:1 thread-aggregation scan over the whole project.
+  const { data: existenceData } = useTracesExist(
     {
       projectId,
-      page: 1,
-      size: 1,
-      logsSource: LOGS_SOURCE.sdk,
+      threadOnly: true,
     },
     {
       enabled: isTableDataEnabled,
     },
   );
-  const hasProjectData = (existenceData?.total ?? 0) > 0;
+  const hasProjectData = existenceData?.exists ?? false;
 
   const handleClearFilters = useCallback(() => {
     setSearch("");

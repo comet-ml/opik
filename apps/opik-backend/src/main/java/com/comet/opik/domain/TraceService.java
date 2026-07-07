@@ -94,6 +94,8 @@ public interface TraceService {
 
     Mono<TracePage> find(int page, int size, TraceSearchCriteria criteria);
 
+    Mono<Boolean> existsByProjectId(TraceSearchCriteria criteria, boolean threadScoped);
+
     Mono<Boolean> validateTraceWorkspace(String workspaceId, Set<UUID> traceIds);
 
     Mono<TraceCountResponse> countTracesPerWorkspace();
@@ -559,6 +561,16 @@ class TraceServiceImpl implements TraceService {
                             return Mono.just(tracePage);
                         }))
                 .switchIfEmpty(Mono.just(TracePage.empty(page, traceSortingFactory.getSortableFields())));
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Boolean> existsByProjectId(@NonNull TraceSearchCriteria criteria, boolean threadScoped) {
+        return findProjectAndVerifyVisibility(criteria)
+                .flatMap(resolvedCriteria -> template
+                        .nonTransaction(
+                                connection -> dao.existsByProjectId(resolvedCriteria, threadScoped, connection)))
+                .switchIfEmpty(Mono.just(false));
     }
 
     @Override

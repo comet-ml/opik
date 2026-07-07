@@ -8,6 +8,7 @@ import com.comet.opik.api.CreateCommentResponse;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.DeleteThreadFeedbackScores;
 import com.comet.opik.api.DeleteTraceThreads;
+import com.comet.opik.api.ExistenceResponse;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatchContainer;
@@ -439,6 +440,38 @@ public class TracesResource {
                 projectStats.stats().size(), workspaceId);
 
         return Response.ok(projectStats).build();
+    }
+
+    @GET
+    @Path("/exists")
+    @Operation(operationId = "tracesExist", summary = "Check whether a project has traces", description = "Returns whether the project has at least one trace matching the given scope. Cheap existence probe (LIMIT 1) used to drive empty-state decisions without scanning or aggregating the whole project.", responses = {
+            @ApiResponse(responseCode = "200", description = "Trace existence", content = @Content(schema = @Schema(implementation = ExistenceResponse.class)))
+    })
+    @RateLimited(value = "tracesExist:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
+    public Response tracesExist(@QueryParam("project_id") UUID projectId,
+            @QueryParam("project_name") String projectName,
+            @QueryParam("thread_only") @DefaultValue("false") @Schema(description = "When true, only considers traces that belong to a thread (thread_id is set) — used by the Threads empty state.") boolean threadOnly) {
+
+        validateProjectNameAndProjectId(projectName, projectId);
+
+        var searchCriteria = TraceSearchCriteria.builder()
+                .projectName(projectName)
+                .projectId(projectId)
+                .build();
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Check traces existence by '{}' (threadOnly={}) on workspaceId '{}'", searchCriteria, threadOnly,
+                workspaceId);
+
+        boolean exists = service.existsByProjectId(searchCriteria, threadOnly)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Checked traces existence by '{}', exists '{}' on workspaceId '{}'", searchCriteria, exists,
+                workspaceId);
+
+        return Response.ok(ExistenceResponse.builder().exists(exists).build()).build();
     }
 
     // Feedback scores

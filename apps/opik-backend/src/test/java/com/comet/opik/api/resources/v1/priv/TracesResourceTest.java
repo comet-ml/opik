@@ -313,6 +313,64 @@ class TracesResourceTest {
     }
 
     @Nested
+    @DisplayName("Traces existence probe")
+    class TracesExistence {
+
+        @Test
+        @DisplayName("returns true when the project has traces and false for an existing project with none")
+        void existsByProject() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = "exists-project-" + UUID.randomUUID();
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .build();
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
+            var projectId = getProjectId(projectName, workspaceName, apiKey);
+
+            assertThat(traceResourceClient.existsTraces(projectId, false, apiKey, workspaceName)).isTrue();
+
+            // A project that exists but has no traces must report false (the empty-state path).
+            var emptyProjectId = projectResourceClient.createProject(
+                    "empty-project-" + UUID.randomUUID(), apiKey, workspaceName);
+            assertThat(traceResourceClient.existsTraces(emptyProjectId, false, apiKey, workspaceName)).isFalse();
+        }
+
+        @Test
+        @DisplayName("thread_only distinguishes projects with threads from trace-only projects")
+        void existsThreadScoped() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var threadProjectName = "thread-project-" + UUID.randomUUID();
+            var threadTrace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(threadProjectName)
+                    .threadId(UUID.randomUUID().toString())
+                    .build();
+            traceResourceClient.createTrace(threadTrace, apiKey, workspaceName);
+            var threadProjectId = getProjectId(threadProjectName, workspaceName, apiKey);
+
+            var traceOnlyProjectName = "trace-only-project-" + UUID.randomUUID();
+            var traceOnly = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(traceOnlyProjectName)
+                    .threadId(null)
+                    .build();
+            traceResourceClient.createTrace(traceOnly, apiKey, workspaceName);
+            var traceOnlyProjectId = getProjectId(traceOnlyProjectName, workspaceName, apiKey);
+
+            assertThat(traceResourceClient.existsTraces(threadProjectId, true, apiKey, workspaceName)).isTrue();
+            assertThat(traceResourceClient.existsTraces(traceOnlyProjectId, true, apiKey, workspaceName)).isFalse();
+            // A trace-only project still reports base existence.
+            assertThat(traceResourceClient.existsTraces(traceOnlyProjectId, false, apiKey, workspaceName)).isTrue();
+        }
+    }
+
+    @Nested
     @DisplayName("Required permissions")
     class RequiredPermissionsTest {
 
