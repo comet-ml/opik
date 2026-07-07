@@ -7,12 +7,14 @@ import com.clickhouse.data.ClickHouseFormat;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.google.common.collect.Lists;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.io.ByteArrayInputStream;
@@ -46,6 +48,8 @@ public class CipxSpendBlockDAO {
     /** Tier names ordered by the residual block_idx ordinal. */
     private static final String[] TIER_NAMES = {"input", "cache_read", "cache_creation", "output"};
     private static final int RESIDUAL_IDX_BASE = 65531;
+    /** Rows per bulk-insert chunk; caps the JSON payload at ~35MB (~650 bytes/row). */
+    private static final int INSERT_CHUNK_SIZE = 50_000;
     private static final String SRC_ATTRIBUTED = "a";
     private static final String SRC_RESIDUAL = "r";
 
@@ -303,11 +307,22 @@ public class CipxSpendBlockDAO {
      * built with useAsyncRequests(true) (see DatabaseAnalyticsFactory.buildClient), so the returned
      * future runs the HTTP round-trip on the v2 client's own executor — no shared scheduler
      * (boundedElastic or otherwise) is borrowed for the I/O.
+     *
+     * <p>Rows are inserted in sequential chunks so the peak payload allocation per event is bounded
+     * by one chunk regardless of the incoming span batch size (which is client-controlled): a
+     * 1000-span batch fans out to ~350k block rows, which as a single JSON body would transiently
+     * allocate on the order of 1GB (UTF-16 builder + String copy + UTF-8 bytes).
      */
     public Mono<Long> insert(@NonNull List<BlockRow> rows, @NonNull String workspaceId, @NonNull String userName) {
         if (rows.isEmpty()) {
             return Mono.just(0L);
         }
+        return Flux.fromIterable(Lists.partition(rows, INSERT_CHUNK_SIZE))
+                .concatMap(chunk -> insertChunk(chunk, workspaceId, userName))
+                .reduce(0L, Long::sum);
+    }
+
+    private Mono<Long> insertChunk(List<BlockRow> rows, String workspaceId, String userName) {
         return Mono.fromFuture(() -> {
             StringBuilder body = new StringBuilder();
             for (BlockRow row : rows) {
