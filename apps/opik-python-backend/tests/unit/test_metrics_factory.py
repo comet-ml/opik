@@ -591,6 +591,34 @@ class TestReferenceKeyValidation:
                 dataset_items_provider=lambda: dataset_items,
             )
 
+    def test_malformed_jsonpath_build_raises_with_syntax_error(self):
+        # A JSONPath-shaped key with invalid syntax that matches no literal field
+        # must fail with a JSONPath-specific message, not the generic
+        # "did not resolve" one (which hides the real cause). The literal
+        # fallback in _resolve_reference otherwise swallows the parse error.
+        dataset_items = [{"answer": "42"}]
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build(
+                "equals",
+                {"reference_key": "$.foo["},
+                "model",
+                dataset_items_provider=lambda: dataset_items,
+            )
+        assert "not a valid JSONPath expression" in str(exc_info.value)
+
+    def test_numerical_similarity_malformed_jsonpath_build_raises(self):
+        # Same guard on the numerical_similarity validation path, which infers
+        # scale from a separate resolution loop.
+        dataset_items = [{"score": 3}]
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build(
+                "numerical_similarity",
+                {"reference_key": "$.foo["},
+                "model",
+                dataset_items_provider=lambda: dataset_items,
+            )
+        assert "not a valid JSONPath expression" in str(exc_info.value)
+
     def test_build_passes_when_field_present_but_null(self):
         # A field that exists on every item but holds null is a data-quality
         # issue, not a key misconfiguration -> the metric must still build
@@ -636,7 +664,8 @@ class TestReferenceKeyValidation:
 
     def test_numerical_similarity_builds_with_one_numeric_reference(self):
         # Sparse numeric data: only some items are numeric. Build succeeds
-        # (there is at least one numeric reference to work with).
+        # (there is at least one numeric reference to work with) and the numeric
+        # scoring path is actually live -- not a silent flat-0.
         dataset_items = [{"score": 3}, {"score": "n/a"}]
         metric_fn = MetricFactory.build(
             "numerical_similarity",
@@ -645,6 +674,19 @@ class TestReferenceKeyValidation:
             dataset_items_provider=lambda: dataset_items,
         )
         assert callable(metric_fn)
+        # A single numeric reference means scale_range falls back to 1.0, so an
+        # exact match scores 1.0 -- exercising the similarity math, not just the
+        # constructor.
+        exact = metric_fn({"score": 3}, "3")
+        assert exact.value == 1.0
+        assert exact.name == "numerical_similarity"
+        # A unit-off output is normalized against scale_range=1.0 -> 0.0.
+        off_by_one = metric_fn({"score": 3}, "2")
+        assert off_by_one.value == 0.0
+        # The non-numeric sibling still yields a clean 0 with an explanatory reason.
+        non_numeric = metric_fn({"score": "n/a"}, "3")
+        assert non_numeric.value == 0.0
+        assert "not numeric" in non_numeric.reason
 
 
 class TestMissingReferencePerItem:

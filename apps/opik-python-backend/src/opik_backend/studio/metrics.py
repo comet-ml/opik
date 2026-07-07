@@ -130,6 +130,35 @@ def _reference_key_error(
     )
 
 
+def _raise_if_malformed_jsonpath(metric_type: str, reference_key: str) -> None:
+    """Raise a clear error when a JSONPath-shaped key has invalid syntax.
+
+    ``_resolve_reference`` deliberately swallows JSONPath parse errors and falls
+    back to a literal dict lookup, so a field literally named e.g. "user@email"
+    (which the ``_is_jsonpath`` heuristic flags because of the '@') still works.
+    That same fallback, however, means a *genuinely malformed* JSONPath resolves
+    against nothing and would otherwise surface as the generic
+    "did not resolve against any dataset item" error, hiding the real cause.
+
+    Callers invoke this only after confirming the key resolved nowhere: a key
+    that does resolve (valid JSONPath, or a literal field with special chars)
+    never reaches here, so this stays purely additive and never rejects a
+    working config. The syntax error is data-independent, so an empty probe is
+    enough to trigger it.
+    """
+    if not _is_jsonpath(reference_key):
+        return
+    try:
+        jsonpath.findall(reference_key, {})
+    except Exception as e:
+        raise InvalidMetricError(
+            metric_type,
+            f"reference_key '{reference_key}' is not a valid JSONPath expression: "
+            f"{e}. Use a plain dataset field name, or a valid JSONPath such as "
+            f"\"$.feedback_scores[?(@.name == 'Useful')].value\".",
+        ) from e
+
+
 def _validate_reference_key_resolves(
     metric_type: str, reference_key: str, dataset_items: List[Any]
 ) -> None:
@@ -160,6 +189,9 @@ def _validate_reference_key_resolves(
         return
     if any(_reference_key_resolves(item, reference_key) for item in dataset_items):
         return
+    # Nothing resolved: a malformed JSONPath is the more specific cause, so
+    # report it before the generic "no field matched" message.
+    _raise_if_malformed_jsonpath(metric_type, reference_key)
     raise _reference_key_error(
         metric_type, reference_key, dataset_items,
         "did not resolve against any dataset item",
@@ -315,86 +347,101 @@ class MetricFactory:
         return metric_fn
 
 
+def _build_reference_metric(
+    metric_type: str,
+    opik_metric: Any,
+    reason_for: Callable[[float], str],
+    params: Dict[str, Any],
+    **kwargs,
+) -> Callable:
+    """Build a reference-based string metric (equals / levenshtein_ratio).
+
+    Both metrics share the same scaffolding — resolve ``reference_key`` from the
+    config, validate it against the dataset at build time, and at scoring time
+    resolve the per-item reference, short-circuit to a missing-reference result
+    when it is absent, then delegate to the underlying opik metric. Only the
+    opik metric instance and the human-readable ``reason`` differ, so those are
+    the parameters; everything else lives here so the two stay in lock-step.
+
+    Args:
+        metric_type: Metric identifier, used for validation errors, the missing
+            reference result, and ``metric_fn.__name__``.
+        opik_metric: A pre-built opik metric exposing ``score(reference, output)``.
+        reason_for: Maps the resulting score value to a human-readable reason.
+        params: Metric parameters (reads ``reference_key``).
+    """
+    reference_key = params.get("reference_key", DEFAULT_REFERENCE_KEY)
+    dataset_items_provider = kwargs.get("dataset_items_provider")
+    if dataset_items_provider is not None:
+        _validate_reference_key_resolves(
+            metric_type, reference_key, list(dataset_items_provider())
+        )
+
+    def metric_fn(dataset_item, llm_output):
+        reference = _resolve_reference(dataset_item, reference_key, None)
+        if reference is None:
+            return _missing_reference_result(metric_type, reference_key)
+        result = opik_metric.score(reference=reference, output=llm_output)
+        return ScoreResult(
+            value=result.value, name=result.name, reason=reason_for(result.value)
+        )
+
+    metric_fn.__name__ = metric_type
+    return metric_fn
+
+
 @MetricFactory.register("equals")
 def _build_equals_metric(params: Dict[str, Any], model: str, **kwargs) -> Callable:
     """Build an Equals metric function.
-    
+
     Compares output with reference from dataset using exact string match.
-    
+
     Args:
         params: Metric parameters
             - case_sensitive (bool): Whether comparison is case-sensitive
             - reference_key (str): Key in dataset item containing reference value
         model: LLM model (not used for this metric)
-        
+
     Returns:
         Metric function
     """
-    from opik.evaluation.metrics.score_result import ScoreResult
-    
     case_sensitive = params.get("case_sensitive", DEFAULT_CASE_SENSITIVE)
-    reference_key = params.get("reference_key", DEFAULT_REFERENCE_KEY)
-    dataset_items_provider = kwargs.get("dataset_items_provider")
-    if dataset_items_provider is not None:
-        _validate_reference_key_resolves(
-            "equals", reference_key, list(dataset_items_provider())
-        )
-    equals_metric = Equals(case_sensitive=case_sensitive)
-
-    def metric_fn(dataset_item, llm_output):
-        reference = _resolve_reference(dataset_item, reference_key, None)
-        if reference is None:
-            return _missing_reference_result("equals", reference_key)
-        result = equals_metric.score(reference=reference, output=llm_output)
-
-        if result.value == 1.0:
-            reason = "Exact match: output equals reference"
-        else:
-            reason = "No match: output does not equal reference"
-
-        return ScoreResult(value=result.value, name=result.name, reason=reason)
-    
-    metric_fn.__name__ = "equals"
-    return metric_fn
+    return _build_reference_metric(
+        "equals",
+        Equals(case_sensitive=case_sensitive),
+        lambda value: (
+            "Exact match: output equals reference"
+            if value == 1.0
+            else "No match: output does not equal reference"
+        ),
+        params,
+        **kwargs,
+    )
 
 
 @MetricFactory.register("levenshtein_ratio")
 def _build_levenshtein_metric(params: Dict[str, Any], model: str, **kwargs) -> Callable:
     """Build a LevenshteinRatio metric function.
-    
+
     Computes string similarity using Levenshtein distance.
-    
+
     Args:
         params: Metric parameters
             - case_sensitive (bool): Whether comparison is case-sensitive
             - reference_key (str): Key in dataset item containing reference value
         model: LLM model (not used for this metric)
-        
+
     Returns:
         Metric function
     """
-    from opik.evaluation.metrics.score_result import ScoreResult
-    
     case_sensitive = params.get("case_sensitive", DEFAULT_CASE_SENSITIVE)
-    reference_key = params.get("reference_key", DEFAULT_REFERENCE_KEY)
-    dataset_items_provider = kwargs.get("dataset_items_provider")
-    if dataset_items_provider is not None:
-        _validate_reference_key_resolves(
-            "levenshtein_ratio", reference_key, list(dataset_items_provider())
-        )
-    levenshtein_metric = LevenshteinRatio(case_sensitive=case_sensitive)
-
-    def metric_fn(dataset_item, llm_output):
-        reference = _resolve_reference(dataset_item, reference_key, None)
-        if reference is None:
-            return _missing_reference_result("levenshtein_ratio", reference_key)
-        result = levenshtein_metric.score(reference=reference, output=llm_output)
-
-        reason = f"Similarity: {result.value * 100:.0f}%"
-        return ScoreResult(value=result.value, name=result.name, reason=reason)
-    
-    metric_fn.__name__ = "levenshtein_ratio"
-    return metric_fn
+    return _build_reference_metric(
+        "levenshtein_ratio",
+        LevenshteinRatio(case_sensitive=case_sensitive),
+        lambda value: f"Similarity: {value * 100:.0f}%",
+        params,
+        **kwargs,
+    )
 
 
 def _interpolate_template(template: str, dataset_item: Dict[str, Any]) -> str:
@@ -605,6 +652,7 @@ def _build_numerical_similarity_metric(params: Dict[str, Any], model: str, **kwa
                 except (ValueError, TypeError):
                     pass
             if not resolved_any:
+                _raise_if_malformed_jsonpath("numerical_similarity", reference_key)
                 raise _reference_key_error(
                     "numerical_similarity", reference_key, items,
                     "did not resolve against any dataset item",
