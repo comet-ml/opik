@@ -154,7 +154,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
         ProjectLastUpdatedFlushConfig flushConfig = injector.get().getInstance(OpikConfiguration.class)
                 .getProjectLastUpdatedFlush();
 
-        if (!flushConfig.isEnabled()) {
+        if (!flushConfig.isEnabled() || !flushConfig.isJobEnabled()) {
             log.info("Project last-updated flush job is disabled, skipping job setup");
             return;
         }

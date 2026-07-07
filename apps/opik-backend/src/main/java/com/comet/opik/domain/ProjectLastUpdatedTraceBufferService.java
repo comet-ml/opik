@@ -73,14 +73,11 @@ class ProjectLastUpdatedTraceBufferServiceImpl implements ProjectLastUpdatedTrac
             return;
         }
 
-        // Fail-open: the marker is a best-effort sort hint, a Redis blip must not break trace ingestion.
-        try {
-            RScoredSortedSet<String> pending = redisClient.getScoredSortedSet(PENDING_SET_KEY);
-            lastUpdatedTraces.forEach(project -> pending.addIfGreater(
-                    project.lastUpdatedAt().toEpochMilli(), member(workspaceId, project.id())));
-        } catch (RuntimeException e) {
-            log.warn("Failed to buffer last-updated-trace marker for workspace '{}'", workspaceId, e);
-        }
+        // Let Redis failures propagate to the caller (the event bus), which owns the handling, rather than swallowing
+        // the marker update here — consistent with the synchronous fallback branch above.
+        RScoredSortedSet<String> pending = redisClient.getScoredSortedSet(PENDING_SET_KEY);
+        lastUpdatedTraces.forEach(project -> pending.addIfGreater(
+                project.lastUpdatedAt().toEpochMilli(), member(workspaceId, project.id())));
     }
 
     @Override
@@ -96,17 +93,16 @@ class ProjectLastUpdatedTraceBufferServiceImpl implements ProjectLastUpdatedTrac
         RScoredSortedSet<String> flushing = redisClient.getScoredSortedSet(FLUSHING_SET_KEY);
         int batchSize = config.getJobBatchSize();
         long written = 0;
-        // Read the next page only after the current page is written and removed; removal guarantees progress.
-        while (true) {
+        // Drain a page at a time, removing each page before reading the next so removal guarantees forward progress.
+        // Loop while a full page comes back (there may be more); a short or empty page means the snapshot is drained.
+        int pageSize;
+        do {
             Collection<ScoredEntry<String>> entries = flushing.entryRange(0, batchSize - 1);
-            if (entries.isEmpty()) {
-                break;
+            pageSize = entries.size();
+            if (pageSize > 0) {
+                written += flushBatch(flushing, entries);
             }
-            written += flushBatch(flushing, entries);
-            if (entries.size() < batchSize) {
-                break;
-            }
-        }
+        } while (pageSize == batchSize);
         return written;
     }
 

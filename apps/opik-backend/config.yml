@@ -397,6 +397,10 @@ projectLastUpdatedFlush:
   # Description: When enabled, trace events buffer the per-project last-updated timestamp in Redis and a job
   #   flushes it to MySQL; when disabled, the timestamp is written to MySQL synchronously per event (legacy).
   enabled: ${PROJECT_LAST_UPDATED_FLUSH_ENABLED:-false}
+  # Default: true
+  # Description: When enabled (and the feature above is on), schedule the periodic flush job. Set false to buffer in
+  #   Redis without a scheduler (e.g. tests that invoke the job manually).
+  jobEnabled: ${PROJECT_LAST_UPDATED_FLUSH_JOB_ENABLED:-true}
   # Default: 30s
   # Description: Interval at which the flush job drains the Redis buffer into MySQL (min 1s)
   jobInterval: ${PROJECT_LAST_UPDATED_FLUSH_JOB_INTERVAL:-30s}

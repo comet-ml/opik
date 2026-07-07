@@ -1,7 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Project;
-import com.comet.opik.api.ProjectIdLastUpdated;
+import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
@@ -12,12 +12,16 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.Custom
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.v1.jobs.ProjectLastUpdatedFlushJob;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.redis.StringRedisClient;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -34,6 +38,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -41,14 +46,13 @@ import static com.comet.opik.domain.ProjectLastUpdatedTraceBufferServiceImpl.PEN
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Integration coverage for the enabled (Redis-buffered) path: {@code record} buffers per-project maxima and
- * {@code flush} drains them to {@code projects.last_updated_trace_at}, asserted through the public project API.
- * The disabled/synchronous fallback is exercised by {@code ProjectsResourceTest} (feature off by default), so it is
- * intentionally not repeated here. {@code jobEnabled} is off so tests drive {@code flush()} directly.
+ * Happy-path black-box coverage for the flush job: ingest a trace via the public API so {@code ProjectEventListener}
+ * buffers the marker, invoke {@link ProjectLastUpdatedFlushJob} manually, and assert the project API reflects the
+ * flushed timestamp with the Redis buffer drained. {@code jobEnabled} is off so the Quartz schedule stays idle.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
-class ProjectLastUpdatedTraceBufferServiceTest {
+class ProjectLastUpdatedFlushJobTest {
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
@@ -87,73 +91,47 @@ class ProjectLastUpdatedTraceBufferServiceTest {
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
     private ProjectResourceClient projectResourceClient;
-    private ProjectLastUpdatedTraceBufferService bufferService;
+    private TraceResourceClient traceResourceClient;
+    private ProjectLastUpdatedFlushJob flushJob;
     private StringRedisClient redisClient;
 
     @BeforeAll
-    void setUpAll(ClientSupport clientSupport, ProjectLastUpdatedTraceBufferService bufferService,
-            StringRedisClient redisClient) {
+    void setUpAll(ClientSupport clientSupport, Injector injector, StringRedisClient redisClient) {
         var baseUrl = TestUtils.getBaseUrl(clientSupport);
 
         projectResourceClient = new ProjectResourceClient(clientSupport, baseUrl, factory);
-        this.bufferService = bufferService;
+        traceResourceClient = new TraceResourceClient(clientSupport, baseUrl);
+        flushJob = injector.getInstance(ProjectLastUpdatedFlushJob.class);
         this.redisClient = redisClient;
     }
 
     @Test
-    void recordThenFlushPersistsMarkerToProject() {
+    void jobFlushesBufferedMarkerToProject() {
         var seeded = seedWorkspaceWithProject();
         var lastUpdatedAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+        traceResourceClient.createTrace(
+                factory.manufacturePojo(Trace.class).toBuilder()
+                        .id(null)
+                        .projectName(seeded.projectName())
+                        .projectId(null)
+                        .startTime(Instant.now())
+                        .lastUpdatedAt(lastUpdatedAt)
+                        .feedbackScores(null)
+                        .usage(null)
+                        .build(),
+                seeded.apiKey(), seeded.workspaceName());
 
-        bufferService.record(seeded.workspaceId(), List.of(projectMarker(seeded.projectId(), lastUpdatedAt)));
-        bufferService.flush();
+        Awaitility.await().atMost(10, TimeUnit.SECONDS).pollInterval(100, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> assertThat(redisClient.getScoredSortedSet(PENDING_SET_KEY).size()).isEqualTo(1));
 
-        assertLastUpdatedTraceAt(seeded, lastUpdatedAt);
-    }
+        flushJob.doJob(null);
 
-    @Test
-    void recordKeepsClusterWideMaxAcrossCalls() {
-        var seeded = seedWorkspaceWithProject();
-        var newest = Instant.now().truncatedTo(ChronoUnit.MILLIS);
-
-        // addIfGreater must keep only the highest timestamp regardless of the order records arrive in.
-        bufferService.record(seeded.workspaceId(), List.of(projectMarker(seeded.projectId(), newest.minusSeconds(10))));
-        bufferService.record(seeded.workspaceId(), List.of(projectMarker(seeded.projectId(), newest)));
-        bufferService.record(seeded.workspaceId(), List.of(projectMarker(seeded.projectId(), newest.minusSeconds(5))));
-        bufferService.flush();
-
-        assertLastUpdatedTraceAt(seeded, newest);
-    }
-
-    @Test
-    void flushWritesOneBatchPerWorkspace() {
-        var seededA = seedWorkspaceWithProject();
-        var seededB = seedWorkspaceWithProject();
-        var lastUpdatedAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
-
-        bufferService.record(seededA.workspaceId(), List.of(projectMarker(seededA.projectId(), lastUpdatedAt)));
-        bufferService.record(seededB.workspaceId(), List.of(projectMarker(seededB.projectId(), lastUpdatedAt)));
-        bufferService.flush();
-
-        assertLastUpdatedTraceAt(seededA, lastUpdatedAt);
-        assertLastUpdatedTraceAt(seededB, lastUpdatedAt);
-    }
-
-    @Test
-    void flushSkipsMalformedMemberButDrainsBuffer() {
-        var seeded = seedWorkspaceWithProject();
-        var lastUpdatedAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
-
-        bufferService.record(seeded.workspaceId(), List.of(projectMarker(seeded.projectId(), lastUpdatedAt)));
-        // Inject a member that cannot be parsed back to a workspace/projectId pair; it must not fail the flush.
-        redisClient.getScoredSortedSet(PENDING_SET_KEY)
-                .add(lastUpdatedAt.toEpochMilli(), seeded.workspaceId() + ":not-a-uuid");
-
-        bufferService.flush();
-
-        assertLastUpdatedTraceAt(seeded, lastUpdatedAt);
-        // Both the valid and the malformed members are removed, leaving nothing buffered.
-        assertThat(redisClient.getScoredSortedSet(PENDING_SET_KEY).size()).isZero();
+        Awaitility.await().atMost(15, TimeUnit.SECONDS).pollInterval(100, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+            var project = projectResourceClient.getProject(seeded.projectId(), seeded.apiKey(), seeded.workspaceName());
+            assertThat(project.lastUpdatedTraceAt()).isNotNull();
+            assertThat(project.lastUpdatedTraceAt().toEpochMilli()).isEqualTo(lastUpdatedAt.toEpochMilli());
+            assertThat(redisClient.getScoredSortedSet(PENDING_SET_KEY).size()).isZero();
+        });
     }
 
     private SeededProject seedWorkspaceWithProject() {
@@ -162,26 +140,16 @@ class ProjectLastUpdatedTraceBufferServiceTest {
         var workspaceId = UUID.randomUUID().toString();
         mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
 
-        var projectId = projectResourceClient.createProject(
-                factory.manufacturePojo(Project.class).toBuilder().name(randomName("project")).build(),
-                apiKey, workspaceName);
-        return new SeededProject(apiKey, workspaceName, workspaceId, projectId);
-    }
-
-    private void assertLastUpdatedTraceAt(SeededProject seeded, Instant expected) {
-        var project = projectResourceClient.getProject(seeded.projectId(), seeded.apiKey(), seeded.workspaceName());
-        assertThat(project.lastUpdatedTraceAt()).isNotNull();
-        assertThat(project.lastUpdatedTraceAt().toEpochMilli()).isEqualTo(expected.toEpochMilli());
-    }
-
-    private static ProjectIdLastUpdated projectMarker(UUID projectId, Instant lastUpdatedAt) {
-        return ProjectIdLastUpdated.builder().id(projectId).lastUpdatedAt(lastUpdatedAt).build();
+        var project = factory.manufacturePojo(Project.class).toBuilder().name(randomName("project")).build();
+        var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+        return new SeededProject(apiKey, workspaceName, workspaceId, projectId, project.name());
     }
 
     private static String randomName(String prefix) {
         return "%s-%s".formatted(prefix, RandomStringUtils.secure().nextAlphanumeric(32));
     }
 
-    private record SeededProject(String apiKey, String workspaceName, String workspaceId, UUID projectId) {
+    private record SeededProject(String apiKey, String workspaceName, String workspaceId, UUID projectId,
+            String projectName) {
     }
 }
