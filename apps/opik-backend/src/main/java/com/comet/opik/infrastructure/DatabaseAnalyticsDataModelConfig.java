@@ -1,5 +1,7 @@
 package com.comet.opik.infrastructure;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.Builder;
 
 /**
@@ -20,11 +22,12 @@ import lombok.Builder;
  *
  * <p>{@code deletionEventsInsertBatchSize}: rows per {@code INSERT} into the bridge. A single delete batch can carry
  * far more ids than the ClickHouse driver binds reliably in one statement (5 columns per row), so the insert is split
- * into chunks of this size.</p>
+ * into chunks of this size. Bounded to a positive value so a misconfiguration fails startup rather than silently
+ * disabling capture, and to a sensible ceiling that keeps the per-statement bind count in the safe range.</p>
  */
 @Builder(toBuilder = true)
 public record DatabaseAnalyticsDataModelConfig(
         boolean traceColumnsNonNullable,
         boolean traceDeletionEventsCaptureEnabled,
-        int deletionEventsInsertBatchSize) {
+        @Min(1) @Max(2_000) int deletionEventsInsertBatchSize) {
 }
