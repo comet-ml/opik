@@ -25,9 +25,8 @@ def track_mistral(
 
     Structured-output calls (``chat.parse()`` and its async / streaming
     variants) are tracked too: they delegate to ``complete``/``stream``
-    internally, so patching only those primitives yields a single span. The
-    span is named ``chat_completion_parse`` when a ``response_format`` is
-    present (see ``mistral_decorator``).
+    internally, so patching only those primitives yields a single span (named
+    ``chat_completion_create`` / ``chat_completion_stream`` after the primitive).
 
     Can be used within other Opik-tracked functions.
 

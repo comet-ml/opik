@@ -293,7 +293,7 @@ def test_mistral_chat_complete__custom_provider__provider_logged_but_usage_still
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
-def test_mistral_provider_enum_accepted(fake_backend):
+def test_mistral_provider_enum__accepted__provider_logged(fake_backend):
     client = track_mistral(
         mistralai.Mistral(api_key=os.environ["MISTRAL_API_KEY"]),
         provider=LLMProvider.MISTRALAI,
@@ -365,7 +365,9 @@ def test_mistral_chat_complete__error_raised__span_and_trace_finished__error_inf
 
 def _expected_parse_trace(span_name: str) -> TraceModel:
     # A single llm span (no nested primitive span) proves parse doesn't
-    # double-log through the complete/stream method it calls internally.
+    # double-log through the complete/stream method it calls internally. The
+    # span is named after the primitive (create/stream), not "parse", since
+    # parse delegates to it.
     return TraceModel(
         id=ANY_BUT_NONE,
         name=span_name,
@@ -414,11 +416,11 @@ def test_mistral_chat_parse__happyflow__single_span(fake_backend):
 
     # parse() delegates to complete(); only the primitive is patched, so this
     # produces exactly one span (asserted via the single-span trace tree below),
-    # named after the parse call thanks to the response_format kwarg.
+    # named after that primitive (chat_completion_create).
     assert response.choices[0].message.parsed == _Person(name="John", age=30)
     assert len(fake_backend.trace_trees) == 1
     assert_equal(
-        _expected_parse_trace("chat_completion_parse"), fake_backend.trace_trees[0]
+        _expected_parse_trace("chat_completion_create"), fake_backend.trace_trees[0]
     )
 
 
@@ -439,7 +441,7 @@ def test_mistral_chat_parse_async__happyflow(fake_backend):
 
     assert len(fake_backend.trace_trees) == 1
     assert_equal(
-        _expected_parse_trace("chat_completion_parse"), fake_backend.trace_trees[0]
+        _expected_parse_trace("chat_completion_create"), fake_backend.trace_trees[0]
     )
 
 
@@ -458,7 +460,7 @@ def test_mistral_chat_parse_stream__happyflow(fake_backend):
 
     assert len(fake_backend.trace_trees) == 1
     assert_equal(
-        _expected_parse_trace("chat_completion_parse_stream"),
+        _expected_parse_trace("chat_completion_stream"),
         fake_backend.trace_trees[0],
     )
 
@@ -481,7 +483,7 @@ def test_mistral_chat_parse_stream_async__happyflow(fake_backend):
 
     assert len(fake_backend.trace_trees) == 1
     assert_equal(
-        _expected_parse_trace("chat_completion_parse_stream"),
+        _expected_parse_trace("chat_completion_stream"),
         fake_backend.trace_trees[0],
     )
 

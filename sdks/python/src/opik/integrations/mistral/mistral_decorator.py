@@ -37,15 +37,12 @@ class MistralTrackDecorator(base_track_decorator.BaseTrackDecorator):
             "Expected kwargs to be not None in chat.complete(**kwargs) / chat.stream(**kwargs)"
         )
 
+        # Named after the wrapped method (complete -> chat_completion_create,
+        # stream -> chat_completion_stream). parse()/parse_stream() delegate to
+        # those primitives, so they share the same span name; response_format is
+        # not used to rename because a direct complete(response_format=...) call
+        # is a legitimate structured-output request, not a parse call.
         name = track_options.name if track_options.name is not None else func.__name__
-        # parse()/parse_stream() delegate to complete()/stream() with a
-        # response_format; name the span after the parse call it originated from.
-        if kwargs.get("response_format") is not None:
-            name = (
-                "chat_completion_parse_stream"
-                if "stream" in name
-                else "chat_completion_parse"
-            )
 
         metadata = track_options.metadata if track_options.metadata is not None else {}
 

@@ -47,7 +47,7 @@ Read the closest sibling integration in full — it is the template, and most de
 - The library exposes **multiple incompatible client classes or versions** (e.g. a v1 `Client` and a v2 `ClientV2` with different method signatures and response shapes). Decide which to support, and whether both are in scope.
 - The **usage/token shape differs** from the sibling's (so the sibling's usage parser won't just work and you need custom mapping).
 - The **response/streaming shape** is materially different from the sibling's.
-- **Methods delegate to each other.** Check whether a higher-level method calls a lower-level one you also patch (e.g. Mistral's `chat.parse` calls `chat.complete`; some SDKs' `stream` calls `create`). Patching both naively **double-logs the call and double-counts cost**. Read the delegating method's source to find this. The idiomatic fix is to patch **only the primitive** and name the span from a kwarg the delegating method forwards (see [python.md](python.md)) — verify the span count and cost in Phase 5.
+- **Methods delegate to each other.** Check whether a higher-level method calls a lower-level one you also patch (e.g. Mistral's `chat.parse` calls `chat.complete`; some SDKs' `stream` calls `create`). Patching both naively **double-logs the call and double-counts cost**. Read the delegating method's source to find this. The idiomatic fix is to patch **only the primitive** and name the span after that primitive (see [python.md](python.md)) — verify the span count and cost in Phase 5.
 
 A target that looks like "just another provider" but has any of the above is *not* a clean clone — say so before writing code.
 

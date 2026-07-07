@@ -11,7 +11,7 @@ title: Observability for Mistral AI (Python) with Opik
 
 [Mistral AI](https://mistral.ai/) provides cutting-edge large language models with excellent performance for text generation, reasoning, and specialized tasks like code generation.
 
-This guide explains how to integrate Opik with the Mistral AI Python SDK. By using the `track_mistral` method provided by opik, you can easily track and evaluate your Mistral API calls within your Opik projects as Opik will automatically log the input prompt, model used, token usage, and response generated.
+This guide explains how to integrate Opik with the Mistral AI Python SDK. By using the `track_mistral` method provided by Opik, you can easily track and evaluate your Mistral API calls within your Opik projects as Opik will automatically log the input prompt, model used, token usage, and response generated.
 
 ## Account Setup
 
@@ -137,8 +137,10 @@ for event in stream:
 
 ### Structured output
 
-`chat.parse()` (and its async / streaming variants) is tracked too. The parsed
-structured output is captured on the span:
+`chat.parse()` (and its async / streaming variants) is tracked too. It delegates
+to `complete()`/`stream()` internally, so the call is logged as a single
+`chat_completion_create` / `chat_completion_stream` span with the structured
+JSON in the output:
 
 ```python
 from pydantic import BaseModel
