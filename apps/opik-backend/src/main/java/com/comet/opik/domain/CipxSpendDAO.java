@@ -117,18 +117,22 @@ public class CipxSpendDAO {
         template.add("items", queryItems);
         Statement statement = connection.createStatement(template.render());
 
-        statement.bind("workspace_id", workspaceId);
-        for (int i = 0; i < rows.size(); i++) {
-            SpanRow row = rows.get(i);
-            statement.bind("project_id" + i, row.projectId())
-                    .bind("trace_id" + i, row.traceId())
-                    .bind("span_id" + i, row.spanId())
-                    .bind("start_time" + i, ClickHouseDateTimeFormat.formatNanos(row.startTime()))
-                    .bind("model" + i, row.model())
-                    .bind("u_input" + i, row.uInput())
-                    .bind("u_cache_read" + i, row.uCacheRead())
-                    .bind("u_cache_creation" + i, row.uCacheCreation())
-                    .bind("u_output" + i, row.uOutput());
+        // Positional binds: the driver resolves named binds with a linear indexOf over the statement's
+        // parameter list (quadratic per statement), while bind(int) is a direct array write. Indices
+        // follow the placeholders' first-appearance order in the rendered SQL: workspace_id once at 0
+        // (repeats dedup), then 9 parameters per row tuple in template order.
+        statement.bind(0, workspaceId);
+        int index = 1;
+        for (SpanRow row : rows) {
+            statement.bind(index++, row.projectId())
+                    .bind(index++, row.traceId())
+                    .bind(index++, row.spanId())
+                    .bind(index++, ClickHouseDateTimeFormat.formatNanos(row.startTime()))
+                    .bind(index++, row.model())
+                    .bind(index++, row.uInput())
+                    .bind(index++, row.uCacheRead())
+                    .bind(index++, row.uCacheCreation())
+                    .bind(index++, row.uOutput());
         }
 
         return statement.execute();

@@ -64,15 +64,22 @@ public class CostIntelligenceIngestionListener {
                 .filter(span -> CipxMetadata.hasSpendCall(span.metadata()))
                 .filter(span -> span.projectId() != null)
                 .toList();
+
         if (cipxSpans.isEmpty()) {
             return;
         }
+
+        log.info("cipx onSpansCreated on thread '{}': '{}' spans in event, '{}' cipx, workspace: '{}'",
+                Thread.currentThread(), event.spans().size(), cipxSpans.size(), event.workspaceId());
 
         List<SpanRow> spanRows = cipxSpans.stream()
                 .map(span -> SpanRow.from(span.id(), span.traceId(), span.projectId(), span.metadata(),
                         span.startTime()))
                 .toList();
         cipxSpendDAO.insert(spanRows, event.workspaceId(), event.userName())
+                .doOnSubscribe(subscription -> log.info(
+                        "cipx spend insert subscribed for '{}' rows in workspace: '{}'", spanRows.size(),
+                        event.workspaceId()))
                 .subscribe(
                         null,
                         error -> log.error("Failed to ingest cipx spend for workspace: '{}'", event.workspaceId(),
@@ -85,6 +92,9 @@ public class CostIntelligenceIngestionListener {
                         span.startTime()).stream())
                 .toList();
         cipxSpendBlockDAO.insert(blockRows, event.workspaceId(), event.userName())
+                .doOnSubscribe(subscription -> log.info(
+                        "cipx spend blocks insert subscribed for '{}' rows in workspace: '{}'", blockRows.size(),
+                        event.workspaceId()))
                 .subscribe(
                         null,
                         error -> log.error("Failed to ingest cipx spend blocks for workspace: '{}'",
@@ -136,6 +146,9 @@ public class CostIntelligenceIngestionListener {
         }
 
         cipxTraceIdentityDAO.upsert(withProject, workspaceId, userName)
+                .doOnSubscribe(subscription -> log.info(
+                        "cipx trace identity upsert subscribed for '{}' rows in workspace: '{}'", withProject.size(),
+                        workspaceId))
                 .subscribe(
                         null,
                         error -> log.error("Failed to ingest cipx trace identity for workspace: '{}'", workspaceId,

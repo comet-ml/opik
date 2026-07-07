@@ -1,29 +1,26 @@
 package com.comet.opik.domain;
 
+import com.clickhouse.client.api.Client;
+import com.clickhouse.client.api.insert.InsertSettings;
+import com.clickhouse.client.api.metrics.ServerMetrics;
+import com.clickhouse.data.ClickHouseFormat;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
-import com.comet.opik.utils.template.TemplateUtils;
+import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
-import io.r2dbc.spi.Connection;
-import io.r2dbc.spi.ConnectionFactory;
-import io.r2dbc.spi.Result;
-import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.reactivestreams.Publisher;
-import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Mono;
 
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-
-import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
-import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolder;
 
 /**
  * Writes the cipx_spend_blocks table: one row per cipx block, with the token allocation and dashboard
@@ -291,93 +288,76 @@ public class CipxSpendBlockDAO {
         }
     }
 
-    private static final String INSERT = """
-            INSERT INTO cipx_spend_blocks
-                (workspace_id, project_id, trace_id, span_id, block_idx, model, src,
-                 category, side, cache_status, parent_category, chars,
-                 tool_name, tool_server, tool_use_id, resource, kind,
-                 tier, lane, bd_lane, label, is_definition, alloc, start_time)
-            SETTINGS log_comment = '<log_comment>'
-            FORMAT Values
-                <items:{item |
-                    (
-                        :workspace_id,
-                        :project_id<item.index>,
-                        :trace_id<item.index>,
-                        :span_id<item.index>,
-                        :block_idx<item.index>,
-                        :model<item.index>,
-                        :src<item.index>,
-                        :category<item.index>,
-                        :side<item.index>,
-                        :cache_status<item.index>,
-                        :parent_category<item.index>,
-                        :chars<item.index>,
-                        :tool_name<item.index>,
-                        :tool_server<item.index>,
-                        :tool_use_id<item.index>,
-                        :resource<item.index>,
-                        :kind<item.index>,
-                        :tier<item.index>,
-                        :lane<item.index>,
-                        :bd_lane<item.index>,
-                        :label<item.index>,
-                        :is_definition<item.index>,
-                        :alloc<item.index>,
-                        :start_time<item.index>
-                    )
-                    <if(item.hasNext)>,<endif>
-                }>
-            ;
-            """;
+    private final @NonNull Client clickHouseClient;
 
-    private final @NonNull ConnectionFactory connectionFactory;
-
+    /**
+     * Bulk insert via the ClickHouse v2 HTTP client using JSONEachRow, NOT the R2DBC statement path
+     * the sibling cipx DAOs use. One span event fans out to hundreds of block rows (~350/span, so a
+     * 200-span batch is ~70k rows x 24 columns), and the R2DBC driver resolves every named bind with
+     * a linear scan over the statement's parameter list — O(n^2) over ~1.7M parameters, hours of CPU
+     * for a single event (see ExperimentAggregatesDAO.insertExperimentItems for the same trade-off).
+     * The JSONEachRow payload is one HTTP body with no per-parameter work at all.
+     *
+     * <p>last_updated_at is omitted from the payload so the column DEFAULT now64(6) applies
+     * (input_format_defaults_for_omitted_fields is on by default). Fully non-blocking: the client is
+     * built with useAsyncRequests(true) (see DatabaseAnalyticsFactory.buildClient), so the returned
+     * future runs the HTTP round-trip on the v2 client's own executor — no shared scheduler
+     * (boundedElastic or otherwise) is borrowed for the I/O.
+     */
     public Mono<Long> insert(@NonNull List<BlockRow> rows, @NonNull String workspaceId, @NonNull String userName) {
         if (rows.isEmpty()) {
             return Mono.just(0L);
         }
-        return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> insert(rows, workspaceId, userName, connection))
-                .flatMap(Result::getRowsUpdated)
-                .reduce(0L, Long::sum);
+        return Mono.fromFuture(() -> {
+            StringBuilder body = new StringBuilder();
+            for (BlockRow row : rows) {
+                appendJsonRow(body, workspaceId, row);
+            }
+            byte[] payload = body.toString().getBytes(StandardCharsets.UTF_8);
+
+            String logComment = "insert_cipx_spend_blocks:%s:%s:%d".formatted(workspaceId, userName, rows.size());
+            var settings = new InsertSettings()
+                    .logComment(logComment)
+                    .serverSetting("date_time_input_format", "best_effort");
+
+            return clickHouseClient.insert(
+                    "cipx_spend_blocks",
+                    new ByteArrayInputStream(payload),
+                    ClickHouseFormat.JSONEachRow,
+                    settings);
+        }).map(response -> {
+            try (response) {
+                return response.getMetrics().getMetric(ServerMetrics.NUM_ROWS_WRITTEN).getLong();
+            }
+        });
     }
 
-    private Publisher<? extends Result> insert(List<BlockRow> rows, String workspaceId, String userName,
-            Connection connection) {
-        List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(rows.size());
-        ST template = getSTWithLogComment(INSERT, "insert_cipx_spend_blocks", workspaceId, userName, rows.size());
-        template.add("items", queryItems);
-        Statement statement = connection.createStatement(template.render());
-
-        statement.bind("workspace_id", workspaceId);
-        for (int i = 0; i < rows.size(); i++) {
-            BlockRow row = rows.get(i);
-            statement.bind("project_id" + i, row.projectId())
-                    .bind("trace_id" + i, row.traceId())
-                    .bind("span_id" + i, row.spanId())
-                    .bind("block_idx" + i, row.blockIdx())
-                    .bind("model" + i, row.model())
-                    .bind("src" + i, row.src())
-                    .bind("category" + i, row.category())
-                    .bind("side" + i, row.side())
-                    .bind("cache_status" + i, row.cacheStatus())
-                    .bind("parent_category" + i, row.parentCategory())
-                    .bind("chars" + i, row.chars())
-                    .bind("tool_name" + i, row.toolName())
-                    .bind("tool_server" + i, row.toolServer())
-                    .bind("tool_use_id" + i, row.toolUseId())
-                    .bind("resource" + i, row.resource())
-                    .bind("kind" + i, row.kind())
-                    .bind("tier" + i, row.tier())
-                    .bind("lane" + i, row.lane())
-                    .bind("bd_lane" + i, row.bdLane())
-                    .bind("label" + i, row.label())
-                    .bind("is_definition" + i, row.isDefinition())
-                    .bind("alloc" + i, row.alloc())
-                    .bind("start_time" + i, ClickHouseDateTimeFormat.formatNanos(row.startTime()));
-        }
-
-        return statement.execute();
+    private void appendJsonRow(StringBuilder out, String workspaceId, BlockRow row) {
+        var node = JsonUtils.createObjectNode();
+        node.put("workspace_id", workspaceId);
+        node.put("project_id", row.projectId());
+        node.put("trace_id", row.traceId());
+        node.put("span_id", row.spanId());
+        node.put("block_idx", row.blockIdx());
+        node.put("model", row.model());
+        node.put("src", row.src());
+        node.put("category", row.category());
+        node.put("side", row.side());
+        node.put("cache_status", row.cacheStatus());
+        node.put("parent_category", row.parentCategory());
+        node.put("chars", row.chars());
+        node.put("tool_name", row.toolName());
+        node.put("tool_server", row.toolServer());
+        node.put("tool_use_id", row.toolUseId());
+        node.put("resource", row.resource());
+        node.put("kind", row.kind());
+        node.put("tier", row.tier());
+        node.put("lane", row.lane());
+        node.put("bd_lane", row.bdLane());
+        node.put("label", row.label());
+        node.put("is_definition", row.isDefinition());
+        node.put("alloc", row.alloc());
+        node.put("start_time", ClickHouseDateTimeFormat.formatNanos(row.startTime()));
+        out.append(node).append('\n');
     }
 }
