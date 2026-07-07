@@ -32,9 +32,9 @@ import java.util.stream.Collectors;
 @ImplementedBy(ProjectLastUpdatedTraceBufferServiceImpl.class)
 public interface ProjectLastUpdatedTraceBufferService {
 
-    void record(@NonNull String workspaceId, Collection<ProjectIdLastUpdated> lastUpdatedTraces);
+    void record(String workspaceId, Collection<ProjectIdLastUpdated> lastUpdatedTraces);
 
-    /** Drains the Redis buffer to MySQL and returns the number of project markers written. */
+    /** Drains the Redis buffer to MySQL and returns the number of project markers processed (attempted). */
     long flush();
 }
 
@@ -127,6 +127,8 @@ class ProjectLastUpdatedTraceBufferServiceImpl implements ProjectLastUpdatedTrac
         byWorkspace.forEach(projectService::recordLastUpdatedTrace);
 
         flushing.removeAll(entries.stream().map(ScoredEntry::getValue).collect(Collectors.toUnmodifiableSet()));
+        // Count of markers processed, not rows updated: the MySQL write is a monotonic UPDATE that skips rows already
+        // ahead, and the DAO's affected-row counts are not propagated here.
         return byWorkspace.values().stream().mapToInt(Collection::size).sum();
     }
 

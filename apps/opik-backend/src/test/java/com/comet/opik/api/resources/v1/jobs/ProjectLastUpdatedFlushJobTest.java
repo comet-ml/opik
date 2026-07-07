@@ -12,8 +12,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.quartz.JobExecutionContext;
 import reactor.core.publisher.Mono;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
@@ -65,6 +69,22 @@ class ProjectLastUpdatedFlushJobTest {
 
         // flush() runs on boundedElastic (fire-and-forget subscribe), so await it.
         verify(bufferService, timeout(1_000)).flush();
+    }
+
+    @Test
+    @DisplayName("interrupt() cancels an in-flight flush subscription")
+    void interrupt__cancelsInFlightFlush() throws Exception {
+        var cancelled = new AtomicBoolean(false);
+        // A flush that never completes; disposing its subscription must trigger the cancel signal.
+        doReturn(Mono.<Void>never().doOnCancel(() -> cancelled.set(true)))
+                .when(lockService).bestEffortLock(any(), any(), any(), any(), any(), anyBoolean());
+
+        var job = newJob(true);
+        job.doJob(jobContext);
+
+        assertThat(cancelled).isFalse();
+        job.interrupt();
+        assertThat(cancelled).isTrue();
     }
 
     private static ProjectLastUpdatedFlushConfig buildConfig(boolean enabled) {

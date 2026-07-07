@@ -68,7 +68,7 @@ public class ProjectLastUpdatedFlushJob extends Job implements InterruptableJob 
                         .subscribeOn(Schedulers.boundedElastic())
                         .doOnNext(count -> {
                             if (count > 0) {
-                                log.info("Project last-updated flush wrote '{}' project markers", count);
+                                log.info("Project last-updated flush processed '{}' project markers", count);
                             }
                         })
                         .then(),
