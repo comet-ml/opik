@@ -1223,6 +1223,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "nex-agi/deepseek-v3.1-nex-n1",
     },
     {
+      value: PROVIDER_MODEL_TYPE.NEX_AGI_NEX_N2_MINI,
+      label: "nex-agi/nex-n2-mini",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.NEX_AGI_NEX_N2_PRO,
       label: "nex-agi/nex-n2-pro",
     },
@@ -2036,12 +2040,20 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "tencent/hunyuan-a13b-instruct",
     },
     {
+      value: PROVIDER_MODEL_TYPE.TENCENT_HY3,
+      label: "tencent/hy3",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.TENCENT_HY3_PREVIEW,
       label: "tencent/hy3-preview",
     },
     {
       value: PROVIDER_MODEL_TYPE.TENCENT_HY3_PREVIEW_FREE,
       label: "tencent/hy3-preview:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.TENCENT_HY3_FREE,
+      label: "tencent/hy3:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.THEDRUMMER_ANUBIS_70B_V1_1,
