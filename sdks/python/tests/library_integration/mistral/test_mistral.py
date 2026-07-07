@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 
 import mistralai
@@ -560,3 +561,47 @@ def test_track_mistral__unsupported_old_version__raises(monkeypatch):
 
     with pytest.raises(RuntimeError, match=r"mistralai>=1\.3\.0"):
         track_mistral(mistralai.Mistral(api_key="dummy-key"))
+
+
+_WEATHER_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "get_weather",
+        "description": "Get the weather for a city",
+        "parameters": {
+            "type": "object",
+            "properties": {"city": {"type": "string"}},
+            "required": ["city"],
+        },
+    },
+}
+
+
+def test_mistral_chat_stream__tool_calls__aggregated_into_span_output(fake_backend):
+    # Guards against losing streamed tool calls: the chunk aggregator must keep
+    # the tool call(s) (with complete function name + arguments) rather than
+    # overwriting them per chunk.
+    client = track_mistral(mistralai.Mistral(api_key=os.environ["MISTRAL_API_KEY"]))
+
+    for _ in client.chat.stream(
+        model=MODEL_FOR_TESTS,
+        messages=[{"role": "user", "content": "What is the weather in Paris?"}],
+        tools=[_WEATHER_TOOL],
+        tool_choice="any",
+        max_tokens=100,
+    ):
+        pass
+
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    tool_calls = (
+        fake_backend.trace_trees[0]
+        .spans[0]
+        .output["choices"][0]["message"]["tool_calls"]
+    )
+    assert tool_calls, "streamed tool call was lost during aggregation"
+    first_call = tool_calls[0]["function"]
+    assert first_call["name"] == "get_weather"
+    # arguments must be complete/valid JSON, not a truncated fragment
+    assert "city" in json.loads(first_call["arguments"])
