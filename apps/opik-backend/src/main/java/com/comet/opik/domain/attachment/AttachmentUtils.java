@@ -1,10 +1,12 @@
 package com.comet.opik.domain.attachment;
 
 import com.comet.opik.api.attachment.AttachmentInfo;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -19,6 +21,7 @@ import java.util.stream.Collectors;
  * Contains shared constants and helper methods used across attachment processing.
  */
 @UtilityClass
+@Slf4j
 public class AttachmentUtils {
 
     /**
@@ -250,8 +253,11 @@ public class AttachmentUtils {
             if (text.startsWith("{") || text.startsWith("[")) {
                 try {
                     collectAttachmentReferences(objectMapper.readTree(text), objectMapper, references);
-                } catch (Exception e) {
-                    // Not valid JSON, ignore
+                } catch (JsonProcessingException e) {
+                    // Unexpected: text merely starts with "{"/"[" without being valid JSON. Not fatal — the
+                    // outer regex match above still stands — but worth surfacing since it's unusual.
+                    log.warn("Failed to parse embedded JSON string while collecting attachment references;"
+                            + " skipping nested scan", e);
                 }
             }
             return;

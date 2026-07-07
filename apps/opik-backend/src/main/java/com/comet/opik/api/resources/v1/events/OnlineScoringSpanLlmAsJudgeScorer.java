@@ -27,6 +27,7 @@ import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.request.ToolChoice;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.inject.Inject;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonReactiveClient;
@@ -275,11 +276,16 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
             userFacingLogger.info("Sending spanId '{}' to LLM: {}",
                     span.id(), agenticScoringService.summarizeRequest(requests.score(), modelName, useTools));
 
-            return new PreparedEvaluation(requests.score(), requests.structured(), useTools);
+            return PreparedEvaluation.builder()
+                    .scoreRequest(requests.score())
+                    .structuredRequest(requests.structured())
+                    .useTools(useTools)
+                    .build();
         }
     }
 
     /** Score and structured-output requests produced by one of the {@code build*Requests} branches. */
+    @Builder(toBuilder = true)
     private record LlmRequests(ChatRequest score, ChatRequest structured) {
     }
 
@@ -305,7 +311,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
         // REQUIRED on the first call only forces ≥1 tool call; follow-ups switch to AUTO in
         // handleToolCalls so the model can decide when to stop investigating.
         scoreRequest = agenticScoringService.addToolSpecs(scoreRequest, ToolChoice.REQUIRED);
-        return new LlmRequests(scoreRequest, structuredRequest);
+        return LlmRequests.builder().score(scoreRequest).structured(structuredRequest).build();
     }
 
     /**
@@ -320,7 +326,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
                 message.llmAsJudgeCode(), span,
                 llmProviderFactory.getStructuredOutputStrategy(modelName),
                 onlineScoringConfig.getMaxPromptFieldChars(), INLINE_TRUNCATION_HINT, spanStructureJson);
-        return new LlmRequests(scoreRequest, scoreRequest);
+        return LlmRequests.builder().score(scoreRequest).structured(scoreRequest).build();
     }
 
     /**
@@ -333,7 +339,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
         ChatRequest scoreRequest = OnlineScoringEngine.prepareSpanLlmRequest(
                 message.llmAsJudgeCode(), span,
                 llmProviderFactory.getStructuredOutputStrategy(modelName), spanStructureJson);
-        return new LlmRequests(scoreRequest, scoreRequest);
+        return LlmRequests.builder().score(scoreRequest).structured(scoreRequest).build();
     }
 
     /** Normal inline path: no {{span}} reference, so no structure injection. */
@@ -341,7 +347,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
         ChatRequest scoreRequest = OnlineScoringEngine.prepareSpanLlmRequest(
                 message.llmAsJudgeCode(), span,
                 llmProviderFactory.getStructuredOutputStrategy(modelName));
-        return new LlmRequests(scoreRequest, scoreRequest);
+        return LlmRequests.builder().score(scoreRequest).structured(scoreRequest).build();
     }
 
     /**
@@ -382,6 +388,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
      * Carry from {@link #prepareEvaluation} to {@link #evaluate}. {@code useTools} drives whether
      * {@code handleToolCalls} runs the agentic loop after the first response.
      */
+    @Builder(toBuilder = true)
     private record PreparedEvaluation(ChatRequest scoreRequest, ChatRequest structuredRequest, boolean useTools) {
     }
 }

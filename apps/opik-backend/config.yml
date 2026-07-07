@@ -664,7 +664,7 @@ onlineScoring:
   # Default: 4000
   # Description: Per-variable substitution cap (in characters) for the {{trace}}/{{span}} structure-injection
   #   and agentic-tools paths. Large enough that small entity input/output renders inline, small enough that a
-  #   huge entity doesn't blow context (the agent fetches the rest via the read tool). Floor 500.
+  #   huge entity doesn't blow context (the agent fetches the rest via the read tool). 500-100000.
   maxPromptFieldChars: ${ONLINE_SCORING_MAX_PROMPT_FIELD_CHARS:-4000}
   # Default: 5
   # Description: Attachment-upload race tolerance for the {{trace}}/{{span}} structures — how many times the

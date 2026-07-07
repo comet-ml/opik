@@ -118,11 +118,13 @@ public class OnlineScoringConfig {
      * huge entity doesn't blow context — the agent fetches the rest via the {@code read} tool, or, on the
      * no-tools inline fallback, the value is simply truncated.
      *
-     * <p>Floor at 500 chars so a typo'd env var can't truncate every field down to noise. Field
-     * initializer (not {@code @Builder.Default}) so the default applies during YAML deserialization too.
+     * <p>Floor at 500 chars so a typo'd env var can't truncate every field down to noise. Capped at
+     * 100 K chars (~25 K tokens) — above that a single field would dominate the prompt budget, so an
+     * operator wanting more should raise the agentic-tools threshold instead. Field initializer (not
+     * {@code @Builder.Default}) so the default applies during YAML deserialization too.
      */
     @JsonProperty
-    @Min(500) private int maxPromptFieldChars = 4_000;
+    @Min(500) @Max(100_000) private int maxPromptFieldChars = 4_000;
 
     /**
      * Attachment-upload race tolerance for the {@code {{trace}}} / {@code {{span}}} structures: how many

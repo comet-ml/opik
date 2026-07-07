@@ -11,7 +11,6 @@ import com.comet.opik.domain.attachment.AttachmentUtils;
 import com.comet.opik.domain.evaluation.EvaluationRecorder;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
@@ -23,12 +22,12 @@ import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
-import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -213,18 +212,12 @@ public interface AgenticScoringService {
 }
 
 @Singleton
+@RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 class AgenticScoringServiceImpl implements AgenticScoringService {
 
-    private final OnlineScoringConfig onlineScoringConfig;
-    private final ToolRegistry toolRegistry;
-
-    @Inject
-    public AgenticScoringServiceImpl(@NonNull @Config("onlineScoring") OnlineScoringConfig onlineScoringConfig,
-            @NonNull ToolRegistry toolRegistry) {
-        this.onlineScoringConfig = onlineScoringConfig;
-        this.toolRegistry = toolRegistry;
-    }
+    private final @NonNull @Config("onlineScoring") OnlineScoringConfig onlineScoringConfig;
+    private final @NonNull ToolRegistry toolRegistry;
 
     @Override
     public Mono<ChatResponse> runToolCallLoop(@NonNull ChatResponse initialResponse,
@@ -453,13 +446,8 @@ class AgenticScoringServiceImpl implements AgenticScoringService {
     public int estimateThreadContextTokens(@NonNull List<Trace> traces, @NonNull List<Span> spans,
             int charsPerToken) {
         Preconditions.checkArgument(charsPerToken >= 1, "charsPerToken must be >= 1, got %s", charsPerToken);
-        try {
-            return JsonUtils.getMapper()
-                    .writeValueAsString(OnlineScoringEngine.fromTraceToThreadEnriched(traces, spans)).length()
-                    / charsPerToken;
-        } catch (JsonProcessingException ex) {
-            throw new UncheckedIOException(ex);
-        }
+        return JsonUtils.writeValueAsString(OnlineScoringEngine.fromTraceToThreadEnriched(traces, spans)).length()
+                / charsPerToken;
     }
 
     @Override

@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import com.comet.opik.api.LogItem.LogLevel;
+import com.comet.opik.api.PromptType;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
@@ -15,6 +16,7 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudg
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessageContent;
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.events.TracesUpdated;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -86,6 +88,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -1186,10 +1189,10 @@ class OnlineScoringEngineTest {
     @Test
     @DisplayName("templateReferencesTrace detects the 'trace' sentinel and implicit {{trace}} references")
     void templateReferencesTraceDetectsSentinelAndImplicitReference() {
-        var mustache = com.comet.opik.api.PromptType.MUSTACHE;
-        var noMessages = List.<com.comet.opik.api.evaluators.LlmAsJudgeMessage>of();
-        var traceMessage = List.of(com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
-                .role(dev.langchain4j.data.message.ChatMessageType.USER)
+        var mustache = PromptType.MUSTACHE;
+        var noMessages = List.<LlmAsJudgeMessage>of();
+        var traceMessage = List.of(LlmAsJudgeMessage.builder()
+                .role(ChatMessageType.USER)
                 .content("Trace: {{trace}}")
                 .build());
 
@@ -1212,14 +1215,14 @@ class OnlineScoringEngineTest {
     @DisplayName("prepareLlmRequest substitutes a {{trace}}-referencing variable with the supplied structure JSON")
     void prepareLlmRequestInjectsTraceStructure() {
         var evaluatorCode = LlmAsJudgeCode.builder()
-                .model(com.comet.opik.api.evaluators.LlmAsJudgeModelParameters.builder()
+                .model(LlmAsJudgeModelParameters.builder()
                         .name("gpt-4o").temperature(0.3).build())
                 .messages(List.of(
-                        com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
-                                .role(dev.langchain4j.data.message.ChatMessageType.USER)
+                        LlmAsJudgeMessage.builder()
+                                .role(ChatMessageType.USER)
                                 .content("Inspect: {{trace}}")
                                 .build()))
-                .variables(new java.util.LinkedHashMap<>(Map.of("trace", "trace")))
+                .variables(new LinkedHashMap<>(Map.of("trace", "trace")))
                 .schema(List.of())
                 .build();
         var trace = createTrace(generator.generate(), generator.generate());
@@ -1227,7 +1230,7 @@ class OnlineScoringEngineTest {
         var structure = "{\"trace_id\":\"%s\",\"span_tree\":[]}".formatted(traceId);
 
         var request = OnlineScoringEngine.prepareLlmRequest(evaluatorCode, trace, new InstructionStrategy(),
-                com.comet.opik.api.PromptType.MUSTACHE, List.of(), structure);
+                PromptType.MUSTACHE, List.of(), structure);
 
         var allText = request.messages().stream().map(Object::toString).collect(Collectors.joining("\n"));
         assertThat(allText).contains(traceId);
@@ -2328,10 +2331,10 @@ class OnlineScoringEngineTest {
     @Test
     @DisplayName("templateReferencesSpanStructure detects the 'span' sentinel and implicit {{span}} references")
     void templateReferencesSpanStructureDetectsSentinelAndImplicitReference() {
-        var mustache = com.comet.opik.api.PromptType.MUSTACHE;
-        var noMessages = List.<com.comet.opik.api.evaluators.LlmAsJudgeMessage>of();
-        var spanMessage = List.of(com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
-                .role(dev.langchain4j.data.message.ChatMessageType.USER)
+        var mustache = PromptType.MUSTACHE;
+        var noMessages = List.<LlmAsJudgeMessage>of();
+        var spanMessage = List.of(LlmAsJudgeMessage.builder()
+                .role(ChatMessageType.USER)
                 .content("Span: {{span}}")
                 .build());
 
@@ -2354,14 +2357,14 @@ class OnlineScoringEngineTest {
     @DisplayName("prepareSpanLlmRequest (tool-mode) substitutes a {{span}}-referencing variable with the structure JSON")
     void prepareSpanLlmRequestInjectsSpanStructure() {
         var evaluatorCode = AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode.builder()
-                .model(com.comet.opik.api.evaluators.LlmAsJudgeModelParameters.builder()
+                .model(LlmAsJudgeModelParameters.builder()
                         .name("gpt-4o").temperature(0.3).build())
                 .messages(List.of(
-                        com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
-                                .role(dev.langchain4j.data.message.ChatMessageType.USER)
+                        LlmAsJudgeMessage.builder()
+                                .role(ChatMessageType.USER)
                                 .content("Inspect: {{span}}")
                                 .build()))
-                .variables(new java.util.LinkedHashMap<>(Map.of("span", "span")))
+                .variables(new LinkedHashMap<>(Map.of("span", "span")))
                 .schema(List.of())
                 .build();
         var span = createSpan(generator.generate(), generator.generate());
@@ -2381,14 +2384,14 @@ class OnlineScoringEngineTest {
     @DisplayName("prepareSpanLlmRequest (inline) injects the {{span}} structure without capping")
     void prepareSpanLlmRequestInlineInjectsSpanStructure() {
         var evaluatorCode = AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode.builder()
-                .model(com.comet.opik.api.evaluators.LlmAsJudgeModelParameters.builder()
+                .model(LlmAsJudgeModelParameters.builder()
                         .name("gpt-4o").temperature(0.3).build())
                 .messages(List.of(
-                        com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
-                                .role(dev.langchain4j.data.message.ChatMessageType.USER)
+                        LlmAsJudgeMessage.builder()
+                                .role(ChatMessageType.USER)
                                 .content("Inspect: {{span}}")
                                 .build()))
-                .variables(new java.util.LinkedHashMap<>(Map.of("span", "span")))
+                .variables(new LinkedHashMap<>(Map.of("span", "span")))
                 .schema(List.of())
                 .build();
         var span = createSpan(generator.generate(), generator.generate());
@@ -2407,14 +2410,14 @@ class OnlineScoringEngineTest {
     @DisplayName("prepareSpanLlmRequest renders {{span}} as {} when no structure is supplied, not the literal sentinel")
     void prepareSpanLlmRequestRendersEmptyStructureWhenNull() {
         var evaluatorCode = AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode.builder()
-                .model(com.comet.opik.api.evaluators.LlmAsJudgeModelParameters.builder()
+                .model(LlmAsJudgeModelParameters.builder()
                         .name("gpt-4o").temperature(0.3).build())
                 .messages(List.of(
-                        com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
-                                .role(dev.langchain4j.data.message.ChatMessageType.USER)
+                        LlmAsJudgeMessage.builder()
+                                .role(ChatMessageType.USER)
                                 .content("Inspect: {{span}}")
                                 .build()))
-                .variables(new java.util.LinkedHashMap<>(Map.of("span", "span")))
+                .variables(new LinkedHashMap<>(Map.of("span", "span")))
                 .schema(List.of())
                 .build();
         var span = createSpan(generator.generate(), generator.generate());
