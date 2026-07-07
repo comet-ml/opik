@@ -6,8 +6,6 @@ export * from "./agentInsights/types/index.js";
 export * from "./agentInsightsJobs/client/requests/index.js";
 export * as agentInsightsJobs from "./agentInsightsJobs/index.js";
 export * from "./agentInsightsJobs/types/index.js";
-export * from "./aiSpend/client/requests/index.js";
-export * as aiSpend from "./aiSpend/index.js";
 export * from "./alerts/client/requests/index.js";
 export * as alerts from "./alerts/index.js";
 export * from "./alerts/types/index.js";

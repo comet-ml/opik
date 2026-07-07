@@ -3,7 +3,6 @@
 import { AgentConfigsClient } from "./api/resources/agentConfigs/client/Client.js";
 import { AgentInsightsClient } from "./api/resources/agentInsights/client/Client.js";
 import { AgentInsightsJobsClient } from "./api/resources/agentInsightsJobs/client/Client.js";
-import { AiSpendClient } from "./api/resources/aiSpend/client/Client.js";
 import { AlertsClient } from "./api/resources/alerts/client/Client.js";
 import { AnnotationQueuesClient } from "./api/resources/annotationQueues/client/Client.js";
 import { AssertionResultsClient } from "./api/resources/assertionResults/client/Client.js";
@@ -64,7 +63,6 @@ export class OpikApiClient {
     protected _agentConfigs: AgentConfigsClient | undefined;
     protected _agentInsightsJobs: AgentInsightsJobsClient | undefined;
     protected _agentInsights: AgentInsightsClient | undefined;
-    protected _aiSpend: AiSpendClient | undefined;
     protected _alerts: AlertsClient | undefined;
     protected _annotationQueues: AnnotationQueuesClient | undefined;
     protected _assertionResults: AssertionResultsClient | undefined;
@@ -127,10 +125,6 @@ export class OpikApiClient {
 
     public get agentInsights(): AgentInsightsClient {
         return (this._agentInsights ??= new AgentInsightsClient(this._options));
-    }
-
-    public get aiSpend(): AiSpendClient {
-        return (this._aiSpend ??= new AiSpendClient(this._options));
     }
 
     public get alerts(): AlertsClient {
