@@ -119,7 +119,9 @@ class WorkspaceMetadataServiceCacheTest {
         assertThat(first.sizeGb()).isEqualTo(10.0);
 
         // the cache put is async and its completion signal is dropped, so wait until the entry is
-        // actually readable before altering the underlying value
+        // actually readable before altering the underlying value. The double dash is correct:
+        // CacheInterceptor composes "name:-" + evaluated key, and the @Cacheable key expression
+        // contributes its own leading '-'.
         var cacheKey = "project_metadata:--%s-%s".formatted(workspaceId, projectId);
         Awaitility.await()
                 .atMost(Duration.ofSeconds(5))
