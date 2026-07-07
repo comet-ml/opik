@@ -47,8 +47,9 @@ import static org.assertj.core.api.Assertions.within;
 
 /**
  * End-to-end coverage of the trace deletion-events capture: every public entry point that deletes traces
- * records the deleted ids in the {@code deletion_events_local} bridge. Runs with capture enabled; a single
- * workspace is reused and isolation comes from the random project and trace ids.
+ * records the deleted ids in the {@code deletion_events_local} bridge. Runs with capture enabled and a
+ * deliberately small insert batch size, so the multi-trace cases also exercise the chunked-insert path; a
+ * single workspace is reused and isolation comes from the random project and trace ids.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
@@ -86,8 +87,10 @@ class TraceDeletionEventTest {
                 .databaseAnalyticsFactory(databaseAnalyticsFactory)
                 .redisUrl(redisContainer.getRedisURI())
                 .runtimeInfo(wireMock.runtimeInfo())
-                .customConfigs(List.of(new CustomConfig(
-                        "databaseAnalyticsDataModel.traceDeletionEventsCaptureEnabled", "true")))
+                .customConfigs(List.of(
+                        new CustomConfig("databaseAnalyticsDataModel.traceDeletionEventsCaptureEnabled", "true"),
+                        // Small on purpose: the multi-trace cases (5 ids) then span several insert chunks.
+                        new CustomConfig("databaseAnalyticsDataModel.deletionEventsInsertBatchSize", "2")))
                 .build());
     }
 
@@ -181,7 +184,7 @@ class TraceDeletionEventTest {
 
     private DeletionEvent newExpectedDeletionEvent(UUID projectId, UUID traceId) {
         return DeletionEvent.builder()
-                .sourceTable(DeletionEvent.TRACES_SOURCE_TABLE)
+                .sourceTable(SourceTable.TRACES)
                 .workspaceId(WORKSPACE_ID)
                 .projectId(projectId)
                 .deletedId(traceId.toString())
@@ -197,7 +200,7 @@ class TraceDeletionEventTest {
         // just before this call, so it must be within a couple of seconds of now.
         var now = Instant.now();
         var actualDeletionEvents = deletionEventDAO
-                .findBySourceTableAndDeletedIds(DeletionEvent.TRACES_SOURCE_TABLE, deletedIds)
+                .findBySourceTableAndDeletedIds(SourceTable.TRACES, deletedIds)
                 .collectList()
                 .block();
 

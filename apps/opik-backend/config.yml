@@ -110,6 +110,11 @@ databaseAnalyticsDataModel:
   #   record the deleted ids in the deletion_events_local bridge; without it those deletes are lost from the table
   #   copy. Scope capture to the backfill-to-cutover window.
   traceDeletionEventsCaptureEnabled: ${ANALYTICS_DB_DATA_MODEL_TRACE_DELETION_EVENTS_CAPTURE_ENABLED:-false}
+  #  Default: 1000
+  #  Description: Rows per INSERT into the deletion_events_local bridge. A single delete batch can carry more ids
+  #   than the ClickHouse driver binds reliably in one statement (5 columns per row), so the insert is split into
+  #   chunks of this size.
+  deletionEventsInsertBatchSize: ${ANALYTICS_DB_DATA_MODEL_DELETION_EVENTS_INSERT_BATCH_SIZE:-1000}
 
 # Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
 #   window, protecting data quality.

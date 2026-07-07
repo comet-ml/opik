@@ -518,7 +518,7 @@ class TraceServiceImpl implements TraceService {
             }
             var events = ids.stream()
                     .map(id -> DeletionEvent.builder()
-                            .sourceTable(DeletionEvent.TRACES_SOURCE_TABLE)
+                            .sourceTable(SourceTable.TRACES)
                             .workspaceId(workspaceId)
                             .projectId(projectId)
                             .deletedId(id.toString())

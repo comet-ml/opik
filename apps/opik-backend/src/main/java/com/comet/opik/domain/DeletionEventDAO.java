@@ -1,19 +1,24 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Lists;
 import io.r2dbc.spi.Row;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -26,6 +31,7 @@ import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
  * the row would reappear; recording the deleted ids here lets the copy replay them. Callers insert the ids they
  * delete and read them back per source table.
  */
+@Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class DeletionEventDAO {
@@ -68,6 +74,7 @@ public class DeletionEventDAO {
             """;
 
     private final @NonNull TransactionTemplateAsync templateAsync;
+    private final @NonNull @Config OpikConfiguration config;
 
     /**
      * Inserts the given events, letting ClickHouse stamp {@code event_time} via the column default.
@@ -78,8 +85,20 @@ public class DeletionEventDAO {
         if (CollectionUtils.isEmpty(events)) {
             return Mono.empty();
         }
-        var first = events.iterator().next();
-        var details = "source_table=%s, project_id=%s".formatted(first.sourceTable(), first.projectId());
+        var batchSize = config.getDatabaseAnalyticsDataModel().deletionEventsInsertBatchSize();
+        var batches = Lists.partition(List.copyOf(events), batchSize);
+        log.info("Inserting deletion events in batch, total '{}', batches '{}', batchSize '{}'",
+                events.size(), batches.size(), batchSize);
+        return Flux.fromIterable(batches)
+                .concatMap(batch -> insert(batch, userName))
+                .then();
+    }
+
+    private Mono<Void> insert(List<DeletionEvent> events, String userName) {
+        var first = events.getFirst();
+        log.info("Inserting deletion events batch, size '{}' for source_table '{}' project_id '{}' on workspace '{}'",
+                events.size(), first.sourceTable().getValue(), first.projectId(), first.workspaceId());
+        var details = "source_table=%s, project_id=%s".formatted(first.sourceTable().getValue(), first.projectId());
         var logComment = getLogComment("insert_deletion_events", first.workspaceId(), userName, details);
         var template = TemplateUtils.getBatchSql(INSERT, events.size());
         template.add("log_comment", logComment);
@@ -87,7 +106,7 @@ public class DeletionEventDAO {
             var statement = connection.createStatement(template.render());
             int i = 0;
             for (var event : events) {
-                statement.bind("source_table" + i, event.sourceTable())
+                statement.bind("source_table" + i, event.sourceTable().getValue())
                         .bind("workspace_id" + i, event.workspaceId())
                         // project_id is empty for workspace-scoped source tables
                         .bind("project_id" + i, event.projectId() == null ? "" : event.projectId().toString())
@@ -104,12 +123,13 @@ public class DeletionEventDAO {
     }
 
     @VisibleForTesting
-    Flux<DeletionEvent> findBySourceTableAndDeletedIds(String sourceTable, @NonNull Set<String> deletedIds) {
-        var details = "source_table=%s, deleted_ids_size=%s".formatted(sourceTable, deletedIds.size());
+    Flux<DeletionEvent> findBySourceTableAndDeletedIds(
+            @NonNull SourceTable sourceTable, @NonNull Set<String> deletedIds) {
+        var details = "source_table=%s, deleted_ids_size=%s".formatted(sourceTable.getValue(), deletedIds.size());
         var template = getSTWithLogComment(
                 FIND_BY_SOURCE_TABLE_AND_DELETED_IDS, "find_deletion_events", null, null, details);
         return templateAsync.stream(connection -> Flux.from(connection.createStatement(template.render())
-                .bind("source_table", sourceTable)
+                .bind("source_table", sourceTable.getValue())
                 .bind("deleted_ids", deletedIds)
                 .execute())
                 .flatMap(result -> result.map((row, _) -> map(row))));
@@ -119,7 +139,7 @@ public class DeletionEventDAO {
         var projectId = row.get("project_id", String.class);
         return DeletionEvent.builder()
                 .eventTime(row.get("event_time", Instant.class))
-                .sourceTable(row.get("source_table", String.class))
+                .sourceTable(SourceTable.fromStringOrThrow(row.get("source_table", String.class)))
                 .workspaceId(row.get("workspace_id", String.class))
                 .projectId(StringUtils.isBlank(projectId) ? null : UUID.fromString(projectId))
                 .deletedId(row.get("deleted_id", String.class))

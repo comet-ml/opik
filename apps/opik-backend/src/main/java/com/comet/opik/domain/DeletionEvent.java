@@ -14,11 +14,9 @@ import java.util.UUID;
 @Builder(toBuilder = true)
 public record DeletionEvent(
         Instant eventTime,
-        @NonNull String sourceTable,
+        @NonNull SourceTable sourceTable,
         @NonNull String workspaceId,
         UUID projectId,
         @NonNull String deletedId,
         @NonNull DeletionReason deletionReason) {
-
-    public static final String TRACES_SOURCE_TABLE = "traces";
 }

@@ -17,9 +17,14 @@ import lombok.Builder;
  * {@code deletion_events_local} bridge so they survive the table copy. Left {@code false} at deploy time and turned on
  * once the trace backfill begins, so capture spans exactly the backfill-to-cutover window. A sibling
  * {@code spanDeletionEventsCaptureEnabled} follows when spans migrate.</p>
+ *
+ * <p>{@code deletionEventsInsertBatchSize}: rows per {@code INSERT} into the bridge. A single delete batch can carry
+ * far more ids than the ClickHouse driver binds reliably in one statement (5 columns per row), so the insert is split
+ * into chunks of this size.</p>
  */
 @Builder(toBuilder = true)
 public record DatabaseAnalyticsDataModelConfig(
         boolean traceColumnsNonNullable,
-        boolean traceDeletionEventsCaptureEnabled) {
+        boolean traceDeletionEventsCaptureEnabled,
+        int deletionEventsInsertBatchSize) {
 }
