@@ -788,6 +788,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 <if(dataset_item_filters)>
                 AND eia.dataset_item_id IN (SELECT lookup_id FROM lookup_for_count)
                 <endif>
+                LIMIT 1 BY eia.id
             )
             SELECT COUNT(DISTINCT di_id) AS count
             FROM (
@@ -1449,6 +1450,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         IN (SELECT id FROM dataset_items_aggr_resolved WHERE <dataset_item_filters>)
                     <endif>
                     <endif>
+                    LIMIT 1 BY eia.id
                 ) ei
                 LEFT JOIN dataset_items_aggr_resolved AS di ON di.id = ei.stable_dataset_item_id
                 GROUP BY

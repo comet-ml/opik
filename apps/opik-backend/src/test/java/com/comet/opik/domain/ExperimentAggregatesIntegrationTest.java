@@ -3123,4 +3123,138 @@ class ExperimentAggregatesIntegrationTest {
                 .as("label projectId must be one of the referenced projects")
                 .isIn(Arrays.stream(expectedProjectIdRange).toList());
     }
+
+    @Test
+    @DisplayName("OPIK-7247: editing dataset items across versions must not duplicate experiment items after aggregation")
+    void editedDatasetItemsAcrossVersions__afterAggregation__noDuplicateExperimentItems() {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var project = createProject(apiKey, workspaceName);
+        var dataset = createDataset(apiKey, workspaceName);
+        List<String> feedbackScoreNames = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+
+        // Create initial items (version 1) — id == dataset_item_id for all items
+        var datasetItems = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class)
+                .stream()
+                .map(item -> item.toBuilder()
+                        .datasetId(dataset.id())
+                        .traceId(null)
+                        .experimentItems(null)
+                        .spanId(null)
+                        .source(DatasetItemSource.SDK)
+                        .build())
+                .toList();
+
+        datasetResourceClient.createDatasetItems(
+                DatasetItemBatch.builder().datasetId(dataset.id()).items(datasetItems).build(),
+                workspaceName, apiKey);
+
+        // Edit the first 2 items multiple times to create additional versions.
+        // Each re-insert with the same id creates a new dataset version where
+        // the edited item's row still has id == dataset_item_id. This is the
+        // condition that triggers the Cartesian product in the lookup JOIN.
+        for (int round = 0; round < 3; round++) {
+            final int r = round;
+            var edits = datasetItems.subList(0, 2).stream()
+                    .map(item -> item.toBuilder()
+                            .data(java.util.Map.of("edited", JsonUtils.getJsonNodeFromString(
+                                    "\"round-" + r + "-" + UUID.randomUUID() + "\"")))
+                            .build())
+                    .collect(java.util.stream.Collectors.toList());
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder().datasetId(dataset.id()).items(edits).build(),
+                    workspaceName, apiKey);
+        }
+
+        // Create experiment and link items
+        var experiment = createExperiment(dataset, apiKey, workspaceName);
+        var traces = datasetItems.stream()
+                .map(item -> factory.manufacturePojo(Trace.class).toBuilder()
+                        .projectName(project.name())
+                        .usage(null)
+                        .visibilityMode(null)
+                        .build())
+                .toList();
+        traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+        var allSpans = traces.stream()
+                .flatMap(trace -> PodamFactoryUtils.manufacturePojoList(factory, Span.class)
+                        .stream()
+                        .map(span -> span.toBuilder()
+                                .projectName(project.name())
+                                .traceId(trace.id())
+                                .parentSpanId(null)
+                                .usage(spanResourceClient.getTokenUsage())
+                                .build()))
+                .toList();
+        spanResourceClient.batchCreateSpans(allSpans, apiKey, workspaceName);
+
+        var allFeedbackScoreItems = traces.stream()
+                .flatMap(trace -> feedbackScoreNames.stream()
+                        .map(name -> (FeedbackScoreBatchItem) factory
+                                .manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                .id(trace.id())
+                                .projectName(project.name())
+                                .name(name)
+                                .value(BigDecimal.valueOf(Math.random() * 10))
+                                .source(ScoreSource.SDK)
+                                .build()))
+                .toList();
+        if (!allFeedbackScoreItems.isEmpty()) {
+            traceResourceClient.feedbackScores(allFeedbackScoreItems, apiKey, workspaceName);
+        }
+
+        List<ExperimentItem> experimentItems = IntStream.range(0, datasetItems.size())
+                .mapToObj(i -> ExperimentItem.builder()
+                        .experimentId(experiment.id())
+                        .datasetItemId(datasetItems.get(i).id())
+                        .traceId(traces.get(i).id())
+                        .build())
+                .toList();
+        experimentResourceClient.createExperimentItem(Set.copyOf(experimentItems), apiKey, workspaceName);
+
+        var experimentIds = List.of(experiment.id());
+        int pageSize = 25;
+
+        // Before aggregation (raw branch)
+        var beforeAggregation = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                dataset.id(), experimentIds, null, null, null, 1, pageSize, apiKey, workspaceName);
+
+        assertPageNotEmpty(beforeAggregation);
+
+        int expectedExperimentItemCount = beforeAggregation.content().stream()
+                .mapToInt(di -> di.experimentItems() != null ? di.experimentItems().size() : 0)
+                .sum();
+        assertThat(expectedExperimentItemCount)
+                .as("Before aggregation: each dataset item should have exactly 1 experiment item")
+                .isEqualTo(datasetItems.size());
+
+        // Trigger aggregation
+        experimentAggregatesService.populateAggregations(experiment.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        // After aggregation (aggregated branch)
+        var afterAggregation = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                dataset.id(), experimentIds, null, null, null, 1, pageSize, apiKey, workspaceName);
+
+        assertThat(afterAggregation.total())
+                .as("Total should match before/after aggregation")
+                .isEqualTo(beforeAggregation.total());
+
+        int afterExperimentItemCount = afterAggregation.content().stream()
+                .mapToInt(di -> di.experimentItems() != null ? di.experimentItems().size() : 0)
+                .sum();
+        assertThat(afterExperimentItemCount)
+                .as("OPIK-7247: after aggregation, each dataset item should still have exactly 1 experiment item (no duplicates from multi-version lookup JOIN)")
+                .isEqualTo(datasetItems.size());
+
+        assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
+    }
 }
