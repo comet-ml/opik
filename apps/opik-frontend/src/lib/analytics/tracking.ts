@@ -17,6 +17,21 @@ export const OpikEvent = {
     "opik_filter_dialog_closed_without_selection",
   FILTERS_ACTIVE_COUNT: "opik_filters_active_count",
   PINNED_FILTERS_COUNT: "opik_pinned_filters_count",
+  EXPLAIN_CLICKED: "opik_explain_clicked",
+  EXPLAIN_COMPLETED: "opik_explain_completed",
+  EXPLAIN_ERRORED: "opik_explain_errored",
+  EXPLAIN_CONTINUE_CLICKED: "opik_explain_continue_clicked",
+  EXPLAIN_RETRIED: "opik_explain_retried",
+  QUICK_FILTER_APPLIED: "opik_quick_filter_applied",
+  DIAGNOSTICS_RUN_CLICKED: "opik_diagnostics_run_clicked",
+  DIAGNOSTICS_RUN_COMPLETED: "opik_diagnostics_run_completed",
+  DIAGNOSTICS_RUN_FAILED: "opik_diagnostics_run_failed",
+  DIAGNOSTICS_TRY_AGAIN_CLICKED: "opik_diagnostics_try_again_clicked",
+  DIAGNOSTICS_AUTO_ENABLED: "opik_diagnostics_auto_enabled",
+  DIAGNOSTICS_AUTO_DISABLED: "opik_diagnostics_auto_disabled",
+  DIAGNOSTICS_ISSUE_RESOLVED: "opik_diagnostics_issue_resolved",
+  DIAGNOSTICS_ISSUE_REOPENED: "opik_diagnostics_issue_reopened",
+  DIAGNOSTICS_CONTINUE_WITH_OLLIE: "opik_diagnostics_continue_with_ollie",
 } as const;
 
 type OpikEventValues = (typeof OpikEvent)[keyof typeof OpikEvent];

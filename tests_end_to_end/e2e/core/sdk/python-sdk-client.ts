@@ -5,6 +5,7 @@ export interface PythonSdkClient {
     name: string;
     input: string;
     output: string;
+    thread_id?: string;
     workspace?: string;
   }): Promise<{ id: string; name: string; project_id: string }>;
   createNestedTrace(args: {

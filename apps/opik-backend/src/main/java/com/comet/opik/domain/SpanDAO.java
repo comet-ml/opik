@@ -6,6 +6,7 @@ import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.SpansCountResponse;
+import com.comet.opik.api.UsageByWorkspaceProjectUserResponse;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.api.sorting.SpanSortingFactory;
@@ -35,6 +36,7 @@ import io.r2dbc.spi.RowMetadata;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -609,6 +611,21 @@ public class SpanDAO {
             ;
             """;
 
+    private static final String SELECT_SPAN_REFS_BY_SPAN_IDS = """
+            SELECT
+                id,
+                project_id,
+                trace_id,
+                start_time
+            FROM spans
+            WHERE workspace_id = :workspace_id
+            AND id IN :ids
+            ORDER BY id, last_updated_at DESC
+            LIMIT 1 BY id
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
     private static final String SELECT_BY_IDS = """
             WITH feedback_scores_deduped AS (
                 SELECT workspace_id,
@@ -686,7 +703,7 @@ public class SpanDAO {
                     entries[1].4 AS source,
                     mapFromArrays(
                             arrayMap(e -> e.5, entries),
-                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9), entries)
+                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, '', '', '', e.5), entries)
                     ) AS value_by_author,
                     arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
                     arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
@@ -697,7 +714,15 @@ public class SpanDAO {
             SELECT
                 s.*,
                 s.project_id as project_id,
-                groupArray(tuple(c.*)) AS comments,
+                groupArray(tuple(
+                    c.comment_id,
+                    c.text,
+                    c.comment_created_at,
+                    c.comment_last_updated_at,
+                    c.comment_created_by,
+                    c.comment_last_updated_by,
+                    c.source_queue_id
+                )) AS comments,
                 any(fs.feedback_scores) as feedback_scores_list
             FROM (
                 SELECT
@@ -718,6 +743,7 @@ public class SpanDAO {
                     last_updated_at AS comment_last_updated_at,
                     created_by AS comment_created_by,
                     last_updated_by AS comment_last_updated_by,
+                    source_queue_id,
                     entity_id
                 FROM comments
                 WHERE workspace_id = :workspace_id
@@ -808,6 +834,14 @@ public class SpanDAO {
      * picks the right page) and the final ORDER BY (so the page is returned in order); {@code page_wide}'s own order is
      * immaterial since it is id-bounded and {@code LIMIT 1 BY id}. Field exclusion ({@code exclude_fields}) and
      * truncation are layered on top without dropping the sort key.
+     * <p>
+     * When aggregates are enrichment-only ({@code page_keyed_aggregates}, see
+     * {@code shouldPageKeyAggregates}), the feedback-score and comment CTEs are keyed on
+     * {@code IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))} instead of
+     * {@code span_id_prefilter}: the inner scalar subquery is evaluated once and cached for the whole query,
+     * so each aggregate scans only the page's spans instead of the full filtered project. The aggregate CTEs
+     * referencing {@code page_ids} before its definition is fine — CTE names resolve independently of
+     * declaration order.
      */
     private static final String SELECT_BY_PROJECT_ID = """
             WITH <if(span_id_prefilter)>span_id_prefilter AS (
@@ -830,7 +864,8 @@ public class SpanDAO {
                        created_at AS comment_created_at,
                        last_updated_at AS comment_last_updated_at,
                        created_by AS comment_created_by,
-                       last_updated_by AS comment_last_updated_by
+                       last_updated_by AS comment_last_updated_by,
+                       source_queue_id
                    )) as comments
               FROM (
                 SELECT
@@ -840,13 +875,15 @@ public class SpanDAO {
                     last_updated_at,
                     created_by,
                     last_updated_by,
+                    source_queue_id,
                     entity_id,
                     workspace_id,
                     project_id
                 FROM comments
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                <if(span_id_prefilter)> AND entity_id IN (SELECT id FROM span_id_prefilter)
+                <if(page_keyed_aggregates)> AND entity_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                <elseif(span_id_prefilter)> AND entity_id IN (SELECT id FROM span_id_prefilter)
                 <else>
                 <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                 <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
@@ -887,7 +924,8 @@ public class SpanDAO {
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
-                      <if(span_id_prefilter)> AND entity_id IN (SELECT id FROM span_id_prefilter)
+                      <if(page_keyed_aggregates)> AND entity_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                      <elseif(span_id_prefilter)> AND entity_id IN (SELECT id FROM span_id_prefilter)
                       <else>
                       <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                       <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
@@ -910,7 +948,8 @@ public class SpanDAO {
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
-                      <if(span_id_prefilter)> AND entity_id IN (SELECT id FROM span_id_prefilter)
+                      <if(page_keyed_aggregates)> AND entity_id IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))
+                      <elseif(span_id_prefilter)> AND entity_id IN (SELECT id FROM span_id_prefilter)
                       <else>
                       <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                       <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
@@ -939,7 +978,7 @@ public class SpanDAO {
                     entries[1].4 AS source,
                     mapFromArrays(
                             arrayMap(e -> e.5, entries),
-                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9), entries)
+                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, '', '', '', e.5), entries)
                     ) AS value_by_author,
                     arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
                     arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
@@ -1065,7 +1104,18 @@ public class SpanDAO {
 
     private static final String COUNT_BY_PROJECT_ID = """
             <if(feedback_scores_filters || feedback_scores_empty_filters)>
-            WITH feedback_scores_deduped AS (
+            WITH <if(span_id_prefilter)>span_id_prefilter AS (
+                SELECT DISTINCT id
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                <if(trace_id)> AND trace_id = :trace_id <endif>
+                <if(type)> AND type = :type <endif>
+                <if(filters)> AND <filters> <endif>
+                <if(search_text)> AND <search_text> <endif>
+            ), <endif>feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -1085,8 +1135,11 @@ public class SpanDAO {
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
+                      <if(span_id_prefilter)> AND entity_id IN (SELECT id FROM span_id_prefilter)
+                      <else>
                       <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                       <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                      <endif>
                     UNION ALL
                     SELECT workspace_id,
                            project_id,
@@ -1099,8 +1152,11 @@ public class SpanDAO {
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
+                      <if(span_id_prefilter)> AND entity_id IN (SELECT id FROM span_id_prefilter)
+                      <else>
                       <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                       <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                      <endif>
                 )
                 ORDER BY last_updated_at DESC
                 LIMIT 1 BY workspace_id, project_id, entity_id, name, author
@@ -1310,7 +1366,7 @@ public class SpanDAO {
                     entries[1].4 AS source,
                     mapFromArrays(
                             arrayMap(e -> e.5, entries),
-                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9), entries)
+                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, '', '', '', e.5), entries)
                     ) AS value_by_author,
                     arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
                     arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
@@ -1579,6 +1635,22 @@ public class SpanDAO {
                 <if(demo_data_created_at)>OR created_at > parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>)
             <endif>
             GROUP BY workspace_id, created_by
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    private static final String SPAN_DAILY_COUNT_BY_WORKSPACE_PROJECT_USER = """
+            SELECT
+                 workspace_id,
+                 project_id,
+                 created_by AS user,
+                 COUNT(DISTINCT id) AS span_count
+             FROM spans
+             WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
+             <if(excluded_project_ids)>AND (project_id NOT IN :excluded_project_ids
+                <if(demo_data_created_at)>OR created_at > parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>)
+            <endif>
+             GROUP BY workspace_id, project_id, created_by
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -2122,10 +2194,45 @@ public class SpanDAO {
                 .flatMap(this::mapToDto);
     }
 
+    /** A persisted span's project, trace, and start_time — the fields needed to build its cipx_spends row.
+     *  project_id/trace_id are immutable (sort key); start_time is the stored value, not derived. */
+    @Builder(toBuilder = true)
+    public record SpanRef(@NonNull UUID projectId, @NonNull UUID traceId, @NonNull Instant startTime) {
+    }
+
     /**
-     * Get target project IDs from spans for the given span IDs.
-     * This is executed as a separate query to reduce spans table scans in the main query.
+     * Resolves span -> (project_id, trace_id, start_time) for the given spans, keyed off {@code workspaceId}
+     * explicitly rather than the reactive request context, so it can run from the Cost Intelligence subscriber (an
+     * async event listener with no request scope). A batch span update matches spans by id + workspace and carries
+     * none of these per span, and start_time must come from the stored span (not the UUIDv7 timestamp) so a cipx
+     * update doesn't rewrite it for backfilled/imported spans. Deduped with LIMIT 1 BY id (latest last_updated_at
+     * wins) rather than FINAL, so it stays cheap on the ingestion path. Spans missing from ClickHouse are absent.
      */
+    @WithSpan
+    public Mono<Map<UUID, SpanRef>> getSpanRefsBySpanIds(@NonNull Set<UUID> spanIds, @NonNull String workspaceId) {
+        if (spanIds.isEmpty()) {
+            return Mono.just(Map.of());
+        }
+        log.info("Getting span refs for '{}' span_ids", spanIds.size());
+        return Mono.from(connectionFactory.create())
+                .flatMap(connection -> {
+                    var template = getSTWithLogComment(SELECT_SPAN_REFS_BY_SPAN_IDS,
+                            "get_span_refs_by_span_ids", workspaceId, "", spanIds.size());
+                    var statement = connection.createStatement(template.render())
+                            .bind("ids", spanIds.toArray(UUID[]::new))
+                            .bind("workspace_id", workspaceId);
+                    return Flux.from(statement.execute())
+                            .flatMap(result -> result.map((row, metadata) -> Map.entry(
+                                    row.get("id", UUID.class),
+                                    SpanRef.builder()
+                                            .projectId(row.get("project_id", UUID.class))
+                                            .traceId(row.get("trace_id", UUID.class))
+                                            .startTime(row.get("start_time", Instant.class))
+                                            .build())))
+                            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                });
+    }
+
     private Mono<List<UUID>> getTargetProjectIdsForSpans(Set<UUID> ids) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
@@ -2358,9 +2465,8 @@ public class SpanDAO {
         return makeFluxContextAware((userName, workspaceId) -> {
             var template = newFindTemplate(SELECT_BY_PROJECT_ID, criteria, "find_span_stream", workspaceId, userName);
 
-            if (shouldUseSpanIdPrefilter(criteria, template)) {
-                template.add("span_id_prefilter", true);
-            }
+            // The stream has no custom sorting, so only filters can make aggregates drive page selection.
+            addAggregateKeyingFlags(template, criteria, false);
 
             bindTemplateExcludeFieldVariables(criteria, template);
 
@@ -2407,9 +2513,7 @@ public class SpanDAO {
                     .map(sortFields -> sortFields.contains("feedback_scores"))
                     .orElse(false);
 
-            if (shouldUseSpanIdPrefilter(spanSearchCriteria, template) && !sortHasFeedbackScores) {
-                template.add("span_id_prefilter", true);
-            }
+            addAggregateKeyingFlags(template, spanSearchCriteria, sortHasFeedbackScores);
 
             var finalTemplate = template;
             Optional.ofNullable(orderBySql)
@@ -2495,6 +2599,10 @@ public class SpanDAO {
             var template = newFindTemplate(COUNT_BY_PROJECT_ID, spanSearchCriteria, "count_spans_by_project_id",
                     workspaceId, userName);
 
+            if (shouldUseSpanIdPrefilter(spanSearchCriteria, template)) {
+                template.add("span_id_prefilter", true);
+            }
+
             var statement = connection.createStatement(template.render())
                     .bind("project_id", spanSearchCriteria.projectId())
                     .bind("workspace_id", workspaceId);
@@ -2547,16 +2655,57 @@ public class SpanDAO {
      * uuidFromTime/uuidToTime are excluded because the if/else fallback applies them directly
      * to feedback_scores; lastReceivedSpanId is excluded because it's a pagination cursor,
      * not a semantic filter.
+     *
+     * <p>Feedback score filters use separate template variables ({@code feedback_scores_filters})
+     * and are NOT injected into {@code <filters>}, so the prefilter CTE is safe to use
+     * alongside them (OPIK-7076).
      */
     private boolean shouldUseSpanIdPrefilter(SpanSearchCriteria criteria, ST template) {
-        boolean hasFeedbackScoreFilters = hasFeedbackScoreFilters(template);
-
         boolean hasNarrowingFilters = criteria.traceId() != null
                 || criteria.type() != null
                 || criteria.searchText() != null
                 || template.getAttribute("filters") != null;
 
-        return !hasFeedbackScoreFilters && hasNarrowingFilters;
+        return hasNarrowingFilters;
+    }
+
+    /**
+     * Determines whether the enrichment aggregate CTEs (feedback scores, comments) can be keyed on the page ids
+     * instead of the full filtered span id set.
+     *
+     * <p>Those CTEs are joined to {@code page_wide} only to enrich the returned rows, so whenever neither
+     * filtering nor sorting reads them, computing them for every candidate span is wasted work that grows with
+     * project size: the final LEFT JOINs discard everything outside the page. Keying them on the page ids turns
+     * whole-project scans into page-sized, primary-key-prunable lookups.
+     *
+     * <p>The page ids are consumed via {@code IN (SELECT arrayJoin((SELECT groupArray(id) FROM page_ids)))}:
+     * the inner scalar subquery is evaluated once and cached for the whole query, so the {@code page_ids} CTE is
+     * not re-executed at every reference (ClickHouse inlines plain CTE references), and the materialized constant
+     * array is usable for primary-key index analysis.
+     *
+     * <p>Must stay disabled whenever page selection depends on an aggregate: feedback-score filters
+     * ({@code spans_deduped} filters on feedback_scores_final/fsc) or sorting by feedback scores
+     * ({@code page_ids} joins feedback_scores_agg).
+     */
+    private boolean shouldPageKeyAggregates(ST template, boolean sortHasFeedbackScores) {
+        return !hasFeedbackScoreFilters(template) && !sortHasFeedbackScores;
+    }
+
+    /**
+     * Applies the aggregate-keying decision shared by {@code find} and {@code findSpanStream}: page-keyed
+     * aggregates when they are enrichment-only, otherwise the narrowing span id prefilter when filters allow it.
+     *
+     * <p>The prefilter branch fires for feedback-score-sorted queries with narrowing filters: page-keying is
+     * unsafe there (page selection reads feedback_scores_agg), but the prefilter set — all filtered span ids —
+     * is a superset of any page, so keying the aggregate CTEs on it preserves the sort while avoiding
+     * whole-project feedback-score and comment scans.
+     */
+    private void addAggregateKeyingFlags(ST template, SpanSearchCriteria criteria, boolean sortHasFeedbackScores) {
+        if (shouldPageKeyAggregates(template, sortHasFeedbackScores)) {
+            template.add("page_keyed_aggregates", true);
+        } else if (shouldUseSpanIdPrefilter(criteria, template)) {
+            template.add("span_id_prefilter", true);
+        }
     }
 
     private boolean hasFeedbackScoreFilters(ST template) {
@@ -2794,6 +2943,44 @@ public class SpanDAO {
                         .user(row.get("user", String.class))
                         .count(row.get("span_count", Long.class))
                         .build()));
+    }
+
+    /**
+     * Counts previous-day spans grouped by workspace, project and user.
+     */
+    @WithSpan
+    public Flux<UsageByWorkspaceProjectUserResponse.WorkspaceProjectUserCount> countSpansBreakdownPerWorkspace(
+            @NonNull Map<UUID, Instant> excludedProjectIds) {
+
+        var template = getSTWithLogComment(SPAN_DAILY_COUNT_BY_WORKSPACE_PROJECT_USER,
+                "count_spans_by_workspace_project_user", "", "", "");
+
+        if (!excludedProjectIds.isEmpty()) {
+            template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
+        }
+
+        Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
+        demoDataCreatedAt.ifPresent(instant -> template.add("demo_data_created_at", instant.toString()));
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(template.render());
+
+                    if (!excludedProjectIds.isEmpty()) {
+                        statement.bind("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
+                    }
+
+                    demoDataCreatedAt.ifPresent(instant -> statement.bind("demo_data_created_at", instant.toString()));
+
+                    return statement.execute();
+                })
+                .flatMap(result -> result.map(
+                        (row, rowMetadata) -> UsageByWorkspaceProjectUserResponse.WorkspaceProjectUserCount.builder()
+                                .workspaceId(row.get("workspace_id", String.class))
+                                .projectId(row.get("project_id", UUID.class))
+                                .user(row.get("user", String.class))
+                                .count(row.get("span_count", Long.class))
+                                .build()));
     }
 
     private boolean isManualCost(Span span) {

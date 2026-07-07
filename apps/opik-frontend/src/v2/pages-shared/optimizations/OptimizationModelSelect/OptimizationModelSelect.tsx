@@ -164,7 +164,6 @@ const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
           {filteredFreeModel && (
             <SelectItem
               value={filteredFreeModel.value}
-              withoutCheck
               className="comet-body-s h-8 justify-center hover:bg-primary-foreground"
             >
               <div className="flex w-full items-center gap-2">
@@ -197,7 +196,6 @@ const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
         {freeModelOption && (
           <SelectItem
             value={freeModelOption.value}
-            withoutCheck
             className="comet-body-s h-8 justify-center hover:bg-primary-foreground"
           >
             <div className="flex w-full items-center gap-2">

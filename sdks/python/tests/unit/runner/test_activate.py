@@ -86,3 +86,24 @@ def test_no_signal_then_warn__full_flow_prints_warning(capsys):
 
     captured = capsys.readouterr()
     assert "exited without blocking" in captured.err
+
+
+@pytest.mark.parametrize("value", [0.5, 2.0, 0.001])
+def test_resolve_poll_interval__finite_positive__passed_through(value):
+    assert activate_module._resolve_poll_interval(value) == value
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        0.0,
+        -1.0,
+        float("nan"),
+        float("inf"),
+        float("-inf"),
+    ],
+)
+def test_resolve_poll_interval__non_finite_or_non_positive__falls_back_to_default(
+    value,
+):
+    assert activate_module._resolve_poll_interval(value) is None

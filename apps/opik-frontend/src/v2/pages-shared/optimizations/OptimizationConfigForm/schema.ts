@@ -223,7 +223,7 @@ export const convertOptimizationStudioToFormData = (
   };
 
   return {
-    name: optimization?.name || "Optimization studio run",
+    name: optimization?.name || "Optimization run",
     datasetId: optimization?.dataset_id || "",
     optimizerType,
     optimizerParams,

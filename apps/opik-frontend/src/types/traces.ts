@@ -1,4 +1,5 @@
 import { UsageData } from "@/types/shared";
+import { PROVIDER_TYPE } from "@/types/providers";
 import { CommentItems } from "./comment";
 import { GuardrailValidation } from "./guardrails";
 import { ThreadStatus } from "./thread";
@@ -17,6 +18,9 @@ export enum FEEDBACK_SCORE_TYPE {
 export enum TRACE_VISIBILITY_MODE {
   default = "default",
   hidden = "hidden",
+  // Sentinel for entity-scoped views (experiment/playground/trial logs): show traces of every
+  // visibility. Never sent to the backend — it maps to "no visibility filter" (see generateVisibilityFilters).
+  all = "all",
 }
 
 export enum LOGS_SOURCE {
@@ -24,6 +28,7 @@ export enum LOGS_SOURCE {
   experiment = "experiment",
   playground = "playground",
   optimization = "optimization",
+  evaluator = "evaluator",
 }
 
 export type FeedbackScoreValueByAuthorMap = Record<
@@ -36,6 +41,8 @@ export type FeedbackScoreValueByAuthorMap = Record<
     last_updated_at: string;
     span_type?: string;
     span_id?: string;
+    source_queue_id?: string;
+    author?: string;
   }
 >;
 
@@ -89,6 +96,7 @@ export interface Trace extends BaseTraceData {
   span_count?: number;
   llm_span_count?: number;
   has_tool_spans?: boolean;
+  providers?: PROVIDER_TYPE[];
   thread_id?: string;
   project_id: string;
   workspace_name?: string;

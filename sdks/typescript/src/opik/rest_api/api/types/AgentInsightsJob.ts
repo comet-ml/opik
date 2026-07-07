@@ -7,6 +7,9 @@ export interface AgentInsightsJob {
     projectId?: string;
     status?: OpikApi.AgentInsightsJobStatus;
     lastScanAt?: Date;
+    lastFailureReason?: string;
+    lastFailureDetail?: string;
+    lastFailedAt?: Date;
     createdAt?: Date;
     createdBy?: string;
     lastUpdatedAt?: Date;

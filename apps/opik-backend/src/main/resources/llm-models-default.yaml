@@ -130,6 +130,9 @@ openai:
     structuredOutput: true
     reasoning: true
 anthropic:
+  - id: "claude-sonnet-5"
+    label: "Claude Sonnet 5"
+    structuredOutput: true
   - id: "claude-opus-4-8"
     label: "Claude Opus 4.8"
     structuredOutput: true
@@ -188,6 +191,8 @@ gemini:
     label: "Gemma 4 26B A4B IT"
   - id: "gemma-4-31b-it"
     label: "Gemma 4 31B IT"
+  - id: "gemini-omni-flash-preview"
+    label: "Gemini Omni Flash Preview"
   - id: "lyria-3-clip-preview"
     label: "Lyria 3 Clip Preview"
   - id: "lyria-3-pro-preview"
@@ -212,6 +217,7 @@ gemini:
   - id: "gemini-3.1-flash-image"
   - id: "gemini-3.1-flash-image-preview"
     structuredOutput: true
+  - id: "gemini-3.1-flash-lite-image"
   - id: "gemini-3.1-flash-tts-preview"
   - id: "gemini-pro-vision"
   - id: "nano-banana-pro-preview"
@@ -350,6 +356,8 @@ openrouter:
     label: "anthropic/claude-sonnet-4.5"
   - id: "anthropic/claude-sonnet-4.6"
     label: "anthropic/claude-sonnet-4.6"
+  - id: "anthropic/claude-sonnet-5"
+    label: "anthropic/claude-sonnet-5"
   - id: "arcee-ai/afm-4.5b"
     label: "arcee-ai/afm-4.5b"
   - id: "arcee-ai/coder-large"
@@ -485,10 +493,12 @@ openrouter:
     label: "deepseek/deepseek-v3.2-speciale"
   - id: "deepseek/deepseek-v4-flash"
     label: "deepseek/deepseek-v4-flash"
+    structuredOutput: true
   - id: "deepseek/deepseek-v4-flash:free"
     label: "deepseek/deepseek-v4-flash:free"
   - id: "deepseek/deepseek-v4-pro"
     label: "deepseek/deepseek-v4-pro"
+    structuredOutput: true
   - id: "eleutherai/llemma_7b"
     label: "eleutherai/llemma_7b"
   - id: "essentialai/rnj-1-instruct"
@@ -535,6 +545,8 @@ openrouter:
   - id: "google/gemini-3.1-flash-lite"
     label: "google/gemini-3.1-flash-lite"
     structuredOutput: true
+  - id: "google/gemini-3.1-flash-lite-image"
+    label: "google/gemini-3.1-flash-lite-image"
   - id: "google/gemini-3.1-flash-lite-preview"
     label: "google/gemini-3.1-flash-lite-preview"
     structuredOutput: true
@@ -854,6 +866,8 @@ openrouter:
     label: "neversleep/noromaid-20b"
   - id: "nex-agi/deepseek-v3.1-nex-n1"
     label: "nex-agi/deepseek-v3.1-nex-n1"
+  - id: "nex-agi/nex-n2-mini"
+    label: "nex-agi/nex-n2-mini"
   - id: "nex-agi/nex-n2-pro"
     label: "nex-agi/nex-n2-pro"
   - id: "nex-agi/nex-n2-pro:free"
@@ -1109,6 +1123,10 @@ openrouter:
     label: "poolside/laguna-m.1"
   - id: "poolside/laguna-m.1:free"
     label: "poolside/laguna-m.1:free"
+  - id: "poolside/laguna-xs-2.1"
+    label: "poolside/laguna-xs-2.1"
+  - id: "poolside/laguna-xs-2.1:free"
+    label: "poolside/laguna-xs-2.1:free"
   - id: "poolside/laguna-xs.2"
     label: "poolside/laguna-xs.2"
   - id: "poolside/laguna-xs.2:free"
@@ -1271,6 +1289,8 @@ openrouter:
     label: "relace/relace-apply-3"
   - id: "relace/relace-search"
     label: "relace/relace-search"
+  - id: "sakana/fugu-ultra"
+    label: "sakana/fugu-ultra"
   - id: "sao10k/l3-euryale-70b"
     label: "sao10k/l3-euryale-70b"
   - id: "sao10k/l3-lunaris-8b"
@@ -1293,10 +1313,14 @@ openrouter:
     label: "switchpoint/router"
   - id: "tencent/hunyuan-a13b-instruct"
     label: "tencent/hunyuan-a13b-instruct"
+  - id: "tencent/hy3"
+    label: "tencent/hy3"
   - id: "tencent/hy3-preview"
     label: "tencent/hy3-preview"
   - id: "tencent/hy3-preview:free"
     label: "tencent/hy3-preview:free"
+  - id: "tencent/hy3:free"
+    label: "tencent/hy3:free"
   - id: "thedrummer/anubis-70b-v1.1"
     label: "thedrummer/anubis-70b-v1.1"
   - id: "thedrummer/cydonia-24b-v4.1"

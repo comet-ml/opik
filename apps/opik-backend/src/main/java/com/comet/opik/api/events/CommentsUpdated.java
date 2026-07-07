@@ -1,24 +1,21 @@
 package com.comet.opik.api.events;
 
 import com.comet.opik.domain.EntityType;
-import com.comet.opik.infrastructure.events.BaseEvent;
-import lombok.Getter;
+import jakarta.annotation.Nullable;
 import lombok.NonNull;
-import lombok.experimental.Accessors;
 
 import java.util.Set;
 import java.util.UUID;
 
-@Getter
-@Accessors(fluent = true)
-public class CommentsUpdated extends BaseEvent {
-    private final @NonNull Set<UUID> entityIds;
-    private final @NonNull EntityType entityType;
+public class CommentsUpdated extends EntityProjectEvent {
 
     public CommentsUpdated(@NonNull Set<UUID> entityIds, @NonNull EntityType entityType,
             @NonNull String workspaceId, @NonNull String userName) {
-        super(workspaceId, userName);
-        this.entityIds = entityIds;
-        this.entityType = entityType;
+        this(entityIds, entityType, workspaceId, userName, null);
+    }
+
+    public CommentsUpdated(@NonNull Set<UUID> entityIds, @NonNull EntityType entityType,
+            @NonNull String workspaceId, @NonNull String userName, @Nullable UUID projectId) {
+        super(entityIds, entityType, workspaceId, userName, projectId);
     }
 }

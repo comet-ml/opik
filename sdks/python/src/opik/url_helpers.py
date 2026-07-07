@@ -24,7 +24,7 @@ def get_ui_url() -> str:
     config = opik.config.OpikConfig()
     opik_url_override = config.url_override
 
-    return opik_url_override.rstrip("/api") + "/"
+    return opik_url_override.rstrip("/").removesuffix("/api") + "/"
 
 
 def get_experiment_url_by_id(

@@ -166,7 +166,8 @@ class ExperimentItemDAO {
                       last_updated_by,
                       created_at,
                       last_updated_at,
-                      author
+                      author,
+                      source_queue_id
                   FROM (
                       SELECT
                           workspace_id,
@@ -181,7 +182,8 @@ class ExperimentItemDAO {
                           last_updated_by,
                           created_at,
                           last_updated_at,
-                          feedback_scores.last_updated_by AS author
+                          feedback_scores.last_updated_by AS author,
+                          CAST('' AS FixedString(36)) AS source_queue_id
                       FROM feedback_scores
                       WHERE entity_type = 'trace'
                         AND workspace_id = :workspace_id
@@ -201,7 +203,8 @@ class ExperimentItemDAO {
                           last_updated_by,
                           created_at,
                           last_updated_at,
-                          author
+                          author,
+                          source_queue_id
                       FROM authored_feedback_scores
                       WHERE entity_type = 'trace'
                         AND workspace_id = :workspace_id
@@ -209,14 +212,14 @@ class ExperimentItemDAO {
                         AND entity_id IN (SELECT trace_id FROM experiment_items_ids)
                   )
                   ORDER BY last_updated_at DESC
-                  LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                  LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ), feedback_scores_grouped AS (
                   SELECT
                       workspace_id,
                       project_id,
                       entity_id,
                       name,
-                      groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at)) AS entries
+                      groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at, source_queue_id)) AS entries
                   FROM feedback_scores_deduped
                   GROUP BY workspace_id, project_id, entity_id, name
             ), feedback_scores_final AS (
@@ -230,8 +233,8 @@ class ExperimentItemDAO {
                       arrayStringConcat(arrayMap(e -> e.2, entries), ', ') AS reason,
                       arrayElement(entries, 1).4 AS source,
                       mapFromArrays(
-                          arrayMap(e -> e.5, entries),
-                          arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9), entries)
+                          arrayMap(e -> if(e.10 = '', e.5, concat(e.5, '_', toString(e.10))), entries),
+                          arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, '', '', e.10, e.5), entries)
                       ) AS value_by_author,
                       arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
                       arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
@@ -278,14 +281,22 @@ class ExperimentItemDAO {
                                                   v.2,
                                                   v.3,
                                                   toString(v.4),
-                                                  concat(replaceOne(toString(v.5), ' ', 'T'), 'Z')
+                                                  concat(replaceOne(toString(v.5), ' ', 'T'), 'Z'),
+                                                  v.6,
+                                                  v.7,
+                                                  v.8,
+                                                  v.9
                                               ),
                                               'Tuple(
                                                   value Decimal(18,9),
                                                   reason String,
                                                   category_name String,
                                                   source String,
-                                                  last_updated_at String
+                                                  last_updated_at String,
+                                                  span_type String,
+                                                  span_id String,
+                                                  source_queue_id String,
+                                                  author String
                                               )'
                                           ),
                                           mapValues(value_by_author)
@@ -309,7 +320,11 @@ class ExperimentItemDAO {
                                               reason String,
                                               category_name String,
                                               source String,
-                                              last_updated_at String
+                                              last_updated_at String,
+                                              span_type String,
+                                              span_id String,
+                                              source_queue_id String,
+                                              author String
                                           )
                                       )
                                   )'
@@ -421,7 +436,7 @@ class ExperimentItemDAO {
                       FROM (
                           SELECT
                               id,
-                              duration,
+                              if(isNaN(duration), NULL, duration) AS duration,
                               <if(truncate)> replaceRegexpAll(if(notEmpty(input_slim), input_slim, truncated_input), '<truncate>', '"[image]"') as input <else> input <endif>,
                               <if(truncate)> replaceRegexpAll(if(notEmpty(output_slim), output_slim, truncated_output), '<truncate>', '"[image]"') as output <else> output <endif>,
                               visibility_mode
@@ -495,6 +510,7 @@ class ExperimentItemDAO {
                 AND ea.workspace_id = ei.workspace_id
             WHERE ei.workspace_id = :workspace_id
             AND ei.trace_id IN :trace_ids
+            <if(project_id)> AND ei.project_id = :project_id <endif>
             AND ea.status IN :statuses
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -529,9 +545,11 @@ class ExperimentItemDAO {
                 ON ea.id = ei.experiment_id
                 AND ea.workspace_id = ei.workspace_id
             WHERE ei.workspace_id = :workspace_id
+            <if(project_id)> AND ei.project_id = :project_id <endif>
             AND ei.trace_id IN (
-                SELECT DISTINCT trace_id FROM spans FINAL
+                SELECT DISTINCT trace_id FROM spans
                 WHERE id IN :span_ids AND workspace_id = :workspace_id
+                <if(project_id)> AND project_id = :project_id <endif>
             )
             AND ea.status IN :statuses
             SETTINGS log_comment = '<log_comment>'
@@ -780,14 +798,16 @@ class ExperimentItemDAO {
 
     @WithSpan
     public Flux<ExperimentTraceRef> getExperimentRefsByTraceIds(@NonNull Set<UUID> traceIds,
-            @NonNull Set<ExperimentStatus> statuses) {
-        return getExperimentRefsByIds(GET_EXPERIMENT_REFS_BY_TRACE_IDS, "trace_ids", traceIds, statuses);
+            @NonNull Set<ExperimentStatus> statuses, UUID projectId) {
+        return getExperimentRefsByIds(GET_EXPERIMENT_REFS_BY_TRACE_IDS, "get_experiment_refs_by_trace_ids",
+                "trace_ids", traceIds, statuses, projectId);
     }
 
     @WithSpan
     public Flux<ExperimentTraceRef> getExperimentRefsByItemIds(@NonNull Set<UUID> itemIds,
             @NonNull Set<ExperimentStatus> statuses) {
-        return getExperimentRefsByIds(GET_EXPERIMENT_REFS_BY_ITEM_IDS, "item_ids", itemIds, statuses);
+        return getExperimentRefsByIds(GET_EXPERIMENT_REFS_BY_ITEM_IDS, "get_experiment_refs_by_item_ids",
+                "item_ids", itemIds, statuses, null);
     }
 
     @WithSpan
@@ -810,24 +830,38 @@ class ExperimentItemDAO {
 
     @WithSpan
     public Flux<ExperimentTraceRef> getExperimentRefsBySpanIds(@NonNull Set<UUID> spanIds,
-            @NonNull Set<ExperimentStatus> statuses) {
-        return getExperimentRefsByIds(GET_EXPERIMENT_REFS_BY_SPAN_IDS, "span_ids", spanIds, statuses);
+            @NonNull Set<ExperimentStatus> statuses, UUID projectId) {
+        return getExperimentRefsByIds(GET_EXPERIMENT_REFS_BY_SPAN_IDS, "get_experiment_refs_by_span_ids",
+                "span_ids", spanIds, statuses, projectId);
     }
 
-    private Flux<ExperimentTraceRef> getExperimentRefsByIds(@NonNull String sql, @NonNull String idParamName,
-            @NonNull Set<UUID> ids, @NonNull Set<ExperimentStatus> statuses) {
+    private Flux<ExperimentTraceRef> getExperimentRefsByIds(@NonNull String sql, @NonNull String queryName,
+            @NonNull String idParamName, @NonNull Set<UUID> ids, @NonNull Set<ExperimentStatus> statuses,
+            UUID projectId) {
         if (ids.isEmpty() || statuses.isEmpty()) {
             return Flux.empty();
         }
 
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-                    Statement statement = connection.createStatement(sql)
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = getSTWithLogComment(sql, queryName, workspaceId, userName, ids.size());
+
+                    if (projectId != null) {
+                        template.add("project_id", projectId.toString());
+                    }
+
+                    Statement statement = connection.createStatement(template.render())
                             .bind(idParamName, ids.stream().map(UUID::toString).toArray(String[]::new))
                             .bind("statuses", statuses.stream().map(ExperimentStatus::getValue).toArray(String[]::new));
 
-                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
-                })
+                    if (projectId != null) {
+                        statement.bind("project_id", projectId.toString());
+                    }
+
+                    statement.bind("workspace_id", workspaceId);
+
+                    return Flux.from(statement.execute());
+                }))
                 .flatMap(result -> result.map((row, rowMetadata) -> new ExperimentTraceRef(
                         row.get("experiment_id", UUID.class),
                         row.get("trace_id", UUID.class))));

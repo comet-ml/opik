@@ -5,7 +5,7 @@ import pathlib
 import shutil
 import subprocess
 import sys
-from typing import Callable, List
+from typing import Any, Callable, Dict, List, Optional
 
 from opik.configurator.mcp import json_config
 from opik.configurator.mcp import spec as mcp_spec
@@ -23,6 +23,8 @@ class InstallResult:
 class HostTarget:
     key: str
     display_name: str
+    config_path: Callable[[], pathlib.Path]
+    top_level_key: str
     is_detected: Callable[[], bool]
     install: Callable[[mcp_spec.McpServerSpec], InstallResult]
 
@@ -157,10 +159,42 @@ def _install_vscode(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
     )
 
 
+def read_registered_block(target: "HostTarget") -> Optional[Dict[str, Any]]:
+    """Return the ``opik-mcp`` block recorded in a host's config, or ``None``.
+
+    The read-only counterpart to the install path, used by ``opik mcp status`` to
+    report what each host currently points at. A missing, unreadable, or malformed
+    config is treated as "nothing registered" rather than an error.
+
+    For Claude Code this reads ``~/.claude.json`` directly, which is where
+    ``claude mcp add --scope user`` records the server, so it works whether or not
+    the ``claude`` CLI is installed.
+    """
+    config_path = target.config_path()
+    try:
+        if not config_path.exists() or config_path.stat().st_size == 0:
+            return None
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+    if not isinstance(data, dict):
+        return None
+
+    servers = data.get(target.top_level_key)
+    if not isinstance(servers, dict):
+        return None
+
+    block = servers.get(SERVER_NAME)
+    return block if isinstance(block, dict) else None
+
+
 HOST_TARGETS: List[HostTarget] = [
     HostTarget(
         key="claude-code",
         display_name="Claude Code",
+        config_path=_claude_config_path,
+        top_level_key="mcpServers",
         is_detected=lambda: shutil.which("claude") is not None
         or _claude_config_path().exists(),
         install=_install_claude_code,
@@ -168,12 +202,16 @@ HOST_TARGETS: List[HostTarget] = [
     HostTarget(
         key="cursor",
         display_name="Cursor",
+        config_path=_cursor_config_path,
+        top_level_key="mcpServers",
         is_detected=lambda: (_home() / ".cursor").exists(),
         install=_install_cursor,
     ),
     HostTarget(
         key="vscode",
         display_name="VS Code Copilot",
+        config_path=_vscode_user_config_path,
+        top_level_key="servers",
         is_detected=lambda: _vscode_user_config_path().parent.exists(),
         install=_install_vscode,
     ),

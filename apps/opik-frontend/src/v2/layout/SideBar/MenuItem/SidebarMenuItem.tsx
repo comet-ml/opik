@@ -18,12 +18,13 @@ export type MenuItem = {
   path?: string;
   type: MENU_ITEM_TYPE;
   icon: React.ComponentType<{ className?: string }>;
-  label: string;
+  label: string | React.ReactElement;
   disabled?: boolean;
   muted?: boolean;
   exact?: boolean;
   featureFlag?: FeatureToggleKeys;
   onClick?: MouseEventHandler<HTMLButtonElement>;
+  badge?: React.ComponentType<{ collapsed: boolean }>;
 };
 
 export type MenuItemGroup = {
@@ -64,6 +65,7 @@ const SidebarMenuItem: React.FunctionComponent<SidebarMenuItemProps> = ({
         )}
       />
       {expanded && <div className="grow truncate">{item.label}</div>}
+      {item.badge && <item.badge collapsed={!expanded} />}
     </>
   );
 

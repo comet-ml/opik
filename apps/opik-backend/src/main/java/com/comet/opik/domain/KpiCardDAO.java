@@ -9,8 +9,10 @@ import com.comet.opik.api.metrics.KpiCardResponse.KpiMetric;
 import com.comet.opik.api.metrics.KpiCardResponse.KpiMetricType;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
+import com.comet.opik.utils.SentinelTranslation;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
@@ -51,6 +53,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
 
     private final @NonNull TransactionTemplateAsync template;
     private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
+    private final @NonNull OpikConfiguration configuration;
 
     private static final String GET_TRACE_KPI_CARDS = """
             WITH feedback_scores_deduped AS (
@@ -60,7 +63,8 @@ class KpiCardDAOImpl implements KpiCardDAO {
                        name,
                        value,
                        last_updated_at,
-                       author
+                       author,
+                       source_queue_id
                 FROM (
                     SELECT workspace_id,
                            project_id,
@@ -68,7 +72,8 @@ class KpiCardDAOImpl implements KpiCardDAO {
                            name,
                            value,
                            last_updated_at,
-                           last_updated_by AS author
+                           last_updated_by AS author,
+                           CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
@@ -82,7 +87,8 @@ class KpiCardDAOImpl implements KpiCardDAO {
                            name,
                            value,
                            last_updated_at,
-                           author
+                           author,
+                           source_queue_id
                     FROM authored_feedback_scores
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
@@ -91,7 +97,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
                       AND entity_id \\<= :uuid_to_time
                 )
                 ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
              ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
@@ -142,7 +148,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 FROM (
                     SELECT
                         id,
-                        if(end_time IS NOT NULL AND start_time IS NOT NULL
+                        if(end_time IS NOT NULL AND notEquals(end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) AND start_time IS NOT NULL
                              AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                          NULL) AS duration,
@@ -158,6 +164,8 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     AND workspace_id = :workspace_id
                     AND id >= :uuid_from_time
                     AND id \\<= :uuid_to_time
+                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))
+                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))
                     <if(trace_filters)> AND <trace_filters> <endif>
                     <if(trace_feedback_scores_filters)>
                     AND id in (
@@ -213,7 +221,8 @@ class KpiCardDAOImpl implements KpiCardDAO {
                        name,
                        value,
                        last_updated_at,
-                       author
+                       author,
+                       source_queue_id
                 FROM (
                     SELECT workspace_id,
                            project_id,
@@ -221,7 +230,8 @@ class KpiCardDAOImpl implements KpiCardDAO {
                            name,
                            value,
                            last_updated_at,
-                           last_updated_by AS author
+                           last_updated_by AS author,
+                           CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
@@ -235,7 +245,8 @@ class KpiCardDAOImpl implements KpiCardDAO {
                            name,
                            value,
                            last_updated_at,
-                           author
+                           author,
+                           source_queue_id
                     FROM authored_feedback_scores
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
@@ -244,7 +255,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
                       AND entity_id \\<= :uuid_to_time
                 )
                 ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
              ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
@@ -338,6 +349,8 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
                   AND id >= :uuid_from_time AND id \\<= :uuid_to_time
+                  AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))
+                  AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))
                   AND thread_id \\<> ''
             ), trace_threads_final AS (
                 SELECT
@@ -363,7 +376,8 @@ class KpiCardDAOImpl implements KpiCardDAO {
                        name,
                        value,
                        last_updated_at,
-                       author
+                       author,
+                       source_queue_id
                 FROM (
                     SELECT
                         workspace_id,
@@ -372,7 +386,8 @@ class KpiCardDAOImpl implements KpiCardDAO {
                         name,
                         value,
                         last_updated_at,
-                        last_updated_by AS author
+                        last_updated_by AS author,
+                        CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores
                     WHERE entity_type = 'thread'
                        AND workspace_id = :workspace_id
@@ -385,7 +400,8 @@ class KpiCardDAOImpl implements KpiCardDAO {
                            name,
                            value,
                            last_updated_at,
-                           author
+                           author,
+                           source_queue_id
                     FROM authored_feedback_scores
                     WHERE entity_type = 'thread'
                        AND workspace_id = :workspace_id
@@ -393,7 +409,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
                        AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
                 )
                 ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
@@ -431,13 +447,13 @@ class KpiCardDAOImpl implements KpiCardDAO {
                         t.project_id as project_id,
                         min(t.start_time) as start_time,
                         max(t.end_time) as end_time,
-                        if(max(t.end_time) IS NOT NULL AND min(t.start_time) IS NOT NULL
+                        if(max(t.end_time) IS NOT NULL AND notEquals(max(t.end_time), toDateTime64('1970-01-01 00:00:00.000', 9)) AND min(t.start_time) IS NOT NULL
                                AND notEquals(min(t.start_time), toDateTime64('1970-01-01 00:00:00.000', 9)),
                            (dateDiff('microsecond', min(t.start_time), max(t.end_time)) / 1000.0),
                            NULL) AS duration,
                         count(DISTINCT t.id) * 2 as number_of_messages,
                         <if(trace_thread_first_message_filter)>argMin(t.input, t.start_time) as first_message,<endif>
-                        <if(trace_thread_last_message_filter)>argMax(t.output, t.end_time) as last_message,<endif>
+                        <if(trace_thread_last_message_filter)>argMax(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as last_message,<endif>
                         max(t.last_updated_at) as last_updated_at,
                         argMax(t.last_updated_by, t.last_updated_at) as last_updated_by,
                         argMin(t.created_by, t.created_at) as created_by,
@@ -568,7 +584,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
 
     private void addTraceFilters(ST template, List<? extends Filter> filters) {
         Optional.ofNullable(filters).ifPresent(f -> {
-            FilterQueryBuilder.toAnalyticsDbFilters(f, FilterStrategy.TRACE)
+            FilterQueryBuilder.toAnalyticsDbFilters(f, FilterStrategy.TRACE, traceColumnsNonNullable())
                     .ifPresent(traceFilters -> template.add("trace_filters", traceFilters));
             FilterQueryBuilder.toAnalyticsDbFilters(f, FilterStrategy.FEEDBACK_SCORES)
                     .ifPresent(scoresFilters -> template.add("trace_feedback_scores_filters", scoresFilters));
@@ -577,6 +593,10 @@ class KpiCardDAOImpl implements KpiCardDAO {
             FilterQueryBuilder.hasGuardrailsFilter(f)
                     .ifPresent(hasGuardrails -> template.add("guardrails_filters", true));
         });
+    }
+
+    private boolean traceColumnsNonNullable() {
+        return configuration.getDatabaseAnalyticsDataModel().traceColumnsNonNullable();
     }
 
     private void bindTraceFilters(Statement statement, List<? extends Filter> filters) {
@@ -608,7 +628,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
 
     private void addThreadFilters(ST template, List<? extends Filter> filters) {
         Optional.ofNullable(filters).ifPresent(f -> {
-            FilterQueryBuilder.toAnalyticsDbFilters(f, FilterStrategy.TRACE_THREAD)
+            FilterQueryBuilder.toAnalyticsDbFilters(f, FilterStrategy.TRACE_THREAD, traceColumnsNonNullable())
                     .ifPresent(threadFilters -> template.add("trace_thread_filters", threadFilters));
             // first_message/last_message aggregate the full input/output payloads, so only project
             // them in threads_filtered when a filter actually references them (otherwise the thread
@@ -673,9 +693,6 @@ class KpiCardDAOImpl implements KpiCardDAO {
     }
 
     private Double filterNan(Double value) {
-        if (value == null) {
-            return null;
-        }
-        return value.isNaN() ? null : value;
+        return SentinelTranslation.nanToNull(value);
     }
 }

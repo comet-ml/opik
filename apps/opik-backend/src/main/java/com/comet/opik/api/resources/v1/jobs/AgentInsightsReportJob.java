@@ -62,6 +62,7 @@ public class AgentInsightsReportJob extends Job {
         Mono<Void> timedSweep = Mono.defer(() -> {
             long startMillis = System.currentTimeMillis();
             return runSweep(periodStart, periodEnd)
+                    .doOnSuccess(__ -> log.info("Agent Insights report job completed"))
                     .doFinally(signalType -> AgentInsightsMetrics.SWEEP_DURATION_MS.record(
                             System.currentTimeMillis() - startMillis,
                             signalType == SignalType.ON_COMPLETE
@@ -80,7 +81,8 @@ public class AgentInsightsReportJob extends Job {
                 reportConfig.getLockWaitTime().toJavaDuration(),
                 true)
                 .subscribe(
-                        __ -> log.info("Agent Insights report job completed"),
+                        __ -> {
+                        },
                         error -> log.error("Agent Insights report job failed", error));
     }
 
@@ -101,7 +103,8 @@ public class AgentInsightsReportJob extends Job {
                             .flatMapMany(withTraces -> Flux.fromIterable(jobs)
                                     .filter(job -> withTraces.contains(job.projectId())))
                             .concatMap(job -> reportPublisher
-                                    .enqueue(job.projectId(), job.workspaceId(), periodStart, periodEnd)
+                                    .enqueue(job.projectId(), job.workspaceId(), periodStart, periodEnd,
+                                            AgentInsightsMetrics.SCHEDULED)
                                     .doOnNext(__ -> AgentInsightsMetrics.REPORTS_ENQUEUED.add(1,
                                             AgentInsightsMetrics.ENQUEUE_SCHEDULED_SUCCESS))
                                     .then()

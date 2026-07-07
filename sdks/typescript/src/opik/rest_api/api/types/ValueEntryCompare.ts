@@ -10,4 +10,6 @@ export interface ValueEntryCompare {
     lastUpdatedAt?: Date;
     spanType?: string;
     spanId?: string;
+    sourceQueueId?: string;
+    author?: string;
 }

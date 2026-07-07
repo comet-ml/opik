@@ -77,8 +77,9 @@ const OptimizationHeader: React.FC<OptimizationHeaderProps> = ({
         {optimization?.dataset_id && optimization?.dataset_name && (
           <NavigationTag
             id={optimization.dataset_id}
-            name={`Go to ${optimization.dataset_name}`}
+            name={optimization.dataset_name}
             resource={RESOURCE_TYPE.dataset}
+            prefix="Dataset"
             className="w-fit"
           />
         )}

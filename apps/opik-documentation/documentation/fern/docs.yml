@@ -1,6 +1,6 @@
 instances:
   - url: https://opik.docs.buildwithfern.com/docs/opik
-    custom-domain: www.comet.com/docs/opik/
+    custom-domain: www.comet.com/docs/opik
 metadata:
   # Core platform identity
   og:site_name: "Opik Documentation"
@@ -553,16 +553,6 @@ redirects:
     permanent: true
   - source: "/docs/opik/agent-optimization"
     destination: "/docs/opik/development/optimization-runs/overview"
-    permanent: true
-  # Catch-all for old changelog date URLs (e.g., /changelog/2025/8/2, /changelog/2025/6/7)
-  - source: "/docs/opik/changelog/2025/:slug*"
-    destination: "/docs/opik/changelog"
-    permanent: true
-  - source: "/docs/opik/changelog/2024/:slug*"
-    destination: "/docs/opik/changelog"
-    permanent: true
-  - source: "/docs/opik/changelog/2026/:slug*"
-    destination: "/docs/opik/changelog"
     permanent: true
   # Configuration to Workspace Settings redirects (configuration section was renamed and moved)
   - source: "/docs/opik/configuration"

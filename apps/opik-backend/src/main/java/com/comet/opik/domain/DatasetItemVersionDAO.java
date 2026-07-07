@@ -45,8 +45,10 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -595,7 +597,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                            name,
                            value,
                            last_updated_at,
-                           feedback_scores.last_updated_by AS author
+                           feedback_scores.last_updated_by AS author,
+                           CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
@@ -608,7 +611,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                            name,
                            value,
                            last_updated_at,
-                           author
+                           author,
+                           source_queue_id
                     FROM authored_feedback_scores
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
@@ -616,7 +620,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                       AND entity_id IN (SELECT trace_id FROM experiment_items_trace_scope)
                 )
                 ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ),
             feedback_scores_final AS (
                 SELECT
@@ -990,7 +994,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             ), trace_data AS (
                 SELECT
                     id,
-                    duration,
+                    if(isNaN(duration), NULL, duration) AS duration,
                     <if(truncate)> replaceRegexpAll(if(notEmpty(input_slim), input_slim, truncated_input), '<truncate>', '"[image]"') as input <else> input <endif>,
                     <if(truncate)> replaceRegexpAll(if(notEmpty(output_slim), output_slim, truncated_output), '<truncate>', '"[image]"') as output <else> output <endif>,
                     output as full_output,
@@ -1045,7 +1049,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     last_updated_by,
                     created_at,
                     last_updated_at,
-                    author
+                    author,
+                    source_queue_id
                 FROM (
                     SELECT
                         workspace_id,
@@ -1060,7 +1065,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         last_updated_by,
                         created_at,
                         last_updated_at,
-                        feedback_scores.last_updated_by AS author
+                        feedback_scores.last_updated_by AS author,
+                        CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
@@ -1080,7 +1086,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         last_updated_by,
                         created_at,
                         last_updated_at,
-                        author
+                        author,
+                        source_queue_id
                     FROM authored_feedback_scores
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
@@ -1088,7 +1095,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                       AND entity_id IN (SELECT trace_id FROM experiment_items_trace_scope)
                 )
                 ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ),
             feedback_scores_grouped AS (
                 SELECT
@@ -1096,7 +1103,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     project_id,
                     entity_id,
                     name,
-                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at)) AS entries
+                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at, source_queue_id)) AS entries
                 FROM feedback_scores_deduped
                 GROUP BY workspace_id, project_id, entity_id, name
             ),
@@ -1111,8 +1118,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     IF(length(entries) = 1, arrayElement(entries, 1).2, arrayStringConcat(arrayMap(x -> if(x = '', '\\<no reason>', x), arrayMap(e -> e.2, entries)), ', ')) AS reason,
                     arrayElement(entries, 1).4 AS source,
                     mapFromArrays(
-                        arrayMap(e -> e.5, entries),
-                        arrayMap(e -> tuple(e.1, e.2, e.3, e.4, CAST(e.9 AS DateTime64(9, 'UTC'))), entries)
+                        arrayMap(e -> if(e.10 = '', e.5, concat(e.5, '_', toString(e.10))), entries),
+                        arrayMap(e -> tuple(e.1, e.2, e.3, e.4, CAST(e.9 AS DateTime64(9, 'UTC')), '', '', e.10, e.5), entries)
                     ) AS value_by_author,
                     arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
                     arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
@@ -1569,14 +1576,22 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                                             v.2,
                                                             v.3,
                                                             toString(v.4),
-                                                            concat(replaceOne(toString(v.5), ' ', 'T'), 'Z')
+                                                            concat(replaceOne(toString(v.5), ' ', 'T'), 'Z'),
+                                                            v.6,
+                                                            v.7,
+                                                            v.8,
+                                                            v.9
                                                         ),
                                                         'Tuple(
                                                             value Decimal(18,9),
                                                             reason String,
                                                             category_name String,
                                                             source String,
-                                                            last_updated_at String
+                                                            last_updated_at String,
+                                                            span_type String,
+                                                            span_id String,
+                                                            source_queue_id String,
+                                                            author String
                                                         )'
                                                     ),
                                                     mapValues(value_by_author)
@@ -1600,7 +1615,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                                     reason String,
                                                     category_name String,
                                                     source String,
-                                                    last_updated_at String
+                                                    last_updated_at String,
+                                                    span_type String,
+                                                    span_id String,
+                                                    source_queue_id String,
+                                                    author String
                                                 )
                                             )
                                         )'
@@ -1863,13 +1882,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 {targetDatasetId:String} as dataset_id,
                 {newVersionId:String} as dataset_version_id,
                 <if(data)> mapFromArrays({data_keys:Array(String)}, {data_values:Array(String)}) <else> src.data <endif> as data,
-                <if(description)> {description:String} <else> src.description <endif> as description,
+                <if(description)> base64Decode({description:String}) <else> src.description <endif> as description,
                 src.metadata,
                 src.source,
                 src.trace_id,
                 src.span_id,
                 <if(tags)> {tags:Array(String)} <else> src.tags <endif> as tags,
-                <if(evaluators)> {evaluators:String} <else> src.evaluators <endif> as evaluators,
+                <if(evaluators)> base64Decode({evaluators:String}) <else> src.evaluators <endif> as evaluators,
                 <if(clear_execution_policy)> '' <else><if(execution_policy)> {execution_policy:String} <else> src.execution_policy <endif><endif> as execution_policy,
                 src.item_created_at,
                 now64(9) as item_last_updated_at,
@@ -2186,7 +2205,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                            name,
                            value,
                            last_updated_at,
-                           feedback_scores.last_updated_by AS author
+                           feedback_scores.last_updated_by AS author,
+                           CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
@@ -2202,7 +2222,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         name,
                         value,
                         last_updated_at,
-                        author
+                        author,
+                        source_queue_id
                     FROM authored_feedback_scores
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
@@ -2212,7 +2233,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     AND entity_id IN (SELECT trace_id FROM experiment_items_trace_scope)
                 )
                 ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
@@ -3297,14 +3318,19 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             params.put("data_keys", FilterQueryBuilder.formatStringArrayLiteral(dataAsStrings.keySet()));
             params.put("data_values", FilterQueryBuilder.formatStringArrayLiteral(dataAsStrings.values()));
         }
+        // Free-text / JSON params bound via the v2-client {:String} substitution must be base64'd:
+        // ClickHouse processes backslash escapes in the substituted value, so a raw '\n' is turned
+        // into a literal newline — corrupting JSON (evaluators) or the stored text and even failing
+        // the write (description). base64Decode in the SQL restores the exact bytes. Add the same
+        // treatment to any new free-text/JSON {:String} param added here.
         if (edit.description() != null) {
-            params.put("description", edit.description());
+            params.put("description", base64Encode(edit.description()));
         }
         if (edit.tags() != null) {
             params.put("tags", FilterQueryBuilder.formatStringArrayLiteral(edit.tags()));
         }
         if (edit.evaluators() != null) {
-            params.put("evaluators", serializeEvaluators(edit.evaluators()));
+            params.put("evaluators", base64Encode(serializeEvaluators(edit.evaluators())));
         }
         if (!Boolean.TRUE.equals(edit.clearExecutionPolicy()) && edit.executionPolicy() != null) {
             params.put("execution_policy", serializeExecutionPolicy(edit.executionPolicy()));
@@ -3751,6 +3777,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             return Instant.now().toString().replace("Z", "");
         }
         return timestamp.toString().replace("Z", "");
+    }
+
+    private static String base64Encode(String value) {
+        return Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8));
     }
 
     private static String serializeEvaluators(List<EvaluatorItem> evaluators) {

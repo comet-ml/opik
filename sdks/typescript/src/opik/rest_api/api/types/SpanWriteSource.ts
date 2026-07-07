@@ -5,5 +5,6 @@ export const SpanWriteSource = {
     Experiment: "experiment",
     Playground: "playground",
     Optimization: "optimization",
+    Evaluator: "evaluator",
 } as const;
 export type SpanWriteSource = (typeof SpanWriteSource)[keyof typeof SpanWriteSource];

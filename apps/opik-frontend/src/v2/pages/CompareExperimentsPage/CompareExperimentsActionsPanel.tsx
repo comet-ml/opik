@@ -4,7 +4,6 @@ import slugify from "slugify";
 import uniq from "lodash/uniq";
 import first from "lodash/first";
 
-import CompareExperimentsButton from "@/v2/pages/CompareExperimentsPage/CompareExperimentsButton/CompareExperimentsButton";
 import EvaluateExperimentTracesButton from "@/v2/pages/CompareExperimentsPage/EvaluateExperimentTracesButton/EvaluateExperimentTracesButton";
 import ExportToButton from "@/shared/ExportToButton/ExportToButton";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
@@ -26,7 +25,6 @@ import {
   EXPERIMENT_ITEM_OUTPUT_PREFIX,
   EXPERIMENT_ITEM_DATASET_PREFIX,
 } from "@/constants/experiments";
-import { Separator } from "@/ui/separator";
 
 const COLUMN_PASSED_ID = "passed";
 const COLUMN_TOTAL_ESTIMATED_COST_ID = "total_estimated_cost";
@@ -194,24 +192,20 @@ const CompareExperimentsActionsPanel: React.FC<
 
   return (
     <div className="flex items-center gap-2">
-      <CompareExperimentsButton />
       <EvaluateExperimentTracesButton experiment={singleExperiment} />
       {columnsToExport && (
-        <>
-          <Separator orientation="vertical" className="mx-2 h-4" />
-          <ExportToButton
-            disabled={
-              disabled || columnsToExport.length === 0 || !isExportEnabled
-            }
-            getData={mapRowData}
-            generateFileName={generateFileName}
-            tooltipContent={
-              !isExportEnabled
-                ? "Export functionality is disabled for this installation"
-                : undefined
-            }
-          />
-        </>
+        <ExportToButton
+          disabled={
+            disabled || columnsToExport.length === 0 || !isExportEnabled
+          }
+          getData={mapRowData}
+          generateFileName={generateFileName}
+          tooltipContent={
+            !isExportEnabled
+              ? "Export functionality is disabled for this installation"
+              : undefined
+          }
+        />
       )}
     </div>
   );

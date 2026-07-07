@@ -169,6 +169,7 @@ def build_dataset_plan(
     name: str,
     to_project: str,
     from_project: Optional[str] = None,
+    exclude_experiments: bool = False,
 ) -> MigrationPlan:
     """Build the ordered action list for migrating one dataset.
 
@@ -178,6 +179,12 @@ def build_dataset_plan(
 
     ``from_project`` is an optional source-scope hint (perf + clearer
     error message); ``None`` does a workspace-wide source lookup.
+
+    ``exclude_experiments`` (OPIK-7161) drops the experiment stage. An
+    Optimization is a container defined by its constituent experiments, so
+    skipping experiments also skips the optimization cascade — otherwise the
+    destination would carry empty optimization shells FK-ing experiments that
+    were never migrated. The dataset + full version history still migrate.
 
     The plan emits, in order:
 
@@ -189,11 +196,13 @@ def build_dataset_plan(
       4. ``CascadeOptimizations`` — recreates every optimization
          referencing the source dataset under the destination project,
          populating ``plan.optimization_id_remap`` so the next action can
-         re-point experiment FK references.
+         re-point experiment FK references. Omitted when
+         ``exclude_experiments`` is set.
       5. ``CascadeExperiments`` — recreates every experiment referencing
          the source dataset under the destination project, with traces +
          spans riding along, and re-points each experiment's
-         ``optimization_id`` via ``plan.optimization_id_remap``.
+         ``optimization_id`` via ``plan.optimization_id_remap``. Omitted
+         when ``exclude_experiments`` is set.
     """
     # Fail fast if --to-project doesn't exist. Catches typos before any
     # rename/create/copy work, and prevents auto-creating a stray project.
@@ -265,29 +274,35 @@ def build_dataset_plan(
         )
     )
 
-    # CascadeOptimizations runs AFTER ReplayVersions (the destination
-    # dataset exists by now) and BEFORE CascadeExperiments so the
-    # experiment-write phase can FK to the new destination optimization
-    # ids via plan.optimization_id_remap. Action is always emitted; it's
-    # a no-op when zero optimizations reference the source dataset.
-    plan.actions.append(
-        CascadeOptimizations(
-            source_dataset_id=source.id,
-            dest_name=source.name,
-            dest_project_name=to_project,
+    # OPIK-7161: --exclude-experiments short-circuits before both cascades.
+    # The plan ends after ReplayVersions, so no experiment discovery ever
+    # runs and the OPIK-7152 large-dataset cascade failure mode is dodged
+    # entirely. Optimizations are gated by the same flag because they only
+    # make sense as containers for the experiments being skipped.
+    if not exclude_experiments:
+        # CascadeOptimizations runs AFTER ReplayVersions (the destination
+        # dataset exists by now) and BEFORE CascadeExperiments so the
+        # experiment-write phase can FK to the new destination optimization
+        # ids via plan.optimization_id_remap. It's a no-op when zero
+        # optimizations reference the source dataset.
+        plan.actions.append(
+            CascadeOptimizations(
+                source_dataset_id=source.id,
+                dest_name=source.name,
+                dest_project_name=to_project,
+            )
         )
-    )
 
-    # Cascade experiments must run AFTER ReplayVersions and
-    # CascadeOptimizations so plan.version_remap / plan.item_id_remap /
-    # plan.optimization_id_remap are populated when the cascade reads
-    # them.
-    plan.actions.append(
-        CascadeExperiments(
-            source_dataset_id=source.id,
-            dest_name=source.name,
-            dest_project_name=to_project,
+        # Cascade experiments must run AFTER ReplayVersions and
+        # CascadeOptimizations so plan.version_remap / plan.item_id_remap /
+        # plan.optimization_id_remap are populated when the cascade reads
+        # them.
+        plan.actions.append(
+            CascadeExperiments(
+                source_dataset_id=source.id,
+                dest_name=source.name,
+                dest_project_name=to_project,
+            )
         )
-    )
 
     return plan

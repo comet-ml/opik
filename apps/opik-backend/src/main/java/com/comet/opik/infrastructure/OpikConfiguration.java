@@ -24,6 +24,10 @@ public class OpikConfiguration extends JobConfiguration {
     private DatabaseAnalyticsFactory databaseAnalytics = new DatabaseAnalyticsFactory();
 
     @Valid @NotNull @JsonProperty
+    private DatabaseAnalyticsDataModelConfig databaseAnalyticsDataModel = DatabaseAnalyticsDataModelConfig.builder()
+            .build();
+
+    @Valid @NotNull @JsonProperty
     private DatabaseAnalyticsReadOnlyFreeFormSqlConfig databaseAnalyticsReadOnlyFreeFormSql = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
 
     @Valid @NotNull @JsonProperty
@@ -31,6 +35,9 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private AuthenticationConfig authentication = new AuthenticationConfig();
+
+    @Valid @NotNull @JsonProperty
+    private SharedHttpClientHealthCheckConfig sharedHttpClientHealthCheck = new SharedHttpClientHealthCheckConfig();
 
     @Valid @NotNull @JsonProperty
     private McpOAuthConfig mcpOAuth = new McpOAuthConfig();

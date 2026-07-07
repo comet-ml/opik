@@ -56,7 +56,6 @@
 
     --warning: 348 86% 61%;
     --success: 142 64% 32%;
-    --library-loaded: 78 75% 59%;
 
     /* Gray scale for utility classes */
     --gray-100: #f3f4f6;
@@ -141,6 +140,11 @@
     --feature-experiment-management: #6c6ff7;
     --feature-llm: #52aea4;
     --color-ollie: #f46e41;
+    --color-ollie-amber: #f59e0b;
+    --color-ollie-live: #00d14c;
+    --shadow-ollie: 0px 4px 3px
+        color-mix(in srgb, var(--color-ollie) 10%, transparent),
+      0px 2px 2px color-mix(in srgb, var(--color-ollie) 10%, transparent);
 
     /* Config link icon color */
     --color-fuchsia: #db46ef;
@@ -331,7 +335,6 @@
 
     --warning: 348 86% 61%;
     --success: 142 64% 40%;
-    --library-loaded: 78 75% 65%;
 
     /* Gray scale for utility classes - Dark Mode */
     --gray-100: 217.2 32.6% 15%;
@@ -359,6 +362,8 @@
     --feature-experiment-management: #3b70f6;
     --feature-llm: #20ac74;
     --color-ollie: #f46e41;
+    --color-ollie-amber: #f59e0b;
+    --color-ollie-live: #00d14c;
 
     /* Config link icon color - Dark Mode */
     --color-fuchsia: #c850c0;

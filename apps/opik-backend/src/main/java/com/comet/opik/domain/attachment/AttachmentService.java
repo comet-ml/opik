@@ -25,6 +25,7 @@ import jakarta.ws.rs.core.UriBuilder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.tika.Tika;
 import reactor.core.publisher.Mono;
@@ -32,6 +33,7 @@ import software.amazon.awssdk.services.s3.model.CreateMultipartUploadResponse;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
@@ -72,6 +74,27 @@ public interface AttachmentService {
     Mono<List<AttachmentInfo>> getAttachmentInfoByEntity(UUID entityId, EntityType entityType, UUID containerId);
 
     /**
+     * Returns true if any of the given entity IDs has at least one attachment.
+     * Uses a single batch DB call instead of per-entity queries.
+     */
+    Mono<Boolean> hasAnyAttachmentByEntityIds(EntityType entityType, Set<UUID> entityIds);
+
+    /**
+     * Lists attachments for a set of entity IDs in a single batch DB call. Each returned
+     * {@link AttachmentInfo} carries its owning {@code entityId} so callers can group by entity.
+     */
+    Mono<List<AttachmentInfo>> getAttachmentInfoByEntityIds(EntityType entityType, Set<UUID> entityIds);
+
+    /**
+     * Presigned (S3) download URL for a single attachment, reachable by an external
+     * caller (e.g. an LLM provider fetching media during online evaluation). Uses the
+     * same object-key layout as upload/download so it resolves the stored object.
+     */
+    String presignDownloadUrl(AttachmentInfo attachmentInfo, String workspaceId);
+
+    String presignDownloadUrl(AttachmentInfo attachmentInfo, String workspaceId, Duration expiresIn);
+
+    /**
      * Delete specific attachments by their filenames for a given entity.
      * This method handles errors gracefully and continues processing other deletions.
      */
@@ -97,6 +120,7 @@ class AttachmentServiceImpl implements AttachmentService {
     private final @NonNull OpikConfiguration config;
     private final @NonNull Provider<RequestContext> requestContext;
     private static final Tika tika = new Tika();
+    private static final int MAX_ATTACHMENTS_PER_ENTITY = 1_000;
 
     @Override
     public StartMultipartUploadResponse startMultiPartUpload(@NonNull StartMultipartUploadRequest startUploadRequest,
@@ -317,6 +341,18 @@ class AttachmentServiceImpl implements AttachmentService {
         return preSignerService.presignDownloadUrl(key);
     }
 
+    @Override
+    public String presignDownloadUrl(@NonNull AttachmentInfo attachmentInfo, @NonNull String workspaceId) {
+        return prepareDownloadPresignUrl(attachmentInfo, workspaceId);
+    }
+
+    @Override
+    public String presignDownloadUrl(@NonNull AttachmentInfo attachmentInfo, @NonNull String workspaceId,
+            @NonNull Duration expiresIn) {
+        String key = prepareKey(attachmentInfo, workspaceId);
+        return preSignerService.presignDownloadUrl(key, expiresIn);
+    }
+
     private String prepareMinIODownloadUrl(AttachmentInfo attachmentInfo, String baseUrl, String workspaceName) {
         var uri = UriBuilder.fromUri(baseUrl)
                 .path("v1/private/attachment/download")
@@ -352,7 +388,12 @@ class AttachmentServiceImpl implements AttachmentService {
                 .containerId(containerId)
                 .build();
 
-        return list(1, Integer.MAX_VALUE, criteria, "")
+        // Query the DAO directly rather than list(): callers only need metadata
+        // (fileName / mimeType), and list()'s download-URL enhancement reads
+        // RequestContext.WORKSPACE_NAME from the reactive context — which is not
+        // always present (e.g. the online-scoring thread path). The URL it builds is
+        // discarded here anyway, so skipping it removes a latent context dependency.
+        return attachmentDAO.list(1, MAX_ATTACHMENTS_PER_ENTITY, criteria)
                 .map(attachmentPage -> attachmentPage.content().stream()
                         .map(attachment -> AttachmentInfo.builder()
                                 .fileName(attachment.fileName())
@@ -360,6 +401,7 @@ class AttachmentServiceImpl implements AttachmentService {
                                 .entityId(entityId)
                                 .containerId(containerId)
                                 .mimeType(attachment.mimeType())
+                                .fileSize(attachment.fileSize())
                                 .build())
                         .toList());
     }
@@ -392,6 +434,25 @@ class AttachmentServiceImpl implements AttachmentService {
                     return Mono.empty(); // Continue processing
                 })
                 .then();
+    }
+
+    @Override
+    public Mono<Boolean> hasAnyAttachmentByEntityIds(@NonNull EntityType entityType, @NonNull Set<UUID> entityIds) {
+        if (entityIds.isEmpty()) {
+            return Mono.just(false);
+        }
+        return attachmentDAO.getAttachmentsByEntityIds(entityType, entityIds)
+                .map(list -> !list.isEmpty());
+    }
+
+    @Override
+    @WithSpan
+    public Mono<List<AttachmentInfo>> getAttachmentInfoByEntityIds(@NonNull EntityType entityType,
+            Set<UUID> entityIds) {
+        if (CollectionUtils.isEmpty(entityIds)) {
+            return Mono.just(List.of());
+        }
+        return attachmentDAO.getAttachmentsByEntityIds(entityType, entityIds);
     }
 
     @Override

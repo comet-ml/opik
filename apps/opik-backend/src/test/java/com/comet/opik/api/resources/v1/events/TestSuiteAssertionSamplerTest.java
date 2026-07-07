@@ -88,6 +88,9 @@ class TestSuiteAssertionSamplerTest {
             sampler = new TestSuiteAssertionSampler(
                     datasetItemService, datasetVersionService, onlineScorePublisher, idGenerator,
                     testSuiteConfig, evaluatorMapper, llmProviderApiKeyService, testSuiteAssertionCounterService);
+
+            // enqueueMessage is reactive now; the sampler composes it into the scoring chain.
+            lenient().when(onlineScorePublisher.enqueueMessage(any(), any())).thenReturn(Mono.empty());
         }
 
         @Test

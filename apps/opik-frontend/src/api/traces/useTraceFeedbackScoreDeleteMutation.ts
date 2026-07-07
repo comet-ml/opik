@@ -72,7 +72,11 @@ const useTraceFeedbackScoreDeleteMutation = () => {
       };
 
       const authorToUse = params.author ?? currentUserName;
-      const deleteMutation = generateDeleteMutation(params.name, authorToUse);
+      const deleteMutation = generateDeleteMutation(
+        params.name,
+        authorToUse,
+        params.sourceQueueId,
+      );
 
       if (params.spanId) {
         const spanId = params.spanId; // TypeScript guard: ensure spanId is defined

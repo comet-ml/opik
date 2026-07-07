@@ -51,6 +51,8 @@ import AddEditRuleDialog from "@/v2/pages-shared/automations/AddEditRuleDialog/A
 import RulesActionsPanel from "@/v2/pages-shared/automations/RulesActionsPanel";
 import RuleRowActionsCell from "@/v2/pages-shared/automations/RuleRowActionsCell";
 import RuleLogsCell from "@/v2/pages-shared/automations/RuleLogsCell";
+import RuleTracesCell from "@/v2/pages-shared/automations/RuleTracesCell";
+import { EvaluationTracesSidebar } from "@/v2/pages-shared/automations/EvaluationTracesSidebar";
 import { capitalizeFirstLetter } from "@/lib/utils";
 import { getUIRuleScope } from "@/v2/pages-shared/automations/AddEditRuleDialog/helpers";
 import { usePermissions } from "@/contexts/PermissionsContext";
@@ -226,6 +228,7 @@ export const OnlineEvaluationPage: React.FC = () => {
 
   const editingRule = rows.find((r) => r.id === editRuleId);
   const cloningRule = rows.find((r) => r.id === cloneRuleId);
+
   const isDialogOpen =
     Boolean(editingRule) || Boolean(cloningRule) || openDialogForCreate;
 
@@ -289,6 +292,15 @@ export const OnlineEvaluationPage: React.FC = () => {
           sortableColumns: sortableBy,
         },
       ),
+      {
+        accessorKey: "rule_traces",
+        header: "",
+        cell: RuleTracesCell,
+        size: 150,
+        enableResizing: false,
+        enableHiding: false,
+        enableSorting: false,
+      } as ColumnDef<EvaluatorsRule>,
       {
         accessorKey: "rule_logs",
         header: "",
@@ -385,8 +397,14 @@ export const OnlineEvaluationPage: React.FC = () => {
           description={
             "Create a rule to automatically score your model's outputs.\nDefine criteria, evaluate responses in real time, and track quality over time."
           }
-          primaryActionLabel="Create your first rule"
-          onPrimaryAction={handleNewRuleClick}
+          primaryActionLabel={
+            canUpdateOnlineEvaluationRules
+              ? "Create your first rule"
+              : undefined
+          }
+          onPrimaryAction={
+            canUpdateOnlineEvaluationRules ? handleNewRuleClick : undefined
+          }
           docsUrl={buildDocsUrl("/production/online-evaluation/rules")}
         />
       ) : (
@@ -459,6 +477,7 @@ export const OnlineEvaluationPage: React.FC = () => {
         mode={dialogMode}
         projectId={projectId}
       />
+      <EvaluationTracesSidebar projectId={projectId} />
     </div>
   );
 };

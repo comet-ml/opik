@@ -16,9 +16,33 @@ class SpanCostCalculator {
     private static final String CACHE_CREATION_INPUT_TOKENS_KEY = "cache_creation_input_tokens";
 
     public static BigDecimal textGenerationCost(@NonNull ModelPrice modelPrice, @NonNull Map<String, Integer> usage) {
-        return modelPrice.inputPrice().multiply(BigDecimal.valueOf(usage.getOrDefault("prompt_tokens", 0)))
-                .add(modelPrice.outputPrice()
-                        .multiply(BigDecimal.valueOf(usage.getOrDefault("completion_tokens", 0))));
+        int promptTokens = usage.getOrDefault("prompt_tokens", 0);
+        // Audio tokens (OpenAI realtime / audio-preview models) are billed at a separate rate;
+        // SDK 1.6.0+ logs them under original_usage.prompt_tokens_details.audio_tokens,
+        // with the bare OTel key as a fallback.
+        int audioInputTokens = usage.getOrDefault("original_usage.prompt_tokens_details.audio_tokens",
+                usage.getOrDefault("prompt_tokens_details.audio_tokens", 0));
+
+        BigDecimal inputAudioRate = modelPrice.inputAudioTokenPrice();
+        int nonAudioPromptTokens = inputAudioRate.compareTo(BigDecimal.ZERO) > 0
+                ? Math.max(0, promptTokens - audioInputTokens)
+                : promptTokens;
+
+        int completionTokens = usage.getOrDefault("completion_tokens", 0);
+        // Audio output tokens (OpenAI audio-preview / realtime) likewise carry a separate rate;
+        // they're nested under original_usage.completion_tokens_details.audio_tokens.
+        int audioOutputTokens = usage.getOrDefault("original_usage.completion_tokens_details.audio_tokens",
+                usage.getOrDefault("completion_tokens_details.audio_tokens", 0));
+
+        BigDecimal outputAudioRate = modelPrice.outputAudioTokenPrice();
+        int nonAudioCompletionTokens = outputAudioRate.compareTo(BigDecimal.ZERO) > 0
+                ? Math.max(0, completionTokens - audioOutputTokens)
+                : completionTokens;
+
+        return modelPrice.inputPrice().multiply(BigDecimal.valueOf(nonAudioPromptTokens))
+                .add(inputAudioRate.multiply(BigDecimal.valueOf(audioInputTokens)))
+                .add(modelPrice.outputPrice().multiply(BigDecimal.valueOf(nonAudioCompletionTokens)))
+                .add(outputAudioRate.multiply(BigDecimal.valueOf(audioOutputTokens)));
     }
 
     public static BigDecimal textGenerationWithCacheCostOpenAI(@NonNull ModelPrice modelPrice,
@@ -35,17 +59,56 @@ class SpanCostCalculator {
                 usage.getOrDefault("original_usage.input_tokens_details.cached_tokens",
                         usage.getOrDefault(CACHE_READ_INPUT_TOKENS_KEY, 0)));
 
-        // If we got cached tokens, substract them from the input tokens count
-        if (cachedReadInputTokens > 0) {
-            inputTokens = Math.max(0, inputTokens - cachedReadInputTokens);
+        // Audio input tokens (OpenAI realtime models like gpt-4o-realtime-preview, gpt-realtime)
+        // are billed at a separate rate when the model publishes input_cost_per_audio_token.
+        // SDK 1.6.0+ logs them under original_usage.prompt_tokens_details.audio_tokens, with the
+        // bare OTel key as a fallback.
+        int audioInputTokens = usage.getOrDefault("original_usage.prompt_tokens_details.audio_tokens",
+                usage.getOrDefault("prompt_tokens_details.audio_tokens", 0));
+        BigDecimal inputAudioRate = modelPrice.inputAudioTokenPrice();
+
+        // When the payload carries prompt_tokens_details.text_tokens explicitly (OpenAI Realtime
+        // publishes it, and LiteLLM's _calculate_input_cost consumes it directly), use it as the
+        // pure-text bucket. This avoids over-subtracting when cached and audio tokens overlap on
+        // realtime models — see baz-reviewer's note on the double-charge risk.
+        // Falls back to substracting cached + audio for the pre-realtime code path.
+        Integer explicitInputTextTokens = usage.getOrDefault(
+                "original_usage.prompt_tokens_details.text_tokens",
+                usage.get("prompt_tokens_details.text_tokens"));
+        if (explicitInputTextTokens != null) {
+            inputTokens = explicitInputTextTokens;
+        } else {
+            if (cachedReadInputTokens > 0) {
+                inputTokens = Math.max(0, inputTokens - cachedReadInputTokens);
+            }
+            if (inputAudioRate.compareTo(BigDecimal.ZERO) > 0) {
+                inputTokens = Math.max(0, inputTokens - audioInputTokens);
+            }
         }
 
         // Get the output tokens (SDK version below 1.6.0 logged completion_tokens, while 1.6.0+ logged original_usage.completion_tokens)
         int outputTokens = usage.getOrDefault("original_usage.completion_tokens",
                 usage.getOrDefault("completion_tokens", 0));
 
+        // Audio output tokens carry their own rate via output_cost_per_audio_token; same fallback shape.
+        int audioOutputTokens = usage.getOrDefault("original_usage.completion_tokens_details.audio_tokens",
+                usage.getOrDefault("completion_tokens_details.audio_tokens", 0));
+        BigDecimal outputAudioRate = modelPrice.outputAudioTokenPrice();
+
+        // Same explicit-text-tokens preference on the completion side.
+        Integer explicitOutputTextTokens = usage.getOrDefault(
+                "original_usage.completion_tokens_details.text_tokens",
+                usage.get("completion_tokens_details.text_tokens"));
+        if (explicitOutputTextTokens != null) {
+            outputTokens = explicitOutputTextTokens;
+        } else if (outputAudioRate.compareTo(BigDecimal.ZERO) > 0) {
+            outputTokens = Math.max(0, outputTokens - audioOutputTokens);
+        }
+
         return modelPrice.inputPrice().multiply(BigDecimal.valueOf(inputTokens))
+                .add(inputAudioRate.multiply(BigDecimal.valueOf(audioInputTokens)))
                 .add(modelPrice.outputPrice().multiply(BigDecimal.valueOf(outputTokens)))
+                .add(outputAudioRate.multiply(BigDecimal.valueOf(audioOutputTokens)))
                 .add(modelPrice.cacheReadInputTokenPrice().multiply(BigDecimal.valueOf(cachedReadInputTokens)));
     }
 

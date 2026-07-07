@@ -1,20 +1,8 @@
-.PHONY: cursor codex claude clean-agents help hooks hooks-remove precommit-sdks precommit-sdks-all
+.PHONY: cursor codex claude clean-agents help hooks hooks-remove precommit precommit-all
 
 AI_DIR := .agents
 CURSOR_DIR := .cursor
 CLAUDE_DIR := .claude
-HOOKS_SRC := .hooks
-# Anchor hook paths to this Makefile's directory so `make hooks` resolves to the
-# Opik repo regardless of where make was invoked from (subdir, -f from another
-# repo, etc.). Without this, running from a different git repo with its own
-# .hooks/ would silently install that repo's hook into that repo's .git/hooks/.
-MAKEFILE_DIR := $(patsubst %/,%,$(dir $(realpath $(firstword $(MAKEFILE_LIST)))))
-# Resolve git-common-dir from the Makefile's dir so the lookup is independent
-# of make's invocation cwd. Empty when MAKEFILE_DIR is not in a git repo so the
-# recipes fail loudly instead of acting on /hooks.
-GIT_COMMON_DIR := $(shell cd "$(MAKEFILE_DIR)" 2>/dev/null && git rev-parse --git-common-dir 2>/dev/null)
-HOOKS_DEST := $(if $(GIT_COMMON_DIR),$(GIT_COMMON_DIR)/hooks)
-SDK_DIFF_BASE ?= origin/main
 
 define link_agent_config
 	@if [ ! -d "$(AI_DIR)" ]; then \
@@ -54,14 +42,14 @@ help:
 	@echo "  make claude        - Sync .agents/ to .claude/ + generate .mcp.json (preserves local files)"
 	@echo "  make clean-agents  - Remove synced files from .claude/ and local Codex artifacts"
 	@echo ""
-	@echo "Git Hooks"
+	@echo "Git Hooks (pre-commit framework — install once per clone)"
 	@echo ""
-	@echo "  make hooks         - Install pre-commit hooks"
-	@echo "  make hooks-remove  - Remove pre-commit hooks"
+	@echo "  make hooks         - Install the pre-commit framework hook"
+	@echo "  make hooks-remove  - Uninstall the pre-commit framework hook"
 	@echo ""
-	@echo "SDK Checks"
-	@echo "  make precommit-sdks       - Run staged/prepared file checks for all SDKs"
-	@echo "  make precommit-sdks-all   - Run all-file pre-commit checks for all SDKs"
+	@echo "Lint Checks (root .pre-commit-config.yaml is the single source of truth)"
+	@echo "  make precommit       - Run hooks on changed files (vs origin/main)"
+	@echo "  make precommit-all   - Run all hooks on the whole repo (full audit)"
 	@echo ""
 
 # Sync to Cursor (symlink .cursor -> .agents)
@@ -143,57 +131,55 @@ clean-agents:
 	@[ -f ".mcp.json" ] && rm -f .mcp.json && echo "Removed .mcp.json" || true
 	@echo "Done! Local customizations preserved."
 
-# Install Git hooks from .hooks/ to .git/hooks/
+# Install the pre-commit framework hook (writes .git/hooks/pre-commit).
 hooks:
-	@if [ -z "$(HOOKS_DEST)" ]; then \
-		echo "Error: $(MAKEFILE_DIR) is not in a git repository."; \
+	@command -v pre-commit >/dev/null 2>&1 || { \
+		echo "Error: pre-commit not found. Install it: pip install pre-commit (or brew install pre-commit)."; \
+		exit 1; \
+	}
+	@# pre-commit refuses to install while core.hooksPath is set (it would write a
+	@# hook git then ignores). Detect it and tell the user exactly how to clear it,
+	@# rather than silently mutating their git config.
+	@hp=$$(git config --get core.hooksPath || true); \
+	if [ -n "$$hp" ]; then \
+		echo "Error: core.hooksPath is set to '$$hp', which makes pre-commit refuse to install"; \
+		echo "       (a hook written to .git/hooks would be ignored by git)."; \
+		echo "       Clear it, then re-run 'make hooks':"; \
+		echo "         git config --unset core.hooksPath        # local (this repo)"; \
+		echo "         git config --global --unset core.hooksPath  # if it was set globally"; \
 		exit 1; \
 	fi
-	@cd "$(MAKEFILE_DIR)" && \
-		if [ ! -d "$(HOOKS_SRC)" ]; then echo "Error: $(MAKEFILE_DIR)/$(HOOKS_SRC)/ does not exist."; exit 1; fi && \
-		if [ ! -d "$(HOOKS_DEST)" ]; then echo "Error: $(HOOKS_DEST)/ does not exist."; exit 1; fi && \
-		cp $(HOOKS_SRC)/pre-commit $(HOOKS_DEST)/pre-commit && \
-		chmod +x $(HOOKS_DEST)/pre-commit && \
-		echo "Pre-commit hook installed."
+	@# -f: install only pre-commit's hook, never chain a pre-existing one in
+	@# "migration mode" (a stale chained hook breaks commits). See OPIK-7235.
+	@pre-commit install -f
+	@# Clear any legacy hook a prior non-force install left behind.
+	@rm -f "$$(git rev-parse --git-path hooks)/pre-commit.legacy"
+	@echo "pre-commit hook installed."
 
-# Remove Git hooks
+# Uninstall the pre-commit framework hook.
 hooks-remove:
-	@if [ -z "$(HOOKS_DEST)" ]; then \
-		echo "Error: $(MAKEFILE_DIR) is not in a git repository."; \
+	@command -v pre-commit >/dev/null 2>&1 || { \
+		echo "pre-commit not found; nothing to uninstall."; \
+		exit 0; \
+	}
+	@pre-commit uninstall
+	@echo "pre-commit hook removed."
+
+# Run all hooks on files changed vs origin/main (the same hooks a commit runs,
+# but over the branch diff). Mirrors how CI lints a PR.
+precommit:
+	@command -v pre-commit >/dev/null 2>&1 || { \
+		echo "Error: pre-commit not found. Install it: pip install pre-commit (or brew install pre-commit)."; \
 		exit 1; \
-	fi
-	@cd "$(MAKEFILE_DIR)" && \
-		if [ -f "$(HOOKS_DEST)/pre-commit" ]; then \
-			rm -f $(HOOKS_DEST)/pre-commit; \
-			echo "Pre-commit hook removed."; \
-		else \
-			echo "No pre-commit hook found."; \
-		fi
+	}
+	@git fetch -q origin main 2>/dev/null || true
+	@pre-commit run --from-ref origin/main --to-ref HEAD --show-diff-on-failure --verbose
 
-# Run SDK pre-commit style checks (changed files only / explicit script checks)
-precommit-sdks:
-	@echo "Running SDK-level pre-commit checks on changed files..."
-	@./scripts/run-precommit-changed-files.sh \
-		--config sdks/python/.pre-commit-config.yaml \
-		--pathspec sdks/python/ \
-		--base-ref "$(SDK_DIFF_BASE)" \
-		--label "Python SDK files"
-	$(MAKE) -C sdks/opik_optimizer precommit SDK_DIFF_BASE="$(SDK_DIFF_BASE)"
-	@ts_files=$$(./scripts/run-precommit-changed-files.sh \
-		--pathspec sdks/typescript/ \
-		--base-ref "$(SDK_DIFF_BASE)" \
-		--label "TypeScript SDK files" \
-		--print-files | grep -E '^sdks/typescript/.*\.(ts|tsx|js|jsx)$$' || true); \
-	if [ -n "$$ts_files" ]; then \
-		echo "TypeScript SDK source files changed. Running lint and typecheck..."; \
-		cd sdks/typescript && npm run lint && npm run typecheck; \
-	else \
-		echo "No TypeScript SDK source files changed. Skipping lint and typecheck."; \
-	fi
-
-# Run full all-file SDK checks
-precommit-sdks-all:
-	@echo "Running all-file SDK checks..."
-	@cd sdks/python && pre-commit run --all-files -c .pre-commit-config.yaml
-	@cd sdks/opik_optimizer && pre-commit run --all-files -c .pre-commit-config.yaml
-	@cd sdks/typescript && npm run lint && npm run typecheck
+# Full-repo audit: run every hook against every file. Slow; surfaces pre-existing
+# debt. Not a routine gate (commits and CI are changed-files-only).
+precommit-all:
+	@command -v pre-commit >/dev/null 2>&1 || { \
+		echo "Error: pre-commit not found. Install it: pip install pre-commit (or brew install pre-commit)."; \
+		exit 1; \
+	}
+	@pre-commit run --all-files --show-diff-on-failure --verbose

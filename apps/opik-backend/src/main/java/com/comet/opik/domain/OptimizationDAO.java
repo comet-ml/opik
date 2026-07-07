@@ -314,7 +314,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                            name,
                            value,
                            last_updated_at,
-                           last_updated_by AS author
+                           last_updated_by AS author,
+                           CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores
                     WHERE entity_type = :entity_type
                       AND workspace_id = :workspace_id
@@ -326,14 +327,15 @@ class OptimizationDAOImpl implements OptimizationDAO {
                            name,
                            value,
                            last_updated_at,
-                           author
+                           author,
+                           source_queue_id
                     FROM authored_feedback_scores
                     WHERE entity_type = :entity_type
                       AND workspace_id = :workspace_id
                       AND entity_id IN (SELECT trace_id FROM experiment_items_final)
                 )
                 ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
@@ -395,7 +397,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     sum(s.total_estimated_cost) AS total_estimated_cost
                 FROM experiment_items_final ei
                 LEFT JOIN (
-                    SELECT id, duration
+                    SELECT id, if(isNaN(duration), NULL, duration) AS duration
                     FROM traces
                     WHERE workspace_id = :workspace_id
                     AND id IN (SELECT trace_id FROM experiment_items_final)

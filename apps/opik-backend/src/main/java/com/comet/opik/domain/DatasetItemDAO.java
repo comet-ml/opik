@@ -273,7 +273,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                            name,
                            value,
                            last_updated_at,
-                           feedback_scores.last_updated_by AS author
+                           feedback_scores.last_updated_by AS author,
+                           CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
@@ -284,13 +285,14 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                            name,
                            value,
                            last_updated_at,
-                           author
+                           author,
+                           source_queue_id
                      FROM authored_feedback_scores
                      WHERE entity_type = 'trace'
                        AND workspace_id = :workspace_id
                 )
                 ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
@@ -450,7 +452,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     last_updated_by,
                     created_at,
                     last_updated_at,
-                    author
+                    author,
+                    source_queue_id
                 FROM (
                     SELECT
                         workspace_id,
@@ -465,7 +468,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         last_updated_by,
                         created_at,
                         last_updated_at,
-                        feedback_scores.last_updated_by AS author
+                        feedback_scores.last_updated_by AS author,
+                        CAST('' AS FixedString(36)) AS source_queue_id
                     FROM feedback_scores
                     WHERE entity_type = :entityType
                       AND workspace_id = :workspace_id
@@ -484,21 +488,22 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         last_updated_by,
                         created_at,
                         last_updated_at,
-                        author
+                        author,
+                        source_queue_id
                     FROM authored_feedback_scores
                     WHERE entity_type = :entityType
                       AND workspace_id = :workspace_id
                       AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
                 )
                 ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
             ), feedback_scores_grouped AS (
                 SELECT
                     workspace_id,
                     project_id,
                     entity_id,
                     name,
-                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at)) AS entries
+                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at, source_queue_id)) AS entries
                 FROM feedback_scores_deduped
                 GROUP BY workspace_id, project_id, entity_id, name
             ), feedback_scores_final AS (
@@ -512,8 +517,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     IF(length(entries) = 1, arrayElement(entries, 1).2, arrayStringConcat(arrayMap(x -> if(x = '', '\\<no reason>', x), arrayMap(e -> e.2, entries)), ', ')) AS reason,
                     arrayElement(entries, 1).4 AS source,
                     mapFromArrays(
-                        arrayMap(e -> e.5, entries),
-                        arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9), entries)
+                        arrayMap(e -> if(e.10 = '', e.5, concat(e.5, '_', toString(e.10))), entries),
+                        arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, '', '', e.10, e.5), entries)
                     ) AS value_by_author,
                     arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
                     arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
@@ -653,7 +658,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 FROM (
                     SELECT
                         id,
-                       if(end_time IS NOT NULL AND start_time IS NOT NULL
+                       if(end_time IS NOT NULL AND notEquals(end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) AND start_time IS NOT NULL
                                              AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                                          NULL) AS duration,
@@ -933,7 +938,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 LEFT JOIN (
                     SELECT
                         id,
-                        if(end_time IS NOT NULL AND start_time IS NOT NULL
+                        if(end_time IS NOT NULL AND notEquals(end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) AND start_time IS NOT NULL
                             AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                             (dateDiff('microsecond', start_time, end_time) / 1000.0),
                             NULL) as duration

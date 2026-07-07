@@ -4367,6 +4367,79 @@ class DatasetVersionResourceTest {
         }
 
         @Test
+        @DisplayName("Success: Editing an item's evaluator and description containing JSON escape sequences round-trips (OPIK-6855)")
+        void applyChanges__whenEvaluatorAndDescriptionContainJsonEscapeSequences__thenItemNotLostAndRoundTrips() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            var items = List.of(DatasetItem.builder()
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("input", JsonUtils.getJsonNodeFromString("\"" + UUID.randomUUID() + "\"")))
+                    .build());
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .batchGroupId(UUID.randomUUID())
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            var version1 = getLatestVersion(datasetId);
+            datasetResourceClient.createVersionTag(datasetId, version1.versionHash(),
+                    DatasetVersionTag.builder().tag("v1").build(), API_KEY, TEST_WORKSPACE);
+
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
+            assertThat(v1Items).hasSize(1);
+
+            // Edit the item with an evaluator prompt AND a description that contain newlines, an
+            // escaped quote and a backslash — the characters ClickHouse's {:String} param
+            // substitution would unescape. Before the fix this corrupted the stored evaluator JSON
+            // (item silently dropped on read by the r2dbc driver) and made the description write
+            // fail outright, so both fields are exercised here.
+            var newEvaluators = List.of(
+                    EvaluatorItem.builder()
+                            .name(UUID.randomUUID().toString())
+                            .type(EvaluatorType.LLM_JUDGE)
+                            .config(JsonUtils.getJsonNodeFromString(
+                                    "{\"messages\":[{\"role\":\"SYSTEM\",\"content\":\"Line one.\\n\\nLine two with an agent's \\\"quoted\\\" word and a back\\\\slash.\"}],"
+                                            + "\"schema\":[{\"name\":\"my assertion\",\"type\":\"BOOLEAN\",\"description\":\"my assertion\"}]}"))
+                            .build());
+
+            var newDescription = "Desc with \\n newline, \\t tab, a \\\"quote\\\" and a back\\\\slash";
+
+            var editedItem = DatasetItemEdit.builder()
+                    .id(v1Items.getFirst().id())
+                    .evaluators(newEvaluators)
+                    .description(newDescription)
+                    .build();
+
+            var changes = DatasetItemChanges.builder()
+                    .baseVersion(version1.id())
+                    .editedItems(List.of(editedItem))
+                    .tags(List.of("v2"))
+                    .build();
+
+            var version2 = datasetResourceClient.applyDatasetItemChanges(
+                    datasetId, changes, false, API_KEY, TEST_WORKSPACE);
+
+            assertThat(version2.itemsTotal()).isEqualTo(1);
+            assertThat(version2.itemsModified()).isEqualTo(1);
+
+            var v2Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v2", API_KEY, TEST_WORKSPACE).content();
+
+            // Full-item comparison: the row must survive the round-trip and every field must be
+            // preserved, with the new evaluators and description applied (volatile fields ignored).
+            var expectedItem = v1Items.getFirst().toBuilder()
+                    .evaluators(newEvaluators)
+                    .description(newDescription)
+                    .build();
+            assertThat(v2Items)
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
+                    .containsExactly(expectedItem);
+        }
+
+        @Test
         @DisplayName("Success: Editing only executionPolicy bumps dataset version as modified")
         void applyChanges__whenOnlyExecutionPolicyChanged__thenItemIsModified() {
             var datasetId = createDataset(UUID.randomUUID().toString());

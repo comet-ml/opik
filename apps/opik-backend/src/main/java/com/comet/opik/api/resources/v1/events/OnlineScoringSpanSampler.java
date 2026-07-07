@@ -89,7 +89,8 @@ public class OnlineScoringSpanSampler {
         // fetch automation rules per project
         spansByProject.forEach((projectId, spans) -> {
             // Only score spans from SDK logging source. Non-SDK spans (playground, experiment,
-            // optimization) are skipped from online evaluation.
+            // optimization, and the engine's own evaluator monitoring spans) are skipped from online
+            // evaluation.
             var scorableSpans = spans.stream().filter(span -> Source.isLoggingSource(span.source())).toList();
             if (scorableSpans.isEmpty()) {
                 log.info("No scorable spans: source is not SDK, projectId '{}', workspaceId '{}'",
@@ -140,8 +141,9 @@ public class OnlineScoringSpanSampler {
                                 .toList();
                         logSampledSpan(evaluator, messages, scorableSpans.size());
                         if (!messages.isEmpty()) {
-                            onlineScorePublisher.enqueueMessage(messages,
-                                    AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE);
+                            OnlineScoringSamplerSupport.publishSampled(onlineScorePublisher, log, messages,
+                                    AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE, spansBatch.workspaceId(),
+                                    spansBatch.workspaceName());
                         }
                     }
                     case AutomationRuleEvaluatorLlmAsJudge rule -> logUnsupportedEvaluatorType(rule);
@@ -165,8 +167,9 @@ public class OnlineScoringSpanSampler {
                                 .toList();
                         logSampledSpan(evaluator, messages, scorableSpans.size());
                         if (!messages.isEmpty()) {
-                            onlineScorePublisher.enqueueMessage(messages,
-                                    AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON);
+                            OnlineScoringSamplerSupport.publishSampled(onlineScorePublisher, log, messages,
+                                    AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON,
+                                    spansBatch.workspaceId(), spansBatch.workspaceName());
                         }
                     }
                 }
@@ -226,6 +229,7 @@ public class OnlineScoringSpanSampler {
                 .llmAsJudgeCode(evaluator.getCode())
                 .workspaceId(spansBatch.workspaceId())
                 .userName(spansBatch.userName())
+                .workspaceName(spansBatch.workspaceName())
                 .build();
     }
 
@@ -239,6 +243,7 @@ public class OnlineScoringSpanSampler {
                 .code(evaluator.getCode())
                 .workspaceId(spansBatch.workspaceId())
                 .userName(spansBatch.userName())
+                .workspaceName(spansBatch.workspaceName())
                 .build();
     }
 

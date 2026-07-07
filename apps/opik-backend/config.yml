@@ -85,10 +85,36 @@ databaseAnalytics:
   #   - failover=3
   #   - custom_http_params=max_query_size=100000000
   #  Description: query parameters that will be added to the connection string
-  queryParameters: ${ANALYTICS_DB_QUERY_PARAMETERS:-health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=250,async_insert_busy_timeout_min_ms=100,async_insert=1,wait_for_async_insert=1,async_insert_use_adaptive_busy_timeout=1,async_insert_deduplicate=1,use_skip_indexes_if_final=1}
+  queryParameters: ${ANALYTICS_DB_QUERY_PARAMETERS:-health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=250,async_insert_busy_timeout_min_ms=100,async_insert=1,wait_for_async_insert=1,async_insert_use_adaptive_busy_timeout=1,async_insert_deduplicate=1,use_skip_indexes_if_final=1,optimize_skip_unused_shards=1,do_not_merge_across_partitions_select_final=1,distributed_product_mode=local}
+  #  Default: unset (inherits the async_insert_busy_timeout_max_ms=250 carried by queryParameters above)
+  #  Description: Optional override (ms) for async_insert_busy_timeout_max_ms in the custom_http_params chain of
+  #   queryParameters above; only applied when that setting is already present there, otherwise it is not injected.
+  #   Leave unset to keep the queryParameters value untouched. With async_insert_use_adaptive_busy_timeout=1 this is
+  #   a ceiling: the adaptive scheduler widens the buffer only while rows are queued.
+  asyncInsertBusyTimeoutMaxMs: ${ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS:-}
   #  Default: 1s
   #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
   healthCheckTimeout: ${ANALYTICS_DB_HEALTH_CHECK_TIMEOUT:-1s}
+
+# Description: Cutover toggles migrating the trace analytics columns to non-nullable, sentinel-defaulted form.
+databaseAnalyticsDataModel:
+  #  Default: false
+  #  Description: Leave false while the traces table still has Nullable end_time/duration/ttft columns; trace writes
+  #   bind null for absent end_time/ttft. Set true once replaced with sentinel-defaulted
+  #   non-nullable columns so writes bind the sentinels (end_time->epoch, ttft->NaN) instead. Gates reads too, so
+  #   while false a legitimate epoch end time round-trips unchanged instead of reading as null.
+  #   Flip in lockstep with the cutover EXCHANGE.
+  traceColumnsNonNullable: ${ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE:-false}
+  #  Default: false
+  #  Description: Leave false at deploy time. Turn true once the trace backfill starts so trace deletes also
+  #   record the deleted ids in the deletion_events_local bridge; without it those deletes are lost from the table
+  #   copy. Scope capture to the backfill-to-cutover window.
+  traceDeletionEventsCaptureEnabled: ${ANALYTICS_DB_DATA_MODEL_TRACE_DELETION_EVENTS_CAPTURE_ENABLED:-false}
+  #  Default: 1000
+  #  Description: Rows per INSERT into the deletion_events_local bridge. A single delete batch can carry more ids
+  #   than the ClickHouse driver binds reliably in one statement (5 columns per row), so the insert is split into
+  #   chunks of this size.
+  deletionEventsInsertBatchSize: ${ANALYTICS_DB_DATA_MODEL_DELETION_EVENTS_INSERT_BATCH_SIZE:-1000}
 
 # Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
 #   window, protecting data quality.
@@ -113,6 +139,10 @@ databaseAnalyticsReadOnlyFreeFormSql:
   #  Default: opik
   #  Description: The read-only user password used to connect to the server
   password: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_PASS:-opik}
+  #  Default: 200s
+  #  Description: Socket read timeout for the read-only client (client-v2 default is 0/none). Kept
+  #   above the read-only profile's max_execution_time (180s) so the server-side cap fires first.
+  socketTimeout: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_SOCKET_TIMEOUT:-200s}
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
@@ -123,6 +153,13 @@ health:
   # https://www.dropwizard.io/en/stable/manual/configuration.html#man-configuration-health-checks
   healthChecks:
     - name: deadlocks
+      critical: true
+      type: alive
+    # Gates liveness (type: alive) so a pod whose shared outbound HTTP pool has been shut down gets restarted and
+    # recreates the pool. A shut-down pool is unrecoverable without a restart, so removing it from rotation isn't
+    # enough. Fails only on the local "Connection pool shut down" condition, never on transient upstream errors, so a
+    # blip in any outbound dependency cannot restart-storm the fleet.
+    - name: shared_http_client
       critical: true
       type: alive
     - name: db
@@ -206,6 +243,12 @@ authentication:
   # Description: Configures base url for React service, used for user management and authentication
   reactService:
     url: ${REACT_SERVICE_URL:-http://react-svc:8080}
+
+# Liveness health check for the shared outbound HTTP client (see shared_http_client under healthChecks)
+sharedHttpClientHealthCheck:
+  # Default: 1s
+  # Description: Probe timeout (connect + read) for the shared_http_client liveness health check.
+  timeout: ${SHARED_HTTP_CLIENT_HEALTH_CHECK_TIMEOUT:-1s}
 
 # OAuth 2.1 Authorization Server for hosted/local Opik MCP
 mcpOAuth:
@@ -618,6 +661,30 @@ onlineScoring:
   #   length. 4 ≈ natural-language English. Lower for code/JSON-heavy workloads (≈ 2) — yields a more
   #   pessimistic estimate so the agentic-tools path engages earlier.
   agenticToolsCharsPerToken: ${ONLINE_SCORING_AGENTIC_TOOLS_CHARS_PER_TOKEN:-4}
+  # Default: 52428800 (50 MB)
+  # Description: Maximum total bytes of attachment data injected as multimodal content per judge invocation.
+  #   Every injected attachment is re-sent on every follow-up tool round, so cost is multiplicative.
+  #   Lower this on memory-constrained deployments.
+  agenticToolsMaxInjectedBytes: ${ONLINE_SCORING_AGENTIC_TOOLS_MAX_INJECTED_BYTES:-52428800}
+  # Default: 120
+  # Description: TTL in seconds for S3 presigned download URLs generated by the get_attachment agentic
+  #   tool. The URL is consumed within a single tool-call round; 120 s is ample for most providers.
+  #   Capped at 3600 s — longer-lived URLs are a security risk if the URL leaks.
+  agenticToolsS3PresignTtlSeconds: ${ONLINE_SCORING_AGENTIC_TOOLS_S3_PRESIGN_TTL_SECONDS:-120}
+  # Default: 4000
+  # Description: Per-variable substitution cap (in characters) for the {{trace}}/{{span}} structure-injection
+  #   and agentic-tools paths. Large enough that small entity input/output renders inline, small enough that a
+  #   huge entity doesn't blow context (the agent fetches the rest via the read tool). 500-100000.
+  maxPromptFieldChars: ${ONLINE_SCORING_MAX_PROMPT_FIELD_CHARS:-4000}
+  # Default: 5
+  # Description: Attachment-upload race tolerance for the {{trace}}/{{span}} structures — how many times the
+  #   attachment lookup is retried when the entity references an attachment that isn't persisted yet. Interim
+  #   guard (0-20; 0 disables retrying) pending the pre-evaluation dispatch delay (OPIK-7224).
+  attachmentFetchMaxRetries: ${ONLINE_SCORING_ATTACHMENT_FETCH_MAX_RETRIES:-5}
+  # Default: 300ms
+  # Description: Delay between attachment-lookup retries (see attachmentFetchMaxRetries). Worst-case added
+  #   latency ≈ attachmentFetchMaxRetries × this, and only for entities that expect an attachment. 50ms-5s.
+  attachmentFetchRetryDelay: ${ONLINE_SCORING_ATTACHMENT_FETCH_RETRY_DELAY:-300ms}
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
@@ -978,7 +1045,11 @@ cacheManager:
     # Default: {}
     # Description: Dynamically created caches with their respective time to live in seconds
     automationRules: ${CACHE_MANAGER_AUTOMATION_RULES_DURATION:-PT1S}
-    workspace_metadata: ${CACHE_MANAGER_WORKSPACE_METADATA_DURATION:-PT1H}
+    # Default: PT1H
+    # Description: Cache TTL for the per-project size estimate (ScopeMetadata) gating dynamic sorting.
+    # The estimate scans all of the project's spans, so cache misses are expensive by design.
+    # Renamed from the orphaned workspace_metadata entry, which no code referenced.
+    project_metadata: ${CACHE_MANAGER_PROJECT_METADATA_DURATION:-PT1H}
     # Default: PT5M
     # Description: Cache TTL for workspace version determination results, applied per workspace
     # Scope: Per workspace (cache key includes workspace ID)
@@ -1189,6 +1260,11 @@ serviceToggles:
   # Description: Whether or not the Agent Insights freeform SQL path is enabled. Gates the read-only ClickHouse client
   #   and the clickhouse-readonly-freeform-sql health check usage. When off, the read-only client is never queried.
   agentInsightsEnabled: ${TOGGLE_AGENT_INSIGHTS_ENABLED:-"false"}
+  # Default: true
+  # Description: Whether the online-scoring (LLM-as-judge) evaluation loop is persisted as monitoring traces/spans.
+  #   When on, each evaluation produces one trace (source=evaluator) with one llm span per LLM round, so cost and
+  #   behavior are auditable inside Opik. When off, evaluations run exactly as before with no extra writes.
+  onlineScoringTracingEnabled: ${TOGGLE_ONLINE_SCORING_TRACING_ENABLED:-"true"}
   # Default: "" (empty, no allowlisted workspaces)
   # Description: Comma-separated list of workspace IDs that should always receive V2 navigation.
   # Valid values: comma-separated workspace IDs (e.g. "ws-id-1,ws-id-2"), or "" (empty, disabled).

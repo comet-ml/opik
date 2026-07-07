@@ -69,10 +69,36 @@ databaseAnalytics:
   #   - failover=3
   #   - custom_http_params=max_query_size=100000000
   #  Description: query parameters that will be added to the connection string
-  queryParameters: health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=60,async_insert_busy_timeout_min_ms=50,async_insert=1,wait_for_async_insert=1,async_insert_use_adaptive_busy_timeout=1,async_insert_deduplicate=1,use_skip_indexes_if_final=1
+  queryParameters: health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=60,async_insert_busy_timeout_min_ms=50,async_insert=1,wait_for_async_insert=1,async_insert_use_adaptive_busy_timeout=1,async_insert_deduplicate=1,use_skip_indexes_if_final=1,optimize_skip_unused_shards=1,do_not_merge_across_partitions_select_final=1,distributed_product_mode=local
+  #  Default: unset (inherits the async_insert_busy_timeout_max_ms=60 carried by queryParameters above)
+  #  Description: Optional override (ms) for async_insert_busy_timeout_max_ms in the custom_http_params chain of
+  #   queryParameters above; only applied when that setting is already present there, otherwise it is not injected.
+  #   Leave unset to keep the queryParameters value untouched. With async_insert_use_adaptive_busy_timeout=1 this is
+  #   a ceiling: the adaptive scheduler widens the buffer only while rows are queued.
+  asyncInsertBusyTimeoutMaxMs: # Empty - inherits the queryParameters value above
   #  Default: 1s
   #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
   healthCheckTimeout: 1s
+
+# Description: Cutover toggles migrating the trace analytics columns to non-nullable, sentinel-defaulted form.
+databaseAnalyticsDataModel:
+  #  Default: false
+  #  Description: Leave false while the traces table still has Nullable end_time/duration/ttft columns; trace writes
+  #   bind null for absent end_time/ttft. Set true once replaced with sentinel-defaulted
+  #   non-nullable columns so writes bind the sentinels (end_time->epoch, ttft->NaN) instead. Gates reads too, so
+  #   while false a legitimate epoch end time round-trips unchanged instead of reading as null.
+  #   Flip in lockstep with the cutover EXCHANGE.
+  traceColumnsNonNullable: false
+  #  Default: false
+  #  Description: Leave false at deploy time. Turn true once the trace backfill starts so trace deletes also
+  #   record the deleted ids in the deletion_events_local bridge; without it those deletes are lost from the table
+  #   copy. Scope capture to the backfill-to-cutover window.
+  traceDeletionEventsCaptureEnabled: false
+  #  Default: 1000
+  #  Description: Rows per INSERT into the deletion_events_local bridge. A single delete batch can carry more ids
+  #   than the ClickHouse driver binds reliably in one statement (5 columns per row), so the insert is split into
+  #   chunks of this size.
+  deletionEventsInsertBatchSize: 1000
 
 # Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
 #   window, protecting data quality.
@@ -94,6 +120,8 @@ uuidValidation:
 databaseAnalyticsReadOnlyFreeFormSql:
   username: comet_readonly_freeform_sql_user
   password: opik
+  # Plain value (no env var).
+  socketTimeout: 200s
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
@@ -108,6 +136,11 @@ health:
   # healthy for the entire test window.
   healthChecks:
     - name: deadlocks
+      critical: true
+      type: alive
+      initialState: false
+      schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
+    - name: shared_http_client
       critical: true
       type: alive
       initialState: false
@@ -177,6 +210,9 @@ authentication:
   # Description: Configures base url for React service, used for user management and authentication
   reactService:
     url: ''
+
+sharedHttpClientHealthCheck:
+  timeout: 1s
 
 # OAuth 2.1 Authorization Server for hosted/local Opik MCP
 mcpOAuth:
@@ -351,6 +387,14 @@ onlineScoring:
   # Default: 4
   # Description: Characters-per-token ratio used to estimate trace size from serialized JSON length.
   agenticToolsCharsPerToken: 4
+  agenticToolsMaxInjectedBytes: 52428800
+  agenticToolsS3PresignTtlSeconds: 120
+  # Per-variable substitution cap (chars) for the {{trace}}/{{span}} structure-injection / agentic paths.
+  maxPromptFieldChars: 4000
+  # Attachment-upload race tolerance for the {{trace}}/{{span}} structures (retries + delay). Interim guard
+  # pending the pre-evaluation dispatch delay (OPIK-7224).
+  attachmentFetchMaxRetries: 5
+  attachmentFetchRetryDelay: 300ms
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
@@ -692,6 +736,9 @@ serviceToggles:
   # Default: false
   # Description: Master switch for the agentic-tools path on LLM-as-judge online scoring.
   agenticToolsEnabled: "false"
+  # Default: true
+  # Description: Whether the online-scoring (LLM-as-judge) evaluation loop is persisted as monitoring traces.
+  onlineScoringTracingEnabled: "true"
   # Default: false
   # Description: Whether or not the Agent Insights freeform SQL path is enabled. Tests flip this on when exercising
   #   the read-only ClickHouse client and the clickhouse-readonly-freeform-sql health check.
