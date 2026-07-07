@@ -547,7 +547,7 @@ class ExperimentItemDAO {
             WHERE ei.workspace_id = :workspace_id
             <if(project_id)> AND ei.project_id = :project_id <endif>
             AND ei.trace_id IN (
-                SELECT DISTINCT trace_id FROM spans FINAL
+                SELECT DISTINCT trace_id FROM spans
                 WHERE id IN :span_ids AND workspace_id = :workspace_id
                 <if(project_id)> AND project_id = :project_id <endif>
             )
