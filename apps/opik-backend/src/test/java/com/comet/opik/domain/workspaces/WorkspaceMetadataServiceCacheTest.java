@@ -26,8 +26,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,6 +36,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@link WorkspaceMetadataServiceImpl#getProjectMetadata(String, UUID)} actually engages: the
  * method must stay interceptable by Guice (not private) and the cache name must stay configured,
  * otherwise the expensive per-project size estimate silently runs on every call.
+ * <p>
+ * Follows the black-box cache test flow: produce the cached value, alter the underlying value,
+ * verify the stale value is still served from the cache, then verify the updated value is served
+ * after expiration.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
@@ -47,15 +50,16 @@ class WorkspaceMetadataServiceCacheTest {
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(ZOOKEEPER_CONTAINER);
 
-    private static final AtomicInteger PROJECT_METADATA_DAO_CALLS = new AtomicInteger();
+    private static final Duration CACHE_TTL = Duration.ofSeconds(1);
 
-    private static final WorkspaceMetadataDAO COUNTING_DAO = new WorkspaceMetadataDAO() {
+    private static final AtomicReference<Double> PROJECT_SIZE_GB = new AtomicReference<>();
+
+    private static final WorkspaceMetadataDAO STUB_DAO = new WorkspaceMetadataDAO() {
 
         @Override
         public Mono<ScopeMetadata> getProjectMetadata(String workspaceId, UUID projectId) {
-            PROJECT_METADATA_DAO_CALLS.incrementAndGet();
             return Mono.just(ScopeMetadata.builder()
-                    .sizeGb(ThreadLocalRandom.current().nextDouble())
+                    .sizeGb(PROJECT_SIZE_GB.get())
                     .totalTableSizeGb(100)
                     .percentageOfTable(1)
                     .limitSizeGb(10)
@@ -89,46 +93,49 @@ class WorkspaceMetadataServiceCacheTest {
 
                             @Override
                             protected void configure() {
-                                bind(WorkspaceMetadataDAO.class).toInstance(COUNTING_DAO);
+                                bind(WorkspaceMetadataDAO.class).toInstance(STUB_DAO);
                             }
 
                         }))
                         .customConfigs(
                                 List.of(
                                         new CustomConfig("cacheManager.enabled", "true"),
-                                        new CustomConfig("cacheManager.caches.project_metadata", "PT30S")))
+                                        new CustomConfig("cacheManager.caches.project_metadata",
+                                                "PT%dS".formatted(CACHE_TTL.toSeconds()))))
                         .build());
     }
 
     @Test
-    void getProjectMetadata__repeatedCallsAreServedFromCache(WorkspaceMetadataService service,
+    void getProjectMetadata__staleValueIsServedFromCacheUntilExpiration(WorkspaceMetadataService service,
             CacheManager cacheManager) {
         var impl = (WorkspaceMetadataServiceImpl) service;
         var workspaceId = UUID.randomUUID().toString();
         var projectId = UUID.randomUUID();
 
+        // produce the cached value
+        PROJECT_SIZE_GB.set(10.0);
         var first = impl.getProjectMetadata(workspaceId, projectId).block();
 
-        assertThat(first).isNotNull();
-        assertThat(PROJECT_METADATA_DAO_CALLS.get()).isEqualTo(1);
+        assertThat(first.sizeGb()).isEqualTo(10.0);
 
         // the cache put is async and its completion signal is dropped, so wait until the entry is
-        // actually readable before asserting the second call is served from the cache
+        // actually readable before altering the underlying value. The double dash is correct:
+        // CacheInterceptor composes "name:-" + evaluated key, and the @Cacheable key expression
+        // contributes its own leading '-'.
         var cacheKey = "project_metadata:--%s-%s".formatted(workspaceId, projectId);
         Awaitility.await()
                 .atMost(Duration.ofSeconds(5))
                 .until(() -> Boolean.TRUE.equals(cacheManager.contains(cacheKey).block()));
 
-        // same key: served from cache, the DAO must not be called again
+        // alter the underlying value: the stale value must still be served from the cache
+        PROJECT_SIZE_GB.set(20.0);
         var second = impl.getProjectMetadata(workspaceId, projectId).block();
 
-        assertThat(second).isEqualTo(first);
-        assertThat(PROJECT_METADATA_DAO_CALLS.get()).isEqualTo(1);
+        assertThat(second.sizeGb()).isEqualTo(10.0);
 
-        // different project: cache miss, the DAO is called again
-        var other = impl.getProjectMetadata(workspaceId, UUID.randomUUID()).block();
-
-        assertThat(other).isNotEqualTo(first);
-        assertThat(PROJECT_METADATA_DAO_CALLS.get()).isEqualTo(2);
+        // after expiration, the updated value is served
+        Awaitility.await()
+                .atMost(CACHE_TTL.plusSeconds(5))
+                .until(() -> impl.getProjectMetadata(workspaceId, projectId).block().sizeGb() == 20.0);
     }
 }
