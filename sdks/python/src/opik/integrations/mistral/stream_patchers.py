@@ -46,7 +46,6 @@ def patch_sync_event_stream(
         except Exception as exception:
             LOGGER.debug(
                 "Exception raised from mistralai event stream.",
-                str(exception),
                 exc_info=True,
             )
             error_info = error_info_collector.collect(exception)
@@ -103,7 +102,6 @@ def patch_async_event_stream(
         except Exception as exception:
             LOGGER.debug(
                 "Exception raised from mistralai async event stream.",
-                str(exception),
                 exc_info=True,
             )
             error_info = error_info_collector.collect(exception)
