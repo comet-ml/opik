@@ -4,6 +4,11 @@ import {
   pollTraceForFeedbackScore,
   type PollFeedbackScoreOpts,
 } from './poll-feedback-score';
+import {
+  pollOptimizationStatus,
+  type OptimizationStatus,
+  type PollOptimizationStatusOpts,
+} from './poll-optimization-status';
 
 export type BackendClient = ReturnType<typeof makeBackendClient>;
 
@@ -60,6 +65,15 @@ export interface AutomationRuleRef {
   projectIds: string[];
 }
 
+export interface OptimizationRef {
+  id: string;
+  name: string;
+  status: OptimizationStatus;
+  objectiveName: string | null;
+  datasetName: string | null;
+  numTrials: number;
+}
+
 /** Backend discriminator for Dataset vs Test Suite (shared DB table). */
 const TEST_SUITE_TYPE = 'evaluation_suite';
 
@@ -70,6 +84,25 @@ export function makeBackendClient(apiKey: string | null = null) {
     workspaceName: env.workspace,
     apiUrl: env.apiBaseUrl,
   });
+
+  // Hoisted so the poll helpers (free functions) can call it without depending
+  // on the not-yet-constructed return object.
+  const localGetOptimization = async (id: string): Promise<OptimizationRef | null> => {
+    try {
+      const o = await opik.api.optimizations.getOptimizationById(id);
+      return {
+        id: String(o.id),
+        name: o.name ?? '',
+        status: String(o.status) as OptimizationStatus,
+        objectiveName: o.objectiveName ?? null,
+        datasetName: o.datasetName ?? null,
+        numTrials: Number(o.numTrials ?? 0),
+      };
+    } catch (err) {
+      if (isNotFoundError(err)) return null;
+      throw err;
+    }
+  };
 
   // Hoisted so pollTraceForFeedbackScore (a free function) can call it without
   // depending on the not-yet-constructed return object.
@@ -286,6 +319,25 @@ export function makeBackendClient(apiKey: string | null = null) {
           projectId,
           body: { ids: [ruleId] },
         });
+      } catch (err) {
+        if (isNotFoundError(err)) return;
+        throw err;
+      }
+    },
+
+    getOptimization: localGetOptimization,
+
+    async pollOptimizationStatus(
+      optimizationId: string,
+      target: OptimizationStatus,
+      opts: PollOptimizationStatusOpts = {},
+    ): Promise<OptimizationRef> {
+      return pollOptimizationStatus(localGetOptimization, optimizationId, target, opts);
+    },
+
+    async deleteOptimization(id: string): Promise<void> {
+      try {
+        await opik.api.optimizations.deleteOptimizationsById({ ids: [id] });
       } catch (err) {
         if (isNotFoundError(err)) return;
         throw err;

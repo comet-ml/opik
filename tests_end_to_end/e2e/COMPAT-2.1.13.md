@@ -71,3 +71,35 @@ returned real completions.
 
 This is a logic bug present identically on `main` and `2.1.13`, so the fix is authored against
 `main` (PR) and every future regression run benefits — not just this compat branch.
+
+## Added test — Optimization Studio smoke (`@t1-smoke`)
+
+`tests/optimization-studio/optimization-studio-smoke.spec.ts` (+ `pom/optimization-studio.page.ts`)
+was added on this branch to verify the Optimization Studio, which is deployed across the staaS
+environments and had no automated check. It drives the **v2** studio end-to-end: it SDK-seeds a
+4-item sentiment dataset (`text` / `label`), opens `/projects/{id}/optimizations/new`, keeps the
+form's default GEPA optimizer + Equals metric, picks the env-configured model
+(`ensureModelAvailable`, Anthropic Haiku preferred), sets the Equals reference key to `label`, and
+clicks **Optimize prompt**. It then polls `GET /v1/private/optimizations/{id}` until the run reaches
+`completed` (the python-backend RQ worker executes it out of band), asserts the run is healthy
+(`objective_name=equals`, `num_trials ≥ 1`), and confirms the detail page shows the `completed`
+status. Runs green in ~26–28s locally (validated 3×).
+
+- **Selectors:** the v2 studio/detail pages carry no product `data-testid`s except the shared LLM
+  message editor (`playground-message-editor`), and per compat-branch rules no testids were added
+  (the deployed image wouldn't have them). Everything else is role/label/text — see the POM.
+- **Seeding note:** the studio dataset picker lists only datasets **associated with the project**
+  (`GET /projects/{id}/datasets`). A dataset must be created with `project_name` set, which the SDK
+  bridge's `createDataset` does; a plain workspace-level dataset does not appear.
+- **Skip guard:** with no LLM provider key (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` /
+  `OPENROUTER_API_KEY`), `ensureModelAvailable` skips the test cleanly (validated) rather than
+  failing — so restricted environments stay green.
+- **Duration:** the run is naturally fast (4 items, Haiku, GEPA, deterministic Equals), so
+  `OPTIMIZER_MAX_TRIALS` did not need bounding on the python-backend.
+
+### Updated result tally with the new test
+
+| Run | Config | Result |
+|---|---|---|
+| A | `optimization-studio-smoke` alone, ×3 (stability) | 3× 1 passed (~26–28s) |
+| B | `optimization-studio-smoke`, provider keys unset | 1 skipped (clean skip guard) |
