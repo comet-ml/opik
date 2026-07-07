@@ -140,11 +140,16 @@ em_backend_running() {
     [ -f "$EM_BACKEND_PID_FILE" ] && kill -0 "$(cat "$EM_BACKEND_PID_FILE")" 2>/dev/null
 }
 
-# Is the EM backend serving? Detects an instance started outside dev-runner
-# (e.g. from IntelliJ) so we reuse it instead of colliding on the port.
+# Is the EM backend serving? Liveness probe, NOT deep health: /isAlive/ping is
+# Dropwizard's aggregate health endpoint and returns 500 if any check is red —
+# locally the feature-toggle check is permanently red (no ci-feature-toggles.json,
+# toggles server unreachable), so /isAlive/ping would never go green and the
+# readiness wait would time out. /auth/test returns 200 as soon as the app is
+# serving, independent of feature toggles. Also detects an instance started
+# outside dev-runner (e.g. from IntelliJ) so we reuse it instead of colliding.
 em_backend_healthy() {
     command -v curl >/dev/null 2>&1 || return 1
-    curl -sf --max-time 2 "http://localhost:${EM_BACKEND_PORT}/isAlive/ping" >/dev/null 2>&1
+    curl -sf --max-time 2 "http://localhost:${EM_BACKEND_PORT}/auth/test" >/dev/null 2>&1
 }
 
 em_frontend_running() {
@@ -316,6 +321,8 @@ start_em_backend_local() {
         CASSANDRA_ENABLED=false MPM_ENABLED=false \
         FORCE_FAIL_ON_TIMEZONE_MISMATCH=False \
         MYSQL_MIN_MAX_ALLOWED_PACKET_MB=3 \
+        PAYMENT_PUBLISHABLE_KEY=pk_test_stub \
+        PAYMENT_SECRET_KEY=sk_test_stub \
         REACT_BIND_HOST=0.0.0.0 \
         REACT_BACKEND_HTTP_PORT="$EM_BACKEND_PORT" \
         REACT_BACKEND_HTTPS_PORT="$EM_BACKEND_ADMIN_PORT" \
