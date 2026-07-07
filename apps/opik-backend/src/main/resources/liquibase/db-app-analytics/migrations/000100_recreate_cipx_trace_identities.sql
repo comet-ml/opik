@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset boryst:000099_recreate_cipx_trace_identities
+--changeset boryst:000100_recreate_cipx_trace_identities
 --comment: Recreate cipx_trace_identities with user_uuid in the primary key
 
 -- Retrieval now filters identities by user_uuid only (user_email is resolved to user_uuid via the
