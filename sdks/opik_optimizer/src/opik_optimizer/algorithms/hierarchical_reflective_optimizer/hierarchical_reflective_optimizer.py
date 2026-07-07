@@ -704,7 +704,9 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
         # finish_reason, stopped_early, stop_reason are handled by base class
         # Align with context in case trial accounting updated current_best_score.
-        if best_score is None or improves_over(context.current_best_score, best_score):
+        if context.current_best_score is not None and (
+            best_score is None or improves_over(context.current_best_score, best_score)
+        ):
             best_score = context.current_best_score
         history_entries = self.get_history_entries()
         for entry in history_entries:
