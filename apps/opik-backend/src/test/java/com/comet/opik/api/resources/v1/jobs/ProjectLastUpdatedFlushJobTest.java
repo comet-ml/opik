@@ -1,4 +1,4 @@
-package com.comet.opik.domain;
+package com.comet.opik.api.resources.v1.jobs;
 
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Trace;
@@ -13,10 +13,8 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
-import com.comet.opik.api.resources.v1.jobs.ProjectLastUpdatedFlushJob;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
-import com.comet.opik.infrastructure.redis.StringRedisClient;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
@@ -42,13 +40,12 @@ import java.util.concurrent.TimeUnit;
 
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.domain.ProjectLastUpdatedTraceBufferServiceImpl.PENDING_SET_KEY;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Happy-path black-box coverage for the flush job: ingest a trace via the public API so {@code ProjectEventListener}
- * buffers the marker, invoke {@link ProjectLastUpdatedFlushJob} manually, and assert the project API reflects the
- * flushed timestamp with the Redis buffer drained. {@code jobEnabled} is off so the Quartz schedule stays idle.
+ * buffers the marker, then invoke {@link ProjectLastUpdatedFlushJob} manually until the project API reflects the
+ * flushed timestamp. {@code jobEnabled} is off so the Quartz schedule stays idle and the job is driven deterministically.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
@@ -93,16 +90,14 @@ class ProjectLastUpdatedFlushJobTest {
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
     private ProjectLastUpdatedFlushJob flushJob;
-    private StringRedisClient redisClient;
 
     @BeforeAll
-    void setUpAll(ClientSupport clientSupport, Injector injector, StringRedisClient redisClient) {
+    void setUpAll(ClientSupport clientSupport, Injector injector) {
         var baseUrl = TestUtils.getBaseUrl(clientSupport);
 
         projectResourceClient = new ProjectResourceClient(clientSupport, baseUrl, factory);
         traceResourceClient = new TraceResourceClient(clientSupport, baseUrl);
         flushJob = injector.getInstance(ProjectLastUpdatedFlushJob.class);
-        this.redisClient = redisClient;
     }
 
     @Test
@@ -121,16 +116,13 @@ class ProjectLastUpdatedFlushJobTest {
                         .build(),
                 seeded.apiKey(), seeded.workspaceName());
 
-        Awaitility.await().atMost(10, TimeUnit.SECONDS).pollInterval(100, TimeUnit.MILLISECONDS)
-                .untilAsserted(() -> assertThat(redisClient.getScoredSortedSet(PENDING_SET_KEY).size()).isEqualTo(1));
-
-        flushJob.doJob(null);
-
+        // The event listener buffers the marker asynchronously; re-invoke the job on each poll tick until it lands
+        // (avoids depending on the buffer service's internal Redis key, which lives in a different package).
         Awaitility.await().atMost(15, TimeUnit.SECONDS).pollInterval(100, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+            flushJob.doJob(null);
             var project = projectResourceClient.getProject(seeded.projectId(), seeded.apiKey(), seeded.workspaceName());
             assertThat(project.lastUpdatedTraceAt()).isNotNull();
             assertThat(project.lastUpdatedTraceAt().toEpochMilli()).isEqualTo(lastUpdatedAt.toEpochMilli());
-            assertThat(redisClient.getScoredSortedSet(PENDING_SET_KEY).size()).isZero();
         });
     }
 
