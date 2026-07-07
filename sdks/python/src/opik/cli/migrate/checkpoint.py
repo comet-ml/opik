@@ -107,6 +107,21 @@ class MigrationCheckpoint:
     total_experiments: int = 0
     completed_experiment_ids: Set[str] = field(default_factory=set)
     in_flight: Optional[InFlightExperiment] = None
+    # Set True once the dataset-level phases (rename source -> _v1, create
+    # destination, replay versions, cascade optimizations) have all completed
+    # on some run. Those phases are NOT idempotent -- re-running them would
+    # collide on the rename and duplicate every version -- so a resumed run
+    # skips them entirely and rebuilds their in-memory maps read-only from the
+    # already-migrated destination (see ``reconstruct_remaps``). ``None`` on a
+    # checkpoint written before this field existed / a fresh run.
+    dataset_phase_done: bool = False
+    # The source dataset's id and its post-rename name (``<name>_v1``), captured
+    # once the rename lands. A resumed run resolves the source by this id/name
+    # (the original name now points at the DESTINATION dataset created by the
+    # first run, so re-resolving by the user-supplied name would pick the wrong
+    # dataset).
+    source_dataset_id: Optional[str] = None
+    source_name_after_rename: Optional[str] = None
     schema_version: int = SCHEMA_VERSION
 
     @property
@@ -153,6 +168,17 @@ class MigrationCheckpoint:
         self.completed_experiment_ids.add(source_experiment_id)
         self.in_flight = None
 
+    def mark_dataset_phase_done(
+        self, *, source_dataset_id: str, source_name_after_rename: str
+    ) -> None:
+        """Record that rename/create/replay/optimizations have all completed,
+        along with the source dataset's id and post-rename name so a resumed
+        run can re-resolve the source and rebuild the remaps.
+        """
+        self.dataset_phase_done = True
+        self.source_dataset_id = source_dataset_id
+        self.source_name_after_rename = source_name_after_rename
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "schema_version": self.schema_version,
@@ -161,6 +187,9 @@ class MigrationCheckpoint:
             "project": self.project,
             "dataset": self.dataset,
             "total_experiments": self.total_experiments,
+            "dataset_phase_done": self.dataset_phase_done,
+            "source_dataset_id": self.source_dataset_id,
+            "source_name_after_rename": self.source_name_after_rename,
             # Sorted for a stable, diff-friendly on-disk representation.
             "completed_experiment_ids": sorted(self.completed_experiment_ids),
             "in_flight": asdict(self.in_flight) if self.in_flight else None,
@@ -287,6 +316,9 @@ def load_or_create(
             dataset=dataset,
             path=path,
             total_experiments=int(data.get("total_experiments", 0)),
+            dataset_phase_done=bool(data.get("dataset_phase_done", False)),
+            source_dataset_id=data.get("source_dataset_id"),
+            source_name_after_rename=data.get("source_name_after_rename"),
             completed_experiment_ids=set(completed_ids),
             in_flight=in_flight,
         )

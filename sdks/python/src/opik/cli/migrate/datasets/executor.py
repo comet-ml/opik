@@ -291,6 +291,23 @@ def _cascade_experiments(
     ``completed`` value so a resumed run renders at the right percentage
     (OPIK-7168) rather than starting from 0.
     """
+    # Mark the dataset phase (rename/create/replay/optimizations) done exactly
+    # once, when the cascade first starts on a FRESH run. This is the point
+    # where all of those have completed; recording it now means a subsequent
+    # crash+resume skips them and reconstructs their remaps instead of colliding
+    # on the rename. Skipped on a resume run (``plan.is_resume``) -- the flag is
+    # already set and the source dataset was renamed on the prior run.
+    if (
+        checkpoint is not None
+        and not plan.is_resume
+        and not checkpoint.dataset_phase_done
+    ):
+        checkpoint.mark_dataset_phase_done(
+            source_dataset_id=action.source_dataset_id,
+            source_name_after_rename=plan.source_name_after_rename,
+        )
+        checkpoint.flush()
+
     with Progress(
         TextColumn("[bold blue]Cascading experiments"),
         BarColumn(),

@@ -131,6 +131,11 @@ def test_migrate_dataset__crash_mid_cascade__resumes_without_duplicates(
     assert len(checkpoints) == 1, f"expected one checkpoint file, got {checkpoints}"
     checkpoint_data = json.loads(checkpoints[0].read_text())
     assert len(checkpoint_data["completed_experiment_ids"]) == _CRASH_AT_INDEX
+    # The dataset phase (rename/create/replay/optimizations) finished before the
+    # cascade started, so resume must skip it and reconstruct the remaps from
+    # the destination rather than re-running (and duplicating) it.
+    assert checkpoint_data["dataset_phase_done"] is True
+    assert checkpoint_data["source_name_after_rename"] == f"{dataset_name}_v1"
     in_flight = checkpoint_data["in_flight"]
     assert in_flight is not None, "interrupted experiment must be recorded in flight"
     assert in_flight["dest_trace_ids"], (
