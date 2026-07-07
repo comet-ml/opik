@@ -53,7 +53,8 @@ public class CipxSpendDAO {
             long uInput,
             long uCacheRead,
             long uCacheCreation,
-            long uOutput) {
+            long uOutput,
+            @NonNull String querySource) {
 
         public static SpanRow from(UUID spanId, UUID traceId, UUID projectId, JsonNode metadata, Instant startTime) {
             JsonNode call = metadata.path("cipx").path("call");
@@ -68,6 +69,7 @@ public class CipxSpendDAO {
                     .uCacheRead(usage.path("cache_read_input_tokens").asLong(0))
                     .uCacheCreation(usage.path("cache_creation_input_tokens").asLong(0))
                     .uOutput(usage.path("output_tokens").asLong(0))
+                    .querySource(call.path("query_source").asText(""))
                     .build();
         }
     }
@@ -77,7 +79,7 @@ public class CipxSpendDAO {
     private static final String INSERT = """
             INSERT INTO cipx_spends
                 (workspace_id, project_id, trace_id, span_id, start_time, model,
-                 u_input, u_cache_read, u_cache_creation, u_output)
+                 u_input, u_cache_read, u_cache_creation, u_output, query_source)
             SETTINGS log_comment = '<log_comment>'
             FORMAT Values
                 <items:{item |
@@ -91,7 +93,8 @@ public class CipxSpendDAO {
                         :u_input<item.index>,
                         :u_cache_read<item.index>,
                         :u_cache_creation<item.index>,
-                        :u_output<item.index>
+                        :u_output<item.index>,
+                        :query_source<item.index>
                     )
                     <if(item.hasNext)>,<endif>
                 }>
@@ -120,7 +123,7 @@ public class CipxSpendDAO {
         // Positional binds: the driver resolves named binds with a linear indexOf over the statement's
         // parameter list (quadratic per statement), while bind(int) is a direct array write. Indices
         // follow the placeholders' first-appearance order in the rendered SQL: workspace_id once at 0
-        // (repeats dedup), then 9 parameters per row tuple in template order.
+        // (repeats dedup), then 10 parameters per row tuple in template order.
         statement.bind(0, workspaceId);
         int index = 1;
         for (SpanRow row : rows) {
@@ -132,7 +135,8 @@ public class CipxSpendDAO {
                     .bind(index++, row.uInput())
                     .bind(index++, row.uCacheRead())
                     .bind(index++, row.uCacheCreation())
-                    .bind(index++, row.uOutput());
+                    .bind(index++, row.uOutput())
+                    .bind(index++, row.querySource());
         }
 
         return statement.execute();
