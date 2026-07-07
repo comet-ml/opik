@@ -5,7 +5,6 @@ from typing import Any, Dict, List
 import groq
 import httpx
 import pytest
-from groq.types.chat import chat_completion_chunk
 from groq.types.chat.chat_completion import ChatCompletion, Choice
 from groq.types.chat.chat_completion_message import ChatCompletionMessage
 from groq.types.completion_usage import CompletionUsage
@@ -94,6 +93,19 @@ def _mock_stream_response(chunks: List[Dict[str, Any]]) -> httpx.Response:
             "POST", "https://api.groq.com/openai/v1/chat/completions"
         ),
     )
+
+
+def _mock_stream_transport(chunks: List[Dict[str, Any]]) -> httpx.MockTransport:
+    """Public testing hook: a fake transport plugged in via the client's
+    ``http_client`` argument, so streaming exercises the real request/response
+    machinery (auth headers, ``_post``, ``Stream``/``AsyncStream`` construction)
+    instead of monkeypatching a private method.
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return _mock_stream_response(chunks)
+
+    return httpx.MockTransport(handler)
 
 
 def _mock_completion(
@@ -207,19 +219,11 @@ def test_groq_chat_completions_create__async__happyflow(fake_backend, monkeypatc
 
 
 def test_groq_chat_completions_create__stream_mode_is_on__generator_tracked_correctly(
-    fake_backend, monkeypatch
+    fake_backend,
 ):
-    client = groq.Groq(api_key="fake-api-key")
+    http_client = httpx.Client(transport=_mock_stream_transport(STREAM_CHUNKS))
+    client = groq.Groq(api_key="fake-api-key", http_client=http_client)
     wrapped_client = track_groq(client)
-    monkeypatch.setattr(
-        client.chat.completions,
-        "_post",
-        lambda *args, **kwargs: groq.Stream(
-            cast_to=chat_completion_chunk.ChatCompletionChunk,
-            response=_mock_stream_response(STREAM_CHUNKS),
-            client=client,
-        ),
-    )
 
     messages = [{"role": "user", "content": "Why is the sky blue?"}]
     stream = wrapped_client.chat.completions.create(
@@ -268,19 +272,11 @@ def test_groq_chat_completions_create__stream_mode_is_on__generator_tracked_corr
 
 
 def test_groq_chat_completions_create__async__stream_mode_is_on__generator_tracked_correctly(
-    fake_backend, monkeypatch
+    fake_backend,
 ):
-    client = groq.AsyncGroq(api_key="fake-api-key")
+    http_client = httpx.AsyncClient(transport=_mock_stream_transport(STREAM_CHUNKS))
+    client = groq.AsyncGroq(api_key="fake-api-key", http_client=http_client)
     wrapped_client = track_groq(client)
-
-    async def _mock_post(*args, **kwargs):
-        return groq.AsyncStream(
-            cast_to=chat_completion_chunk.ChatCompletionChunk,
-            response=_mock_stream_response(STREAM_CHUNKS),
-            client=client,
-        )
-
-    monkeypatch.setattr(client.chat.completions, "_post", _mock_post)
 
     messages = [{"role": "user", "content": "Why is the sky blue?"}]
 
