@@ -2,46 +2,60 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.ProjectIdLastUpdated;
 import com.comet.opik.infrastructure.ProjectLastUpdatedFlushConfig;
+import com.comet.opik.infrastructure.redis.StringRedisClient;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.redisson.api.RScoredSortedSetReactive;
-import org.redisson.api.RedissonReactiveClient;
-import org.redisson.client.codec.StringCodec;
-import reactor.core.publisher.Flux;
-import reactor.core.scheduler.Schedulers;
+import org.apache.commons.collections4.CollectionUtils;
+import org.redisson.api.RScoredSortedSet;
+import org.redisson.client.protocol.ScoredEntry;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.time.Instant;
 import java.util.Collection;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
- * Buffers per-project last-updated-trace timestamps on the ingestion path, keeping the high-frequency trace events
- * off the contended {@code projects} MySQL row. When enabled, the latest timestamp per project is written to a Redis
- * ZSET (member {@code "workspaceId:projectId"}, score = epoch millis) via {@code addIfGreater}, which keeps only the
- * cluster-wide max; {@code ProjectLastUpdatedFlushJob} drains it to MySQL periodically. When disabled, delegates
- * straight to the synchronous MySQL write.
+ * Owns the {@code projects.last_updated_trace_at} buffering: the ingestion-path write that keeps the marker off the
+ * contended {@code projects} MySQL row, and the periodic flush that persists it.
+ * <p>
+ * When enabled, {@link #record} writes the latest timestamp per project to a Redis ZSET (member
+ * {@code "workspaceId:projectId"}, score = epoch millis) via {@code addIfGreater}, which keeps only the cluster-wide
+ * max; {@link #flush} (driven by {@code ProjectLastUpdatedFlushJob}) drains it to MySQL. When disabled,
+ * {@link #record} delegates straight to the synchronous MySQL write.
  */
 @ImplementedBy(ProjectLastUpdatedTraceBufferServiceImpl.class)
 public interface ProjectLastUpdatedTraceBufferService {
 
-    void record(String workspaceId, Collection<ProjectIdLastUpdated> lastUpdatedTraces);
+    void record(@NonNull String workspaceId, Collection<ProjectIdLastUpdated> lastUpdatedTraces);
+
+    /** Drains the Redis buffer to MySQL and returns the number of project markers written. */
+    long flush();
 }
 
 @Slf4j
 @Singleton
 class ProjectLastUpdatedTraceBufferServiceImpl implements ProjectLastUpdatedTraceBufferService {
 
+    static final String PENDING_SET_KEY = "project:last-updated-trace:pending";
+    // Snapshot the live buffer is atomically renamed to while a flush drains it (renamenx), so writers keep
+    // populating PENDING_SET_KEY and the drain owns its data exclusively.
+    static final String FLUSHING_SET_KEY = "project:last-updated-trace:flushing";
+    private static final String MEMBER_SEPARATOR = ":";
+
     private final ProjectLastUpdatedFlushConfig config;
-    private final RedissonReactiveClient redisClient;
+    private final StringRedisClient redisClient;
     private final ProjectService projectService;
 
     @Inject
     public ProjectLastUpdatedTraceBufferServiceImpl(
             @NonNull @Config("projectLastUpdatedFlush") ProjectLastUpdatedFlushConfig config,
-            @NonNull RedissonReactiveClient redisClient,
+            @NonNull StringRedisClient redisClient,
             @NonNull ProjectService projectService) {
         this.config = config;
         this.redisClient = redisClient;
@@ -49,8 +63,8 @@ class ProjectLastUpdatedTraceBufferServiceImpl implements ProjectLastUpdatedTrac
     }
 
     @Override
-    public void record(String workspaceId, Collection<ProjectIdLastUpdated> lastUpdatedTraces) {
-        if (lastUpdatedTraces.isEmpty()) {
+    public void record(@NonNull String workspaceId, Collection<ProjectIdLastUpdated> lastUpdatedTraces) {
+        if (CollectionUtils.isEmpty(lastUpdatedTraces)) {
             return;
         }
 
@@ -59,21 +73,88 @@ class ProjectLastUpdatedTraceBufferServiceImpl implements ProjectLastUpdatedTrac
             return;
         }
 
-        RScoredSortedSetReactive<String> pending = redisClient.getScoredSortedSet(
-                ProjectLastUpdatedFlushConfig.PENDING_SET_KEY, StringCodec.INSTANCE);
-        Flux.fromIterable(lastUpdatedTraces)
-                .flatMap(project -> pending.addIfGreater(
-                        project.lastUpdatedAt().toEpochMilli(), member(workspaceId, project.id())))
-                .subscribeOn(Schedulers.boundedElastic())
-                // Fail-open: the marker is a best-effort sort hint, a Redis blip must not break trace ingestion.
-                .subscribe(
-                        __ -> {
-                        },
-                        error -> log.warn("Failed to buffer last-updated-trace marker for workspace '{}'",
-                                workspaceId, error));
+        // Fail-open: the marker is a best-effort sort hint, a Redis blip must not break trace ingestion.
+        try {
+            RScoredSortedSet<String> pending = redisClient.getScoredSortedSet(PENDING_SET_KEY);
+            lastUpdatedTraces.forEach(project -> pending.addIfGreater(
+                    project.lastUpdatedAt().toEpochMilli(), member(workspaceId, project.id())));
+        } catch (RuntimeException e) {
+            log.warn("Failed to buffer last-updated-trace marker for workspace '{}'", workspaceId, e);
+        }
+    }
+
+    @Override
+    public long flush() {
+        RScoredSortedSet<String> pending = redisClient.getScoredSortedSet(PENDING_SET_KEY);
+        // Move the live buffer aside atomically so concurrent record() calls keep populating a fresh live key while we
+        // drain the snapshot exclusively (no read-then-remove race). A snapshot left by a previous interrupted flush
+        // is drained instead (renamenx is a no-op when it exists); idempotent since the DB write only moves forward.
+        if (Boolean.TRUE.equals(pending.isExists())) {
+            pending.renamenx(FLUSHING_SET_KEY);
+        }
+
+        RScoredSortedSet<String> flushing = redisClient.getScoredSortedSet(FLUSHING_SET_KEY);
+        int batchSize = config.getJobBatchSize();
+        long written = 0;
+        // Read the next page only after the current page is written and removed; removal guarantees progress.
+        while (true) {
+            Collection<ScoredEntry<String>> entries = flushing.entryRange(0, batchSize - 1);
+            if (entries.isEmpty()) {
+                break;
+            }
+            written += flushBatch(flushing, entries);
+            if (entries.size() < batchSize) {
+                break;
+            }
+        }
+        return written;
+    }
+
+    private long flushBatch(RScoredSortedSet<String> flushing, Collection<ScoredEntry<String>> entries) {
+        // Group by workspace so each MySQL batch write targets a single workspace_id (matches the DAO binding).
+        var byWorkspace = entries.stream()
+                .map(ProjectLastUpdatedTraceBufferServiceImpl::parseMember)
+                .filter(Objects::nonNull)
+                .collect(Collectors.groupingBy(
+                        ParsedMember::workspaceId,
+                        Collectors.mapping(
+                                parsed -> ProjectIdLastUpdated.builder()
+                                        .id(parsed.projectId())
+                                        .lastUpdatedAt(parsed.lastUpdatedAt())
+                                        .build(),
+                                Collectors.toUnmodifiableSet())));
+
+        byWorkspace.forEach(projectService::recordLastUpdatedTrace);
+
+        flushing.removeAll(entries.stream().map(ScoredEntry::getValue).collect(Collectors.toUnmodifiableSet()));
+        return byWorkspace.values().stream().mapToInt(Collection::size).sum();
     }
 
     private static String member(String workspaceId, UUID projectId) {
-        return workspaceId + ProjectLastUpdatedFlushConfig.MEMBER_SEPARATOR + projectId;
+        return workspaceId + MEMBER_SEPARATOR + projectId;
+    }
+
+    // Member is "workspaceId:projectId"; projectId is a UUID with no separator, so split on the last separator.
+    private static ParsedMember parseMember(ScoredEntry<String> entry) {
+        String value = entry.getValue();
+        int separatorIndex = value.lastIndexOf(MEMBER_SEPARATOR);
+        if (separatorIndex <= 0 || separatorIndex == value.length() - 1) {
+            log.warn("Skipping malformed last-updated-trace buffer member: '{}'", value);
+            return null;
+        }
+        try {
+            return ParsedMember.builder()
+                    .workspaceId(value.substring(0, separatorIndex))
+                    .projectId(UUID.fromString(value.substring(separatorIndex + 1)))
+                    .lastUpdatedAt(Instant.ofEpochMilli(entry.getScore().longValue()))
+                    .build();
+        } catch (IllegalArgumentException e) {
+            log.warn("Skipping last-updated-trace buffer member with invalid project id: '{}'", value);
+            return null;
+        }
+    }
+
+    @Builder(toBuilder = true)
+    private record ParsedMember(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull Instant lastUpdatedAt) {
     }
 }

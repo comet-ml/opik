@@ -22,37 +22,31 @@ import java.util.concurrent.TimeUnit;
  * maximum timestamp in a Redis ZSET and flushing it under a distributed lock collapses that to one batched write
  * per project per interval from a single flusher.
  * <p>
- * See {@code ProjectLastUpdatedFlushService} and {@code ProjectLastUpdatedFlushJob}.
+ * Defaults live in {@code config.yml} (single source of truth); see {@code ProjectLastUpdatedTraceBufferService} and
+ * {@code ProjectLastUpdatedFlushJob}.
  */
 @Data
 public class ProjectLastUpdatedFlushConfig {
 
-    public static final String PENDING_SET_KEY = "project:last-updated-trace:pending";
-    /**
-     * Snapshot the live buffer is atomically renamed to while a flush drains it ({@code renamenx}), so writers keep
-     * populating {@link #PENDING_SET_KEY} and the drain owns its data exclusively.
-     */
-    public static final String FLUSHING_SET_KEY = "project:last-updated-trace:flushing";
-    public static final String MEMBER_SEPARATOR = ":";
-
-    /** When disabled, {@code ProjectEventListener} writes MySQL synchronously (legacy behavior). */
     @JsonProperty
-    private boolean enabled = false;
+    private boolean enabled;
 
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS)
-    private Duration jobInterval = Duration.seconds(30);
+    @MaxDuration(value = 1, unit = TimeUnit.HOURS)
+    private Duration jobInterval;
 
-    /** Kept below {@link #jobInterval} so the hold-until-expiry lock releases naturally before the next cycle. */
+    // Kept below jobInterval so the hold-until-expiry lock releases naturally before the next cycle.
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS)
-    private Duration jobLockTime = Duration.seconds(25);
+    @MaxDuration(value = 10, unit = TimeUnit.MINUTES)
+    private Duration jobLockTime;
 
     @Valid @JsonProperty
-    @NotNull @MaxDuration(value = 5, unit = TimeUnit.SECONDS)
-    @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
-    private Duration jobLockWaitTime = Duration.milliseconds(500);
+    @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+    @MaxDuration(value = 5, unit = TimeUnit.SECONDS)
+    private Duration jobLockWaitTime;
 
     @Valid @JsonProperty
-    @Min(10) @Max(5000) private int jobBatchSize = 500;
+    @Min(10) @Max(5000) private int jobBatchSize;
 }
