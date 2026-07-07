@@ -1021,7 +1021,11 @@ cacheManager:
     # Default: {}
     # Description: Dynamically created caches with their respective time to live in seconds
     automationRules: ${CACHE_MANAGER_AUTOMATION_RULES_DURATION:-PT1S}
-    workspace_metadata: ${CACHE_MANAGER_WORKSPACE_METADATA_DURATION:-PT1H}
+    # Default: PT1H
+    # Description: Cache TTL for the per-project size estimate (ScopeMetadata) gating dynamic sorting.
+    # The estimate scans all of the project's spans, so cache misses are expensive by design.
+    # Renamed from the orphaned workspace_metadata entry, which no code referenced.
+    project_metadata: ${CACHE_MANAGER_PROJECT_METADATA_DURATION:-PT1H}
     # Default: PT5M
     # Description: Cache TTL for workspace version determination results, applied per workspace
     # Scope: Per workspace (cache key includes workspace ID)
