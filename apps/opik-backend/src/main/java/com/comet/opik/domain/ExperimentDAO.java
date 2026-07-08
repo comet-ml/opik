@@ -1776,6 +1776,12 @@ public class ExperimentDAO {
      * (the natural unit for the dominant pick, since one trace lives in one project) and
      * neutralizes join-output inflation from transient ReplacingMergeTree row versions on
      * either side.
+     *
+     * <p>The {@code t.id IN (SELECT trace_id FROM experiment_items WHERE workspace_id = :workspace_id)}
+     * predicate prunes the traces read to the referenced trace ids. The hash join alone would scan the
+     * whole workspace trace slice into the hash table; this IN set is implied by the join
+     * ({@code ei.trace_id = t.id}), so it adds an {@code id} primary-key condition that bounds the
+     * traces scan without changing the result.
      */
     private static final String COMPUTE_EXPERIMENT_PROJECT_MAPPING = """
             WITH per_experiment_ranked AS (
@@ -1800,6 +1806,7 @@ public class ExperimentDAO {
                     INNER JOIN traces t
                         ON ei.workspace_id = t.workspace_id AND ei.trace_id = t.id
                     WHERE ei.workspace_id = :workspace_id
+                    AND t.id IN (SELECT trace_id FROM experiment_items WHERE workspace_id = :workspace_id)
                     GROUP BY ei.experiment_id, project_id
                     HAVING project_id != ''
                 )
