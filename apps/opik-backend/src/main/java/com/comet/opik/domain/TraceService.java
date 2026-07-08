@@ -26,6 +26,7 @@ import com.comet.opik.domain.attachment.AttachmentReinjectorService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
 import com.comet.opik.domain.attachment.AttachmentUtils;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -50,6 +51,7 @@ import org.apache.http.HttpStatus;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -122,6 +124,7 @@ class TraceServiceImpl implements TraceService {
     public static final String TRACE_KEY = "Trace";
 
     private final @NonNull TraceDAO dao;
+    private final @NonNull DeletionEventDAO deletionEventDAO;
     private final @NonNull TransactionTemplateAsync template;
     private final @NonNull ProjectService projectService;
     private final @NonNull IdGenerator idGenerator;
@@ -131,6 +134,7 @@ class TraceServiceImpl implements TraceService {
     private final @NonNull AttachmentStripperService attachmentStripperService;
     private final @NonNull AttachmentService attachmentService;
     private final @NonNull AttachmentReinjectorService attachmentReinjectorService;
+    private final @NonNull @Config OpikConfiguration config;
 
     @Override
     @WithSpan
@@ -502,23 +506,62 @@ class TraceServiceImpl implements TraceService {
     }
 
     private Mono<Void> delete(Set<UUID> ids, UUID projectId, Connection connection) {
-        return Mono.deferContextual(
-                ctx -> Flux.fromIterable(Lists.partition(new ArrayList<>(ids), ANALYTICS_DELETE_BATCH_SIZE))
-                        .flatMap(batch -> dao.delete(Set.copyOf(batch), projectId, connection)
-                                .doOnSuccess(__ -> {
-                                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-                                    String userName = ctx.get(RequestContext.USER_NAME);
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+            return Flux.fromIterable(Lists.partition(new ArrayList<>(ids), ANALYTICS_DELETE_BATCH_SIZE))
+                    .flatMap(batch -> {
+                        var batchIds = Set.copyOf(batch);
+                        return dao.delete(batchIds, projectId, connection)
+                                .doOnSuccess(_ -> {
                                     eventBus.post(TracesDeleted.builder()
-                                            .traceIds(Set.copyOf(batch))
+                                            .traceIds(batchIds)
                                             .projectId(projectId)
                                             .workspaceId(workspaceId)
                                             .userName(userName)
                                             .build());
                                     log.info(
                                             "Published TracesDeleted event for trace ids count '{}' for project_id '{}' on workspace '{}'",
-                                            batch.size(), projectId, workspaceId);
-                                }))
-                        .then());
+                                            batchIds.size(), projectId, workspaceId);
+                                })
+                                .then(captureDeletions(batchIds, projectId, workspaceId, userName));
+                    })
+                    .then();
+        });
+    }
+
+    /**
+     * Records the deleted ids in the deletion-events bridge so deletes issued while the table is being migrated
+     * survive the copy. Runs after the delete and is best-effort: capture is auxiliary and must never disrupt
+     * the delete, so failures are logged and swallowed. Running after the delete also avoids recording a delete
+     * that did not happen. No-op unless capture is enabled. Deferred so that nothing is built or run until
+     * subscribed, i.e. only after the delete succeeds.
+     */
+    private Mono<Void> captureDeletions(Set<UUID> ids, UUID projectId, String workspaceId, String userName) {
+        return Mono.defer(() -> {
+            if (!config.getDatabaseAnalyticsDataModel().traceDeletionEventsCaptureEnabled()) {
+                return Mono.empty();
+            }
+            var events = ids.stream()
+                    .map(id -> DeletionEvent.builder()
+                            .sourceTable(SourceTable.TRACES)
+                            .workspaceId(workspaceId)
+                            .projectId(projectId)
+                            .deletedId(id.toString())
+                            .deletionReason(DeletionReason.USER_REQUEST)
+                            .build())
+                    .collect(Collectors.toUnmodifiableSet());
+            return deletionEventDAO.insert(events, userName)
+                    .doOnSuccess(_ -> log.info(
+                            "Captured trace deletion events, count '{}' for projectId '{}' on workspaceId '{}'",
+                            ids.size(), projectId, workspaceId))
+                    .onErrorResume(throwable -> {
+                        log.warn(
+                                "Failed to capture trace deletion events, count '{}' for projectId '{}' on workspaceId '{}'",
+                                ids.size(), projectId, workspaceId, throwable);
+                        return Mono.empty();
+                    });
+        });
     }
 
     @Override

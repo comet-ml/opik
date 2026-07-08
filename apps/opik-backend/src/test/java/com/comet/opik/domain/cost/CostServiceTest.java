@@ -179,6 +179,68 @@ class CostServiceTest {
                 Arguments.of("above threshold uses tier rate", 300_000, "0.765"));
     }
 
+    /**
+     * Whole-prompt tier semantics for {@code *_above_128k_tokens} rates: once the prompt strictly
+     * exceeds 128K every token bills at the tier rate; exactly at the threshold the base rate
+     * still applies. {@code gemini-1.5-flash} is the reachable model at this threshold (input
+     * 7.5e-8 base, 1.5e-7 above 128k — 2x).
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideGeminiAbove128kTierCases")
+    void calculateCostAppliesAbove128kTierPricingForGemini(String description, int promptTokens,
+            String expectedCost) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", promptTokens,
+                "completion_tokens", 1_000,
+                "original_usage.prompt_token_count", promptTokens,
+                "original_usage.candidates_token_count", 1_000);
+
+        BigDecimal cost = CostService.calculateCost("gemini/gemini-1.5-flash", "google_ai", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideGeminiAbove128kTierCases() {
+        // gemini-1.5-flash base: input 7.5e-8 / output 0; above_128k: input 1.5e-7 (output stays 0).
+        return Stream.of(
+                // 128_000 * 7.5e-8 + 1_000 * 0 = 0.0096
+                Arguments.of("at threshold uses base rate", 128_000, "0.0096"),
+                // 200_000 * 1.5e-7 + 1_000 * 0 = 0.030
+                Arguments.of("above threshold uses tier rate", 200_000, "0.030"));
+    }
+
+    /**
+     * Whole-prompt tier semantics for {@code *_above_272k_tokens} rates: once the prompt strictly
+     * exceeds 272K every token bills at the tier rate. Reachable models include the OpenAI GPT-5.4
+     * and GPT-5.5 families (and their Azure-hosted twins). {@code gpt-5.4} publishes cache rates
+     * too, so it routes through {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI} —
+     * confirming that the effective-rate helpers cover the OpenAI cache path, not just the Google
+     * and Anthropic ones.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideGpt54Above272kTierCases")
+    void calculateCostAppliesAbove272kTierPricingForOpenAI(String description, int promptTokens,
+            String expectedCost) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", promptTokens,
+                "completion_tokens", 1_000,
+                "original_usage.prompt_tokens", promptTokens,
+                "original_usage.completion_tokens", 1_000);
+
+        BigDecimal cost = CostService.calculateCost("gpt-5.4", "openai", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideGpt54Above272kTierCases() {
+        // gpt-5.4 base: input 2.5e-6 / output 1.5e-5; above_272k: input 5e-6 / output 2.25e-5.
+        return Stream.of(
+                // 272_000 * 2.5e-6 + 1_000 * 1.5e-5 = 0.68 + 0.015 = 0.695
+                Arguments.of("at threshold uses base rate", 272_000, "0.695"),
+                // 300_000 * 5e-6 + 1_000 * 2.25e-5 = 1.5 + 0.0225 = 1.5225
+                Arguments.of("above threshold uses tier rate", 300_000, "1.5225"));
+    }
+
     @Test
     void calculateCostUsesGoogleCacheCalculatorWhenCachePricesConfigured_issue6976() {
         Map<String, Integer> usage = Map.of(
