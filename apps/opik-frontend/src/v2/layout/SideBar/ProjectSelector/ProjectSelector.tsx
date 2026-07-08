@@ -68,11 +68,15 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
           <span className="comet-body-xs-accented text-left text-light-slate">
             Project
           </span>
-          <span className="comet-body-s-accented truncate text-left text-muted-slate">
-            Select project
+          <span className="flex items-center gap-1">
+            <span className="comet-body-s-accented min-w-0 flex-1 truncate text-left text-muted-slate">
+              Select project
+            </span>
+            <span className="shrink-0 text-light-slate">
+              {renderChevronIcon()}
+            </span>
           </span>
         </div>
-        <span className="shrink-0 text-light-slate">{renderChevronIcon()}</span>
       </button>
     </PopoverTrigger>
   );
@@ -93,15 +97,17 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
             <span className="comet-body-xs-accented text-left text-light-slate">
               Project
             </span>
-            <TooltipWrapper content={activeProject.name}>
-              <span className="comet-body-s-accented block w-full truncate text-left text-foreground">
-                {activeProject.name}
+            <span className="flex items-center gap-1">
+              <TooltipWrapper content={activeProject.name}>
+                <span className="comet-body-s-accented min-w-0 flex-1 truncate text-left text-foreground">
+                  {activeProject.name}
+                </span>
+              </TooltipWrapper>
+              <span className="shrink-0 text-light-slate">
+                {renderChevronIcon()}
               </span>
-            </TooltipWrapper>
+            </span>
           </div>
-          <span className="shrink-0 text-light-slate">
-            {renderChevronIcon()}
-          </span>
         </button>
       </PopoverTrigger>
     );

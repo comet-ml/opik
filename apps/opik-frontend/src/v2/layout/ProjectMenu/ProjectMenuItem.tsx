@@ -42,6 +42,7 @@ const ProjectMenuItem: React.FC<ProjectMenuItemProps> = ({
 }) => {
   const resetKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean | number>(false);
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
 
   const {
     permissions: { canCreateProjects, canDeleteProjects },
@@ -105,16 +106,30 @@ const ProjectMenuItem: React.FC<ProjectMenuItemProps> = ({
         </TooltipWrapper>
         <div className="flex shrink-0 items-center gap-0.5">
           {showActions && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                <Button
-                  variant="minimal"
-                  size="icon-2xs"
-                  className="invisible rounded text-light-slate hover:text-foreground group-hover:visible data-[state=open]:visible"
+            <DropdownMenu
+              open={isMoreMenuOpen}
+              onOpenChange={setIsMoreMenuOpen}
+            >
+              <TooltipWrapper content="More options">
+                <DropdownMenuTrigger
+                  asChild
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  <MoreHorizontal className="size-3.5" />
-                </Button>
-              </DropdownMenuTrigger>
+                  <Button
+                    variant="minimal"
+                    size="icon-2xs"
+                    aria-label="More options"
+                    className={cn(
+                      "rounded text-light-slate hover:text-foreground",
+                      isMoreMenuOpen
+                        ? "inline-flex"
+                        : "hidden group-hover:inline-flex",
+                    )}
+                  >
+                    <MoreHorizontal className="size-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipWrapper>
               <DropdownMenuContent align="start" className="w-40">
                 {canCreateProjects && (
                   <DropdownMenuItem
@@ -154,7 +169,7 @@ const ProjectMenuItem: React.FC<ProjectMenuItemProps> = ({
               aria-label={isPinned ? "Unpin project" : "Pin project"}
               className={cn(
                 "group/pin rounded text-light-slate",
-                isPinned ? "visible" : "invisible group-hover:visible",
+                isPinned ? "inline-flex" : "hidden group-hover:inline-flex",
               )}
               onClick={(e) => {
                 e.preventDefault();

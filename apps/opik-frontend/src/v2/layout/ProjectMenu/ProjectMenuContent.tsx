@@ -141,6 +141,8 @@ const ProjectMenuContent: React.FC<ProjectMenuContentProps> = ({
       );
     }
 
+    const recentlyUpdated = projects.filter((project) => !isPinned(project.id));
+
     return (
       <div className="min-h-0 flex-1 overflow-auto">
         {pinnedProjects.length > 0 && (
@@ -155,12 +157,13 @@ const ProjectMenuContent: React.FC<ProjectMenuContentProps> = ({
                 Boolean(full),
               );
             })}
+            <DropdownMenuSeparator className="my-1" />
           </>
         )}
         <DropdownMenuLabel size="sm" className="text-light-slate">
           Recently updated
         </DropdownMenuLabel>
-        {projects.map((project) => renderItem(project, true))}
+        {recentlyUpdated.map((project) => renderItem(project, true))}
       </div>
     );
   };
