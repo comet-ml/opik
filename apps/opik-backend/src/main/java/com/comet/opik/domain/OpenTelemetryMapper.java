@@ -142,20 +142,24 @@ public class OpenTelemetryMapper {
         ObjectNode output = JsonUtils.createObjectNode();
         ObjectNode metadata = JsonUtils.createObjectNode();
         Set<String> tags = new HashSet<>();
+        // Claude Code spans carry a lot of session/config attributes that aren't input. For that
+        // integration the default bucket for unmapped attributes is metadata (not input), so only
+        // the explicitly promoted content attributes land in input/output/usage.
+        // Decided per span by name (not from the batch-level integrationName below): a single OTLP
+        // batch can mix scopes from more than one integration, so gating this on the batch-wide
+        // value could misroute a non-Claude span or skip routing for a real Claude Code span.
+        boolean isClaudeCode = OpenTelemetryMappingRuleFactory.isClaudeCodeSpan(spanName);
+        ObjectNode defaultBucket = isClaudeCode ? metadata : input;
+
         // Hold model and provider until the attribute loop completes so we can apply
         // post-processing (e.g. Elastic Inference Service routing) that needs both values.
+        // Claude Code is Anthropic-only and never sends a provider attribute, so set it directly.
         String model = null;
-        String provider = null;
+        String provider = isClaudeCode ? "anthropic" : null;
 
         if (StringUtils.isNotBlank(integrationName)) {
             metadata.put("integration", integrationName);
         }
-
-        // Claude Code spans carry a lot of session/config attributes that aren't input. For that
-        // integration the default bucket for unmapped attributes is metadata (not input), so only
-        // the explicitly promoted content attributes land in input/output/usage.
-        boolean isClaudeCode = OpenTelemetryMappingRuleFactory.isClaudeCode(integrationName);
-        ObjectNode defaultBucket = isClaudeCode ? metadata : input;
 
         // Iterate over each attribute key-value pair
         for (KeyValue attribute : attributes) {
@@ -170,10 +174,10 @@ public class OpenTelemetryMapper {
                 continue;
             }
 
-            var ruleOpt = OpenTelemetryMappingRuleFactory.findRule(key, integrationName);
+            var ruleOpt = OpenTelemetryMappingRuleFactory.findRule(key, isClaudeCode);
 
             if (ruleOpt.isEmpty()) {
-                log.debug("No rule found for kv {} -> {}. Using default bucket.", key, attribute.getValue());
+                log.debug("No rule found for kv '{}' -> '{}'. Using default bucket.", key, attribute.getValue());
                 extractToJsonColumn(defaultBucket, key, value);
                 continue;
             }
@@ -301,15 +305,22 @@ public class OpenTelemetryMapper {
      * @param output the output node to populate
      */
     private static void extractToolOutputEvent(List<Span.Event> events, ObjectNode output) {
-        if (CollectionUtils.isEmpty(events)) {
-            return;
-        }
-        events.stream()
-                .filter(event -> TOOL_OUTPUT_EVENT_NAME.equals(event.getName()))
-                .reduce((first, second) -> second)
+        findLastEvent(events, TOOL_OUTPUT_EVENT_NAME)
                 .ifPresent(event -> event.getAttributesList().stream()
                         .filter(attribute -> TOOL_OUTPUT_CONTENT_KEYS.contains(attribute.getKey()))
                         .forEach(attribute -> extractToJsonColumn(output, attribute.getKey(), attribute.getValue())));
+    }
+
+    /**
+     * Finds the last span event with the given name; the last one wins when several exist.
+     */
+    private static Optional<Span.Event> findLastEvent(List<Span.Event> events, String name) {
+        if (CollectionUtils.isEmpty(events)) {
+            return Optional.empty();
+        }
+        return events.stream()
+                .filter(event -> name.equals(event.getName()))
+                .reduce((first, second) -> second);
     }
 
     private static final String EXCEPTION_EVENT_NAME = "exception";
@@ -333,9 +344,7 @@ public class OpenTelemetryMapper {
      * @return the extracted error info, or empty when the span did not fail
      */
     static Optional<ErrorInfo> extractErrorInfo(Span otelSpan) {
-        var exceptionEvent = otelSpan.getEventsList().stream()
-                .filter(event -> EXCEPTION_EVENT_NAME.equals(event.getName()))
-                .reduce((first, second) -> second);
+        var exceptionEvent = findLastEvent(otelSpan.getEventsList(), EXCEPTION_EVENT_NAME);
 
         if (exceptionEvent.isPresent()) {
             var attributes = exceptionEvent.get().getAttributesList();

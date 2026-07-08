@@ -1698,7 +1698,7 @@ class OpenTelemetryMapperTest {
         }
 
         @Test
-        void llmRequestSetupMapsToInput() {
+        void llmRequestSetupMapsToModelAndProviderNotInput() {
             var span = enrich(List.of(
                     str("model", "claude-sonnet-4-6"),
                     str("system_prompt_preview", "You are a Claude agent..."),
@@ -1707,12 +1707,31 @@ class OpenTelemetryMapperTest {
                     str("user.id", "user-1")),
                     null);
 
-            assertThat(span.input().get("model").asText()).isEqualTo("claude-sonnet-4-6");
+            // 'model' sets the span's model field (needed for cost calc), not input
+            assertThat(span.model()).isEqualTo("claude-sonnet-4-6");
+            assertThat(span.input().has("model")).isFalse();
             assertThat(span.input().get("system_prompt_preview").asText()).isEqualTo("You are a Claude agent...");
+            // Claude Code is Anthropic-only and never sends a provider attribute
+            assertThat(span.provider()).isEqualTo("anthropic");
+            assertThat(span.type()).isEqualTo(SpanType.llm);
             // request classifiers / identity stay in metadata
             assertThat(span.metadata().get("llm_request.context").asText()).isEqualTo("interaction");
             assertThat(span.metadata().get("query_source").asText()).isEqualTo("sdk");
             assertThat(span.metadata().get("user.id").asText()).isEqualTo("user-1");
+        }
+
+        @Test
+        void toolInputSetsToolSpanType() {
+            var span = enrich(List.of(str("tool_input", "[TOOL INPUT: Bash]\n{\"command\":\"ls\"}")), null);
+
+            assertThat(span.type()).isEqualTo(SpanType.tool);
+        }
+
+        @Test
+        void providerIsAnthropicEvenWithoutModelAttribute() {
+            var span = enrich(List.of(str("user_prompt", "hello")), null);
+
+            assertThat(span.provider()).isEqualTo("anthropic");
         }
 
         @Test

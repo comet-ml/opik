@@ -26,10 +26,17 @@ import java.util.stream.Stream;
 public class OpenTelemetryMappingRuleFactory {
 
     /**
-     * Instrumentation scope name Claude Code / Claude Agent SDK spans are tagged with.
-     * Claude Code rules are applied only for this integration (see {@link #findRule(String, String)}).
+     * Instrumentation scope name Claude Code / Claude Agent SDK spans are tagged with. Used only
+     * for the cosmetic {@code metadata.integration} label; which rules apply is decided per span
+     * by {@link #isClaudeCodeSpan(String)} instead (see its javadoc for why).
      */
     public static final String CLAUDE_CODE_INSTRUMENTATION = "com.anthropic.claude_code.tracing";
+
+    /**
+     * Every Claude Code OTEL span name is prefixed with this (e.g. {@code claude_code.llm_request},
+     * {@code claude_code.tool}). See {@link #isClaudeCodeSpan(String)}.
+     */
+    private static final String CLAUDE_CODE_SPAN_PREFIX = "claude_code.";
 
     private static final List<OpenTelemetryMappingRule> ALL_RULES = Stream.of(
             LogfireMappingRules.getRules(),
@@ -61,31 +68,35 @@ public class OpenTelemetryMappingRuleFactory {
     }
 
     /**
-     * Finds the matching rule for the given key, applying integration-specific rules first.
-     * Claude Code rules are scoped so their reclassification (e.g. session.id → thread, tokens →
-     * usage) doesn't affect other integrations. Falls back to the global rules.
+     * Finds the matching rule for the given key, applying Claude Code's rules first when the span
+     * is a Claude Code span. Falls back to the global rules.
      *
      * @param key the attribute key to find a rule for
-     * @param integrationName the detected instrumentation scope name (may be null)
+     * @param isClaudeCode whether the current span is a Claude Code span (see {@link #isClaudeCodeSpan(String)})
      * @return an Optional containing the matching rule, or empty if no rule matches
      */
-    public static Optional<OpenTelemetryMappingRule> findRule(String key, String integrationName) {
-        if (isClaudeCode(integrationName)) {
-            var claudeCodeRule = ClaudeCodeMappingRules.getRules().stream()
-                    .filter(rule -> rule.matches(key))
-                    .findFirst();
-            if (claudeCodeRule.isPresent()) {
-                return claudeCodeRule;
-            }
+    public static Optional<OpenTelemetryMappingRule> findRule(String key, boolean isClaudeCode) {
+        if (!isClaudeCode) {
+            return findRule(key);
         }
-        return findRule(key);
+        return ClaudeCodeMappingRules.findRule(key).or(() -> findRule(key));
     }
 
     /**
-     * Whether the detected integration is Claude Code / Claude Agent SDK.
+     * Whether the given OTEL span name belongs to Claude Code / Claude Agent SDK.
+     * <p>
+     * This is decided per span, by name, rather than from the batch-level detected
+     * {@code integrationName} (see {@code OpenTelemetryService}): an {@code ExportTraceServiceRequest}
+     * can carry spans from more than one {@code ScopeSpans}/integration in the same batch, but
+     * {@code integrationName} is resolved once for the whole batch. Gating Claude-specific routing
+     * (default attribute bucket, provider, tool-output extraction — see
+     * {@code OpenTelemetryMapper#enrichSpanWithAttributes}) on that batch-wide value would either
+     * misroute a differently-scoped span as Claude Code, or skip Claude routing for a genuine
+     * Claude Code span, depending on which scope happened to be seen first. The span name has no
+     * such ambiguity: Claude Code always names its own spans with this prefix.
      */
-    public static boolean isClaudeCode(String integrationName) {
-        return CLAUDE_CODE_INSTRUMENTATION.equalsIgnoreCase(integrationName);
+    public static boolean isClaudeCodeSpan(String spanName) {
+        return spanName != null && spanName.startsWith(CLAUDE_CODE_SPAN_PREFIX);
     }
 
     /**
