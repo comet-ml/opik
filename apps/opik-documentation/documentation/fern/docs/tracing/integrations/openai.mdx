@@ -92,6 +92,31 @@ print(completion.choices[0].message.content)
   <img src="/img/cookbook/openai_trace_cookbook.png" />
 </Frame>
 
+### Using OpenAI-compatible providers
+
+`track_openai` can also wrap an OpenAI client that points at an
+OpenAI-compatible endpoint. For example, TokenLab uses the OpenAI SDK client
+with a custom `base_url`:
+
+```python
+from opik.integrations.openai import track_openai
+from openai import OpenAI
+import os
+
+os.environ["OPIK_PROJECT_NAME"] = "tokenlab-integration-demo"
+
+client = OpenAI(
+    api_key="your-tokenlab-api-key",
+    base_url="https://api.tokenlab.sh/v1",
+)
+openai_client = track_openai(client)
+
+completion = openai_client.chat.completions.create(
+    model="claude-sonnet-5",
+    messages=[{"role": "user", "content": "Write a short story about observability."}],
+)
+```
+
 ## Advanced Usage
 
 ### Using with the `@track` decorator
