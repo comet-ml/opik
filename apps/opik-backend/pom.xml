@@ -452,6 +452,12 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit-junit5</artifactId>
+            <version>1.4.2</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>uk.co.jemos.podam</groupId>
             <artifactId>podam</artifactId>
             <version>8.0.2.RELEASE</version>

@@ -671,6 +671,20 @@ onlineScoring:
   #   tool. The URL is consumed within a single tool-call round; 120 s is ample for most providers.
   #   Capped at 3600 s — longer-lived URLs are a security risk if the URL leaks.
   agenticToolsS3PresignTtlSeconds: ${ONLINE_SCORING_AGENTIC_TOOLS_S3_PRESIGN_TTL_SECONDS:-120}
+  # Default: 4000
+  # Description: Per-variable substitution cap (in characters) for the {{trace}}/{{span}} structure-injection
+  #   and agentic-tools paths. Large enough that small entity input/output renders inline, small enough that a
+  #   huge entity doesn't blow context (the agent fetches the rest via the read tool). 500-100000.
+  maxPromptFieldChars: ${ONLINE_SCORING_MAX_PROMPT_FIELD_CHARS:-4000}
+  # Default: 5
+  # Description: Attachment-upload race tolerance for the {{trace}}/{{span}} structures — how many times the
+  #   attachment lookup is retried when the entity references an attachment that isn't persisted yet. Interim
+  #   guard (0-20; 0 disables retrying) pending the pre-evaluation dispatch delay (OPIK-7224).
+  attachmentFetchMaxRetries: ${ONLINE_SCORING_ATTACHMENT_FETCH_MAX_RETRIES:-5}
+  # Default: 300ms
+  # Description: Delay between attachment-lookup retries (see attachmentFetchMaxRetries). Worst-case added
+  #   latency ≈ attachmentFetchMaxRetries × this, and only for entities that expect an attachment. 50ms-5s.
+  attachmentFetchRetryDelay: ${ONLINE_SCORING_ATTACHMENT_FETCH_RETRY_DELAY:-300ms}
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only

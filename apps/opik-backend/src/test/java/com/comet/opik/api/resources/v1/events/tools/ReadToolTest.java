@@ -444,6 +444,9 @@ class ReadToolTest {
         assertThat(attachments.isArray()).isTrue();
         assertThat(attachments).hasSize(1);
         var entry = attachments.get(0);
+        // Self-describing: type + id identify the owner so get_attachment args copy verbatim.
+        assertThat(entry.get("type").asText()).isEqualTo("trace");
+        assertThat(entry.get("id").asText()).isEqualTo(traceId.toString());
         assertThat(entry.get("file_name").asText()).isEqualTo(fileName);
         assertThat(entry.get("mime_type").asText()).isEqualTo("image/png");
         assertThat(entry.get("media_type").asText()).isEqualTo("image");
