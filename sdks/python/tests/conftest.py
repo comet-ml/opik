@@ -294,6 +294,14 @@ def ensure_anthropic_configured():
 
 
 @pytest.fixture(scope="session")
+def ensure_mistral_configured():
+    # don't use assertion here to prevent printing os.environ with all env variables
+
+    if "MISTRAL_API_KEY" not in os.environ:
+        raise Exception("Mistral not configured!")
+
+
+@pytest.fixture(scope="session")
 def ensure_vertexai_configured(ensure_google_project_and_location_configured):
     GOOGLE_APPLICATION_CREDENTIALS_PATH = "gcp_credentials.json"
 

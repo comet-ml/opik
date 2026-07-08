@@ -24,6 +24,10 @@ public class OpikConfiguration extends JobConfiguration {
     private DatabaseAnalyticsFactory databaseAnalytics = new DatabaseAnalyticsFactory();
 
     @Valid @NotNull @JsonProperty
+    private DatabaseAnalyticsDataModelConfig databaseAnalyticsDataModel = DatabaseAnalyticsDataModelConfig.builder()
+            .build();
+
+    @Valid @NotNull @JsonProperty
     private DatabaseAnalyticsReadOnlyFreeFormSqlConfig databaseAnalyticsReadOnlyFreeFormSql = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
 
     @Valid @NotNull @JsonProperty
@@ -180,6 +184,9 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private ExperimentDenormalizationConfig experimentDenormalization = new ExperimentDenormalizationConfig();
+
+    @Valid @NotNull @JsonProperty
+    private ProjectLastUpdatedFlushConfig projectLastUpdatedFlush = new ProjectLastUpdatedFlushConfig();
 
     @Valid @NotNull @JsonProperty
     private LlmModelRegistryConfig llmModelRegistry = new LlmModelRegistryConfig();

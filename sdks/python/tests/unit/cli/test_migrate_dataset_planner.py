@@ -12,17 +12,21 @@ come from ``_migrate_helpers``.
 from __future__ import annotations
 
 import json
-from unittest.mock import patch
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
 
 from opik.cli import cli
 from opik.cli.migrate.audit import AuditLog
+from opik.cli.migrate.checkpoint import MigrationCheckpoint
 from opik.cli.migrate.datasets import planner as planner_module
+from opik.cli.migrate.datasets.resume import ReconstructedRemaps
 from opik.cli.migrate.errors import (
     ConflictError,
     DatasetNotFoundError,
+    MigrationError,
     ProjectNotFoundError,
 )
 
@@ -732,3 +736,81 @@ class TestPlanBuilding:
         # difflib should surface the close one-letter neighbours.
         assert "Did you mean" in message
         assert "Beat" in message or "Best" in message
+
+
+# ---------------------------------------------------------------------------
+# OPIK-7162 + OPIK-7168 integration: resume reuses the temp destination and
+# finishes the pending handoff (rename source -> _v1, promote temp -> original).
+# ---------------------------------------------------------------------------
+
+
+class TestBuildResumePlanTempDest:
+    def _checkpoint(self) -> MigrationCheckpoint:
+        return MigrationCheckpoint(
+            key="k",
+            workspace="ws",
+            project="B",
+            dataset="MyDataset",
+            path=Path("/tmp/does-not-matter.json"),
+            dataset_phase_done=True,
+            source_dataset_id="src-1",
+            source_name="MyDataset",
+            temp_dest_name="MyDataset__migrating",
+        )
+
+    def _resume_client(self, source_id: str = "src-1") -> MagicMock:
+        # resolve_source(MyDataset) -> the still-unrenamed source;
+        # get_dataset(MyDataset__migrating) -> the temp destination.
+        rest_client = _planner_rest_client(
+            [_Page([_DatasetRow(id=source_id, name="MyDataset")])]
+        )
+        client = _planner_client(rest_client)
+        dest = MagicMock()
+        dest.id = "temp-dest-1"
+        client.get_dataset = MagicMock(return_value=dest)
+        return client
+
+    def test_resume__reuses_temp_and_appends_cascade_then_handoff(self) -> None:
+        # A dataset_phase_done checkpoint means create-temp/replay/optimizations
+        # already ran into MyDataset__migrating and the source still holds its
+        # original name. The resume plan must NOT re-create or re-replay; it
+        # resolves the temp destination, then emits the pending tail:
+        # CascadeExperiments -> RenameSource -> PromoteDestination.
+        with patch.object(
+            planner_module, "reconstruct_remaps", return_value=ReconstructedRemaps()
+        ):
+            plan = planner_module.build_dataset_plan(
+                client=self._resume_client(),
+                name="MyDataset",
+                to_project="B",
+                resume_checkpoint=self._checkpoint(),
+            )
+
+        types = [type(a).__name__ for a in plan.actions]
+        assert types == ["CascadeExperiments", "RenameSource", "PromoteDestination"]
+        assert plan.is_resume is True
+        # The cascade + promote target the TEMP destination (promote hasn't run
+        # yet); the source rename moves the original name to _v1.
+        cascade = plan.actions[0]
+        assert cascade.dest_name == "MyDataset__migrating"
+        rename = plan.actions[1]
+        assert rename.from_name == "MyDataset"
+        assert rename.to_name == "MyDataset_v1"
+        promote = plan.actions[2]
+        assert promote.from_name == "MyDataset__migrating"
+        assert promote.to_name == "MyDataset"
+
+    def test_resume__source_id_mismatch__raises(self) -> None:
+        # If the user-supplied name now resolves to a DIFFERENT dataset than the
+        # interrupted run's source, resume must refuse rather than migrate the
+        # wrong dataset.
+        with patch.object(
+            planner_module, "reconstruct_remaps", return_value=ReconstructedRemaps()
+        ):
+            with pytest.raises(MigrationError, match="different dataset"):
+                planner_module.build_dataset_plan(
+                    client=self._resume_client(source_id="DIFFERENT-id"),
+                    name="MyDataset",
+                    to_project="B",
+                    resume_checkpoint=self._checkpoint(),
+                )

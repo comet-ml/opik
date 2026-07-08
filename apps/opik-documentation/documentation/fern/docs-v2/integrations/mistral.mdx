@@ -2,36 +2,45 @@
 description: Start here to integrate Opik into your Mistral AI-based genai application
   for end-to-end LLM observability, unit testing, and optimization.
 headline: Mistral AI | Opik Documentation
-og:description: Learn to integrate Mistral AI with Opik via LiteLLM to track and evaluate
-  API calls effectively in your projects.
+og:description: Learn to integrate Mistral AI with Opik using track_mistral to track
+  and evaluate API calls effectively in your projects.
 og:site_name: Opik Documentation
 og:title: Integrate Mistral AI with Opik - Streamline Your Workflow
-title: Observability for Mistral AI with Opik
+title: Observability for Mistral AI (Python) with Opik
 ---
 
 [Mistral AI](https://mistral.ai/) provides cutting-edge large language models with excellent performance for text generation, reasoning, and specialized tasks like code generation.
 
-This guide explains how to integrate Opik with Mistral AI via LiteLLM. By using the LiteLLM integration provided by Opik, you can easily track and evaluate your Mistral API calls within your Opik projects as Opik will automatically log the input prompt, model used, token usage, and response generated.
+This guide explains how to integrate Opik with the Mistral AI Python SDK. By using the `track_mistral` method provided by Opik, you can easily track and evaluate your Mistral API calls within your Opik projects as Opik will automatically log the input prompt, model used, token usage, and response generated.
+
+## Account Setup
+
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=mistral&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=mistral&utm_campaign=opik) and grab your API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=mistral&utm_campaign=opik) for more information.
 
 ## Getting Started
 
+### Installation
+
+First, ensure you have both `opik` and `mistralai` packages installed. This integration targets the Mistral Python SDK v1 (`from mistralai import Mistral`), version 1.3.0 or newer:
+
+```bash
+pip install opik "mistralai>=1.3.0,<2"
+```
+
 ### Configuring Opik
 
-To start tracking your Mistral AI LLM calls, you'll need to have both `opik` and `litellm` installed. You can install them using pip:
+Configure the Opik Python SDK for your deployment type. See the [Python SDK Configuration guide](/tracing/advanced/sdk_configuration) for detailed instructions on:
 
-```bash
-pip install opik litellm
-```
-
-In addition, you can configure Opik using the `opik configure` command which will prompt you for the correct local server address or if you are using the Cloud platform your API key:
-
-```bash
-opik configure
-```
+- **CLI configuration**: `opik configure`
+- **Code configuration**: `opik.configure()`
+- **Self-hosted vs Cloud vs Enterprise** setup
+- **Configuration files** and environment variables
 
 ### Configuring Mistral AI
 
-You'll need to set your Mistral AI API key as an environment variable:
+You'll need to set your Mistral AI API key. You can [find or create your Mistral API Key in the console](https://console.mistral.ai/api-keys/):
 
 ```bash
 export MISTRAL_API_KEY="YOUR_API_KEY"
@@ -39,7 +48,153 @@ export MISTRAL_API_KEY="YOUR_API_KEY"
 
 ## Logging LLM calls
 
-In order to log the LLM calls to Opik, you will need to create the OpikLogger callback. Once the OpikLogger callback is created and added to LiteLLM, you can make calls to LiteLLM as you normally would:
+In order to log the LLM calls to Opik, you will need to wrap the Mistral client with `track_mistral`. When making calls with that wrapped client, all calls will be logged to Opik:
+
+```python
+import os
+from mistralai import Mistral
+from opik.integrations.mistral import track_mistral
+
+os.environ["OPIK_PROJECT_NAME"] = "mistral-integration-demo"
+
+client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
+mistral_client = track_mistral(client)
+
+response = mistral_client.chat.complete(
+    model="mistral-small-latest",
+    messages=[
+        {"role": "user", "content": "Write a short two sentence story about Opik."}
+    ],
+)
+
+print(response.choices[0].message.content)
+```
+
+`track_mistral` also wraps the async and streaming methods — `chat.complete_async`, `chat.stream`, and `chat.stream_async` — so those calls are logged the same way, with streamed responses aggregated into a single span.
+
+## Advanced Usage
+
+### Using with the `@track` decorator
+
+If you have multiple steps in your LLM pipeline, you can use the `@track` decorator to log the traces for each step. If Mistral is called within one of these steps, the LLM call will be associated with that corresponding step:
+
+```python
+import os
+from mistralai import Mistral
+from opik import track
+from opik.integrations.mistral import track_mistral
+
+os.environ["OPIK_PROJECT_NAME"] = "mistral-integration-demo"
+
+client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
+mistral_client = track_mistral(client)
+
+
+@track
+def generate_story(prompt):
+    response = mistral_client.chat.complete(
+        model="mistral-small-latest",
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return response.choices[0].message.content
+
+
+@track
+def generate_topic():
+    prompt = "Generate a topic for a story about Opik."
+    response = mistral_client.chat.complete(
+        model="mistral-small-latest",
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return response.choices[0].message.content
+
+
+@track
+def generate_opik_story():
+    topic = generate_topic()
+    story = generate_story(topic)
+    return story
+
+
+generate_opik_story()
+```
+
+The trace can now be viewed in the UI with hierarchical spans showing the relationship between different steps.
+
+### Streaming
+
+Streamed responses are tracked as well — the chunks are aggregated into a single span with the full output and token usage:
+
+```python
+stream = mistral_client.chat.stream(
+    model="mistral-small-latest",
+    messages=[{"role": "user", "content": "Tell me a fact about space."}],
+)
+
+for event in stream:
+    print(event.data.choices[0].delta.content, end="")
+```
+
+### Structured output
+
+`chat.parse()` (and its async / streaming variants) is tracked too. It delegates
+to `complete()`/`stream()` internally, so the call is logged as a single
+`chat_completion_create` / `chat_completion_stream` span with the structured
+JSON in the output:
+
+```python
+from pydantic import BaseModel
+
+
+class Person(BaseModel):
+    name: str
+    age: int
+
+
+response = mistral_client.chat.parse(
+    model="mistral-small-latest",
+    messages=[{"role": "user", "content": "Extract: John is 30 years old."}],
+    response_format=Person,
+)
+
+print(response.choices[0].message.parsed)
+```
+
+### Setting the provider name
+
+By default the provider recorded on each LLM span is `mistral`, which Opik recognizes for cost tracking. You can override it by passing `provider` to `track_mistral`:
+
+```python
+from opik import LLMProvider
+from opik.integrations.mistral import track_mistral
+
+# Accepts any string, or the opik.LLMProvider enum
+mistral_client = track_mistral(client, provider=LLMProvider.MISTRALAI)
+```
+
+## Cost Tracking
+
+The `track_mistral` integration automatically logs token usage and estimated cost for each traced LLM call, based on the model and provider.
+
+Cost information is automatically captured and displayed in the Opik UI, including:
+
+- **Cost per trace**
+- **Total cost** aggregated at the project level
+
+## Supported Methods
+
+`track_mistral` logs calls to the following methods of the Mistral client:
+
+- `chat.complete()` and `chat.complete_async()`
+- `chat.stream()` and `chat.stream_async()`
+- `chat.parse()` and `chat.parse_async()` (structured output)
+- `chat.parse_stream()` and `chat.parse_stream_async()`
+
+## Using Mistral AI via LiteLLM
+
+If you prefer to route Mistral calls through [LiteLLM](/integrations/litellm) — for example to use the same code across multiple providers — you can use the LiteLLM integration instead of `track_mistral`.
+
+To track Mistral calls made through LiteLLM, create the `OpikLogger` callback and add it to LiteLLM:
 
 ```python
 from litellm.integrations.opik.opik import OpikLogger
@@ -56,9 +211,7 @@ response = litellm.completion(
 )
 ```
 
-## Logging LLM calls within a tracked function
-
-If you are using LiteLLM within a function tracked with the [`@track`](/tracing/advanced/log_traces#using-function-decorators) decorator, you will need to pass the `current_span_data` as metadata to the `litellm.completion` call:
+If you are using LiteLLM within a function tracked with the [`@track`](/tracing/advanced/log_traces#using-function-decorators) decorator, pass the `current_span_data` as metadata to the `litellm.completion` call:
 
 ```python
 from opik import track, opik_context
@@ -76,29 +229,4 @@ def generate_story(prompt):
         },
     )
     return response.choices[0].message.content
-
-
-@track
-def generate_topic():
-    prompt = "Generate a topic for a story about Opik."
-    response = litellm.completion(
-        model="mistral/mistral-medium-2312",
-        messages=[{"role": "user", "content": prompt}],
-        metadata={
-            "opik": {
-                "current_span_data": opik_context.get_current_span_data(),
-            },
-        },
-    )
-    return response.choices[0].message.content
-
-
-@track
-def generate_opik_story():
-    topic = generate_topic()
-    story = generate_story(topic)
-    return story
-
-
-generate_opik_story()
 ```

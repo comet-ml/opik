@@ -8,12 +8,14 @@ reuse the same logic with no side effects.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 import opik
 
+from opik.api_objects import rest_helpers
+
 from .._base import BaseMigrationPlan
-from ..errors import ConflictError, UnsupportedDatasetTypeError
+from ..errors import ConflictError, MigrationError, UnsupportedDatasetTypeError
 from .resolver import (
     ResolvedDataset,
     ensure_destination_project_exists,
@@ -21,6 +23,10 @@ from .resolver import (
     name_taken_in_workspace,
     resolve_source,
 )
+from .resume import reconstruct_remaps
+
+if TYPE_CHECKING:
+    from ..checkpoint import MigrationCheckpoint
 
 # The migrate command supports plain datasets and test suites. Test suites
 # (type 'evaluation_suite') carry suite-level evaluators + execution_policy
@@ -217,6 +223,17 @@ class MigrationPlan(BaseMigrationPlan):
     source: ResolvedDataset
     target_name: str
     to_project: str
+    # The source dataset's ORIGINAL name (it isn't renamed until the run
+    # succeeds) and the temp destination name (``<name>__migrating``). Captured
+    # so the executor can record them on the checkpoint when the dataset phase
+    # completes, and so a resumed run can re-resolve both datasets.
+    source_name: str = ""
+    temp_dest_name: str = ""
+    # True when this plan was built for a RESUME (dataset phase already done on a
+    # prior run): replay is omitted and its remaps are pre-populated by
+    # ``reconstruct_remaps``, so the executor must NOT re-mark the dataset phase
+    # or re-run replay. The still-pending cascade + handoff actions are present.
+    is_resume: bool = False
     version_remap: Dict[str, str] = field(default_factory=dict)
     item_id_remap: Dict[str, str] = field(default_factory=dict)
     trace_id_remap: Dict[str, str] = field(default_factory=dict)
@@ -229,6 +246,7 @@ def build_dataset_plan(
     to_project: str,
     from_project: Optional[str] = None,
     exclude_experiments: bool = False,
+    resume_checkpoint: Optional["MigrationCheckpoint"] = None,
 ) -> MigrationPlan:
     """Build the ordered action list for migrating one dataset.
 
@@ -239,6 +257,14 @@ def build_dataset_plan(
     source-away-then-destination-in so the workspace-unique-name constraint
     never trips and — critically — a failure at any earlier step leaves the
     source name untouched and only a discardable temp behind.
+
+    When ``resume_checkpoint`` has ``dataset_phase_done`` set (OPIK-7168), the
+    create-temp/replay/optimizations phases already completed on a prior run,
+    so this returns a RESUME plan that reuses the temp destination and finishes
+    the still-pending cascade + handoff (``CascadeExperiments`` →
+    ``RenameSource`` → ``PromoteDestination``). Replay is omitted — re-running
+    it would duplicate every destination version — and its remaps are rebuilt
+    read-only from the temp destination via ``reconstruct_remaps``.
 
     ``from_project`` is an optional source-scope hint (perf + clearer
     error message); ``None`` does a workspace-wide source lookup.
@@ -271,6 +297,9 @@ def build_dataset_plan(
       6. ``PromoteDestination`` — renames the temp destination to the
          original name.
     """
+    if resume_checkpoint is not None and resume_checkpoint.dataset_phase_done:
+        return _build_resume_plan(client, to_project, resume_checkpoint)
+
     # Fail fast if --to-project doesn't exist. Catches typos before any
     # rename/create/copy work, and prevents auto-creating a stray project.
     ensure_destination_project_exists(client, to_project)
@@ -314,15 +343,18 @@ def build_dataset_plan(
         source=source,
         target_name=source.name,
         to_project=to_project,
+        source_name=source.name,
+        temp_dest_name=temp_name,
     )
 
     # Discard-and-restart: a stale temp is deleted and the copy re-runs from
-    # scratch. This is the correct minimum for this ticket (safe, idempotent
-    # re-run). The future resume work (OPIK_7168) will REUSE the temp here
-    # instead — reading the audit-log checkpoint to skip already-completed
-    # experiments and resume from ~where it stopped — so this branch is the
-    # seam to swap when that lands. The deterministic temp name +
-    # find_dataset_in_workspace are already the substrate it needs.
+    # scratch. This branch is only reached on the NORMAL path — a resumable
+    # checkpoint (``dataset_phase_done``) short-circuits to ``_build_resume_plan``
+    # above and REUSES the temp instead of discarding it. So we only get here
+    # when there's no resumable progress (a fresh run, or a crash mid-replay
+    # before the dataset phase was marked done), where discarding the partial
+    # temp and restarting is the correct, idempotent behavior (OPIK-7162 /
+    # OPIK-7168).
     if stale_temp is not None:
         plan.actions.append(
             DiscardStaleTemp(temp_id=stale_temp.id, temp_name=temp_name)
@@ -409,4 +441,118 @@ def build_dataset_plan(
         )
     )
 
+    return plan
+
+
+def _build_resume_plan(
+    client: opik.Opik,
+    to_project: str,
+    checkpoint: "MigrationCheckpoint",
+) -> MigrationPlan:
+    """Build a resume plan that finishes a run interrupted after the dataset
+    phase (create-temp/replay/optimizations) but before completion.
+
+    Under the OPIK-7162 temp-dest ordering, when the dataset phase is done:
+
+    * The source still carries its ORIGINAL name (it isn't renamed until the
+      whole run succeeds), so it resolves by ``checkpoint.dataset`` — the
+      user-supplied name. We re-resolve it live to recover its metadata for the
+      pending rename PUT. Its id must match the checkpoint's ``source_dataset_id``.
+    * The destination is still under the TEMP name (``checkpoint.temp_dest_name``);
+      the promote-to-original step is part of the pending handoff.
+    * ``version_remap`` / ``item_id_remap`` / ``optimization_id_remap`` are
+      rebuilt read-only from the temp destination (``reconstruct_remaps``);
+      nothing is re-written, so no versions are duplicated.
+
+    The returned plan contains the still-pending tail:
+    ``CascadeExperiments`` → ``RenameSource`` → ``PromoteDestination``. The
+    checkpoint drives per-experiment skip/resume inside the cascade; the two
+    renames complete the handoff the interrupted run never reached.
+    """
+    if (
+        not checkpoint.source_dataset_id
+        or not checkpoint.source_name
+        or not checkpoint.temp_dest_name
+    ):
+        raise MigrationError(
+            "Cannot resume: the checkpoint is missing the source id, source "
+            "name, or temp destination name. Delete the "
+            f"'{checkpoint.temp_dest_name or '<name>__migrating'}' dataset (if "
+            "any) and re-run the migration from scratch."
+        )
+
+    ensure_destination_project_exists(client, to_project)
+
+    # The source is unrenamed, so its original name still resolves to it.
+    # Re-resolve live to recover description/visibility/tags for the pending
+    # rename PUT, and to verify the id still matches the checkpoint.
+    source = resolve_source(client, checkpoint.dataset, None)
+    if source.id != checkpoint.source_dataset_id:
+        raise MigrationError(
+            f"Cannot resume: '{checkpoint.dataset}' now resolves to a different "
+            "dataset than the interrupted run's source. Delete the "
+            f"'{checkpoint.temp_dest_name}' dataset and re-run from scratch."
+        )
+
+    name_after_rename = f"{source.name}{SOURCE_SUFFIX}"
+
+    # Destination = the TEMP-named dataset the first run created under
+    # --to-project (promote hasn't run yet).
+    dest = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+        lambda: client.get_dataset(
+            name=checkpoint.temp_dest_name, project_name=to_project
+        )
+    )
+
+    remaps = reconstruct_remaps(
+        client.rest_client,
+        source_dataset_id=checkpoint.source_dataset_id,
+        source_name=checkpoint.source_name,
+        source_project_name=source.project_name,
+        dest_dataset_id=dest.id,
+        dest_name=checkpoint.temp_dest_name,
+        dest_project_name=to_project,
+    )
+
+    plan = MigrationPlan(
+        source=source,
+        target_name=source.name,
+        to_project=to_project,
+        source_name=source.name,
+        temp_dest_name=checkpoint.temp_dest_name,
+        is_resume=True,
+    )
+    plan.version_remap.update(remaps.version_remap)
+    plan.item_id_remap.update(remaps.item_id_remap)
+    plan.optimization_id_remap.update(remaps.optimization_id_remap)
+
+    plan.actions.append(
+        CascadeExperiments(
+            source_dataset_id=checkpoint.source_dataset_id,
+            dest_name=checkpoint.temp_dest_name,
+            dest_project_name=to_project,
+        )
+    )
+    # Finish the handoff the interrupted run never reached: source away first,
+    # then promote the temp destination into the original name.
+    plan.actions.append(
+        RenameSource(
+            source_id=source.id,
+            from_name=source.name,
+            to_name=name_after_rename,
+            description=source.description,
+            visibility=source.visibility,
+            tags=source.tags,
+        )
+    )
+    plan.actions.append(
+        PromoteDestination(
+            from_name=checkpoint.temp_dest_name,
+            to_name=source.name,
+            project_name=to_project,
+            description=source.description,
+            visibility=source.visibility,
+            tags=source.tags,
+        )
+    )
     return plan

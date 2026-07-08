@@ -22,6 +22,7 @@ from rich.table import Table
 import opik
 
 from .audit import AuditLog, default_audit_path
+from .checkpoint import MigrationCheckpoint, load_or_create
 from .datasets.executor import execute_plan, record_planned
 from .datasets.planner import (
     CascadeExperiments,
@@ -200,6 +201,7 @@ def _finalize_with_skips_or_ok(
     target_project: str,
     elapsed_seconds: float,
     experiments_excluded: bool = False,
+    checkpoint: Optional[MigrationCheckpoint] = None,
 ) -> None:
     """Finalize the audit log, then either fail loud on skips or print the
     happy-path message.
@@ -216,6 +218,11 @@ def _finalize_with_skips_or_ok(
     so it only annotates the happy-path success line. When
     ``--exclude-experiments`` is set there are no cascade actions and thus
     no ``skipped`` records, so this path is always the one taken.
+
+    ``checkpoint`` (OPIK-7168) is deleted only on the clean-success path: a
+    fully successful migration has nothing left to resume, so the local
+    checkpoint file is removed. On the skip/loss path it is retained so a
+    later re-run can still resume (the skipped experiments aren't marked done).
     """
     skip_records = [
         action for action in audit.actions if action.get("status") == "skipped"
@@ -223,6 +230,8 @@ def _finalize_with_skips_or_ok(
     if not skip_records:
         audit.finalize("ok")
         audit.write(audit_path)
+        if checkpoint is not None:
+            checkpoint.delete()
         elapsed = _format_elapsed(elapsed_seconds)
         excluded_note = (
             " Experiments and optimizations were skipped (--exclude-experiments)."
@@ -360,6 +369,15 @@ def migrate_dataset_command(
     dataset and its versions migrate, but experiments and optimizations are
     skipped entirely (no discovery pass runs).
 
+    If a migration is interrupted (crash, network drop, OOM), re-running the
+    same command from the same machine resumes from the last completed
+    experiment instead of restarting: already-completed experiments are
+    skipped, and an experiment that was interrupted mid-flight has its partial
+    destination data cleaned up before it is re-migrated (so no duplicates are
+    left behind). Progress is checkpointed locally per experiment, keyed by
+    workspace + destination project + dataset name, in a file next to the
+    audit log; it is removed once the migration completes successfully.
+
     Dataset names are workspace-unique on the BE
     (``UNIQUE (workspace_id, name)``); ``--from-project`` is an
     optional source-scope hint that yields a smaller BE result set and
@@ -375,6 +393,7 @@ def migrate_dataset_command(
     audit = AuditLog(command="opik migrate dataset", args=args)
     audit_path = audit_log or default_audit_path()
     started_at = time.monotonic()
+    checkpoint: Optional[MigrationCheckpoint] = None
 
     try:
         client = _build_client(ctx)
@@ -385,12 +404,42 @@ def migrate_dataset_command(
                 "versions only; experiments and optimizations will be "
                 "skipped.[/yellow]"
             )
+        # Checkpoint/resume (OPIK-7168) only applies to the experiment cascade,
+        # so it's skipped when experiments are excluded (nothing to resume) and
+        # on dry runs (no side effects to resume). Keyed by workspace +
+        # destination project + dataset name and persisted locally so a re-run
+        # from the same machine resumes. Loaded BEFORE the plan is built so the
+        # planner can emit a cascade-only resume plan when a prior run already
+        # finished the dataset phase.
+        if not exclude_experiments and not dry_run:
+            checkpoint = load_or_create(
+                workspace=getattr(client, "_workspace", None) or "default",
+                project=to_project,
+                dataset=name,
+            )
+            if checkpoint is None:
+                pass  # no resume support (location unresolvable); run uncheckpointed
+            elif checkpoint.dataset_phase_done:
+                console.print(
+                    f"[blue]Resuming migration: dataset + versions already copied; "
+                    f"{checkpoint.completed_count} experiment(s) completed on a "
+                    f"prior run will be skipped, then the name handoff will "
+                    f"finish.[/blue]"
+                )
+            elif checkpoint.completed_count > 0 or checkpoint.in_flight is not None:
+                console.print(
+                    f"[blue]Resuming migration: "
+                    f"{checkpoint.completed_count} experiment(s) already "
+                    f"completed on a prior run will be skipped.[/blue]"
+                )
+
         plan = build_dataset_plan(
             client=client,
             name=name,
             to_project=to_project,
             from_project=from_project,
             exclude_experiments=exclude_experiments,
+            resume_checkpoint=checkpoint,
         )
 
         _print_plan(plan)
@@ -405,7 +454,7 @@ def migrate_dataset_command(
             return
 
         with _quiet_streamer_rate_limit_logs():
-            execute_plan(client, plan, audit)
+            execute_plan(client, plan, audit, checkpoint=checkpoint)
     except MigrationError as exc:
         _finalize_and_fail(
             audit,
@@ -431,6 +480,7 @@ def migrate_dataset_command(
         target_project=to_project,
         elapsed_seconds=time.monotonic() - started_at,
         experiments_excluded=exclude_experiments,
+        checkpoint=checkpoint,
     )
 
 

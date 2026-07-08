@@ -1,13 +1,17 @@
 package com.comet.opik.domain.attachment;
 
 import com.comet.opik.api.attachment.AttachmentInfo;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -17,6 +21,7 @@ import java.util.stream.Collectors;
  * Contains shared constants and helper methods used across attachment processing.
  */
 @UtilityClass
+@Slf4j
 public class AttachmentUtils {
 
     /**
@@ -210,6 +215,67 @@ public class AttachmentUtils {
             }
         }
         return false;
+    }
+
+    /**
+     * Collects the set of attachment filenames referenced across the provided JSON nodes. Mirrors the
+     * recursive walk of {@link #containsAttachmentReference} (including parsing embedded JSON strings), but
+     * accumulates every matched filename instead of short-circuiting on the first hit. The returned names
+     * are exactly what {@link #hasAttachmentReferences} recognizes as references.
+     *
+     * @param objectMapper the ObjectMapper to use for parsing JSON strings
+     * @param nodes the JsonNodes to scan (e.g. an entity's input/output/metadata)
+     * @return the set of referenced attachment filenames (without brackets)
+     */
+    public static Set<String> collectAttachmentReferences(@NonNull ObjectMapper objectMapper, JsonNode... nodes) {
+        Set<String> references = new HashSet<>();
+        for (JsonNode node : nodes) {
+            if (node != null) {
+                collectAttachmentReferences(node, objectMapper, references);
+            }
+        }
+        return references;
+    }
+
+    private static void collectAttachmentReferences(JsonNode node, ObjectMapper objectMapper,
+            Set<String> references) {
+        if (node == null || node.isNull()) {
+            return;
+        }
+
+        if (node.isTextual()) {
+            String text = node.asText();
+            Matcher matcher = FIND_REFERENCE_PATTERN.matcher(text);
+            while (matcher.find()) {
+                references.add(matcher.group(1));
+            }
+            // If it's a JSON string, parse it and recurse so nested references are collected too.
+            if (text.startsWith("{") || text.startsWith("[")) {
+                try {
+                    collectAttachmentReferences(objectMapper.readTree(text), objectMapper, references);
+                } catch (JsonProcessingException e) {
+                    // Unexpected: text merely starts with "{"/"[" without being valid JSON. Not fatal — the
+                    // outer regex match above still stands — but worth surfacing since it's unusual.
+                    log.warn("Failed to parse embedded JSON string while collecting attachment references;"
+                            + " skipping nested scan", e);
+                }
+            }
+            return;
+        }
+
+        if (node.isObject()) {
+            var fieldNames = node.fieldNames();
+            while (fieldNames.hasNext()) {
+                collectAttachmentReferences(node.get(fieldNames.next()), objectMapper, references);
+            }
+            return;
+        }
+
+        if (node.isArray()) {
+            for (JsonNode element : node) {
+                collectAttachmentReferences(element, objectMapper, references);
+            }
+        }
     }
 
     /**

@@ -28,6 +28,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import reactor.core.publisher.Mono;
@@ -560,7 +561,11 @@ class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
-    public void recordLastUpdatedTrace(String workspaceId, Collection<ProjectIdLastUpdated> lastUpdatedTraces) {
+    public void recordLastUpdatedTrace(@NonNull String workspaceId,
+            Collection<ProjectIdLastUpdated> lastUpdatedTraces) {
+        if (CollectionUtils.isEmpty(lastUpdatedTraces)) {
+            return;
+        }
         template.inTransaction(WRITE,
                 handle -> handle.attach(ProjectDAO.class).recordLastUpdatedTrace(workspaceId, lastUpdatedTraces));
     }

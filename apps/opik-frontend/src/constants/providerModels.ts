@@ -170,6 +170,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "aion-labs/aion-2.0",
     },
     {
+      value: PROVIDER_MODEL_TYPE.AION_LABS_AION_3_0,
+      label: "aion-labs/aion-3.0",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.AION_LABS_AION_3_0_MINI,
+      label: "aion-labs/aion-3.0-mini",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.AION_LABS_AION_RP_LLAMA_3_1_8B,
       label: "aion-labs/aion-rp-llama-3.1-8b",
     },
@@ -1223,6 +1231,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "nex-agi/deepseek-v3.1-nex-n1",
     },
     {
+      value: PROVIDER_MODEL_TYPE.NEX_AGI_NEX_N2_MINI,
+      label: "nex-agi/nex-n2-mini",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.NEX_AGI_NEX_N2_PRO,
       label: "nex-agi/nex-n2-pro",
     },
@@ -1676,6 +1688,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "poolside/laguna-m.1:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_XS_2_1,
+      label: "poolside/laguna-xs-2.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_XS_2_1_FREE,
+      label: "poolside/laguna-xs-2.1:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_XS_2,
       label: "poolside/laguna-xs.2",
     },
@@ -2028,12 +2048,20 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "tencent/hunyuan-a13b-instruct",
     },
     {
+      value: PROVIDER_MODEL_TYPE.TENCENT_HY3,
+      label: "tencent/hy3",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.TENCENT_HY3_PREVIEW,
       label: "tencent/hy3-preview",
     },
     {
       value: PROVIDER_MODEL_TYPE.TENCENT_HY3_PREVIEW_FREE,
       label: "tencent/hy3-preview:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.TENCENT_HY3_FREE,
+      label: "tencent/hy3:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.THEDRUMMER_ANUBIS_70B_V1_1,
