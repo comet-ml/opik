@@ -33,13 +33,15 @@ jobs:
 
     strategy:
       fail-fast: true
-      # Throttle concurrent matrix jobs so we keep full Python coverage
-      # without re-multiplying live Vertex AI calls into 429 RESOURCE_EXHAUSTED
-      # against the shared opik-sdk-tests GCP project (shared with the ADK
-      # suite, so any uncapped suite re-multiplies their contention too).
+      # This suite makes live Vertex AI calls against the shared
+      # opik-sdk-tests GCP project (shared with the ADK suite). Running the
+      # full 3.10-3.14 matrix re-multiplied those calls into 429
+      # RESOURCE_EXHAUSTED, so we run only the oldest and newest supported
+      # Python versions — enough to catch version-specific breakage at a
+      # fraction of the request volume — and keep the concurrency cap.
       max-parallel: 2
       matrix:
-        python_version: ${{ fromJSON(vars.PYTHON_VERSIONS) }}
+        python_version: ["3.10", "3.14"]
 
     steps:
       - name: Check out code
