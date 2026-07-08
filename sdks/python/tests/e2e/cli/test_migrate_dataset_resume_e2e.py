@@ -36,7 +36,7 @@ from typing import Iterator, List
 import pytest
 
 import opik
-from opik import id_helpers
+from opik import id_helpers, synchronization
 from opik.rest_api.types.dataset_item_write import DatasetItemWrite
 
 from ...conftest import random_chars
@@ -137,9 +137,11 @@ def test_migrate_dataset__crash_mid_cascade__resumes_without_duplicates(
     item_id_by_q = {(it.data or {}).get("q"): it.id for it in v1_items}
 
     # ── Seed N experiments, each referencing one dataset item ──
+    # Names derive from the (already-random) ``dataset_name`` fixture so they're
+    # unique per run yet reproducible from the fixture, per sdks/python/AGENTS.md.
     experiment_names: List[str] = []
     for i in range(_NUM_EXPERIMENTS):
-        name = f"e2e-resume-exp-{i}-{random_chars()}"
+        name = f"{dataset_name}-exp-{i}"
         experiment_names.append(name)
         seed_experiment_with_trace_tree(
             rest,
@@ -223,6 +225,19 @@ def test_migrate_dataset__crash_mid_cascade__resumes_without_duplicates(
     dest_dataset = rest.datasets.get_dataset_by_identifier(
         dataset_name=dataset_name, project_name=target_project_name
     )
+
+    # Migrated experiments become readable asynchronously, so poll until the
+    # destination shows the full set before asserting — otherwise the read can
+    # race ahead of eventual consistency and flake. ``until`` returns False on
+    # timeout; the count assertion below then fails with the observed number.
+    def _all_experiments_present() -> bool:
+        page = rest.experiments.find_experiments(
+            dataset_id=dest_dataset.id, page=1, size=100
+        )
+        return len(page.content or []) == _NUM_EXPERIMENTS
+
+    synchronization.until(_all_experiments_present, max_try_seconds=30)
+
     for name in experiment_names:
         # find_destination_experiment RAISES if zero or >1 match — so this is
         # the duplicate check: the interrupted experiment must not have been

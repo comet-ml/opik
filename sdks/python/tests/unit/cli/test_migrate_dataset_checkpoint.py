@@ -192,6 +192,33 @@ class TestMigrationCheckpoint:
         assert cp.in_flight is None
         assert cp.completed_count == 0
 
+    def test_load_or_create__unresolvable_home__returns_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A homeless environment (Path.home() raising, as in some CI/containers)
+        # must NOT crash the migration before it starts -- load_or_create
+        # returns None and the caller runs without resume support.
+        def _boom() -> Path:
+            raise RuntimeError("Could not determine home directory")
+
+        monkeypatch.setattr(checkpoint_module, "checkpoint_dir", _boom, raising=True)
+        assert load_or_create(workspace="ws", project="proj", dataset="ds") is None
+
+    def test_flush__write_failure__swallowed_not_raised(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A checkpoint is only a resume aid: a read-only / full disk on flush
+        # must be logged and swallowed, never abort an otherwise-healthy
+        # migration.
+        cp = load_or_create(workspace="ws", project="proj", dataset="ds")
+        assert cp is not None
+
+        def _readonly(*_a: Any, **_k: Any) -> None:
+            raise OSError("Read-only file system")
+
+        monkeypatch.setattr(Path, "mkdir", _readonly, raising=True)
+        cp.flush()  # must not raise
+
     def test_flush_then_load__round_trips_dest_experiment_id(
         self, tmp_path: Path
     ) -> None:

@@ -408,7 +408,9 @@ def migrate_dataset_command(
                 project=to_project,
                 dataset=name,
             )
-            if checkpoint.dataset_phase_done:
+            if checkpoint is None:
+                pass  # no resume support (location unresolvable); run uncheckpointed
+            elif checkpoint.dataset_phase_done:
                 console.print(
                     f"[blue]Resuming migration: dataset already migrated; "
                     f"{checkpoint.completed_count} experiment(s) completed on a "

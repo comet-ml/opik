@@ -218,11 +218,24 @@ class MigrationCheckpoint:
         same filesystem) so an interruption mid-write can't leave a truncated,
         unparseable checkpoint -- the old file stays intact until the new one
         is fully written.
+
+        A write failure (read-only or full disk, permissions) is logged and
+        swallowed rather than raised: the checkpoint is only a resume aid, so a
+        failure to persist it must never abort an otherwise-healthy migration.
+        The run continues; it just won't be resumable from this point.
         """
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = self.path.with_suffix(self.path.suffix + ".tmp")
-        tmp_path.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
-        os.replace(tmp_path, self.path)
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = self.path.with_suffix(self.path.suffix + ".tmp")
+            tmp_path.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
+            os.replace(tmp_path, self.path)
+        except OSError as exc:
+            LOGGER.warning(
+                "Could not write migrate checkpoint to %s (%s); the migration "
+                "will continue but won't be resumable from here.",
+                self.path,
+                exc,
+            )
 
     def delete(self) -> None:
         """Remove the checkpoint file after a fully successful migration.
@@ -254,11 +267,17 @@ def load_or_create(
     workspace: str,
     project: str,
     dataset: str,
-) -> MigrationCheckpoint:
+) -> Optional[MigrationCheckpoint]:
     """Load an existing checkpoint for this composite key, or create a fresh one.
 
     The checkpoint lives at a fixed per-user path (see ``checkpoint_dir``),
     independent of the working directory, so a re-run from any folder finds it.
+
+    Returns ``None`` when the checkpoint location can't even be resolved -- e.g.
+    ``Path.home()`` raises ``RuntimeError`` on a homeless environment (some CI /
+    container setups). A checkpoint is only a resume aid, so the caller treats
+    ``None`` as "run without resume support" and the migration proceeds
+    unimpeded rather than crashing before it starts.
 
     A checkpoint file that is missing, unreadable, corrupt (truncated JSON from
     an interrupted write on a filesystem without atomic replace), or written by
@@ -267,8 +286,16 @@ def load_or_create(
     everything (correct, just slower), whereas trusting a corrupt checkpoint
     could skip real work.
     """
-    key = checkpoint_key(workspace, project, dataset)
-    path = checkpoint_path(key)
+    try:
+        key = checkpoint_key(workspace, project, dataset)
+        path = checkpoint_path(key)
+    except (OSError, RuntimeError) as exc:
+        LOGGER.warning(
+            "Could not resolve a migrate checkpoint location (%s); the "
+            "migration will run without resume support.",
+            exc,
+        )
+        return None
     fresh = MigrationCheckpoint(
         key=key,
         workspace=workspace,
