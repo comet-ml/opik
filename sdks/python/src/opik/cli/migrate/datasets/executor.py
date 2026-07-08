@@ -19,6 +19,7 @@ from rich.console import Console
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
 
 from ..audit import AuditLog
+from ..checkpoint import MigrationCheckpoint
 from .._base import execute_plan_loop, record_planned_loop
 from .experiments import cascade_experiments
 from .optimizations import cascade_optimizations
@@ -40,6 +41,7 @@ def execute_plan(
     client: opik.Opik,
     plan: MigrationPlan,
     audit: AuditLog,
+    checkpoint: Optional[MigrationCheckpoint] = None,
 ) -> None:
     """Apply ``plan`` against ``client``, recording each action in ``audit``.
 
@@ -48,11 +50,16 @@ def execute_plan(
     captures ``plan`` and ``audit`` so the ``ReplayVersions`` branch can
     stash version_remap / item_id_remap onto the plan and emit per-version
     audit sub-records.
+
+    ``checkpoint`` (OPIK-7168), when supplied, is threaded into the experiment
+    cascade for resume support; the other actions ignore it.
     """
     rest_client = client.rest_client
 
     def _apply(action: Any) -> None:
-        _apply_action(client, rest_client, action, plan=plan, audit=audit)
+        _apply_action(
+            client, rest_client, action, plan=plan, audit=audit, checkpoint=checkpoint
+        )
 
     execute_plan_loop(
         plan.actions,
@@ -74,6 +81,7 @@ def _apply_action(
     *,
     plan: MigrationPlan,
     audit: AuditLog,
+    checkpoint: Optional[MigrationCheckpoint] = None,
 ) -> None:
     # Every REST call in the migrate path -- both writes and reads -- is
     # wrapped with the SDK's 429-aware retry helper so a transient rate
@@ -111,8 +119,26 @@ def _apply_action(
         _replay_versions(client, rest_client, action, plan=plan, audit=audit)
     elif isinstance(action, CascadeOptimizations):
         _cascade_optimizations(rest_client, action, plan=plan, audit=audit)
+        # The dataset-level phases (rename/create/replay/optimizations) are all
+        # done as of here -- CascadeOptimizations is always the last one before
+        # CascadeExperiments. Mark it on the checkpoint NOW, before the cascade
+        # boundary, so a crash between this point and the first experiment still
+        # leaves ``dataset_phase_done=True``; otherwise the next run would take
+        # the full-plan branch and collide on the already-applied rename.
+        if (
+            checkpoint is not None
+            and not plan.is_resume
+            and not checkpoint.dataset_phase_done
+        ):
+            checkpoint.mark_dataset_phase_done(
+                source_dataset_id=action.source_dataset_id,
+                source_name_after_rename=plan.source_name_after_rename,
+            )
+            checkpoint.flush()
     elif isinstance(action, CascadeExperiments):
-        _cascade_experiments(client, rest_client, action, plan=plan, audit=audit)
+        _cascade_experiments(
+            client, rest_client, action, plan=plan, audit=audit, checkpoint=checkpoint
+        )
     else:
         raise TypeError(f"Unknown migration action: {type(action).__name__}")
 
@@ -265,6 +291,7 @@ def _cascade_experiments(
     *,
     plan: MigrationPlan,
     audit: AuditLog,
+    checkpoint: Optional[MigrationCheckpoint] = None,
 ) -> None:
     """Drive the experiment cascade with nested Rich progress bars.
 
@@ -274,7 +301,15 @@ def _cascade_experiments(
     hundreds of traces). ``cascade_experiments`` is console-agnostic; the
     progress UI lives here so the algorithmic core stays testable without
     Rich in the loop.
+
+    When ``checkpoint`` is supplied, it is threaded into the cascade for
+    resume support and the outer bar is seeded with the first callback's
+    ``completed`` value so a resumed run renders at the right percentage
+    (OPIK-7168) rather than starting from 0. The dataset phase is marked done
+    by ``_apply_action`` right after ``CascadeOptimizations`` (before this
+    cascade boundary), so it isn't touched here.
     """
+
     with Progress(
         TextColumn("[bold blue]Cascading experiments"),
         BarColumn(),
@@ -308,7 +343,12 @@ def _cascade_experiments(
                     f"→ {action.dest_project_name} · {label} ({completed + 1}/{total})"
                 )
             if outer_task_id is None:
-                outer_task_id = progress.add_task(description, total=total)
+                # Seed ``completed`` so a resumed run's bar opens at the right
+                # percentage. On a fresh run ``completed`` is 0, so this is a
+                # no-op relative to the prior behavior.
+                outer_task_id = progress.add_task(
+                    description, total=total, completed=completed
+                )
             else:
                 progress.update(
                     outer_task_id, completed=completed, description=description
@@ -362,16 +402,31 @@ def _cascade_experiments(
                 )
                 last_milestone_at = now
 
+        # The destination dataset id is only needed for resume cleanup (to find
+        # a possibly-orphaned destination experiment by name); resolve it once
+        # here so the cascade doesn't have to. Skipped entirely without a
+        # checkpoint so a plain run makes no extra call.
+        target_dataset_id: Optional[str] = None
+        if checkpoint is not None:
+            dest = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+                lambda: client.get_dataset(
+                    name=action.dest_name, project_name=action.dest_project_name
+                )
+            )
+            target_dataset_id = dest.id
+
         result = cascade_experiments(
             client,
             rest_client,
             source_dataset_id=action.source_dataset_id,
             target_dataset_name=action.dest_name,
             target_project_name=action.dest_project_name,
+            target_dataset_id=target_dataset_id,
             version_remap=plan.version_remap,
             item_id_remap=plan.item_id_remap,
             optimization_id_remap=plan.optimization_id_remap,
             audit=audit,
+            checkpoint=checkpoint,
             progress_callback=_on_experiment_start,
             inner_progress_callback=_on_inner_step,
         )
