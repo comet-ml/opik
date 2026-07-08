@@ -111,6 +111,42 @@ public class OnlineScoringConfig {
     @JsonProperty
     @Min(1) @Max(3600) private int agenticToolsS3PresignTtlSeconds = 120;
 
+    /**
+     * Per-variable substitution cap (in characters) for the agentic-tools / structure-injection paths,
+     * shared by the trace- and span-level scorers. ≈ 4 KB chars (~ 1 K tokens) is large enough that a
+     * small trace/span input/output renders inline (cheap, no tool round-trip) but small enough that a
+     * huge entity doesn't blow context — the agent fetches the rest via the {@code read} tool, or, on the
+     * no-tools inline fallback, the value is simply truncated.
+     *
+     * <p>Floor at 500 chars so a typo'd env var can't truncate every field down to noise. Capped at
+     * 100 K chars (~25 K tokens) — above that a single field would dominate the prompt budget, so an
+     * operator wanting more should raise the agentic-tools threshold instead. Field initializer (not
+     * {@code @Builder.Default}) so the default applies during YAML deserialization too.
+     */
+    @JsonProperty
+    @Min(500) @Max(100_000) private int maxPromptFieldChars = 4_000;
+
+    /**
+     * Attachment-upload race tolerance for the {@code {{trace}}} / {@code {{span}}} structures: how many
+     * times the (cold) attachment lookup is resubscribed when the entity body references an attachment but
+     * no persistent copy is visible yet. This is an interim guard while attachment uploads can still be in
+     * flight when scoring is enqueued; a pre-evaluation dispatch delay (OPIK-7224) is intended to replace
+     * it. {@code 0} disables retrying (a single best-effort read). See
+     * {@code OnlineScoringBaseScorer#listAttachmentsToleratingUploadRace}.
+     */
+    @JsonProperty
+    @Min(0) @Max(20) private int attachmentFetchMaxRetries = 5;
+
+    /**
+     * Delay between attachment-lookup retries (see {@link #attachmentFetchMaxRetries}). Worst-case added
+     * latency is roughly {@code attachmentFetchMaxRetries × this}, and only for entities that actually
+     * expect an attachment. Field initializer supplies the default so the key is optional in YAML.
+     */
+    @Valid @JsonProperty
+    @NotNull @MinDuration(value = 50, unit = TimeUnit.MILLISECONDS)
+    @MaxDuration(value = 5, unit = TimeUnit.SECONDS)
+    private Duration attachmentFetchRetryDelay = Duration.milliseconds(300);
+
     @Data
     @Builder(toBuilder = true)
     @NoArgsConstructor

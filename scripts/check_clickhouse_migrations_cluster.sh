@@ -22,7 +22,10 @@ EXIT_CODE=0
 
 # DDL patterns that require ON CLUSTER clause
 # Reference: https://clickhouse.com/docs/sql-reference/distributed-ddl
-DDL_COMMANDS_REGEX="(CREATE|DROP|ALTER|RENAME)"
+# EXCHANGE covers the Distributed-layer cutover shape (EXCHANGE TABLES foo_local AND foo_shadow_local)
+# used from Hyperscale Slice 2 onward. The check is table-name agnostic: both _local shadow tables
+# and their unsuffixed Distributed wrappers are validated the same way.
+DDL_COMMANDS_REGEX="(CREATE|DROP|ALTER|RENAME|EXCHANGE)"
 # Combined pattern for detecting DDL statements that need ON CLUSTER
 DDL_DETECTION_REGEX="^\s*${DDL_COMMANDS_REGEX}\s+"
 # Exact pattern for ON CLUSTER clause validation (project-specific)
@@ -205,7 +208,7 @@ main() {
         echo -e "   🎉 ${GREEN}All DDL operations include proper ON CLUSTER clause${NC}"
     else
         echo -e "   ❌ ${RED}Found $total_errors file(s) with missing ON CLUSTER clauses${NC}"
-        echo -e "   🛠️  ${YELLOW}Please add 'ON CLUSTER '\"'\"'{cluster}'\"'\"'' to all CREATE, DROP, ALTER, and RENAME statements${NC}"
+        echo -e "   🛠️  ${YELLOW}Please add 'ON CLUSTER '\"'\"'{cluster}'\"'\"'' to all CREATE, DROP, ALTER, RENAME, and EXCHANGE statements${NC}"
         echo
         echo -e "${YELLOW}📖 Reference: https://clickhouse.com/docs/sql-reference/distributed-ddl${NC}"
         echo -e "${YELLOW}🔧 Example: CREATE TABLE my_table ON CLUSTER '{cluster}' (...);${NC}"

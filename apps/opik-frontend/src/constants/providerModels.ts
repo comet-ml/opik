@@ -170,6 +170,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "aion-labs/aion-2.0",
     },
     {
+      value: PROVIDER_MODEL_TYPE.AION_LABS_AION_3_0,
+      label: "aion-labs/aion-3.0",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.AION_LABS_AION_3_0_MINI,
+      label: "aion-labs/aion-3.0-mini",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.AION_LABS_AION_RP_LLAMA_3_1_8B,
       label: "aion-labs/aion-rp-llama-3.1-8b",
     },
