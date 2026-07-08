@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { ChevronRight, Search, Settings2 } from "lucide-react";
+import { ChevronRight, Search, Settings2, X } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -31,9 +31,12 @@ interface OptimizationModelSelectProps {
   disabled?: boolean;
   // Render the trigger at the compact (h-8) size used in dense popovers.
   compact?: boolean;
-  // When no explicit model is chosen, show this model as the effective default
-  // ("Same as prompt · <model>") instead of the empty placeholder.
+  // When no explicit model is chosen, the field reads "Same as prompt" instead
+  // of the empty placeholder (the optimizer inherits the prompt model).
   inheritedModel?: PROVIDER_MODEL_TYPE | "";
+  // When provided and a model is selected, an inline × clears the field back to
+  // the inherited prompt model (mirrors the playground's clearable selects).
+  onClear?: () => void;
 }
 
 const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
@@ -43,6 +46,7 @@ const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
   disabled = false,
   compact = false,
   inheritedModel = "",
+  onClear,
 }) => {
   const resetDialogKeyRef = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -96,12 +100,6 @@ const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
   );
 
   const selectedInfo = useMemo(() => resolveInfo(value), [resolveInfo, value]);
-
-  // The effective default when nothing is explicitly selected: the prompt model.
-  const inheritedInfo = useMemo(
-    () => (inheritedModel ? resolveInfo(inheritedModel) : null),
-    [resolveInfo, inheritedModel],
-  );
 
   const handleOpenChange = useCallback((open: boolean) => {
     if (!open) {
@@ -279,9 +277,7 @@ const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
           >
             <SelectValue
               placeholder={
-                inheritedInfo
-                  ? `Same as prompt · ${inheritedInfo.label}`
-                  : "Select an LLM model"
+                inheritedModel ? "Same as prompt" : "Select an LLM model"
               }
             >
               {displayTitle && (
@@ -291,6 +287,33 @@ const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
                 </div>
               )}
             </SelectValue>
+            {onClear && value && (
+              <span
+                role="button"
+                tabIndex={0}
+                aria-label="Use prompt model"
+                className="ml-auto flex shrink-0 items-center text-light-slate hover:text-primary-hover"
+                // Clear without opening the select: Radix opens on pointer down,
+                // so swallow it there, then clear on click.
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClear();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onClear();
+                  }
+                }}
+              >
+                <X className="size-3.5" />
+              </span>
+            )}
           </SelectTrigger>
         </TooltipWrapper>
 

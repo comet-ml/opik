@@ -91,8 +91,23 @@ const BaseOptimizationConfigSchema = z.object({
   messages: z
     .array(z.custom<LLMMessage>())
     .min(1, "At least one message is required")
-    .refine((messages) => !messages.some(isMessageEmpty), {
-      message: "All messages must have content",
+    // Emit a per-message issue (path [index, "content"]) instead of one
+    // array-level error, so each empty message card renders its own red border
+    // + inline text rather than a single banner. An array-root error would
+    // shadow these per-index ones (react-hook-form #7742), but `.min(1)` above
+    // is the only root error and it fires solely on an empty list — unreachable
+    // in the UI (the remove button is hidden at one message) — so they never
+    // collide.
+    .superRefine((messages, ctx) => {
+      messages.forEach((message, index) => {
+        if (isMessageEmpty(message)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [index, "content"],
+            message: "Message is required",
+          });
+        }
+      });
     }),
   // Accept any string, not just the static PROVIDER_MODEL_TYPE enum: models
   // now come from the backend registry and can include ids that weren't in
@@ -207,7 +222,7 @@ export const convertOptimizationStudioToFormData = (
 
   // Leave the algorithm model unset unless the saved run explicitly used a model
   // the workspace can still run. An unset model inherits the prompt model at
-  // runtime (surfaced in the picker as "Same as prompt · <model>"). We must not
+  // runtime (surfaced in the picker as "Same as prompt"). We must not
   // force-seed it to the prompt model: that overrode intentional inheritance and
   // could submit a stale/unavailable model behind an "inherited" label.
   const baseOptimizerParams =

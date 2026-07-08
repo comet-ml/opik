@@ -102,35 +102,23 @@ const AlgorithmConfigs = ({
             optimizer's own fields) is spaced identically. */}
         <div className="flex w-72 flex-col gap-3">
           <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1">
-                <Label className="text-sm">Algorithm model</Label>
-                <ExplainerIcon description="The model the optimizer uses for its own reasoning. Defaults to the prompt model." />
-              </div>
-              {configs.model && (
-                <Button
-                  variant="link"
-                  size="sm"
-                  className="h-auto p-0"
-                  onClick={() => {
-                    // Clear the explicit model so the optimizer inherits the
-                    // prompt model at runtime (shown as "Same as prompt · …").
-                    const next = { ...configs };
-                    delete next.model;
-                    delete next.model_parameters;
-                    onChange(next);
-                  }}
-                  type="button"
-                >
-                  Use prompt model
-                </Button>
-              )}
+            <div className="flex items-center gap-1">
+              <Label className="text-sm">Algorithm model</Label>
+              <ExplainerIcon description="The model the optimizer uses for its own reasoning. Defaults to the prompt model." />
             </div>
             <OptimizationModelSelect
               compact
               value={(configs.model ?? "") as PROVIDER_MODEL_TYPE | ""}
               inheritedModel={(promptModel ?? "") as PROVIDER_MODEL_TYPE | ""}
               onChange={(value) => onChange({ ...configs, model: value })}
+              onClear={() => {
+                // Clear the explicit model so the optimizer inherits the prompt
+                // model at runtime (shown as "Same as prompt").
+                const next = { ...configs };
+                delete next.model;
+                delete next.model_parameters;
+                onChange(next);
+              }}
             />
           </div>
           {getOptimizerForm()}

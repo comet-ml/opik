@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { UseFormReturn } from "react-hook-form";
+import get from "lodash/get";
 import { FileTerminal, Save } from "lucide-react";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import useAppStore from "@/store/AppStore";
@@ -23,7 +24,9 @@ import {
 import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import { generateDefaultLLMPromptMessage } from "@/lib/llm";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
-import LLMPromptMessages from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
+import LLMPromptMessages, {
+  type MessageValidationError,
+} from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptModelSelect";
 import PromptModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
 import PromptLibraryMenu from "@/v2/pages-shared/llm/PromptLibraryMenu/PromptLibraryMenu";
@@ -258,13 +261,22 @@ const OptimizationsNewPromptSection: React.FC<
         <FormField
           control={form.control}
           name="messages"
-          render={({ field }) => {
+          render={({ field, formState }) => {
             const fieldMessages = field.value;
+            // Per-message errors: the schema emits issues at [index, "content"],
+            // so this is an array keyed by message index. LLMPromptMessages reads
+            // `[idx].content.message` to red-border the specific empty card. No
+            // <FormMessage> here — a general banner would render "undefined" off
+            // the array node, and empty content is surfaced inline per card.
+            const validationErrors = get(formState.errors, ["messages"]) as
+              | MessageValidationError[]
+              | undefined;
 
             return (
               <FormItem className="gap-0">
                 <LLMPromptMessages
                   messages={fieldMessages}
+                  validationErrors={validationErrors}
                   possibleTypes={OPTIMIZATION_MESSAGE_TYPE_OPTIONS}
                   hidePromptActions={false}
                   disableMedia
@@ -281,7 +293,6 @@ const OptimizationsNewPromptSection: React.FC<
                     ])
                   }
                 />
-                <FormMessage className="mt-1.5" />
               </FormItem>
             );
           }}
