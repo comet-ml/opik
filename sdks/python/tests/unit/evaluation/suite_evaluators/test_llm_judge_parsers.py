@@ -325,6 +325,67 @@ class TestResponseSchema:
         assert prop["description"] == long_assertion
         assert len("assertion_1") < 64
 
+    def test_parse__verdict_wrapped_in_prose_and_code_fence__returns_score_results(
+        self,
+    ):
+        """Agentic judge fallback: Anthropic (native + LiteLLM) narrates in
+        prose and wraps the verdict in a ```json fence instead of emitting a
+        bare object. The parser must recover it. Payload mirrors the real
+        `claude-haiku-4-5` output that failed the agentic integration suite.
+        """
+        assertion = "The agent's output mentions Tokyo."
+        schema = llm_judge_parsers.ResponseSchema([assertion])
+        content = (
+            "I'll evaluate the assertion by examining the agent's output.\n\n"
+            "**Assertion 1: The agent's output mentions Tokyo.**\n\n"
+            "Looking at the task output provided:\n"
+            '```json\n{\n  "answer": "The capital of France is Paris."\n}\n```\n\n'
+            "The output does not mention Tokyo.\n\n## Verdict\n\n"
+            '```json\n{\n  "assertion_1": {\n    "score": false,\n'
+            '    "reason": "The output is about Paris, not Tokyo.",\n'
+            '    "confidence": 1.0\n  }\n}\n```'
+        )
+
+        results = schema.parse(content)
+
+        assert len(results) == 1
+        assert results[0].name == assertion
+        assert results[0].value is False
+        assert results[0].reason == "The output is about Paris, not Tokyo."
+        assert results[0].scoring_failed is False
+        assert results[0].metadata == {"confidence": 1.0}
+
+    def test_parse__multiple_json_objects__skips_non_matching_and_uses_verdict(self):
+        """When several JSON objects are present, pick the one that validates
+        against the schema, not merely the first or last brace."""
+        schema = llm_judge_parsers.ResponseSchema(["Response is accurate"])
+        content = (
+            'Quoting the agent first: {"answer": "Paris"}\n'
+            'Then the verdict: {"assertion_1": {"score": true, '
+            '"reason": "correct", "confidence": 0.9}}'
+        )
+
+        results = schema.parse(content)
+
+        assert len(results) == 1
+        assert results[0].value is True
+        assert results[0].reason == "correct"
+        assert results[0].scoring_failed is False
+
+    def test_parse__prose_with_no_valid_verdict__raises_with_failed_results(self):
+        """Prose that contains a JSON object which never matches the schema
+        must still surface as a parse failure (not silently pass)."""
+        schema = llm_judge_parsers.ResponseSchema(["Response is accurate"])
+        content = 'Here is my thinking: {"answer": "Paris"} and nothing else.'
+
+        with pytest.raises(LLMJudgeParseError) as exc_info:
+            schema.parse(content)
+
+        results = exc_info.value.results
+        assert len(results) == 1
+        assert results[0].scoring_failed is True
+        assert results[0].metadata["raw_output"] == content
+
     def test_parse__assertion_with_special_characters__handles_correctly(self):
         assertion = 'Response doesn\'t contain "quotes" or special chars: {}/\\'
         schema = llm_judge_parsers.ResponseSchema([assertion])

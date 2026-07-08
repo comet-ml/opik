@@ -11,7 +11,7 @@ each assertion produces {"score": <bool/int/float>, "reason": "..."}.
 import copy
 import json
 import logging
-from typing import Any, Dict, List, Type
+from typing import Any, Dict, Iterator, List, Optional, Type
 
 import pydantic
 
@@ -19,6 +19,33 @@ from opik.evaluation.metrics import score_result
 from opik.exceptions import LLMJudgeParseError
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _iter_json_objects(content: str) -> Iterator[Dict[str, Any]]:
+    """Yield every balanced JSON object embedded in ``content``, in order.
+
+    Providers that don't strictly honor ``response_format`` alongside tool
+    calls (Anthropic in particular) return the verdict as prose with the
+    JSON wrapped in a ```json fence, and sometimes emit more than one JSON
+    object — e.g. quoting the agent's output before the verdict. Scanning
+    for each ``{`` and streaming-decoding lets the caller validate every
+    candidate against the schema and keep the one that fits, rather than
+    betting on the first or last brace.
+    """
+    decoder = json.JSONDecoder()
+    index = 0
+    while True:
+        start = content.find("{", index)
+        if start == -1:
+            return
+        try:
+            obj, end = decoder.raw_decode(content, start)
+        except json.JSONDecodeError:
+            index = start + 1
+            continue
+        if isinstance(obj, dict):
+            yield obj
+        index = end
 
 
 def _resolve_refs(schema: Dict[str, Any]) -> Dict[str, Any]:
@@ -120,6 +147,36 @@ class ResponseSchema:
             f"- `{key}`: {assertion}" for key, assertion in self._field_mapping.items()
         )
 
+    def _parse_and_validate(self, content: str) -> pydantic.BaseModel:
+        """Return the schema-validated response for ``content``.
+
+        Fast path: the whole string is the JSON object (OpenAI / strict
+        structured output). Fallback: scan every embedded JSON object and
+        return the first that validates against the schema — this recovers
+        the verdict when a provider wraps it in prose or a ```json fence
+        and precedes it with an unrelated object (e.g. a quoted copy of the
+        agent's output). Raises ``JSONDecodeError`` when no object is found
+        and the last ``ValidationError`` when candidates were found but none
+        matched, so ``parse`` reports the failure the same way as before.
+        """
+        try:
+            parsed = json.loads(content)
+            if isinstance(parsed, dict):
+                return self._response_model(**parsed)
+        except (json.JSONDecodeError, pydantic.ValidationError):
+            pass
+
+        last_error: Optional[pydantic.ValidationError] = None
+        for candidate in _iter_json_objects(content):
+            try:
+                return self._response_model(**candidate)
+            except pydantic.ValidationError as validation_error:
+                last_error = validation_error
+
+        if last_error is not None:
+            raise last_error
+        raise json.JSONDecodeError("No JSON object found in model output", content, 0)
+
     def parse(self, content: str) -> List[score_result.ScoreResult]:
         """Parse and validate the LLM model output JSON into ScoreResult objects.
 
@@ -142,8 +199,7 @@ class ResponseSchema:
             )
 
         try:
-            parsed = json.loads(content)
-            validated = self._response_model(**parsed)
+            validated = self._parse_and_validate(content)
 
             results = [
                 score_result.ScoreResult(
