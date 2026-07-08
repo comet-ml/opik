@@ -217,14 +217,29 @@ docker compose --profile opik-otel down
 
 ## Running on Raspberry Pi 4 / CM4 (Older ARMv8 architectures)
 
-By default, the ClickHouse and Opik backend images require an `ARMv8.2-A` instruction set. On older ARMv8.0-A hardware like the Raspberry Pi 4 or Raspberry Pi CM4, running the default containers will fail with `Illegal instruction` crashes.
+By default, the ClickHouse and Opik backend images require an `ARMv8.2-A` instruction set. On older ARMv8.0-A hardware like the Raspberry Pi 4 or Raspberry Pi CM4, running the default containers natively will fail with `Illegal instruction` crashes.
 
-To resolve this, you can configure these services to run in emulation mode (using QEMU) by setting the platform environment variables before starting the stack:
+As a best-effort workaround, you can configure these services to run in emulation mode (using QEMU/amd64).
+
+### Prerequisite
+
+Bare Linux/Debian/Raspberry Pi OS setups do not include QEMU emulation handlers by default. Before bringing up the emulated stack, you must register the emulation support on the host machine by executing:
+
+```bash
+docker run --privileged --rm tonistiigi/binfmt --install amd64
+```
+
+*Note: Emulating ClickHouse and the JVM backend on a 4GB Raspberry Pi 4 is extremely memory-intensive and slow, and might still be unstable or unusable under real load.*
+
+### Setup
+
+To enable emulation, set the platform environment variables before starting the stack:
 
 ```bash
 export OPIK_CLICKHOUSE_PLATFORM=linux/amd64
 export OPIK_BACKEND_PLATFORM=linux/amd64
 export OPIK_PYTHON_BACKEND_PLATFORM=linux/amd64
+export OPIK_GUARDRAILS_BACKEND_PLATFORM=linux/amd64
 
 # Start Opik using the launcher script or docker compose
 ./opik.sh

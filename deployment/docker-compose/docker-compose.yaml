@@ -279,6 +279,7 @@ services:
 
   guardrails-backend:
     image: ghcr.io/comet-ml/opik/opik-guardrails-backend:${OPIK_VERSION:-latest}
+    platform: ${OPIK_GUARDRAILS_BACKEND_PLATFORM:-}
     pull_policy: ${OPIK_GUARDRAILS_BACKEND_PULL_POLICY:-always}
     profiles:
       - guardrails
@@ -297,6 +298,7 @@ services:
 
   demo-data-generator:
     image: ghcr.io/comet-ml/opik/opik-python-backend:${OPIK_VERSION:-latest}
+    platform: ${OPIK_PYTHON_BACKEND_PLATFORM:-}
     pull_policy: always
     profiles:
       - opik
