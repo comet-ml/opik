@@ -277,6 +277,22 @@ def _require_str_list(value: Any, field_name: str) -> List[str]:
     return value
 
 
+def _require_opt_str(value: Any, field_name: str) -> Optional[str]:
+    """Return ``value`` if it's a string or ``None``, else raise ``ValueError``.
+
+    Guards the resume-handle fields (``source_dataset_id`` / ``source_name`` /
+    ``temp_dest_name``) loaded from a checkpoint: they flow unvalidated into
+    ``client.get_dataset(name=...)`` and ``stream_dataset_items(dataset_name=...)``
+    on resume, so a hand-edited non-string (list/dict/int) would otherwise reach
+    the API. Callers catch the ``ValueError`` and fall back to a fresh
+    checkpoint, matching the corrupt-JSON recovery contract used for the id
+    collections and ``dataset_phase_done``.
+    """
+    if value is not None and not isinstance(value, str):
+        raise ValueError(f"{field_name} must be a string or null, got {value!r}")
+    return value
+
+
 def load_or_create(
     *,
     workspace: str,
@@ -387,9 +403,13 @@ def load_or_create(
             path=path,
             total_experiments=int(data.get("total_experiments", 0)),
             dataset_phase_done=dataset_phase_done,
-            source_dataset_id=data.get("source_dataset_id"),
-            source_name=data.get("source_name"),
-            temp_dest_name=data.get("temp_dest_name"),
+            source_dataset_id=_require_opt_str(
+                data.get("source_dataset_id"), "source_dataset_id"
+            ),
+            source_name=_require_opt_str(data.get("source_name"), "source_name"),
+            temp_dest_name=_require_opt_str(
+                data.get("temp_dest_name"), "temp_dest_name"
+            ),
             completed_experiment_ids=set(completed_ids),
             in_flight=in_flight,
         )

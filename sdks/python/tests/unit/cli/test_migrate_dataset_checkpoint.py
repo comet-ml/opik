@@ -195,6 +195,28 @@ class TestMigrationCheckpoint:
         assert cp.in_flight is None
         assert cp.completed_count == 0
 
+    def test_load_or_create__non_string_resume_names__starts_fresh(
+        self, tmp_path: Path
+    ) -> None:
+        # OPIK-7162: source_dataset_id / source_name / temp_dest_name are the
+        # resume handles that flow unvalidated into client.get_dataset(name=...)
+        # and stream_dataset_items(dataset_name=...). A hand-edited non-string
+        # would otherwise reach the API; it must fall back to fresh, matching
+        # the same corrupt-recovery contract as the id collections. Uses the
+        # CURRENT schema so the load reaches the field guard (not the schema
+        # short-circuit).
+        key = checkpoint_key("ws", "proj", "ds")
+        for field in ("source_dataset_id", "source_name", "temp_dest_name"):
+            for bad in ("[1]", "{}", "5"):
+                checkpoint_path(key).write_text(
+                    f'{{"schema_version": {SCHEMA_VERSION}, '
+                    f'"dataset_phase_done": true, "{field}": {bad}}}'
+                )
+                cp = load_or_create(workspace="ws", project="proj", dataset="ds")
+                # Fell back to fresh: no phase-done carried over from the bad file.
+                assert cp.dataset_phase_done is False
+                assert getattr(cp, field) is None
+
     def test_load_or_create__unresolvable_home__returns_none(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
