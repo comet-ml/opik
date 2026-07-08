@@ -153,7 +153,7 @@ uuidValidation:
 # Description: credentials for the Agent Insights read-only free-form SQL ClickHouse user (restricted user with a
 #   read-only profile + row policies, provisioned by OPIK-6846). Only the user/password live here; the connection
 #   params (protocol/host/port/database) are reused from databaseAnalytics above (same ClickHouse instance). Only used
-#   when the serviceToggles.agentInsightsEnabled toggle is on.
+#   when the serviceToggles.ollieEnabled toggle is on.
 databaseAnalyticsReadOnlyFreeFormSql:
   #  Default: comet_readonly_freeform_sql_user
   #  Description: The read-only username used to connect to the server
@@ -1373,7 +1373,9 @@ serviceToggles:
   # Description: Whether or not Ollama provider is enabled
   ollamaProviderEnabled: ${TOGGLE_OLLAMA_PROVIDER_ENABLED:-"true"}
   # Default: false
-  # Description: Whether or not the Ollie AI assistant integration is enabled.
+  # Description: Whether or not the Ollie AI assistant integration is enabled. Also gates the Agent Insights
+  #   freeform SQL path: the read-only ClickHouse client and the clickhouse-readonly-freeform-sql health check.
+  #   When off, the read-only client is never queried.
   ollieEnabled: ${TOGGLE_OLLIE_ENABLED:-"false"}
   # Default: false
   # Description: Whether the project homepage is enabled. When false, the Ollie page is the default project page.
@@ -1382,10 +1384,6 @@ serviceToggles:
   # Description: Master switch for the agentic-tools path on LLM-as-judge online scoring. When false, the
   #   inline path is used regardless of context size. Threshold lives under onlineScoring.agenticToolsThresholdTokens.
   agenticToolsEnabled: ${TOGGLE_AGENTIC_TOOLS_ENABLED:-"false"}
-  # Default: false
-  # Description: Whether or not the Agent Insights freeform SQL path is enabled. Gates the read-only ClickHouse client
-  #   and the clickhouse-readonly-freeform-sql health check usage. When off, the read-only client is never queried.
-  agentInsightsEnabled: ${TOGGLE_AGENT_INSIGHTS_ENABLED:-"false"}
   # Default: true
   # Description: Whether the online-scoring (LLM-as-judge) evaluation loop is persisted as monitoring traces/spans.
   #   When on, each evaluation produces one trace (source=evaluator) with one llm span per LLM round, so cost and

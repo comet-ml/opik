@@ -4,7 +4,7 @@
         apps/opik-backend/provision_agent_insights_readonly_user.sh: settings profile, user, the
         per-table SELECT grants and the row policies. Loaded by ClickHouse at startup from
         /etc/clickhouse-server/users.d/. Inert unless a test enables
-        serviceToggles.agentInsightsEnabled and points the freeform-SQL client credentials at
+        serviceToggles.ollieEnabled and points the freeform-SQL client credentials at
         this user (config-test.yml already does).
 
         The opik database is created by the container at startup via the CLICKHOUSE_DB env var

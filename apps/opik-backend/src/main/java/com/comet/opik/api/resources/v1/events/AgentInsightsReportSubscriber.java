@@ -114,7 +114,7 @@ public class AgentInsightsReportSubscriber extends BaseRedisSubscriber<AgentInsi
     }
 
     private boolean isDisabled() {
-        if (!serviceToggles.isAgentInsightsEnabled()) {
+        if (!serviceToggles.isOllieEnabled()) {
             log.info("Agent Insights is disabled, skipping report subscriber lifecycle operation");
             return true;
         }
