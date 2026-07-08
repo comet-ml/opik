@@ -29,6 +29,11 @@ interface OptimizationModelSelectProps {
   onChange: (value: PROVIDER_MODEL_TYPE) => void;
   hasError?: boolean;
   disabled?: boolean;
+  // Render the trigger at the compact (h-8) size used in dense popovers.
+  compact?: boolean;
+  // When no explicit model is chosen, show this model as the effective default
+  // ("Same as prompt · <model>") instead of the empty placeholder.
+  inheritedModel?: PROVIDER_MODEL_TYPE | "";
 }
 
 const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
@@ -36,6 +41,8 @@ const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
   onChange,
   hasError,
   disabled = false,
+  compact = false,
+  inheritedModel = "",
 }) => {
   const resetDialogKeyRef = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -61,29 +68,40 @@ const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
   const { freeModelOption, groupOptions, filteredFreeModel, filteredGroups } =
     useModelOptions(configuredProvidersList, providerModels, filterValue);
 
-  const selectedInfo = useMemo(() => {
-    if (!value) return null;
+  const resolveInfo = useCallback(
+    (modelValue: string) => {
+      if (!modelValue) return null;
 
-    if (freeModelOption && value === freeModelOption.value) {
-      return {
-        icon: freeModelOption.icon,
-        label: freeModelOption.label,
-        title: freeModelOption.label,
-      };
-    }
-
-    for (const group of groupOptions) {
-      const match = group.options.find((o) => o.value === value);
-      if (match) {
+      if (freeModelOption && modelValue === freeModelOption.value) {
         return {
-          icon: group.icon,
-          label: match.label,
-          title: `${group.label} ${match.label}`,
+          icon: freeModelOption.icon,
+          label: freeModelOption.label,
+          title: freeModelOption.label,
         };
       }
-    }
-    return null;
-  }, [value, freeModelOption, groupOptions]);
+
+      for (const group of groupOptions) {
+        const match = group.options.find((o) => o.value === modelValue);
+        if (match) {
+          return {
+            icon: group.icon,
+            label: match.label,
+            title: `${group.label} ${match.label}`,
+          };
+        }
+      }
+      return null;
+    },
+    [freeModelOption, groupOptions],
+  );
+
+  const selectedInfo = useMemo(() => resolveInfo(value), [resolveInfo, value]);
+
+  // The effective default when nothing is explicitly selected: the prompt model.
+  const inheritedInfo = useMemo(
+    () => (inheritedModel ? resolveInfo(inheritedModel) : null),
+    [resolveInfo, inheritedModel],
+  );
 
   const handleOpenChange = useCallback((open: boolean) => {
     if (!open) {
@@ -146,7 +164,7 @@ const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
           {filteredFreeModel && (
             <SelectItem
               value={filteredFreeModel.value}
-              className="comet-body-s h-10 justify-center hover:bg-primary-foreground"
+              className="comet-body-s h-8 justify-center hover:bg-primary-foreground"
             >
               <div className="flex w-full items-center gap-2">
                 {FreeModelIcon && <FreeModelIcon className="size-4 shrink-0" />}
@@ -156,12 +174,12 @@ const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
           )}
           {filteredGroups.map((group) => (
             <SelectGroup key={group.label}>
-              <SelectLabel className="h-10">{group.label}</SelectLabel>
+              <SelectLabel className="h-8">{group.label}</SelectLabel>
               {group.options.map((option) => (
                 <SelectItem
                   key={option.value}
                   value={option.value}
-                  className="h-10 justify-center"
+                  className="h-8 justify-center"
                 >
                   {option.label}
                 </SelectItem>
@@ -178,7 +196,7 @@ const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
         {freeModelOption && (
           <SelectItem
             value={freeModelOption.value}
-            className="comet-body-s h-10 justify-center hover:bg-primary-foreground"
+            className="comet-body-s h-8 justify-center hover:bg-primary-foreground"
           >
             <div className="flex w-full items-center gap-2">
               {FreeModelIconNormal && (
@@ -201,7 +219,7 @@ const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
                 }
                 onMouseLeave={() => setOpenProviderMenu(null)}
                 className={cn(
-                  "comet-body-s flex h-10 w-full items-center gap-2 rounded-sm p-0 pl-2 hover:bg-primary-foreground",
+                  "comet-body-s flex h-8 w-full items-center gap-2 rounded-sm p-0 pl-2 hover:bg-primary-foreground",
                   {
                     "bg-primary-foreground":
                       group.composedProviderType === openProviderMenu,
@@ -228,7 +246,7 @@ const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
                 <SelectItem
                   key={option.value}
                   value={option.value}
-                  className="flex h-10 justify-center pr-5 focus:bg-primary-foreground focus:text-foreground"
+                  className="flex h-8 justify-center pr-5 focus:bg-primary-foreground focus:text-foreground"
                 >
                   {option.label}
                 </SelectItem>
@@ -253,11 +271,19 @@ const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
       >
         <TooltipWrapper content={displayTitle ?? ""}>
           <SelectTrigger
-            className={cn("size-full data-[placeholder]:text-light-slate", {
-              "border-destructive": hasError,
-            })}
+            className={cn(
+              "data-[placeholder]:text-light-slate",
+              compact ? "h-8 w-full" : "size-full",
+              { "border-destructive": hasError },
+            )}
           >
-            <SelectValue placeholder="Select an LLM model">
+            <SelectValue
+              placeholder={
+                inheritedInfo
+                  ? `Same as prompt · ${inheritedInfo.label}`
+                  : "Select an LLM model"
+              }
+            >
               {displayTitle && (
                 <div className="flex items-center gap-2">
                   {Icon && <Icon className="min-w-3.5 text-foreground" />}
@@ -270,7 +296,7 @@ const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
 
         <SelectContent onKeyDown={handleKeyDown} className="p-0">
           <div className="flex h-full flex-col">
-            <div className="relative flex h-10 items-center justify-center gap-1 pl-6">
+            <div className="relative flex h-8 items-center justify-center gap-1 pl-6">
               <Search className="absolute left-2 size-4 text-light-slate" />
               <Input
                 ref={inputRef}
@@ -278,6 +304,7 @@ const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
                 placeholder="Search model"
                 value={filterValue}
                 variant="ghost"
+                dimension="sm"
                 onChange={(e) => setFilterValue(e.target.value)}
               />
             </div>

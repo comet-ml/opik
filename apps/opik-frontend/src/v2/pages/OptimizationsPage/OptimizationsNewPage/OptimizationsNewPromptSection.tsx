@@ -1,10 +1,12 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { UseFormReturn } from "react-hook-form";
-import { Save } from "lucide-react";
+import { FileTerminal, Save } from "lucide-react";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import useAppStore from "@/store/AppStore";
 import { Input } from "@/ui/input";
 import { Label } from "@/ui/label";
 import { Button } from "@/ui/button";
+import { Separator } from "@/ui/separator";
 import {
   FormControl,
   FormField,
@@ -13,22 +15,29 @@ import {
   FormMessage,
 } from "@/ui/form";
 import { OptimizationConfigFormType } from "@/v2/pages-shared/optimizations/OptimizationConfigForm/schema";
-import { PROVIDER_MODEL_TYPE, LLMPromptConfigsType } from "@/types/providers";
+import {
+  COMPOSED_PROVIDER_TYPE,
+  PROVIDER_MODEL_TYPE,
+  LLMPromptConfigsType,
+} from "@/types/providers";
 import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import { generateDefaultLLMPromptMessage } from "@/lib/llm";
+import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import LLMPromptMessages from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
-import OptimizationModelSelect from "@/v2/pages-shared/optimizations/OptimizationModelSelect/OptimizationModelSelect";
-import OptimizationTemperatureConfig from "@/v2/pages-shared/optimizations/OptimizationConfigForm/OptimizationTemperatureConfig";
+import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptModelSelect";
+import PromptModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
+import PromptLibraryMenu from "@/v2/pages-shared/llm/PromptLibraryMenu/PromptLibraryMenu";
+import LoadedPromptDisplay from "@/v2/pages-shared/llm/LoadedPromptDisplay/LoadedPromptDisplay";
 import { OPTIMIZATION_MESSAGE_TYPE_OPTIONS } from "@/constants/optimizations";
 import {
   PROMPT_SAVE_AS_CHAT_TOOLTIP,
   PROMPT_UNSAVED_TOOLTIP,
 } from "@/constants/prompts";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
-import PromptsSelectBox from "@/v2/pages-shared/llm/PromptsSelectBox/PromptsSelectBox";
 import AddNewPromptVersionDialog from "@/v2/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import useLoadChatPrompt from "@/hooks/useLoadChatPrompt";
+import usePromptVersionLabel from "@/hooks/usePromptVersionLabel";
 
 type OptimizationsNewPromptSectionProps = {
   form: UseFormReturn<OptimizationConfigFormType>;
@@ -57,9 +66,21 @@ const OptimizationsNewPromptSection: React.FC<
     permissions: { canCreatePrompts },
   } = usePermissions();
 
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const { calculateModelProvider } = useLLMProviderModelsData();
+
+  // The form has no `provider` field, so derive it from the selected model for
+  // the model picker + params popover.
+  const provider = useMemo<COMPOSED_PROVIDER_TYPE | "">(
+    () => (model ? calculateModelProvider(model) : ""),
+    [calculateModelProvider, model],
+  );
+
   const [selectedChatPromptId, setSelectedChatPromptId] = useState<
     string | undefined
   >(undefined);
+  const [selectedChatPromptVersionId, setSelectedChatPromptVersionId] =
+    useState<string | undefined>(undefined);
   const [showSaveChatPromptDialog, setShowSaveChatPromptDialog] =
     useState(false);
   const [lastImportedPromptName, setLastImportedPromptName] =
@@ -70,7 +91,9 @@ const OptimizationsNewPromptSection: React.FC<
   const handleMessagesLoaded = useCallback(
     (newMessages: LLMMessage[], promptName: string) => {
       setLastImportedPromptName(promptName);
-      form.setValue("messages", newMessages, { shouldValidate: true });
+      form.setValue("messages", newMessages, {
+        shouldDirty: true,
+      });
 
       if (promptName) {
         onNameChange(promptName);
@@ -79,16 +102,32 @@ const OptimizationsNewPromptSection: React.FC<
     [form, onNameChange],
   );
 
-  const { chatPromptData, chatPromptTemplate, hasUnsavedChatPromptChanges } =
-    useLoadChatPrompt({
-      selectedChatPromptId,
-      messages,
-      onMessagesLoaded: handleMessagesLoaded,
-    });
+  const handleImportChatPrompt = useCallback(
+    (loadedPromptId?: string, loadedVersionId?: string) => {
+      setSelectedChatPromptId(loadedPromptId);
+      setSelectedChatPromptVersionId(loadedVersionId);
+    },
+    [],
+  );
 
-  const handleImportChatPrompt = useCallback((loadedPromptId?: string) => {
-    setSelectedChatPromptId(loadedPromptId);
-  }, []);
+  const {
+    chatPromptData,
+    chatPromptVersionData,
+    chatPromptTemplate,
+    hasUnsavedChatPromptChanges,
+  } = useLoadChatPrompt({
+    selectedChatPromptId,
+    selectedChatPromptVersionId,
+    messages,
+    onMessagesLoaded: handleMessagesLoaded,
+    onPromptUnavailable: () => handleImportChatPrompt(undefined, undefined),
+  });
+
+  const chatPromptVersionLabel = usePromptVersionLabel(
+    selectedChatPromptId,
+    selectedChatPromptVersionId ?? chatPromptVersionData?.id,
+    chatPromptData?.version_count,
+  );
 
   const handleSaveChatPrompt = useCallback(() => {
     setShowSaveChatPromptDialog(true);
@@ -101,19 +140,19 @@ const OptimizationsNewPromptSection: React.FC<
   );
 
   return (
-    <div className="min-w-0 flex-1 space-y-6">
+    <div className="min-w-0 flex-1 space-y-2">
       <FormField
         control={form.control}
         name="name"
         render={({ field }) => (
-          <FormItem>
+          <FormItem className="gap-1.5">
             <FormLabel className="comet-body-s-accented">Name</FormLabel>
             <FormControl>
               <Input
                 {...field}
                 onChange={(e) => onNameChange(e.target.value)}
-                placeholder="Enter optimization name, or the name will be generated automatically"
-                className="h-10"
+                placeholder="Name (auto-generated if left blank)"
+                dimension="sm"
               />
             </FormControl>
             <FormMessage />
@@ -122,19 +161,78 @@ const OptimizationsNewPromptSection: React.FC<
       />
 
       <div>
-        <div className="mb-2 flex h-8 items-center justify-between gap-2">
-          <div className="flex shrink-0 items-center gap-0.5">
-            <Label className="comet-body-s-accented">Prompt</Label>
-            <PromptsSelectBox
-              compact
-              projectId={projectId}
-              value={selectedChatPromptId}
-              onValueChange={handleImportChatPrompt}
-              onClear={() => handleImportChatPrompt(undefined)}
-              hasUnsavedChanges={hasUnsavedChatPromptChanges}
-              promptName={chatPromptData?.name}
-              filterByTemplateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
+        <div className="flex h-8 items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-1">
+            <Label className="comet-body-s-accented shrink-0">Prompt</Label>
+            <Separator orientation="vertical" className="mx-1 h-4" />
+            <FormField
+              control={form.control}
+              name="modelName"
+              render={({ field }) => (
+                <FormItem className="flex min-w-0 flex-row items-center gap-1 space-y-0">
+                  <FormControl>
+                    <PromptModelSelect
+                      compact
+                      value={field.value as PROVIDER_MODEL_TYPE | ""}
+                      provider={provider}
+                      workspaceName={workspaceName}
+                      onChange={(newModel) => onModelChange(newModel)}
+                      hasError={Boolean(form.formState.errors.modelName)}
+                    />
+                  </FormControl>
+                  <PromptModelConfigs
+                    provider={provider as COMPOSED_PROVIDER_TYPE}
+                    model={model}
+                    configs={config}
+                    onChange={onModelConfigChange}
+                    size="icon-2xs"
+                    variant="ghost"
+                  />
+                </FormItem>
+              )}
             />
+          </div>
+
+          <div className="flex shrink-0 items-center">
+            {selectedChatPromptId ? (
+              <LoadedPromptDisplay
+                name={chatPromptData?.name}
+                templateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
+                versionLabel={chatPromptVersionLabel}
+                versionTags={
+                  chatPromptVersionData?.tags ??
+                  chatPromptData?.latest_version?.tags
+                }
+                versionEnvironments={
+                  chatPromptVersionData?.environments ??
+                  chatPromptData?.latest_version?.environments
+                }
+                hasUnsavedChanges={hasUnsavedChatPromptChanges}
+                onClear={() => handleImportChatPrompt(undefined, undefined)}
+              />
+            ) : (
+              <PromptLibraryMenu
+                projectId={projectId}
+                filterByTemplateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
+                onSelect={({ promptId: pId, versionId }) =>
+                  handleImportChatPrompt(pId, versionId)
+                }
+                trigger={
+                  <div>
+                    <TooltipWrapper content="Load prompt">
+                      <Button
+                        variant="minimal"
+                        size="icon-2xs"
+                        type="button"
+                        data-testid="load-prompt-button"
+                      >
+                        <FileTerminal />
+                      </Button>
+                    </TooltipWrapper>
+                  </div>
+                }
+              />
+            )}
             {hasMessages && (
               <TooltipWrapper
                 content={
@@ -145,7 +243,7 @@ const OptimizationsNewPromptSection: React.FC<
               >
                 <Button
                   variant="minimal"
-                  size="icon-sm"
+                  size="icon-2xs"
                   onClick={handleSaveChatPrompt}
                   disabled={!canCreatePrompts && !selectedChatPromptId}
                   badge={hasUnsavedChatPromptChanges}
@@ -156,31 +254,6 @@ const OptimizationsNewPromptSection: React.FC<
               </TooltipWrapper>
             )}
           </div>
-          <div className="flex h-full min-w-0 items-center gap-1">
-            <FormField
-              control={form.control}
-              name="modelName"
-              render={({ field }) => (
-                <FormItem className="flex h-full min-w-0 flex-row items-center gap-1">
-                  <FormControl>
-                    <div className="h-full min-w-0 max-w-56">
-                      <OptimizationModelSelect
-                        value={field.value as PROVIDER_MODEL_TYPE | ""}
-                        onChange={onModelChange}
-                        hasError={Boolean(form.formState.errors.modelName)}
-                      />
-                    </div>
-                  </FormControl>
-                  <OptimizationTemperatureConfig
-                    size="icon-sm"
-                    model={model}
-                    configs={config}
-                    onChange={onModelConfigChange}
-                  />
-                </FormItem>
-              )}
-            />
-          </div>
         </div>
         <FormField
           control={form.control}
@@ -189,7 +262,7 @@ const OptimizationsNewPromptSection: React.FC<
             const fieldMessages = field.value;
 
             return (
-              <FormItem>
+              <FormItem className="gap-0">
                 <LLMPromptMessages
                   messages={fieldMessages}
                   possibleTypes={OPTIMIZATION_MESSAGE_TYPE_OPTIONS}
@@ -208,7 +281,7 @@ const OptimizationsNewPromptSection: React.FC<
                     ])
                   }
                 />
-                <FormMessage />
+                <FormMessage className="mt-1.5" />
               </FormItem>
             );
           }}
@@ -222,11 +295,11 @@ const OptimizationsNewPromptSection: React.FC<
         template={chatPromptTemplate}
         templateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
         defaultName={lastImportedPromptName}
-        onSave={(_version, _promptName, savedPromptId) => {
+        onSave={(version, _promptName, savedPromptId) => {
           setShowSaveChatPromptDialog(false);
 
           if (savedPromptId) {
-            setSelectedChatPromptId(savedPromptId);
+            handleImportChatPrompt(savedPromptId, version?.id);
           }
         }}
       />
