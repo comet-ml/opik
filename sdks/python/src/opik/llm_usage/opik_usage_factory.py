@@ -18,6 +18,7 @@ _PROVIDER_TO_OPIK_USAGE_BUILDERS: Dict[
     LLMProvider.GOOGLE_AI: [opik_usage.OpikUsage.from_google_dict],
     LLMProvider.ANTHROPIC: [opik_usage.OpikUsage.from_anthropic_dict],
     LLMProvider.BEDROCK: [opik_usage.OpikUsage.from_bedrock_dict],
+    LLMProvider.MISTRALAI: [opik_usage.OpikUsage.from_mistral_dict],
 }
 
 

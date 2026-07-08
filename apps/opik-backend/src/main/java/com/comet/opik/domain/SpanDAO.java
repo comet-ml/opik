@@ -36,7 +36,6 @@ import io.r2dbc.spi.RowMetadata;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -611,21 +610,6 @@ public class SpanDAO {
             ;
             """;
 
-    private static final String SELECT_SPAN_REFS_BY_SPAN_IDS = """
-            SELECT
-                id,
-                project_id,
-                trace_id,
-                start_time
-            FROM spans
-            WHERE workspace_id = :workspace_id
-            AND id IN :ids
-            ORDER BY id, last_updated_at DESC
-            LIMIT 1 BY id
-            SETTINGS log_comment = '<log_comment>'
-            ;
-            """;
-
     private static final String SELECT_BY_IDS = """
             WITH feedback_scores_deduped AS (
                 SELECT workspace_id,
@@ -1104,7 +1088,18 @@ public class SpanDAO {
 
     private static final String COUNT_BY_PROJECT_ID = """
             <if(feedback_scores_filters || feedback_scores_empty_filters)>
-            WITH feedback_scores_deduped AS (
+            WITH <if(span_id_prefilter)>span_id_prefilter AS (
+                SELECT DISTINCT id
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                <if(trace_id)> AND trace_id = :trace_id <endif>
+                <if(type)> AND type = :type <endif>
+                <if(filters)> AND <filters> <endif>
+                <if(search_text)> AND <search_text> <endif>
+            ), <endif>feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -1124,8 +1119,11 @@ public class SpanDAO {
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
+                      <if(span_id_prefilter)> AND entity_id IN (SELECT id FROM span_id_prefilter)
+                      <else>
                       <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                       <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                      <endif>
                     UNION ALL
                     SELECT workspace_id,
                            project_id,
@@ -1138,8 +1136,11 @@ public class SpanDAO {
                     WHERE entity_type = 'span'
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
+                      <if(span_id_prefilter)> AND entity_id IN (SELECT id FROM span_id_prefilter)
+                      <else>
                       <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                       <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                      <endif>
                 )
                 ORDER BY last_updated_at DESC
                 LIMIT 1 BY workspace_id, project_id, entity_id, name, author
@@ -2177,45 +2178,6 @@ public class SpanDAO {
                 .flatMap(this::mapToDto);
     }
 
-    /** A persisted span's project, trace, and start_time — the fields needed to build its cipx_spends row.
-     *  project_id/trace_id are immutable (sort key); start_time is the stored value, not derived. */
-    @Builder(toBuilder = true)
-    public record SpanRef(@NonNull UUID projectId, @NonNull UUID traceId, @NonNull Instant startTime) {
-    }
-
-    /**
-     * Resolves span -> (project_id, trace_id, start_time) for the given spans, keyed off {@code workspaceId}
-     * explicitly rather than the reactive request context, so it can run from the Cost Intelligence subscriber (an
-     * async event listener with no request scope). A batch span update matches spans by id + workspace and carries
-     * none of these per span, and start_time must come from the stored span (not the UUIDv7 timestamp) so a cipx
-     * update doesn't rewrite it for backfilled/imported spans. Deduped with LIMIT 1 BY id (latest last_updated_at
-     * wins) rather than FINAL, so it stays cheap on the ingestion path. Spans missing from ClickHouse are absent.
-     */
-    @WithSpan
-    public Mono<Map<UUID, SpanRef>> getSpanRefsBySpanIds(@NonNull Set<UUID> spanIds, @NonNull String workspaceId) {
-        if (spanIds.isEmpty()) {
-            return Mono.just(Map.of());
-        }
-        log.info("Getting span refs for '{}' span_ids", spanIds.size());
-        return Mono.from(connectionFactory.create())
-                .flatMap(connection -> {
-                    var template = getSTWithLogComment(SELECT_SPAN_REFS_BY_SPAN_IDS,
-                            "get_span_refs_by_span_ids", workspaceId, "", spanIds.size());
-                    var statement = connection.createStatement(template.render())
-                            .bind("ids", spanIds.toArray(UUID[]::new))
-                            .bind("workspace_id", workspaceId);
-                    return Flux.from(statement.execute())
-                            .flatMap(result -> result.map((row, metadata) -> Map.entry(
-                                    row.get("id", UUID.class),
-                                    SpanRef.builder()
-                                            .projectId(row.get("project_id", UUID.class))
-                                            .traceId(row.get("trace_id", UUID.class))
-                                            .startTime(row.get("start_time", Instant.class))
-                                            .build())))
-                            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-                });
-    }
-
     private Mono<List<UUID>> getTargetProjectIdsForSpans(Set<UUID> ids) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
@@ -2582,6 +2544,10 @@ public class SpanDAO {
             var template = newFindTemplate(COUNT_BY_PROJECT_ID, spanSearchCriteria, "count_spans_by_project_id",
                     workspaceId, userName);
 
+            if (shouldUseSpanIdPrefilter(spanSearchCriteria, template)) {
+                template.add("span_id_prefilter", true);
+            }
+
             var statement = connection.createStatement(template.render())
                     .bind("project_id", spanSearchCriteria.projectId())
                     .bind("workspace_id", workspaceId);
@@ -2634,16 +2600,18 @@ public class SpanDAO {
      * uuidFromTime/uuidToTime are excluded because the if/else fallback applies them directly
      * to feedback_scores; lastReceivedSpanId is excluded because it's a pagination cursor,
      * not a semantic filter.
+     *
+     * <p>Feedback score filters use separate template variables ({@code feedback_scores_filters})
+     * and are NOT injected into {@code <filters>}, so the prefilter CTE is safe to use
+     * alongside them (OPIK-7076).
      */
     private boolean shouldUseSpanIdPrefilter(SpanSearchCriteria criteria, ST template) {
-        boolean hasFeedbackScoreFilters = hasFeedbackScoreFilters(template);
-
         boolean hasNarrowingFilters = criteria.traceId() != null
                 || criteria.type() != null
                 || criteria.searchText() != null
                 || template.getAttribute("filters") != null;
 
-        return !hasFeedbackScoreFilters && hasNarrowingFilters;
+        return hasNarrowingFilters;
     }
 
     /**

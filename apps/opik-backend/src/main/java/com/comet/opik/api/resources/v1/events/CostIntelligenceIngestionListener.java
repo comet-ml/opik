@@ -1,86 +1,107 @@
 package com.comet.opik.api.resources.v1.events;
 
-import com.comet.opik.api.SpanUpdate;
+import com.comet.opik.api.Span;
 import com.comet.opik.api.TraceUpdate;
-import com.comet.opik.api.events.SpanCostIntelligenceChanged;
 import com.comet.opik.api.events.SpansCreated;
 import com.comet.opik.api.events.TraceCostIntelligenceChanged;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.domain.CipxMetadata;
+import com.comet.opik.domain.CipxSpendBlockDAO;
+import com.comet.opik.domain.CipxSpendBlockDAO.BlockRow;
 import com.comet.opik.domain.CipxSpendDAO;
 import com.comet.opik.domain.CipxSpendDAO.SpanRow;
 import com.comet.opik.domain.CipxTraceIdentityDAO;
 import com.comet.opik.domain.CipxTraceIdentityDAO.TraceIdentityRow;
-import com.comet.opik.domain.SpanDAO;
+import com.comet.opik.domain.CipxUserMappingDAO;
+import com.comet.opik.domain.CipxUserMappingDAO.UserMapping;
 import com.comet.opik.domain.TraceDAO;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
+import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.List;
 
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
+
 /**
- * Keeps the cipx_spends / cipx_trace_identities tables in sync as spans and traces are written. Create
- * reuses the existing SpansCreated/TracesCreated (which carry the full entities); update consumes the
- * dedicated *CostIntelligenceChanged events (the *Updated events carry neither ids nor metadata). cipx
- * spans/traces are filtered out here in Java before any DB work, and the cipx fields are constructed
- * in Java. Runs on the AsyncEventBus virtual threads, off the request path; failures are logged and
- * swallowed — ingestion of the source span/trace already succeeded.
+ * Populates the Cost Intelligence tables as spans and traces are written: cipx_spends (span-level
+ * call data) + cipx_spend_blocks (per-block rows with ingestion-derived allocation) from cipx-call
+ * spans, and cipx_trace_identities (ClickHouse) + cipx_user_mappings (MySQL email -> uuid lookup)
+ * from cipx traces. Span ingestion is create-only — cipx call data is complete on the create event
+ * and immutable, so there is no span update path. Trace identity can arrive or change on a trace
+ * update, so identity create reuses TracesCreated (which carries the full entities) and update
+ * consumes the dedicated TraceCostIntelligenceChanged event (TracesUpdated carries only a delta).
+ * cipx spans/traces are filtered out here in Java before any DB work, and all cipx fields are
+ * derived in Java. Runs on the AsyncEventBus virtual threads, off the request path; failures are
+ * logged and swallowed — ingestion of the source span/trace already succeeded.
  */
 @EagerSingleton
 @Slf4j
 public class CostIntelligenceIngestionListener {
 
     private final CipxSpendDAO cipxSpendDAO;
+    private final CipxSpendBlockDAO cipxSpendBlockDAO;
     private final CipxTraceIdentityDAO cipxTraceIdentityDAO;
-    private final SpanDAO spanDAO;
     private final TraceDAO traceDAO;
+    private final TransactionTemplate transactionTemplate;
 
     @Inject
-    public CostIntelligenceIngestionListener(CipxSpendDAO cipxSpendDAO, CipxTraceIdentityDAO cipxTraceIdentityDAO,
-            SpanDAO spanDAO, TraceDAO traceDAO) {
+    public CostIntelligenceIngestionListener(CipxSpendDAO cipxSpendDAO, CipxSpendBlockDAO cipxSpendBlockDAO,
+            CipxTraceIdentityDAO cipxTraceIdentityDAO, TraceDAO traceDAO, TransactionTemplate transactionTemplate) {
         this.cipxSpendDAO = cipxSpendDAO;
+        this.cipxSpendBlockDAO = cipxSpendBlockDAO;
         this.cipxTraceIdentityDAO = cipxTraceIdentityDAO;
-        this.spanDAO = spanDAO;
         this.traceDAO = traceDAO;
+        this.transactionTemplate = transactionTemplate;
     }
 
     @Subscribe
     public void onSpansCreated(SpansCreated event) {
-        List<SpanRow> rows = event.spans().stream()
+        // project_id is part of both merge keys, so a span without it can't land correctly.
+        List<Span> cipxSpans = event.spans().stream()
                 .filter(span -> CipxMetadata.hasSpendCall(span.metadata()))
+                .filter(span -> span.projectId() != null)
+                .toList();
+
+        if (cipxSpans.isEmpty()) {
+            return;
+        }
+
+        log.info("cipx onSpansCreated on thread '{}': '{}' spans in event, '{}' cipx, workspace: '{}'",
+                Thread.currentThread(), event.spans().size(), cipxSpans.size(), event.workspaceId());
+
+        List<SpanRow> spanRows = cipxSpans.stream()
                 .map(span -> SpanRow.from(span.id(), span.traceId(), span.projectId(), span.metadata(),
                         span.startTime()))
                 .toList();
-        upsertSpans(rows, event.workspaceId(), event.userName());
-    }
-
-    @Subscribe
-    public void onSpanCostIntelligenceChanged(SpanCostIntelligenceChanged event) {
-        SpanUpdate update = event.spanUpdate();
-        if (!CipxMetadata.hasSpendCall(update.metadata())) {
-            return;
-        }
-        // project_id, trace_id and start_time are all part of / stored on the cipx_spends row but the span update
-        // carries none of them per span (a batch reuses one SpanUpdate for spans that may span different traces,
-        // matched by id + workspace), so resolve span -> (project, trace, start_time) from the persisted spans off
-        // the request path. start_time comes from the stored span, not the UUIDv7 timestamp.
-        spanDAO.getSpanRefsBySpanIds(event.spanIds(), event.workspaceId())
+        cipxSpendDAO.insert(spanRows, event.workspaceId(), event.userName())
+                .doOnSubscribe(subscription -> log.info(
+                        "cipx spend insert subscribed for '{}' rows in workspace: '{}'", spanRows.size(),
+                        event.workspaceId()))
                 .subscribe(
-                        refs -> {
-                            List<SpanRow> rows = event.spanIds().stream()
-                                    .filter(refs::containsKey)
-                                    .map(spanId -> {
-                                        var ref = refs.get(spanId);
-                                        return SpanRow.from(spanId, ref.traceId(), ref.projectId(),
-                                                update.metadata(), ref.startTime());
-                                    })
-                                    .toList();
-                            upsertSpans(rows, event.workspaceId(), event.userName());
-                        },
-                        error -> log.error("Failed to resolve span refs for cipx spend in workspace: '{}'",
-                                event.workspaceId(), error));
+                        null,
+                        error -> log.error("Failed to ingest cipx spend for workspace: '{}'", event.workspaceId(),
+                                error),
+                        () -> log.info("Ingested cipx spend for '{}' spans in workspace: '{}'", spanRows.size(),
+                                event.workspaceId()));
+
+        List<BlockRow> blockRows = cipxSpans.stream()
+                .flatMap(span -> BlockRow.from(span.id(), span.traceId(), span.projectId(), span.metadata(),
+                        span.startTime()).stream())
+                .toList();
+        cipxSpendBlockDAO.insert(blockRows, event.workspaceId(), event.userName())
+                .doOnSubscribe(subscription -> log.info(
+                        "cipx spend blocks insert subscribed for '{}' rows in workspace: '{}'", blockRows.size(),
+                        event.workspaceId()))
+                .subscribe(
+                        null,
+                        error -> log.error("Failed to ingest cipx spend blocks for workspace: '{}'",
+                                event.workspaceId(), error),
+                        () -> log.info("Ingested '{}' cipx spend blocks for '{}' spans in workspace: '{}'",
+                                blockRows.size(), cipxSpans.size(), event.workspaceId()));
     }
 
     @Subscribe
@@ -90,7 +111,7 @@ public class CostIntelligenceIngestionListener {
                 .map(trace -> TraceIdentityRow.from(trace.id(), trace.projectId(), trace.metadata(),
                         trace.startTime()))
                 .toList();
-        upsertTraces(rows, event.workspaceId(), event.userName());
+        ingestIdentities(rows, event.workspaceId(), event.userName());
     }
 
     @Subscribe
@@ -102,7 +123,10 @@ public class CostIntelligenceIngestionListener {
         // The event carries the resolved project_id per trace, but start_time must come from the stored trace
         // (not the UUIDv7 timestamp) so a cipx update doesn't rewrite it for backfilled/imported traces.
         var traceProjectIds = event.traceProjectIds();
+        // ingestIdentities ends with a blocking MySQL write; publishOn moves the callback off the
+        // ClickHouse driver's I/O thread so that write can't stall unrelated ClickHouse queries.
         traceDAO.getStartTimesByTraceIds(traceProjectIds.keySet(), event.workspaceId())
+                .publishOn(Schedulers.boundedElastic())
                 .subscribe(
                         startTimes -> {
                             List<TraceIdentityRow> rows = traceProjectIds.entrySet().stream()
@@ -110,41 +134,46 @@ public class CostIntelligenceIngestionListener {
                                     .map(entry -> TraceIdentityRow.from(entry.getKey(), entry.getValue(),
                                             update.metadata(), startTimes.get(entry.getKey())))
                                     .toList();
-                            upsertTraces(rows, event.workspaceId(), event.userName());
+                            ingestIdentities(rows, event.workspaceId(), event.userName());
                         },
                         error -> log.error("Failed to resolve start_times for cipx trace identity in workspace: '{}'",
                                 event.workspaceId(), error));
     }
 
-    private void upsertSpans(List<SpanRow> rows, String workspaceId, String userName) {
-        // project_id is part of the cipx_spends merge key, so a row without it can't land correctly.
-        List<SpanRow> withProject = rows.stream()
-                .filter(row -> !row.projectId().isEmpty())
-                .toList();
-        if (withProject.isEmpty()) {
-            return;
-        }
-        cipxSpendDAO.upsert(withProject, workspaceId, userName)
-                .subscribe(
-                        null,
-                        error -> log.error("Failed to ingest cipx spend for workspace: '{}'", workspaceId, error),
-                        () -> log.info("Ingested cipx spend for '{}' spans in workspace: '{}'", withProject.size(),
-                                workspaceId));
-    }
-
-    private void upsertTraces(List<TraceIdentityRow> rows, String workspaceId, String userName) {
+    private void ingestIdentities(List<TraceIdentityRow> rows, String workspaceId, String userName) {
+        // project_id is part of the cipx_trace_identities merge key, so a row without it can't land correctly.
         List<TraceIdentityRow> withProject = rows.stream()
                 .filter(row -> !row.projectId().isEmpty())
                 .toList();
         if (withProject.isEmpty()) {
             return;
         }
+
         cipxTraceIdentityDAO.upsert(withProject, workspaceId, userName)
+                .doOnSubscribe(subscription -> log.info(
+                        "cipx trace identity upsert subscribed for '{}' rows in workspace: '{}'", withProject.size(),
+                        workspaceId))
                 .subscribe(
                         null,
                         error -> log.error("Failed to ingest cipx trace identity for workspace: '{}'", workspaceId,
                                 error),
                         () -> log.info("Ingested cipx trace identity for '{}' traces in workspace: '{}'",
                                 withProject.size(), workspaceId));
+
+        List<UserMapping> mappings = withProject.stream()
+                .filter(row -> !row.userEmail().isEmpty() && !row.userUuid().isEmpty())
+                .map(row -> UserMapping.builder().userEmail(row.userEmail()).userUuid(row.userUuid()).build())
+                .distinct()
+                .toList();
+        if (!mappings.isEmpty()) {
+            try {
+                transactionTemplate.inTransaction(WRITE, handle -> {
+                    handle.attach(CipxUserMappingDAO.class).save(mappings);
+                    return null;
+                });
+            } catch (Exception error) {
+                log.error("Failed to ingest cipx user mappings for workspace: '{}'", workspaceId, error);
+            }
+        }
     }
 }

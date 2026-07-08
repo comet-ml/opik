@@ -45,6 +45,12 @@ Each method is wrapped by a `BaseTrackDecorator` subclass (`<name>_decorator.py`
 
 Wrapped calls check `opik.is_tracing_active()` at call time and no-op the telemetry if tracing is off, while still running the underlying call.
 
+**Delegating methods (patch only the primitive).** When a higher-level method calls a lower-level one you patch (Mistral's `chat.parse` → `chat.complete`, `parse_stream` → `stream`; openai's older `beta…stream` → `create`), do **not** patch both — that produces two spans and double-counts cost. Patch **only the primitive**; the delegating call is then traced through it as one span. Name the span after the primitive (`chat.complete` → `chat_completion_create`, `chat.stream` → `chat_completion_stream`) via `track_options.name` / `func.__name__` — this is unambiguous and always correct. The delegating call (e.g. `parse`) shares that name; the structured JSON is still in the output content, only the deserialized `.parsed` field is absent. Uses only the existing `track()` API — no reentrancy flags, no `contextvars`, no `set_tracing_active` (process-wide and racy). Verify in Phase 5 that the delegating call yields a single span with un-doubled cost.
+
+> **Do not rename the span from a kwarg unless that kwarg faithfully identifies the mode for *every* caller of the primitive.** openai's `if kwargs.get("stream") is True: name = "chat_completion_stream"` is safe because `stream=True` on `create` always means streaming. The same trick with Mistral's `response_format` is **wrong**: a direct `chat.complete(response_format=…)` is a legitimate structured-output call, not a `parse`, so keying the name off `response_format` misclassifies it (real review finding on the Mistral PR). When the discriminator can't distinguish the delegating call from a direct call to the same primitive, don't rename — keep the primitive's name.
+
+**Env var mismatch.** A provider SDK's client may not auto-read its own API-key env var (e.g. `mistralai.Mistral()` ignores `MISTRAL_API_KEY`). In tests and examples, pass the key explicitly — `Mistral(api_key=os.environ["MISTRAL_API_KEY"])` — rather than relying on the bare constructor.
+
 ### OpenTelemetry (backend-first)
 
 When the target already emits OpenTelemetry, most of the work lives on the **backend**: Opik exposes an OTLP ingestion endpoint that maps OTel spans to Opik traces. Many OTel "integrations" are therefore *docs-only* — the user points their framework's OTLP exporter at Opik with auth headers and writes no SDK code. Always check whether that covers the need before writing code.
@@ -72,12 +78,16 @@ A framework-specific OTel **tracer wrapper** (see `adk/patchers/adk_otel_tracer/
 
 For callback integrations, span/trace creation goes through `span_creation_handler` too; map each framework run id → `SpanData`/`TraceData` and set `metadata["created_from"] = "<name>"`.
 
+**Add a dedicated usage format — don't piggyback on another provider's parser.** Even when a provider's token-usage payload looks OpenAI-shaped, give it its own format in the `llm_usage` namespace rather than passing `provider=LLMProvider.OPENAI` to `try_build_opik_usage_or_log_error`. Reusing another provider's converter couples you to *its* schema changes and misattributes the parsed shape. The steps (see the Mistral change for the worked example): (1) add `llm_usage/<name>_usage.py` with a `class <Name>Usage(BaseOriginalProviderUsage)` declaring the token fields (+ nested details classes) and `from_original_usage_dict`; (2) add it to the `ProviderUsage` union and a `OpikUsage.from_<name>_dict` classmethod in `llm_usage/opik_usage.py`; (3) register `LLMProvider.<NAME>: [OpikUsage.from_<name>_dict]` in `llm_usage/opik_usage_factory.py`; (4) in the decorator, parse with `provider=LLMProvider.<NAME>`. Non-int fields (e.g. `prompt_audio_seconds`) are dropped from the backend flat dict automatically. Add unit tests under `tests/unit/llm_usage/test_<name>_usage.py` (parser + `build_opik_usage` factory path).
+
 ## Dependencies & imports
 
 - The framework library is **imported inside the integration module** (`import mistralai` at the top of `opik_tracker.py`). That is safe because the module is only reached when a user does `from opik.integrations.<name> import ...`. Never import an integration from the `opik` package top level.
 - Do **not** add the framework to `install_requires` unless it is already a core dependency (openai and litellm are; most are not). Users install the framework themselves.
 - `integrations/<name>/__init__.py` exports only the public entrypoint.
 - If the integration must support multiple incompatible framework versions, branch at import time on `opik.semantic_version` (see `adk/__init__.py`).
+- **Import only the framework's public API — never reach into internal modules.** Private paths (`mistralai.utils.eventstreaming.EventStream`, `mistralai.models.chatcompletionresponse.…`) move between releases and break the integration. Prefer top-level exports (`from mistralai import Mistral, ChatCompletionResponse`); check what's public with `hasattr(pkg, name)`. When you need a class that *isn't* exported (e.g. the stream type), don't import it — detect the returned object by its **protocol** (`hasattr(output, "__anext__")` → async stream, `hasattr(output, "__next__")` → sync stream; a pydantic response model has `__iter__` but neither) and operate on `type(output)` when you must patch its dunder methods. Real review finding on the Mistral PR.
+- **Guard the minimum framework version.** Pin the floor in the test `requirements.txt` (`<lib>>=X,<next-major`), and add a runtime check in `track_<name>()` that raises a clear error — `f"Opik supports <lib>>=X, but {installed} is installed…"` — so users on an incompatible version get a message, not a cryptic `AttributeError`/`ImportError`. Read the installed version with `importlib.metadata.version("<lib>")` (robust: some versions don't expose `<lib>.__version__`) and compare via `opik.semantic_version.SemanticVersion.parse(...)`. Pick the floor empirically — bisect installs to the release where the public API you depend on first appears (for Mistral, `EventStream` landed in 1.3.0).
 
 ## Tests
 
@@ -104,5 +114,7 @@ def test_<name>_<method>__happyflow(fake_backend):
 ```
 
 - Real API calls are gated by an `ensure_<name>_configured` fixture (skip if the key is missing) — add one to `conftest.py` mirroring `ensure_openai_configured`.
-- Cover: happy flow, streaming, custom `provider`, and an error case.
+- Cover: happy flow, streaming, `parse`/structured-output (+ its single-span/no-double-cost assertion), custom `provider`, nested-under-`@track`, and an error case.
+- Centralize the model id in `tests/llm_constants.py`; add a `requirements.txt` in the test dir with the framework package.
 - Imports: `from tests.testlib import TraceModel, SpanModel, ANY_BUT_NONE, ANY_DICT, ANY_STRING, assert_equal`.
+- **Wire the tests into CI** — create `.github/workflows/lib-<name>-tests.yml` (single Python version unless asked otherwise) and register it in `lib-integration-tests-runner.yml`. See Phase 6 of [workflow.md](workflow.md); unregistered tests never run.

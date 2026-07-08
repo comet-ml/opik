@@ -4,7 +4,7 @@ import com.comet.opik.api.ProjectIdLastUpdated;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.events.TracesUpdated;
-import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.ProjectLastUpdatedTraceBufferService;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
 import lombok.NonNull;
@@ -29,7 +29,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class ProjectEventListener {
 
-    private final ProjectService projectService;
+    private final ProjectLastUpdatedTraceBufferService projectLastUpdatedTraceBufferService;
 
     @Subscribe
     public void onTracesCreated(@NonNull TracesCreated event) {
@@ -60,7 +60,7 @@ public class ProjectEventListener {
                         .lastUpdatedAt(entry.getValue())
                         .build())
                 .collect(Collectors.toUnmodifiableSet());
-        projectService.recordLastUpdatedTrace(workspaceId, lastUpdatedTraces);
+        projectLastUpdatedTraceBufferService.record(workspaceId, lastUpdatedTraces);
         var projectIds = lastUpdatedAtByProject.keySet();
         log.info("Recorded last traces for projects '{}'", projectIds);
     }

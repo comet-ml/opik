@@ -5,6 +5,7 @@ from . import (
     openai_chat_completions_usage,
     google_usage,
     anthropic_usage,
+    mistral_usage,
     unknown_usage,
     bedrock_usage,
     openai_responses_usage,
@@ -15,6 +16,7 @@ ProviderUsage = Union[
     openai_chat_completions_usage.OpenAICompletionsUsage,
     google_usage.GoogleGeminiUsage,
     anthropic_usage.AnthropicUsage,
+    mistral_usage.MistralUsage,
     bedrock_usage.BedrockUsage,
     openai_responses_usage.OpenAIResponsesUsage,
     unknown_usage.UnknownUsage,
@@ -146,6 +148,17 @@ class OpikUsage(pydantic.BaseModel):
             completion_tokens=completion_tokens,
             prompt_tokens=prompt_tokens,
             total_tokens=prompt_tokens + completion_tokens,
+            provider_usage=provider_usage,
+        )
+
+    @classmethod
+    def from_mistral_dict(cls, usage: Dict[str, Any]) -> "OpikUsage":
+        provider_usage = mistral_usage.MistralUsage.from_original_usage_dict(usage)
+
+        return cls(
+            completion_tokens=provider_usage.completion_tokens,
+            prompt_tokens=provider_usage.prompt_tokens,
+            total_tokens=provider_usage.total_tokens,
             provider_usage=provider_usage,
         )
 

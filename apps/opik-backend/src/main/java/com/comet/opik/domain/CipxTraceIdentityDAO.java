@@ -26,10 +26,11 @@ import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolde
 
 /**
  * Writes the cipx_trace_identities table from cipx traces. Triggered asynchronously off trace
- * create/update events; never reads the traces or cipx_trace_identities tables. Identity fields are
- * parsed from metadata in Java ({@link TraceIdentityRow#from}). Plain INSERT relying on
- * ReplacingMergeTree to merge by sorting key (see {@link CipxSpendDAO}); last_updated_at is left to
- * the column DEFAULT now64(6). project_id must be non-empty, so blank rows are dropped.
+ * create/update events (identity can arrive or change on a trace update); never reads the traces or
+ * cipx_trace_identities tables. Identity fields are parsed from metadata in Java
+ * ({@link TraceIdentityRow#from}). Plain INSERT relying on ReplacingMergeTree to merge by sorting
+ * key; last_updated_at is left to the column DEFAULT now64(6). project_id must be non-empty, so
+ * blank rows are dropped.
  */
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -66,9 +67,8 @@ public class CipxTraceIdentityDAO {
         }
     }
 
-    // One tuple per row (mirrors SpanDAO.BULK_INSERT). start_time is bound from Java (the source trace's
-    // stored start, resolved from the traces table on both create and update). The identity/repository/schema_version
-    // projection is the initial extraction; the exact metadata->column mapping is finalized later.
+    // One tuple per row (mirrors SpanDAO.BULK_INSERT). start_time is bound from Java (the source
+    // trace's stored start).
     private static final String INSERT = """
             INSERT INTO cipx_trace_identities
                 (workspace_id, project_id, trace_id, start_time, user_uuid,
@@ -113,18 +113,22 @@ public class CipxTraceIdentityDAO {
         template.add("items", queryItems);
         Statement statement = connection.createStatement(template.render());
 
-        statement.bind("workspace_id", workspaceId);
-        for (int i = 0; i < rows.size(); i++) {
-            TraceIdentityRow row = rows.get(i);
-            statement.bind("project_id" + i, row.projectId())
-                    .bind("trace_id" + i, row.traceId())
-                    .bind("start_time" + i, ClickHouseDateTimeFormat.formatNanos(row.startTime()))
-                    .bind("user_uuid" + i, row.userUuid())
-                    .bind("user_email" + i, row.userEmail())
-                    .bind("user_display_name" + i, row.userDisplayName())
-                    .bind("repository" + i, row.repository())
-                    .bind("session_id" + i, row.sessionId())
-                    .bind("schema_version" + i, row.schemaVersion());
+        // Positional binds: the driver resolves named binds with a linear indexOf over the statement's
+        // parameter list (quadratic per statement), while bind(int) is a direct array write. Indices
+        // follow the placeholders' first-appearance order in the rendered SQL: workspace_id once at 0
+        // (repeats dedup), then 9 parameters per row tuple in template order.
+        statement.bind(0, workspaceId);
+        int index = 1;
+        for (TraceIdentityRow row : rows) {
+            statement.bind(index++, row.projectId())
+                    .bind(index++, row.traceId())
+                    .bind(index++, ClickHouseDateTimeFormat.formatNanos(row.startTime()))
+                    .bind(index++, row.userUuid())
+                    .bind(index++, row.userEmail())
+                    .bind(index++, row.userDisplayName())
+                    .bind(index++, row.repository())
+                    .bind(index++, row.sessionId())
+                    .bind(index++, row.schemaVersion());
         }
 
         return statement.execute();
