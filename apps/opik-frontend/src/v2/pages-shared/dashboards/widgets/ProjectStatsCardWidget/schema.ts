@@ -6,6 +6,7 @@ export const ProjectStatsCardWidgetSchema = z.object({
   source: z.nativeEnum(TRACE_DATA_TYPE),
   projectId: z.string().optional(),
   projectIds: z.array(z.string()).optional(),
+  allProjects: z.boolean().optional(),
   metric: z.string().min(1, "Metric is required"),
   usageMetric: z.string().optional(),
   traceFilters: FiltersArraySchema.optional(),

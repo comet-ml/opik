@@ -17,9 +17,10 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Request for workspace-level span metrics aggregated across projects. When {@code projectIds} is empty, all projects
- * in the workspace are included; otherwise only the given projects. {@code intervalEnd} is optional and defaults to
- * "now" server-side, mirroring the per-project metrics endpoint.
+ * Request for workspace-level span metrics aggregated across projects. When {@code projectIds} is empty, the service
+ * resolves it to every project in the workspace before querying, so the aggregation always runs against an explicit,
+ * bounded project set (never an unconstrained workspace-wide span scan); otherwise only the given projects are used.
+ * {@code intervalEnd} is optional and defaults to "now" server-side, mirroring the per-project metrics endpoint.
  */
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)

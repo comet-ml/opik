@@ -14,6 +14,7 @@ import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 
@@ -39,6 +40,7 @@ public interface WorkspaceMetricsService {
 @RequiredArgsConstructor(onConstructor = @__(@Inject))
 class WorkspaceMetricsServiceImpl implements WorkspaceMetricsService {
     private final @NonNull WorkspaceMetricsDAO workspaceMetricsDAO;
+    private final @NonNull ProjectService projectService;
 
     @Override
     public Mono<WorkspaceMetricsSummaryResponse> getWorkspaceFeedbackScoresSummary(
@@ -75,10 +77,24 @@ class WorkspaceMetricsServiceImpl implements WorkspaceMetricsService {
     @Override
     public Mono<WorkspaceMetricResponse> getWorkspaceSpanMetric(@NonNull WorkspaceSpanMetricRequest request) {
         validate(request);
-        return dispatch(request)
+        return resolveProjectIds(request)
+                .flatMap(resolved -> CollectionUtils.isEmpty(resolved.projectIds())
+                        ? Mono.just(List.<WorkspaceMetricResponse.Result>of())
+                        : dispatch(resolved))
                 .map(results -> WorkspaceMetricResponse.builder()
                         .results(results)
                         .build());
+    }
+
+    // "All projects" (empty projectIds) is resolved into the explicit set of workspace project ids so the DAO always
+    // queries a bounded `project_id IN (...)` list that prunes on the spans primary key, never an unconstrained
+    // workspace-wide scan. An explicit selection passes through unchanged; a workspace with no projects yields nothing.
+    private Mono<WorkspaceSpanMetricRequest> resolveProjectIds(WorkspaceSpanMetricRequest request) {
+        if (CollectionUtils.isNotEmpty(request.projectIds())) {
+            return Mono.just(request);
+        }
+        return projectService.findProjectIdsByWorkspace()
+                .map(projectIds -> request.toBuilder().projectIds(projectIds).build());
     }
 
     private Mono<List<WorkspaceMetricResponse.Result>> dispatch(WorkspaceSpanMetricRequest request) {

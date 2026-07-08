@@ -230,137 +230,12 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             ;
             """;
 
-    // Copied verbatim from ProjectMetricsDAO.SPAN_FILTERED_PREFIX. The only change is the project predicate:
-    // the per-project `AND project_id = :project_id` becomes an optional IN-list so the same query can span a set
-    // of projects (or, when project_ids is absent, every project in the workspace). workspace_id stays mandatory.
-    private static final String SPAN_FILTERED_PREFIX = """
-            WITH feedback_scores_deduped AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       value,
-                       last_updated_at,
-                       author,
-                       source_queue_id
-                FROM (
-                    SELECT workspace_id,
-                           project_id,
-                           entity_id,
-                           name,
-                           value,
-                           last_updated_at,
-                           last_updated_by AS author,
-                           CAST('' AS FixedString(36)) AS source_queue_id
-                    FROM feedback_scores
-                    WHERE entity_type = 'span'
-                      AND workspace_id = :workspace_id
-                      <if(project_ids)> AND project_id IN :project_ids <endif>
-                      <if(uuid_from_time)> AND entity_id >= :uuid_from_time<endif>
-                      <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time<endif>
-                    UNION ALL
-                    SELECT workspace_id,
-                           project_id,
-                           entity_id,
-                           name,
-                           value,
-                           last_updated_at,
-                           author,
-                           source_queue_id
-                    FROM authored_feedback_scores
-                    WHERE entity_type = 'span'
-                      AND workspace_id = :workspace_id
-                      <if(project_ids)> AND project_id IN :project_ids <endif>
-                      <if(uuid_from_time)> AND entity_id >= :uuid_from_time<endif>
-                      <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time<endif>
-                )
-                ORDER BY last_updated_at DESC
-                LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
-             ), feedback_scores_final AS (
-                SELECT
-                    workspace_id,
-                    project_id,
-                    entity_id,
-                    name,
-                    if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value,
-                    max(last_updated_at) AS last_updated_at
-                FROM feedback_scores_deduped
-                GROUP BY workspace_id, project_id, entity_id, name
-            ),
-            <if(feedback_scores_empty_filters)>
-             fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
-                 FROM (
-                    SELECT *
-                    FROM feedback_scores_final
-                    ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, name
-                 )
-                 GROUP BY entity_id
-                 HAVING <feedback_scores_empty_filters>
-            ),
-            <endif>
-            spans_filtered AS (
-                SELECT
-                    id,
-                    UUIDv7ToDateTime(toUUID(id)) as span_time,
-                    duration,
-                    usage,
-                    error_info,
-                    total_estimated_cost
-                    <if(group_expression)>,
-                    project_id,
-                    name,
-                    tags,
-                    metadata,
-                    model,
-                    provider,
-                    type
-                    <endif>
-                FROM (
-                    SELECT
-                        id,
-                        duration,
-                        usage,
-                        error_info,
-                        total_estimated_cost
-                        <if(group_expression)>,
-                        project_id,
-                        name,
-                        tags,
-                        metadata,
-                        model,
-                        provider,
-                        type
-                        <endif>
-                    FROM spans FINAL
-                    <if(feedback_scores_empty_filters)>
-                    LEFT JOIN fsc ON fsc.entity_id = spans.id
-                    <endif>
-                    WHERE workspace_id = :workspace_id
-                    <if(project_ids)> AND project_id IN :project_ids <endif>
-                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
-                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
-                    <if(span_filters)> AND <span_filters> <endif>
-                    <if(span_feedback_scores_filters)>
-                    AND id in (
-                        SELECT
-                            entity_id
-                        FROM (
-                            SELECT *
-                            FROM feedback_scores_final
-                            ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
-                            LIMIT 1 BY entity_id, name
-                        )
-                        GROUP BY entity_id
-                        HAVING <span_feedback_scores_filters>
-                    )
-                    <endif>
-                    <if(feedback_scores_empty_filters)>
-                    AND fsc.feedback_scores_count = 0
-                    <endif>
-                ) AS t
-            )
-            """;
+    // Shared with ProjectMetricsDAO via SpanMetricsQueries. Workspace aggregation queries an explicit set of
+    // projects: WorkspaceMetricsService resolves the "all projects" request into every project id up front, so the
+    // predicate is always a bounded `project_id IN :project_ids` list that prunes on the spans primary key
+    // (workspace_id, project_id, ...) — never an unconstrained workspace-wide scan.
+    private static final String SPAN_FILTERED_PREFIX = SpanMetricsQueries
+            .spanFilteredPrefix("project_id IN :project_ids");
 
     // Span filtering is reused from ProjectMetricsDAO's SPAN_FILTERED_PREFIX (above), but the output is shaped in the
     // workspace-native style like GET_COSTS_DAILY: each row is a finished series {project_id, name, data}, where data is
@@ -428,6 +303,13 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             TimeInterval.DAILY, "toIntervalDay(1)",
             TimeInterval.HOURLY, "toIntervalHour(1)");
 
+    // Span-filter strategies with the SPAN_FILTERED_PREFIX template placeholder each renders into. Drives both the
+    // template `add` pass and the statement `bind` pass so a strategy is declared once, not on two sides that can drift.
+    private static final Map<FilterStrategy, String> SPAN_FILTER_TEMPLATE_PLACEHOLDERS = Map.of(
+            FilterStrategy.SPAN, "span_filters",
+            FilterStrategy.SPAN_FEEDBACK_SCORES, "span_feedback_scores_filters",
+            FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY, "feedback_scores_empty_filters");
+
     private final @NonNull TransactionTemplateAsync template;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
@@ -478,13 +360,16 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
 
     private Mono<? extends Result> getSpanMetric(WorkspaceSpanMetricRequest request, Connection connection,
             String query, String segmentName) {
+        // The service resolves "all projects" into the explicit project set before calling the DAO, so the query is
+        // always bounded by project_id IN (...) and prunes on the spans primary key rather than scanning the workspace.
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(request.projectIds()),
+                "projectIds must be resolved before querying workspace span metrics");
         return makeMonoContextAware((userName, workspaceId) -> {
             var interval = request.interval();
             var isTotal = interval == TimeInterval.TOTAL;
-            var hasProjectIds = CollectionUtils.isNotEmpty(request.projectIds());
 
             var stTemplate = getSTWithLogComment(query, WORKSPACE_METRIC_QUERY_NAME_PREFIX + segmentName, workspaceId,
-                    userName, hasProjectIds ? request.projectIds().size() : "all");
+                    userName, request.projectIds().size());
 
             if (isTotal) {
                 stTemplate.add("bucket", "toDateTime(UUIDv7ToDateTime(toUUID(:uuid_from_time)))");
@@ -503,20 +388,10 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             }
 
             Optional.ofNullable(request.filters())
-                    .ifPresent(filters -> {
-                        FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN)
-                                .ifPresent(spanFilters -> stTemplate.add("span_filters", spanFilters));
-                        FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN_FEEDBACK_SCORES)
-                                .ifPresent(scoresFilters -> stTemplate.add("span_feedback_scores_filters",
-                                        scoresFilters));
-                        FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY)
-                                .ifPresent(emptyFilters -> stTemplate.add("feedback_scores_empty_filters",
-                                        emptyFilters));
-                    });
-
-            if (hasProjectIds) {
-                stTemplate.add("project_ids", true);
-            }
+                    .ifPresent(filters -> SPAN_FILTER_TEMPLATE_PLACEHOLDERS
+                            .forEach((strategy, placeholder) -> FilterQueryBuilder
+                                    .toAnalyticsDbFilters(filters, strategy)
+                                    .ifPresent(rendered -> stTemplate.add(placeholder, rendered))));
 
             stTemplate.add("uuid_from_time", true);
             stTemplate.add("uuid_to_time", true);
@@ -528,11 +403,8 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             var statement = connection.createStatement(stTemplate.render())
                     .bind("uuid_from_time", instantToUUIDMapper.toLowerBound(request.intervalStart()).toString())
                     .bind("uuid_to_time", instantToUUIDMapper.toUpperBound(intervalEnd).toString())
-                    .bind("workspace_id", workspaceId);
-
-            if (hasProjectIds) {
-                statement.bind("project_ids", request.projectIds().toArray(new UUID[0]));
-            }
+                    .bind("workspace_id", workspaceId)
+                    .bind("project_ids", request.projectIds().toArray(new UUID[0]));
 
             if (request.hasBreakdown() && request.breakdown().field() == BreakdownField.METADATA) {
                 statement.bind("metadata_key", request.breakdown().metadataKey());
@@ -544,11 +416,8 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             }
 
             Optional.ofNullable(request.filters())
-                    .ifPresent(filters -> {
-                        FilterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN);
-                        FilterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN_FEEDBACK_SCORES);
-                        FilterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY);
-                    });
+                    .ifPresent(filters -> SPAN_FILTER_TEMPLATE_PLACEHOLDERS.keySet()
+                            .forEach(strategy -> FilterQueryBuilder.bind(statement, filters, strategy)));
 
             InstrumentAsyncUtils.Segment segment = startSegment(segmentName, "Clickhouse", "get");
 

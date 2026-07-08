@@ -643,6 +643,23 @@ class WorkspacesResourceTest {
         }
 
         @Test
+        void allProjects_returnsEmpty_whenWorkspaceHasNoData() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            var endTime = Instant.now();
+            var startTime = endTime.minus(Duration.ofDays(1));
+
+            // "All projects" resolves the project set server-side; with no span data it must return nothing rather
+            // than falling back to an unconstrained workspace-wide scan.
+            var all = workspaceResourceClient.getWorkspaceSpanMetric(
+                    spanRequest(MetricType.SPAN_TOKEN_USAGE, null, startTime, endTime, null), apiKey, workspaceName);
+
+            assertThat(sumValues(all.results())).isZero();
+        }
+
+        @Test
         void workspaceMetric_isolatesByWorkspace() {
             var workspaceA = UUID.randomUUID().toString();
             var apiKeyA = UUID.randomUUID().toString();

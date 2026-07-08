@@ -91,6 +91,7 @@ const ProjectStatsCardWidget: React.FunctionComponent<
 
   const widgetProjectId = widget?.config?.projectId as string | undefined;
   const widgetProjectIds = widget?.config?.projectIds as string[] | undefined;
+  const widgetAllProjects = widget?.config?.allProjects as boolean | undefined;
 
   const { projectId, projectIds } = useMemo(
     () =>
@@ -98,8 +99,14 @@ const ProjectStatsCardWidget: React.FunctionComponent<
         runtimeProjectId: runtimeContext.projectId,
         projectId: widgetProjectId,
         projectIds: widgetProjectIds,
+        allProjects: widgetAllProjects,
       }),
-    [widgetProjectId, widgetProjectIds, runtimeContext.projectId],
+    [
+      widgetProjectId,
+      widgetProjectIds,
+      widgetAllProjects,
+      runtimeContext.projectId,
+    ],
   );
 
   const { intervalStart, intervalEnd } = useMemo(
@@ -157,7 +164,8 @@ const ProjectStatsCardWidget: React.FunctionComponent<
   const workspaceMetric = useWorkspaceMetric(
     {
       projectIds: projectIds ?? [],
-      metricName: (metric as METRIC_NAME_TYPE) ?? METRIC_NAME_TYPE.SPAN_COUNT,
+      // This query only runs for a supported workspace metric (workspaceMetricDef is set), so metric is that metric.
+      metricName: metric as METRIC_NAME_TYPE,
       interval: INTERVAL_TYPE.TOTAL,
       intervalStart,
       intervalEnd,
@@ -207,7 +215,7 @@ const ProjectStatsCardWidget: React.FunctionComponent<
     }
 
     const results = workspaceMetric.data?.results ?? [];
-    // Token usage returns one series per usage key; pick the selected key. Count/cost return a single series.
+    // Token usage returns one series per usage key; pick the selected key. Metrics without a usage key use the first.
     const series = workspaceMetricDef.requiresUsageKey
       ? results.find(
           (r) => r.name === (usageMetric || DEFAULT_WORKSPACE_USAGE_METRIC),

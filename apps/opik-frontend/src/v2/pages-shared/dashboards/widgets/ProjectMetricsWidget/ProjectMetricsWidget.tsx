@@ -86,6 +86,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
 
   const widgetProjectId = widget?.config?.projectId as string | undefined;
   const widgetProjectIds = widget?.config?.projectIds as string[] | undefined;
+  const widgetAllProjects = widget?.config?.allProjects as boolean | undefined;
 
   const { projectId, projectIds } = useMemo(
     () =>
@@ -93,8 +94,14 @@ const ProjectMetricsWidget: React.FunctionComponent<
         runtimeProjectId: runtimeContext.projectId,
         projectId: widgetProjectId,
         projectIds: widgetProjectIds,
+        allProjects: widgetAllProjects,
       }),
-    [widgetProjectId, widgetProjectIds, runtimeContext.projectId],
+    [
+      widgetProjectId,
+      widgetProjectIds,
+      widgetAllProjects,
+      runtimeContext.projectId,
+    ],
   );
 
   const { interval, intervalStart, intervalEnd } = useMemo(

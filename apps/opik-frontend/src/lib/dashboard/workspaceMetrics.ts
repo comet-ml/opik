@@ -55,24 +55,31 @@ export const DEFAULT_WORKSPACE_USAGE_METRIC = "total_tokens";
 export type ResolvedProjectSelection = {
   // Single-project mode (per-project endpoints).
   projectId?: string;
-  // Workspace mode (aggregate across projects). Present only when 2+ projects are selected.
+  // Workspace mode (aggregate across projects). An empty array is the "all projects" signal: the backend resolves it
+  // to every project in the workspace. A populated array is an explicit set. Absent => single-project or unconfigured.
   projectIds?: string[];
 };
 
 // Resolves a widget's project configuration into either a single project or a project set. A runtime project (e.g.
-// the project Insights tab) always pins to a single project. Otherwise: one selected project => single; two or more
-// => workspace aggregation; none => not configured. Falls back to the legacy single `projectId` field.
+// the project Insights tab) always pins to a single project. Otherwise: `allProjects` => workspace aggregation over the
+// whole workspace (empty array signal); one selected project => single; two or more => workspace aggregation over that
+// set; none => not configured. Falls back to the legacy single `projectId` field.
 export const resolveProjectSelection = ({
   runtimeProjectId,
   projectId,
   projectIds,
+  allProjects,
 }: {
   runtimeProjectId?: string;
   projectId?: string;
   projectIds?: string[];
+  allProjects?: boolean;
 }): ResolvedProjectSelection => {
   if (runtimeProjectId) {
     return { projectId: runtimeProjectId };
+  }
+  if (allProjects) {
+    return { projectIds: [] };
   }
   if (Array.isArray(projectIds)) {
     if (projectIds.length === 1) return { projectId: projectIds[0] };
@@ -83,8 +90,11 @@ export const resolveProjectSelection = ({
   return {};
 };
 
-// Whether the current editor selection aggregates across projects (2+ projects and not pinned to a runtime project).
+// Whether the current editor selection aggregates across projects (all projects, or 2+ explicit projects) and is not
+// pinned to a runtime project.
 export const isMultiProjectSelection = (
   runtimeProjectId: string | undefined,
   projectIds: string[],
-): boolean => !runtimeProjectId && projectIds.length >= 2;
+  allProjects?: boolean,
+): boolean =>
+  !runtimeProjectId && (Boolean(allProjects) || projectIds.length >= 2);
