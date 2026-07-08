@@ -15,6 +15,7 @@ from typing import Any, Dict, Optional
 import opik
 from opik.api_objects import rest_helpers
 from opik.rest_api import OpikApi
+from opik.rest_api.core.api_error import ApiError
 from rich.console import Console
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
 
@@ -27,7 +28,9 @@ from .planner import (
     CascadeExperiments,
     CascadeOptimizations,
     CreateDestination,
+    DiscardStaleTemp,
     MigrationPlan,
+    PromoteDestination,
     RenameSource,
     ReplayVersions,
 )
@@ -88,12 +91,48 @@ def _apply_action(
     # limit doesn't abort a half-finished migration. Reads are wrapped
     # too because aborting mid-cascade on a list_dataset_versions /
     # find_experiments 429 wastes the work done up to that point.
-    if isinstance(action, RenameSource):
+    if isinstance(action, DiscardStaleTemp):
+        # A temp destination from a prior failed run — delete it so the
+        # re-run's CreateDestination starts clean (discard-and-restart).
+        # Best-effort: if it's already gone (deleted out-of-band between plan
+        # and apply), that's the desired end state, so swallow the 404 and
+        # continue rather than aborting an otherwise-healthy migration. Any
+        # other API error still propagates so real failures aren't masked.
+        try:
+            rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+                lambda: rest_client.datasets.delete_dataset(id=action.temp_id)
+            )
+        except ApiError as exc:
+            if exc.status_code == 404:
+                LOGGER.info(
+                    "Stale temp dataset %s already deleted; continuing.",
+                    action.temp_id,
+                )
+            else:
+                raise
+    elif isinstance(action, RenameSource):
         # Re-pass description/visibility/tags so the BE doesn't wipe them on
         # the rename PUT (description is silently nulled when omitted).
         rest_helpers.ensure_rest_api_call_respecting_rate_limit(
             lambda: rest_client.datasets.update_dataset(
                 id=action.source_id,
+                name=action.to_name,
+                description=action.description,
+                visibility=action.visibility,
+                tags=action.tags,
+            )
+        )
+    elif isinstance(action, PromoteDestination):
+        # Resolve the temp destination by its (temp) name — it was created
+        # at execute time, so its id wasn't known when the plan was built.
+        dest = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            lambda: client.get_dataset(
+                name=action.from_name, project_name=action.project_name
+            )
+        )
+        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            lambda: rest_client.datasets.update_dataset(
+                id=dest.id,
                 name=action.to_name,
                 description=action.description,
                 visibility=action.visibility,
@@ -119,12 +158,14 @@ def _apply_action(
         _replay_versions(client, rest_client, action, plan=plan, audit=audit)
     elif isinstance(action, CascadeOptimizations):
         _cascade_optimizations(rest_client, action, plan=plan, audit=audit)
-        # The dataset-level phases (rename/create/replay/optimizations) are all
+        # The dataset-level phases (create-temp/replay/optimizations) are all
         # done as of here -- CascadeOptimizations is always the last one before
         # CascadeExperiments. Mark it on the checkpoint NOW, before the cascade
         # boundary, so a crash between this point and the first experiment still
-        # leaves ``dataset_phase_done=True``; otherwise the next run would take
-        # the full-plan branch and collide on the already-applied rename.
+        # leaves ``dataset_phase_done=True``; the next run then resumes into the
+        # cascade + pending handoff instead of restarting the copy. The source
+        # is still under its original name and the destination under the temp
+        # name at this point (the handoff runs only after the cascade).
         if (
             checkpoint is not None
             and not plan.is_resume
@@ -132,7 +173,8 @@ def _apply_action(
         ):
             checkpoint.mark_dataset_phase_done(
                 source_dataset_id=action.source_dataset_id,
-                source_name_after_rename=plan.source_name_after_rename,
+                source_name=plan.source_name,
+                temp_dest_name=plan.temp_dest_name,
             )
             checkpoint.flush()
     elif isinstance(action, CascadeExperiments):
@@ -196,7 +238,7 @@ def _replay_versions(
         result = replay_all_versions(
             rest_client,
             source_dataset_id=action.source_dataset_id,
-            source_name_after_rename=action.source_name_after_rename,
+            source_name=action.source_name,
             source_project_name=action.source_project_name,
             dest_dataset_id=dest.id,
             dest_name=action.dest_name,
@@ -476,6 +518,13 @@ def _cascade_experiments(
 
 
 def _action_details(action: object) -> Dict[str, Any]:
+    if isinstance(action, DiscardStaleTemp):
+        return {
+            "type": "discard_stale_temp",
+            "entity": "dataset",
+            "id": action.temp_id,
+            "name": action.temp_name,
+        }
     if isinstance(action, RenameSource):
         return {
             "type": "rename_source",
@@ -483,6 +532,14 @@ def _action_details(action: object) -> Dict[str, Any]:
             "id": action.source_id,
             "from": action.from_name,
             "to": action.to_name,
+        }
+    if isinstance(action, PromoteDestination):
+        return {
+            "type": "promote_destination",
+            "entity": "dataset",
+            "from": action.from_name,
+            "to": action.to_name,
+            "project": action.project_name,
         }
     if isinstance(action, CreateDestination):
         return {
@@ -495,7 +552,7 @@ def _action_details(action: object) -> Dict[str, Any]:
     if isinstance(action, ReplayVersions):
         return {
             "type": "replay_versions",
-            "from_dataset": action.source_name_after_rename,
+            "from_dataset": action.source_name,
             "from_project": action.source_project_name,
             "to_dataset": action.dest_name,
             "to_project": action.dest_project_name,
