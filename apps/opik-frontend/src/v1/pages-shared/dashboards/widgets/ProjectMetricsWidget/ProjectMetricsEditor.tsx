@@ -17,7 +17,9 @@ import {
 } from "@/ui/form";
 import VisualizationCardSelector from "@/v1/pages-shared/dashboards/widgets/shared/VisualizationCardSelector/VisualizationCardSelector";
 import { LoadableSelectBox } from "@/shared/LoadableSelectBox/LoadableSelectBox";
-import ProjectsSelectBox from "@/v1/pages-shared/automations/ProjectsSelectBox";
+import ProjectsSelectBox, {
+  useProjectsSelectData,
+} from "@/v1/pages-shared/automations/ProjectsSelectBox";
 import { Checkbox } from "@/ui/checkbox";
 import { Label } from "@/ui/label";
 import ProjectWidgetFiltersSection from "@/v1/pages-shared/dashboards/widgets/shared/ProjectWidgetFiltersSection/ProjectWidgetFiltersSection";
@@ -191,9 +193,15 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
     };
   });
   const hasRuntimeProjectId = !!runtimeContext.projectId;
+  // "All projects" has no selected project to source option lists from, so borrow the first project in the workspace
+  // (from the cache the project dropdown already populated) as a representative for those lookups.
+  const { projects: workspaceProjects } = useProjectsSelectData({});
   // Representative project for loading option lists (usage keys, feedback scores, filter/breakdown autocompletes)
-  // and the preview: the runtime project, else the first selected project.
-  const projectId = runtimeContext.projectId || localProjectIds[0] || "";
+  // and the preview: the runtime project, else the first selected project, else (for "all projects") any project.
+  const projectId =
+    runtimeContext.projectId ||
+    localProjectIds[0] ||
+    (allProjects ? workspaceProjects[0]?.id ?? "" : "");
 
   // Selecting more than one project (or "all projects") aggregates across projects, which only supports span metrics.
   const isMultiProject = isMultiProjectSelection(

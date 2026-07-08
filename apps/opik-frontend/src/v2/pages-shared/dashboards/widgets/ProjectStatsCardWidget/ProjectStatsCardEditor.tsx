@@ -29,7 +29,9 @@ import {
   selectRuntimeConfig,
   selectUpdatePreviewWidget,
 } from "@/store/DashboardStore";
-import ProjectsSelectBox from "@/v2/pages-shared/automations/ProjectsSelectBox";
+import ProjectsSelectBox, {
+  useProjectsSelectData,
+} from "@/v2/pages-shared/automations/ProjectsSelectBox";
 import { Checkbox } from "@/ui/checkbox";
 import { Label } from "@/ui/label";
 import ProjectWidgetFiltersSection from "@/v2/pages-shared/dashboards/widgets/shared/ProjectWidgetFiltersSection/ProjectWidgetFiltersSection";
@@ -89,8 +91,14 @@ const ProjectStatsCardEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
     };
   });
   const hasRuntimeProjectId = !!runtimeContext.projectId;
-  // Representative project (runtime, else first selected) for loading option lists.
-  const projectId = runtimeContext.projectId || localProjectIds[0] || "";
+  // "All projects" has no selected project to source option lists from, so borrow the first project in the workspace
+  // (from the cache the project dropdown already populated) as a representative for those lookups.
+  const { projects: workspaceProjects } = useProjectsSelectData({});
+  // Representative project (runtime, else first selected, else any project for "all projects") for option lists.
+  const projectId =
+    runtimeContext.projectId ||
+    localProjectIds[0] ||
+    (allProjects ? workspaceProjects[0]?.id ?? "" : "");
   const isTraceSource = source === TRACE_DATA_TYPE.traces;
 
   // Selecting more than one project (or "all projects") aggregates across projects, which only supports span totals.
