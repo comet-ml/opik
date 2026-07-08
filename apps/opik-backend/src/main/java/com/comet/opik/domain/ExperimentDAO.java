@@ -1800,7 +1800,6 @@ public class ExperimentDAO {
                     INNER JOIN traces t
                         ON ei.workspace_id = t.workspace_id AND ei.trace_id = t.id
                     WHERE ei.workspace_id = :workspace_id
-                    AND t.workspace_id = :workspace_id
                     GROUP BY ei.experiment_id, project_id
                     HAVING project_id != ''
                 )
