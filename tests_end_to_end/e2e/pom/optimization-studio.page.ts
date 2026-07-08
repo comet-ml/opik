@@ -60,8 +60,14 @@ export class OptimizationStudioPage {
 
   async selectModel(displayName: string): Promise<void> {
     return test.step(`Select model "${displayName}"`, async () => {
-      await this.modelCombobox().click();
-      await this.page.getByRole('textbox', { name: 'Search model' }).fill(displayName);
+      const search = this.page.getByRole('textbox', { name: 'Search model' });
+      // The trigger occasionally swallows the first click as a hover, so retry
+      // until the search box (i.e. the open popover) actually appears.
+      await expect(async () => {
+        await this.modelCombobox().click();
+        await expect(search).toBeVisible({ timeout: 2_000 });
+      }).toPass({ timeout: 15_000 });
+      await search.fill(displayName);
       await this.page.getByRole('option', { name: displayName }).click();
       await expect(this.modelCombobox()).toContainText(displayName);
     });

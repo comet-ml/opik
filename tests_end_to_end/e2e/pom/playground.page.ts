@@ -472,9 +472,14 @@ export class PlaygroundPage {
   }
 
   private async setModelForVariant(index: number, modelDisplayName: string): Promise<void> {
-    await this.modelPicker(index).click();
     const listbox = this.page.getByRole('listbox');
-    await listbox.waitFor({ state: 'visible' });
+    // The trigger occasionally swallows the first click as a hover (surfacing a
+    // tooltip instead of opening the popover), so retry the click until the
+    // listbox actually opens rather than firing once and waiting.
+    await expect(async () => {
+      await this.modelPicker(index).click();
+      await expect(listbox).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 15_000 });
     await listbox.getByPlaceholder('Search model').fill(modelDisplayName);
     await listbox.getByRole('option', { name: modelDisplayName, exact: true }).first().click();
   }
