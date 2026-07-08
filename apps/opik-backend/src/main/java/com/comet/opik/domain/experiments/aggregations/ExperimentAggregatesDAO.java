@@ -1271,18 +1271,25 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                            di.description,
                            eia.execution_policy
                 )) AS experiment_items_array
-            FROM experiment_item_aggregates eia FINAL
-            LEFT JOIN dataset_item_versions AS lookup_div FINAL
-                ON lookup_div.workspace_id = eia.workspace_id
-                AND lookup_div.id = eia.dataset_item_id
+            FROM (
+                SELECT eia.*,
+                       if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia.dataset_item_id) AS stable_dataset_item_id
+                FROM experiment_item_aggregates eia FINAL
+                LEFT JOIN dataset_item_versions AS lookup_div FINAL
+                    ON lookup_div.workspace_id = eia.workspace_id
+                    AND lookup_div.id = eia.dataset_item_id
+                WHERE eia.workspace_id = :workspace_id
+                <if(experiment_ids)>AND eia.experiment_id IN :experiment_ids<endif>
+                <if(has_target_projects)>AND eia.project_id IN :target_project_ids<endif>
+                <if(experiment_item_filters)>AND <experiment_item_filters><endif>
+                <if(feedback_scores_filters)>AND <feedback_scores_filters><endif>
+                <if(feedback_scores_empty_filters)>AND <feedback_scores_empty_filters><endif>
+                -- all duplicated rows share the same stable_dataset_item_id, so arbitrary pick is safe
+                LIMIT 1 BY eia.id
+            ) eia
             LEFT JOIN dataset_item_versions_resolved AS di
-                ON di.id = if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia.dataset_item_id)
-            WHERE eia.workspace_id = :workspace_id
-            <if(experiment_ids)>AND eia.experiment_id IN :experiment_ids<endif>
-            <if(has_target_projects)>AND eia.project_id IN :target_project_ids<endif>
-            <if(experiment_item_filters)>AND <experiment_item_filters><endif>
-            <if(feedback_scores_filters)>AND <feedback_scores_filters><endif>
-            <if(feedback_scores_empty_filters)>AND <feedback_scores_empty_filters><endif>
+                ON di.id = eia.stable_dataset_item_id
+            WHERE 1 = 1
             <if(dataset_item_filters)>
             AND <dataset_item_filters>
             <endif>
