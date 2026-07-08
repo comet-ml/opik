@@ -349,13 +349,42 @@ class TestTempDestRenameOnSuccess:
         assert source_rename["name"] == "MyDataset_v1"
         promote = next(c for c in rename_calls if c.get("name") == "MyDataset")
         assert promote["name"] == "MyDataset"
-        assert TEMP_MIGRATION_MARKER_TAG not in (promote.get("tags") or [])
+        # The promote PUT must pass tags as an EXPLICIT list (never None), so the
+        # BE actually overwrites and drops the marker. A live backend treats
+        # ``tags=None`` as "leave unchanged", which would strand the marker on a
+        # source with no tags — so assert the concrete list, not just marker
+        # absence. Source here has no tags -> promote clears with [].
+        assert promote["tags"] == []
+        assert TEMP_MIGRATION_MARKER_TAG not in promote["tags"]
         # Audit ends ok and records the handoff actions in order.
         on_disk = json.loads(audit_path.read_text())
         assert on_disk["status"] == "ok"
         ok_types = [a["type"] for a in on_disk["actions"] if a.get("status") == "ok"]
         assert ok_types.index("rename_source") < ok_types.index("promote_destination")
         assert ok_types.index("create_destination") < ok_types.index("rename_source")
+
+    def test_success__source_tags_preserved_marker_stripped(self, tmp_path) -> None:
+        # When the source has real tags, the temp create adds the marker
+        # alongside them, and the promote re-passes exactly the source's
+        # originals (marker dropped, real tags kept).
+        client, _, _ = _build_fake_client(
+            source_rows=[_DatasetRow(id="src-1", name="MyDataset", tags=["team-a", "prod"])],
+            destination_rows=[],
+            items=[{"id": "item-a", "input": "hello"}],
+        )
+        result, _ = self._run(client, tmp_path)
+
+        assert result.exit_code == 0, result.output
+        rest = client.rest_client
+        create_tags = rest.datasets.create_dataset.call_args.kwargs["tags"]
+        assert set(create_tags) == {"team-a", "prod", TEMP_MIGRATION_MARKER_TAG}
+        promote = next(
+            c.kwargs
+            for c in rest.datasets.update_dataset.call_args_list
+            if c.kwargs.get("name") == "MyDataset"
+        )
+        assert promote["tags"] == ["team-a", "prod"]
+        assert TEMP_MIGRATION_MARKER_TAG not in promote["tags"]
 
     def test_midrun_failure__source_name_untouched(self, tmp_path) -> None:
         # AC: a migration interrupted mid-run leaves the source name

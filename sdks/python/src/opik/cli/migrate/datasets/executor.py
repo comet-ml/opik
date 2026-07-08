@@ -130,13 +130,20 @@ def _apply_action(
                 name=action.from_name, project_name=action.project_name
             )
         )
+        # Pass tags as an EXPLICIT list (never None). The temp carries the
+        # ``opik-migrate-temp`` marker from CreateDestination; the promote PUT
+        # must overwrite tags with the source's originals to strip it. The BE
+        # treats ``tags=None``/omitted as "leave tags unchanged" (verified on a
+        # live backend), so a source with no tags would otherwise leave the
+        # marker on the final dataset — pass ``[]`` to actually clear it.
+        promote_tags = action.tags if action.tags is not None else []
         rest_helpers.ensure_rest_api_call_respecting_rate_limit(
             lambda: rest_client.datasets.update_dataset(
                 id=dest.id,
                 name=action.to_name,
                 description=action.description,
                 visibility=action.visibility,
-                tags=action.tags,
+                tags=promote_tags,
             )
         )
     elif isinstance(action, CreateDestination):
