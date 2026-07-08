@@ -8,6 +8,7 @@
   * Prerequisite QEMU registration command (`docker run --privileged --rm tonistiigi/binfmt --install amd64`).
   * Softened RPi compatibility to a "best-effort workaround".
   * Warned about ClickHouse/JVM resource limitations on 4GB RPi4.
+* **Review Feedback Fix**: Added module and function docstrings to [verify_compose_yaml.py](file:///C:/Users/LENOVO/.gemini/antigravity/scratch/opik/verify_compose_yaml.py) to resolve the Baz Reviewer blocker comment.
 * **SDD Artifacts**: Added `spec.md`, `plan.md`, `task.md` under `.specify/`.
 
 ## Verification Results

@@ -1,7 +1,18 @@
+"""
+Verification script for Opik Docker Compose deployment configurations.
+This script validates that the deployment/docker-compose/docker-compose.yaml file
+is syntactically valid and contains the correct parameterized platform properties.
+"""
+
 import yaml
 import sys
 
 def verify():
+    """
+    Validates that the target docker-compose.yaml is correct.
+    Checks that 'demo-data-generator' and 'guardrails-backend' have
+    platform variables configured, and exits with status 1 on mismatch.
+    """
     path = "deployment/docker-compose/docker-compose.yaml"
     print(f"=== Verifying {path} syntax and values ===")
     try:
