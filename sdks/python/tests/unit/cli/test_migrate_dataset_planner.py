@@ -368,7 +368,9 @@ class TestTempDestRenameOnSuccess:
         # alongside them, and the promote re-passes exactly the source's
         # originals (marker dropped, real tags kept).
         client, _, _ = _build_fake_client(
-            source_rows=[_DatasetRow(id="src-1", name="MyDataset", tags=["team-a", "prod"])],
+            source_rows=[
+                _DatasetRow(id="src-1", name="MyDataset", tags=["team-a", "prod"])
+            ],
             destination_rows=[],
             items=[{"id": "item-a", "input": "hello"}],
         )
