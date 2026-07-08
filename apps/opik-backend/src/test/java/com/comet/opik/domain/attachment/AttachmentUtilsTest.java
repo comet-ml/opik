@@ -13,6 +13,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -784,6 +785,56 @@ public class AttachmentUtilsTest {
 
             // Then
             assertThat(result).isTrue();
+        }
+    }
+
+    /**
+     * Unit tests for {@link AttachmentUtils#collectAttachmentReferences(ObjectMapper, JsonNode...)}.
+     */
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class CollectAttachmentReferences {
+        private ObjectMapper objectMapper;
+
+        @BeforeEach
+        void setUp() {
+            objectMapper = new ObjectMapper();
+        }
+
+        @Test
+        @DisplayName("Should return empty set when no nodes or no references")
+        void shouldReturnEmptyWhenNoReferences() throws Exception {
+            assertThat(AttachmentUtils.collectAttachmentReferences(objectMapper)).isEmpty();
+            assertThat(AttachmentUtils.collectAttachmentReferences(objectMapper, (JsonNode) null)).isEmpty();
+            JsonNode node = objectMapper.readTree("{\"text\": \"just some regular text\"}");
+            assertThat(AttachmentUtils.collectAttachmentReferences(objectMapper, node)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("Should collect all referenced filenames across multiple nodes, including -sdk names")
+        void shouldCollectAcrossNodes() throws Exception {
+            JsonNode input = objectMapper.readTree(
+                    "{\"q\": \"see [input-attachment-1-1700000000000.png] and [output-attachment-2-1700000000001-sdk.pdf]\"}");
+            JsonNode metadata = objectMapper.readTree("{\"m\": \"[metadata-attachment-3-1700000000002.jpg]\"}");
+
+            Set<String> result = AttachmentUtils.collectAttachmentReferences(objectMapper, input, null, metadata);
+
+            assertThat(result).containsExactlyInAnyOrder(
+                    "input-attachment-1-1700000000000.png",
+                    "output-attachment-2-1700000000001-sdk.pdf",
+                    "metadata-attachment-3-1700000000002.jpg");
+        }
+
+        @Test
+        @DisplayName("Should recurse into embedded JSON strings, matching hasAttachmentReferences semantics")
+        void shouldRecurseIntoEmbeddedJsonStrings() throws Exception {
+            // A text node whose value is itself a JSON string containing a reference.
+            JsonNode node = objectMapper.readTree(
+                    "{\"payload\": \"{\\\"file\\\": \\\"[input-attachment-1-1700000000000.png]\\\"}\"}");
+
+            Set<String> result = AttachmentUtils.collectAttachmentReferences(objectMapper, node);
+
+            assertThat(result).containsExactly("input-attachment-1-1700000000000.png");
         }
     }
 }
