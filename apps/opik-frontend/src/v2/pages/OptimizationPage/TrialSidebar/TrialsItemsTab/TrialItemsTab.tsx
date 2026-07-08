@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import get from "lodash/get";
 import sortBy from "lodash/sortBy";
+import uniq from "lodash/uniq";
 import {
   JsonParam,
   NumberParam,
@@ -31,7 +32,12 @@ import TrialPassedCell from "./TrialPassedCell";
 import TrialScoreCell from "./TrialScoreCell";
 import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
-import FiltersButton from "@/shared/FiltersButton/FiltersButton";
+import FilterChipBar from "@/shared/filter-chips/FilterChipBar/FilterChipBar";
+import useFilterChips from "@/shared/filter-chips/hooks/useFilterChips";
+import { ChipDefinition, chipOptionsValue } from "@/shared/filter-chips/types";
+import { FEEDBACK_SCORE_OPERATORS } from "@/shared/filter-chips/chips/QueryBuilderChip/operators";
+import { DEFAULT_OPERATOR_MAP, OPERATORS_MAP } from "@/constants/filters";
+import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeedbackScoresNames";
 import ExplainerCallout from "@/shared/ExplainerCallout/ExplainerCallout";
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
 import useAppStore from "@/store/AppStore";
@@ -48,16 +54,11 @@ import useCompareExperimentsColumns from "@/api/datasets/useCompareExperimentsCo
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import FeedbackScoreHeader from "@/shared/DataTableHeaders/FeedbackScoreHeader";
-import ExperimentsFeedbackScoresSelect from "@/v2/pages-shared/experiments/ExperimentsFeedbackScoresSelect/ExperimentsFeedbackScoresSelect";
 import { calculateHeightStyle } from "@/shared/DataTable/utils";
 import SectionHeader from "@/shared/DataTableHeaders/SectionHeader";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { generateDistinctColorMap } from "@/v2/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
-import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
-
-type PassFilterValue = "all" | "passed" | "failed";
-
 type FlattenedTrialItem = {
   id: string;
   dataset_item_id: string;
@@ -83,19 +84,6 @@ const COLUMNS_SCORES_ORDER_KEY = "compare-trials-scores-columns-order";
 const COLUMNS_OUTPUT_ORDER_KEY = "compare-trials-output-columns-order";
 const PAGINATION_SIZE_KEY = "compare-trials-pagination-size";
 const ROW_HEIGHT_KEY = "compare-trials-row-height";
-
-export const FILTER_COLUMNS: ColumnData<FlattenedTrialItem>[] = [
-  {
-    id: "output",
-    label: "Evaluation task",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: COLUMN_FEEDBACK_SCORES_ID,
-    label: "Optimizations scores",
-    type: COLUMN_TYPE.numberDictionary,
-  },
-];
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: [COLUMN_SELECT_ID],
@@ -163,24 +151,12 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
     syncQueryWithLocalStorageOnInit: true,
   });
 
-  const [filters = [], setFilters] = useQueryParam("filters", JsonParam, {
+  // The chip bar (useFilterChips below) owns writes to the "filters" URL param;
+  // the list query reads it raw so a deep-linked filter on a not-yet-loaded
+  // dynamic dataset column is never dropped before its chip definition exists.
+  const [filters = []] = useQueryParam("filters", JsonParam, {
     updateType: "replaceIn",
   });
-
-  const filtersConfig = useMemo(
-    () => ({
-      rowsMap: {
-        [COLUMN_FEEDBACK_SCORES_ID]: {
-          keyComponent: ExperimentsFeedbackScoresSelect,
-          keyComponentProps: {
-            experimentsIds,
-            placeholder: "Select score",
-          },
-        },
-      },
-    }),
-    [experimentsIds],
-  );
 
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
@@ -248,7 +224,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
   const apiTotal = data?.total ?? 0;
   const noDataText = "There is no data for the selected trials";
 
-  const allFlatRows = useMemo(() => {
+  const rows = useMemo(() => {
     const apiRows: ExperimentsCompare[] = data?.content ?? [];
     const flat: FlattenedTrialItem[] = [];
 
@@ -276,50 +252,6 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
 
     return flat;
   }, [data?.content]);
-
-  const [passFilter, setPassFilter] = useState<PassFilterValue>("all");
-
-  const { rows, passedCount, failedCount } = useMemo(() => {
-    if (!isTestSuite) {
-      return { rows: allFlatRows, passedCount: 0, failedCount: 0 };
-    }
-
-    const getItemStatus = (row: FlattenedTrialItem): boolean | undefined => {
-      if (row.runSummary) {
-        return row.runSummary.status === "passed";
-      }
-      const firstRun = row.experimentItem;
-      if (firstRun.status) {
-        return firstRun.status === "passed";
-      }
-      return undefined;
-    };
-
-    let passed = 0;
-    let failed = 0;
-
-    allFlatRows.forEach((row) => {
-      const itemPassed = getItemStatus(row);
-      if (itemPassed === undefined) return;
-      if (itemPassed) {
-        passed++;
-      } else {
-        failed++;
-      }
-    });
-
-    if (passFilter === "all") {
-      return { rows: allFlatRows, passedCount: passed, failedCount: failed };
-    }
-
-    const filtered = allFlatRows.filter((row) => {
-      const itemPassed = getItemStatus(row);
-      if (itemPassed === undefined) return false;
-      return passFilter === "passed" ? itemPassed : !itemPassed;
-    });
-
-    return { rows: filtered, passedCount: passed, failedCount: failed };
-  }, [allFlatRows, passFilter, isTestSuite]);
 
   const dynamicDatasetColumns = useMemo(() => {
     return (data?.columns ?? [])
@@ -353,6 +285,91 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
     dynamicColumnsKey: DYNAMIC_COLUMNS_KEY,
     dynamicColumnsIds,
     setSelectedColumns,
+  });
+
+  const { data: feedbackScoresNamesData, isPending: isScoreNamesPending } =
+    useExperimentsFeedbackScoresNames(
+      { experimentsIds },
+      { placeholderData: keepPreviousData },
+    );
+
+  const scoreNameOptions = useMemo(
+    () => ({
+      // Dedupe: the same score name is reported once per experiment.
+      items: sortBy(
+        uniq((feedbackScoresNamesData?.scores ?? []).map((s) => s.name)),
+        (name) => name.toLowerCase(),
+      ),
+      isLoading: isScoreNamesPending,
+    }),
+    [feedbackScoresNamesData?.scores, isScoreNamesPending],
+  );
+
+  // New filter-chips definitions: one query-builder chip per dynamic test-suite
+  // column, plus the evaluation output and the optimization feedback scores.
+  const chipDefinitions = useMemo<ChipDefinition[]>(() => {
+    const definitions: ChipDefinition[] = sortBy(
+      dynamicDatasetColumns,
+      "label",
+    ).map(
+      ({ id, label, columnType }): ChipDefinition => ({
+        id,
+        field: id,
+        label: `${label} (Test suite)`,
+        kind: "query-builder",
+        columnType,
+        operators: OPERATORS_MAP[columnType].map((o) => o.value),
+        defaultOperator: DEFAULT_OPERATOR_MAP[columnType],
+      }),
+    );
+
+    definitions.push({
+      id: "output",
+      field: "output",
+      label: "Evaluation task",
+      kind: "query-builder",
+      columnType: COLUMN_TYPE.string,
+      operators: OPERATORS_MAP[COLUMN_TYPE.string].map((o) => o.value),
+      defaultOperator: DEFAULT_OPERATOR_MAP[COLUMN_TYPE.string],
+    });
+
+    definitions.push({
+      id: COLUMN_FEEDBACK_SCORES_ID,
+      field: COLUMN_FEEDBACK_SCORES_ID,
+      label: "Optimizations scores",
+      kind: "query-builder",
+      columnType: COLUMN_TYPE.numberDictionary,
+      operators: FEEDBACK_SCORE_OPERATORS,
+      defaultOperator: ">=",
+      key: {
+        placeholder: "Select score",
+        options: chipOptionsValue(scoreNameOptions),
+      },
+      value: { type: "numeric", decimals: 2, placeholder: "0" },
+    });
+
+    return definitions;
+  }, [dynamicDatasetColumns, scoreNameOptions]);
+
+  const {
+    chipsPinned,
+    chipsUnpinned,
+    values: chipValues,
+    applyValue: applyChipValue,
+    clearValue: clearChipValue,
+    clearAll: clearAllChips,
+    pinChip,
+    unpinChip,
+    managerOpen: chipManagerOpen,
+    setManagerOpen: setChipManagerOpen,
+    openChipId,
+    setOpenChipId,
+  } = useFilterChips({
+    tableId: "compare-trials",
+    urlKey: "filters",
+    definitions: chipDefinitions,
+    defaultPinned: [COLUMN_FEEDBACK_SCORES_ID],
+    onChange: () => setPage(1),
   });
 
   const datasetColumnsData = useMemo(() => {
@@ -540,19 +557,6 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
     scoresColumnsOrder,
   ]);
 
-  const filterColumns = useMemo(() => {
-    return [
-      ...sortBy(dynamicDatasetColumns, "label").map(
-        ({ id, label, columnType }) => ({
-          id,
-          label: `${label} (Test suite)`,
-          type: columnType,
-        }),
-      ),
-      ...FILTER_COLUMNS,
-    ];
-  }, [dynamicDatasetColumns]);
-
   const resizeConfig = useMemo(
     () => ({
       enabled: true,
@@ -605,49 +609,37 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
         />
       </PageBodyStickyContainer>
       <PageBodyStickyContainer
-        className="mb-3 flex flex-wrap items-center justify-between gap-x-8 gap-y-2"
+        className="mb-3 flex items-start justify-between gap-x-8 gap-y-2"
         direction="bidirectional"
         limitWidth
       >
-        <div className="flex items-center gap-2">
-          <h2 className="comet-title-xs">
-            {isTestSuite ? "Test items" : "Evaluation results"}
-          </h2>
-          <FiltersButton
-            columns={filterColumns}
-            config={filtersConfig as never}
-            filters={filters}
-            onChange={setFilters}
-            layout="icon"
-            className="size-7"
+        <div className="min-w-0 flex-1">
+          <FilterChipBar
+            chipsPinned={chipsPinned}
+            chipsUnpinned={chipsUnpinned}
+            values={chipValues}
+            managerOpen={chipManagerOpen}
+            onManagerOpenChange={setChipManagerOpen}
+            onApplyValue={applyChipValue}
+            onClearValue={clearChipValue}
+            onPinChip={pinChip}
+            onUnpinChip={unpinChip}
+            onClearAll={clearAllChips}
+            openChipId={openChipId}
+            onOpenChipIdChange={setOpenChipId}
+            prefix={
+              <h2 className="comet-title-xs mr-1 shrink-0">
+                {isTestSuite ? "Test items" : "Evaluation results"}
+              </h2>
+            }
           />
-          {isTestSuite && (
-            <ToggleGroup
-              type="single"
-              value={passFilter}
-              onValueChange={(v) => {
-                if (v) setPassFilter(v as PassFilterValue);
-              }}
-              variant="default"
-              size="sm"
-            >
-              <ToggleGroupItem value="all">
-                All ({allFlatRows.length})
-              </ToggleGroupItem>
-              <ToggleGroupItem value="passed">
-                Passed ({passedCount})
-              </ToggleGroupItem>
-              <ToggleGroupItem value="failed">
-                Failed ({failedCount})
-              </ToggleGroupItem>
-            </ToggleGroup>
-          )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <DataTableRowHeightSelector
             type={height as ROW_HEIGHT}
             setType={setHeight}
-            size="icon-xs"
+            layout="labeled"
+            size="2xs"
           />
           <ColumnsButton
             columns={[...activeDefaultColumns, ...datasetColumnsData]}
@@ -657,7 +649,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
             onOrderChange={setColumnsOrder}
             sections={columnSections}
             layout="labeled"
-            size="xs"
+            size="2xs"
           ></ColumnsButton>
         </div>
       </PageBodyStickyContainer>
@@ -691,9 +683,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
           pageChange={setPage}
           size={size as number}
           sizeChange={setSize}
-          total={
-            passFilter !== "all" ? rows.length : Math.max(apiTotal, rows.length)
-          }
+          total={Math.max(apiTotal, rows.length)}
           supportsTruncation
           truncationEnabled={truncationEnabled}
         />

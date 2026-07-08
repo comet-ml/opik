@@ -2,7 +2,7 @@ import React from "react";
 
 import WaypointsIcon from "@/icons/waypoints.svg?react";
 import { StatCard } from "@/ui/stat-card";
-import { formatDate } from "@/lib/date";
+import { formatDate, SORTABLE_DATE_TIME_FORMAT } from "@/lib/date";
 import {
   TRIAL_STATUS_LABELS,
   getTrialDotColor,
@@ -49,7 +49,7 @@ const TrialStatusCard: React.FC<TrialStatusCardProps> = ({
         <span className="comet-body-xs truncate text-muted-slate">Details</span>
       </div>
       {stepIndex != null && (
-        <div className="inline-flex shrink-0 items-center gap-1 rounded-md border bg-background px-2 py-0.5">
+        <div className="inline-flex h-5 shrink-0 items-center gap-1 rounded-md border bg-background px-2">
           <WaypointsIcon className="size-3 shrink-0 text-muted-slate" />
           <span className="comet-body-xs-accented whitespace-nowrap text-foreground">
             {stepIndex === 0 ? "Baseline" : `Step ${stepIndex}`}
@@ -61,7 +61,11 @@ const TrialStatusCard: React.FC<TrialStatusCardProps> = ({
       {/* Match the trials table, where the best trial reads "Best". */}
       {isBest ? "Best" : status ? TRIAL_STATUS_LABELS[status] : "-"}
     </StatCard.Value>
-    {createdAt && <StatCard.Caption>{formatDate(createdAt)}</StatCard.Caption>}
+    {createdAt && (
+      <StatCard.Caption>
+        {formatDate(createdAt, { format: SORTABLE_DATE_TIME_FORMAT })}
+      </StatCard.Caption>
+    )}
   </StatCard>
 );
 

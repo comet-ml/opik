@@ -48,6 +48,9 @@ const TrialSidebar: React.FC<TrialSidebarProps> = ({
       onClose={onClose}
       initialWidth={0.65}
       minWidth={640}
+      // Align the header's chevron icon (6px inset in its 24px button) with the
+      // body content's 24px (px-6) left edge: 24 − 6 = 18px.
+      headerClassName="pl-[18px]"
       header={
         <ResizableSidePanelTopBar title={title} onClose={onClose}>
           {canViewDatasets &&
@@ -58,6 +61,7 @@ const TrialSidebar: React.FC<TrialSidebarProps> = ({
                 name={experiment.dataset_name}
                 resource={RESOURCE_TYPE.dataset}
                 icon={Database}
+                textSize="xs"
                 className="rounded-md"
               />
             )}
@@ -68,6 +72,9 @@ const TrialSidebar: React.FC<TrialSidebarProps> = ({
               sourceFilters={generateExperimentIdsFilter(
                 trialExperiments.map((e) => e.id),
               )}
+              variant="nav"
+              label="Logs"
+              textSize="xs"
               title="Optimization logs"
             />
           )}

@@ -66,7 +66,7 @@ const OptimizationHeader: React.FC<OptimizationHeaderProps> = ({
   return (
     <div className="flex min-h-8 flex-nowrap items-start justify-between gap-2">
       <div className="flex min-w-0 flex-col gap-2">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center">
           <BackButton
             to="/$workspaceName/projects/$projectId/optimizations"
             tooltip="Back to optimization runs"
@@ -78,12 +78,14 @@ const OptimizationHeader: React.FC<OptimizationHeaderProps> = ({
           </h1>
           {status && (
             <OptimizationConfigPill
-              className="bg-primary-foreground pl-1 pr-1.5 capitalize"
+              className="ml-1.5 bg-primary-foreground pl-1 pr-1.5 capitalize"
               icon={
-                <span
-                  className="size-1.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: STATUS_DOT_COLOR[status] }}
-                />
+                <span className="flex size-3 shrink-0 items-center justify-center">
+                  <span
+                    className="size-1.5 rounded-full"
+                    style={{ backgroundColor: STATUS_DOT_COLOR[status] }}
+                  />
+                </span>
               }
             >
               {status}
@@ -104,6 +106,7 @@ const OptimizationHeader: React.FC<OptimizationHeaderProps> = ({
               name={optimization.dataset_name}
               resource={RESOURCE_TYPE.dataset}
               icon={Database}
+              textSize="xs"
               className="w-fit rounded-md"
             />
           )}
@@ -120,20 +123,20 @@ const OptimizationHeader: React.FC<OptimizationHeaderProps> = ({
       </div>
       <div className="flex shrink-0 items-center gap-2">
         {canRerun && (
-          <Button variant="outline" size="sm" onClick={handleRerun}>
-            <RotateCw className="mr-2 size-4" />
-            Rerun
+          <Button variant="outline" size="2xs" onClick={handleRerun}>
+            <RotateCw className="size-3.5 shrink-0" />
+            <span className="ml-1.5">Rerun</span>
           </Button>
         )}
         {canStop && (
           <Button
             variant="destructive"
-            size="sm"
+            size="2xs"
             onClick={handleStop}
             disabled={isStoppingOptimization}
           >
-            <X className="mr-2 size-4" />
-            Stop Execution
+            <X className="size-3.5 shrink-0" />
+            <span className="ml-1.5">Stop Execution</span>
           </Button>
         )}
       </div>

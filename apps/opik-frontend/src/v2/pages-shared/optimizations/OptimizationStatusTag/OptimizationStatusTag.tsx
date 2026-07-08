@@ -19,11 +19,11 @@ type OptimizationStatusTagProps = {
   status: OPTIMIZATION_STATUS;
 };
 
-// Fixed 16px pill (per design) with dot + label vertically centered.
+// 20px pill with 2px vertical padding; dot + label vertically centered.
 const OptimizationStatusTag: React.FC<OptimizationStatusTagProps> = ({
   status,
 }) => (
-  <Tag className="inline-flex h-4 items-center gap-1.5 border border-[var(--pill-neutral-border)] bg-[var(--pill-neutral-bg)] leading-none text-foreground">
+  <Tag className="inline-flex h-5 items-center gap-1.5 border border-[var(--pill-neutral-border)] bg-[var(--pill-neutral-bg)] py-0.5 leading-none text-foreground">
     <span
       className="size-1.5 shrink-0 rounded-full"
       style={{ backgroundColor: STATUS_DOT_COLOR[status] }}

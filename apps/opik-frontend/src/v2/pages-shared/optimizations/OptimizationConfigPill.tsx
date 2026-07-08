@@ -6,8 +6,8 @@ import { cn } from "@/lib/utils";
 /**
  * Shared shell for the run-config header pills on the single-run overview.
  *
- * A white, bordered tag: 24px tall, 6px radius, 8px horizontal padding, with a
- * 12px muted-slate leading icon and 12px medium foreground text. Building every
+ * A transparent, bordered tag: 24px tall, 6px radius, 8px horizontal padding,
+ * with a 12px muted-slate leading icon and 12px medium foreground text. Building every
  * config pill on top of the core `Tag` keeps the row visually uniform and gives
  * one place to tune the spec.
  */
@@ -30,7 +30,7 @@ const OptimizationConfigPill = React.forwardRef<
 >(({ icon, suffix, children, className, ...props }, ref) => (
   <Tag
     ref={ref}
-    variant="default"
+    variant="transparent"
     className={cn(CONFIG_PILL_CLASS, className)}
     {...props}
   >

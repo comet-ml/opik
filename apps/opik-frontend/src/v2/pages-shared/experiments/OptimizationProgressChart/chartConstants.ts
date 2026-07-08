@@ -67,7 +67,9 @@ export const GHOST_DOT_FILL_OPACITY = 0.2;
 export const GHOST_DOT_STROKE_OPACITY = 0.4;
 
 // Chart margins
-export const CHART_MARGIN = { top: 30, bottom: 10, left: 10, right: 10 };
+// top leaves room for the "Best trial" badge above a best dot sitting at y=1
+// (grown radius 5 + gap 4 + tail 6 + label 20 = 35px) so it never clips.
+export const CHART_MARGIN = { top: 40, bottom: 10, left: 10, right: 10 };
 export const X_AXIS_PADDING = { left: 20 };
 export const X_DOMAIN_EXTRA = 0.3;
 

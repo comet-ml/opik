@@ -92,9 +92,9 @@ const RoleCard: React.FC<{ role: string; children: React.ReactNode }> = ({
 }) => (
   <div className="flex w-full flex-col rounded-md border bg-primary-foreground px-3 py-2">
     <div className="pb-1.5 pt-0.5">
-      <span className="comet-body-xs-accented capitalize text-muted-slate">
+      <div className="comet-body-xs-accented capitalize text-muted-slate">
         {getRoleLabel(role)}
-      </span>
+      </div>
     </div>
     {children}
   </div>

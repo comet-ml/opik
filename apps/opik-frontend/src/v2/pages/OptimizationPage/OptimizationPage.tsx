@@ -209,17 +209,17 @@ const OptimizationPage: React.FC = () => {
 
         <TabsContent value={OPTIMIZATION_TAB.OVERVIEW} className="mt-0">
           <PageBodyStickyContainer
-            className="flex flex-col pt-4"
+            className="flex flex-col gap-3 pt-3"
             direction="horizontal"
             limitWidth
           >
             {optimization &&
               optimization.status === OPTIMIZATION_STATUS.ERROR && (
-                <div className="shrink-0 pb-4">
+                <div className="shrink-0">
                   <RunErrorPanel optimization={optimization} />
                 </div>
               )}
-            <div className="shrink-0 pb-4">
+            <div className="shrink-0">
               <OptimizationKPICards
                 experiments={experiments}
                 baselineCandidate={baselineCandidate}
@@ -237,7 +237,7 @@ const OptimizationPage: React.FC = () => {
               />
             </div>
 
-            <div className="shrink-0 pb-4">
+            <div className="shrink-0">
               <OptimizationProgressChartContainer
                 candidates={candidates}
                 bestCandidateId={bestCandidate?.candidateId}
@@ -253,7 +253,7 @@ const OptimizationPage: React.FC = () => {
             </div>
 
             {bestCandidate && (
-              <div className="shrink-0 pb-4">
+              <div className="shrink-0">
                 <BestTrialPrompt
                   bestCandidate={bestCandidate}
                   candidates={candidates}
@@ -269,16 +269,16 @@ const OptimizationPage: React.FC = () => {
 
         <TabsContent value={OPTIMIZATION_TAB.TRIALS} className="mt-0">
           <PageBodyStickyContainer
-            className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
+            className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-2 pt-3"
             direction="bidirectional"
             limitWidth
           >
             <SearchInput
               searchText={search ?? ""}
               setSearchText={setSearch}
-              placeholder="Search by trial name"
-              className="w-[320px]"
-              dimension="sm"
+              placeholder="Search"
+              className="w-[200px] shrink-0"
+              dimension="xs"
             />
             <OptimizationTrialsControls
               onRefresh={handleRefresh}

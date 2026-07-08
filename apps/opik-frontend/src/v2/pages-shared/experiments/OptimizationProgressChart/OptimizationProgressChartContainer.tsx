@@ -106,8 +106,8 @@ const OptimizationProgressChartContainer: React.FC<
   // data-chart-panel: the pinned best-trial card clamps itself to this panel's
   // borders (it may overhang the chart's inner padding).
   return (
-    <Card data-chart-panel className="h-[280px] min-w-[400px] flex-auto">
-      <CardHeader className="space-y-0.5 px-4 pt-3">
+    <Card data-chart-panel className="h-auto min-w-[400px] flex-auto">
+      <CardHeader className="space-y-0.5 px-4 pb-0 pt-3">
         <CardTitle className="comet-body-s-accented flex items-center gap-2">
           Optimization progress
           {isInProgress && !noData && (

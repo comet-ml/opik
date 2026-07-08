@@ -35,6 +35,8 @@ const OptimizationTrialsControls: React.FC<OptimizationTrialsControlsProps> = ({
       <DataTableRowHeightSelector
         type={rowHeight}
         setType={onRowHeightChange}
+        layout="labeled"
+        size="2xs"
       />
       <ColumnsButton
         columns={columnsDef}
@@ -42,12 +44,15 @@ const OptimizationTrialsControls: React.FC<OptimizationTrialsControlsProps> = ({
         onSelectionChange={onSelectedColumnsChange}
         order={columnsOrder}
         onOrderChange={onColumnsOrderChange}
+        layout="labeled"
+        size="2xs"
       />
-      <Separator orientation="vertical" className="mx-1 h-4" />
+      <Separator orientation="vertical" className="mx-[2px] h-4" />
       <RefreshButton
         tooltip="Refresh trials list"
         isFetching={isFetching}
         onRefresh={onRefresh}
+        size="icon-2xs"
       />
     </div>
   );

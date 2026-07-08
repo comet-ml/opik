@@ -77,7 +77,7 @@ export const OptimizationAccuracyCell = (
         <FeedbackScoreTag
           label={feedbackScore.name}
           value={feedbackScore.value}
-          className="overflow-hidden"
+          className="h-5 overflow-hidden"
         />
       ) : (
         "-"

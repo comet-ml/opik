@@ -56,6 +56,16 @@ const CHART_CONFIG = {
   score: { label: "Score", color: "var(--color-fuchsia)" },
 };
 
+// X/Y axis tick labels per the Figma spec: Inter 10px / weight 300 / 12px
+// line-height in the foreground colour (#373D4D), overriding the shared tick's
+// lighter stroke + 200 weight.
+const AXIS_TICK = {
+  ...DEFAULT_CHART_TICK,
+  stroke: "none",
+  fill: "hsl(var(--foreground))",
+  fontWeight: 300,
+};
+
 const OptimizationProgressChartContent: React.FC<
   OptimizationProgressChartContentProps
 > = ({
@@ -145,14 +155,11 @@ const OptimizationProgressChartContent: React.FC<
     [positionedData],
   );
 
-  const { width: tickWidth, yTickFormatter } = useChartTickDefaultConfig(
-    values,
-    {
-      maxTickPrecision: 2,
-      targetTickCount: 5,
-      showMinMaxDomain: true,
-    },
-  );
+  const { width: tickWidth } = useChartTickDefaultConfig(values, {
+    maxTickPrecision: 2,
+    targetTickCount: 5,
+    showMinMaxDomain: true,
+  });
   // Scores / pass rates are always 0–1, so pin the axis to a fixed 0–1 domain
   // with quarter ticks rather than a data-driven range.
   const yTicks = [0, 0.25, 0.5, 0.75, 1];
@@ -237,15 +244,20 @@ const OptimizationProgressChartContent: React.FC<
 
   return (
     <div ref={containerRef} className="relative">
-      <ChartContainer config={CHART_CONFIG} className="h-48 w-full">
+      <ChartContainer config={CHART_CONFIG} className="h-40 w-full">
         <ComposedChart data={positionedData} margin={CHART_MARGIN}>
-          <CartesianGrid vertical={false} {...DEFAULT_CHART_GRID_PROPS} />
+          <CartesianGrid
+            vertical={false}
+            {...DEFAULT_CHART_GRID_PROPS}
+            stroke="#E2E8F0"
+          />
           <XAxis
             dataKey="x"
             type="number"
+            height={24}
             axisLine={false}
             tickLine={false}
-            tick={DEFAULT_CHART_TICK}
+            tick={AXIS_TICK}
             ticks={
               ghostStep != null && !steps.includes(ghostStep)
                 ? [...steps, ghostStep]
@@ -261,9 +273,10 @@ const OptimizationProgressChartContent: React.FC<
             width={tickWidth}
             axisLine={false}
             tickLine={false}
-            tick={DEFAULT_CHART_TICK}
+            tick={AXIS_TICK}
             ticks={yTicks}
-            tickFormatter={yTickFormatter}
+            interval={0}
+            tickFormatter={(value) => Number(value).toFixed(2)}
             domain={[0, 1]}
           />
 
@@ -296,14 +309,16 @@ const OptimizationProgressChartContent: React.FC<
         />
       )}
 
-      <div className="mt-1 flex items-center justify-center gap-4">
+      <div className="mt-1 flex items-center justify-center">
         {legendItems.map(({ color, label }) => (
-          <div key={label} className="flex items-center gap-1.5">
-            <span
-              className="size-2.5 rounded-full"
-              style={{ backgroundColor: color }}
-            />
-            <span className="comet-body-xs text-muted-slate">{label}</span>
+          <div key={label} className="flex items-center gap-0.5 pl-1 pr-1.5">
+            <span className="flex size-3 items-center justify-center">
+              <span
+                className="size-1.5 rounded-full"
+                style={{ backgroundColor: color }}
+              />
+            </span>
+            <span className="comet-body-xs text-foreground">{label}</span>
           </div>
         ))}
       </div>

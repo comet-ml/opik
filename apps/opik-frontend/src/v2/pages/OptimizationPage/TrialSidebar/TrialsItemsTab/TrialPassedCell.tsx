@@ -1,14 +1,13 @@
 import React from "react";
 import { CellContext } from "@tanstack/react-table";
+import { ExperimentItem } from "@/types/datasets";
 import { RunStatus } from "@/types/test-suites";
+import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import { StatusTag } from "@/v2/pages-shared/experiments/TestSuiteExperiment/PassedCell";
 
 type FlattenedTrialItem = {
-  experimentItem: {
-    status?: RunStatus;
-  };
-  allRuns: {
-    status?: RunStatus;
-  }[];
+  experimentItem: ExperimentItem;
+  allRuns: ExperimentItem[];
   runSummary?: {
     passed_runs: number;
     total_runs: number;
@@ -20,56 +19,30 @@ type FlattenedTrialItem = {
   };
 };
 
+// Reuses the experiment page's StatusTag (colored Passed/Failed tag + assertions
+// breakdown tooltip), building its StatusInfo from the flattened per-experiment
+// row the same way getStatusInfoForExperiment does for the compare view.
 const TrialPassedCell: React.FC<CellContext<FlattenedTrialItem, unknown>> = (
   context,
 ) => {
-  const row = context.row.original;
-  const { allRuns, runSummary, executionPolicy } = row;
-
-  if (runSummary) {
-    const { passed_runs, total_runs, status } = runSummary;
-    const itemPassed = status === RunStatus.PASSED;
-
-    if (total_runs === 1) {
-      return (
-        <span className={itemPassed ? "text-success" : "text-destructive"}>
-          {itemPassed ? "Yes" : "No"}
-        </span>
-      );
-    }
-
-    const passThreshold = executionPolicy?.pass_threshold ?? 1;
-    return (
-      <span className={itemPassed ? "text-success" : "text-destructive"}>
-        {passed_runs}/{total_runs} (threshold: {passThreshold})
-      </span>
-    );
-  }
-
-  const firstRun = row.experimentItem;
-  if (!firstRun.status) {
-    return <span>-</span>;
-  }
-
-  if (allRuns.length === 1) {
-    const itemPassed = firstRun.status === RunStatus.PASSED;
-    return (
-      <span className={itemPassed ? "text-success" : "text-destructive"}>
-        {itemPassed ? "Yes" : "No"}
-      </span>
-    );
-  }
-
-  const runsPassed = allRuns.filter(
-    (r) => r.status === RunStatus.PASSED,
-  ).length;
-  const passThreshold = executionPolicy?.pass_threshold ?? 1;
-  const itemPassed = runsPassed >= passThreshold;
+  const { allRuns, runSummary, experimentItem, executionPolicy } =
+    context.row.original;
+  const status = runSummary?.status ?? experimentItem.status;
 
   return (
-    <span className={itemPassed ? "text-success" : "text-destructive"}>
-      {runsPassed}/{allRuns.length} (threshold: {passThreshold})
-    </span>
+    <CellWrapper
+      metadata={context.column.columnDef.meta}
+      tableMetadata={context.table.options.meta}
+    >
+      <StatusTag
+        status={status}
+        evaluating={!status}
+        assertionsByRun={allRuns.map((run) => run.assertion_results ?? [])}
+        reason={undefined}
+        passThreshold={executionPolicy?.pass_threshold}
+        runsPerItem={executionPolicy?.runs_per_item}
+      />
+    </CellWrapper>
   );
 };
 

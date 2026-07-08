@@ -103,6 +103,18 @@ export const ACTIVE_OPTIMIZATION_FILTER: Filters = [
   },
 ];
 
+// Labels mirror OptimizationStatusTag (capitalized enum value).
+export const OPTIMIZATION_STATUS_OPTIONS: {
+  label: string;
+  value: OPTIMIZATION_STATUS;
+}[] = [
+  { label: "Running", value: OPTIMIZATION_STATUS.RUNNING },
+  { label: "Completed", value: OPTIMIZATION_STATUS.COMPLETED },
+  { label: "Cancelled", value: OPTIMIZATION_STATUS.CANCELLED },
+  { label: "Initialized", value: OPTIMIZATION_STATUS.INITIALIZED },
+  { label: "Error", value: OPTIMIZATION_STATUS.ERROR },
+];
+
 export const getDefaultOptimizerConfig = (
   optimizerType: OPTIMIZER_TYPE,
 ): Partial<OptimizerParameters> => {
