@@ -760,8 +760,13 @@ start_cost_api_local() {
         rm -f "$COST_API_PID_FILE"
     fi
 
-    # No Platform locally, so disable auth (pins to the default workspace). Point at
-    # the dev-runner's own ClickHouse + MySQL (host-published ports, opik/opik).
+    # Point cost-api at the dev-runner's ClickHouse + MySQL (host-published
+    # ports, opik/opik). In platform (EM) mode, cost-api targets local comet-backend
+    # (the React service on EM_BACKEND_PORT).
+    # No-op in OSS mode (cost-api keeps its default).
+    if em_stack_enabled; then
+        export PLATFORM_BASE_URL="http://localhost:${EM_BACKEND_PORT}"
+    fi
     (
         cd "$AI_COST_BACKEND_PATH" || exit 1
         AUTH_ENABLED=false \
