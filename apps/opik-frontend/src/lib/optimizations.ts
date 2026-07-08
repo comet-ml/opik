@@ -58,6 +58,14 @@ export const getMetricLabel = (type?: string): string =>
   type ??
   "—";
 
+// Optimizer type from a run: studio_config, falling back to metadata.optimizer
+// (untyped) for older/non-Studio runs. Undefined when neither is present.
+export const getOptimizationOptimizerType = (
+  row: Pick<Optimization, "studio_config" | "metadata">,
+): string | undefined =>
+  row.studio_config?.optimizer?.type ??
+  (row.metadata as { optimizer?: string } | undefined)?.optimizer;
+
 export const getBestOptimizationScore = (
   row: Pick<
     Optimization,

@@ -2,26 +2,9 @@ import { test, expect } from '../../fixtures/prompt.fixture';
 import { PromptsPage } from '@e2e/pom/prompts.page';
 import { PlaygroundPage } from '@e2e/pom/playground.page';
 import { PlaygroundLogsSidebarPage } from '@e2e/pom/playground-logs-sidebar.page';
-import { ConfigurationPage } from '@e2e/pom/configuration.page';
+import { ensureModelAvailable } from '@e2e/pom/model-availability';
 import type { PromptDetailPage } from '@e2e/pom/prompt-detail.page';
 import type { Locator } from '@playwright/test';
-
-async function ensureModelAvailable(page: import('@playwright/test').Page): Promise<string> {
-  const anthropic = process.env.ANTHROPIC_API_KEY;
-  const openai = process.env.OPENAI_API_KEY;
-  if (!anthropic && !openai) {
-    test.skip(true, 'Neither ANTHROPIC_API_KEY nor OPENAI_API_KEY is set');
-    return '';
-  }
-  const cfg = new ConfigurationPage(page);
-  await cfg.gotoAiProviders();
-  if (anthropic) {
-    await cfg.ensureProviderConfigured('Anthropic', anthropic);
-    return 'Claude Haiku 4.5';
-  }
-  await cfg.ensureProviderConfigured('OpenAI', openai!);
-  return 'GPT 4o Mini';
-}
 
 type PromptVariant = {
   label: string;

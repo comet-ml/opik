@@ -4,6 +4,7 @@ Domain-specific agent skills for the Opik monorepo. Each skill provides patterns
 
 | Skill | Path | Description |
 |-------|------|-------------|
+| add-code-quality-hook | `add-code-quality-hook/` | Recipe for wiring a new linter into Opik's unified `🐙 Code Quality` pipeline (pre-commit + CI). Use when adding a pre-commit-driven linter — enumerates every file that must change, the non-obvious gotchas (mandatory explicit `files:`, blank-description trap, `TOOLCHAIN_BY_ID`/`TYPED_IDS`), the fix-vs-suppress policy, and the verification loop. |
 | analytics-instrumentation | `analytics-instrumentation/` | Add analytics events to Opik features. Use when wiring PostHog events on the frontend or backend for product analytics tracking. |
 | debugging-e2e-tests | `debugging-e2e-tests/` | Investigate a failed Opik E2E test and propose a fix (read-only). Use when a test goes red in CI, a TestOps launch, or locally — gathers the trace + history, classifies regression vs. flake, proposes a fix. |
 | diagram-generation | `diagram-generation/` | Generate self-contained HTML architecture diagrams. Use when creating visual diagrams for PRs, task plans, or architectural explanations. |

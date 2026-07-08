@@ -6,11 +6,15 @@ import { cn, formatNumericData } from "@/lib/utils";
 import { Tag, TagProps } from "@/ui/tag";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 
-const getConfig = (
+export type PercentageTrendType = "direct" | "inverted" | "neutral";
+export type PercentageTrendVariant = "green" | "red" | "gray";
+
+// Shared trend direction → icon + color mapping, reused by table cells.
+export const getTrendConfig = (
   percentage: number,
   trend: PercentageTrendType,
   precision: number,
-) => {
+): { Icon: typeof MoveRight; variant: PercentageTrendVariant } => {
   if (Math.abs(percentage) < Math.pow(10, -precision) / 2) {
     return {
       Icon: MoveRight,
@@ -31,8 +35,6 @@ const getConfig = (
   }
 };
 
-export type PercentageTrendType = "direct" | "inverted" | "neutral";
-
 type PercentageTrendProps = {
   percentage?: number;
   precision?: number;
@@ -46,6 +48,17 @@ type PercentageTrendProps = {
   size?: "sm" | "md";
 };
 
+// Bright trend-icon colors for the metric pill (icon on a neutral surface).
+// Not applied to the Tag below, which keeps its own variant text token.
+export const TREND_COLOR_CLASS: Record<
+  PercentageTrendVariant,
+  string | undefined
+> = {
+  green: "text-[var(--color-green-bright)]",
+  red: "text-[var(--color-red)]",
+  gray: undefined,
+};
+
 const PercentageTrend: React.FC<PercentageTrendProps> = ({
   percentage,
   precision = 0,
@@ -56,7 +69,7 @@ const PercentageTrend: React.FC<PercentageTrendProps> = ({
 }) => {
   if (isUndefined(percentage)) return null;
 
-  const { Icon, variant } = getConfig(percentage, trend, precision);
+  const { Icon, variant } = getTrendConfig(percentage, trend, precision);
   const tagVariant = variant as TagProps["variant"];
 
   const isIconOnly = iconOnly || !isFinite(percentage);

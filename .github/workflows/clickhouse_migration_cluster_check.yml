@@ -92,7 +92,7 @@ jobs:
             echo "💡 What this means:"
             echo "   - DDL operations without ON CLUSTER clause will only execute on a single node"
             echo "   - This can cause inconsistencies in distributed ClickHouse deployments"
-            echo "   - All CREATE, DROP, ALTER, and RENAME statements must include ON CLUSTER '{cluster}'"
+            echo "   - All CREATE, DROP, ALTER, RENAME, and EXCHANGE statements must include ON CLUSTER '{cluster}'"
             echo
             echo "🔧 How to fix:"
             echo "   1. Add 'ON CLUSTER '\"'\"'{cluster}'\"'\"'' to all DDL statements in your migration files"

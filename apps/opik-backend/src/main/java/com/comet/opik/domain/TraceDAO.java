@@ -1480,7 +1480,18 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     private static final String COUNT_BY_PROJECT_ID = """
-            WITH feedback_scores_deduped AS (
+            WITH <if(trace_id_prefilter)>trace_id_prefilter AS (
+                SELECT DISTINCT id
+                FROM traces
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                <if(uuid_from_time)> AND id >= :uuid_from_time
+                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time
+                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                <if(filters)> AND <filters> <endif>
+                <if(search_text)> AND <search_text> <endif>
+            ), <endif>feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -1500,8 +1511,11 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'trace'
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
+                      <if(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
+                      <else>
                       <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                       <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                      <endif>
                     UNION ALL
                     SELECT workspace_id,
                            project_id,
@@ -1516,8 +1530,11 @@ class TraceDAOImpl implements TraceDAO {
                        AND workspace_id = :workspace_id
                        AND project_id = :project_id
                        <if(annotation_queue_id)>AND source_queue_id = :annotation_queue_id<endif>
+                       <if(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
+                       <else>
                        <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                        <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                       <endif>
                 )
                 ORDER BY last_updated_at DESC
                 LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
@@ -1542,8 +1559,11 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
                     AND project_id = :project_id
+                    <if(trace_id_prefilter)> AND entity_id IN (SELECT id FROM trace_id_prefilter)
+                    <else>
                     <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                     <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                    <endif>
                     ORDER BY (workspace_id, project_id, entity_type, entity_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY entity_id, id
                 )
@@ -1558,8 +1578,11 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE aq.scope = 'trace'
                       AND workspace_id = :workspace_id
                       AND project_id = :project_id
+                      <if(trace_id_prefilter)> AND aqi.item_id IN (SELECT id FROM trace_id_prefilter)
+                      <else>
                       <if(uuid_from_time)> AND aqi.item_id >= :uuid_from_time <endif>
                       <if(uuid_to_time)> AND aqi.item_id \\<= :uuid_to_time <endif>
+                      <endif>
                  ) AS annotation_queue_ids_with_trace_id
                  GROUP BY trace_id
             ), target_spans AS (
@@ -1567,8 +1590,11 @@ class TraceDAOImpl implements TraceDAO {
                 FROM spans
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
+                <if(trace_id_prefilter)>AND trace_id IN (SELECT id FROM trace_id_prefilter)
+                <else>
                 <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
                 <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
+                <endif>
             ),
             span_feedback_scores_deduped AS (
                 SELECT workspace_id,
@@ -3694,15 +3720,19 @@ class TraceDAOImpl implements TraceDAO {
      * <p>Guardrails filters inject {@code gagg.guardrails_result} into the {@code <filters>}
      * template variable, which references the guardrails_agg CTE alias. Since the prefilter
      * CTE only queries the traces table, these references would fail. Guard against them.
+     *
+     * <p>Feedback score filters use separate template variables ({@code feedback_scores_filters},
+     * {@code span_feedback_scores_filters}) and are NOT injected into {@code <filters>}, so
+     * the prefilter CTE is safe to use alongside them. Enabling it dramatically reduces
+     * feedback score scan volume when trace-column filters are also present (OPIK-7076).
      */
     private boolean shouldUseTraceIdPrefilter(TraceSearchCriteria criteria, ST template) {
-        boolean hasCteDependentFilters = hasFeedbackScoreFilters(template)
-                || template.getAttribute("guardrails_filters") != null;
+        boolean hasGuardrailsInFilters = template.getAttribute("guardrails_filters") != null;
 
         boolean hasNarrowingFilters = criteria.searchText() != null
                 || template.getAttribute("filters") != null;
 
-        return !hasCteDependentFilters && hasNarrowingFilters;
+        return !hasGuardrailsInFilters && hasNarrowingFilters;
     }
 
     /**
@@ -3899,6 +3929,10 @@ class TraceDAOImpl implements TraceDAO {
             var template = newTraceThreadFindTemplate(
                     COUNT_BY_PROJECT_ID, traceSearchCriteria, TRACE_SEARCH_CLAUSE, traceColumnsNonNullable());
             template.add("log_comment", logComment);
+
+            if (shouldUseTraceIdPrefilter(traceSearchCriteria, template)) {
+                template.add("trace_id_prefilter", true);
+            }
 
             var statement = connection.createStatement(template.render())
                     .bind("project_id", traceSearchCriteria.projectId())

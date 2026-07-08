@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expect } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 
 /**
@@ -91,40 +91,65 @@ export class ConfigurationPage {
   /**
    * Add a provider's API key via the UI. Idempotent: if the provider is already
    * in the table, no-ops.
+   *
+   * Returns `false` when the deployment doesn't offer this provider in the
+   * add-provider dialog — restricted environments expose only a subset of
+   * providers, and a missing option must fall through to the next candidate
+   * instead of hanging on a click that will never resolve. Returns `true` when
+   * the provider is configured (either already present or added just now).
    */
-  async ensureProviderConfigured(provider: ProviderName, apiKey: string): Promise<void> {
-    if (await this.hasProvider(provider)) return;
+  async ensureProviderConfigured(provider: ProviderName, apiKey: string): Promise<boolean> {
+    return test.step(`ensure provider "${provider}" is configured`, async () => {
+      if (await this.hasProvider(provider)) return true;
 
-    // Two buttons can have the name "Add configuration": the toolbar button
-    // (always visible) and an empty-state CTA inside the table's no-data row.
-    // Scope to the toolbar button — it's always present.
-    const tabpanel = this.page.getByTestId('ai-providers-tabpanel');
-    const toolbarButton = tabpanel
-      .getByRole('button', { name: 'Add configuration', exact: true })
-      .first();
-    await toolbarButton.click();
-    const dialog = this.page.getByTestId('add-provider-dialog');
-    await dialog.waitFor({ state: 'visible' });
+      // Two buttons can have the name "Add configuration": the toolbar button
+      // (always visible) and an empty-state CTA inside the table's no-data row.
+      // Scope to the toolbar button — it's always present.
+      const tabpanel = this.page.getByTestId('ai-providers-tabpanel');
+      const toolbarButton = tabpanel
+        .getByRole('button', { name: 'Add configuration', exact: true })
+        .first();
+      await toolbarButton.click();
+      const dialog = this.page.getByTestId('add-provider-dialog');
+      await dialog.waitFor({ state: 'visible' });
 
-    const providerType = PROVIDER_TYPE_MAP[provider];
-    const providerButton = dialog
-      .getByTestId('add-provider-dialog-option')
-      .and(this.page.locator(`[data-provider="${providerType}"]`));
-    await providerButton.first().click();
+      // The provider option this candidate needs may be absent: a deployment
+      // exposes only the providers its feature toggles enable, and the grid
+      // renders nothing for the rest. Probe with a bounded wait so an absent
+      // option (or an entirely empty grid) falls through instead of hanging on
+      // the default 30s timeout.
+      const providerType = PROVIDER_TYPE_MAP[provider];
+      const providerButton = dialog
+        .getByTestId('add-provider-dialog-option')
+        .and(this.page.locator(`[data-provider="${providerType}"]`))
+        .first();
 
-    // Step 2: API key input. The textbox accessible name follows
-    // "<Provider> API Key" exactly (verified during Phase 3 discovery).
-    await dialog.getByRole('textbox', { name: `${provider} API Key` }).fill(apiKey);
-    await dialog.getByRole('button', { name: 'Add provider', exact: true }).click();
-    await dialog.waitFor({ state: 'hidden' });
+      const offered = await providerButton
+        .waitFor({ state: 'visible', timeout: 2_000 })
+        .then(() => true)
+        .catch(() => false);
+      if (!offered) {
+        await this.page.keyboard.press('Escape');
+        await dialog.waitFor({ state: 'hidden' });
+        return false;
+      }
+      await providerButton.click();
 
-    // Wait for the new row to land in the table.
-    await expect
-      .poll(async () => this.hasProvider(provider), {
-        timeout: 15_000,
-        intervals: [500, 1000],
-      })
-      .toBe(true);
+      // Step 2: API key input. The textbox accessible name follows
+      // "<Provider> API Key" exactly (verified during Phase 3 discovery).
+      await dialog.getByRole('textbox', { name: `${provider} API Key` }).fill(apiKey);
+      await dialog.getByRole('button', { name: 'Add provider', exact: true }).click();
+      await dialog.waitFor({ state: 'hidden' });
+
+      // Wait for the new row to land in the table.
+      await expect
+        .poll(async () => this.hasProvider(provider), {
+          timeout: 15_000,
+          intervals: [500, 1000],
+        })
+        .toBe(true);
+      return true;
+    });
   }
 
   /**
@@ -132,37 +157,56 @@ export class ConfigurationPage {
    * `ensureProviderConfigured` because Custom providers carry a user-defined
    * provider_name and require URL + Models list fields. Idempotent: if a row
    * matching the same provider_name is already present, no-ops.
+   *
+   * Returns `false` when the deployment doesn't offer the Custom option in the
+   * dialog (its feature toggle is off), mirroring `ensureProviderConfigured` so
+   * the caller can fall through instead of hanging on a missing option. Returns
+   * `true` when the provider is configured (already present or added just now).
    */
-  async ensureCustomProviderConfigured(config: CustomProviderConfig): Promise<void> {
-    if (await this.hasCustomProvider(config.providerName)) return;
+  async ensureCustomProviderConfigured(config: CustomProviderConfig): Promise<boolean> {
+    return test.step(`ensure custom provider "${config.providerName}" is configured`, async () => {
+      if (await this.hasCustomProvider(config.providerName)) return true;
 
-    const tabpanel = this.page.getByTestId('ai-providers-tabpanel');
-    const toolbarButton = tabpanel
-      .getByRole('button', { name: 'Add configuration', exact: true })
-      .first();
-    await toolbarButton.click();
-    const dialog = this.page.getByTestId('add-provider-dialog');
-    await dialog.waitFor({ state: 'visible' });
+      const tabpanel = this.page.getByTestId('ai-providers-tabpanel');
+      const toolbarButton = tabpanel
+        .getByRole('button', { name: 'Add configuration', exact: true })
+        .first();
+      await toolbarButton.click();
+      const dialog = this.page.getByTestId('add-provider-dialog');
+      await dialog.waitFor({ state: 'visible' });
 
-    const providerButton = dialog
-      .getByTestId('add-provider-dialog-option')
-      .and(this.page.locator(`[data-provider="${CUSTOM_PROVIDER_TYPE}"]`));
-    await providerButton.first().click();
+      const providerButton = dialog
+        .getByTestId('add-provider-dialog-option')
+        .and(this.page.locator(`[data-provider="${CUSTOM_PROVIDER_TYPE}"]`))
+        .first();
 
-    await dialog.getByRole('textbox', { name: 'Provider name' }).fill(config.providerName);
-    await dialog.getByRole('textbox', { name: 'URL' }).fill(config.baseUrl);
-    await dialog.getByRole('textbox', { name: 'API key' }).fill(config.apiKey);
-    await dialog.getByRole('textbox', { name: 'Models list' }).fill(config.models);
+      const offered = await providerButton
+        .waitFor({ state: 'visible', timeout: 2_000 })
+        .then(() => true)
+        .catch(() => false);
+      if (!offered) {
+        await this.page.keyboard.press('Escape');
+        await dialog.waitFor({ state: 'hidden' });
+        return false;
+      }
+      await providerButton.click();
 
-    await dialog.getByRole('button', { name: 'Add provider', exact: true }).click();
-    await dialog.waitFor({ state: 'hidden' });
+      await dialog.getByRole('textbox', { name: 'Provider name' }).fill(config.providerName);
+      await dialog.getByRole('textbox', { name: 'URL' }).fill(config.baseUrl);
+      await dialog.getByRole('textbox', { name: 'API key' }).fill(config.apiKey);
+      await dialog.getByRole('textbox', { name: 'Models list' }).fill(config.models);
 
-    await expect
-      .poll(async () => this.hasCustomProvider(config.providerName), {
-        timeout: 15_000,
-        intervals: [500, 1000],
-      })
-      .toBe(true);
+      await dialog.getByRole('button', { name: 'Add provider', exact: true }).click();
+      await dialog.waitFor({ state: 'hidden' });
+
+      await expect
+        .poll(async () => this.hasCustomProvider(config.providerName), {
+          timeout: 15_000,
+          intervals: [500, 1000],
+        })
+        .toBe(true);
+      return true;
+    });
   }
 
   /**
