@@ -82,6 +82,15 @@ backend, and frontend services for development workflows.
 | `--be-only-restart` | Stop, rebuild, and start services |
 | `--be-only-verify` | Check status of services |
 
+**EM / Platform Mode** (Opik-team only — opt-in via `PLATFORM_ENABLED=true`):
+
+Runs the Comet EM/Platform stack (`comet-backend` + `comet-react`, auto-detected sibling checkouts) alongside Opik behind a single-origin proxy, with Opik in comet mode. Off by default; Standard/BE-only dev is unaffected. See `--help` for env vars (`COMET_BACKEND_PATH`, `COMET_REACT_PATH`, `EM_JAVA_HOME`, `EM_*_PORT`).
+
+| Command | Description |
+|---------|-------------|
+| `PLATFORM_ENABLED=true ./scripts/dev-runner.sh --restart` | Bring up Opik + EM stack; integrated UI at `http://localhost:9100` (Opik at `/opik`). Also works with `--start`/`--stop`/`--verify`. |
+| `--platform-build` | Build the EM stack only (comet-backend jar + comet-react deps) |
+
 **Other Commands**:
 
 | Command | Description |

@@ -20,6 +20,24 @@ description: Local development environment setup and commands. Use when helping 
 |------|---------|----------|----------|
 | Standard | `--restart` | localhost:5174 | Frontend work, full-stack |
 | BE-only | `--be-only-restart` | localhost:5173 | Backend-focused, faster rebuilds |
+| Platform (EM) | `PLATFORM_ENABLED=true ./scripts/dev-runner.sh --restart` | localhost:9100 | Opik-team only: run Opik connected to the Comet Platform |
+
+### Platform (EM) mode — Opik-team only
+
+`PLATFORM_ENABLED=true` runs the Comet EM/Platform stack (`comet-backend` +
+`comet-react`, auto-detected sibling checkouts) alongside Opik behind a
+single-origin nginx proxy, with Opik in **comet mode** authenticating/resolving
+workspaces via comet-backend. Off by default — Standard/BE-only dev is
+unaffected. comet-backend builds under a detected JDK 17/21; Opik still uses JDK 25.
+
+```bash
+PLATFORM_ENABLED=true ./scripts/dev-runner.sh --restart   # then also --start/--stop/--verify
+# Integrated UI:  http://localhost:9100        (comet-react / Platform)
+#                 http://localhost:9100/opik   (Opik, comet mode)
+```
+
+Env vars (`COMET_BACKEND_PATH`, `COMET_REACT_PATH`, `EM_JAVA_HOME`, `EM_*_PORT`)
+and `--platform-build` are documented in `./scripts/dev-runner.sh --help`.
 
 ## URLs
 
