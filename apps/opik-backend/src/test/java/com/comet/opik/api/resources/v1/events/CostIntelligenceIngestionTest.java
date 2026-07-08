@@ -162,7 +162,7 @@ class CostIntelligenceIngestionTest {
 
             await().atMost(30, SECONDS).untilAsserted(() -> {
                 var rows = getCipxBlocks(span.id(), ws.workspaceId());
-                assertThat(rows).hasSize(5);
+                assertThat(rows).hasSize(6);
 
                 // idx 0: memory block, cache_read tier; identity_context at raw idx 1 is dropped but
                 // does not shift the following indexes.
@@ -193,9 +193,31 @@ class CostIntelligenceIngestionTest {
                 assertThat(mcpCall.lane()).isEqualTo("mcp_tool_calls");
                 assertThat(mcpCall.label()).isEqualTo("srv");
                 assertThat(mcpCall.alloc()).isCloseTo(40.0, within(1e-9)); // 30 * 40 / 30
+                // raw passthrough columns, pinned on the block with every field populated.
+                assertThat(mcpCall.side()).isEqualTo("output");
+                assertThat(mcpCall.cacheStatus()).isEqualTo("none");
+                assertThat(mcpCall.parentCategory()).isEqualTo("assistant");
+                assertThat(mcpCall.chars()).isEqualTo(30L);
+                assertThat(mcpCall.toolName()).isEqualTo("search");
+                assertThat(mcpCall.toolServer()).isEqualTo("srv");
+                assertThat(mcpCall.toolUseId()).isEqualTo("tu1");
+                assertThat(mcpCall.resource()).isEqualTo("res");
+                assertThat(mcpCall.kind()).isEqualTo("tool");
+
+                // idx 4: (side, cache_status) matches no tier -> still lands, counted by breakdowns
+                // with zero allocation.
+                var noTier = rows.get(3);
+                assertThat(noTier.blockIdx()).isEqualTo(4);
+                assertThat(noTier.src()).isEqualTo("a");
+                assertThat(noTier.category()).isEqualTo("tool_io");
+                assertThat(noTier.tier()).isEmpty();
+                assertThat(noTier.lane()).isEqualTo("built_in_tools");
+                assertThat(noTier.bdLane()).isEqualTo("built_in_tools");
+                assertThat(noTier.label()).isEqualTo("Bash");
+                assertThat(noTier.alloc()).isZero();
 
                 // residuals: billed tiers with no blocks (input, cache_creation), deterministic idx.
-                var residualInput = rows.get(3);
+                var residualInput = rows.get(4);
                 assertThat(residualInput.blockIdx()).isEqualTo(65531);
                 assertThat(residualInput.src()).isEqualTo("r");
                 assertThat(residualInput.category()).isEmpty();
@@ -205,7 +227,7 @@ class CostIntelligenceIngestionTest {
                 assertThat(residualInput.label()).isEmpty();
                 assertThat(residualInput.alloc()).isCloseTo(100.0, within(1e-9));
 
-                var residualCacheCreation = rows.get(4);
+                var residualCacheCreation = rows.get(5);
                 assertThat(residualCacheCreation.blockIdx()).isEqualTo(65533);
                 assertThat(residualCacheCreation.src()).isEqualTo("r");
                 assertThat(residualCacheCreation.tier()).isEqualTo("cache_creation");
@@ -361,7 +383,8 @@ class CostIntelligenceIngestionTest {
                               {"category":"memory","side":"input","cache_status":"read","parent_category":"context","chars":120,"tool_name":"","tool_server":"","tool_use_id":"","resource":"CLAUDE.md","kind":"text"},
                               {"category":"identity_context","side":"input","cache_status":"none","parent_category":"identity_context","chars":50,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"},
                               {"category":"skills_loaded","side":"input","cache_status":"read","parent_category":"context","chars":360,"tool_name":"","tool_server":"","tool_use_id":"","resource":"dataviz","kind":"text"},
-                              {"category":"mcp_tool_calls","side":"output","cache_status":"none","parent_category":"assistant","chars":30,"tool_name":"search","tool_server":"srv","tool_use_id":"tu1","resource":"res","kind":"tool"}
+                              {"category":"mcp_tool_calls","side":"output","cache_status":"none","parent_category":"assistant","chars":30,"tool_name":"search","tool_server":"srv","tool_use_id":"tu1","resource":"res","kind":"tool"},
+                              {"category":"tool_io","side":"input","cache_status":"unknown","parent_category":"context","chars":75,"tool_name":"Bash","tool_server":"","tool_use_id":"tu2","resource":"","kind":"tool"}
                             ]
                           }
                         }
@@ -423,6 +446,8 @@ class CostIntelligenceIngestionTest {
                     toInt32(is_definition) AS is_definition,
                     alloc,
                     model,
+                    side, cache_status, parent_category, chars,
+                    tool_name, tool_server, tool_use_id, resource, kind,
                     toUnixTimestamp64Milli(start_time) AS start_ms
                 FROM cipx_spend_blocks FINAL
                 WHERE workspace_id = :workspace_id AND span_id = :span_id
@@ -444,6 +469,15 @@ class CostIntelligenceIngestionTest {
                             row.get("is_definition", Integer.class),
                             row.get("alloc", Double.class),
                             row.get("model", String.class),
+                            row.get("side", String.class),
+                            row.get("cache_status", String.class),
+                            row.get("parent_category", String.class),
+                            row.get("chars", Long.class),
+                            row.get("tool_name", String.class),
+                            row.get("tool_server", String.class),
+                            row.get("tool_use_id", String.class),
+                            row.get("resource", String.class),
+                            row.get("kind", String.class),
                             row.get("start_ms", Long.class))))
                     .collectList();
         }).block();
@@ -503,7 +537,9 @@ class CostIntelligenceIngestionTest {
     }
 
     private record CipxBlockRow(Integer blockIdx, String src, String category, String tier, String lane,
-            String bdLane, String label, Integer isDefinition, Double alloc, String model, Long startMs) {
+            String bdLane, String label, Integer isDefinition, Double alloc, String model, String side,
+            String cacheStatus, String parentCategory, Long chars, String toolName, String toolServer,
+            String toolUseId, String resource, String kind, Long startMs) {
     }
 
     private record CipxIdentityRow(String projectId, Long startMs, String userUuid, String userEmail,

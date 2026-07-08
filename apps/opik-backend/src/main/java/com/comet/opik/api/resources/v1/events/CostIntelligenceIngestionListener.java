@@ -18,6 +18,7 @@ import com.comet.opik.domain.TraceDAO;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
@@ -122,7 +123,10 @@ public class CostIntelligenceIngestionListener {
         // The event carries the resolved project_id per trace, but start_time must come from the stored trace
         // (not the UUIDv7 timestamp) so a cipx update doesn't rewrite it for backfilled/imported traces.
         var traceProjectIds = event.traceProjectIds();
+        // ingestIdentities ends with a blocking MySQL write; publishOn moves the callback off the
+        // ClickHouse driver's I/O thread so that write can't stall unrelated ClickHouse queries.
         traceDAO.getStartTimesByTraceIds(traceProjectIds.keySet(), event.workspaceId())
+                .publishOn(Schedulers.boundedElastic())
                 .subscribe(
                         startTimes -> {
                             List<TraceIdentityRow> rows = traceProjectIds.entrySet().stream()

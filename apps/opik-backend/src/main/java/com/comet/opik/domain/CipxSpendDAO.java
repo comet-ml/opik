@@ -34,8 +34,8 @@ import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolde
  * <p>This is a plain INSERT: ingestion is create-only (cipx data is complete on the create event and
  * immutable), so the ReplacingMergeTree is only a safeguard against replayed events — a replay
  * produces the same sorting key and dedups at merge time. last_updated_at is left to the column
- * DEFAULT now64(6). project_id must be non-empty for the row to land under the correct key, so blank
- * rows are dropped.
+ * DEFAULT now64(6). project_id must be non-empty for the row to land under the correct key — callers
+ * must drop blank rows before calling insert (the listener does).
  */
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
