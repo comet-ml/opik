@@ -1261,6 +1261,7 @@ public class SpanDAO {
                 UUIDv7ToDateTime(toUUID(min(id))) AS oldest_span_time
             FROM spans
             WHERE workspace_id = :workspace_id
+            AND trace_id >= :lower_bound
             AND trace_id \\< :cutoff_id
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -3255,7 +3256,8 @@ public class SpanDAO {
      * @return velocity estimate with oldest span time, or empty Mono if no data exists
      * @throws io.r2dbc.spi.R2dbcException with code 158 (TOO_MANY_ROWS) for huge workspaces
      */
-    public Mono<VelocityEstimate> estimateVelocityForRetention(@NonNull String workspaceId, @NonNull UUID cutoffId) {
+    public Mono<VelocityEstimate> estimateVelocityForRetention(@NonNull String workspaceId, @NonNull UUID lowerBound,
+            @NonNull UUID cutoffId) {
         log.debug("Estimating retention velocity for workspace '{}'", workspaceId);
 
         var template = getSTWithLogComment(ESTIMATE_VELOCITY_FOR_RETENTION,
@@ -3265,6 +3267,7 @@ public class SpanDAO {
                 .flatMap(connection -> {
                     var statement = connection.createStatement(template.render())
                             .bind("workspace_id", workspaceId)
+                            .bind("lower_bound", lowerBound)
                             .bind("cutoff_id", cutoffId);
 
                     return Mono.from(statement.execute())
