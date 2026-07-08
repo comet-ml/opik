@@ -24,6 +24,7 @@ import {
   DEFAULT_NUMERICAL_SIMILARITY_METRIC_CONFIGS,
   DEFAULT_CODE_METRIC_CONFIGS,
   OPTIMIZER_OPTIONS,
+  OPTIMIZATION_METRIC_OPTIONS,
 } from "@/constants/optimizations";
 import { DEFAULT_ANTHROPIC_CONFIGS } from "@/constants/llm";
 import {
@@ -50,6 +51,12 @@ export const getBaselineCandidate = (
 export const getOptimizerLabel = (type: string): string => {
   return OPTIMIZER_OPTIONS.find((opt) => opt.value === type)?.label || type;
 };
+
+/** Human label for a metric type, falling back to the raw value then an em dash. */
+export const getMetricLabel = (type?: string): string =>
+  OPTIMIZATION_METRIC_OPTIONS.find((opt) => opt.value === type)?.label ??
+  type ??
+  "—";
 
 // Optimizer type from a run: studio_config, falling back to metadata.optimizer
 // (untyped) for older/non-Studio runs. Undefined when neither is present.

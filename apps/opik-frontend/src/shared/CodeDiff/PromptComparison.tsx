@@ -1,20 +1,22 @@
 import React, { useMemo, useState } from "react";
 import { diffLines } from "diff";
-import { ChevronDown, GitCompareArrows } from "lucide-react";
+import { ChevronDown, GitCompare } from "lucide-react";
 
+import GitCompareOff from "@/icons/git-compare-off.svg?react";
 import { cn } from "@/lib/utils";
-import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
 import { PromptComparisonTarget } from "./promptComparisonTargets";
 import {
-  buildRoleDiffRows,
-  groupMessageContentByRole,
+  buildDiffRows,
+  buildPromptRows,
+  getRoleLabel,
 } from "./promptMessageDiff";
 
 type PromptComparisonProps = {
@@ -30,23 +32,28 @@ type PromptComparisonProps = {
   targets: PromptComparisonTarget[];
   /** Target selected initially; falls back to the first target. */
   defaultTargetId?: string;
+  /** Show the built-in target picker + diff toggle bar. Default true. */
+  showControls?: boolean;
+  /**
+   * Section title shown on the left of the control bar while NOT diffing (e.g.
+   * "Trial prompt"). Once diffing starts it is replaced by the target picker.
+   * When omitted, the target picker is always shown (the original behavior).
+   */
+  title?: string;
+  /** Whether the built-in toggle starts in the diff state. Default true. */
+  defaultDiff?: boolean;
+  /**
+   * Controlled diff state. When provided, overrides the internal toggle — use
+   * together with `showControls={false}` to drive the diff from an outer header.
+   */
+  diff?: boolean;
   className?: string;
 };
 
-const promptToText = (prompt: unknown): string => {
-  if (prompt === null || prompt === undefined) return "";
-  if (typeof prompt === "string") return prompt;
-  return JSON.stringify(prompt, null, 2);
-};
-
-const roleLabel = (role: string): string =>
-  LLM_MESSAGE_ROLE_NAME_MAP[role as keyof typeof LLM_MESSAGE_ROLE_NAME_MAP] ??
-  role;
-
 /**
  * Line-level diff: unchanged lines keep the full foreground color, added lines
- * get a green band and removed lines a struck-through red band (matching the
- * Figma trial-details diff — no word-level inline highlighting, no tag pills).
+ * get a green band and removed lines a struck-through red band (no word-level
+ * inline highlighting, no tag pills).
  */
 const LineDiff: React.FC<{ base: string; current: string }> = ({
   base,
@@ -72,6 +79,13 @@ const LineDiff: React.FC<{ base: string; current: string }> = ({
   );
 };
 
+const PlainText: React.FC<{ text: string }> = ({ text }) => (
+  <div className="comet-body-s whitespace-pre-wrap break-words text-foreground">
+    {text}
+  </div>
+);
+
+/** One per-role section: a labelled card wrapping either plain text or a diff. */
 const RoleCard: React.FC<{ role: string; children: React.ReactNode }> = ({
   role,
   children,
@@ -79,17 +93,83 @@ const RoleCard: React.FC<{ role: string; children: React.ReactNode }> = ({
   <div className="flex w-full flex-col rounded-md border bg-primary-foreground px-3 py-2">
     <div className="pb-1.5 pt-0.5">
       <span className="comet-body-xs-accented capitalize text-muted-slate">
-        {roleLabel(role)}
+        {getRoleLabel(role)}
       </span>
     </div>
     {children}
   </div>
 );
 
-const PlainText: React.FC<{ text: string }> = ({ text }) => (
-  <div className="comet-body-s whitespace-pre-wrap break-words text-foreground">
-    {text}
-  </div>
+/**
+ * "[target] → [current]" picker: a dropdown to choose what the current prompt
+ * is diffed against, followed by the current side's label.
+ */
+const TargetPicker: React.FC<{
+  targets: PromptComparisonTarget[];
+  selected: PromptComparisonTarget;
+  currentLabel: string;
+  onSelect: (id: string) => void;
+}> = ({ targets, selected, currentLabel, onSelect }) => (
+  <>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="comet-body-s-accented inline-flex items-center gap-0.5 border-b border-foreground pb-px text-foreground outline-none"
+        >
+          {selected.label}
+          {selected.caption && (
+            <span className="comet-body-xs text-muted-slate">
+              {selected.caption}
+            </span>
+          )}
+          <ChevronDown className="size-3.5" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-[180px]">
+        <DropdownMenuLabel size="sm">Compare against</DropdownMenuLabel>
+        <DropdownMenuSeparator className="bg-border" />
+        {targets.map((target) => (
+          <DropdownMenuItem
+            key={target.id}
+            size="sm"
+            selected={target.id === selected.id}
+            onSelect={() => onSelect(target.id)}
+            className="justify-between gap-2"
+          >
+            <span>{target.label}</span>
+            {target.caption && (
+              <span className="comet-body-xs text-muted-slate">
+                {target.caption}
+              </span>
+            )}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+    <span className="comet-body-s-accented text-foreground">
+      → {currentLabel}
+    </span>
+  </>
+);
+
+/** Toggle between the diff view and the plain current-prompt view. */
+const DiffToggle: React.FC<{ showDiff: boolean; onToggle: () => void }> = ({
+  showDiff,
+  onToggle,
+}) => (
+  <button
+    type="button"
+    onClick={onToggle}
+    className="comet-body-s inline-flex items-center gap-1 text-foreground"
+  >
+    {showDiff ? (
+      <GitCompareOff className="size-3.5" />
+    ) : (
+      <GitCompare className="size-3.5" />
+    )}
+    {showDiff ? "Hide diff" : "Show diff"}
+  </button>
 );
 
 /**
@@ -103,16 +183,20 @@ const PromptComparison: React.FunctionComponent<PromptComparisonProps> = ({
   currentLabel = "Trial",
   targets,
   defaultTargetId,
+  showControls = true,
+  title,
+  defaultDiff = true,
+  diff,
   className,
 }) => {
-  const fallbackId = targets[0]?.id;
   const initialId =
     defaultTargetId && targets.some((t) => t.id === defaultTargetId)
       ? defaultTargetId
-      : fallbackId;
+      : targets[0]?.id;
 
   const [selectedId, setSelectedId] = useState<string | undefined>(initialId);
-  const [showDiff, setShowDiff] = useState(true);
+  const [internalShowDiff, setShowDiff] = useState(defaultDiff);
+  const showDiff = diff ?? internalShowDiff;
 
   // Always derive from the live targets so a stale selection can't point at a
   // target that no longer exists.
@@ -124,90 +208,58 @@ const PromptComparison: React.FunctionComponent<PromptComparisonProps> = ({
   const hasTargets = targets.length > 0;
   const diffActive = hasTargets && showDiff && Boolean(selectedTarget);
 
-  const body = useMemo(() => {
+  const cards = useMemo(() => {
     if (diffActive && selectedTarget) {
-      const rows = buildRoleDiffRows(selectedTarget.prompt, current);
-      if (rows) {
-        return rows.map((row) => (
-          <RoleCard key={row.role} role={row.role}>
-            <LineDiff base={row.baseContent} current={row.currentContent} />
-          </RoleCard>
-        ));
-      }
-      return (
-        <RoleCard role="prompt">
-          <LineDiff
-            base={promptToText(selectedTarget.prompt)}
-            current={promptToText(current)}
-          />
-        </RoleCard>
-      );
-    }
-
-    const rows = groupMessageContentByRole(current);
-    if (rows) {
-      return rows.map((row) => (
+      return buildDiffRows(selectedTarget.prompt, current).map((row) => (
         <RoleCard key={row.role} role={row.role}>
-          <PlainText text={row.content} />
+          <LineDiff base={row.baseContent} current={row.currentContent} />
         </RoleCard>
       ));
     }
 
-    const text = promptToText(current);
-    return text ? (
-      <RoleCard role="prompt">
-        <PlainText text={text} />
+    return buildPromptRows(current).map((row) => (
+      <RoleCard key={row.role} role={row.role}>
+        <PlainText text={row.content} />
       </RoleCard>
-    ) : null;
+    ));
   }, [diffActive, selectedTarget, current]);
 
-  if (!body || (Array.isArray(body) && body.length === 0)) {
-    return null;
-  }
+  if (cards.length === 0) return null;
+
+  // A plain title stands in for the target picker until diffing begins; without
+  // a title the picker always shows (the original behavior).
+  const showTitle = Boolean(title) && !diffActive;
+  const showControlBar = showControls && (hasTargets || showTitle);
 
   return (
     <div className={cn("flex flex-col gap-3", className)}>
-      {hasTargets && selectedTarget && (
+      {showControlBar && (
         <div className="flex items-center justify-between pl-1">
           <div className="flex items-center gap-1.5">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className="comet-body-s-accented inline-flex items-center gap-0.5 border-b border-foreground pb-px text-foreground outline-none"
-                >
-                  {selectedTarget.label}
-                  <ChevronDown className="size-3.5" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <DropdownMenuRadioGroup
-                  value={selectedTarget.id}
-                  onValueChange={setSelectedId}
-                >
-                  {targets.map((target) => (
-                    <DropdownMenuRadioItem key={target.id} value={target.id}>
-                      {target.label}
-                    </DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <span className="comet-body-s-accented text-foreground">
-              → {currentLabel}
-            </span>
+            {showTitle ? (
+              <span className="comet-body-s-accented text-foreground">
+                {title}
+              </span>
+            ) : (
+              selectedTarget && (
+                <TargetPicker
+                  targets={targets}
+                  selected={selectedTarget}
+                  currentLabel={currentLabel}
+                  onSelect={setSelectedId}
+                />
+              )
+            )}
           </div>
-          <button
-            type="button"
-            onClick={() => setShowDiff((prev) => !prev)}
-            className="comet-body-s inline-flex items-center gap-1 text-foreground"
-          >
-            <GitCompareArrows className="size-3.5" />
-            {showDiff ? "Hide diff" : "Show diff"}
-          </button>
+          {hasTargets && (
+            <DiffToggle
+              showDiff={showDiff}
+              onToggle={() => setShowDiff((prev) => !prev)}
+            />
+          )}
         </div>
       )}
-      <div className="flex flex-col gap-1.5">{body}</div>
+      <div className="flex flex-col gap-1.5">{cards}</div>
     </div>
   );
 };

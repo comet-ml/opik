@@ -3,32 +3,16 @@ import { ColumnPinningState, ColumnSort, Row } from "@tanstack/react-table";
 import { ColumnDef } from "@tanstack/react-table";
 import { ROW_HEIGHT, OnChangeFn } from "@/types/shared";
 import { AggregatedCandidate } from "@/types/optimizations";
-import { Card } from "@/ui/card";
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
-import { DataTableWrapperProps } from "@/shared/DataTable/DataTableWrapper";
-import { TABLE_WRAPPER_ATTRIBUTE } from "@/v2/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
+import DataTableVirtualBody from "@/shared/DataTable/DataTableVirtualBody";
+import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 
 export const getRowId = (e: AggregatedCandidate) => e.id;
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: [],
   right: [],
-};
-
-const StickyTableWrapperWithBorder: React.FC<DataTableWrapperProps> = ({
-  children,
-}) => {
-  return (
-    <div
-      className="comet-sticky-table comet-compare-optimizations-table overflow-x-auto rounded-md"
-      {...{
-        [TABLE_WRAPPER_ATTRIBUTE]: "",
-      }}
-    >
-      {children}
-    </div>
-  );
 };
 
 interface OptimizationTrialsTableProps {
@@ -69,31 +53,30 @@ const OptimizationTrialsTable: React.FC<OptimizationTrialsTableProps> = ({
   );
 
   return (
-    <Card className="overflow-hidden">
-      <DataTable
-        columns={columns}
-        data={rows}
-        onRowClick={onRowClick}
-        sortConfig={{
-          enabled: true,
-          sorting: sortedColumns,
-          setSorting: onSortChange,
-        }}
-        resizeConfig={{
-          enabled: true,
-          columnSizing: columnsWidth,
-          onColumnResize: onColumnsWidthChange,
-        }}
-        getRowId={getRowId}
-        getRowClassName={getRowClassName}
-        rowHeight={rowHeight}
-        columnPinning={DEFAULT_COLUMN_PINNING}
-        noData={<DataTableNoData title={noDataText} />}
-        TableWrapper={StickyTableWrapperWithBorder}
-        stickyHeader
-        showLoadingOverlay={showLoadingOverlay}
-      />
-    </Card>
+    <DataTable
+      columns={columns}
+      data={rows}
+      onRowClick={onRowClick}
+      sortConfig={{
+        enabled: true,
+        sorting: sortedColumns,
+        setSorting: onSortChange,
+      }}
+      resizeConfig={{
+        enabled: true,
+        columnSizing: columnsWidth,
+        onColumnResize: onColumnsWidthChange,
+      }}
+      getRowId={getRowId}
+      getRowClassName={getRowClassName}
+      rowHeight={rowHeight}
+      columnPinning={DEFAULT_COLUMN_PINNING}
+      noData={<DataTableNoData title={noDataText} />}
+      TableBody={DataTableVirtualBody}
+      TableWrapper={PageBodyStickyTableWrapper}
+      stickyHeader
+      showLoadingOverlay={showLoadingOverlay}
+    />
   );
 };
 
