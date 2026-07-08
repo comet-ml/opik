@@ -174,8 +174,11 @@ final class ToolCallLoop {
                 .flatMap(loopFinalResponse -> {
                     // Budget-triggered wrap-up gets a distinct instruction: the run was cut short, so
                     // ask for a best-effort verdict from partial data rather than telling the model it
-                    // "completed" its investigation.
-                    var wrapUpMessage = costGuard.shouldWrapUp()
+                    // "completed" its investigation. Keyed on wasBudgetEnforced() (the gate actually
+                    // abandoned pending tool calls), NOT shouldWrapUp() (mere spend >= limit): a model
+                    // that stopped naturally on the turn its cost tipped over the limit still "completed"
+                    // its investigation and must get the standard instruction.
+                    var wrapUpMessage = costGuard.wasBudgetEnforced()
                             ? BUDGET_WRAP_UP_USER_MESSAGE
                             : WRAP_UP_USER_MESSAGE;
                     messages.add(UserMessage.from(wrapUpMessage));
@@ -210,15 +213,20 @@ final class ToolCallLoop {
         // runWithWrapUp will bridge via the forcing user message.
         if (round >= MAX_TOOL_CALL_ROUNDS || costGuard.shouldWrapUp()) {
             if (costGuard.shouldWrapUp() && round < MAX_TOOL_CALL_ROUNDS) {
-                // The spend budget (not the round cap) is cutting this agentic run short. Flag it here,
-                // at the authoritative point the guard actually fires, rather than inferring it later
-                // from shouldWrapUp(): a natural stop that merely crossed spend reaches the no-tool
-                // branch above (never here, so it isn't mislabelled), and flagging now means the
-                // monitoring trace is tagged budget_exceeded even if the wrap-up/scoring chain errors
-                // afterwards. Idempotent — the gate trips once. Demoted to debug (the user-facing warn
-                // in the scorer is the primary signal).
-                log.debug("Evaluation spend budget reached for '{}' (spent '{}' of '{}' USD); wrapping up",
-                        logIdValue, costGuard.spentUsd(), costGuard.limitUsd());
+                // The spend budget (not the round cap) is cutting this agentic run short, here at the
+                // authoritative point the gate abandons pending tool calls. This drives all three
+                // budget signals off one event: markBudgetEnforced() is the source the wrap-up
+                // instruction and the scorer's user-facing warn key off, and flagBudgetExceeded() tags
+                // the monitoring trace even if the wrap-up/scoring chain errors afterwards. A natural
+                // stop that merely crossed spend reaches the no-tool branch above (never here), so it is
+                // not mislabelled by any of the three. Idempotent — the gate trips once.
+                try (var logContext = wrapWithMdc(mdc)) {
+                    // debug (the user-facing warn in the scorer is the primary signal); wrapped in MDC so
+                    // it carries the same workspace_id / rule_id tags as the other tool-loop log lines.
+                    log.debug("Evaluation spend budget reached for '{}' (spent '{}' of '{}' USD); wrapping up",
+                            logIdValue, costGuard.spentUsd(), costGuard.limitUsd());
+                }
+                costGuard.markBudgetEnforced();
                 recorder.flagBudgetExceeded();
             }
             return Mono.just(currentResponse);

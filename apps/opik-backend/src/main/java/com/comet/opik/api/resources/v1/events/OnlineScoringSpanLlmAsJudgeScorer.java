@@ -370,8 +370,9 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
         var span = message.span();
         // Shared loop orchestration lives in the base scorer; here we provide only the span-specific
         // context seeding — pre-seed the active span so read(type=span) / jq(type=span) resolve it
-        // without a re-fetch. Span evaluation is a single LLM call with no loop to wrap up, so a spend
-        // budget could never enforce anything here — always pass the unlimited guard.
+        // without a re-fetch. This method runs the same multi-turn agentic tool loop as the trace/thread
+        // scorers, but the span evaluator DTO exposes no maxCostUsd field (unlike trace/thread), so there
+        // is no per-evaluation spend budget to enforce — always pass the unlimited guard.
         return agenticScoringService.runToolCallLoop(chatResponse, toolRequest, structuredRequest,
                 () -> {
                     var ctx = TraceToolContext.forActiveSpan(span, message.workspaceId(),

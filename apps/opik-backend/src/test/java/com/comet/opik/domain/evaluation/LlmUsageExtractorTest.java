@@ -33,12 +33,14 @@ class LlmUsageExtractorTest {
     @Test
     void baseTokenUsageIsCapturedForAnyProvider() {
         // The base type is what Vertex AI and OpenAI-compatible providers return — no cache subtype.
-        var usage = LlmUsageExtractor.toUsageMap(responseWith(new TokenUsage(100, 20, 120)));
+        // total (130) deliberately differs from prompt+completion (120) so the assertion verifies the
+        // provider-reported total is passed through, not recomputed from the parts.
+        var usage = LlmUsageExtractor.toUsageMap(responseWith(new TokenUsage(100, 20, 130)));
 
         assertThat(usage)
                 .containsEntry("prompt_tokens", 100)
                 .containsEntry("completion_tokens", 20)
-                .containsEntry("total_tokens", 120)
+                .containsEntry("total_tokens", 130)
                 .doesNotContainKeys("cache_creation_input_tokens", "cache_read_input_tokens");
     }
 
@@ -89,25 +91,32 @@ class LlmUsageExtractorTest {
                 .containsEntry("cache_read_input_tokens", 120);
     }
 
+    // The value != null && value > 0 guard is what keeps the usage map (and therefore cost) unchanged
+    // when a provider reports no caching. Each branch it protects is exercised independently below so a
+    // regression in one is reported by name and never masked by an earlier failure.
+
     @Test
-    void omitsCacheKeysWhenCacheCountsAreNullOrZero() {
-        // The value != null && value > 0 guard is what keeps the usage map (and therefore cost)
-        // unchanged when a provider reports no caching — exercise both the null-field and zero-field
-        // branches it protects, plus the null-details branch on the OpenAI subtype.
-        var nullCache = LlmUsageExtractor.toUsageMap(responseWith(AnthropicTokenUsage.builder()
+    void omitsCacheKeysWhenAnthropicCacheFieldsAreNull() {
+        var usage = LlmUsageExtractor.toUsageMap(responseWith(AnthropicTokenUsage.builder()
                 .inputTokenCount(100).outputTokenCount(20).build()));
-        assertThat(nullCache)
+        assertThat(usage)
                 .containsEntry("prompt_tokens", 100)
                 .doesNotContainKeys("cache_creation_input_tokens", "cache_read_input_tokens");
+    }
 
-        var zeroCache = LlmUsageExtractor.toUsageMap(responseWith(AnthropicTokenUsage.builder()
+    @Test
+    void omitsCacheKeysWhenAnthropicCacheFieldsAreZero() {
+        var usage = LlmUsageExtractor.toUsageMap(responseWith(AnthropicTokenUsage.builder()
                 .inputTokenCount(100).outputTokenCount(20)
                 .cacheCreationInputTokens(0).cacheReadInputTokens(0).build()));
-        assertThat(zeroCache)
+        assertThat(usage)
                 .doesNotContainKeys("cache_creation_input_tokens", "cache_read_input_tokens");
+    }
 
-        var nullDetails = LlmUsageExtractor.toUsageMap(responseWith(OpenAiTokenUsage.builder()
+    @Test
+    void omitsCacheKeyWhenOpenAiInputDetailsAreNull() {
+        var usage = LlmUsageExtractor.toUsageMap(responseWith(OpenAiTokenUsage.builder()
                 .inputTokenCount(200).outputTokenCount(50).totalTokenCount(250).build()));
-        assertThat(nullDetails).doesNotContainKey("cache_read_input_tokens");
+        assertThat(usage).doesNotContainKey("cache_read_input_tokens");
     }
 }

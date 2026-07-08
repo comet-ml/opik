@@ -88,6 +88,7 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -737,6 +738,25 @@ class AutomationRuleEvaluatorsResourceTest {
                         .ignoringFields(AUTOMATION_RULE_EVALUATOR_IGNORED_FIELDS)
                         .isEqualTo(expectedAutomationRuleEvaluator);
                 assertIgnoredFields(actualAutomationRuleEvaluator, expectedAutomationRuleEvaluator);
+            }
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"0", "-0.5"})
+        @DisplayName("create evaluator: when max_cost_usd is not positive, then reject at the API boundary")
+        void createEvaluator__whenMaxCostUsdIsNotPositive__thenReturnUnprocessableEntity(String maxCostUsd) {
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class);
+            var invalidCode = evaluator.getCode().toBuilder()
+                    .maxCostUsd(new BigDecimal(maxCostUsd))
+                    .build();
+            var invalidEvaluator = evaluator.toBuilder().code(invalidCode).build();
+
+            try (var actualResponse = evaluatorsResourceClient.createEvaluator(
+                    invalidEvaluator, WORKSPACE_NAME, API_KEY, HttpStatus.SC_UNPROCESSABLE_ENTITY)) {
+                var errorMessage = actualResponse.readEntity(com.comet.opik.api.error.ErrorMessage.class);
+                assertThat(errorMessage.errors())
+                        .anyMatch(error -> error.toLowerCase().contains("cost")
+                                && error.contains("must be greater than 0"));
             }
         }
     }

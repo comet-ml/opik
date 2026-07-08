@@ -154,10 +154,11 @@ class ToolCallLoopTest {
         // When the spend budget cut the run short, the final re-issue must NOT tell the model it
         // "completed" its investigation — it gets the budget-specific, best-effort-from-partial-data
         // instruction instead.
-        var costGuard = overBudgetGuard();
+        var costGuard = tightBudgetGuard();
         var messages = runToWrapUp(costGuard);
 
         assertThat(costGuard.shouldWrapUp()).isTrue();
+        assertThat(costGuard.wasBudgetEnforced()).isTrue();
         assertThat(lastUserMessageText(messages))
                 .contains("evaluation spend budget")
                 .doesNotContain("completed your investigation");
@@ -177,7 +178,7 @@ class ToolCallLoopTest {
         // Regression: when a follow-up round both finishes naturally (no tool calls) AND tips spend
         // over the budget, the terminal AiMessage must still be appended so the wrap-up re-issues
         // with the model's final reasoning. The budget gate must not swallow a no-tool-call response.
-        var costGuard = overBudgetGuard();
+        var costGuard = tightBudgetGuard();
         ToolExecutionRequest toolReq = ToolExecutionRequest.builder()
                 .id("t").name(TOOL_NAME).arguments("{}").build();
         ChatResponse round0 = ChatResponse.builder()
@@ -199,16 +200,50 @@ class ToolCallLoopTest {
 
         assertThat(result).isSameAs(naturalStop);
         assertThat(costGuard.shouldWrapUp()).isTrue();
+        // Spend crossed the limit, but the model stopped on its own via the no-tool branch — the budget
+        // gate never abandoned pending tool calls, so this is NOT flagged as a budget-enforced cut-off.
+        assertThat(costGuard.wasBudgetEnforced()).isFalse();
         // The natural-stop terminal AiMessage is retained as the last message (not dropped by the gate).
         assertThat(messages.getLast()).isInstanceOf(AiMessage.class);
         assertThat(((AiMessage) messages.getLast()).text()).isEqualTo("final reasoning");
     }
 
     @Test
+    void naturalStopThatMerelyCrossesBudgetStillUsesCompletionInstruction() {
+        // A model that finishes on its own (no tool calls) on the exact turn whose cost tips spend over
+        // the budget "completed" its investigation — spend just happens to be over. The wrap-up must use
+        // the standard completion instruction, and the guard must not report the budget as enforced, so
+        // the message / user warn / budget_exceeded tag all agree (they no longer diverge on this path).
+        var costGuard = tightBudgetGuard();
+        ToolExecutionRequest toolReq = ToolExecutionRequest.builder()
+                .id("t").name(TOOL_NAME).arguments("{}").build();
+        ChatResponse round0 = ChatResponse.builder()
+                .aiMessage(AiMessage.from(List.of(toolReq))).build();
+        ChatResponse naturalStop = ChatResponse.builder()
+                .aiMessage(AiMessage.from("final reasoning"))
+                .tokenUsage(OpenAiTokenUsage.builder()
+                        .inputTokenCount(100_000).outputTokenCount(100_000).totalTokenCount(200_000).build())
+                .build();
+
+        var messages = new ArrayList<ChatMessage>(List.of(UserMessage.from("score")));
+        ToolCallLoop.runWithWrapUp(
+                round0, baseRequest(), baseRequest(), followUpParams(), registry(stubTool(TOOL_NAME, "ok")),
+                req -> costGuard.track(Mono.just(naturalStop)),
+                messages, ctx(), new ToolCallLoop.Budget(), costGuard, "trace-id", Map.of(),
+                EvaluationRecorder.NOOP).block();
+
+        assertThat(costGuard.shouldWrapUp()).isTrue();
+        assertThat(costGuard.wasBudgetEnforced()).isFalse();
+        assertThat(lastUserMessageText(messages))
+                .contains("completed your investigation")
+                .doesNotContain("evaluation spend budget");
+    }
+
+    @Test
     void flagsBudgetExceededOnTheRecorderWhenTheBudgetTripsMidLoop() {
         // The recorder must be flagged at the point the budget gate fires (so the monitoring trace is
         // tagged even if the chain errors afterwards), not inferred later by the scorer.
-        var costGuard = overBudgetGuard();
+        var costGuard = tightBudgetGuard();
         ToolExecutionRequest toolReq = ToolExecutionRequest.builder()
                 .id("t").name(TOOL_NAME).arguments("{}").build();
         ChatResponse toolCalling = ChatResponse.builder()
@@ -226,6 +261,8 @@ class ToolCallLoopTest {
                 messages, ctx(), new ToolCallLoop.Budget(), costGuard, "trace-id", Map.of(), recorder).block();
 
         verify(recorder).flagBudgetExceeded();
+        // The recorder tag and the guard's cut-short flag are set together at the same gate.
+        assertThat(costGuard.wasBudgetEnforced()).isTrue();
     }
 
     @Test
@@ -470,7 +507,9 @@ class ToolCallLoopTest {
 
     // --- helpers ---
 
-    private static BudgetGuard overBudgetGuard() {
+    // A guard with a $0.01 limit and zero recorded spend: NOT over budget at return time — it only
+    // trips after the first tracked follow-up response (which carries ~200k tokens) is charged.
+    private static BudgetGuard tightBudgetGuard() {
         var factory = mock(LlmProviderFactory.class);
         when(factory.getResolvedModelInfo("gpt-4o"))
                 .thenReturn(new LlmProviderFactory.ResolvedModelInfo("gpt-4o", "openai"));

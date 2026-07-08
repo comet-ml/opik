@@ -347,9 +347,12 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 })
                 .map(chatResponse -> {
                     try (var logContext = wrapWithMdc(mdc)) {
-                        if (costGuard.shouldWrapUp()) {
-                            // The budget_exceeded tag is flagged where the guard actually fires inside
-                            // ToolCallLoop (agentic path); here we only surface the user-facing signal.
+                        if (costGuard.wasBudgetEnforced()) {
+                            // Keyed on wasBudgetEnforced() (the loop's budget gate actually cut the run
+                            // short), not shouldWrapUp() (mere spend >= limit): this warn claims the
+                            // investigation was stopped, so it must not fire on the inline single-call path
+                            // or a natural stop that only crossed spend. Same authoritative signal as the
+                            // budget_exceeded trace tag flagged inside ToolCallLoop.
                             userFacingLogger.warn(
                                     "Spend budget of '{}' USD reached for traceId '{}' (spent '{}'); "
                                             + "stopped investigating and wrapped up with the scores gathered so far.",

@@ -1,5 +1,7 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.domain.cost.CostService;
+import com.comet.opik.domain.evaluation.LlmUsageExtractor;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.model.chat.response.ChatResponse;
@@ -10,13 +12,13 @@ import reactor.core.publisher.Mono;
 import java.math.BigDecimal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.when;
 
 class BudgetGuardTest {
 
-    // gpt-4o is priced at $2.5/1M input + $10/1M output tokens in the bundled price table,
-    // so 100k input tokens cost exactly $0.25 — the unit used across these cases.
     private static ChatResponse responseWith(int inputTokens, int outputTokens) {
         return ChatResponse.builder()
                 .aiMessage(AiMessage.from("ok"))
@@ -37,7 +39,9 @@ class BudgetGuardTest {
 
     @Test
     void noBudgetSetReturnsSharedUnlimitedGuardThatNeverTrips() {
-        var guard = BudgetGuard.create(null, "gpt-4o", factoryFor("gpt-4o", "openai"));
+        // A bare factory (no stubbing): create() short-circuits to UNLIMITED before resolving the model,
+        // so model resolution never participates in this path.
+        var guard = BudgetGuard.create(null, "gpt-4o", mock(LlmProviderFactory.class));
 
         assertThat(guard).isSameAs(BudgetGuard.UNLIMITED);
 
@@ -49,9 +53,11 @@ class BudgetGuardTest {
 
     @Test
     void nonPositiveBudgetIsTreatedAsUnlimitedNotAnInstantTrip() {
-        // @Positive on the DTO doesn't run (code field isn't @Valid-cascaded), so a 0/negative limit
-        // can reach create(). It must degrade to UNLIMITED, not wrap up every evaluation on turn one.
-        var factory = factoryFor("gpt-4o", "openai");
+        // @Positive now rejects 0/negative at the API boundary, but create() keeps this coercion as
+        // defense-in-depth (e.g. a legacy persisted row): it must degrade to UNLIMITED, not wrap up
+        // every evaluation on turn one. A bare factory suffices — the non-positive check short-circuits
+        // before the model is resolved.
+        var factory = mock(LlmProviderFactory.class);
 
         assertThat(BudgetGuard.create(BigDecimal.ZERO, "gpt-4o", factory)).isSameAs(BudgetGuard.UNLIMITED);
 
@@ -63,16 +69,24 @@ class BudgetGuardTest {
 
     @Test
     void accumulatesSpendAcrossCallsAndTripsOnceLimitReached() {
-        var guard = BudgetGuard.create(new BigDecimal("0.50"), "gpt-4o", factoryFor("gpt-4o", "openai"));
+        // Derive the per-call cost from CostService for the same (model, provider, usage) rather than
+        // hardcoding it, so a bundled price-table update moves the expectation with it instead of
+        // silently breaking this guard test.
+        var perCallCost = CostService.calculateCost("gpt-4o", "openai",
+                LlmUsageExtractor.toUsageMap(responseWith(100_000, 0)), null);
+        assertThat(perCallCost).isGreaterThan(BigDecimal.ZERO); // guard against an unpriced-model false pass
+        var limit = perCallCost.add(perCallCost); // trips exactly on the second identical call
+
+        var guard = BudgetGuard.create(limit, "gpt-4o", factoryFor("gpt-4o", "openai"));
 
         assertThat(guard.shouldWrapUp()).isFalse();
 
-        guard.track(Mono.just(responseWith(100_000, 0))).block(); // +$0.25 -> $0.25
+        guard.track(Mono.just(responseWith(100_000, 0))).block(); // +perCallCost -> below limit
         assertThat(guard.shouldWrapUp()).isFalse();
 
-        guard.track(Mono.just(responseWith(100_000, 0))).block(); // +$0.25 -> $0.50, reaches limit
+        guard.track(Mono.just(responseWith(100_000, 0))).block(); // +perCallCost -> reaches limit
         assertThat(guard.shouldWrapUp()).isTrue();
-        assertThat(guard.spentUsd()).isEqualByComparingTo("0.50");
+        assertThat(guard.spentUsd()).isEqualByComparingTo(limit);
     }
 
     @Test
@@ -104,6 +118,25 @@ class BudgetGuardTest {
                 factoryFor("no-such-model", "no-such-provider"));
 
         guard.track(Mono.just(responseWith(1_000_000, 1_000_000))).block();
+
+        assertThat(guard.spentUsd()).isEqualByComparingTo("0");
+        assertThat(guard.shouldWrapUp()).isFalse();
+    }
+
+    @Test
+    void failsOpenWhenPerCallCostComputationThrows() {
+        // The class contract is "everything is fail-open". A pricing exception inside charge() must be
+        // swallowed: the tracked response passes through unchanged, nothing is charged, and the budget
+        // never trips — a regression that let it propagate would break the scoring call.
+        var guard = BudgetGuard.create(new BigDecimal("0.01"), "gpt-4o", factoryFor("gpt-4o", "openai"));
+        var response = responseWith(100_000, 0);
+
+        try (var costService = mockStatic(CostService.class)) {
+            costService.when(() -> CostService.calculateCost(any(), any(), any(), any()))
+                    .thenThrow(new RuntimeException("pricing failure"));
+
+            assertThat(guard.track(Mono.just(response)).block()).isSameAs(response);
+        }
 
         assertThat(guard.spentUsd()).isEqualByComparingTo("0");
         assertThat(guard.shouldWrapUp()).isFalse();
