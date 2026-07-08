@@ -3,7 +3,6 @@ package com.comet.opik.podam;
 import com.comet.opik.utils.ValidationUtils;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
-import jakarta.validation.constraints.Positive;
 import uk.co.jemos.podam.api.PodamUtils;
 import uk.co.jemos.podam.common.AttributeStrategy;
 import uk.co.jemos.podam.common.BeanValidationStrategy;
@@ -17,21 +16,12 @@ public class BigDecimalStrategy implements AttributeStrategy<BigDecimal> {
 
     public static final BigDecimalStrategy INSTANCE = new BigDecimalStrategy();
 
-    // Smallest strictly-positive value at SCALE=9; used as the lower bound for @Positive fields so
-    // they never manufacture a non-positive value.
-    private static final String MIN_POSITIVE_VALUE = "0.000000001";
-
     @Override
     public BigDecimal getValue(Class<?> attrType, List<Annotation> annotations) {
         var min = ValidationUtils.MIN_FEEDBACK_SCORE_VALUE;
         var decimalMin = BeanValidationStrategy.findTypeFromList(annotations, DecimalMin.class);
         if (null != decimalMin) {
             min = decimalMin.value();
-        } else if (null != BeanValidationStrategy.findTypeFromList(annotations, Positive.class)) {
-            // Without this, the default range spans negatives, so ~half of the manufactured values
-            // for a @Positive field would violate the constraint once it is enforced at the API
-            // boundary (e.g. maxCostUsd, now cascaded via @Valid) — producing flaky create failures.
-            min = MIN_POSITIVE_VALUE;
         }
         var max = ValidationUtils.MAX_FEEDBACK_SCORE_VALUE;
         var decimalMax = BeanValidationStrategy.findTypeFromList(annotations, DecimalMax.class);

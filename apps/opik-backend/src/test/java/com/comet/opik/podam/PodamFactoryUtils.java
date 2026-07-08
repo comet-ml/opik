@@ -44,7 +44,6 @@ import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Pattern;
-import jakarta.validation.constraints.Positive;
 import uk.co.jemos.podam.api.AttributeMetadata;
 import uk.co.jemos.podam.api.DataProviderStrategy;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -71,7 +70,6 @@ public class PodamFactoryUtils {
         strategy.addOrReplaceAttributeStrategy(Pattern.class, PatternStrategy.INSTANCE);
         strategy.addOrReplaceAttributeStrategy(DecimalMax.class, BigDecimalStrategy.INSTANCE);
         strategy.addOrReplaceAttributeStrategy(DecimalMin.class, BigDecimalStrategy.INSTANCE);
-        strategy.addOrReplaceAttributeStrategy(Positive.class, BigDecimalStrategy.INSTANCE);
         strategy.addOrReplaceAttributeStrategy(InRange.class, InRangeStrategy.INSTANCE);
         strategy.addOrReplaceTypeManufacturer(BigDecimal.class, BigDecimalTypeManufacturer.INSTANCE);
         strategy.addOrReplaceTypeManufacturer(UUID.class, UUIDTypeManufacturer.INSTANCE);

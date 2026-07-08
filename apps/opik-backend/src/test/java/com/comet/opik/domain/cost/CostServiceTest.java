@@ -341,6 +341,40 @@ class CostServiceTest {
     }
 
     /**
+     * Callers that hold an LlmProvider value (e.g. online scoring / BudgetGuard) pass the runtime
+     * provider name ("gemini", "vertex-ai"), which differs from the canonical price-table vocabulary
+     * ("google_ai", "google_vertexai"/"anthropic_vertexai"). calculateCost must canonicalize it so the
+     * lookup hits instead of silently pricing at zero. Vertex is disambiguated by the model's own rows.
+     */
+    @ParameterizedTest
+    @MethodSource
+    void calculateCost_canonicalizesRuntimeProviderNames(String modelName, String provider) {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost(modelName, provider, usage, null);
+
+        assertThat(cost).isGreaterThan(BigDecimal.ZERO);
+    }
+
+    private static Stream<Arguments> calculateCost_canonicalizesRuntimeProviderNames() {
+        return Stream.of(
+                Arguments.of("gemini-2.5-flash", "gemini"), // -> google_ai
+                Arguments.of("gemini-2.5-flash", "vertex-ai"), // -> google_vertexai
+                Arguments.of("claude-haiku-4-5", "vertex-ai")); // -> anthropic_vertexai
+    }
+
+    @Test
+    void calculateCost_returnsZeroForRuntimeProviderWithoutCostTracking() {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 500);
+
+        // OpenRouter proxies many providers and has no canonical price-table namespace; the lookup must
+        // degrade to zero gracefully (surfaced to operators by BudgetGuard's unpriced warn), not throw.
+        BigDecimal cost = CostService.calculateCost("gpt-4o", "openrouter", usage, null);
+
+        assertThat(cost).isEqualTo(BigDecimal.ZERO);
+    }
+
+    /**
      * Overrides file: alias entries should resolve to the target's pricing.
      */
     @ParameterizedTest

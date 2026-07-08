@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { UseFormReturn } from "react-hook-form";
 import { Info } from "lucide-react";
 import find from "lodash/find";
@@ -76,6 +76,58 @@ type LLMJudgeRuleDetailsProps = {
   workspaceName: string;
   form: UseFormReturn<EvaluationRuleFormType>;
   datasetColumnNames?: string[];
+};
+
+// Positive decimal only (also rejects the sign/exponent/comma that type=number would accept).
+const POSITIVE_DECIMAL_REGEX = /^\d*\.?\d*$/;
+
+type MaxCostInputProps = {
+  value: number | null | undefined;
+  hasError: boolean;
+  onChange: (value: number | null) => void;
+};
+
+// Decimal budget field. The committed form value is a number, but a controlled type=number bound to
+// that number erases an in-progress trailing decimal point ("1." commits as 1 and re-renders "1"),
+// making fractional entry impossible. So keep the raw text as the source of truth for what's displayed
+// and commit the parsed number separately, re-syncing only when the value changes from outside typing.
+const MaxCostInput: React.FC<MaxCostInputProps> = ({
+  value,
+  hasError,
+  onChange,
+}) => {
+  const [text, setText] = useState(value == null ? "" : String(value));
+
+  useEffect(() => {
+    const parsed = text === "" ? null : Number(text);
+    const reflectsCurrentText =
+      value === parsed || (value == null && parsed == null);
+    if (!reflectsCurrentText) {
+      setText(value == null ? "" : String(value));
+    }
+    // Re-sync display only on external value changes (form reset / editing an existing rule), not on
+    // the value we just committed from our own typing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  return (
+    <Input
+      type="text"
+      inputMode="decimal"
+      placeholder="No limit"
+      value={text}
+      className={cn("max-w-40", { "border-destructive": hasError })}
+      onChange={(event) => {
+        const raw = event.target.value;
+        if (raw !== "" && !POSITIVE_DECIMAL_REGEX.test(raw)) {
+          return;
+        }
+        setText(raw);
+        const parsed = raw === "" ? null : Number(raw);
+        onChange(parsed === null || Number.isNaN(parsed) ? null : parsed);
+      }}
+    />
+  );
 };
 
 const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
@@ -269,41 +321,10 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
               <FormItem>
                 <FormLabel>Max cost per evaluation (USD)</FormLabel>
                 <FormControl>
-                  <Input
-                    type="number"
-                    step="any"
-                    inputMode="decimal"
-                    placeholder="No limit"
-                    value={field.value ?? ""}
-                    // Hide the number spinner arrows (webkit + Firefox).
-                    className={cn(
-                      "max-w-40 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
-                      {
-                        "border-destructive": Boolean(
-                          validationErrors?.message,
-                        ),
-                      },
-                    )}
-                    onKeyDown={(event) => {
-                      // Positive decimal only: block the symbols type=number would otherwise accept
-                      // (sign, exponent, and the comma thousands/decimal separator).
-                      if (["e", "E", "+", "-", ","].includes(event.key)) {
-                        event.preventDefault();
-                      }
-                    }}
-                    onChange={(event) => {
-                      const raw = event.target.value;
-                      // Reject anything that isn't a plain positive decimal. Closes the gap where
-                      // pasted or IME input like "1e3" (a valid float to type=number) would slip past
-                      // onKeyDown and be accepted as 1000; the controlled value keeps its last valid state.
-                      if (raw !== "" && !/^\d*\.?\d*$/.test(raw)) {
-                        return;
-                      }
-                      const value = event.target.valueAsNumber;
-                      field.onChange(
-                        raw === "" || Number.isNaN(value) ? null : value,
-                      );
-                    }}
+                  <MaxCostInput
+                    value={field.value}
+                    hasError={Boolean(validationErrors?.message)}
+                    onChange={field.onChange}
                   />
                 </FormControl>
                 <FormDescription className="comet-body-xs text-muted-slate">

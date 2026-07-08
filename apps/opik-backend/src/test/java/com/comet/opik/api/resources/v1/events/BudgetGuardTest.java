@@ -124,6 +124,19 @@ class BudgetGuardTest {
     }
 
     @Test
+    void enforcesForRuntimeProviderNamesLikeGemini() {
+        // getResolvedModelInfo returns the LlmProvider value ("gemini"), but the price table is keyed by
+        // the canonical provider ("google_ai"). CostService canonicalizes it, so the guard actually
+        // charges and can enforce for Gemini/Vertex judges instead of silently pricing every call at zero.
+        var guard = BudgetGuard.create(new BigDecimal("999"), "gemini-2.5-flash",
+                factoryFor("gemini-2.5-flash", "gemini"));
+
+        guard.track(Mono.just(responseWith(1_000_000, 0))).block();
+
+        assertThat(guard.spentUsd()).isGreaterThan(BigDecimal.ZERO);
+    }
+
+    @Test
     void failsOpenWhenPerCallCostComputationThrows() {
         // The class contract is "everything is fail-open". A pricing exception inside charge() must be
         // swallowed: the tracked response passes through unchanged, nothing is charged, and the budget
