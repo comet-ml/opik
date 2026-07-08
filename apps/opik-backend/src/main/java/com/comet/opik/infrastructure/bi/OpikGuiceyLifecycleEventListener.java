@@ -10,6 +10,7 @@ import com.comet.opik.api.resources.v1.jobs.ExperimentProjectMigrationJob;
 import com.comet.opik.api.resources.v1.jobs.LocalRunnerReaperJob;
 import com.comet.opik.api.resources.v1.jobs.MetricsAlertJob;
 import com.comet.opik.api.resources.v1.jobs.OptimizationProjectMigrationJob;
+import com.comet.opik.api.resources.v1.jobs.ProjectLastUpdatedFlushJob;
 import com.comet.opik.api.resources.v1.jobs.PromptProjectMigrationJob;
 import com.comet.opik.api.resources.v1.jobs.RetentionCatchUpJob;
 import com.comet.opik.api.resources.v1.jobs.RetentionEstimationJob;
@@ -20,6 +21,7 @@ import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
 import com.comet.opik.infrastructure.LlmModelRegistryConfig;
 import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.ProjectLastUpdatedFlushConfig;
 import com.comet.opik.infrastructure.RetentionConfig;
 import com.comet.opik.infrastructure.StreamConsumerReaperConfig;
 import com.comet.opik.infrastructure.TraceThreadConfig;
@@ -64,6 +66,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 setMetricsAlertJob();
                 setAgentInsightsReportJob();
                 setExperimentDenormalizationJob();
+                setProjectLastUpdatedFlushJob();
                 setLocalRunnerReaperJob();
                 setStreamConsumerReaperJob();
                 setRetentionJobs();
@@ -145,6 +148,19 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
         scheduleRepeatingJob(MetricsAlertJob.class,
                 webhookConfig.getMetrics().getFixedDelay().toJavaDuration(),
                 webhookConfig.getMetrics().getInitialDelay().toJavaDuration());
+    }
+
+    private void setProjectLastUpdatedFlushJob() {
+        ProjectLastUpdatedFlushConfig flushConfig = injector.get().getInstance(OpikConfiguration.class)
+                .getProjectLastUpdatedFlush();
+
+        if (!flushConfig.isEnabled() || !flushConfig.isJobEnabled()) {
+            log.info("Project last-updated flush job is disabled, skipping job setup");
+            return;
+        }
+
+        scheduleRepeatingJob(ProjectLastUpdatedFlushJob.class,
+                flushConfig.getJobInterval().toJavaDuration(), null);
     }
 
     private void setLocalRunnerReaperJob() {
