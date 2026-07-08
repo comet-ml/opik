@@ -437,8 +437,13 @@ class TestJsonPathReferenceKey:
         result = metric_fn(dataset_item, "42")
         assert result.value == 1.0
 
-    def test_jsonpath_no_match_returns_default(self):
-        """Test that a JSONPath with no matches returns the default empty string."""
+    def test_jsonpath_no_match_scores_zero_with_reason(self):
+        """A JSONPath that resolves nothing must not silently match empty output.
+
+        Regression guard for OPIK-7160: the old behavior defaulted an
+        unresolvable reference to "" and reported a perfect 1.0 against empty
+        output, hiding the misconfiguration. It now scores 0.0 and explains why.
+        """
         metric_fn = MetricFactory.build(
             "equals",
             {"reference_key": "$.feedback_scores[?(@.name == 'NonExistent')].value"},
@@ -451,10 +456,11 @@ class TestJsonPathReferenceKey:
             ]
         }
         result = metric_fn(dataset_item, "")
-        assert result.value == 1.0
+        assert result.value == 0.0
+        assert "Missing reference value" in result.reason
 
     def test_jsonpath_no_match_against_nonempty_output(self):
-        """Test that a JSONPath with no matches (default='') doesn't match non-empty output."""
+        """A JSONPath with no matches scores 0 against non-empty output."""
         metric_fn = MetricFactory.build(
             "equals",
             {"reference_key": "$.feedback_scores[?(@.name == 'NonExistent')].value"},
@@ -494,6 +500,220 @@ class TestJsonPathReferenceKey:
         assert _is_jsonpath("scores[0].value") is True
         assert _is_jsonpath("$.scores[?(@.name == 'x')].value") is True
         assert _is_jsonpath("items..value") is True
+
+
+class TestReferenceKeyValidation:
+    """Build-time validation that a reference_key resolves against the dataset.
+
+    Guards OPIK-7160: a reference_key matching no dataset field silently scored
+    every item 0, so no candidate could beat the baseline and the optimizer
+    returned the seed prompt while the run reported "completed". Building the
+    metric now fails loudly instead, keeping that failure distinguishable from a
+    legitimate "no improvement over baseline" run (OPIK-7038).
+    """
+
+    def test_equals_build_raises_when_key_resolves_no_item(self):
+        dataset_items = [{"answer": "a"}, {"answer": "b"}]
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build(
+                "equals",
+                {"reference_key": "label"},  # not a dataset field
+                "model",
+                dataset_items_provider=lambda: dataset_items,
+            )
+        message = str(exc_info.value)
+        assert "label" in message
+        assert "did not resolve" in message
+        # Available fields are surfaced to make the fix obvious.
+        assert "answer" in message
+
+    def test_levenshtein_build_raises_when_key_resolves_no_item(self):
+        dataset_items = [{"answer": "a"}, {"answer": "b"}]
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build(
+                "levenshtein_ratio",
+                {"reference_key": "typo"},
+                "model",
+                dataset_items_provider=lambda: dataset_items,
+            )
+        assert "did not resolve" in str(exc_info.value)
+
+    def test_numerical_similarity_build_raises_when_key_resolves_no_item(self):
+        dataset_items = [{"score": 1}, {"score": 2}]
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build(
+                "numerical_similarity",
+                {"reference_key": "value"},
+                "model",
+                dataset_items_provider=lambda: dataset_items,
+            )
+        assert "did not resolve" in str(exc_info.value)
+
+    def test_build_passes_when_key_resolves_for_some_items(self):
+        # Sparse data: the key is present on only one item. Validation passes;
+        # missing items are handled per-item at scoring time.
+        dataset_items = [{"answer": "a"}, {"other": "b"}]
+        metric_fn = MetricFactory.build(
+            "equals",
+            {"reference_key": "answer"},
+            "model",
+            dataset_items_provider=lambda: dataset_items,
+        )
+        assert callable(metric_fn)
+
+    def test_build_skips_validation_without_provider(self):
+        # No dataset available (e.g. config validation) -> do not guess, skip.
+        metric_fn = MetricFactory.build(
+            "equals",
+            {"reference_key": "anything"},
+            "model",
+        )
+        assert callable(metric_fn)
+
+    def test_build_skips_validation_for_empty_dataset(self):
+        metric_fn = MetricFactory.build(
+            "equals",
+            {"reference_key": "anything"},
+            "model",
+            dataset_items_provider=lambda: [],
+        )
+        assert callable(metric_fn)
+
+    def test_equals_jsonpath_build_raises_when_no_item_matches(self):
+        dataset_items = [
+            {"feedback_scores": [{"name": "Useful", "value": 0}]},
+        ]
+        with pytest.raises(InvalidMetricError):
+            MetricFactory.build(
+                "equals",
+                {"reference_key": "$.feedback_scores[?(@.name == 'Missing')].value"},
+                "model",
+                dataset_items_provider=lambda: dataset_items,
+            )
+
+    def test_malformed_jsonpath_build_raises_with_syntax_error(self):
+        # A JSONPath-shaped key with invalid syntax that matches no literal field
+        # must fail with a JSONPath-specific message, not the generic
+        # "did not resolve" one (which hides the real cause). The literal
+        # fallback in _resolve_reference otherwise swallows the parse error.
+        dataset_items = [{"answer": "42"}]
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build(
+                "equals",
+                {"reference_key": "$.foo["},
+                "model",
+                dataset_items_provider=lambda: dataset_items,
+            )
+        assert "not a valid JSONPath expression" in str(exc_info.value)
+
+    def test_numerical_similarity_malformed_jsonpath_build_raises(self):
+        # Same guard on the numerical_similarity validation path, which infers
+        # scale from a separate resolution loop.
+        dataset_items = [{"score": 3}]
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build(
+                "numerical_similarity",
+                {"reference_key": "$.foo["},
+                "model",
+                dataset_items_provider=lambda: dataset_items,
+            )
+        assert "not a valid JSONPath expression" in str(exc_info.value)
+
+    def test_build_passes_when_field_present_but_null(self):
+        # A field that exists on every item but holds null is a data-quality
+        # issue, not a key misconfiguration -> the metric must still build
+        # (regression guard: this previously hard-failed the run with a
+        # self-contradictory "did not resolve ... available fields: answer"
+        # message).
+        dataset_items = [{"answer": None}, {"answer": None}]
+        metric_fn = MetricFactory.build(
+            "equals",
+            {"reference_key": "answer"},
+            "model",
+            dataset_items_provider=lambda: dataset_items,
+        )
+        assert callable(metric_fn)
+
+    def test_build_does_not_crash_on_non_dict_items(self):
+        # Malformed dataset items must yield a clean InvalidMetricError, not an
+        # AttributeError from .get()/.keys() on a non-dict.
+        dataset_items = [None, "scalar", 42]
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build(
+                "equals",
+                {"reference_key": "answer"},
+                "model",
+                dataset_items_provider=lambda: dataset_items,
+            )
+        assert "did not resolve" in str(exc_info.value)
+
+    def test_numerical_similarity_raises_when_references_non_numeric(self):
+        # The key resolves for every item, but to non-numeric text -> every item
+        # would score 0 (silent flat-0). numerical_similarity must fail loudly
+        # (OPIK-7160), unlike equals/levenshtein for which any resolved value is
+        # scoreable.
+        dataset_items = [{"answer": "positive"}, {"answer": "negative"}]
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build(
+                "numerical_similarity",
+                {"reference_key": "answer"},
+                "model",
+                dataset_items_provider=lambda: dataset_items,
+            )
+        assert "no dataset item held a numeric value" in str(exc_info.value)
+
+    def test_numerical_similarity_builds_with_one_numeric_reference(self):
+        # Sparse numeric data: only some items are numeric. Build succeeds
+        # (there is at least one numeric reference to work with) and the numeric
+        # scoring path is actually live -- not a silent flat-0.
+        dataset_items = [{"score": 3}, {"score": "n/a"}]
+        metric_fn = MetricFactory.build(
+            "numerical_similarity",
+            {"reference_key": "score"},
+            "model",
+            dataset_items_provider=lambda: dataset_items,
+        )
+        assert callable(metric_fn)
+        # A single numeric reference means scale_range falls back to 1.0, so an
+        # exact match scores 1.0 -- exercising the similarity math, not just the
+        # constructor.
+        exact = metric_fn({"score": 3}, "3")
+        assert exact.value == 1.0
+        assert exact.name == "numerical_similarity"
+        # A unit-off output is normalized against scale_range=1.0 -> 0.0.
+        off_by_one = metric_fn({"score": 3}, "2")
+        assert off_by_one.value == 0.0
+        # The non-numeric sibling still yields a clean 0 with an explanatory reason.
+        non_numeric = metric_fn({"score": "n/a"}, "3")
+        assert non_numeric.value == 0.0
+        assert "not numeric" in non_numeric.reason
+
+
+class TestMissingReferencePerItem:
+    """Per-item feedback when a reference key is absent on a specific item."""
+
+    def test_equals_missing_reference_scores_zero_with_reason(self):
+        metric_fn = MetricFactory.build("equals", {"reference_key": "answer"}, "model")
+        result = metric_fn({"other": "x"}, "x")
+        assert result.value == 0.0
+        assert "Missing reference value" in result.reason
+        assert "answer" in result.reason
+
+    def test_levenshtein_missing_reference_scores_zero_with_reason(self):
+        metric_fn = MetricFactory.build(
+            "levenshtein_ratio", {"reference_key": "answer"}, "model"
+        )
+        result = metric_fn({"other": "x"}, "x")
+        assert result.value == 0.0
+        assert "Missing reference value" in result.reason
+
+    def test_present_empty_string_reference_matches_empty_output(self):
+        # A field that is present but holds "" is a real reference value, not a
+        # missing one: empty output should still score a perfect match. Only a
+        # genuinely absent field short-circuits to the missing-reference result.
+        metric_fn = MetricFactory.build("equals", {"reference_key": "answer"}, "model")
+        result = metric_fn({"answer": ""}, "")
+        assert result.value == 1.0
 
 
 class TestNumericalSimilarityMetric:
