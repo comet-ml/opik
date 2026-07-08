@@ -31,6 +31,7 @@ export const ProjectMetricsWidgetSchema = z.object({
     .min(1, { message: "Metric type is required" }),
   chartType: z.nativeEnum(CHART_TYPE),
   projectId: z.string().optional(),
+  projectIds: z.array(z.string()).optional(),
   traceFilters: FiltersArraySchema.optional(),
   threadFilters: FiltersArraySchema.optional(),
   spanFilters: FiltersArraySchema.optional(),

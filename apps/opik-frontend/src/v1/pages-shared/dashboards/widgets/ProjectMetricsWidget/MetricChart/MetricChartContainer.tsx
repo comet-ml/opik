@@ -12,10 +12,11 @@ import { formatNumericData } from "@/lib/utils";
 
 import { TransformedData } from "@/types/projects";
 import useChartConfig from "@/hooks/useChartConfig";
-import useProjectMetric, {
+import {
   INTERVAL_TYPE,
   METRIC_NAME_TYPE,
 } from "@/api/projects/useProjectMetric";
+import useMetricData from "@/api/projects/useMetricData";
 import { ChartTooltipRenderValueArguments } from "@/shared/Charts/ChartTooltipContent/ChartTooltipContent";
 import NoData from "@/shared/NoData/NoData";
 import { ValueType } from "recharts/types/component/DefaultTooltipContent";
@@ -39,7 +40,10 @@ interface MetricContainerChartProps {
   name: string;
   description: string;
   chartType: CHART_TYPE.line | CHART_TYPE.bar;
-  projectId: string;
+  // Single-project mode (per-project endpoint). Mutually exclusive with projectIds.
+  projectId?: string;
+  // Workspace mode (aggregate across projects). Empty array => all projects in the workspace.
+  projectIds?: string[];
   interval: INTERVAL_TYPE;
   intervalStart: string | undefined;
   intervalEnd: string | undefined;
@@ -81,6 +85,7 @@ const MetricContainerChart = ({
   description,
   metricName,
   projectId,
+  projectIds,
   interval,
   intervalStart,
   intervalEnd,
@@ -99,9 +104,10 @@ const MetricContainerChart = ({
   isAggregateTotal = false,
   customEmptyState,
 }: MetricContainerChartProps) => {
-  const { data: response, isPending } = useProjectMetric(
+  const { data: response, isPending } = useMetricData(
     {
       projectId,
+      projectIds,
       metricName,
       interval,
       intervalStart,
@@ -111,10 +117,7 @@ const MetricContainerChart = ({
       spanFilters,
       breakdown,
     },
-    {
-      enabled: !!projectId,
-      refetchInterval: 30000,
-    },
+    { refetchInterval: 30000 },
   );
 
   const traces = response?.results;
