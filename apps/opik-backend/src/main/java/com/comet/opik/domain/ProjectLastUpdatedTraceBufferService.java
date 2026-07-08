@@ -4,6 +4,10 @@ import com.comet.opik.api.ProjectIdLastUpdated;
 import com.comet.opik.infrastructure.ProjectLastUpdatedFlushConfig;
 import com.comet.opik.infrastructure.redis.StringRedisClient;
 import com.google.inject.ImplementedBy;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.LongCounter;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Builder;
@@ -19,6 +23,8 @@ import java.util.Collection;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
+
+import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 /**
  * Owns the {@code projects.last_updated_trace_at} buffering: the ingestion-path write that keeps the marker off the
@@ -48,9 +54,15 @@ class ProjectLastUpdatedTraceBufferServiceImpl implements ProjectLastUpdatedTrac
     static final String FLUSHING_SET_KEY = "project:last-updated-trace:flushing";
     private static final String MEMBER_SEPARATOR = ":";
 
+    static final String METER_NAME = "opik.project_last_updated_flush";
+    private static final AttributeKey<String> RESULT_KEY = stringKey("result");
+
     private final ProjectLastUpdatedFlushConfig config;
     private final StringRedisClient redisClient;
     private final ProjectService projectService;
+
+    private final LongCounter bufferedRecords;
+    private final LongCounter flushedMarkers;
 
     @Inject
     public ProjectLastUpdatedTraceBufferServiceImpl(
@@ -60,6 +72,17 @@ class ProjectLastUpdatedTraceBufferServiceImpl implements ProjectLastUpdatedTrac
         this.config = config;
         this.redisClient = redisClient;
         this.projectService = projectService;
+
+        var meter = GlobalOpenTelemetry.get().getMeter(METER_NAME);
+        this.bufferedRecords = meter
+                .counterBuilder(METER_NAME + ".buffered")
+                .setDescription("Project last-updated markers buffered to Redis on the ingestion path, by result")
+                .build();
+        // Cumulative throughput of markers persisted over time (monotonic) — a counter, not a point-in-time gauge.
+        this.flushedMarkers = meter
+                .counterBuilder(METER_NAME + ".markers")
+                .setDescription("Total project last-updated markers processed by the flush")
+                .build();
     }
 
     @Override
@@ -73,11 +96,20 @@ class ProjectLastUpdatedTraceBufferServiceImpl implements ProjectLastUpdatedTrac
             return;
         }
 
-        // Let Redis failures propagate to the caller (the event bus), which owns the handling, rather than swallowing
-        // the marker update here — consistent with the synchronous fallback branch above.
+        // Count each marker once by its actual outcome so a mid-batch Redis failure doesn't mislabel the whole batch:
+        // the failing marker is "error", already-buffered ones stay "ok", and the un-attempted remainder isn't counted.
+        // The exception still propagates to the caller (the event bus), which owns the handling — Redis failures are
+        // no longer swallowed here (see #7361 review feedback).
         RScoredSortedSet<String> pending = redisClient.getScoredSortedSet(PENDING_SET_KEY);
-        lastUpdatedTraces.forEach(project -> pending.addIfGreater(
-                project.lastUpdatedAt().toEpochMilli(), member(workspaceId, project.id())));
+        for (ProjectIdLastUpdated project : lastUpdatedTraces) {
+            try {
+                pending.addIfGreater(project.lastUpdatedAt().toEpochMilli(), member(workspaceId, project.id()));
+                bufferedRecords.add(1, Attributes.of(RESULT_KEY, "ok"));
+            } catch (RuntimeException e) {
+                bufferedRecords.add(1, Attributes.of(RESULT_KEY, "error"));
+                throw e;
+            }
+        }
     }
 
     @Override
@@ -103,6 +135,9 @@ class ProjectLastUpdatedTraceBufferServiceImpl implements ProjectLastUpdatedTrac
                 written += flushBatch(flushing, entries);
             }
         } while (pageSize == batchSize);
+        if (written > 0) {
+            flushedMarkers.add(written);
+        }
         return written;
     }
 
