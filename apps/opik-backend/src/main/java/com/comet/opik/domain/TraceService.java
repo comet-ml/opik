@@ -486,7 +486,7 @@ class TraceServiceImpl implements TraceService {
         // by the TracesDeleted event - filters by project_id and prunes on the (workspace_id, project_id)
         // sorting-key prefix instead of scanning the whole workspace. Trace ids with no resolvable project
         // (the trace row is already gone) fall back to a workspace-scoped delete to still clean up orphan rows.
-        log.info("Resolving owning projects for '{}' trace ids to delete per project group", ids.size());
+        log.info("Resolving owning projects for trace ids to delete per project group (count={})", ids.size());
         return dao.getProjectIdsByTraceIdsBounded(ids)
                 .flatMap(traceToProject -> {
                     var idsByProject = ids.stream()

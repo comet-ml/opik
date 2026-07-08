@@ -4781,8 +4781,8 @@ class TracesResourceTest {
 
         @Test
         void deleteTraceDeletesTraceAndSpanComments() {
-            UUID traceId = traceResourceClient.createTrace(createTrace(), API_KEY,
-                    TEST_WORKSPACE);
+            Trace trace = createTrace();
+            UUID traceId = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
             List<Comment> expectedTraceComments = IntStream.range(0, 5)
                     .mapToObj(i -> traceResourceClient.generateAndCreateComment(traceId, API_KEY, TEST_WORKSPACE, 201))
                     .toList();
@@ -4792,7 +4792,7 @@ class TracesResourceTest {
             assertComments(expectedTraceComments, expectedTrace.comments());
 
             // Create span for the trace and span comments
-            var spanWithComments = createSpanWithCommentsAndAssert(traceId);
+            var spanWithComments = createSpanWithCommentsAndAssert(traceId, trace.projectName());
 
             traceResourceClient.deleteTrace(traceId, TEST_WORKSPACE, API_KEY);
 
@@ -4838,7 +4838,7 @@ class TracesResourceTest {
             assertComments(expectedTraceComments, expectedTrace.comments());
 
             // Create span for the trace and span comments
-            var spanWithComments = createSpanWithCommentsAndAssert(traces.getFirst().id());
+            var spanWithComments = createSpanWithCommentsAndAssert(traces.getFirst().id(), projectName);
 
             var request = BatchDeleteByProject.builder()
                     .ids(traces.stream().map(Trace::id).collect(Collectors.toUnmodifiableSet()))
@@ -4861,11 +4861,13 @@ class TracesResourceTest {
             });
         }
 
-        private Pair<UUID, List<Comment>> createSpanWithCommentsAndAssert(UUID traceId) {
-            // Create span for the trace and span comments
+        private Pair<UUID, List<Comment>> createSpanWithCommentsAndAssert(UUID traceId, String projectName) {
+            // Create span for the trace and span comments. A span shares its trace's project, so the span
+            // must be created in the same project - otherwise the trace-delete cascade (which scopes by the
+            // trace's project) would not reach it.
             UUID spanId = spanResourceClient.createSpan(
-                    factory.manufacturePojo(Span.class).toBuilder().traceId(traceId).build(), API_KEY,
-                    TEST_WORKSPACE);
+                    factory.manufacturePojo(Span.class).toBuilder().traceId(traceId).projectName(projectName).build(),
+                    API_KEY, TEST_WORKSPACE);
             List<Comment> expectedSpanComments = IntStream.range(0, 5)
                     .mapToObj(i -> spanResourceClient.generateAndCreateComment(spanId, API_KEY, TEST_WORKSPACE, 201))
                     .toList();

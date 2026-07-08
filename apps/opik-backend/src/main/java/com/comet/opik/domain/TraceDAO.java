@@ -54,7 +54,6 @@ import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.publisher.SignalType;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -4437,8 +4436,6 @@ class TraceDAOImpl implements TraceDAO {
     public Mono<Map<UUID, UUID>> getProjectIdsByTraceIds(@NonNull List<UUID> traceIds) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(traceIds), "Argument 'traceIds' must not be empty");
 
-        log.info("Getting project_ids for '{}' trace_ids", traceIds.size());
-
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(SELECT_PROJECT_IDS_BY_TRACE_IDS, "get_project_ids_by_trace_ids",
                     workspaceId, userName, traceIds.size());
@@ -4446,16 +4443,15 @@ class TraceDAOImpl implements TraceDAO {
             var statement = connection.createStatement(template.render())
                     .bind("trace_ids", traceIds.toArray(UUID[]::new));
 
-            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
-                    .flatMapMany(result -> result.map((row, rowMetadata) -> Map.entry(row.get("id", UUID.class),
-                            row.get("project_id", UUID.class))))
-                    .collect(toMap(Map.Entry::getKey, Map.Entry::getValue))
-                    .doFinally(signalType -> {
-                        if (signalType == SignalType.ON_COMPLETE) {
-                            log.info("Got project_ids for '{}' trace_ids", traceIds.size());
-                        }
-                    });
+            return collectTraceIdToProjectId(statement);
         }));
+    }
+
+    private Mono<Map<UUID, UUID>> collectTraceIdToProjectId(Statement statement) {
+        return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                .flatMapMany(result -> result.map((row, rowMetadata) -> Map.entry(row.get("id", UUID.class),
+                        row.get("project_id", UUID.class))))
+                .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     @Override
@@ -4474,10 +4470,7 @@ class TraceDAOImpl implements TraceDAO {
                     .bind("min_id", minId)
                     .bind("max_id", maxId);
 
-            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
-                    .flatMapMany(result -> result.map((row, rowMetadata) -> Map.entry(row.get("id", UUID.class),
-                            row.get("project_id", UUID.class))))
-                    .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+            return collectTraceIdToProjectId(statement);
         }));
     }
 
