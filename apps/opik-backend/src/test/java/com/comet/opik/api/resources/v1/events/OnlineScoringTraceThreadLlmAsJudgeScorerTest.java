@@ -108,6 +108,7 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
     private com.comet.opik.domain.attachment.AttachmentService attachmentService;
 
     private OnlineScoringTraceThreadLlmAsJudgeScorer scorer;
+    private AgenticScoringService agenticScoringService;
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
     private Logger userFacingLogger;
 
@@ -146,6 +147,8 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
         Mockito.lenient().when(onlineScoringConfig.getAgenticToolsCharsPerToken()).thenReturn(4);
         Mockito.lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(50_000);
 
+        agenticScoringService = new AgenticScoringServiceImpl(onlineScoringConfig, toolRegistry);
+
         scorer = new OnlineScoringTraceThreadLlmAsJudgeScorer(
                 onlineScoringConfig,
                 serviceTogglesConfig,
@@ -157,7 +160,7 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
                 traceThreadService,
                 projectService,
                 automationRuleEvaluatorService,
-                toolRegistry,
+                agenticScoringService,
                 spanService,
                 onlineEvaluationRecorder,
                 attachmentService);

@@ -1,6 +1,5 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.TestComparators;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.ErrorCountWithDeviation;
 import com.comet.opik.api.ErrorInfo;
@@ -137,6 +136,7 @@ import static java.util.stream.Collectors.averagingDouble;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.toMap;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -1400,12 +1400,12 @@ class ProjectsResourceTest {
             assertThat(actualEntity.content().stream().map(Project::id).toList())
                     .isEqualTo(List.of(id3, id2, id));
 
-            assertThat(actualEntity.content().get(0).lastUpdatedTraceAt())
-                    .isEqualTo(expectedProject3.lastUpdatedTraceAt());
-            assertThat(actualEntity.content().get(1).lastUpdatedTraceAt())
-                    .isEqualTo(expectedProject2.lastUpdatedTraceAt());
-            assertThat(actualEntity.content().get(2).lastUpdatedTraceAt())
-                    .isEqualTo(expectedProject.lastUpdatedTraceAt());
+            assertLastUpdatedTraceAtEquals(actualEntity.content().get(0).lastUpdatedTraceAt(),
+                    expectedProject3.lastUpdatedTraceAt());
+            assertLastUpdatedTraceAtEquals(actualEntity.content().get(1).lastUpdatedTraceAt(),
+                    expectedProject2.lastUpdatedTraceAt());
+            assertLastUpdatedTraceAtEquals(actualEntity.content().get(2).lastUpdatedTraceAt(),
+                    expectedProject.lastUpdatedTraceAt());
 
             assertAllProjectsHavePersistedLastTraceAt(workspaceId, List.of(expectedProject, expectedProject2,
                     expectedProject3));
@@ -1714,11 +1714,12 @@ class ProjectsResourceTest {
             assertThat(actualEntity.content().stream().map(Project::id).toList())
                     .isEqualTo(List.of(id3, id2, id1));
 
-            // project3 and project2 carry explicit client timestamps, so the recorded marker matches exactly.
-            assertThat(actualEntity.content().get(0).lastUpdatedTraceAt())
-                    .isEqualTo(expectedProject3.lastUpdatedTraceAt());
-            assertThat(actualEntity.content().get(1).lastUpdatedTraceAt())
-                    .isEqualTo(expectedProject2.lastUpdatedTraceAt());
+            // project3 and project2 carry explicit client timestamps, so the recorded marker matches the stored value
+            // (within the micro-level rounding difference between MySQL and ClickHouse storage).
+            assertLastUpdatedTraceAtEquals(actualEntity.content().get(0).lastUpdatedTraceAt(),
+                    expectedProject3.lastUpdatedTraceAt());
+            assertLastUpdatedTraceAtEquals(actualEntity.content().get(1).lastUpdatedTraceAt(),
+                    expectedProject2.lastUpdatedTraceAt());
             // project1 left lastUpdatedAt null, so its marker is the event publish time: at or after the stored
             // value and not in the future.
             assertThat(actualEntity.content().get(2).lastUpdatedTraceAt())
@@ -1788,17 +1789,16 @@ class ProjectsResourceTest {
 
         private void assertAllProjectsHavePersistedLastTraceAt(String workspaceId, List<Project> expectedProjects) {
             Awaitility.await().untilAsserted(() -> {
-                List<Project> dbProjects = projectService.findByIds(workspaceId, expectedProjects.stream()
-                        .map(Project::id).collect(Collectors.toUnmodifiableSet()));
-                Map<UUID, Instant> actualLastTraceByProjectId = dbProjects.stream()
+                var expectedLastTraceByProjectId = expectedProjects.stream()
                         .collect(toMap(Project::id, Project::lastUpdatedTraceAt));
-                Map<UUID, Instant> expectedLastTraceByProjectId = expectedProjects.stream()
+                var expectedProjectIds = expectedLastTraceByProjectId.keySet();
+                var actualLastTraceByProjectId = projectService.findByIds(
+                        workspaceId, expectedProjectIds).stream()
                         .collect(toMap(Project::id, Project::lastUpdatedTraceAt));
-
                 assertThat(actualLastTraceByProjectId)
-                        .usingRecursiveComparison()
-                        .withComparatorForType(TestComparators::compareMicroNanoTime, Instant.class)
-                        .isEqualTo(expectedLastTraceByProjectId);
+                        .containsOnlyKeys(expectedProjectIds)
+                        .allSatisfy((projectId, actualLastUpdatedTraceAt) -> assertLastUpdatedTraceAtEquals(
+                                actualLastUpdatedTraceAt, expectedLastTraceByProjectId.get(projectId)));
             });
         }
 
@@ -2424,9 +2424,22 @@ class ProjectsResourceTest {
         assertThat(actualEntity.lastUpdatedBy()).isEqualTo(USER);
         assertThat(actualEntity.createdBy()).isEqualTo(USER);
 
-        assertThat(actualEntity.lastUpdatedTraceAt()).isEqualTo(project.lastUpdatedTraceAt());
+        assertLastUpdatedTraceAtEquals(actualEntity.lastUpdatedTraceAt(), project.lastUpdatedTraceAt());
         assertThat(actualEntity.createdAt()).isAfter(project.createdAt());
         assertThat(actualEntity.lastUpdatedAt()).isAfter(project.createdAt());
+    }
+
+    /**
+     * Compares a project's last_updated_trace_at marker with a one-microsecond tolerance: MySQL rounds it to micros
+     * while the source ClickHouse trace timestamp is truncated, so the same instant can differ by up to a microsecond.
+     * Null (projects without traces) is handled separately.
+     */
+    private void assertLastUpdatedTraceAtEquals(Instant actual, Instant expected) {
+        if (expected == null) {
+            assertThat(actual).isNull();
+        } else {
+            assertThat(actual).isCloseTo(expected, within(1, ChronoUnit.MICROS));
+        }
     }
 
     private void requestAndAssertLastTraceSorting(String workspaceName, String apiKey, List<Project> allProjects,

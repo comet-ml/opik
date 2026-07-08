@@ -117,10 +117,17 @@ export class LogsPage {
     return this.page.getByRole('radio', { name: 'Threads' });
   }
 
-  /** Wait for the Threads table to have rendered at least one row. */
-  async waitForThreadsReady(): Promise<void> {
+  /**
+   * Wait for the Threads table to be ready. When a threadId is given, wait for
+   * that specific row — threads are eventually consistent, so gating on "any
+   * row" can pass before the seeded thread has been aggregated into the list.
+   */
+  async waitForThreadsReady(threadId?: string): Promise<void> {
     return test.step('Wait for Threads table ready', async () => {
-      await this.page.locator('tr[data-row-id]').first().waitFor({ state: 'visible' });
+      const target = threadId
+        ? this.threadRow(threadId)
+        : this.page.locator('tr[data-row-id]').first();
+      await target.waitFor({ state: 'visible' });
     });
   }
 

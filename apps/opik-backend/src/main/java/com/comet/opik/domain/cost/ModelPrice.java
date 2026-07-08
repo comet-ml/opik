@@ -16,6 +16,7 @@ public record ModelPrice(
         @NonNull BigDecimal videoOutputPrice,
         @NonNull BigDecimal audioInputCharacterPrice,
         @NonNull BigDecimal inputAudioTokenPrice,
+        @NonNull BigDecimal outputAudioTokenPrice,
         @NonNull BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator,
         @NonNull BigDecimal inputPriceAbove200kTokens,
         @NonNull BigDecimal outputPriceAbove200kTokens,
@@ -44,6 +45,7 @@ public record ModelPrice(
                 .videoOutputPrice(BigDecimal.ZERO)
                 .audioInputCharacterPrice(BigDecimal.ZERO)
                 .inputAudioTokenPrice(BigDecimal.ZERO)
+                .outputAudioTokenPrice(BigDecimal.ZERO)
                 .calculator(SpanCostCalculator::defaultCost)
                 .inputPriceAbove200kTokens(BigDecimal.ZERO)
                 .outputPriceAbove200kTokens(BigDecimal.ZERO)

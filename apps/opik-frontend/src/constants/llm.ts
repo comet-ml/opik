@@ -21,7 +21,7 @@ export const PLAYGROUND_SELECTED_DATASET_VERSION_KEY =
   "playground-selected-dataset-version";
 
 export const PLAYGROUND_PROMPT_COLORS = [
-  { bg: "#b8e54a", text: "#1a1a1a" },
+  { bg: "#6bdf93", text: "#1a1a1a" },
   { bg: "#a6ddfe", text: "#1a1a1a" },
   { bg: "#6e3de8", text: "#ffffff" },
   { bg: "#be48ea", text: "#ffffff" },
@@ -57,6 +57,35 @@ export const RESERVED_TRACE_EVALUATOR_VARIABLES: Readonly<
   Record<string, string>
 > = Object.freeze({
   spans: "spans",
+});
+
+/**
+ * LLM-as-judge trace-scope reserved variables. Superset of
+ * {@link RESERVED_TRACE_EVALUATOR_VARIABLES}: adds `{{trace}}`, which injects the
+ * trace skeleton (trace id, span ids, attachment file_names) into the prompt and
+ * triggers the agentic-tools loop so the judge can call `get_attachment` with real
+ * ids. `trace` is intentionally NOT in the shared set above — the Python-metric
+ * backend only handles `spans`, so auto-mapping a `trace` param there would inject a
+ * value the scorer ignores.
+ */
+export const RESERVED_TRACE_LLM_JUDGE_VARIABLES: Readonly<
+  Record<string, string>
+> = Object.freeze({
+  spans: "spans",
+  trace: "trace",
+});
+
+/**
+ * LLM-as-judge span-scope reserved variables: `{{span}}` injects the span (span id +
+ * the span's own attachment file_names) into the prompt and triggers the agentic-tools
+ * loop so the span judge can call `get_attachment(type=span, ...)` with real ids. The
+ * span-scope analogue of `{{trace}}`; `{{spans}}` / `{{trace}}` are not meaningful at
+ * span scope (a span has no sub-spans, and the trace structure belongs to trace scope).
+ */
+export const RESERVED_SPAN_LLM_JUDGE_VARIABLES: Readonly<
+  Record<string, string>
+> = Object.freeze({
+  span: "span",
 });
 
 export const DEFAULT_OPEN_AI_CONFIGS = {
@@ -134,6 +163,14 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
     thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7]: {
+    supportsSamplingParams: false,
+    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5]: {
+    supportsSamplingParams: false,
+    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5]: {
     supportsSamplingParams: false,
     thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
   },

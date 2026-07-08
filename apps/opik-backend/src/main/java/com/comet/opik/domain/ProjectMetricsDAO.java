@@ -8,6 +8,7 @@ import com.comet.opik.api.metrics.MetricType;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
 import com.comet.opik.utils.RowUtils;
@@ -150,6 +151,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private final @NonNull TransactionTemplateAsync template;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
+    private final @NonNull OpikConfiguration configuration;
 
     private static final Map<TimeInterval, String> INTERVAL_TO_SQL = Map.of(
             TimeInterval.WEEKLY, "toIntervalWeek(1)",
@@ -545,12 +547,12 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         t.project_id as project_id,
                         min(t.start_time) as start_time,
                         max(t.end_time) as end_time,
-                        if(max(t.end_time) IS NOT NULL AND min(t.start_time) IS NOT NULL
+                        if(max(t.end_time) IS NOT NULL AND notEquals(max(t.end_time), toDateTime64('1970-01-01 00:00:00.000', 9)) AND min(t.start_time) IS NOT NULL
                                AND notEquals(min(t.start_time), toDateTime64('1970-01-01 00:00:00.000', 9)),
                            (dateDiff('microsecond', min(t.start_time), max(t.end_time)) / 1000.0),
                            NULL) AS duration,
                         <if(truncate)> replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"') as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
-                        <if(truncate)> replaceRegexpAll(argMax(t.output, t.end_time), '<truncate>', '"[image]"') as last_message <else> argMax(t.output, t.end_time) as last_message<endif>,
+                        <if(truncate)> replaceRegexpAll(argMax(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))), '<truncate>', '"[image]"') as last_message <else> argMax(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as last_message<endif>,
                         count(DISTINCT t.id) * 2 as number_of_messages,
                         max(t.last_updated_at) as last_updated_at,
                         argMax(t.last_updated_by, t.last_updated_at) as last_updated_by,
@@ -1069,7 +1071,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     private static final String GET_AVERAGE_DURATION = """
             SELECT
-                avg(duration) AS avg_duration
+                avg(if(isNaN(duration), NULL, duration)) AS avg_duration
             FROM traces final
             WHERE workspace_id = :workspace_id
                 <if(project_ids)> AND project_id IN :project_ids <endif>
@@ -1183,7 +1185,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private static final String GET_TRACE_AVERAGE_DURATION = """
             %s
             SELECT <bucket> AS bucket,
-                   avg(duration) AS avg_duration
+                   avg(if(isNaN(duration), NULL, duration)) AS avg_duration
             FROM traces_filtered
             GROUP BY bucket
             ORDER BY bucket
@@ -1741,7 +1743,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             if (THREAD_METRICS.contains(metricType)) {
                 Optional.ofNullable(request.threadFilters())
                         .ifPresent(filters -> {
-                            filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE_THREAD)
+                            FilterQueryBuilder.toAnalyticsDbFilters(
+                                    filters, FilterStrategy.TRACE_THREAD, traceColumnsNonNullable())
                                     .ifPresent(threadFilters -> template.add("trace_thread_filters", threadFilters));
                             filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
                                     .ifPresent(
@@ -1772,7 +1775,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             } else {
                 Optional.ofNullable(request.traceFilters())
                         .ifPresent(filters -> {
-                            filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE)
+                            FilterQueryBuilder.toAnalyticsDbFilters(
+                                    filters, FilterStrategy.TRACE, traceColumnsNonNullable())
                                     .ifPresent(traceFilters -> template.add("trace_filters", traceFilters));
                             filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
                                     .ifPresent(
@@ -1837,6 +1841,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             return Mono.from(statement.execute())
                     .doFinally(signalType -> endSegment(segment));
         });
+    }
+
+    private boolean traceColumnsNonNullable() {
+        return configuration.getDatabaseAnalyticsDataModel().traceColumnsNonNullable();
     }
 
     private static final Set<MetricType> SPAN_TIME_METRICS = EnumSet.of(

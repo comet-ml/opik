@@ -47,7 +47,7 @@ public class AgentInsightsReportPublisher {
      * stream, or completes empty when publishing is disabled.
      */
     public Mono<String> enqueue(@NonNull UUID projectId, @NonNull String workspaceId,
-            @NonNull Instant periodStart, @NonNull Instant periodEnd) {
+            @NonNull Instant periodStart, @NonNull Instant periodEnd, @NonNull String triggerSource) {
 
         if (!serviceToggles.isAgentInsightsEnabled()) {
             log.debug("Agent Insights is disabled, ignoring trigger for project '{}'", projectId);
@@ -61,6 +61,7 @@ public class AgentInsightsReportPublisher {
                 .workspaceId(workspaceId)
                 .periodStart(periodStart)
                 .periodEnd(periodEnd)
+                .triggerSource(triggerSource)
                 .build();
 
         // DEBUG: the daily sweep enqueues one per enabled project, so keep INFO for lifecycle events only.

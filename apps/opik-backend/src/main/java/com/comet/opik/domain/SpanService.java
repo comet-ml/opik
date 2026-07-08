@@ -503,7 +503,7 @@ public class SpanService {
                     })
                     .doOnSuccess(spanIds -> {
                         if (spanIds != null) {
-                            eventBus.post(new SpansDeleted(spanIds, traceIds, workspaceId, userName));
+                            eventBus.post(new SpansDeleted(spanIds, traceIds, workspaceId, userName, projectId));
                         }
                     })
                     .then();

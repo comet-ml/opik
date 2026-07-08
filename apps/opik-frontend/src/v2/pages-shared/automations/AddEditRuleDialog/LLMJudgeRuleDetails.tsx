@@ -39,7 +39,10 @@ import {
 import { COMPOSED_PROVIDER_TYPE, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { safelyGetPromptMustacheTags } from "@/lib/prompt";
 import { cn } from "@/lib/utils";
-import { RESERVED_TRACE_EVALUATOR_VARIABLES } from "@/constants/llm";
+import {
+  RESERVED_SPAN_LLM_JUDGE_VARIABLES,
+  RESERVED_TRACE_LLM_JUDGE_VARIABLES,
+} from "@/constants/llm";
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/AddEditRuleDialog/schema";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
@@ -137,6 +140,11 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
       // recalculate variables
       const variables = formInstance.getValues("llmJudgeDetails.variables");
       const currentScope = formInstance.getValues("scope");
+      // {{span}} is reserved on span scope; {{trace}} / {{spans}} on trace scope.
+      const reservedVariables =
+        currentScope === EVALUATORS_RULE_SCOPE.span
+          ? RESERVED_SPAN_LLM_JUDGE_VARIABLES
+          : RESERVED_TRACE_LLM_JUDGE_VARIABLES;
       const localVariables: Record<string, string> = {};
       let parsingVariablesError: boolean = false;
       messages
@@ -161,6 +169,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
             variables[v],
             currentScope,
             agenticToolsEnabled,
+            reservedVariables,
           );
         });
 
@@ -424,7 +433,9 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     includeIntermediateNodes
                     reservedSentinels={
                       agenticToolsEnabled
-                        ? RESERVED_TRACE_EVALUATOR_VARIABLES
+                        ? isSpanScope
+                          ? RESERVED_SPAN_LLM_JUDGE_VARIABLES
+                          : RESERVED_TRACE_LLM_JUDGE_VARIABLES
                         : undefined
                     }
                   />

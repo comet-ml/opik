@@ -115,19 +115,19 @@ profile:
 	LITELLM_USE_QUEUE_LOGGING=false \
 	$(PYTHON) -m pytest -n auto --dist loadfile tests/unit -vv -rA --profile --maxfail=1
 
+# Optimizer hooks live in the root .pre-commit-config.yaml, gated to
+# ^sdks/opik_optimizer, so a diff-range run from the repo root only fires them
+# on optimizer changes. Run from the repo root against that single config.
 precommit:
 	$(call warn_if_no_venv)
 	@repo_root=$$(git rev-parse --show-toplevel); \
-	"$$repo_root/scripts/run-precommit-changed-files.sh" \
-		--config sdks/opik_optimizer/.pre-commit-config.yaml \
-		--pathspec sdks/opik_optimizer/ \
-		--base-ref "$(SDK_DIFF_BASE)" \
-		--label "Optimizer SDK files" \
-		--precommit-cmd "$(PRECOMMIT)"
+	cd "$$repo_root" && git fetch -q origin main 2>/dev/null || true; \
+	cd "$$repo_root" && $(PRECOMMIT) run --from-ref "$(SDK_DIFF_BASE)" --to-ref HEAD --show-diff-on-failure --verbose
 
 precommit-all:
 	$(call warn_if_no_venv)
-	PYTHONPATH=src $(PRECOMMIT) run --all-files -c .pre-commit-config.yaml
+	@repo_root=$$(git rev-parse --show-toplevel); \
+	cd "$$repo_root" && $(PRECOMMIT) run --all-files --show-diff-on-failure --verbose
 
 build:
 	$(call warn_if_no_venv)

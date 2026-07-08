@@ -107,6 +107,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
 
   [PROVIDER_TYPE.ANTHROPIC]: [
     {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_5,
+      label: "Claude Sonnet 5",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_8,
       label: "Claude Opus 4.8",
     },
@@ -164,6 +168,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.AION_LABS_AION_2_0,
       label: "aion-labs/aion-2.0",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.AION_LABS_AION_3_0,
+      label: "aion-labs/aion-3.0",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.AION_LABS_AION_3_0_MINI,
+      label: "aion-labs/aion-3.0-mini",
     },
     {
       value: PROVIDER_MODEL_TYPE.AION_LABS_AION_RP_LLAMA_3_1_8B,
@@ -312,6 +324,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4_6,
       label: "anthropic/claude-sonnet-4.6",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_5,
+      label: "anthropic/claude-sonnet-5",
     },
     {
       value: PROVIDER_MODEL_TYPE.ARCEE_AI_AFM_4_5B,
@@ -633,6 +649,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_1_FLASH_LITE,
       label: "google/gemini-3.1-flash-lite",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_1_FLASH_LITE_IMAGE,
+      label: "google/gemini-3.1-flash-lite-image",
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_1_FLASH_LITE_PREVIEW,
@@ -1211,6 +1231,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "nex-agi/deepseek-v3.1-nex-n1",
     },
     {
+      value: PROVIDER_MODEL_TYPE.NEX_AGI_NEX_N2_MINI,
+      label: "nex-agi/nex-n2-mini",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.NEX_AGI_NEX_N2_PRO,
       label: "nex-agi/nex-n2-pro",
     },
@@ -1664,6 +1688,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "poolside/laguna-m.1:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_XS_2_1,
+      label: "poolside/laguna-xs-2.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_XS_2_1_FREE,
+      label: "poolside/laguna-xs-2.1:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_XS_2,
       label: "poolside/laguna-xs.2",
     },
@@ -2016,12 +2048,20 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "tencent/hunyuan-a13b-instruct",
     },
     {
+      value: PROVIDER_MODEL_TYPE.TENCENT_HY3,
+      label: "tencent/hy3",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.TENCENT_HY3_PREVIEW,
       label: "tencent/hy3-preview",
     },
     {
       value: PROVIDER_MODEL_TYPE.TENCENT_HY3_PREVIEW_FREE,
       label: "tencent/hy3-preview:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.TENCENT_HY3_FREE,
+      label: "tencent/hy3:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.THEDRUMMER_ANUBIS_70B_V1_1,
@@ -2293,6 +2333,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GEMMA_4_31B_IT,
       label: "Gemma 4 31B IT",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_OMNI_FLASH_PREVIEW,
+      label: "Gemini Omni Flash Preview",
     },
     {
       value: PROVIDER_MODEL_TYPE.LYRIA_3_CLIP_PREVIEW,

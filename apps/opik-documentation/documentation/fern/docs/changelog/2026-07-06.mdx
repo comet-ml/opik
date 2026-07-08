@@ -1,0 +1,47 @@
+---
+canonical-url: https://www.comet.com/docs/opik/changelog/2026-07-06
+---
+
+## Ask Ollie to Explain Trace Cells
+
+Error, duration, and cost cells across the Traces, Spans, and Threads tables now have an "Explain" button (the Ollie owl icon) that streams a plain-language explanation of that specific value without leaving the table — no need to open the trace panel and dig through raw payloads to understand why a call errored, took as long as it did, or cost what it did.
+
+Explanations are cached per cell, so reopening a popover shows the previous answer immediately instead of re-running the query, and a "Continue conversation" link hands off to the full Ollie sidebar when you want to dig deeper.
+
+## Online Evaluation Runs Are Now Traced
+
+LLM-as-a-judge scoring runs (on traces, spans, and threads) are now recorded as monitoring traces automatically, with a `prepare_evaluation` span and one span per scoring call, including token usage and cost. They're hidden from the main Logs view by default, and each rule on the **Online Evaluation** page now has a **Go to traces** action that opens a scoped, filtered view of that rule's evaluation activity — useful for confirming a rule is running, checking what it cost, or debugging why it errored. This is on by default for all workspaces.
+
+## Bug Fixes & Improvements
+
+- **Diagnostics now explains why a run failed** — Previously, a Diagnostics run that crashed or never started (for example, from exhausted LLM credits) just spun until it timed out, with no indication of what went wrong. Failed runs now show a specific reason (out of credits, rate limited, provider error, or never started) with a "Try again" action, and the failure timeout was cut from 12 minutes to 5.
+
+- **Playground and online scoring: Sonnet 5 and Fable 5 no longer error out** — These models were missing from the capability list, so the Playground kept showing temperature/Top P sliders and sending those parameters, which the models reject. The sliders are now hidden and the parameters are no longer sent, matching the behavior already in place for Opus 4.7/4.8.
+
+- **Azure-hosted OpenAI model prices now load correctly** — Model prices for the `azure/*` model family (`gpt-4o`, `gpt-5`, `codex-mini`, and others) were silently failing to load because of a provider-mapping gap, causing cost to show as unavailable for these models.
+
+- **Experiment and Playground traces now show up in scoped "Go to logs" views** — Traces created by experiment runs and Playground runs were sometimes missing from their respective "Go to logs" tables even though the traces existed, due to a visibility-filter mismatch. These views now correctly scope by the experiment or run itself.
+
+- **Playground: dataset and metric selection redesigned** — The "Run experiment" dialog is replaced by inline dataset and metrics dropdowns in the Playground header, so you can change either independently without reopening a modal. Metrics can also be created and edited in place.
+
+- **Permission gating extended to more pages** — Users with the Annotator workspace role no longer see Agent Playground, Online Evaluation, or Alerts in the sidebar. Prompt Library view/edit access is now governed by the same permission system, at both the UI and API level.
+
+- **`opik import --to-workspace` for cross-workspace imports** — The `opik import` CLI command accepts a `--to-workspace` option to import exported data into a different workspace than the one it was exported from, without needing to restructure the export directory as a workaround.
+
+- **`opik migrate dataset --exclude-experiments`** — This flag skips migrating a dataset's experiments and optimizations, migrating only the dataset and its version history. Useful for large datasets where the experiment/optimization cascade isn't needed.
+
+- **Fixed intermittent errors loading prompt and dataset versions under load** — A query pattern that caused MySQL to materialize large temporary tables could fail outright under load. Prompt and dataset version lookups are now rewritten to avoid the issue.
+
+## Performance Improvements
+
+- **Faster trace ingestion** — Removed a redundant ClickHouse lookup that ran on every trace ingestion just to check the trace's last-updated timestamp, reducing ingestion latency and ClickHouse load.
+
+- **SDK: shared connection resources across `Opik()` clients** — Code that creates multiple `Opik()` clients (for example, one per task or request) now shares the underlying connection pool and background threads across clients with matching configuration instead of creating a full new stack each time, reducing thread and connection overhead.
+
+- **Self-hosted: ClickHouse `FINAL` reads no longer over-read on skip-indexed tables** — Disabled the new ClickHouse 25.x default for `use_skip_indexes_if_final_exact_mode`, which was causing skip-indexed queries to read far more data than necessary; Opik's queries already prune by primary key and project ID, so the exact mode isn't needed.
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.1.10...2.1.15)
+
+_Releases_: `2.1.11`, `2.1.12`, `2.1.13`, `2.1.14`, `2.1.15`

@@ -20,7 +20,8 @@ public enum AnthropicModelName implements StructuredOutputSupported {
     CLAUDE_SONNET_4("claude-sonnet-4-20250514"),
     CLAUDE_SONNET_4_5("claude-sonnet-4-5"),
     CLAUDE_SONNET_4_5_20250929("claude-sonnet-4-5-20250929"),
-    CLAUDE_SONNET_4_6("claude-sonnet-4-6");
+    CLAUDE_SONNET_4_6("claude-sonnet-4-6"),
+    CLAUDE_SONNET_5("claude-sonnet-5");
 
     private final String value;
 
