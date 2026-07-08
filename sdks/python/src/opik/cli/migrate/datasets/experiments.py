@@ -703,12 +703,11 @@ def _list_source_experiments(
     """Page through ``find_experiments(dataset_id=...)`` to exhaustion.
 
     Stays on ``rest_client`` rather than ``client.get_dataset_experiments``:
-    the high-level wrapper takes ``dataset_name`` only, which would
-    require a per-call name lookup (the cascade has the source
-    ``dataset_id`` from the plan, but the source dataset is renamed to
-    ``<name>_v1`` by the migrate, so the source name isn't stable across
-    the cascade's runtime). The ``rest_client`` call takes ``dataset_id``
-    directly.
+    the high-level wrapper takes ``dataset_name`` only, which would require
+    a per-call name lookup. The cascade keys off the stable source
+    ``dataset_id`` from the plan instead — decoupling it from the source's
+    name, which the OPIK-7162 handoff renames to ``<name>_v1`` at the very
+    end of the run. The ``rest_client`` call takes ``dataset_id`` directly.
     """
     collected: List[ExperimentPublic] = []
     page = 1
