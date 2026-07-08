@@ -3186,7 +3186,7 @@ class ExperimentAggregatesIntegrationTest {
                             .data(Map.of("edited", JsonUtils.getJsonNodeFromString(
                                     "\"round-" + r + "-" + UUID.randomUUID() + "\"")))
                             .build())
-                    .collect(Collectors.toList());
+                    .toList();
             datasetResourceClient.createDatasetItems(
                     DatasetItemBatch.builder().datasetId(dataset.id()).items(edits).build(),
                     workspaceName, apiKey);

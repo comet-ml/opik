@@ -1284,6 +1284,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 <if(experiment_item_filters)>AND <experiment_item_filters><endif>
                 <if(feedback_scores_filters)>AND <feedback_scores_filters><endif>
                 <if(feedback_scores_empty_filters)>AND <feedback_scores_empty_filters><endif>
+                -- all duplicated rows share the same stable_dataset_item_id, so arbitrary pick is safe
                 LIMIT 1 BY eia.id
             ) eia
             LEFT JOIN dataset_item_versions_resolved AS di
