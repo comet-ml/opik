@@ -1,10 +1,9 @@
 import React from "react";
 import { RotateCw, X } from "lucide-react";
-import { Tag } from "@/ui/tag";
 import { Button } from "@/ui/button";
 import { useNavigate } from "@tanstack/react-router";
 import { OPTIMIZATION_STATUS, Optimization } from "@/types/optimizations";
-import { STATUS_TO_VARIANT_MAP } from "@/constants/experiments";
+import OptimizationStatusTag from "@/v2/pages-shared/optimizations/OptimizationStatusTag";
 import { IN_PROGRESS_OPTIMIZATION_STATUSES } from "@/lib/optimizations";
 import useOptimizationStopMutation from "@/api/optimizations/useOptimizationStopMutation";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
@@ -64,15 +63,7 @@ const OptimizationHeader: React.FC<OptimizationHeaderProps> = ({
               {formatDate(optimization.created_at)}
             </span>
           )}
-          {status && (
-            <Tag
-              variant={STATUS_TO_VARIANT_MAP[status]}
-              size="md"
-              className="capitalize"
-            >
-              {status}
-            </Tag>
-          )}
+          {status && <OptimizationStatusTag status={status} size="md" />}
         </div>
         {optimization?.dataset_id && optimization?.dataset_name && (
           <NavigationTag
