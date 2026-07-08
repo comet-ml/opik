@@ -12,12 +12,15 @@ import DataTable from "@/shared/DataTable/DataTable";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
-import { COLUMN_DATASET_ID } from "@/types/shared";
+import { COLUMN_DATASET_ID, COLUMN_TYPE } from "@/types/shared";
 import { Filter } from "@/types/filters";
 import { Optimization } from "@/types/optimizations";
 import { convertColumnDataToColumn } from "@/lib/table";
+import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
+import useFilterChips from "@/shared/filter-chips/hooks/useFilterChips";
+import { ChipDefinition } from "@/shared/filter-chips/types";
+import { OPTIMIZATION_STATUS_OPTIONS } from "@/lib/optimizations";
 import AddOptimizationDialog from "@/v2/pages/OptimizationsPage/AddOptimizationDialog/AddOptimizationDialog";
-import DatasetSelectBox from "@/v2/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox";
 import OptimizationRowActionsCell from "@/v2/pages/OptimizationsPage/OptimizationRowActionsCell";
 import {
   generateActionsColumDef,
@@ -68,7 +71,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
     updateType: "replaceIn",
   });
 
-  const [filters = [], setFilters] = useQueryParam("filters", JsonParam, {
+  const [filters = []] = useQueryParam("filters", JsonParam, {
     updateType: "replaceIn",
   });
 
@@ -84,22 +87,78 @@ const OptimizationsPage: React.FunctionComponent = () => {
     [filters],
   );
 
-  const filtersConfig = useMemo(
-    () => ({
-      rowsMap: {
-        [COLUMN_DATASET_ID]: {
-          keyComponent: DatasetSelectBox,
-          keyComponentProps: {
-            className: "w-full min-w-72",
-            ...(activeProjectId && { projectId: activeProjectId }),
-          },
-          defaultOperator: "=",
-          operators: [{ label: "=", value: "=" }],
-        },
-      },
-    }),
-    [activeProjectId],
+  // Dataset is sent via the dedicated `dataset_id` param; the rest (status)
+  // go through the list filter builder.
+  const listFilters = useMemo(
+    () => filters.filter((f: Filter) => f.field !== COLUMN_DATASET_ID),
+    [filters],
   );
+
+  const { data: datasetsData } = useProjectDatasetsList(
+    {
+      projectId: activeProjectId!,
+      page: 1,
+      size: 1000,
+    },
+    {
+      enabled: canViewDatasets && !!activeProjectId,
+    },
+  );
+
+  const datasetOptions = useMemo(
+    () =>
+      (datasetsData?.content || []).map((dataset) => ({
+        label: dataset.name,
+        value: dataset.id,
+      })),
+    [datasetsData?.content],
+  );
+
+  const chipDefinitions = useMemo<ChipDefinition[]>(() => {
+    const definitions: ChipDefinition[] = [];
+    if (canViewDatasets) {
+      definitions.push({
+        id: COLUMN_DATASET_ID,
+        field: COLUMN_DATASET_ID,
+        label: "Test suite",
+        kind: "single-select",
+        columnType: COLUMN_TYPE.string,
+        operator: "=",
+        options: datasetOptions,
+      });
+    }
+    definitions.push({
+      id: "status",
+      field: "status",
+      label: "Status",
+      kind: "single-select",
+      columnType: COLUMN_TYPE.string,
+      operator: "=",
+      options: OPTIMIZATION_STATUS_OPTIONS,
+    });
+    return definitions;
+  }, [canViewDatasets, datasetOptions]);
+
+  const {
+    chipsPinned,
+    chipsUnpinned,
+    values: chipValues,
+    applyValue: applyChipValue,
+    clearValue: clearChipValue,
+    clearAll: clearAllChips,
+    pinChip,
+    unpinChip,
+    managerOpen: chipManagerOpen,
+    setManagerOpen: setChipManagerOpen,
+    openChipId,
+    setOpenChipId,
+  } = useFilterChips({
+    tableId: "optimizations",
+    urlKey: "filters",
+    definitions: chipDefinitions,
+    defaultPinned: [...(canViewDatasets ? [COLUMN_DATASET_ID] : []), "status"],
+    onChange: () => setPage(1),
+  });
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
@@ -134,6 +193,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
     workspaceName,
     projectId: activeProjectId ?? undefined,
     datasetId,
+    filters: listFilters,
     search: search || "",
     page: page || 1,
     rowSelection,
@@ -212,8 +272,8 @@ const OptimizationsPage: React.FunctionComponent = () => {
 
   const handleClearFilters = useCallback(() => {
     setSearch(undefined);
-    setFilters([]);
-  }, [setSearch, setFilters]);
+    clearAllChips();
+  }, [setSearch, clearAllChips]);
 
   return (
     <div className="flex min-h-full flex-col pt-4">
@@ -252,10 +312,20 @@ const OptimizationsPage: React.FunctionComponent = () => {
             <OptimizationsToolbar
               search={search!}
               onSearchChange={setSearch}
-              filters={filters}
-              onFiltersChange={setFilters}
-              filtersConfig={filtersConfig}
-              canViewDatasets={canViewDatasets}
+              filterChips={{
+                chipsPinned,
+                chipsUnpinned,
+                values: chipValues,
+                managerOpen: chipManagerOpen,
+                onManagerOpenChange: setChipManagerOpen,
+                onApplyValue: applyChipValue,
+                onClearValue: clearChipValue,
+                onPinChip: pinChip,
+                onUnpinChip: unpinChip,
+                onClearAll: clearAllChips,
+                openChipId,
+                onOpenChipIdChange: setOpenChipId,
+              }}
               canDeleteOptimizationRuns={canDeleteOptimizationRuns}
               selectedRows={selectedRows}
               isFetching={isFetching}

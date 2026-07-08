@@ -1,7 +1,8 @@
 import React, { useCallback } from "react";
-import { ListTree } from "lucide-react";
+import { ArrowUpRight, ListTree } from "lucide-react";
 
-import { Tag } from "@/ui/tag";
+import { cn } from "@/lib/utils";
+import { Tag, type TagTextSize } from "@/ui/tag";
 import { Button } from "@/ui/button";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import TraceLogsSidebar, { TraceLogsViewConfig } from "./TraceLogsSidebar";
@@ -18,7 +19,10 @@ type TraceLogsSidebarButtonProps = {
   // shown as a read-only indicator of what the view is locked to.
   lockScope?: boolean;
   scopeLabel?: string;
-  variant?: "tag" | "icon";
+  // "tag": green icon + label transparent tag. "nav": bordered nav pill with a
+  // trailing arrow (matches the sibling dataset NavigationTag). "icon": icon-only.
+  variant?: "tag" | "nav" | "icon";
+  textSize?: TagTextSize;
   title?: string;
   label?: string;
   viewConfig?: TraceLogsViewConfig;
@@ -37,6 +41,7 @@ const TraceLogsSidebarButton: React.FunctionComponent<
   lockScope = false,
   scopeLabel,
   variant = "tag",
+  textSize = "s",
   title,
   label = "Go to logs",
   viewConfig,
@@ -53,6 +58,11 @@ const TraceLogsSidebarButton: React.FunctionComponent<
     [openSidebar, sourceFilters, lockScope, scopeLabel],
   );
 
+  const labelClassName = cn(
+    "truncate",
+    textSize === "xs" ? "comet-body-xs-accented" : "comet-body-s-accented",
+  );
+
   const trigger =
     variant === "icon" ? (
       <TooltipWrapper content={label}>
@@ -64,6 +74,18 @@ const TraceLogsSidebarButton: React.FunctionComponent<
         >
           <ListTree />
         </Button>
+      </TooltipWrapper>
+    ) : variant === "nav" ? (
+      <TooltipWrapper content={label}>
+        <Tag
+          size="md"
+          variant="transparent"
+          className="flex shrink-0 cursor-pointer items-center gap-1 rounded-md hover:bg-primary-foreground hover:text-foreground active:bg-primary-100 active:text-foreground"
+          onClick={handleOpen}
+        >
+          <div className={cn(labelClassName, "text-foreground")}>{label}</div>
+          <ArrowUpRight className="size-3 shrink-0 text-foreground" />
+        </Tag>
       </TooltipWrapper>
     ) : (
       <TooltipWrapper content={label}>
@@ -77,9 +99,7 @@ const TraceLogsSidebarButton: React.FunctionComponent<
             className="size-3 shrink-0"
             style={{ color: "var(--color-green)" }}
           />
-          <div className="comet-body-s-accented truncate text-muted-slate">
-            {label}
-          </div>
+          <div className={cn(labelClassName, "text-muted-slate")}>{label}</div>
         </Tag>
       </TooltipWrapper>
     );
