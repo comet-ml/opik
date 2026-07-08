@@ -8,18 +8,24 @@ reuse the same logic with no side effects.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 import opik
 
+from opik.api_objects import rest_helpers
+
 from .._base import BaseMigrationPlan
-from ..errors import ConflictError, UnsupportedDatasetTypeError
+from ..errors import ConflictError, MigrationError, UnsupportedDatasetTypeError
 from .resolver import (
     ResolvedDataset,
     ensure_destination_project_exists,
     name_taken_in_workspace,
     resolve_source,
 )
+from .resume import reconstruct_remaps
+
+if TYPE_CHECKING:
+    from ..checkpoint import MigrationCheckpoint
 
 # The migrate command supports plain datasets and test suites. Test suites
 # (type 'evaluation_suite') carry suite-level evaluators + execution_policy
@@ -158,6 +164,15 @@ class MigrationPlan(BaseMigrationPlan):
     source: ResolvedDataset
     target_name: str
     to_project: str
+    # The source dataset's post-rename name (``<name>_v1``). Captured so the
+    # executor can record it on the checkpoint when the dataset phase completes,
+    # and so a resumed run can re-resolve the source by it.
+    source_name_after_rename: str = ""
+    # True when this plan was built for a RESUME (dataset phase already done on a
+    # prior run): it contains only the ``CascadeExperiments`` action and its
+    # remaps are pre-populated by ``reconstruct_remaps``, so the executor must
+    # NOT re-mark the dataset phase or re-run replay.
+    is_resume: bool = False
     version_remap: Dict[str, str] = field(default_factory=dict)
     item_id_remap: Dict[str, str] = field(default_factory=dict)
     trace_id_remap: Dict[str, str] = field(default_factory=dict)
@@ -170,8 +185,17 @@ def build_dataset_plan(
     to_project: str,
     from_project: Optional[str] = None,
     exclude_experiments: bool = False,
+    resume_checkpoint: Optional["MigrationCheckpoint"] = None,
 ) -> MigrationPlan:
     """Build the ordered action list for migrating one dataset.
+
+    When ``resume_checkpoint`` has ``dataset_phase_done`` set (OPIK-7168), the
+    dataset-level phases (rename/create/replay/optimizations) already completed
+    on a prior run, so this returns a RESUME plan: a single
+    ``CascadeExperiments`` action whose remaps are rebuilt read-only from the
+    already-migrated destination via ``reconstruct_remaps``. The rename/create/
+    replay actions are deliberately omitted -- re-running them would collide on
+    the rename and duplicate every destination version.
 
     Ordering invariant: the source rename always precedes the destination
     create, so the workspace-unique-name constraint never trips. The target
@@ -204,6 +228,9 @@ def build_dataset_plan(
          ``optimization_id`` via ``plan.optimization_id_remap``. Omitted
          when ``exclude_experiments`` is set.
     """
+    if resume_checkpoint is not None and resume_checkpoint.dataset_phase_done:
+        return _build_resume_plan(client, to_project, resume_checkpoint)
+
     # Fail fast if --to-project doesn't exist. Catches typos before any
     # rename/create/copy work, and prevents auto-creating a stray project.
     ensure_destination_project_exists(client, to_project)
@@ -236,6 +263,7 @@ def build_dataset_plan(
         source=source,
         target_name=source.name,
         to_project=to_project,
+        source_name_after_rename=name_after_rename,
     )
 
     plan.actions.append(
@@ -305,4 +333,80 @@ def build_dataset_plan(
             )
         )
 
+    return plan
+
+
+def _build_resume_plan(
+    client: opik.Opik,
+    to_project: str,
+    checkpoint: "MigrationCheckpoint",
+) -> MigrationPlan:
+    """Build a cascade-only plan for a resumed migration.
+
+    The dataset phase already completed on a prior run, so:
+
+    * The source is the renamed ``<name>_v1`` dataset, resolved by the
+      checkpoint's stored ``source_dataset_id`` (the original name now points
+      at the DESTINATION dataset the first run created, so re-resolving by the
+      user-supplied name would pick the wrong dataset).
+    * The destination is the dataset carrying the ORIGINAL name under
+      ``to_project`` -- what the first run's ``CreateDestination`` produced.
+    * ``version_remap`` / ``item_id_remap`` / ``optimization_id_remap`` are
+      rebuilt read-only from the destination (``reconstruct_remaps``); nothing
+      is re-written, so no versions are duplicated.
+
+    The returned plan contains only a ``CascadeExperiments`` action; the
+    checkpoint drives per-experiment skip/resume inside the cascade.
+    """
+    if not checkpoint.source_dataset_id or not checkpoint.source_name_after_rename:
+        raise MigrationError(
+            "Cannot resume: the checkpoint is missing the source dataset id or "
+            "post-rename name. Delete the destination dataset and re-run the "
+            "migration from scratch."
+        )
+
+    ensure_destination_project_exists(client, to_project)
+
+    # Destination dataset = the original name under --to-project (created by
+    # the first run). ``checkpoint.dataset`` is that original name.
+    dest = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+        lambda: client.get_dataset(name=checkpoint.dataset, project_name=to_project)
+    )
+
+    remaps = reconstruct_remaps(
+        client.rest_client,
+        source_dataset_id=checkpoint.source_dataset_id,
+        source_name_after_rename=checkpoint.source_name_after_rename,
+        source_project_name=None,
+        dest_dataset_id=dest.id,
+        dest_name=checkpoint.dataset,
+        dest_project_name=to_project,
+    )
+
+    plan = MigrationPlan(
+        source=ResolvedDataset(
+            id=checkpoint.source_dataset_id,
+            name=checkpoint.source_name_after_rename,
+            project_name=None,
+            description=None,
+            type=None,
+            visibility=None,
+            tags=None,
+        ),
+        target_name=checkpoint.dataset,
+        to_project=to_project,
+        source_name_after_rename=checkpoint.source_name_after_rename,
+        is_resume=True,
+    )
+    plan.version_remap.update(remaps.version_remap)
+    plan.item_id_remap.update(remaps.item_id_remap)
+    plan.optimization_id_remap.update(remaps.optimization_id_remap)
+
+    plan.actions.append(
+        CascadeExperiments(
+            source_dataset_id=checkpoint.source_dataset_id,
+            dest_name=checkpoint.dataset,
+            dest_project_name=to_project,
+        )
+    )
     return plan
