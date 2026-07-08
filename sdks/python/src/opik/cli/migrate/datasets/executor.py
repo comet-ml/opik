@@ -15,6 +15,7 @@ from typing import Any, Dict, Optional
 import opik
 from opik.api_objects import rest_helpers
 from opik.rest_api import OpikApi
+from opik.rest_api.core.api_error import ApiError
 from rich.console import Console
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
 
@@ -93,9 +94,22 @@ def _apply_action(
     if isinstance(action, DiscardStaleTemp):
         # A temp destination from a prior failed run — delete it so the
         # re-run's CreateDestination starts clean (discard-and-restart).
-        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-            lambda: rest_client.datasets.delete_dataset(id=action.temp_id)
-        )
+        # Best-effort: if it's already gone (deleted out-of-band between plan
+        # and apply), that's the desired end state, so swallow the 404 and
+        # continue rather than aborting an otherwise-healthy migration. Any
+        # other API error still propagates so real failures aren't masked.
+        try:
+            rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+                lambda: rest_client.datasets.delete_dataset(id=action.temp_id)
+            )
+        except ApiError as exc:
+            if exc.status_code == 404:
+                LOGGER.info(
+                    "Stale temp dataset %s already deleted; continuing.",
+                    action.temp_id,
+                )
+            else:
+                raise
     elif isinstance(action, RenameSource):
         # Re-pass description/visibility/tags so the BE doesn't wipe them on
         # the rename PUT (description is silently nulled when omitted).

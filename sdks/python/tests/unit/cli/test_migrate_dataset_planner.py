@@ -22,6 +22,7 @@ from opik.cli import cli
 from opik.cli.migrate.audit import AuditLog
 from opik.cli.migrate.checkpoint import MigrationCheckpoint
 from opik.cli.migrate.datasets import planner as planner_module
+from opik.cli.migrate.datasets.planner import TEMP_MIGRATION_MARKER_TAG
 from opik.cli.migrate.datasets.resume import ReconstructedRemaps
 from opik.cli.migrate.errors import (
     ConflictError,
@@ -335,15 +336,20 @@ class TestTempDestRenameOnSuccess:
 
         assert result.exit_code == 0, result.output
         rest = client.rest_client
-        # Destination created under the temp name (not the final name).
+        # Destination created under the temp name (not the final name), and
+        # stamped with the migration marker tag so a future re-run can prove
+        # it's ours before discarding it.
         create_kwargs = rest.datasets.create_dataset.call_args.kwargs
         assert create_kwargs["name"] == "MyDataset__migrating"
-        # Two rename PUTs: source -> _v1, then temp -> original.
+        assert TEMP_MIGRATION_MARKER_TAG in (create_kwargs["tags"] or [])
+        # Two rename PUTs: source -> _v1, then temp -> original. The promote PUT
+        # re-passes the source's ORIGINAL tags (marker stripped).
         rename_calls = [c.kwargs for c in rest.datasets.update_dataset.call_args_list]
         source_rename = next(c for c in rename_calls if c["id"] == "src-1")
         assert source_rename["name"] == "MyDataset_v1"
         promote = next(c for c in rename_calls if c.get("name") == "MyDataset")
         assert promote["name"] == "MyDataset"
+        assert TEMP_MIGRATION_MARKER_TAG not in (promote.get("tags") or [])
         # Audit ends ok and records the handoff actions in order.
         on_disk = json.loads(audit_path.read_text())
         assert on_disk["status"] == "ok"
@@ -384,13 +390,20 @@ class TestTempDestRenameOnSuccess:
         self, tmp_path
     ) -> None:
         # AC: re-running after an interrupted run completes with no manual
-        # cleanup. A stale ``MyDataset__migrating`` from the prior failed run
-        # is discovered and deleted before the destination is recreated.
+        # cleanup. A stale ``MyDataset__migrating`` from the prior failed run —
+        # carrying the migration marker tag that proves it's ours — is
+        # discovered and deleted before the destination is recreated.
         client, _, _ = _build_fake_client(
             source_rows=[_DatasetRow(id="src-1", name="MyDataset")],
             destination_rows=[],
             items=[{"id": "item-a", "input": "hello"}],
-            stale_temp_rows=[_DatasetRow(id="stale-1", name="MyDataset__migrating")],
+            stale_temp_rows=[
+                _DatasetRow(
+                    id="stale-1",
+                    name="MyDataset__migrating",
+                    tags=[TEMP_MIGRATION_MARKER_TAG],
+                )
+            ],
         )
         result, audit_path = self._run(client, tmp_path)
 
@@ -608,17 +621,25 @@ class TestPlanBuilding:
         )
         assert plan.target_name == "MyDataset"
 
-    def test_build_dataset_plan__stale_temp_exists__prepends_discard_action(
+    def test_build_dataset_plan__marked_stale_temp__prepends_discard_action(
         self,
     ) -> None:
-        # OPIK-7162 safe re-run: a leftover "<name>__migrating" from a prior
-        # failed run is detected and a DiscardStaleTemp action is prepended
-        # so the re-run starts clean (discard-and-restart).
+        # OPIK-7162 safe re-run: a leftover "<name>__migrating" carrying the
+        # migration marker tag (proof it's ours) is detected and a
+        # DiscardStaleTemp action is prepended so the re-run starts clean.
         rest_client = _planner_rest_client(
             [
                 _Page([_DatasetRow(id="src-1", name="MyDataset")]),
                 _Page([]),
-                _Page([_DatasetRow(id="stale-1", name="MyDataset__migrating")]),
+                _Page(
+                    [
+                        _DatasetRow(
+                            id="stale-1",
+                            name="MyDataset__migrating",
+                            tags=[TEMP_MIGRATION_MARKER_TAG],
+                        )
+                    ]
+                ),
             ]
         )
 
@@ -641,6 +662,46 @@ class TestPlanBuilding:
         discard = plan.actions[0]
         assert discard.temp_id == "stale-1"
         assert discard.temp_name == "MyDataset__migrating"
+
+    def test_build_dataset_plan__unmarked_name_collision__raises_conflict(
+        self,
+    ) -> None:
+        # A dataset named "<name>__migrating" WITHOUT the migration marker is a
+        # real user dataset that merely shares the name — it must NOT be
+        # deleted. The planner aborts with ConflictError instead.
+        rest_client = _planner_rest_client(
+            [
+                _Page([_DatasetRow(id="src-1", name="MyDataset")]),
+                _Page([]),
+                _Page([_DatasetRow(id="user-1", name="MyDataset__migrating")]),
+            ]
+        )
+
+        with pytest.raises(ConflictError) as exc_info:
+            planner_module.build_dataset_plan(
+                client=_planner_client(rest_client),
+                name="MyDataset",
+                to_project="B",
+            )
+        assert "MyDataset__migrating" in str(exc_info.value)
+        assert TEMP_MIGRATION_MARKER_TAG in str(exc_info.value)
+
+    def test_build_dataset_plan__same_from_and_to_project__raises_conflict(
+        self,
+    ) -> None:
+        # Dataset names are unique workspace-wide, so migrating from project A
+        # to project A is a self-colliding no-op — reject it up-front.
+        rest_client = _planner_rest_client(
+            [_Page([_DatasetRow(id="src-1", name="MyDataset")])]
+        )
+
+        with pytest.raises(ConflictError, match="same project"):
+            planner_module.build_dataset_plan(
+                client=_planner_client(rest_client),
+                name="MyDataset",
+                to_project="A",
+                from_project="A",
+            )
 
     def test_build_dataset_plan__no_stale_temp__no_discard_action(self) -> None:
         # The common case: no leftover temp, so no DiscardStaleTemp emitted.

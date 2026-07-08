@@ -46,10 +46,34 @@ SOURCE_SUFFIX = "_v1"
 # ``<name>__migrating`` while the source keeps its original name; only once
 # the copy is proven complete is it promoted to ``<name>`` (OPIK-7162). A
 # deterministic suffix (not a per-run id) is what lets a re-run reliably
-# find and discard a stale temp left by a prior failed run — no orphans, no
-# manual cleanup. The name isn't assumed unguessable: the planner's
-# pre-flight aborts if a *real* dataset already holds this name.
+# find a stale temp left by a prior failed run — no orphans, no manual cleanup.
 TEMP_MIGRATION_SUFFIX = "__migrating"
+
+# Tag stamped on the temp destination at creation time so a re-run can *prove*
+# a ``<name>__migrating`` dataset was created by this tool before discarding it.
+# The deterministic name is only how we FIND the candidate; this marker is how
+# we prove ownership. Without it, a real user dataset that happens to be named
+# ``<source>__migrating`` would be deleted on the next run — so a name match
+# without this tag raises ``ConflictError`` instead. ``PromoteDestination``
+# strips the marker so the final promoted dataset carries only the source's
+# original tags.
+TEMP_MIGRATION_MARKER_TAG = "opik-migrate-temp"
+
+
+def _with_migration_marker(tags: Optional[List[str]]) -> List[str]:
+    """Return ``tags`` plus the migration marker (idempotent, order-stable)."""
+    base = list(tags) if tags else []
+    if TEMP_MIGRATION_MARKER_TAG not in base:
+        base.append(TEMP_MIGRATION_MARKER_TAG)
+    return base
+
+
+def _has_migration_marker(row: object) -> bool:
+    """True when a dataset row carries the migration marker tag — i.e. it was
+    created by this tool and is safe to discard/reuse. A ``<name>__migrating``
+    dataset WITHOUT the marker is a user dataset that merely shares the name."""
+    tags = getattr(row, "tags", None) or []
+    return TEMP_MIGRATION_MARKER_TAG in tags
 
 
 @dataclass(frozen=True)
@@ -57,11 +81,14 @@ class DiscardStaleTemp:
     """Delete a leftover temp destination from a prior failed run.
 
     Only emitted when the pre-flight finds an existing ``<name>__migrating``
-    dataset (a stale artifact of an interrupted earlier migration). Deleting
-    it up-front gives ``CreateDestination`` a clean slate, which is what
-    makes a re-run safe and idempotent (discard-and-restart, not resume).
-    Resuming from the temp's partial progress instead of discarding it is
-    the follow-up work tracked in OPIK_7168.
+    dataset that carries the ``TEMP_MIGRATION_MARKER_TAG`` — proof it was
+    created by this tool (a name match without the marker is a user dataset
+    and raises ``ConflictError`` instead of being deleted). Deleting it
+    up-front gives ``CreateDestination`` a clean slate, which is what makes a
+    re-run safe and idempotent (discard-and-restart, not resume). Resuming
+    from the temp's partial progress instead of discarding it is handled by
+    the resume path (OPIK_7168), which reuses the temp rather than emitting
+    this action.
     """
 
     temp_id: str
@@ -300,6 +327,20 @@ def build_dataset_plan(
     if resume_checkpoint is not None and resume_checkpoint.dataset_phase_done:
         return _build_resume_plan(client, to_project, resume_checkpoint)
 
+    # Source and destination projects must differ. Dataset names are unique
+    # workspace-wide (not per-project), so "migrate from project A to project A"
+    # is a no-op copy that can only collide with itself — reject it up-front
+    # rather than fail deeper in the rename/create dance. Only enforceable when
+    # --from-project is given; a None source scope is a workspace-wide lookup
+    # with no single project to compare against.
+    if from_project is not None and from_project == to_project:
+        raise ConflictError(
+            f"--from-project and --to-project are both '{to_project}'. Migrating "
+            "a dataset into the same project is a no-op (dataset names are unique "
+            "per workspace, not per project); choose a different destination "
+            "project."
+        )
+
     # Fail fast if --to-project doesn't exist. Catches typos before any
     # rename/create/copy work, and prevents auto-creating a stray project.
     ensure_destination_project_exists(client, to_project)
@@ -330,14 +371,20 @@ def build_dataset_plan(
             "Rename or delete the conflicting dataset and re-run."
         )
 
-    # The temp name must also be free workspace-wide. An existing dataset
-    # under it is either (a) a stale temp from a prior failed migration of
-    # this same source — safe to discard and restart — or (b) a real,
-    # unrelated user dataset that happens to share the name, which we must
-    # not touch. We distinguish the two by the deterministic naming
-    # contract: a ``<source>__migrating`` dataset is only ever created by
-    # this tool, so treat it as reclaimable.
+    # A dataset may already exist under the temp name. It's either (a) a stale
+    # temp from a prior failed migration of this source — safe to discard and
+    # restart — or (b) a real, unrelated user dataset that happens to share the
+    # name, which we must NOT delete. We distinguish them by PROOF, not by the
+    # name: a genuine temp carries the ``TEMP_MIGRATION_MARKER_TAG`` we stamp at
+    # creation. A name match without the marker is a user dataset -> abort.
     stale_temp = find_dataset_in_workspace(client, temp_name)
+    if stale_temp is not None and not _has_migration_marker(stale_temp):
+        raise ConflictError(
+            f"Cannot use temp destination name '{temp_name}' — a dataset with "
+            "that name already exists and was not created by `opik migrate` "
+            f"(missing the '{TEMP_MIGRATION_MARKER_TAG}' marker). Rename or "
+            "delete that dataset and re-run."
+        )
 
     plan = MigrationPlan(
         source=source,
@@ -347,8 +394,8 @@ def build_dataset_plan(
         temp_dest_name=temp_name,
     )
 
-    # Discard-and-restart: a stale temp is deleted and the copy re-runs from
-    # scratch. This branch is only reached on the NORMAL path — a resumable
+    # Discard-and-restart: a proven-stale temp is deleted and the copy re-runs
+    # from scratch. This branch is only reached on the NORMAL path — a resumable
     # checkpoint (``dataset_phase_done``) short-circuits to ``_build_resume_plan``
     # above and REUSES the temp instead of discarding it. So we only get here
     # when there's no resumable progress (a fresh run, or a crash mid-replay
@@ -366,7 +413,10 @@ def build_dataset_plan(
             project_name=to_project,
             description=source.description,
             visibility=source.visibility,
-            tags=source.tags,
+            # Stamp the migration marker alongside the source's own tags so a
+            # future re-run can prove this temp is ours before discarding it.
+            # PromoteDestination strips the marker on success.
+            tags=_with_migration_marker(source.tags),
             # Only forward the type when it differs from the default —
             # creating a 'dataset' explicitly is harmless but creating an
             # 'evaluation_suite' is what makes the target accept suite config.
