@@ -686,11 +686,11 @@ class TestPlanBuilding:
         assert "MyDataset__migrating" in str(exc_info.value)
         assert TEMP_MIGRATION_MARKER_TAG in str(exc_info.value)
 
-    def test_build_dataset_plan__same_from_and_to_project__raises_conflict(
+    def test_build_dataset_plan__same_from_and_to_project_flag__raises_conflict(
         self,
     ) -> None:
-        # Dataset names are unique workspace-wide, so migrating from project A
-        # to project A is a self-colliding no-op — reject it up-front.
+        # Cheap early-out: user literally passed --from-project A --to-project A.
+        # Rejected before any lookup.
         rest_client = _planner_rest_client(
             [_Page([_DatasetRow(id="src-1", name="MyDataset")])]
         )
@@ -702,6 +702,48 @@ class TestPlanBuilding:
                 to_project="A",
                 from_project="A",
             )
+
+    def test_build_dataset_plan__omitted_flag_source_in_dest_project__raises_conflict(
+        self,
+    ) -> None:
+        # The gap the flag-only check missed: --from-project is OMITTED, but the
+        # source actually lives in the destination project. resolve_source
+        # populates source.project_name from the row's project_id, so the
+        # authoritative post-resolve guard still catches it.
+        source_row = _DatasetRow(id="src-1", name="MyDataset", project_id="proj-A")
+        rest_client = _planner_rest_client([_Page([source_row])])
+        # project_name_for_row -> client.get_project(id="proj-A").name == "A".
+        proj = MagicMock()
+        proj.name = "A"
+        rest_client.projects.get_project_by_id.return_value = proj
+
+        with pytest.raises(ConflictError, match="same project"):
+            planner_module.build_dataset_plan(
+                client=_planner_client(rest_client),
+                name="MyDataset",
+                to_project="A",
+            )
+
+    def test_build_dataset_plan__workspace_scoped_source__no_same_project_abort(
+        self,
+    ) -> None:
+        # A workspace-scoped source (no project_id -> project_name is None) has
+        # no single project to collide with --to-project, so a workspace-scoped
+        # -> project migrate is legitimate and must NOT be blocked.
+        rest_client = _planner_rest_client(
+            [
+                _Page([_DatasetRow(id="src-1", name="MyDataset", project_id=None)]),
+                _Page([]),
+                _Page([]),
+            ]
+        )
+
+        plan = planner_module.build_dataset_plan(
+            client=_planner_client(rest_client),
+            name="MyDataset",
+            to_project="A",
+        )
+        assert plan.target_name == "MyDataset"
 
     def test_build_dataset_plan__no_stale_temp__no_discard_action(self) -> None:
         # The common case: no leftover temp, so no DiscardStaleTemp emitted.

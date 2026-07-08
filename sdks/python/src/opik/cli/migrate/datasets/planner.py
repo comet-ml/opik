@@ -76,6 +76,18 @@ def _has_migration_marker(row: object) -> bool:
     return TEMP_MIGRATION_MARKER_TAG in tags
 
 
+def _same_project_message(project: str) -> str:
+    """User-facing explanation for the same-source-and-destination-project abort."""
+    return (
+        f"Source and destination are the same project ('{project}'). Migrating a "
+        "dataset into the project it already lives in is a no-op: dataset names "
+        "are unique per workspace (not per project), so there is no second copy "
+        "to create — the source already occupies the name in this project. "
+        "Choose a different --to-project, or omit --from-project only when the "
+        "source lives in a different project than the destination."
+    )
+
+
 @dataclass(frozen=True)
 class DiscardStaleTemp:
     """Delete a leftover temp destination from a prior failed run.
@@ -327,25 +339,27 @@ def build_dataset_plan(
     if resume_checkpoint is not None and resume_checkpoint.dataset_phase_done:
         return _build_resume_plan(client, to_project, resume_checkpoint)
 
-    # Source and destination projects must differ. Dataset names are unique
-    # workspace-wide (not per-project), so "migrate from project A to project A"
-    # is a no-op copy that can only collide with itself — reject it up-front
-    # rather than fail deeper in the rename/create dance. Only enforceable when
-    # --from-project is given; a None source scope is a workspace-wide lookup
-    # with no single project to compare against.
+    # Cheap early-out: if the user literally passed the same value for
+    # --from-project and --to-project, reject before any lookup. (The
+    # authoritative check below also covers the omitted-flag case.)
     if from_project is not None and from_project == to_project:
-        raise ConflictError(
-            f"--from-project and --to-project are both '{to_project}'. Migrating "
-            "a dataset into the same project is a no-op (dataset names are unique "
-            "per workspace, not per project); choose a different destination "
-            "project."
-        )
+        raise ConflictError(_same_project_message(to_project))
 
     # Fail fast if --to-project doesn't exist. Catches typos before any
     # rename/create/copy work, and prevents auto-creating a stray project.
     ensure_destination_project_exists(client, to_project)
 
     source = resolve_source(client, name, from_project)
+
+    # Authoritative same-project guard (covers the --from-project-omitted case
+    # your early check can't). resolve_source populates ``project_name`` with
+    # the source's ACTUAL project even when the flag was omitted. Dataset names
+    # are unique workspace-wide, so if the resolved source project equals
+    # --to-project the migrate is a self-colliding no-op. A workspace-scoped
+    # source (``project_name is None``) has no single project to collide with,
+    # so a workspace-scoped -> project migrate is legitimate and proceeds.
+    if source.project_name is not None and source.project_name == to_project:
+        raise ConflictError(_same_project_message(to_project))
 
     if source.type not in SUPPORTED_DATASET_TYPES:
         raise UnsupportedDatasetTypeError(
