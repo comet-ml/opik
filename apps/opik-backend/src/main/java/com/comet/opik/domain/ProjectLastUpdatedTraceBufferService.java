@@ -75,12 +75,13 @@ class ProjectLastUpdatedTraceBufferServiceImpl implements ProjectLastUpdatedTrac
 
         var meter = GlobalOpenTelemetry.get().getMeter(METER_NAME);
         this.bufferedRecords = meter
-                .counterBuilder("opik.project_last_updated_flush.buffered")
+                .counterBuilder(METER_NAME + ".buffered")
                 .setDescription("Project last-updated markers buffered to Redis on the ingestion path, by result")
                 .build();
+        // Cumulative throughput of markers persisted over time (monotonic) — a counter, not a point-in-time gauge.
         this.flushedMarkers = meter
-                .counterBuilder("opik.project_last_updated_flush.markers")
-                .setDescription("Project last-updated markers processed by the flush")
+                .counterBuilder(METER_NAME + ".markers")
+                .setDescription("Total project last-updated markers processed by the flush")
                 .build();
     }
 
