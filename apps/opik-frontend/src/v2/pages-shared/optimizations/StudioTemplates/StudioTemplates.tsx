@@ -1,7 +1,8 @@
 import React from "react";
 import { ArrowRight } from "lucide-react";
 
-import { Button } from "@/ui/button";
+import { cn } from "@/lib/utils";
+import { Button, buttonVariants } from "@/ui/button";
 import useNavigateToOptimizationStudio from "@/v2/pages-shared/optimizations/useNavigateToOptimizationStudio";
 import {
   getStudioCardConfigs,
@@ -63,7 +64,7 @@ const StudioTemplates: React.FC<StudioTemplatesProps> = ({
               className="flex shrink-0 items-center justify-center rounded-md p-[7px]"
               style={{ backgroundColor: chipColor }}
             >
-              <Icon className="size-3.5 text-white" />
+              <Icon className="size-3.5 text-[#030712]" />
             </span>
             <span className="flex min-w-0 flex-1 flex-col items-start gap-px">
               <span className="comet-body-s-accented w-full truncate text-foreground">
@@ -72,7 +73,12 @@ const StudioTemplates: React.FC<StudioTemplatesProps> = ({
               <span className="comet-body-xs text-muted-slate">
                 {description}
               </span>
-              <span className="comet-body-xs mt-1 inline-flex items-center gap-0.5 text-primary">
+              <span
+                className={cn(
+                  buttonVariants({ variant: "link", size: "2xs" }),
+                  "mt-1 h-auto gap-0.5 px-0",
+                )}
+              >
                 {actionLabel}
                 <ArrowRight className="size-3" />
               </span>

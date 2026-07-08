@@ -1,7 +1,7 @@
 import React from "react";
 
 import { OPTIMIZATION_STATUS } from "@/types/optimizations";
-import { Tag, TagProps } from "@/ui/tag";
+import { Tag } from "@/ui/tag";
 
 // A run status is a neutral pill with a colored status dot: running = green,
 // completed/initialized = slate, cancelled/error = red. Uses the shared brand
@@ -17,24 +17,18 @@ const STATUS_DOT_COLOR: Record<OPTIMIZATION_STATUS, string> = {
 
 type OptimizationStatusTagProps = {
   status: OPTIMIZATION_STATUS;
-  size?: TagProps["size"];
 };
 
+// Fixed 16px pill (per design) with dot + label vertically centered.
 const OptimizationStatusTag: React.FC<OptimizationStatusTagProps> = ({
   status,
-  size,
 }) => (
-  <Tag
-    size={size}
-    className="border border-[var(--pill-neutral-border)] bg-[var(--pill-neutral-bg)] text-foreground"
-  >
-    <div className="flex items-center gap-1.5">
-      <span
-        className="size-1.5 shrink-0 rounded-full"
-        style={{ backgroundColor: STATUS_DOT_COLOR[status] }}
-      />
-      <span className="truncate capitalize">{status}</span>
-    </div>
+  <Tag className="inline-flex h-4 items-center gap-1.5 border border-[var(--pill-neutral-border)] bg-[var(--pill-neutral-bg)] leading-none text-foreground">
+    <span
+      className="size-1.5 shrink-0 rounded-full"
+      style={{ backgroundColor: STATUS_DOT_COLOR[status] }}
+    />
+    <span className="truncate capitalize">{status}</span>
   </Tag>
 );
 
