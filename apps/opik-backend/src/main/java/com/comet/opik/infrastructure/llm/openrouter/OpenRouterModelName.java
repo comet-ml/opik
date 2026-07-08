@@ -22,6 +22,8 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     AION_LABS_AION_1_0("aion-labs/aion-1.0"),
     AION_LABS_AION_1_0_MINI("aion-labs/aion-1.0-mini"),
     AION_LABS_AION_2_0("aion-labs/aion-2.0"),
+    AION_LABS_AION_3_0("aion-labs/aion-3.0"),
+    AION_LABS_AION_3_0_MINI("aion-labs/aion-3.0-mini"),
     AION_LABS_AION_RP_LLAMA_3_1_8B("aion-labs/aion-rp-llama-3.1-8b"),
     ALFREDPROS_CODELLAMA_7B_INSTRUCT_SOLIDITY("alfredpros/codellama-7b-instruct-solidity"),
     ALIBABA_TONGYI_DEEPRESEARCH_30B_A3B("alibaba/tongyi-deepresearch-30b-a3b"),
