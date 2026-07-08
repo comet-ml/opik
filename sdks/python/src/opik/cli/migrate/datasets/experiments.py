@@ -47,7 +47,6 @@ failures, matching Slice 1/2's ``skipped_items`` semantics.
 from __future__ import annotations
 
 import logging
-import os
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -137,42 +136,6 @@ class _InnerProgress:
 
 
 _EXPERIMENT_PAGE_SIZE = 100
-
-# Test-only fault-injection hook (OPIK-7168). When
-# ``OPIK_MIGRATE_CRASH_AFTER_EXPERIMENT`` is set to an integer N, the cascade
-# hard-exits (``os._exit`` -- uncatchable, no cleanup/atexit, mimicking an OOM
-# SIGKILL) partway through migrating the experiment at zero-based position N,
-# AFTER its destination traces have been written and recorded on the checkpoint
-# but BEFORE the experiment row is recreated. This is the deterministic
-# interruption the E2E resume test needs: it can't otherwise guarantee a crash
-# lands mid-experiment. No real user sets this env var; when it's unset the
-# check is a single ``os.environ.get`` returning None, so the production path is
-# unaffected.
-_CRASH_AFTER_EXPERIMENT_ENV = "OPIK_MIGRATE_CRASH_AFTER_EXPERIMENT"
-
-
-def _maybe_crash_for_resume_test(processed_index: int) -> None:
-    """Hard-exit if the fault-injection env var targets this experiment index.
-
-    ``processed_index`` is the zero-based position within the CURRENT run's
-    not-yet-completed experiments (matches the progress ``completed`` count), so
-    on a resumed run the same env value targets the same source experiment only
-    if it hasn't been completed yet -- which is the correct semantics for a test
-    that crashes once and then resumes to completion.
-    """
-    target = os.environ.get(_CRASH_AFTER_EXPERIMENT_ENV)
-    if target is None:
-        return
-    try:
-        target_index = int(target)
-    except ValueError:
-        # A non-integer value is treated as unset rather than raising -- this is
-        # a test-only knob, and a malformed value must never abort a real
-        # migration mid-cascade.
-        return
-    if processed_index == target_index:
-        os._exit(137)  # 128 + SIGKILL(9): uncatchable, no flush/atexit
-
 
 # Per-request page size for the cascade's bulk trace/span reads. The SDK
 # default of 2000 (with the cascade's ``truncate=False`` for round-trip
@@ -387,7 +350,6 @@ def cascade_experiments(
             audit=audit,
             checkpoint=checkpoint,
             inner_progress_callback=inner_progress_callback,
-            processed_index=processed,
         )
 
         if checkpoint is not None:
@@ -469,14 +431,9 @@ def cascade_one_experiment(
     audit: Optional[AuditLog] = None,
     checkpoint: Optional[MigrationCheckpoint] = None,
     inner_progress_callback: Optional[InnerProgressCallback] = None,
-    processed_index: int = 0,
 ) -> None:
     """Migrate one source experiment: read items -> copy traces + spans ->
     recreate experiment via ``imports.experiment.recreate_experiment``.
-
-    ``processed_index`` is the experiment's zero-based position in the current
-    run's not-yet-completed set; it's only consumed by the test-only
-    fault-injection hook (see ``_maybe_crash_for_resume_test``).
 
     When ``checkpoint`` is supplied, the destination trace ids minted for this
     experiment are recorded on the checkpoint's in-flight record and flushed to
@@ -609,12 +566,6 @@ def cascade_one_experiment(
     )
 
     target_version_id = version_remap.get(source_experiment.dataset_version_id or "")
-
-    # Test-only deterministic crash point (OPIK-7168 E2E resume test): traces +
-    # spans for this experiment are now on the backend and their ids are on the
-    # checkpoint, but the experiment row has not been created yet -- the exact
-    # partial state a mid-experiment OOM leaves. No-op in production.
-    _maybe_crash_for_resume_test(processed_index)
 
     # Mint the destination experiment id here (rather than letting
     # ``create_experiment`` generate it) so we can record it on the checkpoint

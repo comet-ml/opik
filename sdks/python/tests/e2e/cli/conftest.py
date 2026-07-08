@@ -96,9 +96,10 @@ def run_migrate_cli(
     tmp_path so the JSON can be re-read and asserted on.
 
     ``extra_env`` is merged into the child process environment — the resume
-    E2E test uses it to set ``OPIK_MIGRATE_CRASH_AFTER_EXPERIMENT`` so the
-    first run dies deterministically mid-cascade (the child ``os._exit``s, so
-    ``returncode`` is the hard-exit code, not a clean CLI exit).
+    E2E test uses it to put a test-only ``sitecustomize.py`` seam on
+    ``PYTHONPATH`` that injects a deterministic mid-cascade crash (the child
+    ``os._exit``s, so ``returncode`` is the hard-exit code, not a clean CLI
+    exit) and redirects the checkpoint dir into a tmp path.
     """
     cmd = [sys.executable, "-m", "opik.cli", "migrate"] + args
     if audit_log_path is not None:

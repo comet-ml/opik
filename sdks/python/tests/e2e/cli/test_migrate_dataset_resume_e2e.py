@@ -10,12 +10,13 @@ Shape:
 
   1. Seed a source dataset (one version) and N experiments, each with its own
      trace + span tree, all referencing that dataset.
-  2. Run ``opik migrate dataset`` with ``OPIK_MIGRATE_CRASH_AFTER_EXPERIMENT``
-     set so the child ``os._exit(137)``s partway through one experiment —
-     after its destination traces are written and recorded on the checkpoint
-     but before the experiment row is recreated. This is the uncatchable-kill
-     (OOM-like) interruption the feature exists for; a clean ``except`` never
-     runs, so only the incrementally-flushed checkpoint survives.
+  2. Run ``opik migrate dataset`` with a test-only ``sitecustomize.py`` seam on
+     ``PYTHONPATH`` (nothing test-only lives in the product) that ``os._exit(137)``s
+     partway through one experiment — after its destination traces are written
+     and recorded on the checkpoint but before the experiment row is recreated.
+     This is the uncatchable-kill (OOM-like) interruption the feature exists for;
+     a clean ``except`` never runs, so only the incrementally-flushed checkpoint
+     survives. The seam also redirects the checkpoint dir into tmp_path.
   3. Assert the run died hard and the checkpoint on disk shows partial progress
      (some experiments done, one in flight with recorded dest trace ids).
   4. Re-run the *same* command with no crash env. Assert it exits 0, resumes
@@ -28,6 +29,7 @@ Shape:
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Iterator, List
 
@@ -47,12 +49,12 @@ from .conftest import (
     stream_items_wire,
 )
 
-# Number of source experiments and the zero-based position at which the first
-# run hard-exits. Crashing after 2 completed experiments (i.e. mid-experiment
-# index 2, the 3rd) leaves a non-trivial done-set to skip AND an in-flight
-# experiment to clean up + re-migrate on resume.
+# Number of source experiments and the count of experiments completed before
+# the first run hard-exits. Crashing after 2 completed experiments (mid the 3rd)
+# leaves a non-trivial done-set to skip AND an in-flight experiment to clean up
+# + re-migrate on resume.
 _NUM_EXPERIMENTS = 5
-_CRASH_AT_INDEX = 2
+_CRASH_AFTER_N_EXPERIMENTS = 2
 
 
 @pytest.fixture
@@ -60,8 +62,50 @@ def dataset_name() -> Iterator[str]:
     yield f"e2e-migrate-resume-{random_chars()}"
 
 
-def _checkpoint_files(audit_path: Path) -> List[Path]:
-    return list(audit_path.parent.glob("opik-migrate-checkpoint-*.json"))
+def _write_test_seam(
+    seam_dir: Path, *, crash_after_n: int, checkpoint_dir: Path
+) -> None:
+    """Write a test-only ``sitecustomize.py`` the migrate subprocess auto-imports.
+
+    Python imports ``sitecustomize`` at interpreter startup, so dropping it on
+    the subprocess's ``PYTHONPATH`` lets the test inject behaviour **without any
+    test-only logic living in the product**. Two patches, both test-owned:
+
+    * Redirect the checkpoint dir to a tmp path (via ``checkpoint_dir``) so the
+      test can find/assert the checkpoint without touching the developer's real
+      ``~/.opik`` and without repointing ``HOME`` (which would break the SDK's
+      backend-config resolution the E2E run relies on).
+    * Wrap ``_copy_traces_and_spans`` so the real one runs first (destination
+      traces written + recorded on the checkpoint), then ``os._exit(137)`` after
+      the Nth experiment — reproducing the exact "traces written, experiment row
+      not yet created" partial state an OOM leaves mid-cascade. ``crash_after_n``
+      < 0 disables the crash (used for the resume run).
+    """
+    seam_dir.mkdir(parents=True, exist_ok=True)
+    (seam_dir / "sitecustomize.py").write_text(
+        f"""
+import os
+from pathlib import Path
+from opik.cli.migrate import checkpoint as _cp
+from opik.cli.migrate.datasets import experiments as _exp
+
+_cp.checkpoint_dir = lambda: Path({str(checkpoint_dir)!r})
+
+_crash_after = {crash_after_n}
+if _crash_after >= 0:
+    _seen = {{"n": 0}}
+    _real_copy = _exp._copy_traces_and_spans
+
+    def _copy_then_maybe_crash(*args, **kwargs):
+        result = _real_copy(*args, **kwargs)
+        _seen["n"] += 1
+        if _seen["n"] > _crash_after:
+            os._exit(137)  # 128 + SIGKILL(9): uncatchable, mimics an OOM kill
+        return result
+
+    _exp._copy_traces_and_spans = _copy_then_maybe_crash
+"""
+    )
 
 
 def test_migrate_dataset__crash_mid_cascade__resumes_without_duplicates(
@@ -111,11 +155,30 @@ def test_migrate_dataset__crash_mid_cascade__resumes_without_duplicates(
     audit_path = tmp_path / "audit.json"
     migrate_args = ["dataset", dataset_name, "--to-project", target_project_name]
 
+    # Test seam: a sitecustomize.py the migrate subprocess auto-imports. It
+    # redirects the checkpoint dir into tmp_path (hermetic; no real ~/.opik) and
+    # injects the deterministic mid-cascade crash — all test-owned, nothing in
+    # the product. PYTHONPATH must keep the SDK's own src on it (the E2E run
+    # imports opik from source), so the seam dir is prepended.
+    checkpoint_dir = tmp_path / "checkpoints"
+    seam_dir = tmp_path / "seam"
+    existing_pythonpath = os.environ.get("PYTHONPATH", "")
+
+    def _seam_env(crash_after_n: int) -> dict:
+        _write_test_seam(
+            seam_dir, crash_after_n=crash_after_n, checkpoint_dir=checkpoint_dir
+        )
+        return {
+            "PYTHONPATH": os.pathsep.join(
+                [str(seam_dir)] + ([existing_pythonpath] if existing_pythonpath else [])
+            )
+        }
+
     # ── Run 1: crash deterministically mid-cascade ──
     crashed = run_migrate_cli(
         migrate_args,
         audit_log_path=str(audit_path),
-        extra_env={"OPIK_MIGRATE_CRASH_AFTER_EXPERIMENT": str(_CRASH_AT_INDEX)},
+        extra_env=_seam_env(_CRASH_AFTER_N_EXPERIMENTS),
     )
     # os._exit(137) is a hard, uncatchable exit — not a clean CLI exit code.
     assert crashed.returncode == 137, (
@@ -124,13 +187,15 @@ def test_migrate_dataset__crash_mid_cascade__resumes_without_duplicates(
     )
 
     # The incrementally-flushed checkpoint must have survived the kill and show
-    # partial progress: the experiments before the crash index completed, and
-    # the one at the crash index is in flight with recorded destination trace
-    # ids (its traces were written to the backend before the crash).
-    checkpoints = _checkpoint_files(audit_path)
+    # partial progress: the experiments before the crash completed, and the one
+    # at the crash is in flight with recorded destination trace ids (its traces
+    # were written to the backend before the crash).
+    checkpoints = list(checkpoint_dir.glob("opik-migrate-checkpoint-*.json"))
     assert len(checkpoints) == 1, f"expected one checkpoint file, got {checkpoints}"
     checkpoint_data = json.loads(checkpoints[0].read_text())
-    assert len(checkpoint_data["completed_experiment_ids"]) == _CRASH_AT_INDEX
+    assert (
+        len(checkpoint_data["completed_experiment_ids"]) == _CRASH_AFTER_N_EXPERIMENTS
+    )
     # The dataset phase (rename/create/replay/optimizations) finished before the
     # cascade started, so resume must skip it and reconstruct the remaps from
     # the destination rather than re-running (and duplicating) it.
@@ -145,8 +210,10 @@ def test_migrate_dataset__crash_mid_cascade__resumes_without_duplicates(
     # Crash landed before the experiment row was created.
     assert in_flight["dest_experiment_id"] is None
 
-    # ── Run 2: resume to completion (no crash env) ──
-    resumed = run_migrate_cli(migrate_args, audit_log_path=str(audit_path))
+    # ── Run 2: resume to completion (same seam, crash disabled) ──
+    resumed = run_migrate_cli(
+        migrate_args, audit_log_path=str(audit_path), extra_env=_seam_env(-1)
+    )
     assert resumed.returncode == 0, resumed.stdout + resumed.stderr
     assert "Resuming migration" in resumed.stdout, (
         "resumed run should announce it is resuming"
@@ -184,4 +251,4 @@ def test_migrate_dataset__crash_mid_cascade__resumes_without_duplicates(
     )
 
     # Checkpoint deleted on successful completion.
-    assert _checkpoint_files(audit_path) == []
+    assert list(checkpoint_dir.glob("opik-migrate-checkpoint-*.json")) == []

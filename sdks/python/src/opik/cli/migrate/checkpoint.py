@@ -57,15 +57,31 @@ def checkpoint_key(workspace: str, project: str, dataset: str) -> str:
     return hashlib.sha256(raw).hexdigest()[:16]
 
 
-def checkpoint_path(audit_path: Path, key: str) -> Path:
-    """Location of the checkpoint file: adjacent to the audit log.
+def checkpoint_dir() -> Path:
+    """Per-user directory holding migration checkpoints: ``~/.opik/migrate-checkpoints``.
 
-    Placing it in the audit log's directory means it travels with an explicit
-    ``--audit-log`` path and, by default, lands in the working directory next
-    to ``opik-migrate-<timestamp>.json``. The name is derived from the
-    composite ``key`` (not the timestamp) so resume can find it deterministically.
+    Deliberately a FIXED, cwd-independent location (alongside the SDK's existing
+    ``~/.opik.config``) rather than next to the audit log. The audit log defaults
+    to the working directory, so anchoring the checkpoint there broke resume when
+    the operator re-ran from a different folder -- the lookup missed and the run
+    silently restarted. A fixed home-dir location makes resume work regardless of
+    cwd for the common single-machine case.
+
+    (A globally-robust location for CI with an ephemeral/differing HOME, and for
+    containers recreated after an OOM where no in-container path survives without
+    a mounted volume, is tracked as a follow-up: an ``OPIK_MIGRATE_CHECKPOINT_DIR``
+    override + docs. This default doesn't foreclose that.)
     """
-    return audit_path.parent / f"opik-migrate-checkpoint-{key}.json"
+    return Path.home() / ".opik" / "migrate-checkpoints"
+
+
+def checkpoint_path(key: str) -> Path:
+    """On-disk path for a migration's checkpoint, keyed by the composite hash.
+
+    The name is derived from the composite ``key`` (workspace+project+dataset),
+    not a timestamp, so a re-run finds the prior run's checkpoint deterministically.
+    """
+    return checkpoint_dir() / f"opik-migrate-checkpoint-{key}.json"
 
 
 @dataclass
@@ -94,7 +110,7 @@ class InFlightExperiment:
 class MigrationCheckpoint:
     """Resumable per-experiment progress for one migration.
 
-    Persisted as JSON at ``checkpoint_path(audit_path, key)``. Mutated in place
+    Persisted as JSON at ``checkpoint_path(key)``. Mutated in place
     by the cascade and flushed after each experiment. ``path`` is the on-disk
     location; it is not serialized.
     """
@@ -235,12 +251,14 @@ def _require_str_list(value: Any, field_name: str) -> List[str]:
 
 def load_or_create(
     *,
-    audit_path: Path,
     workspace: str,
     project: str,
     dataset: str,
 ) -> MigrationCheckpoint:
     """Load an existing checkpoint for this composite key, or create a fresh one.
+
+    The checkpoint lives at a fixed per-user path (see ``checkpoint_dir``),
+    independent of the working directory, so a re-run from any folder finds it.
 
     A checkpoint file that is missing, unreadable, corrupt (truncated JSON from
     an interrupted write on a filesystem without atomic replace), or written by
@@ -250,7 +268,7 @@ def load_or_create(
     could skip real work.
     """
     key = checkpoint_key(workspace, project, dataset)
-    path = checkpoint_path(audit_path, key)
+    path = checkpoint_path(key)
     fresh = MigrationCheckpoint(
         key=key,
         workspace=workspace,

@@ -23,6 +23,9 @@ from pathlib import Path
 from typing import Any, List, Tuple
 from unittest.mock import MagicMock
 
+import pytest
+
+from opik.cli.migrate import checkpoint as checkpoint_module
 from opik.cli.migrate.checkpoint import (
     MigrationCheckpoint,
     checkpoint_key,
@@ -46,6 +49,19 @@ from .test_migrate_dataset_experiments_cascade import (
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def _isolate_checkpoint_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Point the checkpoint store at a tmp dir instead of the real ~/.opik.
+
+    The checkpoint now lives at a fixed per-user path (``checkpoint_dir``),
+    independent of cwd/--audit-log. Redirecting it here keeps the unit tests
+    hermetic and off the developer's home directory.
+    """
+    cp_dir = tmp_path / "migrate-checkpoints"
+    cp_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(checkpoint_module, "checkpoint_dir", lambda: cp_dir)
+
+
 class TestMigrationCheckpoint:
     def test_checkpoint_key__stable_and_distinct_per_tuple(self) -> None:
         key = checkpoint_key("ws", "proj", "ds")
@@ -56,16 +72,14 @@ class TestMigrationCheckpoint:
         # "a"+"bc" colliding with "ab"+"c").
         assert checkpoint_key("a", "bc", "d") != checkpoint_key("ab", "c", "d")
 
-    def test_checkpoint_path__adjacent_to_audit_log(self) -> None:
-        audit_path = Path("/tmp/run/opik-migrate-20260101T000000Z.json")
+    def test_checkpoint_path__lives_in_checkpoint_dir_keyed_by_hash(self) -> None:
         key = checkpoint_key("ws", "proj", "ds")
-        path = checkpoint_path(audit_path, key)
-        assert path.parent == audit_path.parent
+        path = checkpoint_path(key)
+        assert path.parent == checkpoint_module.checkpoint_dir()
         assert path.name == f"opik-migrate-checkpoint-{key}.json"
 
     def test_load_or_create__no_file__starts_fresh(self, tmp_path: Path) -> None:
         cp = load_or_create(
-            audit_path=tmp_path / "opik-migrate-x.json",
             workspace="ws",
             project="proj",
             dataset="ds",
@@ -77,10 +91,7 @@ class TestMigrationCheckpoint:
     def test_flush_then_load__round_trips_completed_and_in_flight(
         self, tmp_path: Path
     ) -> None:
-        audit_path = tmp_path / "opik-migrate-x.json"
-        cp = load_or_create(
-            audit_path=audit_path, workspace="ws", project="proj", dataset="ds"
-        )
+        cp = load_or_create(workspace="ws", project="proj", dataset="ds")
         cp.total_experiments = 3
         cp.mark_in_flight(
             "src-exp-2", experiment_name="exp-2", dest_dataset_id="dest-ds"
@@ -89,28 +100,21 @@ class TestMigrationCheckpoint:
         cp.mark_completed("src-exp-1")
         cp.flush()
 
-        reloaded = load_or_create(
-            audit_path=audit_path, workspace="ws", project="proj", dataset="ds"
-        )
+        reloaded = load_or_create(workspace="ws", project="proj", dataset="ds")
         assert reloaded.total_experiments == 3
         assert reloaded.completed_experiment_ids == {"src-exp-1"}
         # ``mark_completed`` clears in_flight, so only the completed set survives.
         assert reloaded.in_flight is None
 
     def test_flush_preserves_in_flight_when_not_completed(self, tmp_path: Path) -> None:
-        audit_path = tmp_path / "opik-migrate-x.json"
-        cp = load_or_create(
-            audit_path=audit_path, workspace="ws", project="proj", dataset="ds"
-        )
+        cp = load_or_create(workspace="ws", project="proj", dataset="ds")
         cp.mark_in_flight(
             "src-exp-2", experiment_name="exp-2", dest_dataset_id="dest-ds"
         )
         cp.record_dest_trace_ids(["dest-trace-a"])
         cp.flush()
 
-        reloaded = load_or_create(
-            audit_path=audit_path, workspace="ws", project="proj", dataset="ds"
-        )
+        reloaded = load_or_create(workspace="ws", project="proj", dataset="ds")
         assert reloaded.in_flight is not None
         assert reloaded.in_flight.source_experiment_id == "src-exp-2"
         assert reloaded.in_flight.experiment_name == "exp-2"
@@ -122,12 +126,9 @@ class TestMigrationCheckpoint:
         # filesystem without atomic replace) must be treated as "no progress",
         # not crash the migration.
         key = checkpoint_key("ws", "proj", "ds")
-        audit_path = tmp_path / "opik-migrate-x.json"
-        checkpoint_path(audit_path, key).write_text('{"schema_version": 1, "comp')
+        checkpoint_path(key).write_text('{"schema_version": 1, "comp')
 
-        cp = load_or_create(
-            audit_path=audit_path, workspace="ws", project="proj", dataset="ds"
-        )
+        cp = load_or_create(workspace="ws", project="proj", dataset="ds")
         assert cp.completed_count == 0
         assert cp.in_flight is None
 
@@ -139,14 +140,11 @@ class TestMigrationCheckpoint:
         # force a resume that skips rename/create/replay. A non-bool is
         # malformed -> fresh.
         key = checkpoint_key("ws", "proj", "ds")
-        audit_path = tmp_path / "opik-migrate-x.json"
         for bad in ('"false"', "[1]", "1"):
-            checkpoint_path(audit_path, key).write_text(
+            checkpoint_path(key).write_text(
                 f'{{"schema_version": 1, "dataset_phase_done": {bad}}}'
             )
-            cp = load_or_create(
-                audit_path=audit_path, workspace="ws", project="proj", dataset="ds"
-            )
+            cp = load_or_create(workspace="ws", project="proj", dataset="ds")
             assert cp.dataset_phase_done is False
 
     def test_load_or_create__malformed_in_flight__starts_fresh(
@@ -157,15 +155,12 @@ class TestMigrationCheckpoint:
         # ``source_experiment_id``) must fall back to fresh rather than crash
         # the CLI with a TypeError/KeyError.
         key = checkpoint_key("ws", "proj", "ds")
-        audit_path = tmp_path / "opik-migrate-x.json"
         for bad_in_flight in ('"not-a-dict"', '{"experiment_name": "x"}'):
-            checkpoint_path(audit_path, key).write_text(
+            checkpoint_path(key).write_text(
                 '{"schema_version": 1, "completed_experiment_ids": ["e1"], '
                 f'"in_flight": {bad_in_flight}}}'
             )
-            cp = load_or_create(
-                audit_path=audit_path, workspace="ws", project="proj", dataset="ds"
-            )
+            cp = load_or_create(workspace="ws", project="proj", dataset="ds")
             assert cp.completed_count == 0
             assert cp.in_flight is None
 
@@ -177,14 +172,11 @@ class TestMigrationCheckpoint:
         # entries) would silently seed the wrong completed set and make the
         # cascade skip/re-run the wrong experiments. It must fall back to fresh.
         key = checkpoint_key("ws", "proj", "ds")
-        audit_path = tmp_path / "opik-migrate-x.json"
         for bad in ('"abc"', "[1, 2, 3]", "{}"):
-            checkpoint_path(audit_path, key).write_text(
+            checkpoint_path(key).write_text(
                 f'{{"schema_version": 1, "completed_experiment_ids": {bad}}}'
             )
-            cp = load_or_create(
-                audit_path=audit_path, workspace="ws", project="proj", dataset="ds"
-            )
+            cp = load_or_create(workspace="ws", project="proj", dataset="ds")
             assert cp.completed_experiment_ids == set()
 
     def test_load_or_create__corrupt_dest_trace_ids__starts_fresh(
@@ -192,33 +184,25 @@ class TestMigrationCheckpoint:
     ) -> None:
         # Same silent-corruption guard for the in-flight trace-id list.
         key = checkpoint_key("ws", "proj", "ds")
-        audit_path = tmp_path / "opik-migrate-x.json"
-        checkpoint_path(audit_path, key).write_text(
+        checkpoint_path(key).write_text(
             '{"schema_version": 1, "in_flight": '
             '{"source_experiment_id": "e2", "dest_trace_ids": "trace-1"}}'
         )
-        cp = load_or_create(
-            audit_path=audit_path, workspace="ws", project="proj", dataset="ds"
-        )
+        cp = load_or_create(workspace="ws", project="proj", dataset="ds")
         assert cp.in_flight is None
         assert cp.completed_count == 0
 
     def test_flush_then_load__round_trips_dest_experiment_id(
         self, tmp_path: Path
     ) -> None:
-        audit_path = tmp_path / "opik-migrate-x.json"
-        cp = load_or_create(
-            audit_path=audit_path, workspace="ws", project="proj", dataset="ds"
-        )
+        cp = load_or_create(workspace="ws", project="proj", dataset="ds")
         cp.mark_in_flight(
             "src-exp-2", experiment_name="exp-2", dest_dataset_id="dest-ds"
         )
         cp.record_dest_experiment_id("dest-exp-99")
         cp.flush()
 
-        reloaded = load_or_create(
-            audit_path=audit_path, workspace="ws", project="proj", dataset="ds"
-        )
+        reloaded = load_or_create(workspace="ws", project="proj", dataset="ds")
         assert reloaded.in_flight is not None
         assert reloaded.in_flight.dest_experiment_id == "dest-exp-99"
 
@@ -226,22 +210,16 @@ class TestMigrationCheckpoint:
         self, tmp_path: Path
     ) -> None:
         key = checkpoint_key("ws", "proj", "ds")
-        audit_path = tmp_path / "opik-migrate-x.json"
-        checkpoint_path(audit_path, key).write_text(
+        checkpoint_path(key).write_text(
             '{"schema_version": 999, "completed_experiment_ids": ["src-exp-1"]}'
         )
 
-        cp = load_or_create(
-            audit_path=audit_path, workspace="ws", project="proj", dataset="ds"
-        )
+        cp = load_or_create(workspace="ws", project="proj", dataset="ds")
         # A newer schema we can't interpret is ignored -> fresh start.
         assert cp.completed_count == 0
 
     def test_delete__removes_file_and_is_idempotent(self, tmp_path: Path) -> None:
-        audit_path = tmp_path / "opik-migrate-x.json"
-        cp = load_or_create(
-            audit_path=audit_path, workspace="ws", project="proj", dataset="ds"
-        )
+        cp = load_or_create(workspace="ws", project="proj", dataset="ds")
         cp.flush()
         assert cp.path.exists()
         cp.delete()
@@ -250,10 +228,7 @@ class TestMigrationCheckpoint:
         cp.delete()
 
     def test_flush__atomic__no_stray_tmp_file_left(self, tmp_path: Path) -> None:
-        audit_path = tmp_path / "opik-migrate-x.json"
-        cp = load_or_create(
-            audit_path=audit_path, workspace="ws", project="proj", dataset="ds"
-        )
+        cp = load_or_create(workspace="ws", project="proj", dataset="ds")
         cp.flush()
         # The temp file used for the atomic write must have been renamed away.
         tmp_files = list(tmp_path.glob("*.tmp"))
@@ -325,7 +300,6 @@ class TestCascadeResume:
     ) -> None:
         rest_client, client = _two_experiment_rig()
         cp = load_or_create(
-            audit_path=tmp_path / "opik-migrate-x.json",
             workspace="ws",
             project="DestProject",
             dataset="MyDataset",
@@ -346,7 +320,6 @@ class TestCascadeResume:
     def test_skip_completed__all_done__no_recreation(self, tmp_path: Path) -> None:
         rest_client, client = _two_experiment_rig()
         cp = load_or_create(
-            audit_path=tmp_path / "opik-migrate-x.json",
             workspace="ws",
             project="DestProject",
             dataset="MyDataset",
@@ -363,9 +336,7 @@ class TestCascadeResume:
         self, tmp_path: Path
     ) -> None:
         rest_client, client = _two_experiment_rig()
-        audit_path = tmp_path / "opik-migrate-x.json"
         cp = load_or_create(
-            audit_path=audit_path,
             workspace="ws",
             project="DestProject",
             dataset="MyDataset",
@@ -379,7 +350,6 @@ class TestCascadeResume:
         assert cp.in_flight is None
         # Progress was flushed to disk (a re-run would see both done).
         reloaded = load_or_create(
-            audit_path=audit_path,
             workspace="ws",
             project="DestProject",
             dataset="MyDataset",
@@ -391,7 +361,6 @@ class TestCascadeResume:
     ) -> None:
         rest_client, client = _two_experiment_rig()
         cp = load_or_create(
-            audit_path=tmp_path / "opik-migrate-x.json",
             workspace="ws",
             project="DestProject",
             dataset="MyDataset",
@@ -432,7 +401,6 @@ class TestCascadeResume:
         # name lookup that could hit a peer).
         rest_client, client = _two_experiment_rig()
         cp = load_or_create(
-            audit_path=tmp_path / "opik-migrate-x.json",
             workspace="ws",
             project="DestProject",
             dataset="MyDataset",
@@ -458,9 +426,7 @@ class TestCascadeResume:
         # already carries this experiment's dest trace ids by the time the
         # trace-flush happens.
         rest_client, client = _two_experiment_rig()
-        audit_path = tmp_path / "opik-migrate-x.json"
         cp = load_or_create(
-            audit_path=audit_path,
             workspace="ws",
             project="DestProject",
             dataset="MyDataset",
@@ -474,7 +440,6 @@ class TestCascadeResume:
             # checkpoint from disk and snapshot its in-flight trace ids.
             if "dest_trace_ids" not in flushed_state:
                 reloaded = load_or_create(
-                    audit_path=audit_path,
                     workspace="ws",
                     project="DestProject",
                     dataset="MyDataset",
@@ -499,7 +464,6 @@ class TestCascadeResume:
     ) -> None:
         rest_client, client = _two_experiment_rig()
         cp = load_or_create(
-            audit_path=tmp_path / "opik-migrate-x.json",
             workspace="ws",
             project="DestProject",
             dataset="MyDataset",

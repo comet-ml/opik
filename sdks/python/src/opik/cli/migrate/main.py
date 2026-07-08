@@ -404,7 +404,6 @@ def migrate_dataset_command(
         # finished the dataset phase.
         if not exclude_experiments and not dry_run:
             checkpoint = load_or_create(
-                audit_path=audit_path,
                 workspace=getattr(client, "_workspace", None) or "default",
                 project=to_project,
                 dataset=name,
