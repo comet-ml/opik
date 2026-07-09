@@ -149,6 +149,43 @@ class RemoteAuthServiceTest {
     }
 
     @Test
+    void testAuth__whenApiKeyHasBearerPrefix__thenPrefixStrippedAndAuthSucceeds() throws JsonProcessingException {
+        // Reproduces OPIK-7267: Optimization Studio routes its LLM calls through the backend gateway
+        // (/v1/private/chat/completions) via LiteLLM, whose OpenAI-compatible client sends the Opik API
+        // key as "Bearer <key>". Single-tenant (stsaas) react-services do a literal key lookup, so the
+        // "Bearer " prefix makes the lookup fail with "User with provided api key not found!" — even
+        // though the very same key authenticates fine for the SDK's REST calls, which send it raw. The
+        // auth layer must strip the prefix before forwarding to the react-service.
+        var authResponse = podamFactory.manufacturePojo(RemoteAuthService.AuthResponse.class);
+        var apiKey = "apiKey-" + UUID.randomUUID();
+        var workspaceName = "workspace-" + UUID.randomUUID();
+
+        // Model the strict stsaas react-service: the RAW key resolves to a user...
+        WIRE_MOCK.server().stubFor(post("/opik/auth")
+                .withHeader(HttpHeaders.AUTHORIZATION, equalTo(apiKey))
+                .willReturn(okJson(OBJECT_MAPPER.writeValueAsString(authResponse))));
+        // ...but a Bearer-prefixed value is rejected exactly as the ticket reports.
+        WIRE_MOCK.server().stubFor(post("/opik/auth")
+                .withHeader(HttpHeaders.AUTHORIZATION, equalTo("Bearer " + apiKey))
+                .willReturn(aResponse().withStatus(HttpStatus.SC_UNAUTHORIZED)
+                        .withHeader("Content-Type", "application/json")
+                        .withJsonBody(JsonUtils.readTree(new ReactServiceErrorResponse(
+                                "User with provided api key not found!", HttpStatus.SC_UNAUTHORIZED)))));
+
+        remoteAuthService.authenticate(
+                getHeadersMock(workspaceName, "Bearer " + apiKey), null,
+                ContextInfoHolder.builder()
+                        .uriInfo(createMockUriInfo("/priv/chat/completions"))
+                        .method("POST")
+                        .build());
+
+        assertThat(requestContext.getUserName()).isEqualTo(authResponse.user());
+        assertThat(requestContext.getWorkspaceId()).isEqualTo(authResponse.workspaceId());
+        // The credential stored in context is the normalized (raw) key.
+        assertThat(requestContext.getApiKey()).isEqualTo(apiKey);
+    }
+
+    @Test
     void testAuthCacheHit_preservesAllCredentials() throws JsonProcessingException {
         var authResponse = podamFactory.manufacturePojo(RemoteAuthService.AuthResponse.class);
         var apiKey = "apiKey-" + UUID.randomUUID();

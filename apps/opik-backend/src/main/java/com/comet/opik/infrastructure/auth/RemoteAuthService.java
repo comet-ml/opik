@@ -44,6 +44,7 @@ import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_QUERY_
 class RemoteAuthService implements AuthService {
     private static final String USER_NOT_FOUND = "User not found";
     private static final String NOT_LOGGED_USER = "Please login first";
+    private static final String BEARER_PREFIX = "Bearer ";
 
     // GenericType instances are thread-safe and expensive to build, so reuse a single instance.
     private static final GenericType<List<WorkspaceIdNameResponse>> WORKSPACE_LIST_TYPE = new GenericType<>() {
@@ -319,9 +320,24 @@ class RemoteAuthService implements AuthService {
         }
     }
 
+    /**
+     * Strips a leading {@code Bearer } prefix from the API key. OpenAI-compatible clients — notably
+     * LiteLLM, which Optimization Studio uses to route LLM calls through
+     * {@code /v1/private/chat/completions} — send the key as {@code Authorization: Bearer <key>}. The
+     * react-service does a literal key lookup, so the prefix must be removed or single-tenant deployments
+     * reject the request with "User with provided api key not found!" (OPIK-7267). A real Opik API key
+     * never starts with {@code Bearer }, so stripping it is a safe normalization.
+     */
+    private static String stripBearerPrefix(String apiKey) {
+        return apiKey.regionMatches(true, 0, BEARER_PREFIX, 0, BEARER_PREFIX.length())
+                ? apiKey.substring(BEARER_PREFIX.length()).strip()
+                : apiKey;
+    }
+
     private void authenticateUsingApiKey(HttpHeaders headers, String workspaceName, String path,
             List<String> requiredPermissions) {
-        var apiKey = Optional.ofNullable(headers.getHeaderString(HttpHeaders.AUTHORIZATION)).orElse("");
+        var apiKey = stripBearerPrefix(
+                Optional.ofNullable(headers.getHeaderString(HttpHeaders.AUTHORIZATION)).orElse(""));
         if (apiKey.isBlank()) {
             log.info("API key not found in headers");
             throw new ClientErrorException(MISSING_API_KEY, Response.Status.UNAUTHORIZED);
