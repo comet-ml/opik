@@ -85,6 +85,12 @@ This workflow will:
   - If found, store the status (e.g., "Baz approved: ✅" or "Baz status: pending")
   - If not found or unavailable, skip this field (it's optional)
 
+- **Extract PR size**:
+  - The `📏 Auto Label PR Size` workflow applies one size label to every PR. Read the PR labels and look for a `size/*` label: `🔵 size/XS`, `🟢 size/S`, `🟡 size/M`, `🟠 size/L`, or `🔴 size/XL`.
+  - Store the bucket as `{emoji} {BUCKET}` (e.g. `🟠 L`) — just the bucket, no line counts.
+  - If no size label is present yet (the workflow may not have run), derive the bucket from the PR's changed lines (`additions + deletions`, ignoring lockfiles/generated clients): XS < 20, S 20–100, M 101–300, L 301–600, XL > 600 — and still store only `{emoji} {BUCKET}`.
+  - GitHub is the source of truth; the size at message-publish time is good enough (PRs rarely change bucket after review starts).
+
 - **Extract test environment link from PR description and comments**:
   - First, search PR comments for test environment deployment messages (look for "Test environment is now available!" or similar)
   - When fetching PR comments via `gh api`, **always** use `--paginate` to ensure all results are fetched:
@@ -153,6 +159,7 @@ This workflow will:
   
   :jira_epic: jira link: {{Jira_URL}}
   :github: pr link: {{PR_link}}
+  :straight_ruler: pr size: {{pr_size}}
   :test_tube: test env link: {{test_env}}
   {{baz_approved_status_if_available}}
   :react: fe summary (optional): {{description_in_one_line}}
@@ -166,6 +173,7 @@ This workflow will:
   - **User customization**: If user provided customization text in Step 4, include it after the greeting (before the structured fields)
   - **Jira link**: Include full Jira URL with ticket (e.g., `https://comet-ml.atlassian.net/browse/OPIK-1234`)
   - **PR link**: Include GitHub PR URL
+  - **PR size**: Include the size bucket extracted in Step 3 (e.g., `🟠 L`). Always included — size is always available from GitHub.
   - **Test env link**: Include test environment URL
   - **Baz approved status**: Only include if extracted from PR status checks (optional field)
   - **Component summaries**: Only include optional fields that were provided (skip empty ones)
@@ -178,6 +186,7 @@ This workflow will:
   
   :jira_epic: jira link: https://comet-ml.atlassian.net/browse/OPIK-1234
   :github: pr link: https://github.com/comet-ml/opik/pull/1234
+  :straight_ruler: pr size: 🟠 L
   :test_tube: test env link: https://test.opik.com
   :react: fe summary (optional): Added new metrics dashboard UI
   :java: be summary (optional): Implemented metrics aggregation endpoint
@@ -281,6 +290,7 @@ cursor generate-code-review-slack-command
 # 1. Find PR for current branch: https://github.com/comet-ml/opik/pull/1234
 # 2. Extract Jira ticket from PR title: [OPIK-1234] [FE] feat(api): add metrics dashboard
 # 3. Extract test env from PR comments or description: https://pr-1234.dev.comet.com (from PR comments or Testing section)
+#    Extract PR size from the size/* label (or additions+deletions): 🟠 L
 # 4. Extract summaries from PR description:
 #    - FE: Added new metrics dashboard UI (from Details section)
 #    - BE: Implemented metrics aggregation endpoint (from Details section)
@@ -308,6 +318,7 @@ cursor generate-code-review-slack-command
 # 
 # :jira_epic: jira link: https://comet-ml.atlassian.net/browse/OPIK-1234
 # :github: pr link: https://github.com/comet-ml/opik/pull/1234
+# :straight_ruler: pr size: 🟠 L
 # :test_tube: test env link: https://test.opik.com
 # :react: fe summary (optional): Added new metrics dashboard UI
 # :java: be summary (optional): Implemented metrics aggregation endpoint
