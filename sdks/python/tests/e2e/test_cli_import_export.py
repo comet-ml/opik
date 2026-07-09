@@ -980,8 +980,15 @@ class TestCLIImportExport:
             imported_chat_prompt,
             name=prompt_name,
         )
-        assert set(imported_chat_prompt.tags or []) == set(_CHAT_PROMPT_TAGS), (
-            f"Imported chat prompt tags mismatch: {imported_chat_prompt.tags!r}"
+        # Tags live on the prompt container and are not surfaced by
+        # get_chat_prompt()/retrieve_prompt_version (they come back empty);
+        # search_prompts() injects the container tags. Assert against it to
+        # mirror the text-prompt flow above and exports._resolve_prompt_tags.
+        imported_chat_container = next(
+            p for p in imported_prompts if p.name == prompt_name
+        )
+        assert set(imported_chat_container.tags or []) == set(_CHAT_PROMPT_TAGS), (
+            f"Imported chat prompt tags mismatch: {imported_chat_container.tags!r}"
         )
 
     def test_import_projects_automatically_recreates_experiments(
