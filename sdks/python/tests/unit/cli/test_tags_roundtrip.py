@@ -17,6 +17,10 @@ sys.modules.setdefault("opik.api_objects.prompt.prompt", MagicMock())
 
 from opik.cli.imports.prompt import import_prompts_from_directory  # noqa: E402
 from opik.cli.imports.dataset import import_datasets_from_directory  # noqa: E402
+from opik.cli.exports.prompt import (  # noqa: E402
+    export_single_prompt,
+    _resolve_prompt_tags,
+)
 from opik.cli.imports.experiment import (  # noqa: E402
     ExperimentData,
     recreate_experiment,
@@ -211,6 +215,67 @@ class TestDatasetTagsImport:
         client.create_dataset.return_value.insert.assert_called_once()
         assert result["datasets"] == 1
         assert result["datasets_errors"] == 0
+
+
+class TestPromptTagsExport:
+    """Prompt tags are container-level and are dropped by the direct
+    get_prompt() lookup; the exporter must recover them via search_prompts.
+    """
+
+    def test_resolve_prompt_tags__object_has_tags__skips_search(self) -> None:
+        prompt = Mock()
+        prompt.tags = ["prod"]
+        prompt.name = "greeting"
+        client = Mock()
+
+        assert _resolve_prompt_tags(client, prompt, "proj") == ["prod"]
+        client.search_prompts.assert_not_called()
+
+    def test_resolve_prompt_tags__empty_object_tags__recovers_from_search(
+        self,
+    ) -> None:
+        prompt = Mock()
+        prompt.tags = []  # direct lookup lost the container tags
+        prompt.name = "greeting"
+
+        candidate = Mock()
+        candidate.name = "greeting"
+        candidate.tags = ["prod", "greeting"]
+        client = Mock()
+        client.search_prompts = Mock(return_value=[candidate])
+
+        assert _resolve_prompt_tags(client, prompt, "proj") == ["prod", "greeting"]
+
+    def test_export_single_prompt__container_only_tags__writes_them(
+        self, tmp_path: Path
+    ) -> None:
+        prompt = Mock()
+        prompt.id = "p1"
+        prompt.name = "greeting"
+        prompt.tags = []  # direct lookup dropped tags
+
+        candidate = Mock()
+        candidate.name = "greeting"
+        candidate.tags = ["prod", "greeting"]
+        client = Mock()
+        client.search_prompts = Mock(return_value=[candidate])
+        # No history available; _safe_prompt_history swallows the error.
+        client.get_prompt_history = Mock(side_effect=Exception("no history"))
+
+        count = export_single_prompt(
+            client=client,
+            prompt=prompt,
+            output_dir=tmp_path,
+            project_name="proj",
+            max_results=None,
+            force=True,
+            debug=False,
+            format="json",
+        )
+
+        assert count == 1
+        data = json.loads((tmp_path / "prompt_p1.json").read_text())
+        assert data["current_version"]["tags"] == ["prod", "greeting"]
 
 
 class TestExperimentTags:

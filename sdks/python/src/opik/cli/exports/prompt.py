@@ -95,6 +95,44 @@ def _build_version_data(prompt: Any) -> dict:
     }
 
 
+def _resolve_prompt_tags(
+    client: opik.Opik,
+    prompt: Union[Prompt, ChatPrompt],
+    project_name: str,
+) -> Optional[List[str]]:
+    """Return the prompt's container-level tags.
+
+    Tags live on the prompt container, and ``get_prompt`` /
+    ``retrieve_prompt_version`` do not surface them (they come back empty).
+    ``search_prompts`` injects the container tags, so fall back to it whenever
+    the directly-fetched prompt object carries none.
+    """
+    tags = getattr(prompt, "tags", None)
+    if tags:
+        return tags
+
+    name = getattr(prompt, "name", None)
+    if not name:
+        return tags
+
+    try:
+        candidates = client.search_prompts(
+            filter_string=f'name = "{name}"', project_name=project_name
+        )
+    except Exception:
+        # Fall back to an unfiltered scan if the name filter can't be parsed
+        # (e.g. names with characters the query language rejects).
+        try:
+            candidates = client.search_prompts(project_name=project_name)
+        except Exception:
+            return tags
+
+    for candidate in candidates:
+        if getattr(candidate, "name", None) == name:
+            return getattr(candidate, "tags", None) or tags
+    return tags
+
+
 def _safe_prompt_history(
     client: opik.Opik,
     prompt: Union[Prompt, ChatPrompt],
@@ -140,11 +178,14 @@ def export_single_prompt(
         # Get prompt history (scoped to the prompt's project)
         prompt_history = _safe_prompt_history(client, prompt, project_name)
 
-        # Create prompt data structure
+        # Create prompt data structure. Tags are container-level and not
+        # surfaced by the direct lookup, so resolve them explicitly.
+        current_version = _build_version_data(prompt)
+        current_version["tags"] = _resolve_prompt_tags(client, prompt, project_name)
         prompt_data = {
             "id": prompt_id,
             "name": prompt.name,
-            "current_version": _build_version_data(prompt),
+            "current_version": current_version,
             "history": [_build_version_data(version) for version in prompt_history],
             "downloaded_at": datetime.now().isoformat(),
         }
@@ -324,7 +365,10 @@ def export_prompts_by_ids(
                     client.get_prompt_history(prompt_id, project_name=project_name)
                 )
 
-            # Create prompt data structure
+            # Create prompt data structure. Tags are container-level and not
+            # surfaced by the direct lookup, so resolve them explicitly.
+            current_version = _build_version_data(prompt)
+            current_version["tags"] = _resolve_prompt_tags(client, prompt, project_name)
             prompt_data = {
                 "prompt": {
                     "id": getattr(prompt, "id", None),
@@ -341,7 +385,7 @@ def export_prompts_by_ids(
                         else None
                     ),
                 },
-                "current_version": _build_version_data(prompt),
+                "current_version": current_version,
                 "history": [_build_version_data(version) for version in prompt_history],
                 "downloaded_at": datetime.now().isoformat(),
             }
@@ -467,7 +511,12 @@ def export_related_prompts_by_name(
                 # Get prompt history - use appropriate method based on prompt type
                 prompt_history = _safe_prompt_history(client, prompt, project_name)
 
-                # Create prompt data structure
+                # Create prompt data structure. Tags are container-level and not
+                # surfaced by the direct lookup, so resolve them explicitly.
+                current_version = _build_version_data(prompt)
+                current_version["tags"] = _resolve_prompt_tags(
+                    client, prompt, project_name
+                )
                 prompt_data = {
                     "prompt": {
                         "id": getattr(prompt, "__internal_api__prompt_id__", None),
@@ -476,7 +525,7 @@ def export_related_prompts_by_name(
                         "created_at": getattr(prompt, "created_at", None),
                         "last_updated_at": getattr(prompt, "last_updated_at", None),
                     },
-                    "current_version": _build_version_data(prompt),
+                    "current_version": current_version,
                     "history": [
                         _build_version_data(version) for version in prompt_history
                     ],
