@@ -2,8 +2,31 @@ import { describe, it, expect } from "vitest";
 import {
   computeCandidateStatuses,
   buildCandidateChartData,
+  buildTrendLineEdges,
+  buildTrialCardModel,
+  buildEdgePath,
+  getUniqueSteps,
+  getTrialStatusLabel,
+  getTrialDotColor,
+  TRIAL_STATUS_COLORS,
+  TRIAL_BEST_COLOR,
+  TRIAL_BEST_RING_COLOR,
+  CandidateDataPoint,
 } from "./optimizationChartUtils";
 import { AggregatedCandidate } from "@/types/optimizations";
+
+const makePoint = (
+  overrides: Partial<CandidateDataPoint> & {
+    candidateId: string;
+    stepIndex: number;
+  },
+): CandidateDataPoint => ({
+  parentCandidateIds: [],
+  value: null,
+  status: "passed",
+  name: "test",
+  ...overrides,
+});
 
 const makeCandidate = (
   overrides: Partial<AggregatedCandidate> & {
@@ -52,18 +75,26 @@ describe("computeCandidateStatuses", () => {
   });
 
   describe("non-test-suite", () => {
-    it("should mark all scored candidates as passed", () => {
+    it("derives passed/pruned from the tree, same as a test suite", () => {
       const candidates = [
-        makeCandidate({ candidateId: "a", stepIndex: 0, score: 0.5 }),
+        makeCandidate({ candidateId: "a", stepIndex: 0, score: 0.3 }),
         makeCandidate({
           candidateId: "b",
           stepIndex: 1,
-          score: 0.3,
+          score: 0.9,
+          parentCandidateIds: ["a"],
+        }),
+        makeCandidate({
+          candidateId: "c",
+          stepIndex: 1,
+          score: 0.2,
           parentCandidateIds: ["a"],
         }),
       ];
       const result = computeCandidateStatuses(candidates, false);
-      expect(result.get("b")).toBe("passed");
+      expect(result.get("a")).toBe("baseline");
+      expect(result.get("b")).toBe("passed"); // best-scoring winner
+      expect(result.get("c")).toBe("pruned"); // discarded sibling → faded dot
     });
   });
 
@@ -349,5 +380,234 @@ describe("buildCandidateChartData", () => {
     ];
     const data = buildCandidateChartData(candidates);
     expect(data[0].status).toBe("baseline");
+  });
+});
+
+describe("getTrialStatusLabel", () => {
+  it("labels baseline without a step suffix", () => {
+    expect(getTrialStatusLabel("baseline", 0)).toBe("Baseline");
+  });
+
+  it("labels passed and pruned trials with their step", () => {
+    expect(getTrialStatusLabel("passed", 1)).toBe("Passed step 1");
+    expect(getTrialStatusLabel("pruned", 2)).toBe("Discarded in step 2");
+  });
+});
+
+describe("getTrialDotColor", () => {
+  it("gives the best trial its own colour regardless of status or run type", () => {
+    expect(
+      getTrialDotColor({ status: "pruned", isBest: true, isTestSuite: true }),
+    ).toBe(TRIAL_BEST_COLOR);
+    expect(
+      getTrialDotColor({ status: "passed", isBest: true, isTestSuite: false }),
+    ).toBe(TRIAL_BEST_COLOR);
+  });
+
+  it("colours every status for test-suite runs", () => {
+    expect(
+      getTrialDotColor({
+        status: "evaluating",
+        isBest: false,
+        isTestSuite: true,
+      }),
+    ).toBe(TRIAL_STATUS_COLORS.evaluating);
+    expect(
+      getTrialDotColor({ status: "pruned", isBest: false, isTestSuite: true }),
+    ).toBe(TRIAL_STATUS_COLORS.pruned);
+  });
+
+  it("collapses dataset runs to discarded vs passed", () => {
+    expect(
+      getTrialDotColor({ status: "pruned", isBest: false, isTestSuite: false }),
+    ).toBe(TRIAL_STATUS_COLORS.pruned);
+    expect(
+      getTrialDotColor({
+        status: "evaluating",
+        isBest: false,
+        isTestSuite: false,
+      }),
+    ).toBe(TRIAL_STATUS_COLORS.passed);
+  });
+});
+
+describe("getUniqueSteps", () => {
+  it("returns sorted, de-duplicated step indices", () => {
+    expect(
+      getUniqueSteps([
+        { stepIndex: 2 },
+        { stepIndex: 0 },
+        { stepIndex: 2 },
+        { stepIndex: 1 },
+      ]),
+    ).toEqual([0, 1, 2]);
+  });
+
+  it("returns an empty array for no items", () => {
+    expect(getUniqueSteps([])).toEqual([]);
+  });
+});
+
+describe("buildEdgePath", () => {
+  it("draws a horizontal-control-point cubic bezier between two dots", () => {
+    // Control points sit at the midpoint x, level with each endpoint's y.
+    expect(buildEdgePath({ cx: 0, cy: 0 }, { cx: 10, cy: 20 })).toBe(
+      "M 0,0 C 5,0 5,20 10,20",
+    );
+  });
+});
+
+describe("buildTrendLineEdges", () => {
+  it("connects the best passed trial of each step into a single path", () => {
+    const edges = buildTrendLineEdges([
+      makePoint({
+        candidateId: "base",
+        stepIndex: 0,
+        value: 0.2,
+        status: "baseline",
+      }),
+      makePoint({ candidateId: "s1-low", stepIndex: 1, value: 0.4 }),
+      makePoint({ candidateId: "s1-high", stepIndex: 1, value: 0.6 }),
+      makePoint({ candidateId: "s2", stepIndex: 2, value: 0.8 }),
+    ]);
+
+    // One line, no fork: baseline -> step 1 winner -> step 2.
+    expect(edges).toEqual([
+      { parentCandidateId: "base", childCandidateId: "s1-high" },
+      { parentCandidateId: "s1-high", childCandidateId: "s2" },
+    ]);
+  });
+
+  it("skips discarded, evaluating, and unscored trials", () => {
+    const edges = buildTrendLineEdges([
+      makePoint({
+        candidateId: "base",
+        stepIndex: 0,
+        value: 0.2,
+        status: "baseline",
+      }),
+      // Step 1 only has a discarded trial — the line bridges over it.
+      makePoint({
+        candidateId: "s1-pruned",
+        stepIndex: 1,
+        value: 0.9,
+        status: "pruned",
+      }),
+      makePoint({
+        candidateId: "s2-evaluating",
+        stepIndex: 2,
+        value: 0.7,
+        status: "evaluating",
+      }),
+      makePoint({ candidateId: "s2-unscored", stepIndex: 2, value: null }),
+      makePoint({ candidateId: "s2", stepIndex: 2, value: 0.5 }),
+    ]);
+
+    expect(edges).toEqual([
+      { parentCandidateId: "base", childCandidateId: "s2" },
+    ]);
+  });
+
+  it("returns no edges when fewer than two steps have a winner", () => {
+    expect(buildTrendLineEdges([])).toEqual([]);
+    expect(
+      buildTrendLineEdges([
+        makePoint({
+          candidateId: "base",
+          stepIndex: 0,
+          value: 0.2,
+          status: "baseline",
+        }),
+      ]),
+    ).toEqual([]);
+  });
+});
+
+describe("buildTrialCardModel", () => {
+  it("builds the title, status label, dot colour, and metric rows", () => {
+    const candidate = makeCandidate({
+      candidateId: "a",
+      stepIndex: 3,
+      trialNumber: 20,
+      score: 0.9,
+      latencyP50: 24800,
+      runtimeCost: 0.0008,
+    });
+
+    const model = buildTrialCardModel({
+      candidate,
+      status: "passed",
+      stepIndex: 3,
+    });
+
+    expect(model.title).toBe("Trial #20");
+    expect(model.statusLabel).toBe("Passed step 3");
+    expect(model.dotColor).toBe(TRIAL_STATUS_COLORS.passed);
+    expect(model.dotRingColor).toBeUndefined();
+    expect(model.rows.map((r) => r.label)).toEqual([
+      "Score",
+      "Latency",
+      "Runtime cost",
+    ]);
+  });
+
+  it("labels and colours the best trial, with a ring around the dot", () => {
+    const candidate = makeCandidate({
+      candidateId: "a",
+      stepIndex: 5,
+      score: 0.8,
+    });
+
+    const model = buildTrialCardModel({
+      candidate,
+      status: "passed",
+      stepIndex: 5,
+      isBest: true,
+    });
+
+    expect(model.statusLabel).toBe("Best trial");
+    expect(model.dotColor).toBe(TRIAL_BEST_COLOR);
+    expect(model.dotRingColor).toBe(TRIAL_BEST_RING_COLOR);
+  });
+
+  it("uses Pass rate with a fraction for test suites", () => {
+    const candidate = makeCandidate({
+      candidateId: "a",
+      stepIndex: 1,
+      score: 0.9,
+      passedCount: 9,
+      totalCount: 10,
+    });
+
+    const model = buildTrialCardModel({
+      candidate,
+      status: "passed",
+      stepIndex: 1,
+      isTestSuite: true,
+    });
+
+    const scoreRow = model.rows[0];
+    expect(scoreRow.label).toBe("Pass rate");
+    expect(scoreRow.value).toContain("(9/10)");
+  });
+
+  it("omits latency and cost rows when absent, and shows '-' for no score", () => {
+    const candidate = makeCandidate({
+      candidateId: "a",
+      stepIndex: 2,
+      score: undefined,
+      latencyP50: undefined,
+      runtimeCost: undefined,
+    });
+
+    const model = buildTrialCardModel({
+      candidate,
+      status: "pruned",
+      stepIndex: 2,
+    });
+
+    expect(model.rows).toHaveLength(1);
+    expect(model.rows[0]).toEqual({ label: "Score", value: "-" });
+    expect(model.statusLabel).toBe("Discarded in step 2");
   });
 });

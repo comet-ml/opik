@@ -6,8 +6,8 @@ import { getFeedbackScore } from "@/lib/feedback-scores";
 import {
   getOptimizerLabel,
   getOptimizationOptimizerType,
+  getMetricLabel,
 } from "@/lib/optimizations";
-import { getMetricLabel } from "@/lib/optimization-config";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import ItemSourceCell, {
   ITEM_SOURCE_LABEL,

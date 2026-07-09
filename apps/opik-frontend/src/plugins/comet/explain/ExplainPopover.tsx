@@ -12,15 +12,15 @@ interface Props {
   onContinue: () => void;
 }
 
-// Persistent-underline + arrow link affordance (Figma LinkButton). The shared
+// Persistent-underline + arrow link affordance. The shared
 // <Button variant="tableLink"> gives foreground color + focus ring + disabled
 // handling, plus its hover/active primary color (we no longer override that to
 // foreground, so the link visibly responds on hover — the border tracks the text
 // via hover:border-primary). We keep the underline as a border (not
 // text-decoration) because the button is inline-flex and text-decoration won't
 // render under the arrow row. <Button> defaults to size="default" (h-10 px-4
-// py-2); we strip all of it (h-auto px-0 py-0) so the border-b hugs the text like
-// Figma's LinkButton, instead of sitting 8px below it on the default padding.
+// py-2); we strip all of it (h-auto px-0 py-0) so the border-b hugs the text,
+// instead of sitting 8px below it on the default padding.
 const linkClass =
   "h-auto rounded-none px-0 py-0 text-xs font-normal leading-4 no-underline border-b border-foreground transition-colors hover:border-primary";
 
@@ -49,7 +49,7 @@ const ExplainPopover = ({ target, onContinue }: Props) => {
       <div className="flex items-center gap-1.5 px-1.5 pb-1">
         {/* The owl's eye-circles are bottom-heavy in the 13x13 viewBox, so
             items-center leaves extra space above it. Lift it ~1px to optically
-            center against the label. (Tune against Figma.) */}
+            center against the label. */}
         <OllieOwl className="relative -top-px size-4 shrink-0 text-[var(--color-ollie)]" />
         <span className="leading-4 text-foreground">Ollie</span>
       </div>

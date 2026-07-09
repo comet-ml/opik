@@ -1,9 +1,11 @@
 import React from "react";
+import { type LucideIcon } from "lucide-react";
 
 import ResourceLink, {
   RESOURCE_TYPE,
   RESOURCE_MAP,
 } from "@/shared/ResourceLink/ResourceLink";
+import { type TagTextSize } from "@/ui/tag";
 import { Filter } from "@/types/filters";
 
 type NavigationTagProps = {
@@ -14,8 +16,10 @@ type NavigationTagProps = {
   tooltipContent?: string | false;
   className?: string;
   isSmall?: boolean;
+  textSize?: TagTextSize;
   prefix?: string;
   suffix?: React.ReactNode;
+  icon?: LucideIcon;
 };
 
 const NavigationTag: React.FunctionComponent<NavigationTagProps> = ({
@@ -26,8 +30,10 @@ const NavigationTag: React.FunctionComponent<NavigationTagProps> = ({
   tooltipContent,
   className,
   isSmall = false,
+  textSize,
   prefix,
   suffix,
+  icon,
 }) => {
   const resourceLabel = RESOURCE_MAP[resource].label;
   const defaultTooltipContent = `Navigate to ${resourceLabel}: ${name}`;
@@ -42,8 +48,10 @@ const NavigationTag: React.FunctionComponent<NavigationTagProps> = ({
       className={className}
       asTag
       isSmall={isSmall}
+      textSize={textSize}
       prefix={prefix}
       suffix={suffix}
+      icon={icon}
     />
   );
 };
