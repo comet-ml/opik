@@ -513,13 +513,17 @@ def recreate_experiment(
             "type": experiment_info.get("type", "regular"),
             "project_name": project_name,
         }
+        # Tags round-trip on both paths: the exporter now serializes them and
+        # create_experiment accepts them directly.
+        experiment_tags = experiment_info.get("tags")
+        if experiment_tags:
+            create_kwargs["tags"] = experiment_tags
         if experiment_id is not None:
             create_kwargs["experiment_id"] = experiment_id
         if is_migrate_path:
             create_kwargs["evaluation_method"] = experiment_info.get(
                 "evaluation_method", "dataset"
             )
-            create_kwargs["tags"] = experiment_info.get("tags")
             create_kwargs["dataset_version_id"] = target_dataset_version_id
             optimization_id = experiment_info.get("optimization_id")
             if optimization_id:

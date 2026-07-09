@@ -134,6 +134,7 @@ def export_single_prompt(
                 "type": _get_prompt_type_string(prompt),
                 "commit": getattr(prompt, "commit", None),
                 "template_structure": _get_template_structure(prompt),
+                "tags": getattr(prompt, "tags", None),
             },
             "history": [
                 {
@@ -142,6 +143,7 @@ def export_single_prompt(
                     "type": _get_prompt_type_string(version),
                     "commit": getattr(version, "commit", None),
                     "template_structure": _get_template_structure(version),
+                    "tags": getattr(version, "tags", None),
                 }
                 for version in prompt_history
             ],
@@ -346,6 +348,7 @@ def export_prompts_by_ids(
                     "type": _get_prompt_type_string(prompt),
                     "commit": getattr(prompt, "commit", None),
                     "template_structure": _get_template_structure(prompt),
+                    "tags": getattr(prompt, "tags", None),
                 },
                 "history": [
                     {
@@ -354,6 +357,7 @@ def export_prompts_by_ids(
                         "type": _get_prompt_type_string(version),
                         "commit": getattr(version, "commit", None),
                         "template_structure": _get_template_structure(version),
+                        "tags": getattr(version, "tags", None),
                     }
                     for version in prompt_history
                 ],
@@ -496,6 +500,7 @@ def export_related_prompts_by_name(
                         "type": _get_prompt_type_string(prompt),
                         "commit": getattr(prompt, "commit", None),
                         "template_structure": _get_template_structure(prompt),
+                        "tags": getattr(prompt, "tags", None),
                     },
                     "history": [
                         {
@@ -504,6 +509,7 @@ def export_related_prompts_by_name(
                             "type": _get_prompt_type_string(version),
                             "commit": getattr(version, "commit", None),
                             "template_structure": _get_template_structure(version),
+                            "tags": getattr(version, "tags", None),
                         }
                         for version in prompt_history
                     ],

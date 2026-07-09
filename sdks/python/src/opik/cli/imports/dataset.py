@@ -64,6 +64,14 @@ def import_datasets_from_directory(
                     else None
                 )
 
+                # Dataset-level tags live at the top level (export_single_dataset)
+                # or nested under "dataset" (export_experiment_datasets).
+                dataset_tags = dataset_data.get("tags") or (
+                    dataset_data.get("dataset", {}).get("tags")
+                    if dataset_data.get("dataset")
+                    else None
+                )
+
                 # Check if name is missing or empty
                 if not dataset_name or (
                     isinstance(dataset_name, str) and not dataset_name.strip()
@@ -113,6 +121,25 @@ def import_datasets_from_directory(
                     if debug:
                         console.print(
                             f"[blue]Created new dataset: {dataset_name}[/blue]"
+                        )
+
+                # Apply dataset-level tags. create_dataset() doesn't expose a
+                # tags argument, so set them via the REST update endpoint after
+                # the dataset exists.
+                if dataset_tags:
+                    try:
+                        client.rest_client.datasets.update_dataset(
+                            dataset.id,
+                            name=dataset_name,
+                            tags=dataset_tags,
+                        )
+                        if debug:
+                            console.print(
+                                f"[blue]Applied tags to dataset '{dataset_name}': {dataset_tags}[/blue]"
+                            )
+                    except Exception as tag_error:
+                        console.print(
+                            f"[yellow]Warning: Could not apply tags to dataset '{dataset_name}': {tag_error}[/yellow]"
                         )
 
                 # Import dataset items

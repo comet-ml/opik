@@ -55,11 +55,20 @@ def export_single_dataset(
             formatted_item = {k: v for k, v in item.items() if k != "id"}
             formatted_items.append(formatted_item)
 
+        # Dataset-level tags are stored on the version, not surfaced by
+        # get_dataset(); fetch them explicitly. Never let a tags lookup abort
+        # the export.
+        try:
+            dataset_tags = dataset.get_tags()
+        except Exception:
+            dataset_tags = None
+
         # Create dataset data structure
         dataset_data = {
             "id": dataset_id,
             "name": dataset.name,
             "description": dataset.description,
+            "tags": dataset_tags,
             "items": formatted_items,
             "downloaded_at": datetime.now().isoformat(),
         }
@@ -205,10 +214,16 @@ def export_experiment_datasets(
 
             dataset_items = dataset_obj.get_items()
 
+            try:
+                dataset_tags = dataset_obj.get_tags()
+            except Exception:
+                dataset_tags = None
+
             dataset_data = {
                 "dataset": {
                     "name": dataset_name,
                     "id": dataset_id,
+                    "tags": dataset_tags,
                 },
                 # Use all fields from each item, excluding 'id' (internal field)
                 "items": [

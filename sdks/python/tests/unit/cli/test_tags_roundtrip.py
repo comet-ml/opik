@@ -1,0 +1,219 @@
+"""Unit tests verifying that item tags round-trip through CLI export/import.
+
+Covers the regression where ``opik export`` / ``opik import`` silently dropped
+tags for prompts, datasets, and experiments because the exporters used
+hand-written field allowlists that omitted ``tags`` (and the importers never
+forwarded them). Traces and spans already round-tripped correctly.
+"""
+
+import json
+import sys
+from pathlib import Path
+from unittest.mock import Mock, MagicMock, patch
+
+# The experiment/prompt import modules pull in a prompt module that is awkward
+# to import in isolation; mirror the shim used by test_import_experiment.py.
+sys.modules.setdefault("opik.api_objects.prompt.prompt", MagicMock())
+
+from opik.cli.imports.prompt import import_prompts_from_directory  # noqa: E402
+from opik.cli.imports.dataset import import_datasets_from_directory  # noqa: E402
+from opik.cli.imports.experiment import (  # noqa: E402
+    ExperimentData,
+    recreate_experiment,
+)
+from opik.cli.exports.utils import create_experiment_data_structure  # noqa: E402
+
+
+class TestPromptTagsImport:
+    def test_text_prompt_import_forwards_tags(self, tmp_path: Path) -> None:
+        prompt_file = tmp_path / "prompt_p1.json"
+        prompt_file.write_text(
+            json.dumps(
+                {
+                    "name": "greeting",
+                    "current_version": {
+                        "prompt": "Hello {{name}}",
+                        "type": "mustache",
+                        "template_structure": "text",
+                        "tags": ["prod", "greeting"],
+                    },
+                    "history": [],
+                }
+            )
+        )
+
+        client = Mock()
+        client.create_prompt = Mock()
+
+        import_prompts_from_directory(
+            client=client,
+            source_dir=tmp_path,
+            project_name="proj",
+            dry_run=False,
+            name_pattern=None,
+            debug=False,
+        )
+
+        client.create_prompt.assert_called_once()
+        assert client.create_prompt.call_args.kwargs["tags"] == ["prod", "greeting"]
+
+    def test_chat_prompt_import_forwards_tags(self, tmp_path: Path) -> None:
+        prompt_file = tmp_path / "prompt_c1.json"
+        prompt_file.write_text(
+            json.dumps(
+                {
+                    "name": "chat",
+                    "current_version": {
+                        "prompt": [{"role": "user", "content": "hi"}],
+                        "type": "mustache",
+                        "template_structure": "chat",
+                        "tags": ["chatty"],
+                    },
+                    "history": [],
+                }
+            )
+        )
+
+        client = Mock()
+        client.create_chat_prompt = Mock()
+
+        import_prompts_from_directory(
+            client=client,
+            source_dir=tmp_path,
+            project_name="proj",
+            dry_run=False,
+            name_pattern=None,
+            debug=False,
+        )
+
+        client.create_chat_prompt.assert_called_once()
+        assert client.create_chat_prompt.call_args.kwargs["tags"] == ["chatty"]
+
+
+class TestDatasetTagsImport:
+    def _write_dataset(self, tmp_path: Path, payload: dict) -> None:
+        (tmp_path / "dataset_d1.json").write_text(json.dumps(payload))
+
+    def _make_client(self) -> Mock:
+        client = Mock()
+        # Force the create path (get_dataset raises -> create_dataset used).
+        client.get_dataset = Mock(side_effect=Exception("not found"))
+        created = Mock()
+        created.id = "new-ds-id"
+        client.create_dataset = Mock(return_value=created)
+        client.rest_client = Mock()
+        client.rest_client.datasets = Mock()
+        client.rest_client.datasets.update_dataset = Mock()
+        return client
+
+    def test_flat_format_applies_tags(self, tmp_path: Path) -> None:
+        self._write_dataset(
+            tmp_path,
+            {"name": "ds", "tags": ["a", "b"], "items": []},
+        )
+        client = self._make_client()
+
+        import_datasets_from_directory(
+            client=client,
+            source_dir=tmp_path,
+            project_name="proj",
+            dry_run=False,
+            name_pattern=None,
+            debug=False,
+        )
+
+        client.rest_client.datasets.update_dataset.assert_called_once()
+        call = client.rest_client.datasets.update_dataset.call_args
+        assert call.args[0] == "new-ds-id"
+        assert call.kwargs["tags"] == ["a", "b"]
+
+    def test_nested_format_applies_tags(self, tmp_path: Path) -> None:
+        self._write_dataset(
+            tmp_path,
+            {"dataset": {"name": "ds", "id": "x", "tags": ["c"]}, "items": []},
+        )
+        client = self._make_client()
+
+        import_datasets_from_directory(
+            client=client,
+            source_dir=tmp_path,
+            project_name="proj",
+            dry_run=False,
+            name_pattern=None,
+            debug=False,
+        )
+
+        client.rest_client.datasets.update_dataset.assert_called_once()
+        assert client.rest_client.datasets.update_dataset.call_args.kwargs["tags"] == [
+            "c"
+        ]
+
+    def test_no_tags_skips_update(self, tmp_path: Path) -> None:
+        self._write_dataset(tmp_path, {"name": "ds", "items": []})
+        client = self._make_client()
+
+        import_datasets_from_directory(
+            client=client,
+            source_dir=tmp_path,
+            project_name="proj",
+            dry_run=False,
+            name_pattern=None,
+            debug=False,
+        )
+
+        client.rest_client.datasets.update_dataset.assert_not_called()
+
+
+class TestExperimentTags:
+    def test_export_structure_includes_tags(self) -> None:
+        experiment = Mock()
+        experiment.id = "exp-1"
+        experiment.name = "e"
+        experiment.dataset_name = "ds"
+        data_obj = Mock()
+        data_obj.tags = ["t1", "t2"]
+        experiment.get_experiment_data = Mock(return_value=data_obj)
+
+        structure = create_experiment_data_structure(experiment, [])
+
+        assert structure["experiment"]["tags"] == ["t1", "t2"]
+
+    def test_import_from_disk_forwards_tags(self) -> None:
+        client = Mock()
+        client.flush = Mock(return_value=True)
+        client.get_or_create_dataset = Mock(return_value=Mock(name="ds"))
+        created_experiment = Mock()
+        created_experiment.id = "exp-123"
+        client.create_experiment = Mock(return_value=created_experiment)
+        client._rest_client = Mock()
+
+        experiment_data = ExperimentData(
+            experiment={
+                "id": "exp-123",
+                "name": "test-experiment",
+                "dataset_name": "test-dataset",
+                "type": "regular",
+                "tags": ["golden", "regression"],
+            },
+            items=[],
+        )
+
+        with patch("opik.cli.imports.experiment.id_helpers_module") as mock_id_helpers:
+            mock_id_helpers.generate_id = Mock(return_value="generated-id")
+
+            recreate_experiment(
+                client,
+                experiment_data,
+                "test-project",
+                {},  # trace_id_map
+                {},  # dataset_item_id_map
+                dry_run=False,
+                debug=False,
+                # target_project_name defaults to None -> import-from-disk path
+            )
+
+        client.create_experiment.assert_called_once()
+        assert client.create_experiment.call_args.kwargs["tags"] == [
+            "golden",
+            "regression",
+        ]
