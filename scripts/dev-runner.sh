@@ -742,11 +742,18 @@ start_cost_api_local() {
 
     # Reuse a healthy cost-api started outside this dev-runner. Avoids a port
     # conflict and lets devs share one instance across opik worktrees.
+    # Skip reuse in EM mode: /cost-api/ping is a bare liveness probe and can't
+    # tell whether the running instance has AUTH_ENABLED=true, so a reused
+    # OSS-mode instance would fail org-scoped /ai-spend/* requests. Start our own.
     if cost_api_healthy; then
-        log_success "cost-api is already healthy on port ${AI_COST_BACKEND_PORT} — reusing existing instance"
-        # Clear stale state so a later --stop won't kill the reused instance.
-        rm -f "$COST_API_PID_FILE" "$COST_API_REPO_PATH_FILE"
-        return 0
+        if em_stack_enabled; then
+            log_warning "cost-api already healthy on port ${AI_COST_BACKEND_PORT}, but EM mode needs AUTH_ENABLED=true — not reusing it (start our own; will warn if the port is taken)"
+        else
+            log_success "cost-api is already healthy on port ${AI_COST_BACKEND_PORT} — reusing existing instance"
+            # Clear stale state so a later --stop won't kill the reused instance.
+            rm -f "$COST_API_PID_FILE" "$COST_API_REPO_PATH_FILE"
+            return 0
+        fi
     fi
 
     if [ -f "$COST_API_PID_FILE" ]; then
