@@ -409,9 +409,17 @@ public class CostService {
         BigDecimal outputAudioTokenPrice = Optional.ofNullable(modelCost.outputCostPerAudioToken())
                 .map(BigDecimal::new)
                 .orElse(BigDecimal.ZERO);
-        // Tier rates: above_200k_tokens variants. Models without a tier (most) leave these null
-        // in the LiteLLM JSON; we default to zero and the effective-price helpers on ModelPrice
-        // fall through to the base rate in that case.
+        // Tier rates: above_{128k,200k,272k}_tokens variants. Models without a tier (most) leave
+        // these null in the LiteLLM JSON; we default to zero and the effective-price helpers on
+        // ModelPrice fall through to the base rate in that case. Reachable models today: Gemini
+        // 1.5 Flash at 128k, Gemini 2.5 Pro / Claude Sonnet 4.5 at 200k, GPT-5.4 and GPT-5.5
+        // families (both openai and azure) at 272k.
+        BigDecimal inputPriceAbove128kTokens = Optional.ofNullable(modelCost.inputCostPerTokenAbove128kTokens())
+                .map(BigDecimal::new)
+                .orElse(BigDecimal.ZERO);
+        BigDecimal outputPriceAbove128kTokens = Optional.ofNullable(modelCost.outputCostPerTokenAbove128kTokens())
+                .map(BigDecimal::new)
+                .orElse(BigDecimal.ZERO);
         BigDecimal inputPriceAbove200kTokens = Optional.ofNullable(modelCost.inputCostPerTokenAbove200kTokens())
                 .map(BigDecimal::new)
                 .orElse(BigDecimal.ZERO);
@@ -424,6 +432,12 @@ public class CostService {
                 .orElse(BigDecimal.ZERO);
         BigDecimal cacheReadInputTokenPriceAbove200kTokens = Optional
                 .ofNullable(modelCost.cacheReadInputTokenCostAbove200kTokens())
+                .map(BigDecimal::new)
+                .orElse(BigDecimal.ZERO);
+        BigDecimal inputPriceAbove272kTokens = Optional.ofNullable(modelCost.inputCostPerTokenAbove272kTokens())
+                .map(BigDecimal::new)
+                .orElse(BigDecimal.ZERO);
+        BigDecimal outputPriceAbove272kTokens = Optional.ofNullable(modelCost.outputCostPerTokenAbove272kTokens())
                 .map(BigDecimal::new)
                 .orElse(BigDecimal.ZERO);
         ModelMode mode = ModelMode.fromValue(modelCost.mode());
@@ -442,10 +456,14 @@ public class CostService {
                 .inputAudioTokenPrice(inputAudioTokenPrice)
                 .outputAudioTokenPrice(outputAudioTokenPrice)
                 .calculator(calculator)
+                .inputPriceAbove128kTokens(inputPriceAbove128kTokens)
+                .outputPriceAbove128kTokens(outputPriceAbove128kTokens)
                 .inputPriceAbove200kTokens(inputPriceAbove200kTokens)
                 .outputPriceAbove200kTokens(outputPriceAbove200kTokens)
                 .cacheCreationInputTokenPriceAbove200kTokens(cacheCreationInputTokenPriceAbove200kTokens)
                 .cacheReadInputTokenPriceAbove200kTokens(cacheReadInputTokenPriceAbove200kTokens)
+                .inputPriceAbove272kTokens(inputPriceAbove272kTokens)
+                .outputPriceAbove272kTokens(outputPriceAbove272kTokens)
                 .build();
     }
 

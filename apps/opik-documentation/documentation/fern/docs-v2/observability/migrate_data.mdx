@@ -103,6 +103,15 @@ opik migrate dataset "MyDataset" --to-project="production" --dry-run
 opik migrate dataset "MyDataset" --to-project="production" --from-project="staging"
 ```
 
+### Resuming an interrupted migration
+
+If a migration is interrupted — a crash, a dropped connection, or the process being killed (for example, out-of-memory on a very large dataset) — just re-run the exact same command from the same machine. It resumes instead of starting over:
+
+- **Already-migrated experiments are skipped.** Progress is checkpointed after each experiment completes, so a re-run picks up from the last completed one. The progress bar reflects this — a migration that was ~53% done resumes near 53%, not 0%.
+- **An experiment interrupted mid-flight is re-migrated cleanly.** Its partial traces, spans, and experiment record at the destination are deleted first, so the re-run doesn't leave duplicates behind.
+
+The checkpoint is stored locally under `~/.opik/migrate-checkpoints/`, keyed by workspace + destination project + dataset name, so a re-run resumes regardless of which directory you run it from. It is removed automatically once the migration finishes successfully. Resume is local to the machine that ran the migration — moving to a different machine starts fresh. (Experiments are the checkpoint granularity; there is no finer per-trace or per-span resume.)
+
 ## `opik migrate prompt`
 
 ```bash

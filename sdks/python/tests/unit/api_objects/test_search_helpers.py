@@ -156,6 +156,43 @@ def test_search_traces__non_429_error__propagates_without_retry():
     assert rest_client.traces.search_traces.call_count == 1
 
 
+def test_search_spans__max_batch_size__passed_as_limit_to_rest_client():
+    rest_client = mock.Mock()
+    rest_client.spans.search_spans.return_value = _stream(SPAN_RECORD)
+
+    search_helpers.search_spans_with_filters(
+        rest_client=rest_client,
+        trace_id=None,
+        project_name="proj",
+        filters=None,
+        max_results=10_000,
+        truncate=False,
+        max_batch_size=400,
+    )
+
+    # max_results (10_000) is the total cap; max_batch_size (400) is the
+    # per-request page size that reaches the Fern client as ``limit``.
+    _, kwargs = rest_client.spans.search_spans.call_args
+    assert kwargs["limit"] == 400
+
+
+def test_search_traces__max_batch_size__passed_as_limit_to_rest_client():
+    rest_client = mock.Mock()
+    rest_client.traces.search_traces.return_value = _stream(TRACE_RECORD)
+
+    search_helpers.search_traces_with_filters(
+        rest_client=rest_client,
+        project_name="proj",
+        filters=None,
+        max_results=10_000,
+        truncate=False,
+        max_batch_size=250,
+    )
+
+    _, kwargs = rest_client.traces.search_traces.call_args
+    assert kwargs["limit"] == 250
+
+
 def test_search_spans__429_without_reset_header__falls_back_to_one_second_sleep(
     patched_sleep,
 ):
