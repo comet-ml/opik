@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Span;
+import com.comet.opik.domain.mapping.OpenTelemetryMappingRuleFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
@@ -1526,6 +1527,230 @@ class OpenTelemetryMapperTest {
                     .build();
 
             assertThat(map(okSpan).errorInfo()).isNull();
+        }
+    }
+
+    @Nested
+    class ClaudeCodeMappingTest {
+
+        private static final String CLAUDE_CODE = OpenTelemetryMappingRuleFactory.CLAUDE_CODE_INSTRUMENTATION;
+
+        private Span enrich(List<KeyValue> attributes, List<io.opentelemetry.proto.trace.v1.Span.Event> events) {
+            return enrich(attributes, events, "claude_code.interaction");
+        }
+
+        private Span enrich(List<KeyValue> attributes, List<io.opentelemetry.proto.trace.v1.Span.Event> events,
+                String spanName) {
+            var spanBuilder = Span.builder()
+                    .id(UUID.randomUUID())
+                    .traceId(UUID.randomUUID())
+                    .projectId(UUID.randomUUID())
+                    .startTime(Instant.now());
+            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, CLAUDE_CODE, events, spanName);
+            return spanBuilder.build();
+        }
+
+        private KeyValue intVal(String key, long value) {
+            return KeyValue.newBuilder()
+                    .setKey(key)
+                    .setValue(AnyValue.newBuilder().setIntValue(value))
+                    .build();
+        }
+
+        private KeyValue str(String key, String value) {
+            return KeyValue.newBuilder()
+                    .setKey(key)
+                    .setValue(AnyValue.newBuilder().setStringValue(value))
+                    .build();
+        }
+
+        @Test
+        void userPromptMapsToInput() {
+            var span = enrich(List.of(str("user_prompt", "What is the marker?")), null);
+
+            assertThat(span.input().get("user_prompt").asText()).isEqualTo("What is the marker?");
+        }
+
+        @Test
+        void toolInputMapsToInput() {
+            var span = enrich(List.of(str("tool_input", "[TOOL INPUT: Bash]\n{\"command\":\"ls\"}")), null);
+
+            assertThat(span.input().get("tool_input").asText()).isEqualTo("[TOOL INPUT: Bash]\n{\"command\":\"ls\"}");
+        }
+
+        @Test
+        void responseModelOutputMapsToOutput() {
+            var span = enrich(List.of(str("response.model_output", "The marker is OTEL-REPRO-MARKER-12345.")), null);
+
+            assertThat(span.output().get("response.model_output").asText())
+                    .isEqualTo("The marker is OTEL-REPRO-MARKER-12345.");
+            assertThat(span.input()).isNull();
+        }
+
+        @Test
+        void llmResponseFieldsMapToOutput() {
+            var span = enrich(List.of(
+                    str("response.model_output", "calling a tool"),
+                    str("stop_reason", "tool_use"),
+                    KeyValue.newBuilder().setKey("response.has_tool_call")
+                            .setValue(AnyValue.newBuilder().setBoolValue(true)).build(),
+                    str("request_id", "req_abc"),
+                    intVal("ttft_ms", 1230)),
+                    null, "claude_code.llm_request");
+
+            assertThat(span.output().get("stop_reason").asText()).isEqualTo("tool_use");
+            assertThat(span.output().get("response.has_tool_call").asBoolean()).isTrue();
+            // call identifiers / latency stay in metadata, not output
+            assertThat(span.output().has("request_id")).isFalse();
+            assertThat(span.metadata().get("request_id").asText()).isEqualTo("req_abc");
+            assertThat(span.metadata().get("ttft_ms").asInt()).isEqualTo(1230);
+        }
+
+        @Test
+        void modelOutputTruncationSiblingsGoToMetadata() {
+            var span = enrich(List.of(
+                    str("response.model_output", "partial"),
+                    KeyValue.newBuilder().setKey("response.model_output_truncated")
+                            .setValue(AnyValue.newBuilder().setBoolValue(true)).build(),
+                    KeyValue.newBuilder().setKey("response.model_output_original_length")
+                            .setValue(AnyValue.newBuilder().setIntValue(120)).build()),
+                    null);
+
+            assertThat(span.output().has("response.model_output")).isTrue();
+            assertThat(span.metadata().has("response.model_output_truncated")).isTrue();
+            assertThat(span.metadata().get("response.model_output_original_length").asInt()).isEqualTo(120);
+        }
+
+        @ParameterizedTest
+        @CsvSource({
+                "output, AGENTS.md README.md",
+                "content, marker: OTEL-REPRO-MARKER-12345"
+        })
+        void toolOutputEventMapsToOutput(String contentKey, String value) {
+            var event = io.opentelemetry.proto.trace.v1.Span.Event.newBuilder()
+                    .setName("tool.output")
+                    .addAttributes(str(contentKey, value))
+                    .build();
+
+            var span = enrich(List.of(), List.of(event));
+
+            assertThat(span.output().get(contentKey).asText()).isEqualTo(value);
+        }
+
+        @Test
+        void sessionIdMapsToThreadId() {
+            var span = enrich(List.of(str("session.id", "session-abc-123")), null);
+
+            assertThat(span.metadata().get("thread_id").asText()).isEqualTo("session-abc-123");
+            assertThat(span.input()).isNull();
+        }
+
+        @Test
+        void tokensMapToUsage() {
+            var span = enrich(List.of(
+                    intVal("input_tokens", 1234),
+                    intVal("output_tokens", 26),
+                    intVal("cache_read_tokens", 100),
+                    intVal("cache_creation_tokens", 50)),
+                    null);
+
+            assertThat(span.usage().get("prompt_tokens")).isEqualTo(1234);
+            assertThat(span.usage().get("completion_tokens")).isEqualTo(26);
+            // Normalized to the names the Anthropic cache-cost calculator recognizes.
+            assertThat(span.usage().get("cache_read_input_tokens")).isEqualTo(100);
+            assertThat(span.usage().get("cache_creation_input_tokens")).isEqualTo(50);
+            assertThat(span.input()).isNull();
+            assertThat(span.output()).isNull();
+        }
+
+        @Test
+        void unmappedAttributesGoToMetadataNotInput() {
+            var span = enrich(List.of(
+                    str("user.id", "user-1"),
+                    str("terminal.type", "ghostty"),
+                    str("span.type", "interaction"),
+                    str("user_prompt", "hello")),
+                    null);
+
+            // Only the promoted content is input; the session/identity noise is metadata.
+            assertThat(span.input().get("user_prompt").asText()).isEqualTo("hello");
+            assertThat(span.input().has("user.id")).isFalse();
+            assertThat(span.metadata().get("user.id").asText()).isEqualTo("user-1");
+            assertThat(span.metadata().get("terminal.type").asText()).isEqualTo("ghostty");
+        }
+
+        @Test
+        void hookIdentityMapsToInput() {
+            var span = enrich(List.of(
+                    str("hook_event", "UserPromptSubmit"),
+                    str("hook_name", "UserPromptSubmit"),
+                    str("hook_definitions", "[{\"type\":\"command\"}]"),
+                    intVal("num_hooks", 1),
+                    str("user.id", "user-1")),
+                    null);
+
+            assertThat(span.input().get("hook_event").asText()).isEqualTo("UserPromptSubmit");
+            assertThat(span.input().get("hook_name").asText()).isEqualTo("UserPromptSubmit");
+            assertThat(span.input().has("hook_definitions")).isTrue();
+            // counters and identity stay in metadata
+            assertThat(span.metadata().has("num_hooks")).isTrue();
+            assertThat(span.metadata().get("user.id").asText()).isEqualTo("user-1");
+        }
+
+        @Test
+        void llmRequestSetupMapsToModelAndProviderNotInput() {
+            var span = enrich(List.of(
+                    str("model", "claude-sonnet-4-6"),
+                    str("system_prompt_preview", "You are a Claude agent..."),
+                    str("llm_request.context", "interaction"),
+                    str("query_source", "sdk"),
+                    str("user.id", "user-1")),
+                    null);
+
+            // 'model' sets the span's model field (needed for cost calc), not input
+            assertThat(span.model()).isEqualTo("claude-sonnet-4-6");
+            assertThat(span.input().has("model")).isFalse();
+            assertThat(span.input().get("system_prompt_preview").asText()).isEqualTo("You are a Claude agent...");
+            // Claude Code is Anthropic-only and never sends a provider attribute
+            assertThat(span.provider()).isEqualTo("anthropic");
+            assertThat(span.type()).isEqualTo(SpanType.llm);
+            // request classifiers / identity stay in metadata
+            assertThat(span.metadata().get("llm_request.context").asText()).isEqualTo("interaction");
+            assertThat(span.metadata().get("query_source").asText()).isEqualTo("sdk");
+            assertThat(span.metadata().get("user.id").asText()).isEqualTo("user-1");
+        }
+
+        @Test
+        void toolInputSetsToolSpanType() {
+            var span = enrich(List.of(str("tool_input", "[TOOL INPUT: Bash]\n{\"command\":\"ls\"}")), null);
+
+            assertThat(span.type()).isEqualTo(SpanType.tool);
+        }
+
+        @Test
+        void providerIsAnthropicEvenWithoutModelAttribute() {
+            var span = enrich(List.of(str("user_prompt", "hello")), null);
+
+            assertThat(span.provider()).isEqualTo("anthropic");
+        }
+
+        @Test
+        void newContextMapsToInputOnLlmRequestSpan() {
+            var span = enrich(List.of(str("new_context", "[TOOL RESULT: t1]\nAGENTS.md README.md")),
+                    null, "claude_code.llm_request");
+
+            assertThat(span.input().get("new_context").asText()).isEqualTo("[TOOL RESULT: t1]\nAGENTS.md README.md");
+        }
+
+        @Test
+        void newContextGoesToMetadataOnNonLlmSpans() {
+            var span = enrich(List.of(
+                    str("user_prompt", "hello"),
+                    str("new_context", "[USER PROMPT]\nhello")),
+                    null, "claude_code.interaction");
+
+            assertThat(span.input().has("new_context")).isFalse();
+            assertThat(span.metadata().get("new_context").asText()).isEqualTo("[USER PROMPT]\nhello");
         }
     }
 }
