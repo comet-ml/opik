@@ -762,14 +762,17 @@ start_cost_api_local() {
 
     # Point cost-api at the dev-runner's ClickHouse + MySQL (host-published
     # ports, opik/opik). In platform (EM) mode, cost-api targets local comet-backend
-    # (the React service on EM_BACKEND_PORT).
-    # No-op in OSS mode (cost-api keeps its default).
+    # (the React service on EM_BACKEND_PORT) and delegates auth to it (cookie /
+    # API-key), so org-scoped endpoints resolve the real org. In OSS mode there is
+    # no platform to delegate to, so keep auth off and pin to the default workspace.
+    local cost_api_auth="false"
     if em_stack_enabled; then
         export PLATFORM_BASE_URL="http://localhost:${EM_BACKEND_PORT}"
+        cost_api_auth="true"
     fi
     (
         cd "$AI_COST_BACKEND_PATH" || exit 1
-        AUTH_ENABLED=false \
+        AUTH_ENABLED="$cost_api_auth" \
         CLICKHOUSE_HOST=localhost CLICKHOUSE_PORT="$CLICKHOUSE_HTTP_PORT" \
         CLICKHOUSE_DATABASE=opik CLICKHOUSE_USER=opik CLICKHOUSE_PASSWORD=opik \
         MYSQL_HOST=localhost MYSQL_PORT="$MYSQL_PORT" \
