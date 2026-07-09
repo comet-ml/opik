@@ -6,6 +6,7 @@ import dev.langchain4j.model.googleai.GoogleAiGeminiTokenUsage;
 import dev.langchain4j.model.openai.OpenAiTokenUsage;
 import dev.langchain4j.model.openaiofficial.OpenAiOfficialTokenUsage;
 import dev.langchain4j.model.output.TokenUsage;
+import lombok.NonNull;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -32,7 +33,7 @@ public final class LlmUsageExtractor {
      * per-provider switch below only <i>adds</i> the prompt-cache token counts, which each SDK exposes
      * under a different subtype.
      */
-    public static Map<String, Integer> toUsageMap(ChatResponse response) {
+    public static Map<String, Integer> toUsageMap(@NonNull ChatResponse response) {
         var tokenUsage = response.tokenUsage();
         if (tokenUsage == null) {
             return null;

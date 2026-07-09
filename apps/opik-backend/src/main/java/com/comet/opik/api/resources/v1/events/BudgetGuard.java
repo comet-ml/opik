@@ -4,6 +4,7 @@ import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.evaluation.LlmUsageExtractor;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import dev.langchain4j.model.chat.response.ChatResponse;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 
@@ -64,7 +65,7 @@ public final class BudgetGuard {
      * {@link #shouldWrapUp()} true on the first turn and silently wrap up every evaluation with no real
      * work — worse than ignoring it.
      */
-    public static BudgetGuard create(BigDecimal maxCostUsd, String modelName,
+    public static BudgetGuard create(BigDecimal maxCostUsd, @NonNull String modelName,
             LlmProviderFactory llmProviderFactory) {
         if (maxCostUsd == null || maxCostUsd.signum() <= 0) {
             return UNLIMITED;
@@ -80,7 +81,7 @@ public final class BudgetGuard {
     }
 
     /** Taps the LLM call to charge its cost, returning the response unchanged. Pass-through when unlimited. */
-    public Mono<ChatResponse> track(Mono<ChatResponse> call) {
+    public Mono<ChatResponse> track(@NonNull Mono<ChatResponse> call) {
         if (limitUsd == null) {
             return call;
         }
