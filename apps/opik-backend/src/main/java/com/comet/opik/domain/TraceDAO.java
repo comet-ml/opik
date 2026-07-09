@@ -2099,10 +2099,12 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
-    // Partition-bounded variant used on the delete path. id_at is MATERIALIZED as
-    // UUIDv7ToDateTime(toUUID(id)) (migration 000091), so bounding toMonday(id_at) by the id set's own
-    // min/max (mirrors SELECT_PROJECT_ID_FROM_TRACE) is exact - it never drops a valid id - while keeping
-    // the lookup on the ids' own weekly partitions instead of scanning all cold history once traces tier.
+    /**
+     * Partition-bounded variant used on the delete path. id_at is MATERIALIZED as
+     * UUIDv7ToDateTime(toUUID(id)) (migration 000091), so bounding toMonday(id_at) by the id set's own
+     * min/max (mirrors SELECT_PROJECT_ID_FROM_TRACE) is exact - it never drops a valid id - while keeping
+     * the lookup on the ids' own weekly partitions instead of scanning all cold history once traces tier.
+     */
     private static final String SELECT_PROJECT_IDS_BY_TRACE_IDS_BOUNDED = """
             SELECT
                 id,
@@ -4455,7 +4457,7 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @Override
-    public Mono<Map<UUID, UUID>> getProjectIdsByTraceIdsBounded(@NonNull Set<UUID> traceIds) {
+    public Mono<Map<UUID, UUID>> getProjectIdsByTraceIdsBounded(Set<UUID> traceIds) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(traceIds), "Argument 'traceIds' must not be empty");
 
         var minId = Collections.min(traceIds);
