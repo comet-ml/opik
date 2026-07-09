@@ -57,11 +57,16 @@ def export_single_dataset(
 
         # Dataset-level tags are stored on the version, not surfaced by
         # get_dataset(); fetch them explicitly. Never let a tags lookup abort
-        # the export.
+        # the export, but log it so a missing-tags export is diagnosable.
         try:
             dataset_tags = dataset.get_tags()
-        except Exception:
+        except Exception as tag_error:
             dataset_tags = None
+            console.print(
+                f"[yellow]Warning: Could not fetch tags for dataset "
+                f"'{dataset.name}' ({dataset_id}): {tag_error}. "
+                f"Exporting without tags.[/yellow]"
+            )
 
         # Create dataset data structure
         dataset_data = {
@@ -216,8 +221,13 @@ def export_experiment_datasets(
 
             try:
                 dataset_tags = dataset_obj.get_tags()
-            except Exception:
+            except Exception as tag_error:
                 dataset_tags = None
+                console.print(
+                    f"[yellow]Warning: Could not fetch tags for dataset "
+                    f"'{dataset_name}' ({dataset_id}): {tag_error}. "
+                    f"Exporting without tags.[/yellow]"
+                )
 
             dataset_data = {
                 "dataset": {

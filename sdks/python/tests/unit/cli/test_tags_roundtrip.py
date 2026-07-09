@@ -25,7 +25,7 @@ from opik.cli.exports.utils import create_experiment_data_structure  # noqa: E40
 
 
 class TestPromptTagsImport:
-    def test_text_prompt_import_forwards_tags(self, tmp_path: Path) -> None:
+    def test_import_text_prompt__with_tags__forwards_tags(self, tmp_path: Path) -> None:
         prompt_file = tmp_path / "prompt_p1.json"
         prompt_file.write_text(
             json.dumps(
@@ -57,7 +57,7 @@ class TestPromptTagsImport:
         client.create_prompt.assert_called_once()
         assert client.create_prompt.call_args.kwargs["tags"] == ["prod", "greeting"]
 
-    def test_chat_prompt_import_forwards_tags(self, tmp_path: Path) -> None:
+    def test_import_chat_prompt__with_tags__forwards_tags(self, tmp_path: Path) -> None:
         prompt_file = tmp_path / "prompt_c1.json"
         prompt_file.write_text(
             json.dumps(
@@ -106,7 +106,9 @@ class TestDatasetTagsImport:
         client.rest_client.datasets.update_dataset = Mock()
         return client
 
-    def test_flat_format_applies_tags(self, tmp_path: Path) -> None:
+    def test_import_dataset__flat_format_with_tags__applies_tags(
+        self, tmp_path: Path
+    ) -> None:
         self._write_dataset(
             tmp_path,
             {"name": "ds", "tags": ["a", "b"], "items": []},
@@ -127,7 +129,9 @@ class TestDatasetTagsImport:
         assert call.args[0] == "new-ds-id"
         assert call.kwargs["tags"] == ["a", "b"]
 
-    def test_nested_format_applies_tags(self, tmp_path: Path) -> None:
+    def test_import_dataset__nested_format_with_tags__applies_tags(
+        self, tmp_path: Path
+    ) -> None:
         self._write_dataset(
             tmp_path,
             {"dataset": {"name": "ds", "id": "x", "tags": ["c"]}, "items": []},
@@ -148,7 +152,7 @@ class TestDatasetTagsImport:
             "c"
         ]
 
-    def test_no_tags_skips_update(self, tmp_path: Path) -> None:
+    def test_import_dataset__no_tags_field__skips_update(self, tmp_path: Path) -> None:
         self._write_dataset(tmp_path, {"name": "ds", "items": []})
         client = self._make_client()
 
@@ -163,9 +167,54 @@ class TestDatasetTagsImport:
 
         client.rest_client.datasets.update_dataset.assert_not_called()
 
+    def test_import_dataset__empty_tags_list__clears_tags(self, tmp_path: Path) -> None:
+        # An explicit empty list must still call the REST update so a
+        # re-import can clear pre-existing tags on the destination.
+        self._write_dataset(tmp_path, {"name": "ds", "tags": [], "items": []})
+        client = self._make_client()
+
+        import_datasets_from_directory(
+            client=client,
+            source_dir=tmp_path,
+            project_name="proj",
+            dry_run=False,
+            name_pattern=None,
+            debug=False,
+        )
+
+        client.rest_client.datasets.update_dataset.assert_called_once()
+        assert client.rest_client.datasets.update_dataset.call_args.kwargs["tags"] == []
+
+    def test_import_dataset__update_dataset_raises__continues_and_inserts_items(
+        self, tmp_path: Path
+    ) -> None:
+        # A tag-update failure must be swallowed with a warning so the rest of
+        # the import (item insertion, count, manifest) still proceeds.
+        self._write_dataset(
+            tmp_path,
+            {"name": "ds", "tags": ["a"], "items": [{"id": "1", "input": "x"}]},
+        )
+        client = self._make_client()
+        client.rest_client.datasets.update_dataset = Mock(side_effect=Exception("boom"))
+
+        result = import_datasets_from_directory(
+            client=client,
+            source_dir=tmp_path,
+            project_name="proj",
+            dry_run=False,
+            name_pattern=None,
+            debug=False,
+        )
+
+        # The import did not abort: items were still inserted and the dataset
+        # counted as imported.
+        client.create_dataset.return_value.insert.assert_called_once()
+        assert result["datasets"] == 1
+        assert result["datasets_errors"] == 0
+
 
 class TestExperimentTags:
-    def test_export_structure_includes_tags(self) -> None:
+    def test_export_experiment_structure__with_tags__includes_tags(self) -> None:
         experiment = Mock()
         experiment.id = "exp-1"
         experiment.name = "e"
@@ -178,7 +227,7 @@ class TestExperimentTags:
 
         assert structure["experiment"]["tags"] == ["t1", "t2"]
 
-    def test_import_from_disk_forwards_tags(self) -> None:
+    def test_import_experiment_from_disk__with_tags__forwards_tags(self) -> None:
         client = Mock()
         client.flush = Mock(return_value=True)
         client.get_or_create_dataset = Mock(return_value=Mock(name="ds"))
@@ -217,3 +266,43 @@ class TestExperimentTags:
             "golden",
             "regression",
         ]
+
+    def test_import_experiment_from_disk__empty_tags_list__forwards_empty_tags(
+        self,
+    ) -> None:
+        # An explicit empty list must round-trip as tags=[], not collapse to
+        # tags=None (which would drop a deliberately cleared tag set).
+        client = Mock()
+        client.flush = Mock(return_value=True)
+        client.get_or_create_dataset = Mock(return_value=Mock(name="ds"))
+        created_experiment = Mock()
+        created_experiment.id = "exp-123"
+        client.create_experiment = Mock(return_value=created_experiment)
+        client._rest_client = Mock()
+
+        experiment_data = ExperimentData(
+            experiment={
+                "id": "exp-123",
+                "name": "test-experiment",
+                "dataset_name": "test-dataset",
+                "type": "regular",
+                "tags": [],
+            },
+            items=[],
+        )
+
+        with patch("opik.cli.imports.experiment.id_helpers_module") as mock_id_helpers:
+            mock_id_helpers.generate_id = Mock(return_value="generated-id")
+
+            recreate_experiment(
+                client,
+                experiment_data,
+                "test-project",
+                {},  # trace_id_map
+                {},  # dataset_item_id_map
+                dry_run=False,
+                debug=False,
+            )
+
+        client.create_experiment.assert_called_once()
+        assert client.create_experiment.call_args.kwargs["tags"] == []

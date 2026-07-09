@@ -79,6 +79,22 @@ def _get_prompt_type_string(prompt: Any) -> Optional[str]:
     return str(prompt_type).upper()
 
 
+def _build_version_data(prompt: Any) -> dict:
+    """Build the serialized per-version dict shared by every prompt export path.
+
+    Keeping this in one place ensures ``current_version`` and each ``history``
+    entry stay in sync when the exported metadata changes.
+    """
+    return {
+        "prompt": _get_prompt_content(prompt),
+        "metadata": getattr(prompt, "metadata", None),
+        "type": _get_prompt_type_string(prompt),
+        "commit": getattr(prompt, "commit", None),
+        "template_structure": _get_template_structure(prompt),
+        "tags": getattr(prompt, "tags", None),
+    }
+
+
 def _safe_prompt_history(
     client: opik.Opik,
     prompt: Union[Prompt, ChatPrompt],
@@ -128,25 +144,8 @@ def export_single_prompt(
         prompt_data = {
             "id": prompt_id,
             "name": prompt.name,
-            "current_version": {
-                "prompt": _get_prompt_content(prompt),
-                "metadata": getattr(prompt, "metadata", None),
-                "type": _get_prompt_type_string(prompt),
-                "commit": getattr(prompt, "commit", None),
-                "template_structure": _get_template_structure(prompt),
-                "tags": getattr(prompt, "tags", None),
-            },
-            "history": [
-                {
-                    "prompt": _get_prompt_content(version),
-                    "metadata": getattr(version, "metadata", None),
-                    "type": _get_prompt_type_string(version),
-                    "commit": getattr(version, "commit", None),
-                    "template_structure": _get_template_structure(version),
-                    "tags": getattr(version, "tags", None),
-                }
-                for version in prompt_history
-            ],
+            "current_version": _build_version_data(prompt),
+            "history": [_build_version_data(version) for version in prompt_history],
             "downloaded_at": datetime.now().isoformat(),
         }
 
@@ -342,25 +341,8 @@ def export_prompts_by_ids(
                         else None
                     ),
                 },
-                "current_version": {
-                    "prompt": _get_prompt_content(prompt),
-                    "metadata": getattr(prompt, "metadata", None),
-                    "type": _get_prompt_type_string(prompt),
-                    "commit": getattr(prompt, "commit", None),
-                    "template_structure": _get_template_structure(prompt),
-                    "tags": getattr(prompt, "tags", None),
-                },
-                "history": [
-                    {
-                        "prompt": _get_prompt_content(version),
-                        "metadata": getattr(version, "metadata", None),
-                        "type": _get_prompt_type_string(version),
-                        "commit": getattr(version, "commit", None),
-                        "template_structure": _get_template_structure(version),
-                        "tags": getattr(version, "tags", None),
-                    }
-                    for version in prompt_history
-                ],
+                "current_version": _build_version_data(prompt),
+                "history": [_build_version_data(version) for version in prompt_history],
                 "downloaded_at": datetime.now().isoformat(),
             }
 
@@ -494,24 +476,9 @@ def export_related_prompts_by_name(
                         "created_at": getattr(prompt, "created_at", None),
                         "last_updated_at": getattr(prompt, "last_updated_at", None),
                     },
-                    "current_version": {
-                        "prompt": _get_prompt_content(prompt),
-                        "metadata": getattr(prompt, "metadata", None),
-                        "type": _get_prompt_type_string(prompt),
-                        "commit": getattr(prompt, "commit", None),
-                        "template_structure": _get_template_structure(prompt),
-                        "tags": getattr(prompt, "tags", None),
-                    },
+                    "current_version": _build_version_data(prompt),
                     "history": [
-                        {
-                            "prompt": _get_prompt_content(version),
-                            "metadata": getattr(version, "metadata", None),
-                            "type": _get_prompt_type_string(version),
-                            "commit": getattr(version, "commit", None),
-                            "template_structure": _get_template_structure(version),
-                            "tags": getattr(version, "tags", None),
-                        }
-                        for version in prompt_history
+                        _build_version_data(version) for version in prompt_history
                     ],
                     "downloaded_at": datetime.now().isoformat(),
                     "related_to_experiment": experiment.name or experiment.id,

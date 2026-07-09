@@ -514,9 +514,11 @@ def recreate_experiment(
             "project_name": project_name,
         }
         # Tags round-trip on both paths: the exporter now serializes them and
-        # create_experiment accepts them directly.
+        # create_experiment accepts them directly. Check for None (no tags
+        # field) rather than truthiness so an explicit empty list ([]) is
+        # preserved instead of collapsing to tags=None.
         experiment_tags = experiment_info.get("tags")
-        if experiment_tags:
+        if experiment_tags is not None:
             create_kwargs["tags"] = experiment_tags
         if experiment_id is not None:
             create_kwargs["experiment_id"] = experiment_id

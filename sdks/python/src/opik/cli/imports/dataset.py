@@ -65,12 +65,16 @@ def import_datasets_from_directory(
                 )
 
                 # Dataset-level tags live at the top level (export_single_dataset)
-                # or nested under "dataset" (export_experiment_datasets).
-                dataset_tags = dataset_data.get("tags") or (
-                    dataset_data.get("dataset", {}).get("tags")
-                    if dataset_data.get("dataset")
-                    else None
-                )
+                # or nested under "dataset" (export_experiment_datasets). Check
+                # key presence rather than truthiness so an explicit empty list
+                # ([]) survives and can clear the destination's tags; only fall
+                # back to the nested field when the flat key is missing/null.
+                if dataset_data.get("tags") is not None:
+                    dataset_tags = dataset_data.get("tags")
+                elif dataset_data.get("dataset"):
+                    dataset_tags = dataset_data.get("dataset", {}).get("tags")
+                else:
+                    dataset_tags = None
 
                 # Check if name is missing or empty
                 if not dataset_name or (
@@ -125,8 +129,9 @@ def import_datasets_from_directory(
 
                 # Apply dataset-level tags. create_dataset() doesn't expose a
                 # tags argument, so set them via the REST update endpoint after
-                # the dataset exists.
-                if dataset_tags:
+                # the dataset exists. An explicit empty list clears existing
+                # tags, so distinguish None (no tags field -> skip) from [].
+                if dataset_tags is not None:
                     try:
                         client.rest_client.datasets.update_dataset(
                             dataset.id,
