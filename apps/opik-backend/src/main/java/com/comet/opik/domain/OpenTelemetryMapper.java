@@ -177,7 +177,7 @@ public class OpenTelemetryMapper {
             var ruleOpt = OpenTelemetryMappingRuleFactory.findRule(key, isClaudeCode);
 
             if (ruleOpt.isEmpty()) {
-                log.debug("No rule found for kv '{}' -> '{}'. Using default bucket.", key, attribute.getValue());
+                log.debug("No rule found for unmapped attribute key '{}'. Using default bucket.", key);
                 extractToJsonColumn(defaultBucket, key, value);
                 continue;
             }
