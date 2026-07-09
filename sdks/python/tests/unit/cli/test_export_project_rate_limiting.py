@@ -83,6 +83,22 @@ def _make_full_page(n=500, offset=0):
     return _make_page([_make_mock_trace(f"bulk-{offset + i}") for i in range(n)])
 
 
+def _uuid7(n: int) -> str:
+    """Deterministic, valid UUIDv7 string for trace index *n*.
+
+    Version nibble is 7 and the variant nibble is RFC-4122 (8), so
+    ``uuid.UUID(...).version == 7`` — this is what makes the exporter build a
+    bounded ``trace_id`` range filter instead of falling back to a full scan.
+    """
+    high = f"{0x0190A1B2C3D4 + n:012x}"
+    return f"{high[:8]}-{high[8:12]}-7000-8000-{n:012x}"
+
+
+def _make_full_page_uuid7(n=500, offset=0):
+    """Like ``_make_full_page`` but with UUIDv7 trace ids (bounded-scan path)."""
+    return _make_page([_make_mock_trace(_uuid7(offset + i)) for i in range(n)])
+
+
 # ---------------------------------------------------------------------------
 # Retry wait behaviour — tested via export_traces (public API)
 # ---------------------------------------------------------------------------
@@ -382,11 +398,13 @@ class TestExportTracesChunking:
         """
         from opik.cli.exports.project import export_traces
 
-        page1 = _make_full_page(2, offset=0)
-        page2 = _make_full_page(2, offset=2)
-        page3 = _make_full_page(2, offset=4)
+        # UUIDv7 ids so each chunk builds a bounded trace_id range filter and
+        # scans spans per chunk (the common, memory-bounded path).
+        page1 = _make_full_page_uuid7(2, offset=0)
+        page2 = _make_full_page_uuid7(2, offset=2)
+        page3 = _make_full_page_uuid7(2, offset=4)
         mock_client = MagicMock()
-        expected_ids = [f"bulk-{i}" for i in range(6)]
+        expected_ids = [_uuid7(i) for i in range(6)]
 
         with tempfile.TemporaryDirectory() as tmp:
             project_dir = Path(tmp)
@@ -445,6 +463,67 @@ class TestExportTracesChunking:
         )
         assert files_on_disk_at_each_span_fetch[0] == 0
         assert files_on_disk_at_each_span_fetch[-1] > 0
+
+    def test_export_traces__non_uuid7_ids__unbounded_span_scan_runs_once(self):
+        """When trace ids aren't UUIDv7 the span scan can't be bounded by a
+        trace_id range, so the backend must scan every span in the project.
+
+        That expensive full scan must run once for the whole export and be
+        cached — not repeated on every chunk.  Per-chunk full scans turn a large
+        export into O(chunks × full-project-scan) and make it far more likely to
+        time out (the regression this guards against).
+        """
+        from opik.cli.exports.project import export_traces
+
+        # Non-UUIDv7 ids ("bulk-N") force the unbounded-scan fallback.
+        page1 = _make_full_page(2, offset=0)
+        page2 = _make_full_page(2, offset=2)
+        page3 = _make_full_page(2, offset=4)
+        mock_client = MagicMock()
+        expected_ids = [f"bulk-{i}" for i in range(6)]
+
+        span_page_requests = []
+
+        def span_fetch_side_effect(*args, **kwargs):
+            # Record every page the spans endpoint is asked for. With caching
+            # this fires only during the single full scan, not once per chunk.
+            span_page_requests.append(kwargs.get("page"))
+            return _make_page([])
+
+        mock_client.rest_client.traces.get_traces_by_project.side_effect = [
+            page1,
+            page2,
+            page3,
+            _make_page([]),
+        ]
+        mock_client.rest_client.spans.get_spans_by_project.side_effect = (
+            span_fetch_side_effect
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            project_dir = Path(tmp)
+            with patch(f"{_MODULE}.time.sleep"):
+                exported, skipped, had_errors = export_traces(
+                    client=mock_client,
+                    project_name="proj",
+                    project_dir=project_dir,
+                    max_results=None,
+                    filter_string=None,
+                    show_progress=False,
+                    page_size=2,
+                )
+
+            assert (exported, skipped, had_errors) == (6, 0, False)
+            written_ids = sorted(
+                p.name[len("trace_") : -len(".json")]
+                for p in project_dir.glob("trace_*.json")
+            )
+            assert written_ids == sorted(expected_ids)
+
+        # Three chunks are flushed, but the unbounded project-wide scan happens
+        # exactly once (a single empty page here) and later chunks reuse the
+        # cache — not one full scan per chunk.
+        assert len(span_page_requests) == 1
 
 
 # ---------------------------------------------------------------------------

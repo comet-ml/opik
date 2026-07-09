@@ -520,29 +520,36 @@ def export_traces(
         # Reset after each flush so it never holds more than one chunk.
         traces_to_fetch: dict[str, Any] = {}
 
-        def _fetch_spans_for_chunk() -> tuple[dict[str, list], bool]:
-            """Fetch and group spans for the buffered chunk's traces.
+        # Fallback cache for the unbounded span scan.  When a chunk's trace ids
+        # can't be bounded by a trace_id range filter (e.g. non-UUIDv7 ids), the
+        # backend has to scan every span in the project.  That scan is done once
+        # for the whole export and cached here so subsequent chunks reuse it
+        # instead of re-scanning the entire project on every flush (which would
+        # make a large export O(chunks × full-scan) and time out).
+        unbounded_spans_cache: Optional[dict[str, list]] = None
+        unbounded_scan_had_errors = False
 
-            Instead of one POST /spans/search per trace (rate-limited to 30
-            req/min), paginate GET /spans bounded to the chunk's trace_id range
-            so the backend prunes by primary key.  Each span carries its
-            trace_id so we group client-side and discard spans for traces
-            outside this chunk.  Returns (spans_by_trace_id, chunk_had_errors).
+        def _scan_and_group_spans(
+            spans_filter: Optional[str],
+            group_into: dict[str, list],
+            only_known_ids: bool,
+        ) -> bool:
+            """Paginate GET /spans and group the results by trace_id into
+            ``group_into``.
+
+            ``spans_filter`` (parsed OQL JSON) optionally bounds the scan by
+            ``trace_id`` range so the backend prunes by primary key.
+
+            When ``only_known_ids`` is True, spans whose ``trace_id`` is not
+            already a key in ``group_into`` are discarded — used for the bounded
+            chunk scan where ``group_into`` is pre-seeded with the chunk's
+            trace_ids (so the range filter only needs to be a superset).  When
+            False, every span is grouped, adding keys as needed — used for the
+            one-shot unbounded full-project scan.
+
+            Returns True if any span page failed after retries (partial spans).
             """
-            spans_by_trace_id: dict[str, list] = {tid: [] for tid in traces_to_fetch}
-            chunk_had_errors = False
-            if not traces_to_fetch:
-                return spans_by_trace_id, chunk_had_errors
-
-            if progress and task is not None:
-                progress.update(task, description="Fetching spans...")
-
-            # Bound the span scan to the chunk's trace_id range so the backend
-            # prunes by primary key. Exactness is still guaranteed by the
-            # membership check (`tid in spans_by_trace_id`) below, so this only
-            # needs to be a superset of the chunk's trace_ids.
-            spans_filter = _spans_trace_id_range_filter(traces_to_fetch.keys())
-
+            had_errors = False
             span_page = 1
             span_consecutive_failures = 0
             while True:
@@ -570,12 +577,12 @@ def export_traces(
                             f"[red]{span_consecutive_failures} consecutive span page failures — "
                             "stopping span fetch. Traces will be exported with partial spans.[/red]"
                         )
-                        chunk_had_errors = True
+                        had_errors = True
                         break
                     console.print(
                         f"[yellow]Error fetching span page {span_page}: {e} — skipping and continuing.[/yellow]"
                     )
-                    chunk_had_errors = True
+                    had_errors = True
                     span_page += 1
                     time.sleep(_PAGE_FETCH_DELAY_SECONDS)
                     continue
@@ -583,11 +590,16 @@ def export_traces(
                 spans = span_result.content or []
                 for span in spans:
                     tid = span.trace_id
-                    if tid and tid in spans_by_trace_id:
-                        spans_by_trace_id[tid].append(span)
+                    if not tid:
+                        continue
+                    if only_known_ids:
+                        if tid in group_into:
+                            group_into[tid].append(span)
+                    else:
+                        group_into.setdefault(tid, []).append(span)
 
                 if debug:
-                    total_relevant = sum(len(v) for v in spans_by_trace_id.values())
+                    total_relevant = sum(len(v) for v in group_into.values())
                     debug_print(
                         f"DEBUG: Span page {span_page}: {len(spans)} spans fetched, "
                         f"{total_relevant} relevant so far",
@@ -595,7 +607,7 @@ def export_traces(
                     )
 
                 if progress and task is not None:
-                    total_relevant = sum(len(v) for v in spans_by_trace_id.values())
+                    total_relevant = sum(len(v) for v in group_into.values())
                     progress.update(
                         task,
                         description=f"Fetching spans... (page {span_page}, {total_relevant} matched)",
@@ -605,6 +617,64 @@ def export_traces(
                     break
 
                 span_page += 1
+
+            return had_errors
+
+        def _fetch_spans_for_chunk() -> tuple[dict[str, list], bool]:
+            """Fetch and group spans for the buffered chunk's traces.
+
+            Instead of one POST /spans/search per trace (rate-limited to 30
+            req/min), paginate GET /spans bounded to the chunk's trace_id range
+            so the backend prunes by primary key.  Each span carries its
+            trace_id so we group client-side and discard spans for traces
+            outside this chunk.
+
+            When the range filter can't be built (e.g. non-UUIDv7 ids) the
+            backend has to scan every span in the project; that unbounded scan is
+            done once and cached (``unbounded_spans_cache``) so later chunks reuse
+            it rather than re-scanning the whole project on every flush.
+
+            Returns (spans_by_trace_id, chunk_had_errors).
+            """
+            nonlocal unbounded_spans_cache, unbounded_scan_had_errors
+
+            spans_by_trace_id: dict[str, list] = {tid: [] for tid in traces_to_fetch}
+            chunk_had_errors = False
+            if not traces_to_fetch:
+                return spans_by_trace_id, chunk_had_errors
+
+            if progress and task is not None:
+                progress.update(task, description="Fetching spans...")
+
+            if unbounded_spans_cache is None:
+                # Bound the span scan to the chunk's trace_id range so the backend
+                # prunes by primary key. Exactness is still guaranteed by the
+                # membership check in _scan_and_group_spans, so this only needs to
+                # be a superset of the chunk's trace_ids.
+                spans_filter = _spans_trace_id_range_filter(traces_to_fetch.keys())
+                if spans_filter is not None:
+                    chunk_had_errors = _scan_and_group_spans(
+                        spans_filter, spans_by_trace_id, only_known_ids=True
+                    )
+                    return spans_by_trace_id, chunk_had_errors
+
+                # No trace_id range filter could be built (e.g. non-UUIDv7 ids),
+                # so the backend must scan every span in the project. Do that once
+                # for the whole export and cache the grouped result; repeating the
+                # full scan per chunk would make a large export O(chunks × full-scan)
+                # and time out.
+                unbounded_spans_cache = {}
+                unbounded_scan_had_errors = _scan_and_group_spans(
+                    None, unbounded_spans_cache, only_known_ids=False
+                )
+
+            # Serve this chunk from the cached full scan (built now or by an
+            # earlier chunk). A partial scan (errors) is surfaced on every chunk
+            # it feeds so the manifest is left incomplete and the next run resumes.
+            if unbounded_scan_had_errors:
+                chunk_had_errors = True
+            for tid in spans_by_trace_id:
+                spans_by_trace_id[tid] = unbounded_spans_cache.get(tid, [])
 
             return spans_by_trace_id, chunk_had_errors
 
