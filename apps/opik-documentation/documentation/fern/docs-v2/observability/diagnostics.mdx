@@ -4,14 +4,11 @@ og:description: Opik Diagnostics automatically scans your project's traces with
   Ollie and surfaces recurring agent issues, complete with root cause, a suggested
   fix, and affected traces.
 og:site_name: Opik Documentation
-og:title: Diagnostics — Opik
+og:title: Diagnostics - Opik
 title: Diagnostics
 ---
 
-Manually skimming traces to catch recurring failures doesn't scale once your agent is handling
-real traffic. Diagnostics runs [Ollie](/ollie) against your project's traces on a schedule,
-groups repeated failures into a single issue, and gives you a root cause, a suggested fix, and the
-traces to prove it — before your users report the problem.
+Skimming traces for recurring failures doesn't scale once your agent is handling real traffic. Diagnostics scans your project's traces on a schedule, groups repeated failures into a single issue, and surfaces a root cause, a suggested fix, and the traces to prove it, so you catch problems before your users report them.
 
 <Frame>
   <img src="/img/v2/observability/diagnostics-overview.png" alt="Diagnostics page showing a detected issue with summary and Ollie fix" />
@@ -19,7 +16,7 @@ traces to prove it — before your users report the problem.
 
 ## How it works
 
-Diagnostics is powered by Ollie, so it doesn't rely on fixed rules or thresholds — it reads full
+Diagnostics is powered by Ollie, so it doesn't rely on fixed rules or thresholds. It reads full
 traces the same way you would, looking for patterns like tool-call loops, malformed API calls,
 hallucinated outputs, or latency regressions.
 
@@ -32,7 +29,7 @@ hallucinated outputs, or latency regressions.
 
 <Note>
   Diagnostics requires the Ollie AI assistant to be enabled for your workspace. Scans run on your
-  Ollie tokens — see the settings dialog for billing details.
+  Ollie tokens, see the settings dialog for billing details.
 </Note>
 
 ## Turning on diagnostics
@@ -46,23 +43,19 @@ Each issue in the list shows its severity (`critical`, `high`, `medium`, or `low
 it's occurred, and when it was last seen, so you can sort and prioritize before opening any single
 issue.
 
-<Frame>
-  <img src="/img/v2/observability/diagnostics-issue-list.png" alt="Diagnostics issues list with severity, occurrences, and last seen" />
-</Frame>
-
 Opening an issue shows:
 
 - **First seen / last seen** and **occurrences** (total and in the latest scan)
 - **Users impacted**
-- **Summary** — a plain-language description of the pattern Ollie detected
-- **Ollie fix** — the likely root cause and a suggested fix, with a **Continue with Ollie** button
+- **Summary:** what Ollie found, in plain language
+- **Ollie fix:** the likely root cause and a suggested fix, with a **Continue with Ollie** button
   that hands off to the Ollie chat sidebar to dig deeper or apply a code fix directly
-- **Occurrence over time** — a chart of how often the issue has fired since it was first detected
-- **Affected traces sample** — a handful of traces that show the issue, linking directly to the
+- **Occurrence over time:** a chart of how often the issue has fired since it was first detected
+- **Affected traces sample:** a handful of traces that show the issue, linking directly to the
   trace view
 
 <Frame>
-  <img src="/img/v2/observability/diagnostics-occurrence-and-traces.png" alt="Occurrence over time chart and affected traces sample for a diagnostics issue" />
+  <img src="/img/v2/observability/diagnostics-ollie-fix.png" alt="Occurrence over time chart and affected traces sample for a diagnostics issue" />
 </Frame>
 
 ## Resolving issues
@@ -70,14 +63,10 @@ Opening an issue shows:
 Once you've fixed the underlying problem, click **Resolve** on the issue. Resolved issues move to
 the **Resolved issues** page, where you can reopen them at any time if the pattern comes back.
 
-<Frame>
-  <img src="/img/v2/observability/diagnostics-resolved.png" alt="Resolved issues page" />
-</Frame>
-
 ## Settings
 
 Use the settings icon next to **Run diagnostic** to turn the daily automated scan on or off. This
-doesn't affect on-demand scans — you can still click **Run diagnostic** manually while automated
+doesn't affect on-demand scans: you can still click **Run diagnostic** manually while automated
 scans are paused.
 
 <Frame>
@@ -86,8 +75,8 @@ scans are paused.
 
 ## Next steps
 
-- [Ollie overview](/ollie) — Full introduction to Ollie's capabilities and setup
-- [Debugging agents with Ollie and Opik Connect](/tracing/debug-agents) — Take a single
-  failing trace from root cause to verified fix
-- [Alerts](/production/alerts/alerts) — Get notified in Slack, PagerDuty, or a custom webhook when
-  specific events happen, as a complement to Diagnostics' pattern detection
+- [Ollie overview](/ollie): what Ollie can do and how to set it up
+- [Debugging agents with Ollie](/tracing/debug-agents): take a single failing trace from root
+  cause to verified fix
+- [Alerts](/production/alerts/alerts): get notified in Slack, PagerDuty, or a custom webhook for
+  specific events
