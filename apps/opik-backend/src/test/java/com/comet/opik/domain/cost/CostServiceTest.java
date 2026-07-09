@@ -341,6 +341,28 @@ class CostServiceTest {
     }
 
     /**
+     * Online evaluation resolves models to LlmProvider serialized values ("gemini", "vertex-ai") that
+     * differ from the canonical price-table vocabulary ("google_ai", "google_vertexai"). calculateCost
+     * must map them so every provider selectable for online evaluation is cost-tracked instead of
+     * silently pricing at zero.
+     */
+    @ParameterizedTest
+    @MethodSource
+    void calculateCost_mapsOnlineEvaluationProviderNames(String modelName, String provider) {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost(modelName, provider, usage, null);
+
+        assertThat(cost).isGreaterThan(BigDecimal.ZERO);
+    }
+
+    private static Stream<Arguments> calculateCost_mapsOnlineEvaluationProviderNames() {
+        return Stream.of(
+                Arguments.of("gemini-2.5-flash", "gemini"), // -> google_ai
+                Arguments.of("vertex_ai/gemini-2.5-flash", "vertex-ai")); // -> google_vertexai
+    }
+
+    /**
      * Overrides file: alias entries should resolve to the target's pricing.
      */
     @ParameterizedTest
