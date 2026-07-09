@@ -742,11 +742,18 @@ start_cost_api_local() {
 
     # Reuse a healthy cost-api started outside this dev-runner. Avoids a port
     # conflict and lets devs share one instance across opik worktrees.
+    # Skip reuse in EM mode: /cost-api/ping is a bare liveness probe and can't
+    # tell whether the running instance has AUTH_ENABLED=true, so a reused
+    # OSS-mode instance would fail org-scoped /ai-spend/* requests. Start our own.
     if cost_api_healthy; then
-        log_success "cost-api is already healthy on port ${AI_COST_BACKEND_PORT} — reusing existing instance"
-        # Clear stale state so a later --stop won't kill the reused instance.
-        rm -f "$COST_API_PID_FILE" "$COST_API_REPO_PATH_FILE"
-        return 0
+        if em_stack_enabled; then
+            log_warning "cost-api already healthy on port ${AI_COST_BACKEND_PORT}, but EM mode needs AUTH_ENABLED=true — not reusing it (start our own; will warn if the port is taken)"
+        else
+            log_success "cost-api is already healthy on port ${AI_COST_BACKEND_PORT} — reusing existing instance"
+            # Clear stale state so a later --stop won't kill the reused instance.
+            rm -f "$COST_API_PID_FILE" "$COST_API_REPO_PATH_FILE"
+            return 0
+        fi
     fi
 
     if [ -f "$COST_API_PID_FILE" ]; then
@@ -762,14 +769,17 @@ start_cost_api_local() {
 
     # Point cost-api at the dev-runner's ClickHouse + MySQL (host-published
     # ports, opik/opik). In platform (EM) mode, cost-api targets local comet-backend
-    # (the React service on EM_BACKEND_PORT).
-    # No-op in OSS mode (cost-api keeps its default).
+    # (the React service on EM_BACKEND_PORT) and delegates auth to it (cookie /
+    # API-key), so org-scoped endpoints resolve the real org. In OSS mode there is
+    # no platform to delegate to, so keep auth off and pin to the default workspace.
+    local cost_api_auth="false"
     if em_stack_enabled; then
         export PLATFORM_BASE_URL="http://localhost:${EM_BACKEND_PORT}"
+        cost_api_auth="true"
     fi
     (
         cd "$AI_COST_BACKEND_PATH" || exit 1
-        AUTH_ENABLED=false \
+        AUTH_ENABLED="$cost_api_auth" \
         CLICKHOUSE_HOST=localhost CLICKHOUSE_PORT="$CLICKHOUSE_HTTP_PORT" \
         CLICKHOUSE_DATABASE=opik CLICKHOUSE_USER=opik CLICKHOUSE_PASSWORD=opik \
         MYSQL_HOST=localhost MYSQL_PORT="$MYSQL_PORT" \
