@@ -520,32 +520,24 @@ def export_traces(
         # Reset after each flush so it never holds more than one chunk.
         traces_to_fetch: dict[str, Any] = {}
 
-        # Fallback cache for the unbounded span scan.  When a chunk's trace ids
-        # can't be bounded by a trace_id range filter (e.g. non-UUIDv7 ids), the
-        # backend has to scan every span in the project.  A *clean* full scan is
-        # cached here once so subsequent chunks reuse it instead of re-scanning
-        # the entire project on every flush (which would make a large export
-        # O(chunks × full-scan) and time out).  A scan that errors out is never
-        # published here — it stays partial and the next chunk retries.
-        unbounded_spans_cache: Optional[dict[str, list]] = None
-
         def _scan_and_group_spans(
             spans_filter: Optional[str],
             group_into: dict[str, list],
-            only_known_ids: bool,
         ) -> bool:
             """Paginate GET /spans and group the results by trace_id into
             ``group_into``.
 
-            ``spans_filter`` (parsed OQL JSON) optionally bounds the scan by
-            ``trace_id`` range so the backend prunes by primary key.
+            ``group_into`` is pre-seeded with the current chunk's trace_ids;
+            spans whose ``trace_id`` is not already a key are discarded, so the
+            scan only ever retains this chunk's spans.  Peak memory therefore
+            stays bounded to one chunk regardless of how many spans the project
+            holds — even on the unfiltered fallback below where the backend
+            streams back every span.
 
-            When ``only_known_ids`` is True, spans whose ``trace_id`` is not
-            already a key in ``group_into`` are discarded — used for the bounded
-            chunk scan where ``group_into`` is pre-seeded with the chunk's
-            trace_ids (so the range filter only needs to be a superset).  When
-            False, every span is grouped, adding keys as needed — used for the
-            one-shot unbounded full-project scan.
+            ``spans_filter`` (parsed OQL JSON) optionally bounds the scan by
+            ``trace_id`` range so the backend prunes by primary key; the
+            membership check means it only needs to be a superset of the chunk's
+            trace_ids.
 
             Returns True if any span page failed after retries (partial spans).
             """
@@ -592,11 +584,10 @@ def export_traces(
                     tid = span.trace_id
                     if not tid:
                         continue
-                    if only_known_ids:
-                        if tid in group_into:
-                            group_into[tid].append(span)
-                    else:
-                        group_into.setdefault(tid, []).append(span)
+                    # Discard spans for traces outside this chunk (keeps the
+                    # unfiltered fallback scan bounded to one chunk's spans).
+                    if tid in group_into:
+                        group_into[tid].append(span)
 
                 if debug:
                     total_relevant = sum(len(v) for v in group_into.values())
@@ -624,63 +615,35 @@ def export_traces(
             """Fetch and group spans for the buffered chunk's traces.
 
             Instead of one POST /spans/search per trace (rate-limited to 30
-            req/min), paginate GET /spans bounded to the chunk's trace_id range
-            so the backend prunes by primary key.  Each span carries its
-            trace_id so we group client-side and discard spans for traces
-            outside this chunk.
+            req/min), paginate GET /spans and group each span client-side by its
+            trace_id, keeping only the traces in this chunk.
 
-            When the range filter can't be built (e.g. non-UUIDv7 ids) the
-            backend has to scan every span in the project; that unbounded scan is
-            done once and cached (``unbounded_spans_cache``) so later chunks reuse
-            it rather than re-scanning the whole project on every flush.
+            When the chunk's ids are UUIDv7 we bound the scan to their trace_id
+            range so the backend prunes by primary key.  When the range filter
+            can't be built (e.g. non-UUIDv7 ids) the backend has to stream back
+            every span in the project, but ``_scan_and_group_spans`` still
+            discards spans outside this chunk, so peak memory stays bounded to
+            one chunk's spans either way.  (That unfiltered scan runs per chunk
+            rather than once-and-cached: caching the whole-project span set to
+            avoid re-scanning would reintroduce the unbounded peak this chunked
+            export exists to prevent — bounded memory wins over scan count on
+            the rare non-UUIDv7 fallback.)
 
             Returns (spans_by_trace_id, chunk_had_errors).
             """
-            nonlocal unbounded_spans_cache
-
             spans_by_trace_id: dict[str, list] = {tid: [] for tid in traces_to_fetch}
-            chunk_had_errors = False
             if not traces_to_fetch:
-                return spans_by_trace_id, chunk_had_errors
+                return spans_by_trace_id, False
 
             if progress and task is not None:
                 progress.update(task, description="Fetching spans...")
 
-            if unbounded_spans_cache is None:
-                # Bound the span scan to the chunk's trace_id range so the backend
-                # prunes by primary key. Exactness is still guaranteed by the
-                # membership check in _scan_and_group_spans, so this only needs to
-                # be a superset of the chunk's trace_ids.
-                spans_filter = _spans_trace_id_range_filter(traces_to_fetch.keys())
-                if spans_filter is not None:
-                    chunk_had_errors = _scan_and_group_spans(
-                        spans_filter, spans_by_trace_id, only_known_ids=True
-                    )
-                    return spans_by_trace_id, chunk_had_errors
-
-                # No trace_id range filter could be built (e.g. non-UUIDv7 ids),
-                # so the backend must scan every span in the project. Scan into a
-                # local map and only publish it as the shared cache when the scan
-                # completes cleanly, so later chunks reuse a *complete* scan rather
-                # than a partially-populated one poisoned by a transient error.
-                scanned: dict[str, list] = {}
-                scan_had_errors = _scan_and_group_spans(
-                    None, scanned, only_known_ids=False
-                )
-                if scan_had_errors:
-                    # Use the partial result for this chunk (some spans beat none)
-                    # and flag the error, but leave the cache unpublished so the
-                    # next chunk retries the scan instead of reusing partial data.
-                    for tid in spans_by_trace_id:
-                        spans_by_trace_id[tid] = scanned.get(tid, [])
-                    return spans_by_trace_id, True
-                unbounded_spans_cache = scanned
-
-            # Serve this chunk from the cached (clean) full scan — built just now
-            # or by an earlier chunk.
-            for tid in spans_by_trace_id:
-                spans_by_trace_id[tid] = unbounded_spans_cache.get(tid, [])
-
+            # Bound the span scan to the chunk's trace_id range so the backend
+            # prunes by primary key; exactness is still guaranteed by the
+            # membership check in _scan_and_group_spans, so this only needs to be
+            # a superset of the chunk's trace_ids (None ⇒ unfiltered fallback).
+            spans_filter = _spans_trace_id_range_filter(traces_to_fetch.keys())
+            chunk_had_errors = _scan_and_group_spans(spans_filter, spans_by_trace_id)
             return spans_by_trace_id, chunk_had_errors
 
         def _write_chunk(spans_by_trace_id: dict[str, list]) -> tuple[int, bool]:

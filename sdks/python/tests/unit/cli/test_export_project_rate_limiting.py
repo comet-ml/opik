@@ -464,30 +464,34 @@ class TestExportTracesChunking:
         assert files_on_disk_at_each_span_fetch[0] == 0
         assert files_on_disk_at_each_span_fetch[-1] > 0
 
-    def test_export_traces__non_uuid7_ids__unbounded_span_scan_runs_once(self):
+    def test_export_traces__non_uuid7_ids__span_scan_bounded_per_chunk(self):
         """When trace ids aren't UUIDv7 the span scan can't be bounded by a
-        trace_id range, so the backend must scan every span in the project.
+        trace_id range, so the backend streams back every span in the project.
 
-        That expensive full scan must run once for the whole export and be
-        cached — not repeated on every chunk.  Per-chunk full scans turn a large
-        export into O(chunks × full-project-scan) and make it far more likely to
-        time out (the regression this guards against).
+        Rather than cache that whole-project span set — which would reintroduce
+        the unbounded memory peak this chunked export exists to prevent — each
+        chunk runs its own scan and keeps only its own traces' spans.  Peak
+        memory therefore stays bounded to one chunk regardless of project size;
+        the trade-off is one unfiltered scan per chunk on this rare fallback.
         """
         from opik.cli.exports.project import export_traces
 
-        # Non-UUIDv7 ids ("bulk-N") force the unbounded-scan fallback.
+        # Non-UUIDv7 ids ("bulk-N") force the unfiltered-scan fallback.
         page1 = _make_full_page(2, offset=0)
         page2 = _make_full_page(2, offset=2)
         page3 = _make_full_page(2, offset=4)
         mock_client = MagicMock()
         expected_ids = [f"bulk-{i}" for i in range(6)]
 
-        span_page_requests = []
+        # Each per-chunk scan pages GET /spans starting at page 1; a fresh page-1
+        # request marks a new scan session.
+        scan_sessions = []
 
         def span_fetch_side_effect(*args, **kwargs):
-            # Record every page the spans endpoint is asked for. With caching
-            # this fires only during the single full scan, not once per chunk.
-            span_page_requests.append(kwargs.get("page"))
+            page = kwargs.get("page")
+            if page == 1:
+                scan_sessions.append([])
+            scan_sessions[-1].append(page)
             return _make_page([])
 
         mock_client.rest_client.traces.get_traces_by_project.side_effect = [
@@ -520,74 +524,72 @@ class TestExportTracesChunking:
             )
             assert written_ids == sorted(expected_ids)
 
-        # Three chunks are flushed, but the unbounded project-wide scan happens
-        # exactly once (a single empty page here) and later chunks reuse the
-        # cache — not one full scan per chunk.
-        assert len(span_page_requests) == 1
+        # One unfiltered scan per flushed chunk (3) — not a single cached
+        # whole-project scan — which is what keeps peak memory bounded to a chunk.
+        assert len(scan_sessions) == 3
 
-    def test_export_traces__unbounded_scan_errors__cache_not_poisoned_and_retried(self):
-        """A transient failure during the unbounded scan must not poison the
-        cache for the rest of the export.
+    def test_export_traces__span_scan_error_isolated_to_its_chunk(self):
+        """A transient span-scan failure is confined to the chunk that hit it.
 
-        The errored scan is left unpublished, so a later chunk retries the scan
-        (and can complete cleanly) instead of every remaining chunk silently
-        reusing a partially-populated result.
-
-        Failure is injected at the private ``_fetch_spans_page`` transport helper
-        (as the sibling span-failure test does): patching the public client
-        boundary would trigger the real 8-attempt retry decorator, making
-        controlled per-page failure injection impractical.
+        With per-chunk scanning there is no shared span cache to poison: the
+        failed chunk is exported with partial spans and had_errors is set, while
+        later chunks scan independently and export normally.  The failure is
+        injected at the public REST boundary (``spans.get_spans_by_project``),
+        per the SDK testing guidelines, not at a private transport helper.
         """
         from opik.cli.exports.project import export_traces
 
-        # Non-UUIDv7 ids force the unbounded-scan fallback.
+        # Non-UUIDv7 ids force the unfiltered per-chunk scan fallback.
         page1 = _make_full_page(2, offset=0)
         page2 = _make_full_page(2, offset=2)
         page3 = _make_full_page(2, offset=4)
         mock_client = MagicMock()
-        mock_client.rest_client.traces.get_traces_by_project.side_effect = [
-            page1,
-            page2,
-            page3,
-            _make_page([]),
-        ]
-
-        # One "session" == one _scan_and_group_spans() pagination run, which
-        # always starts at page 1. The first chunk's scan fails every page (so it
-        # aborts after MAX_CONSECUTIVE_PAGE_FAILURES); later scans succeed.
-        scan_sessions = []
-
-        def span_fetch_side_effect(
-            client, project_name, page, page_size, parsed_filter=None
-        ):
-            if page == 1:
-                scan_sessions.append([])
-            scan_sessions[-1].append(page)
-            if len(scan_sessions) == 1:
-                raise ApiError(status_code=503)
-            return _make_page([])
+        expected_ids = [f"bulk-{i}" for i in range(6)]
 
         with tempfile.TemporaryDirectory() as tmp:
-            with patch(
-                f"{_MODULE}._fetch_spans_page", side_effect=span_fetch_side_effect
-            ):
+            project_dir = Path(tmp)
+
+            def get_spans_side_effect(*args, **kwargs):
+                # Fail every span page while the first chunk is being scanned
+                # (nothing flushed yet); once earlier chunks have written their
+                # files, succeed — proving the error didn't leak across chunks.
+                if not any(project_dir.glob("trace_*.json")):
+                    raise ApiError(status_code=503)
+                return _make_page([])
+
+            mock_client.rest_client.traces.get_traces_by_project.side_effect = [
+                page1,
+                page2,
+                page3,
+                _make_page([]),
+            ]
+            mock_client.rest_client.spans.get_spans_by_project.side_effect = (
+                get_spans_side_effect
+            )
+
+            # Neutralise the retry decorator's sleep (public boundary triggers
+            # the real 8-attempt retry) and the inter-page delay.
+            with patch(f"{_MODULE}._fetch_spans_page.retry.sleep"):
                 with patch(f"{_MODULE}.time.sleep"):
                     exported, skipped, had_errors = export_traces(
                         client=mock_client,
                         project_name="proj",
-                        project_dir=Path(tmp),
+                        project_dir=project_dir,
                         max_results=None,
                         filter_string=None,
                         show_progress=False,
                         page_size=2,
                     )
 
-        # All traces still written; the failed scan is flagged.
-        assert (exported, skipped) == (6, 0)
-        assert had_errors is True
-        # The failed scan was not cached, so a later chunk retried it (a second
-        # session). That retry succeeded and was cached, so no third session.
-        assert len(scan_sessions) == 2
+            # The failed chunk still wrote its traces (with partial spans) and the
+            # failure is flagged; later chunks were unaffected, so all 6 landed.
+            assert (exported, skipped) == (6, 0)
+            assert had_errors is True
+            written_ids = sorted(
+                p.name[len("trace_") : -len(".json")]
+                for p in project_dir.glob("trace_*.json")
+            )
+            assert written_ids == sorted(expected_ids)
 
 
 # ---------------------------------------------------------------------------
