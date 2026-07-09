@@ -41,6 +41,8 @@ class ClickHouseExistenceHealthCheckTest {
     private static final int HEALTH_CHECK_TIMEOUT_SECONDS = 1;
     private static final Duration HEALTH_CHECK_TIMEOUT = Duration.seconds(HEALTH_CHECK_TIMEOUT_SECONDS);
     private static final String CLICKHOUSE_SETTING_MAX_EXECUTION_TIME = "clickhouse_setting_max_execution_time";
+    private static final String CLICKHOUSE_SETTING_LOG_COMMENT = "clickhouse_setting_log_comment";
+    private static final String LOG_COMMENT_PREFIX = "health_check:";
 
     private final Client clickHouseClient = mock(Client.class);
 
@@ -88,7 +90,7 @@ class ClickHouseExistenceHealthCheckTest {
     void check__whenEnabledAndResourcePresent__thenHealthy(String name, String query, String notFoundMessage,
             String disabledMessage, BiFunction<Client, Boolean, AbstractClickHouseExistenceHealthCheck> factory) {
         var records = records(1L);
-        when(clickHouseClient.queryRecords(eq(query), argThat(maxExecutionTimeServerSetting())))
+        when(clickHouseClient.queryRecords(eq(query), argThat(probeServerSettings())))
                 .thenReturn(CompletableFuture.completedFuture(records));
 
         var actualResult = factory.apply(clickHouseClient, true).execute();
@@ -101,7 +103,7 @@ class ClickHouseExistenceHealthCheckTest {
     void check__whenEnabledAndCountIsZero__thenUnhealthy(String name, String query, String notFoundMessage,
             String disabledMessage, BiFunction<Client, Boolean, AbstractClickHouseExistenceHealthCheck> factory) {
         var records = records(0L);
-        when(clickHouseClient.queryRecords(eq(query), argThat(maxExecutionTimeServerSetting())))
+        when(clickHouseClient.queryRecords(eq(query), argThat(probeServerSettings())))
                 .thenReturn(CompletableFuture.completedFuture(records));
 
         var actualResult = factory.apply(clickHouseClient, true).execute();
@@ -115,7 +117,7 @@ class ClickHouseExistenceHealthCheckTest {
             String disabledMessage, BiFunction<Client, Boolean, AbstractClickHouseExistenceHealthCheck> factory) {
         var records = mock(Records.class);
         when(records.iterator()).thenReturn(Collections.emptyIterator());
-        when(clickHouseClient.queryRecords(eq(query), argThat(maxExecutionTimeServerSetting())))
+        when(clickHouseClient.queryRecords(eq(query), argThat(probeServerSettings())))
                 .thenReturn(CompletableFuture.completedFuture(records));
 
         var actualResult = factory.apply(clickHouseClient, true).execute();
@@ -133,7 +135,7 @@ class ClickHouseExistenceHealthCheckTest {
         var failingFuture = mock(CompletableFuture.class);
         when(failingFuture.get(HEALTH_CHECK_TIMEOUT.toMilliseconds(), TimeUnit.MILLISECONDS))
                 .thenThrow(executionException);
-        when(clickHouseClient.queryRecords(eq(query), argThat(maxExecutionTimeServerSetting())))
+        when(clickHouseClient.queryRecords(eq(query), argThat(probeServerSettings())))
                 .thenReturn(failingFuture);
 
         var actualResult = factory.apply(clickHouseClient, true).execute();
@@ -151,7 +153,7 @@ class ClickHouseExistenceHealthCheckTest {
         var failingFuture = mock(CompletableFuture.class);
         when(failingFuture.get(HEALTH_CHECK_TIMEOUT.toMilliseconds(), TimeUnit.MILLISECONDS))
                 .thenThrow(interruptedException);
-        when(clickHouseClient.queryRecords(eq(query), argThat(maxExecutionTimeServerSetting())))
+        when(clickHouseClient.queryRecords(eq(query), argThat(probeServerSettings())))
                 .thenReturn(failingFuture);
 
         var actualResult = factory.apply(clickHouseClient, true).execute();
@@ -175,9 +177,14 @@ class ClickHouseExistenceHealthCheckTest {
         return databaseAnalytics;
     }
 
-    private ArgumentMatcher<QuerySettings> maxExecutionTimeServerSetting() {
-        return settings -> String.valueOf(HEALTH_CHECK_TIMEOUT_SECONDS)
-                .equals(settings.getAllSettings().get(CLICKHOUSE_SETTING_MAX_EXECUTION_TIME));
+    private ArgumentMatcher<QuerySettings> probeServerSettings() {
+        return settings -> {
+            var allSettings = settings.getAllSettings();
+            var logComment = allSettings.get(CLICKHOUSE_SETTING_LOG_COMMENT);
+            return String.valueOf(HEALTH_CHECK_TIMEOUT_SECONDS)
+                    .equals(allSettings.get(CLICKHOUSE_SETTING_MAX_EXECUTION_TIME))
+                    && logComment instanceof String value && value.startsWith(LOG_COMMENT_PREFIX);
+        };
     }
 
     private void assertResult(HealthCheck.Result actual, HealthCheck.Result expected) {

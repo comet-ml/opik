@@ -5,8 +5,6 @@ import com.clickhouse.client.api.query.Records;
 import io.dropwizard.util.Duration;
 import lombok.NonNull;
 
-import java.util.concurrent.TimeUnit;
-
 /**
  * Toggle-gated probe that asserts a single {@code count()} query returns at least one row — used to
  * verify that a piece of ClickHouse topology (a Distributed cluster definition, a storage disk) is
@@ -45,15 +43,8 @@ abstract class AbstractClickHouseExistenceHealthCheck extends AbstractClickHouse
         if (!enabled) {
             return Result.healthy(disabledMessage);
         }
-        var queryFuture = clickHouseClient.queryRecords(existenceQuery, newQuerySettings());
-        try (var records = queryFuture.get(healthCheckTimeout.toMillis(), TimeUnit.MILLISECONDS)) {
-            return exists(records) ? Result.healthy() : Result.unhealthy(notFoundMessage);
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            return getUnhealthyAndCancelQuery(queryFuture, exception);
-        } catch (Exception exception) {
-            return getUnhealthyAndCancelQuery(queryFuture, exception);
-        }
+        return executeProbe(clickHouseClient.queryRecords(existenceQuery, newQuerySettings()),
+                records -> exists(records) ? Result.healthy() : Result.unhealthy(notFoundMessage));
     }
 
     private static boolean exists(Records records) {
