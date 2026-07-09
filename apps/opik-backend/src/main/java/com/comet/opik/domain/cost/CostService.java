@@ -41,14 +41,6 @@ public class CostService {
             Map.entry("microsoft", "azure"),
             Map.entry("azure", "azure"),
             Map.entry("mistral", "mistral"));
-
-    // Online scoring resolves models to LlmProvider values that don't all match the canonical price-table
-    // vocabulary. Most map 1:1 through PROVIDERS_MAPPING ("gemini" -> "google_ai"; "openai"/"anthropic"/
-    // "bedrock" are identity). Vertex is the exception: it hosts both Google and Anthropic models under
-    // two canonical namespaces, and the "vertex-ai" value alone can't tell them apart, so both are tried
-    // and the model's own price rows decide which one hits. Keyed by the LlmProvider serialized values.
-    private static final Map<String, List<String>> RUNTIME_PROVIDER_CANONICALS = Map.of(
-            "vertex-ai", List.of("google_vertexai", "anthropic_vertexai"));
     public static final String MODEL_PRICES_FILE = "model_prices_and_context_window.json";
     public static final String MODEL_PRICES_OVERRIDES_FILE = "model_prices_overrides.json";
     private static final String BEDROCK_PROVIDER = "bedrock";
@@ -88,39 +80,6 @@ public class CostService {
     }
 
     /**
-     * Resolves the price for {@code (modelName, provider)}, canonicalizing the provider first so callers
-     * that hold an {@code LlmProvider} value (e.g. online scoring, which passes "gemini"/"vertex-ai") hit
-     * the same rows as callers that already pass the canonical name (e.g. span ingestion, "google_ai").
-     * The price map is keyed by the canonical provider, so without this a runtime provider name misses and
-     * cost silently resolves to zero. Tries each candidate namespace and returns the first hit.
-     */
-    private static ModelPrice findModelPrice(String modelName, String provider) {
-        if (StringUtils.isBlank(provider)) {
-            return DEFAULT_COST;
-        }
-        for (String candidateProvider : candidateProviders(provider)) {
-            ModelPrice price = lookupModelPrice(modelName, candidateProvider);
-            if (price != DEFAULT_COST) {
-                return price;
-            }
-        }
-        return DEFAULT_COST;
-    }
-
-    /**
-     * Candidate canonical provider names to try for a given input provider. A canonical name (or an
-     * unknown one) passes through unchanged; a name in {@link #PROVIDERS_MAPPING} maps to its canonical
-     * form; Vertex maps to both of its canonical namespaces (Google + Anthropic hosted models).
-     */
-    private static List<String> candidateProviders(String provider) {
-        List<String> vertexCandidates = RUNTIME_PROVIDER_CANONICALS.get(provider);
-        if (vertexCandidates != null) {
-            return vertexCandidates;
-        }
-        return List.of(PROVIDERS_MAPPING.getOrDefault(provider, provider));
-    }
-
-    /**
      * Finds model pricing information with fallback to normalized model names.
      * This method provides backwards compatibility by first trying exact match,
      * then falling back to normalized variations.
@@ -139,10 +98,10 @@ public class CostService {
      * base model name (e.g. "anthropic.claude-opus-4-6-v1") used in the pricing database.
      *
      * @param modelName The model name (may contain dots or provider prefix, e.g., "openai/gpt-4o")
-     * @param provider The canonical provider name (e.g., "anthropic")
+     * @param provider The provider name (e.g., "anthropic")
      * @return ModelPrice for the model, or DEFAULT_COST if not found
      */
-    private static ModelPrice lookupModelPrice(String modelName, String provider) {
+    private static ModelPrice findModelPrice(String modelName, String provider) {
         if (StringUtils.isBlank(modelName) || StringUtils.isBlank(provider)) {
             return DEFAULT_COST;
         }
