@@ -167,6 +167,47 @@ def _safe_prompt_history(
         return []
 
 
+def _build_prompt_export_data(
+    client: opik.Opik,
+    prompt: Union[Prompt, ChatPrompt],
+    prompt_history: List[Union[Prompt, ChatPrompt]],
+    project_name: str,
+    base: dict,
+    extra: Optional[dict] = None,
+) -> dict:
+    """Assemble the serialized prompt payload shared by every export path.
+
+    ``base`` carries the path-specific identity fields (a flat ``id``/``name`` or
+    a nested ``prompt`` block), ``extra`` any additional top-level keys. The
+    shared ``current_version``/``history``/``downloaded_at`` block — including the
+    container-level tag resolution — lives here so the exported schema stays in
+    sync across paths and tags cannot be dropped on one of them.
+    """
+    current_version = _build_version_data(prompt)
+    current_version["tags"] = _resolve_prompt_tags(client, prompt, project_name)
+    prompt_data = {
+        **base,
+        "current_version": current_version,
+        "history": [_build_version_data(version) for version in prompt_history],
+        "downloaded_at": datetime.now().isoformat(),
+    }
+    if extra:
+        prompt_data.update(extra)
+    return prompt_data
+
+
+def _write_prompt_export_file(
+    prompt_data: dict,
+    prompt_file: Path,
+    format: str,
+) -> None:
+    """Write a prompt payload to disk in the requested format."""
+    if format.lower() == "csv":
+        write_csv_data(prompt_data, prompt_file, prompt_to_csv_rows)
+    else:
+        write_json_data(prompt_data, prompt_file)
+
+
 def export_single_prompt(
     client: opik.Opik,
     prompt: Union[Prompt, ChatPrompt],
@@ -194,22 +235,17 @@ def export_single_prompt(
         prompt_history = _safe_prompt_history(client, prompt, project_name)
 
         # Create prompt data structure. Tags are container-level and not
-        # surfaced by the direct lookup, so resolve them explicitly.
-        current_version = _build_version_data(prompt)
-        current_version["tags"] = _resolve_prompt_tags(client, prompt, project_name)
-        prompt_data = {
-            "id": prompt_id,
-            "name": prompt.name,
-            "current_version": current_version,
-            "history": [_build_version_data(version) for version in prompt_history],
-            "downloaded_at": datetime.now().isoformat(),
-        }
+        # surfaced by the direct lookup; the shared helper resolves them.
+        prompt_data = _build_prompt_export_data(
+            client,
+            prompt,
+            prompt_history,
+            project_name,
+            base={"id": prompt_id, "name": prompt.name},
+        )
 
         # Save to file using the appropriate format
-        if format.lower() == "csv":
-            write_csv_data(prompt_data, prompt_file, prompt_to_csv_rows)
-        else:
-            write_json_data(prompt_data, prompt_file)
+        _write_prompt_export_file(prompt_data, prompt_file, format)
 
         if debug:
             debug_print(f"Exported prompt: {prompt.name}", debug)
@@ -381,35 +417,37 @@ def export_prompts_by_ids(
                 )
 
             # Create prompt data structure. Tags are container-level and not
-            # surfaced by the direct lookup, so resolve them explicitly.
-            current_version = _build_version_data(prompt)
-            current_version["tags"] = _resolve_prompt_tags(client, prompt, project_name)
-            prompt_data = {
-                "prompt": {
-                    "id": getattr(prompt, "id", None),
-                    "name": prompt.name,
-                    "description": getattr(prompt, "description", None),
-                    "created_at": (
-                        created_at.isoformat()
-                        if (created_at := getattr(prompt, "created_at", None))
-                        else None
-                    ),
-                    "last_updated_at": (
-                        last_updated_at.isoformat()
-                        if (last_updated_at := getattr(prompt, "last_updated_at", None))
-                        else None
-                    ),
+            # surfaced by the direct lookup; the shared helper resolves them.
+            prompt_data = _build_prompt_export_data(
+                client,
+                prompt,
+                prompt_history,
+                project_name,
+                base={
+                    "prompt": {
+                        "id": getattr(prompt, "id", None),
+                        "name": prompt.name,
+                        "description": getattr(prompt, "description", None),
+                        "created_at": (
+                            created_at.isoformat()
+                            if (created_at := getattr(prompt, "created_at", None))
+                            else None
+                        ),
+                        "last_updated_at": (
+                            last_updated_at.isoformat()
+                            if (
+                                last_updated_at := getattr(
+                                    prompt, "last_updated_at", None
+                                )
+                            )
+                            else None
+                        ),
+                    },
                 },
-                "current_version": current_version,
-                "history": [_build_version_data(version) for version in prompt_history],
-                "downloaded_at": datetime.now().isoformat(),
-            }
+            )
 
             # Save prompt data using the appropriate format
-            if format.lower() == "csv":
-                write_csv_data(prompt_data, prompt_file, prompt_to_csv_rows)
-            else:
-                write_json_data(prompt_data, prompt_file)
+            _write_prompt_export_file(prompt_data, prompt_file, format)
 
             console.print(f"[green]Exported prompt: {prompt.name or prompt_id}[/green]")
             exported_count += 1
@@ -527,26 +565,23 @@ def export_related_prompts_by_name(
                 prompt_history = _safe_prompt_history(client, prompt, project_name)
 
                 # Create prompt data structure. Tags are container-level and not
-                # surfaced by the direct lookup, so resolve them explicitly.
-                current_version = _build_version_data(prompt)
-                current_version["tags"] = _resolve_prompt_tags(
-                    client, prompt, project_name
-                )
-                prompt_data = {
-                    "prompt": {
-                        "id": getattr(prompt, "__internal_api__prompt_id__", None),
-                        "name": prompt.name,
-                        "description": getattr(prompt, "description", None),
-                        "created_at": getattr(prompt, "created_at", None),
-                        "last_updated_at": getattr(prompt, "last_updated_at", None),
+                # surfaced by the direct lookup; the shared helper resolves them.
+                prompt_data = _build_prompt_export_data(
+                    client,
+                    prompt,
+                    prompt_history,
+                    project_name,
+                    base={
+                        "prompt": {
+                            "id": getattr(prompt, "__internal_api__prompt_id__", None),
+                            "name": prompt.name,
+                            "description": getattr(prompt, "description", None),
+                            "created_at": getattr(prompt, "created_at", None),
+                            "last_updated_at": getattr(prompt, "last_updated_at", None),
+                        },
                     },
-                    "current_version": current_version,
-                    "history": [
-                        _build_version_data(version) for version in prompt_history
-                    ],
-                    "downloaded_at": datetime.now().isoformat(),
-                    "related_to_experiment": experiment.name or experiment.id,
-                }
+                    extra={"related_to_experiment": experiment.name or experiment.id},
+                )
 
                 # File is keyed by prompt ID (the name lives inside the file).
                 ext = "csv" if format.lower() == "csv" else "json"
@@ -560,10 +595,7 @@ def export_related_prompts_by_name(
                     continue
 
                 # File doesn't exist or force is set, so export it
-                if format.lower() == "csv":
-                    write_csv_data(prompt_data, prompt_file, prompt_to_csv_rows)
-                else:
-                    write_json_data(prompt_data, prompt_file)
+                _write_prompt_export_file(prompt_data, prompt_file, format)
 
                 console.print(f"[green]Exported related prompt: {prompt.name}[/green]")
                 exported_count += 1
