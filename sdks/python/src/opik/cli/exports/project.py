@@ -522,12 +522,12 @@ def export_traces(
 
         # Fallback cache for the unbounded span scan.  When a chunk's trace ids
         # can't be bounded by a trace_id range filter (e.g. non-UUIDv7 ids), the
-        # backend has to scan every span in the project.  That scan is done once
-        # for the whole export and cached here so subsequent chunks reuse it
-        # instead of re-scanning the entire project on every flush (which would
-        # make a large export O(chunks × full-scan) and time out).
+        # backend has to scan every span in the project.  A *clean* full scan is
+        # cached here once so subsequent chunks reuse it instead of re-scanning
+        # the entire project on every flush (which would make a large export
+        # O(chunks × full-scan) and time out).  A scan that errors out is never
+        # published here — it stays partial and the next chunk retries.
         unbounded_spans_cache: Optional[dict[str, list]] = None
-        unbounded_scan_had_errors = False
 
         def _scan_and_group_spans(
             spans_filter: Optional[str],
@@ -636,7 +636,7 @@ def export_traces(
 
             Returns (spans_by_trace_id, chunk_had_errors).
             """
-            nonlocal unbounded_spans_cache, unbounded_scan_had_errors
+            nonlocal unbounded_spans_cache
 
             spans_by_trace_id: dict[str, list] = {tid: [] for tid in traces_to_fetch}
             chunk_had_errors = False
@@ -659,20 +659,25 @@ def export_traces(
                     return spans_by_trace_id, chunk_had_errors
 
                 # No trace_id range filter could be built (e.g. non-UUIDv7 ids),
-                # so the backend must scan every span in the project. Do that once
-                # for the whole export and cache the grouped result; repeating the
-                # full scan per chunk would make a large export O(chunks × full-scan)
-                # and time out.
-                unbounded_spans_cache = {}
-                unbounded_scan_had_errors = _scan_and_group_spans(
-                    None, unbounded_spans_cache, only_known_ids=False
+                # so the backend must scan every span in the project. Scan into a
+                # local map and only publish it as the shared cache when the scan
+                # completes cleanly, so later chunks reuse a *complete* scan rather
+                # than a partially-populated one poisoned by a transient error.
+                scanned: dict[str, list] = {}
+                scan_had_errors = _scan_and_group_spans(
+                    None, scanned, only_known_ids=False
                 )
+                if scan_had_errors:
+                    # Use the partial result for this chunk (some spans beat none)
+                    # and flag the error, but leave the cache unpublished so the
+                    # next chunk retries the scan instead of reusing partial data.
+                    for tid in spans_by_trace_id:
+                        spans_by_trace_id[tid] = scanned.get(tid, [])
+                    return spans_by_trace_id, True
+                unbounded_spans_cache = scanned
 
-            # Serve this chunk from the cached full scan (built now or by an
-            # earlier chunk). A partial scan (errors) is surfaced on every chunk
-            # it feeds so the manifest is left incomplete and the next run resumes.
-            if unbounded_scan_had_errors:
-                chunk_had_errors = True
+            # Serve this chunk from the cached (clean) full scan — built just now
+            # or by an earlier chunk.
             for tid in spans_by_trace_id:
                 spans_by_trace_id[tid] = unbounded_spans_cache.get(tid, [])
 

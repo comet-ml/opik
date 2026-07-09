@@ -525,6 +525,70 @@ class TestExportTracesChunking:
         # cache — not one full scan per chunk.
         assert len(span_page_requests) == 1
 
+    def test_export_traces__unbounded_scan_errors__cache_not_poisoned_and_retried(self):
+        """A transient failure during the unbounded scan must not poison the
+        cache for the rest of the export.
+
+        The errored scan is left unpublished, so a later chunk retries the scan
+        (and can complete cleanly) instead of every remaining chunk silently
+        reusing a partially-populated result.
+
+        Failure is injected at the private ``_fetch_spans_page`` transport helper
+        (as the sibling span-failure test does): patching the public client
+        boundary would trigger the real 8-attempt retry decorator, making
+        controlled per-page failure injection impractical.
+        """
+        from opik.cli.exports.project import export_traces
+
+        # Non-UUIDv7 ids force the unbounded-scan fallback.
+        page1 = _make_full_page(2, offset=0)
+        page2 = _make_full_page(2, offset=2)
+        page3 = _make_full_page(2, offset=4)
+        mock_client = MagicMock()
+        mock_client.rest_client.traces.get_traces_by_project.side_effect = [
+            page1,
+            page2,
+            page3,
+            _make_page([]),
+        ]
+
+        # One "session" == one _scan_and_group_spans() pagination run, which
+        # always starts at page 1. The first chunk's scan fails every page (so it
+        # aborts after MAX_CONSECUTIVE_PAGE_FAILURES); later scans succeed.
+        scan_sessions = []
+
+        def span_fetch_side_effect(
+            client, project_name, page, page_size, parsed_filter=None
+        ):
+            if page == 1:
+                scan_sessions.append([])
+            scan_sessions[-1].append(page)
+            if len(scan_sessions) == 1:
+                raise ApiError(status_code=503)
+            return _make_page([])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch(
+                f"{_MODULE}._fetch_spans_page", side_effect=span_fetch_side_effect
+            ):
+                with patch(f"{_MODULE}.time.sleep"):
+                    exported, skipped, had_errors = export_traces(
+                        client=mock_client,
+                        project_name="proj",
+                        project_dir=Path(tmp),
+                        max_results=None,
+                        filter_string=None,
+                        show_progress=False,
+                        page_size=2,
+                    )
+
+        # All traces still written; the failed scan is flagged.
+        assert (exported, skipped) == (6, 0)
+        assert had_errors is True
+        # The failed scan was not cached, so a later chunk retried it (a second
+        # session). That retry succeeded and was cached, so no third session.
+        assert len(scan_sessions) == 2
+
 
 # ---------------------------------------------------------------------------
 # export_traces — inter-page delay
