@@ -2168,6 +2168,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "x-ai/grok-4.3",
     },
     {
+      value: PROVIDER_MODEL_TYPE.X_AI_GROK_4_5,
+      label: "x-ai/grok-4.5",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.X_AI_GROK_BUILD_0_1,
       label: "x-ai/grok-build-0.1",
     },
@@ -2290,6 +2294,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_MINI_LATEST,
       label: "~openai/gpt-mini-latest",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.X_AI_GROK_LATEST,
+      label: "~x-ai/grok-latest",
     },
   ],
 

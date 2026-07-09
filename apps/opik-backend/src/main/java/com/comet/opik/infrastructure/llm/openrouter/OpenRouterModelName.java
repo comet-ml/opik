@@ -523,6 +523,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     X_AI_GROK_4_20_MULTI_AGENT("x-ai/grok-4.20-multi-agent"),
     X_AI_GROK_4_20_MULTI_AGENT_BETA("x-ai/grok-4.20-multi-agent-beta"),
     X_AI_GROK_4_3("x-ai/grok-4.3"),
+    X_AI_GROK_4_5("x-ai/grok-4.5"),
     X_AI_GROK_BUILD_0_1("x-ai/grok-build-0.1"),
     X_AI_GROK_CODE_FAST_1("x-ai/grok-code-fast-1"),
     XIAOMI_MIMO_V2_FLASH("xiaomi/mimo-v2-flash"),
@@ -553,7 +554,8 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     GOOGLE_GEMINI_PRO_LATEST("~google/gemini-pro-latest"),
     MOONSHOTAI_KIMI_LATEST("~moonshotai/kimi-latest"),
     OPENAI_GPT_LATEST("~openai/gpt-latest"),
-    OPENAI_GPT_MINI_LATEST("~openai/gpt-mini-latest");
+    OPENAI_GPT_MINI_LATEST("~openai/gpt-mini-latest"),
+    X_AI_GROK_LATEST("~x-ai/grok-latest");
 
     private static final String WARNING_UNKNOWN_MODEL = "could not find OpenRouterModelName with value '{}'";
 
