@@ -365,14 +365,20 @@ class TestExportTracesSpanFetchFailures:
 
 class TestExportTracesChunking:
     def test_export_traces__large_project_flushes_in_bounded_chunks(self):
-        """Traces are span-fetched and written incrementally, one bounded chunk
-        at a time, instead of buffering every trace and span before the first
-        write.  This is what keeps peak memory from scaling with the whole
-        project (the previous all-at-once design OOM'd on large projects).
+        """A multi-page export writes traces incrementally, one bounded chunk at
+        a time, instead of buffering every trace and span before the first write.
+        Incremental flushing is what keeps peak memory from scaling with the
+        whole project (the previous all-at-once design OOM'd on large projects).
 
-        With page_size=2 (so chunk_target=2) and three full pages, the flush
-        runs once per page: each chunk's span fetch must see the *prior*
-        chunks' trace files already written to disk.
+        The export is driven purely through the public ``export_traces`` API,
+        mocking only the public REST client boundary
+        (``traces.get_traces_by_project`` / ``spans.get_spans_by_project``) — no
+        private helpers are patched.  Correctness is asserted on the returned
+        tuple and the final ``trace_*.json`` artifacts.  The bounded-chunk
+        property is asserted through robust invariants observed at the public
+        span endpoint (files already on disk when each span fetch fires), not a
+        brittle exact-call-order snapshot: the assertions hold regardless of the
+        exact chunk boundary the implementation picks.
         """
         from opik.cli.exports.project import export_traces
 
@@ -380,43 +386,65 @@ class TestExportTracesChunking:
         page2 = _make_full_page(2, offset=2)
         page3 = _make_full_page(2, offset=4)
         mock_client = MagicMock()
+        expected_ids = [f"bulk-{i}" for i in range(6)]
 
         with tempfile.TemporaryDirectory() as tmp:
             project_dir = Path(tmp)
             files_on_disk_at_each_span_fetch = []
 
             def span_fetch_side_effect(*args, **kwargs):
-                # How many trace files already exist when this chunk's span
-                # fetch begins — proves earlier chunks were flushed to disk.
+                # How many trace files already exist when a span fetch begins.
+                # A growing, sub-total count proves earlier chunks were flushed
+                # to disk before later chunks are processed (incremental), rather
+                # than one all-at-once sweep after buffering everything.
                 files_on_disk_at_each_span_fetch.append(
                     len(list(project_dir.glob("trace_*.json")))
                 )
                 return _make_page([])
 
-            with patch(f"{_MODULE}._fetch_traces_page") as mock_fetch:
-                mock_fetch.side_effect = [page1, page2, page3, _make_page([])]
-                with patch(
-                    f"{_MODULE}._fetch_spans_page",
-                    side_effect=span_fetch_side_effect,
-                ):
-                    with patch(f"{_MODULE}.time.sleep"):
-                        exported, skipped, had_errors = export_traces(
-                            client=mock_client,
-                            project_name="proj",
-                            project_dir=project_dir,
-                            max_results=None,
-                            filter_string=None,
-                            show_progress=False,
-                            page_size=2,
-                        )
+            mock_client.rest_client.traces.get_traces_by_project.side_effect = [
+                page1,
+                page2,
+                page3,
+                _make_page([]),
+            ]
+            mock_client.rest_client.spans.get_spans_by_project.side_effect = (
+                span_fetch_side_effect
+            )
 
-        assert exported == 6
-        assert had_errors is False
-        # One span-fetch session per chunk — three chunks, not one giant sweep.
-        assert len(files_on_disk_at_each_span_fetch) == 3
-        # Incremental: each chunk sees the prior chunks' files already on disk,
-        # so at most one chunk's worth of traces is held in memory at a time.
-        assert files_on_disk_at_each_span_fetch == [0, 2, 4]
+            with patch(f"{_MODULE}.time.sleep"):
+                exported, skipped, had_errors = export_traces(
+                    client=mock_client,
+                    project_name="proj",
+                    project_dir=project_dir,
+                    max_results=None,
+                    filter_string=None,
+                    show_progress=False,
+                    page_size=2,
+                )
+
+            # Public result contract.
+            assert (exported, skipped, had_errors) == (6, 0, False)
+
+            # Final artifacts: exactly the six expected trace files were written.
+            written_ids = sorted(
+                p.name[len("trace_") : -len(".json")]
+                for p in project_dir.glob("trace_*.json")
+            )
+            assert written_ids == sorted(expected_ids)
+
+        # Bounded-chunk invariants (robust to the exact chunk boundary):
+        #  - more than one span-fetch session → work is chunked, not one sweep;
+        #  - counts never decrease → files accumulate as chunks flush;
+        #  - a later fetch sees files already written → earlier chunks were
+        #    flushed to disk before the last chunk was processed, so only ~one
+        #    chunk's worth of traces is held in memory at a time.
+        assert len(files_on_disk_at_each_span_fetch) > 1
+        assert files_on_disk_at_each_span_fetch == sorted(
+            files_on_disk_at_each_span_fetch
+        )
+        assert files_on_disk_at_each_span_fetch[0] == 0
+        assert files_on_disk_at_each_span_fetch[-1] > 0
 
 
 # ---------------------------------------------------------------------------

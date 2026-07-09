@@ -872,27 +872,27 @@ def export_traces(
                             )
                         skipped_count += 1
                         total_processed += 1
-                    else:
-                        # File was deleted after the manifest was written — re-download.
-                        if debug:
-                            debug_print(
-                                f"Trace {trace.id} in manifest but file missing; re-downloading",
-                                debug,
-                            )
-                        already_downloaded.discard(trace.id)
-                        traces_to_fetch[trace.id] = trace
-                        total_processed += 1
-                else:
-                    traces_to_fetch[trace.id] = trace
-                    total_processed += 1
+                        continue
+                    # File was deleted after the manifest was written — re-download.
+                    if debug:
+                        debug_print(
+                            f"Trace {trace.id} in manifest but file missing; re-downloading",
+                            debug,
+                        )
+                    already_downloaded.discard(trace.id)
+
+                traces_to_fetch[trace.id] = trace
+                total_processed += 1
+
+                # Flush the moment the buffer fills — mid-page if necessary — so
+                # peak memory stays bounded to ≈ one chunk of traces + their
+                # spans.  Checking only after a whole page is appended would let
+                # the buffer grow to almost two chunks (a nearly full buffer plus
+                # a freshly appended page).
+                if len(traces_to_fetch) >= chunk_target:
+                    _flush_chunk()
 
             current_page += 1
-
-            # Flush the chunk once enough traces are queued so peak memory stays
-            # bounded (≈ one chunk of traces + their spans) rather than growing
-            # with the whole project.
-            if len(traces_to_fetch) >= chunk_target:
-                _flush_chunk()
 
             # If we got fewer traces than requested, we've reached the end
             if len(traces) < current_page_size:
