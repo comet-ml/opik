@@ -476,7 +476,33 @@ class TraceServiceImpl implements TraceService {
     public Mono<Void> delete(@NonNull Set<UUID> ids, UUID projectId) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
         log.info("Deleting traces, count '{}'", ids.size());
-        return template.nonTransaction(connection -> delete(ids, projectId, connection));
+
+        if (projectId != null) {
+            return template.nonTransaction(connection -> delete(ids, projectId, connection));
+        }
+
+        // No project provided (e.g. delete-by-id, or a batch spanning projects): resolve each trace's owning
+        // project and delete per project group, so every delete - and its async span/feedback cascade carried
+        // by the TracesDeleted event - filters by project_id and prunes on the (workspace_id, project_id)
+        // sorting-key prefix instead of scanning the whole workspace. Trace ids with no resolvable project
+        // (the trace row is already gone) fall back to a workspace-scoped delete to still clean up orphan rows.
+        log.info("Resolving owning projects for trace ids to delete per project group (count={})", ids.size());
+        return dao.getProjectIdsByTraceIdsBounded(ids)
+                .flatMap(traceToProject -> {
+                    var idsByProject = ids.stream()
+                            .filter(traceToProject::containsKey)
+                            .collect(Collectors.groupingBy(traceToProject::get, Collectors.toSet()));
+                    var unresolvedIds = ids.stream()
+                            .filter(id -> !traceToProject.containsKey(id))
+                            .collect(Collectors.toSet());
+
+                    return template.nonTransaction(connection -> Flux.fromIterable(idsByProject.entrySet())
+                            .concatMap(group -> delete(group.getValue(), group.getKey(), connection))
+                            .then(Mono.defer(() -> unresolvedIds.isEmpty()
+                                    ? Mono.empty()
+                                    : delete(unresolvedIds, null, connection)))
+                            .then());
+                });
     }
 
     private Mono<Void> delete(Set<UUID> ids, UUID projectId, Connection connection) {
