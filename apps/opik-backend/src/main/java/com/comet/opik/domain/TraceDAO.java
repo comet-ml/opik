@@ -112,6 +112,9 @@ public interface TraceDAO {
 
     Mono<TracePage> find(int size, int page, TraceSearchCriteria traceSearchCriteria, Connection connection);
 
+    Mono<Boolean> existsByProjectId(TraceSearchCriteria traceSearchCriteria, boolean threadScoped,
+            Connection connection);
+
     Mono<Void> partialInsert(UUID projectId, TraceUpdate traceUpdate, UUID traceId, Connection connection);
 
     Mono<List<WorkspaceAndResourceId>> getTraceWorkspace(Set<UUID> traceIds, Connection connection);
@@ -1479,6 +1482,40 @@ class TraceDAOImpl implements TraceDAO {
             GROUP BY workspace_id, created_by
             SETTINGS log_comment = '<log_comment>'
             ;
+            """;
+
+    /**
+     * Cheap "does the project have any trace?" probe for the Logs empty state. Deliberately minimal —
+     * project scope only — so it is always a primary-key-prunable {@code LIMIT 1} (traces sort key is
+     * {@code (workspace_id, project_id, id)}). It intentionally does not support arbitrary filters, search, or
+     * time ranges: no consumer needs them, and adding them back would reintroduce a full-project COUNT fallback.
+     */
+    private static final String EXISTS_BY_PROJECT_ID = """
+            SELECT 1 AS exist
+            FROM traces
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            <if(source)> AND source IN (:source<if(source_legacy)>, :source_legacy<endif>) <endif>
+            LIMIT 1
+            SETTINGS log_comment = '<log_comment>'
+            """;
+
+    /**
+     * Thread-scoped variant backing the Threads tab empty state. Probes {@code trace_threads}, not
+     * {@code traces WHERE thread_id != ''}: {@code thread_id} is not in the {@code traces} sort key, and its
+     * only index there is a bloom filter that serves equality, not the {@code != ''} inequality — so that
+     * predicate could not prune and would scan the whole project on exactly the no-threads empty state it
+     * targets. {@code trace_threads} is ordered by {@code (workspace_id, project_id, thread_id, id)}, so project
+     * scope is primary-key-prunable, and it is the same table the Threads list reads (consistent empty state).
+     */
+    private static final String THREADS_EXISTS_BY_PROJECT_ID = """
+            SELECT 1 AS exist
+            FROM trace_threads
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            <if(source)> AND source IN (:source<if(source_legacy)>, :source_legacy<endif>) <endif>
+            LIMIT 1
+            SETTINGS log_comment = '<log_comment>'
             """;
 
     private static final String COUNT_BY_PROJECT_ID = """
@@ -3678,6 +3715,46 @@ class TraceDAOImpl implements TraceDAO {
                         .collectList()
                         .map(traces -> new TracePage(page, traces.size(), total, traces,
                                 sortingFactory.getSortableFields())));
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Boolean> existsByProjectId(@NonNull TraceSearchCriteria traceSearchCriteria, boolean threadScoped,
+            @NonNull Connection connection) {
+        return makeMonoContextAware((userName, workspaceId) -> {
+            var template = getSTWithLogComment(
+                    threadScoped ? THREADS_EXISTS_BY_PROJECT_ID : EXISTS_BY_PROJECT_ID,
+                    threadScoped ? "exists_threads_by_project_id" : "exists_traces_by_project_id",
+                    workspaceId, userName, "");
+
+            var source = traceSearchCriteria.source();
+            var sourceLegacy = source == null
+                    ? Optional.<String>empty()
+                    : Source.legacyFallbackDbValue(source.getValue());
+            if (source != null) {
+                template.add("source", true);
+                if (sourceLegacy.isPresent()) {
+                    template.add("source_legacy", true);
+                }
+            }
+
+            var statement = connection.createStatement(template.render())
+                    .bind("project_id", traceSearchCriteria.projectId())
+                    .bind("workspace_id", workspaceId);
+
+            if (source != null) {
+                statement.bind("source", source.getValue());
+                sourceLegacy.ifPresent(legacy -> statement.bind("source_legacy", legacy));
+            }
+
+            Segment segment = startSegment("traces", "Clickhouse",
+                    threadScoped ? "existsThreadsByProjectId" : "existsByProjectId");
+
+            return Mono.from(statement.execute())
+                    .doFinally(signalType -> endSegment(segment));
+        })
+                .flatMap(result -> Mono.from(result.map((row, metadata) -> true)))
+                .defaultIfEmpty(false);
     }
 
     @Override
