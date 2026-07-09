@@ -96,11 +96,7 @@ This workflow will:
   - If found, store the status (e.g., "Baz approved: ✅" or "Baz status: pending")
   - If not found or unavailable, skip this field (it\'s optional)
 
-- **Extract PR size**:
-  - The `📏 Auto Label PR Size` workflow applies one size label to every PR. Read the PR labels and look for a `size/*` label: `🔵 size/XS`, `🟢 size/S`, `🟡 size/M`, `🟠 size/L`, or `🔴 size/XL`.
-  - Store the bucket as `{emoji} {BUCKET}` (e.g. `🟠 L`) — just the bucket, no line counts.
-  - If no size label is present yet (the workflow may not have run), derive the bucket from the PR\'s changed lines (`additions + deletions`, ignoring lockfiles/generated clients): XS < 20, S 20–100, M 101–300, L 301–600, XL > 600 — and still store only `{emoji} {BUCKET}`.
-  - GitHub is the source of truth; the size at message-publish time is good enough (PRs rarely change bucket after review starts).
+- **Extract PR size**: Follow the shared steps in `.agents/docs/PR_SIZE_EXTRACTION.md` (read the `size/*` label; fall back to changed lines using the workflow's own ignore list + thresholds). Store the bucket as `{emoji} {BUCKET}` (e.g. `🟠 L`).
 
 - **Extract test environment link from PR description and comments**:
   - First, search PR comments for test environment deployment messages (look for "Test environment is now available!" or similar)
