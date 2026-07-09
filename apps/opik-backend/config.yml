@@ -578,6 +578,32 @@ rateLimit:
       userFacingBucketName: get_trace_stats
       # Description: Rate limit error message
       errorMessage: "You have exceeded the rate limit for this operation. Please try again later."
+    tracesExist:
+      # Default: 30
+      # Description: how many tracesExist empty-state probes are allowed per workspace in the specified time bucket
+      limit: ${RATE_LIMIT_TRACES_EXIST_EVENTS_PER_WORKSPACE_LIMIT:-30}
+      # Default: 60
+      # Description: Time bucket size in seconds
+      durationInSeconds: ${RATE_LIMIT_WORKSPACE_EVENTS_DURATION_IN_SEC:-60}
+      # Description: Header name to use for rate limiting
+      headerName: Traces-Exist
+      # Description: User facing bucket name
+      userFacingBucketName: traces_exist
+      # Description: Rate limit error message
+      errorMessage: "You have exceeded the rate limit for this operation. Please try again later."
+    spansExist:
+      # Default: 30
+      # Description: how many spansExist empty-state probes are allowed per workspace in the specified time bucket
+      limit: ${RATE_LIMIT_SPANS_EXIST_EVENTS_PER_WORKSPACE_LIMIT:-30}
+      # Default: 60
+      # Description: Time bucket size in seconds
+      durationInSeconds: ${RATE_LIMIT_WORKSPACE_EVENTS_DURATION_IN_SEC:-60}
+      # Description: Header name to use for rate limiting
+      headerName: Spans-Exist
+      # Description: User facing bucket name
+      userFacingBucketName: spans_exist
+      # Description: Rate limit error message
+      errorMessage: "You have exceeded the rate limit for this operation. Please try again later."
     mcpOAuthRegister:
       # Default: 20
       # Description: Max dynamic client registrations (RFC 7591) accepted per source IP in the specified time bucket

@@ -94,6 +94,13 @@ public class SpanService {
                         }));
     }
 
+    @WithSpan
+    public Mono<Boolean> existsByProjectId(@NonNull SpanSearchCriteria searchCriteria) {
+        return findProjectAndVerifyVisibility(searchCriteria)
+                .flatMap(spanDAO::existsByProjectId)
+                .switchIfEmpty(Mono.just(false));
+    }
+
     private Mono<SpanSearchCriteria> findProjectAndVerifyVisibility(SpanSearchCriteria searchCriteria) {
         return projectService
                 .resolveProjectIdAndVerifyVisibility(searchCriteria.projectId(), searchCriteria.projectName())
