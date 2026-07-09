@@ -13,10 +13,12 @@ concurrency:
 jobs:
     run:
         runs-on: ubuntu-latest
-        # The crawl dominates runtime; linkinator's own --retry/--retry-errors add bounded
-        # backoff for transient 429/5xx rather than a separate re-verify phase. 20 gives
-        # headroom over the old 15-min ceiling while the step logs reveal the true duration.
-        timeout-minutes: 20
+        # A single crawl at --concurrency 25 takes ~17 min (the docs publish two version
+        # trees, latest + v1, ~4k pages total; 25 is the only concurrency the crawl survives
+        # — see the crawl comment below). linkinator crashes on any unhandled socket error,
+        # so we retry the whole crawl until it yields valid JSON; 30 min leaves room for a
+        # second attempt after a first-attempt crash.
+        timeout-minutes: 30
         permissions: write-all
         steps:
             - name: Checkout repository
@@ -44,22 +46,23 @@ jobs:
               run: |
                 echo -e "\n\n" >> preview_url.txt
 
-                # --retry/--retry-errors handle per-link transience (429 Retry-After, 5xx and
-                # network/"unknown" responses) with backoff+jitter, so we don't re-verify links
-                # ourselves. But they can't rescue a crawl that CRASHES: linkinator emits an
-                # unhandled 'error' event on a dropped socket ("SocketError: other side closed"),
-                # which throws and kills the process with no JSON written — there is no per-link
-                # result left to retry. So we also retry the whole crawl once, and send stderr to
-                # the step log (NOT /dev/null) so a crash is diagnosable. --concurrency 25 keeps
-                # the burst small enough to make the crash rare in the first place.
+                # linkinator@7.x crashes the whole Node process on ANY unhandled stream 'error'
+                # event — a CloudFront keep-alive socket reaped mid-read (ECONNRESET) or a
+                # request abort both throw and kill the crawl with no JSON written. There is no
+                # flag that fixes this (it's a bug in the tool), and every knob that adds socket
+                # churn makes it worse: --concurrency > 25 crashes reliably; --timeout turns each
+                # timeout into a crashing abort; --retry-errors hammers failing links until the
+                # crawl hangs. So: crawl at 25 (empirically the only survivable concurrency),
+                # keep only --retry (safe, bounded 429/Retry-After handling), skip the big
+                # off-preview trees we don't own, send stderr to the step log (NOT /dev/null) so
+                # a crash is diagnosable, and simply retry the whole crawl until it yields valid
+                # JSON. The crash is a random per-socket event, so a fresh attempt usually
+                # succeeds; timeout-minutes above budgets for a second ~17-min run.
                 crawl() {
                   npx linkinator ${{ steps.generate-docs.outputs.URL }} \
                     --recurse \
                     --concurrency 25 \
                     --retry \
-                    --retry-errors \
-                    --retry-errors-count 3 \
-                    --retry-errors-jitter 2000 \
                     --skip "search\/v2\/key" \
                     --skip "https://ai.google.dev/gemini-api" \
                     --skip "https://ai.google.dev/aistudio" \
@@ -68,15 +71,24 @@ jobs:
                     --skip "http://localhost:5173" \
                     --skip "googletagmanager.com" \
                     --skip "insights/script.js" \
+                    --skip "www.comet.com" \
+                    --skip "files.buildwithfern.com" \
+                    --skip "github.com" \
+                    --skip "raw.githubusercontent.com" \
                     --format json > linkinator_results.json || true
                 }
                 json_ok() { jq -e 'type == "object" and (.links | type == "array")' linkinator_results.json > /dev/null 2>&1; }
 
-                crawl
-                if ! json_ok; then
-                  echo "Crawl produced no valid JSON (likely a dropped-socket crash); retrying once..."
+                MAX_CRAWL_ATTEMPTS=2
+                for attempt in $(seq 1 "$MAX_CRAWL_ATTEMPTS"); do
+                  echo "Crawl attempt $attempt/$MAX_CRAWL_ATTEMPTS..."
                   crawl
-                fi
+                  if json_ok; then
+                    echo "Crawl attempt $attempt produced valid JSON."
+                    break
+                  fi
+                  echo "Crawl attempt $attempt produced no valid JSON (likely an unhandled-socket-error crash)."
+                done
 
                 PREVIEW_ORIGIN=$(echo "${{ steps.generate-docs.outputs.URL }}" | grep -oE '^https?://[^/]+')
 
@@ -103,13 +115,91 @@ jobs:
                 # Real HTTP errors, deduped by url — one broken sidebar link otherwise
                 # multiplies into hundreds of lines and overflows GitHub's 65,536-char
                 # comment limit. 403s are auth walls (not broken), so they are excluded.
-                # Transient 429/500/network failures are already retried by linkinator's
-                # --retry/--retry-errors above, so anything still failing here is genuine.
+                # status 0 means linkinator gave up on a link mid-crawl (a reaped socket, the
+                # same failure class as the crash) rather than a real 4xx/5xx — these routinely
+                # return 200 when fetched on their own, so they are excluded here and re-verified
+                # below, reported only if still unreachable.
                 BROKEN_LINKS=$(jq -r --arg origin "$PREVIEW_ORIGIN" '
-                  [.links[] | select(.state != "OK" and .status != 403)]
+                  [.links[] | select(.state != "OK" and .status != 403 and .status != 0)]
                   | group_by(.url) | map(.[0]) | .[]
                   | "❌ Broken link: \(.url) (\(.status))\n   ↳ on page: \((.parent // "") | sub("^" + $origin; ""))"
                 ' linkinator_results.json)
+
+                # `↳ on page` strips the ephemeral preview host, leaving a stable, greppable
+                # doc path. Append one report entry for a re-verified url that is still broken.
+                report_broken() {
+                  local url=$1 label=$2 parent
+                  parent=$(jq -r --arg u "$url" --arg origin "$PREVIEW_ORIGIN" \
+                    '(first(.links[] | select(.url == $u)).parent // "") | sub("^" + $origin; "")' linkinator_results.json)
+                  BROKEN_LINKS=$(printf '%s\n❌ Broken link: %s (%s)\n   ↳ on page: %s' "$BROKEN_LINKS" "$url" "$label" "$parent")
+                }
+
+                # SSRF guard: a PR author controls the doc links, so before curling one we
+                # require http(s) and reject any host resolving into a private/loopback/
+                # link-local/metadata range. Exits 0 (safe) or 1 (blocked/unresolvable).
+                cat > ssrf_guard.py <<'PY'
+                import ipaddress, socket, sys
+                from urllib.parse import urlparse
+                p = urlparse(sys.argv[1])
+                if p.scheme not in ("http", "https") or not p.hostname:
+                    sys.exit(1)
+                try:
+                    infos = socket.getaddrinfo(p.hostname, p.port or (443 if p.scheme == "https" else 80))
+                except socket.gaierror:
+                    sys.exit(1)
+                for info in infos:
+                    ip = ipaddress.ip_address(info[4][0])
+                    if (ip.is_private or ip.is_loopback or ip.is_link_local
+                            or ip.is_multicast or ip.is_reserved or ip.is_unspecified):
+                        sys.exit(1)
+                sys.exit(0)
+                PY
+
+                # Re-verify the status-0 give-ups one at a time (there are only ever a handful;
+                # capped so a pathological run can't serialize hundreds of curls into the job
+                # timeout). curl -L follows redirects, but the SSRF guard runs on the initial
+                # url; a link that resolves 2xx/3xx on its own was never really broken.
+                MAX_REVERIFY=25
+                REVERIFY_URLS=$(jq -r '[.links[] | select(.status == 0) | .url] | unique | .[]' linkinator_results.json)
+                total_reverify=$(printf '%s\n' "$REVERIFY_URLS" | grep -c . || true)
+                echo "Re-verifying $total_reverify status-0 give-up link(s), cap $MAX_REVERIFY..."
+                count=0
+                still_broken=0
+                while IFS= read -r url; do
+                  [ -z "$url" ] && continue
+                  count=$((count + 1))
+                  if [ "$count" -gt "$MAX_REVERIFY" ]; then
+                    echo "  [$count/$total_reverify] $url -> over cap, reporting broken"
+                    report_broken "$url" "not re-verified, over cap of $MAX_REVERIFY"
+                    still_broken=$((still_broken + 1))
+                    continue
+                  fi
+                  if ! python3 ssrf_guard.py "$url" 2>/dev/null; then
+                    echo "  [$count/$total_reverify] $url -> blocked by SSRF guard or unresolvable"
+                    report_broken "$url" "blocked by SSRF guard or unresolvable"
+                    still_broken=$((still_broken + 1))
+                    continue
+                  fi
+                  # The give-ups are transient by definition, and a single curl can itself blip
+                  # (000/timeout), so try up to 3 times and clear on the first 2xx/3xx. Only a
+                  # link that fails all three is reported broken.
+                  code=000
+                  for _try in 1 2 3; do
+                    code=$(curl -sL -o /dev/null -w "%{http_code}" --max-time 15 "$url" 2>/dev/null)
+                    case "$code" in 2*|3*) break ;; esac
+                    sleep 2
+                  done
+                  case "$code" in
+                    2*|3*) echo "  [$count/$total_reverify] $url -> reachable ($code), cleared" ;;
+                    *)
+                      echo "  [$count/$total_reverify] $url -> recheck ${code:-000} (3 attempts)"
+                      report_broken "$url" "recheck ${code:-000}"
+                      still_broken=$((still_broken + 1))
+                      ;;
+                  esac
+                done <<< "$REVERIFY_URLS"
+                echo "Re-verify done: $still_broken of $total_reverify still broken."
+                rm -f ssrf_guard.py
 
                 if [ -n "$BROKEN_LINKS" ]; then
                   {
