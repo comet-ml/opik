@@ -1,5 +1,8 @@
 import { useEffect, useMemo } from "react";
-import useAppStore, { useActiveWorkspaceName } from "@/store/AppStore";
+import useAppStore, {
+  useActiveProjectId,
+  useActiveWorkspaceName,
+} from "@/store/AppStore";
 import useProjectsList from "@/api/projects/useProjectsList";
 
 const KEY_PREFIX = "opik-active-project-";
@@ -32,9 +35,14 @@ export function setActiveProject(
 
 export function useActiveProjectInitializer() {
   const workspaceName = useActiveWorkspaceName();
+  const activeProjectId = useActiveProjectId();
+  // Re-read the persisted id whenever the active project changes (e.g. cleared
+  // after deleting it) so the "latest project" fallback below can re-resolve
+  // instead of staying disabled until a reload or workspace switch.
   const storedId = useMemo(
     () => getStoredActiveProject(workspaceName),
-    [workspaceName],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [workspaceName, activeProjectId],
   );
 
   const { data, isPending } = useProjectsList(
