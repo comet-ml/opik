@@ -1,6 +1,7 @@
 """Prompt export functionality."""
 
 import json
+import logging
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -20,6 +21,8 @@ from .utils import (
     write_json_data,
     print_export_summary,
 )
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _get_prompt_content(prompt: Any) -> Any:
@@ -121,10 +124,22 @@ def _resolve_prompt_tags(
         )
     except Exception:
         # Fall back to an unfiltered scan if the name filter can't be parsed
-        # (e.g. names with characters the query language rejects).
+        # (e.g. names with characters the query language rejects). Log with a
+        # stack trace so the failure is diagnosable rather than silent.
+        LOGGER.debug(
+            "Filtered search_prompts failed for prompt %r; retrying unfiltered",
+            name,
+            exc_info=True,
+        )
         try:
             candidates = client.search_prompts(project_name=project_name)
         except Exception:
+            LOGGER.warning(
+                "Could not resolve container-level tags for prompt %r via "
+                "search_prompts; exported tags may be incomplete",
+                name,
+                exc_info=True,
+            )
             return tags
 
     for candidate in candidates:
