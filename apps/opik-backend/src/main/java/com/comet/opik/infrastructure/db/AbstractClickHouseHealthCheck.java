@@ -1,7 +1,6 @@
 package com.comet.opik.infrastructure.db;
 
 import com.clickhouse.client.api.Client;
-import com.clickhouse.client.api.query.QueryResponse;
 import com.clickhouse.client.api.query.QuerySettings;
 import com.google.common.base.Preconditions;
 import lombok.Getter;
@@ -35,8 +34,8 @@ abstract class AbstractClickHouseHealthCheck extends NamedHealthCheck {
      */
     private static final String MAX_EXECUTION_TIME = "max_execution_time";
 
-    private final Client clickHouseClient;
-    private final Duration healthCheckTimeout;
+    protected final Client clickHouseClient;
+    protected final Duration healthCheckTimeout;
 
     /**
      * Server-side ceiling aligned with the call-site deadline so ClickHouse aborts a stuck probe
@@ -91,7 +90,7 @@ abstract class AbstractClickHouseHealthCheck extends NamedHealthCheck {
     /**
      * Cancel on failure so the query doesn't keep running server-side.
      */
-    private Result getUnhealthyAndCancelQuery(CompletableFuture<QueryResponse> queryFuture, Exception exception) {
+    protected Result getUnhealthyAndCancelQuery(CompletableFuture<?> queryFuture, Exception exception) {
         queryFuture.cancel(true);
         return Result.unhealthy(exception);
     }
