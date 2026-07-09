@@ -50,6 +50,9 @@ Please review the CLA before contributing:
 ## GitHub Actions workflows
 Workflow files in `.github/workflows/` are validated with [actionlint](https://github.com/rhysd/actionlint), which runs as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit) on changed workflow files. The pre-commit framework builds the pinned actionlint from source automatically — no manual install needed. Run `make hooks` once per clone to enable it locally.
 
+## Dockerfiles
+Dockerfiles are linted with [hadolint](https://github.com/hadolint/hadolint), which runs as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit) on changed Dockerfiles. It uses hadolint's default rule set; the handful of intentionally-suppressed rules are annotated inline in each Dockerfile with a `# hadolint ignore=` comment and a reason. The hook runs hadolint via its Docker image, so it needs only Docker — no manual install. To run it directly on a single file: `docker run --rm -i ghcr.io/hadolint/hadolint < path/to/Dockerfile`.
+
 ## Generated files (do not edit manually)
 - `apps/opik-backend/src/main/resources/model_prices_and_context_window.json`
 - `apps/opik-frontend/src/data/model_prices_and_context_window.json`

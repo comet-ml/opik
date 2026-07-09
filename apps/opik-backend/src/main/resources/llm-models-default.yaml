@@ -1382,6 +1382,8 @@ openrouter:
     label: "x-ai/grok-4.20-multi-agent-beta"
   - id: "x-ai/grok-4.3"
     label: "x-ai/grok-4.3"
+  - id: "x-ai/grok-4.5"
+    label: "x-ai/grok-4.5"
   - id: "x-ai/grok-build-0.1"
     label: "x-ai/grok-build-0.1"
   - id: "x-ai/grok-code-fast-1"
@@ -1446,5 +1448,7 @@ openrouter:
     label: "~openai/gpt-latest"
   - id: "~openai/gpt-mini-latest"
     label: "~openai/gpt-mini-latest"
+  - id: "~x-ai/grok-latest"
+    label: "~x-ai/grok-latest"
   - id: "google/gemini-2.0-flash-001"
     structuredOutput: true

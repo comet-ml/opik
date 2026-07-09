@@ -6465,6 +6465,45 @@ class ExperimentsResourceTest {
             assertExperimentItems(actualExperimentItems, expectedItems);
         }
 
+        @Test
+        @DisplayName("when an item has a trace but spans is omitted, then the request succeeds without an NPE")
+        void experimentItemsBulk__whenTraceProvidedButSpansOmitted__thenReturnNoContent() {
+            // given
+            var datasetWithItem = createDatasetWithItem();
+
+            var trace = createTrace();
+            UUID projectId = projectResourceClient.createProject(trace.projectName(), API_KEY, TEST_WORKSPACE);
+            trace = trace.toBuilder()
+                    .projectId(projectId)
+                    .build();
+
+            var feedbackScore = createScore();
+
+            List<ExperimentItem> expectedItems = getExpectedItem(datasetWithItem.item(), trace, feedbackScore, null);
+
+            var experimentName = newExperimentName();
+            var bulkRecord = ExperimentItemBulkRecord.builder()
+                    .datasetItemId(datasetWithItem.item().id())
+                    .trace(trace)
+                    .feedbackScores(List.of(feedbackScore))
+                    .build();
+
+            var bulkUpload = ExperimentItemBulkUpload.builder()
+                    .experimentName(experimentName)
+                    .datasetName(datasetWithItem.datasetName())
+                    .items(List.of(bulkRecord))
+                    .build();
+
+            // when
+            experimentResourceClient.bulkUploadExperimentItem(bulkUpload, API_KEY, TEST_WORKSPACE);
+
+            // then
+            List<ExperimentItem> actualExperimentItems = experimentResourceClient.getExperimentItems(experimentName,
+                    API_KEY, TEST_WORKSPACE);
+
+            assertExperimentItems(actualExperimentItems, expectedItems);
+        }
+
         private List<ExperimentItem> getExpectedItem(DatasetItem datasetItem, Trace trace,
                 FeedbackScore feedbackScore, JsonNode evaluateTaskResult) {
             return List.of(

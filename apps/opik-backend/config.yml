@@ -399,6 +399,31 @@ experimentDenormalization:
   # Description: Number of entries to trim in a single operation when streamMaxLen is exceeded.
   streamTrimLimit: ${OPIK_REDIS_EXPERIMENT_DENORM_STREAM_TRIM_LIMIT:-100}
 
+# Configuration for buffering projects.last_updated_trace_at updates in Redis and flushing them to MySQL
+# periodically, instead of writing MySQL synchronously on every trace-created/updated event. Keeps the
+# high-frequency ingestion path off the contended `projects` row (avoids lock contention / connection churn).
+projectLastUpdatedFlush:
+  # Default: false
+  # Description: When enabled, trace events buffer the per-project last-updated timestamp in Redis and a job
+  #   flushes it to MySQL; when disabled, the timestamp is written to MySQL synchronously per event (legacy).
+  enabled: ${PROJECT_LAST_UPDATED_FLUSH_ENABLED:-false}
+  # Default: true
+  # Description: When enabled (and the feature above is on), schedule the periodic flush job. Set false to buffer in
+  #   Redis without a scheduler (e.g. tests that invoke the job manually).
+  jobEnabled: ${PROJECT_LAST_UPDATED_FLUSH_JOB_ENABLED:-true}
+  # Default: 30s
+  # Description: Interval at which the flush job drains the Redis buffer into MySQL (min 1s)
+  jobInterval: ${PROJECT_LAST_UPDATED_FLUSH_JOB_INTERVAL:-30s}
+  # Default: 25s
+  # Description: Time the flush job holds the distributed lock (kept below jobInterval so it releases each cycle)
+  jobLockTime: ${PROJECT_LAST_UPDATED_FLUSH_JOB_LOCK_TIME:-25s}
+  # Default: 500ms
+  # Description: Time the flush job waits to acquire the lock before giving up (100ms-5s)
+  jobLockWaitTime: ${PROJECT_LAST_UPDATED_FLUSH_JOB_LOCK_WAIT_TIME:-500ms}
+  # Default: 500
+  # Description: Maximum number of ZSET entries to read per page when flushing pending projects (10-5000)
+  jobBatchSize: ${PROJECT_LAST_UPDATED_FLUSH_JOB_BATCH_SIZE:-500}
+
 # Configuration for rate limit. This is not enabled by default for open source installations.
 # If enabled, rate limit is applied to creation and update of various entities including traces, spans, projects,
 # prompts, feedback definitions, experiments, datasets and dataset items

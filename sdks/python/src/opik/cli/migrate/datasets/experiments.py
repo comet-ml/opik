@@ -70,6 +70,7 @@ from opik.types import (
 from ...imports.experiment import ExperimentData, recreate_experiment
 from ...imports.utils import sort_spans_topologically
 from ..audit import AuditLog
+from ..checkpoint import MigrationCheckpoint
 from ..errors import ExperimentCascadeError
 
 LOGGER = logging.getLogger(__name__)
@@ -136,6 +137,22 @@ class _InnerProgress:
 
 _EXPERIMENT_PAGE_SIZE = 100
 
+# Per-request page size for the cascade's bulk trace/span reads. The SDK
+# default of 2000 (with the cascade's ``truncate=False`` for round-trip
+# fidelity) makes the per-request read a firehose: on a large customer
+# migration (OPIK-7152) the backend container was OOM-killed by RSS (~3 GiB)
+# driven by native/off-heap read buffers tracking the SELECT throughput --
+# NOT JVM heap (heap peaked at 931 MiB against a 3.2 GiB ceiling). The CH
+# SELECT ran at 2.93M rows/s while INSERT was only 511 rows/s, so the read
+# path is the culprit; the write path is already batched and needs no cap
+# here. 500 records/page bounds the read firehose (~12.5 MB/page at the
+# observed ~25 KB avg span; ~4.5 MB max single span) without ballooning the
+# request count (~5-6 pages for a 2.7k-span experiment). The SDK's adaptive
+# shrink halves this further if a page still drops the socket on a
+# connection/timeout error -- the reactive guard for a page that happens to
+# bunch up multi-MB spans.
+MIGRATION_SEARCH_PAGE_SIZE = 500
+
 # Cap the per-record ``sample_source_ids`` list so a pathological
 # all-items-missing case doesn't bloat the audit JSON. The count is
 # always recorded in full; the sample is only there to give an operator
@@ -191,10 +208,12 @@ def cascade_experiments(
     source_dataset_id: str,
     target_dataset_name: str,
     target_project_name: str,
+    target_dataset_id: Optional[str] = None,
     version_remap: Dict[str, str],
     item_id_remap: Dict[str, str],
     optimization_id_remap: Optional[Dict[str, str]] = None,
     audit: AuditLog,
+    checkpoint: Optional[MigrationCheckpoint] = None,
     progress_callback: Optional[ProgressCallback] = None,
     inner_progress_callback: Optional[InnerProgressCallback] = None,
 ) -> ExperimentCascadeResult:
@@ -210,7 +229,20 @@ def cascade_experiments(
 
     ``progress_callback(completed, total, label)`` fires once before each
     experiment so callers can drive a progress bar; matches the shape used
-    by ``version_replay.replay_all_versions``.
+    by ``version_replay.replay_all_versions``. ``completed`` and ``total`` are
+    absolute across the full experiment set (including experiments already
+    completed on a prior run) so a resumed run's bar starts at the right
+    percentage rather than at 0.
+
+    When ``checkpoint`` is supplied (OPIK-7168), the cascade resumes an
+    interrupted migration: experiments whose source id is already in the
+    checkpoint's completed set are skipped, and an experiment left ``in_flight``
+    by a prior run has its partial destination data (traces/spans + a
+    possibly-orphaned experiment row) deleted before it is re-migrated. The
+    checkpoint is flushed after each experiment completes and is the caller's
+    responsibility to delete on full success. ``target_dataset_id`` is used
+    only for that resume cleanup (to find an orphaned destination experiment
+    by name under the destination dataset).
 
     Returns
     -------
@@ -260,11 +292,27 @@ def cascade_experiments(
         )
         return result
 
-    for index, experiment in enumerate(source_experiments):
-        label = experiment.name or experiment.id or f"<experiment[{index}]>"
-        if progress_callback is not None:
-            progress_callback(index, total, label)
+    if checkpoint is not None:
+        checkpoint.total_experiments = total
+        # Clean up a prior run's interrupted experiment before we start, so its
+        # partial destination data doesn't survive as duplicates. The backend
+        # mints fresh ids on re-migrate rather than overwriting, so this
+        # client-side cleanup is the only thing that keeps the resume lossless.
+        _cleanup_in_flight_experiment(client, rest_client, checkpoint)
 
+    # ``already_done`` anchors the progress bar's absolute completed count so a
+    # resumed run starts at the right percentage. It counts experiments in
+    # THIS source set that the checkpoint already marks done (not the raw
+    # checkpoint size, which could include ids no longer present if the source
+    # changed between runs).
+    already_done = (
+        sum(1 for e in source_experiments if checkpoint.is_completed(e.id or ""))
+        if checkpoint is not None
+        else 0
+    )
+    processed = already_done
+
+    for index, experiment in enumerate(source_experiments):
         if experiment.id is None:
             # Defensive: the BE should always return an id; if it doesn't,
             # treat as cascade-fatal because we can't enumerate items
@@ -272,6 +320,22 @@ def cascade_experiments(
             raise ExperimentCascadeError(
                 f"BE returned experiment without id at position {index}: {experiment!r}"
             )
+
+        if checkpoint is not None and checkpoint.is_completed(experiment.id):
+            # Already migrated on a prior run -- skip without re-doing any work.
+            continue
+
+        label = experiment.name or experiment.id or f"<experiment[{index}]>"
+        if progress_callback is not None:
+            progress_callback(processed, total, label)
+
+        if checkpoint is not None:
+            checkpoint.mark_in_flight(
+                experiment.id,
+                experiment_name=experiment.name,
+                dest_dataset_id=target_dataset_id,
+            )
+            checkpoint.flush()
 
         cascade_one_experiment(
             client,
@@ -284,13 +348,73 @@ def cascade_experiments(
             optimization_id_remap=optimization_id_remap,
             result=result,
             audit=audit,
+            checkpoint=checkpoint,
             inner_progress_callback=inner_progress_callback,
         )
+
+        if checkpoint is not None:
+            checkpoint.mark_completed(experiment.id)
+            checkpoint.flush()
+        processed += 1
 
     if progress_callback is not None:
         progress_callback(total, total, "done")
 
     return result
+
+
+def _cleanup_in_flight_experiment(
+    client: opik.Opik,
+    rest_client: OpikApi,
+    checkpoint: MigrationCheckpoint,
+) -> None:
+    """Delete the partial destination data left by a prior run's interrupted
+    experiment, so re-migrating it doesn't create duplicates.
+
+    The backend does not cascade-delete on re-migrate -- ``recreate_experiment``
+    mints fresh experiment/trace/span ids every run rather than overwriting by
+    name -- so the SDK removes the partial copy client-side:
+
+    1. Delete the recorded destination traces (``traces.delete_traces``); the
+       backend cascades their spans, so no separate span delete is needed.
+    2. Delete the destination experiment row by its recorded id. The cascade
+       mints and checkpoints ``dest_experiment_id`` before creating the row, so
+       cleanup targets that exact experiment -- never a same-named peer (names
+       are not unique in the destination dataset). ``dest_experiment_id`` is
+       ``None`` when the interruption landed before the experiment row was
+       created, in which case there is nothing to delete.
+
+    No-op when nothing was in flight. Clears the in-flight record and flushes
+    afterward so a crash *during* cleanup doesn't re-run deletes against ids
+    that were already removed.
+    """
+    in_flight = checkpoint.in_flight
+    if in_flight is None:
+        return
+
+    LOGGER.info(
+        "Resuming migration: cleaning up partial data from interrupted "
+        "experiment %s (%s) before re-migrating.",
+        in_flight.source_experiment_id,
+        in_flight.experiment_name,
+    )
+
+    if in_flight.dest_trace_ids:
+        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            lambda: rest_client.traces.delete_traces(ids=in_flight.dest_trace_ids),
+            operation_name="delete_traces (resume cleanup)",
+        )
+
+    if in_flight.dest_experiment_id is not None:
+        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            lambda: rest_client.experiments.delete_experiments_by_id(
+                ids=[in_flight.dest_experiment_id]
+            ),
+            operation_name="delete_experiments_by_id (resume cleanup)",
+        )
+
+    checkpoint.in_flight = None
+    checkpoint.flush()
 
 
 def cascade_one_experiment(
@@ -305,10 +429,18 @@ def cascade_one_experiment(
     optimization_id_remap: Optional[Dict[str, str]] = None,
     result: ExperimentCascadeResult,
     audit: Optional[AuditLog] = None,
+    checkpoint: Optional[MigrationCheckpoint] = None,
     inner_progress_callback: Optional[InnerProgressCallback] = None,
 ) -> None:
     """Migrate one source experiment: read items -> copy traces + spans ->
     recreate experiment via ``imports.experiment.recreate_experiment``.
+
+    When ``checkpoint`` is supplied, the destination trace ids minted for this
+    experiment are recorded on the checkpoint's in-flight record and flushed to
+    disk right after the trace/span copy. If the process is then killed before
+    ``recreate_experiment`` finishes, the next run's resume cleanup can delete
+    those traces (and, via BE cascade, their spans) so the re-migration doesn't
+    duplicate them.
 
     The source project is derived from ``source_experiment.project_id`` --
     experiments are always project-scoped on the BE, so every experiment
@@ -392,6 +524,11 @@ def cascade_one_experiment(
     inner = _InnerProgress(inner_progress_callback, inner_total)
     inner.tick(label="read items")
 
+    # ``_copy_traces_and_spans`` records the destination trace ids on the
+    # checkpoint and flushes it to disk BEFORE it flushes those traces to the
+    # backend -- so a crash anywhere from the trace flush through the span-copy
+    # phase leaves the ids recorded for the next run's resume cleanup. Recording
+    # here (after the call returned) would leave that window uncovered.
     (
         traces_copied,
         spans_copied,
@@ -408,6 +545,7 @@ def cascade_one_experiment(
         trace_id_remap=result.trace_id_remap,
         assertion_results_by_source_trace=assertion_results_by_source_trace,
         inner_progress=inner,
+        checkpoint=checkpoint,
     )
     result.traces_migrated += traces_copied
     result.spans_migrated += spans_copied
@@ -429,6 +567,16 @@ def cascade_one_experiment(
 
     target_version_id = version_remap.get(source_experiment.dataset_version_id or "")
 
+    # Mint the destination experiment id here (rather than letting
+    # ``create_experiment`` generate it) so we can record it on the checkpoint
+    # BEFORE the row is created. Resume then deletes that exact row on cleanup
+    # instead of matching by name -- experiment names are not unique in the
+    # destination dataset, so a name match could delete an unrelated peer.
+    dest_experiment_id = id_helpers_module.generate_id()
+    if checkpoint is not None:
+        checkpoint.record_dest_experiment_id(dest_experiment_id)
+        checkpoint.flush()
+
     recreated = recreate_experiment(
         client=client,
         experiment_data=experiment_data,
@@ -438,6 +586,7 @@ def cascade_one_experiment(
         target_project_name=target_project_name,
         target_dataset_name=target_dataset_name,
         target_dataset_version_id=target_version_id,
+        experiment_id=dest_experiment_id,
     )
     # Snap the inner bar to 100% so the executor's nested Rich bar
     # finishes cleanly even when our pre-computed ``inner_total`` ran a
@@ -554,12 +703,11 @@ def _list_source_experiments(
     """Page through ``find_experiments(dataset_id=...)`` to exhaustion.
 
     Stays on ``rest_client`` rather than ``client.get_dataset_experiments``:
-    the high-level wrapper takes ``dataset_name`` only, which would
-    require a per-call name lookup (the cascade has the source
-    ``dataset_id`` from the plan, but the source dataset is renamed to
-    ``<name>_v1`` by the migrate, so the source name isn't stable across
-    the cascade's runtime). The ``rest_client`` call takes ``dataset_id``
-    directly.
+    the high-level wrapper takes ``dataset_name`` only, which would require
+    a per-call name lookup. The cascade keys off the stable source
+    ``dataset_id`` from the plan instead — decoupling it from the source's
+    name, which the OPIK-7162 handoff renames to ``<name>_v1`` at the very
+    end of the run. The ``rest_client`` call takes ``dataset_id`` directly.
     """
     collected: List[ExperimentPublic] = []
     page = 1
@@ -703,6 +851,7 @@ def _copy_traces_and_spans(
     trace_id_remap: Dict[str, str],
     assertion_results_by_source_trace: Optional[Dict[str, List[Any]]] = None,
     inner_progress: Optional["_InnerProgress"] = None,
+    checkpoint: Optional[MigrationCheckpoint] = None,
 ) -> tuple[int, int, int, int]:
     """Re-emit traces + spans under ``target_project_name`` via the high-level
     Opik client's streamer infrastructure.
@@ -807,6 +956,7 @@ def _copy_traces_and_spans(
                 filter_string=f'experiment_id = "{source_experiment_id}"',
                 max_results=sys.maxsize,
                 truncate=False,
+                max_batch_size=MIGRATION_SEARCH_PAGE_SIZE,
             ),
             operation_name="search_traces (experiment cascade)",
         )
@@ -872,6 +1022,17 @@ def _copy_traces_and_spans(
 
     trace_id_remap.update(source_to_new_trace)
     traces_copied = len(new_source_ids)
+
+    # Record the freshly-minted destination trace ids on the checkpoint and
+    # flush it to disk BEFORE the BE flush below. Ordering is the whole point:
+    # once ``client.flush()`` persists these traces, a crash (OOM SIGKILL) at
+    # any later point -- including the entire span-copy phase -- must find the
+    # ids already on disk so the next run's resume cleanup can delete them.
+    # Recording after ``_copy_traces_and_spans`` returned (the previous
+    # approach) left this window uncovered and duplicated the traces on resume.
+    if checkpoint is not None and source_to_new_trace:
+        checkpoint.record_dest_trace_ids(list(source_to_new_trace.values()))
+        checkpoint.flush()
 
     # Flush traces before writing trace-attached records (feedback scores,
     # assertion results, spans). The streamer batches writes without
@@ -1150,9 +1311,8 @@ def _copy_trace_comments(
             continue
         for comment in source_trace.comments:
             rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-                lambda nt=new_trace_id,
-                text=comment.text: rest_client.traces.add_trace_comment(
-                    id_=nt, text=text
+                lambda nt=new_trace_id, text=comment.text: (
+                    rest_client.traces.add_trace_comment(id_=nt, text=text)
                 ),
                 operation_name="add_trace_comment (experiment cascade)",
             )
@@ -1196,9 +1356,8 @@ def _copy_span_comments(
                 continue
             for comment in source_span.comments:
                 rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-                    lambda ns=new_span_id,
-                    text=comment.text: rest_client.spans.add_span_comment(
-                        id_=ns, text=text
+                    lambda ns=new_span_id, text=comment.text: (
+                        rest_client.spans.add_span_comment(id_=ns, text=text)
                     ),
                     operation_name="add_span_comment (experiment cascade)",
                 )
@@ -1357,6 +1516,7 @@ def _bulk_fetch_spans_for_experiment(
                 filter_string=fs,
                 max_results=sys.maxsize,
                 truncate=False,
+                max_batch_size=MIGRATION_SEARCH_PAGE_SIZE,
             ),
         )
 

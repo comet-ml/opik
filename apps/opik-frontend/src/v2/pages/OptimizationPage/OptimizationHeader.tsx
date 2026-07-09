@@ -45,9 +45,9 @@ const OptimizationHeader: React.FC<OptimizationHeaderProps> = ({
   const handleRerun = () => {
     if (!optimizationId) return;
     navigate({
-      to: "/$workspaceName/projects/$projectId/optimizations/new",
+      to: "/$workspaceName/projects/$projectId/optimizations",
       params: { workspaceName, projectId: activeProjectId! },
-      search: { rerun: optimizationId },
+      search: { new: true, rerun: optimizationId },
     });
   };
 
