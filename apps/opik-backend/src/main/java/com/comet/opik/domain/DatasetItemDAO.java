@@ -348,8 +348,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     LEFT JOIN fsc ON fsc.entity_id = traces.id
                 <endif>
                 WHERE workspace_id = :workspace_id
-                AND id IN (SELECT trace_id FROM experiment_items WHERE workspace_id = :workspace_id AND experiment_id IN :experimentIds)
-                AND project_id IN (SELECT DISTINCT project_id FROM traces WHERE workspace_id = :workspace_id AND id IN (SELECT trace_id FROM experiment_items WHERE workspace_id = :workspace_id AND experiment_id IN :experimentIds))
+                AND id IN (SELECT DISTINCT trace_id FROM experiment_items WHERE workspace_id = :workspace_id AND experiment_id IN :experimentIds)
+                AND project_id IN (SELECT DISTINCT project_id FROM traces WHERE workspace_id = :workspace_id AND id IN (SELECT DISTINCT trace_id FROM experiment_items WHERE workspace_id = :workspace_id AND experiment_id IN :experimentIds))
                 <if(experiment_item_filters)>
                 AND <experiment_item_filters>
                 <endif>
@@ -850,8 +850,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 <if(experiment_item_filters)>
                 AND ei.trace_id IN (
                     SELECT id FROM traces FINAL WHERE workspace_id = :workspace_id
-                    AND id IN (SELECT trace_id FROM experiment_items WHERE workspace_id = :workspace_id <if(experiment_ids)> AND experiment_id IN :experiment_ids <endif>)
-                    AND project_id IN (SELECT DISTINCT project_id FROM traces WHERE workspace_id = :workspace_id AND id IN (SELECT trace_id FROM experiment_items WHERE workspace_id = :workspace_id <if(experiment_ids)> AND experiment_id IN :experiment_ids <endif>))
+                    AND id IN (SELECT DISTINCT trace_id FROM experiment_items WHERE workspace_id = :workspace_id <if(experiment_ids)> AND experiment_id IN :experiment_ids <endif>)
+                    AND project_id IN (SELECT DISTINCT project_id FROM traces WHERE workspace_id = :workspace_id AND id IN (SELECT DISTINCT trace_id FROM experiment_items WHERE workspace_id = :workspace_id <if(experiment_ids)> AND experiment_id IN :experiment_ids <endif>))
                     AND <experiment_item_filters>
                 )
                 <endif>
