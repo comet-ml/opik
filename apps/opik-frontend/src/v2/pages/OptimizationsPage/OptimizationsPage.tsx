@@ -34,6 +34,7 @@ import { Separator } from "@/ui/separator";
 import { useOptimizationsView } from "@/hooks/useOptimizationsView";
 import { useOptimizationsExistence } from "@/hooks/useOptimizationsExistence";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import NewRunSidebar from "@/v2/pages/OptimizationsPage/OptimizationsNewPage/NewRunSidebar";
 import {
   DEFAULT_COLUMNS,
   DEFAULT_COLUMNS_ORDER,
@@ -73,6 +74,18 @@ const OptimizationsPage: React.FunctionComponent = () => {
   });
 
   const [page = 1, setPage] = useQueryParam("page", NumberParam, {
+    updateType: "replaceIn",
+  });
+
+  const [newRunFlag, setNewRunFlag] = useQueryParam("new", StringParam, {
+    updateType: "replaceIn",
+  });
+  const [templateParam, setTemplateParam] = useQueryParam(
+    "template",
+    StringParam,
+    { updateType: "replaceIn" },
+  );
+  const [rerunParam, setRerunParam] = useQueryParam("rerun", StringParam, {
     updateType: "replaceIn",
   });
 
@@ -215,6 +228,12 @@ const OptimizationsPage: React.FunctionComponent = () => {
     setFilters([]);
   }, [setSearch, setFilters]);
 
+  const handleCloseNewRun = useCallback(() => {
+    setNewRunFlag(undefined);
+    setTemplateParam(undefined);
+    setRerunParam(undefined);
+  }, [setNewRunFlag, setTemplateParam, setRerunParam]);
+
   return (
     <div className="flex min-h-full flex-col pt-4">
       <div className="mb-4 flex min-h-7 items-center justify-between">
@@ -300,6 +319,14 @@ const OptimizationsPage: React.FunctionComponent = () => {
             </div>
           </div>
         </>
+      )}
+      {canUseOptimizationStudio && (
+        <NewRunSidebar
+          open={Boolean(newRunFlag)}
+          onClose={handleCloseNewRun}
+          templateId={templateParam ?? undefined}
+          rerunId={rerunParam ?? undefined}
+        />
       )}
       <AddOptimizationDialog
         key={resetDialogKeyRef.current}
