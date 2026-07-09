@@ -3,11 +3,6 @@ name: 📏 Auto Label PR Size
 on:
   pull_request_target:
     types: [opened, reopened, synchronize, ready_for_review]
-  # TEMP(OPIK-7293): prove the labeler on its own introducing PR. pull_request_target
-  # runs the base-branch copy (main), which lacks this file, so it can't run here yet.
-  # Same-repo PR => pull_request still gets a write token. REVERT before merge.
-  pull_request:
-    types: [opened, reopened, synchronize, ready_for_review]
 
 
 concurrency:
