@@ -17,7 +17,6 @@ from . import chat_completion_chunks_aggregator, stream_patchers
 LOGGER = logging.getLogger(__name__)
 
 KWARGS_KEYS_TO_LOG_AS_INPUTS = ["messages", "function_call"]
-RESPONSE_KEYS_TO_LOG_AS_OUTPUT = ["choices"]
 
 
 class GroqChatCompletionsTrackDecorator(base_track_decorator.BaseTrackDecorator):

@@ -163,8 +163,7 @@ export const getDefaultMetricConfig = (
   switch (metricType) {
     case METRIC_TYPE.EQUALS:
       return {
-        reference_key:
-          DEFAULT_JSON_SCHEMA_VALIDATOR_METRIC_CONFIGS.REFERENCE_KEY,
+        reference_key: DEFAULT_EQUALS_METRIC_CONFIGS.REFERENCE_KEY,
         case_sensitive: DEFAULT_EQUALS_METRIC_CONFIGS.CASE_SENSITIVE,
       };
     case METRIC_TYPE.JSON_SCHEMA_VALIDATOR:

@@ -25,6 +25,16 @@ export const safelyGetPromptMustacheTags = (template: string) => {
   }
 };
 
+export const safelyGetPromptVariables = (template: string): string[] => {
+  try {
+    return getPromptMustacheTags(template)
+      .map((name) => name.split(".")[0])
+      .filter((name) => name.length > 0);
+  } catch (error) {
+    return [];
+  }
+};
+
 export type OpenAIMessage = {
   role: string;
   content:

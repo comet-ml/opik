@@ -1,295 +1,122 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useCallback, useMemo } from "react";
 import { useFormContext } from "react-hook-form";
 
-import useAppStore, { useActiveProjectId } from "@/store/AppStore";
-import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
-import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
-import useOptimizationCreateMutation from "@/api/optimizations/useOptimizationCreateMutation";
+import { useActiveProjectId } from "@/store/AppStore";
+import useDatasetById from "@/api/datasets/useDatasetById";
+import { METRIC_TYPE } from "@/types/optimizations";
+import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import { extractMessageContent, safelyGetPromptVariables } from "@/lib/prompt";
 import { OptimizationConfigFormType } from "@/v2/pages-shared/optimizations/OptimizationConfigForm/schema";
-import { convertFormDataToStudioConfig } from "@/v2/pages-shared/optimizations/OptimizationConfigForm/schema";
-import {
-  OPTIMIZATION_STATUS,
-  OPTIMIZER_TYPE,
-  METRIC_TYPE,
-  OptimizerParameters,
-  MetricParameters,
-} from "@/types/optimizations";
-import { PROVIDER_MODEL_TYPE, LLMPromptConfigsType } from "@/types/providers";
-import { useLastOptimizationRun } from "@/lib/optimizationSessionStorage";
-import {
-  getDefaultOptimizerConfig,
-  getDefaultMetricConfig,
-  getOptimizationDefaultConfigByProvider,
-  extractMetricNameFromCode,
-} from "@/lib/optimizations";
-import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
-import { updateProviderConfig } from "@/lib/modelUtils";
 import useDatasetSamplePreview from "./useDatasetSamplePreview";
+import { useOptimizerFormHandlers } from "./formHandlers/useOptimizerFormHandlers";
+import { useMetricFormHandlers } from "./formHandlers/useMetricFormHandlers";
+import { useModelFormHandlers } from "./formHandlers/useModelFormHandlers";
+import { useSubmitOptimization } from "./formHandlers/useSubmitOptimization";
 
-const getBreadcrumbTitle = (name: string) =>
-  name?.trim() ? `${name} (new)` : "... (new)";
+const METRICS_WITH_REFERENCE_KEY = [
+  METRIC_TYPE.EQUALS,
+  METRIC_TYPE.JSON_SCHEMA_VALIDATOR,
+  METRIC_TYPE.LEVENSHTEIN,
+];
 
 export const useOptimizationsNewFormHandlers = () => {
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
-  const navigate = useNavigate();
-  const { setLastSessionRunId } = useLastOptimizationRun();
-  const { mutateAsync: createOptimization } = useOptimizationCreateMutation();
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
-
   const form = useFormContext<OptimizationConfigFormType>();
-
-  const { data: datasetsData } = useProjectDatasetsList(
-    {
-      projectId: activeProjectId!,
-      page: 1,
-      size: 1000,
-    },
-    {
-      enabled: !!activeProjectId,
-    },
-  );
-
-  const datasets = useMemo(
-    () => datasetsData?.content || [],
-    [datasetsData?.content],
-  );
 
   const datasetId = form.watch("datasetId");
   const optimizerType = form.watch("optimizerType");
   const metricType = form.watch("metricType");
+  const metricParams = form.watch("metricParams");
+  const messages = form.watch("messages");
   const model = form.watch("modelName") as PROVIDER_MODEL_TYPE | "";
   const config = form.watch("modelConfig");
 
-  const { datasetSample, datasetVariables } = useDatasetSamplePreview({
-    datasetId,
-  });
+  const { datasetSample, datasetVariables, areColumnsLoading } =
+    useDatasetSamplePreview({
+      datasetId,
+    });
 
-  const { calculateModelProvider } = useLLMProviderModelsData();
+  // Prompt + G-Eval `{{variables}}` must exist as dataset columns, or the run
+  // fails at evaluation time. Skipped until the sample loads (empty
+  // `datasetVariables`) so we don't flag a mismatch before the columns are known.
+  const missingDatasetVariables = useMemo(() => {
+    if (datasetVariables.length === 0) return [];
+
+    const referenced = new Set<string>();
+    const collect = (text: unknown) => {
+      if (typeof text !== "string" || text.length === 0) return;
+      safelyGetPromptVariables(text).forEach((tag) => referenced.add(tag));
+    };
+
+    // Flatten structured (array) message content to text so `{{vars}}` inside
+    // multipart parts are still checked, not just plain-string content.
+    (messages ?? []).forEach((message) =>
+      collect(extractMessageContent(message.content)),
+    );
+
+    if (metricType === METRIC_TYPE.G_EVAL && metricParams) {
+      const params = metricParams as {
+        task_introduction?: string;
+        evaluation_criteria?: string;
+      };
+      collect(params.task_introduction);
+      collect(params.evaluation_criteria);
+    }
+
+    return [...referenced].filter((tag) => !datasetVariables.includes(tag));
+  }, [messages, metricParams, metricType, datasetVariables]);
+
+  // Resolve the dataset by id (not from a capped list). Loading/error gate
+  // submit so an in-flight or deleted dataset can't silently no-op.
+  const {
+    data: selectedDataset,
+    isLoading: isDatasetLoading,
+    isError: isDatasetError,
+  } = useDatasetById({ datasetId }, { enabled: Boolean(datasetId) });
 
   const handleDatasetChange = useCallback(
     (id: string | null) => {
-      form.setValue("datasetId", id || "", { shouldValidate: true });
+      form.setValue("datasetId", id || "", {
+        shouldDirty: true,
+      });
 
-      const currentMetricType = form.getValues("metricType");
-      const currentMetricParams = form.getValues("metricParams");
-
-      const metricsWithReferenceKey = [
-        METRIC_TYPE.EQUALS,
-        METRIC_TYPE.JSON_SCHEMA_VALIDATOR,
-        METRIC_TYPE.LEVENSHTEIN,
-      ];
-
-      if (metricsWithReferenceKey.includes(currentMetricType)) {
+      // Reference keys are dataset-specific, so clear them when the dataset
+      // changes for metrics that use one.
+      if (METRICS_WITH_REFERENCE_KEY.includes(form.getValues("metricType"))) {
         form.setValue(
           "metricParams",
           {
-            ...currentMetricParams,
+            ...form.getValues("metricParams"),
             reference_key: "",
           } as OptimizationConfigFormType["metricParams"],
-          { shouldValidate: true },
+          { shouldDirty: true },
         );
       }
     },
     [form],
   );
 
-  const handleOptimizerTypeChange = useCallback(
-    (newOptimizerType: OPTIMIZER_TYPE) => {
-      form.setValue("optimizerType", newOptimizerType, {
-        shouldValidate: true,
-      });
-
-      const defaultConfig = getDefaultOptimizerConfig(newOptimizerType);
-      form.setValue("optimizerParams", defaultConfig, {
-        shouldValidate: true,
-      });
-    },
-    [form],
-  );
-
-  const handleOptimizerParamsChange = useCallback(
-    (newParams: Partial<OptimizerParameters>) => {
-      form.setValue("optimizerParams", newParams);
-    },
-    [form],
-  );
-
-  const handleMetricTypeChange = useCallback(
-    (newMetricType: METRIC_TYPE) => {
-      const defaultConfig = getDefaultMetricConfig(newMetricType);
-      form.setValue("metricType", newMetricType);
-      form.setValue(
-        "metricParams",
-        defaultConfig as OptimizationConfigFormType["metricParams"],
-        { shouldValidate: true },
-      );
-    },
-    [form],
-  );
-
-  const handleMetricParamsChange = useCallback(
-    (newParams: Partial<MetricParameters>) => {
-      form.setValue(
-        "metricParams",
-        newParams as OptimizationConfigFormType["metricParams"],
-        { shouldValidate: true },
-      );
-    },
-    [form],
-  );
-
-  const getFirstMetricParamsError = useCallback(() => {
-    const errors = form.formState.errors.metricParams;
-    if (!errors) return null;
-    if (errors.message) return errors.message;
-
-    const firstKey = Object.keys(errors)[0];
-    const firstError = errors[firstKey as keyof typeof errors];
-
-    if (
-      firstError &&
-      typeof firstError === "object" &&
-      "message" in firstError
-    ) {
-      return firstError.message as string;
-    }
-
-    return null;
-  }, [form.formState.errors.metricParams]);
-
-  const handleModelConfigChange = useCallback(
-    (newConfigs: Partial<LLMPromptConfigsType>) => {
-      const currentConfig = form.getValues("modelConfig");
-      form.setValue("modelConfig", {
-        ...currentConfig,
-        ...newConfigs,
-      } as typeof currentConfig);
-    },
-    [form],
-  );
-
-  const handleModelChange = useCallback(
-    (newModel: PROVIDER_MODEL_TYPE) => {
-      const newProvider = calculateModelProvider(newModel);
-      const defaultConfig = getOptimizationDefaultConfigByProvider(
-        newProvider,
-        newModel,
-      );
-      // Strip params the model doesn't accept (e.g. temperature on models that
-      // deprecate it), matching the playground's reconciler.
-      const adjustedConfig =
-        updateProviderConfig(defaultConfig, {
-          model: newModel,
-          provider: newProvider,
-        }) ?? defaultConfig;
-
-      form.setValue("modelName", newModel);
-      form.setValue(
-        "modelConfig",
-        adjustedConfig as OptimizationConfigFormType["modelConfig"],
-      );
-    },
-    [form, calculateModelProvider],
-  );
-
-  const handleSubmit = useCallback(async () => {
-    const isValid = await form.trigger();
-    if (!isValid) return;
-
-    const formData = form.getValues();
-    const selectedDs = datasets.find((ds) => ds.id === formData.datasetId);
-    const datasetNameValue = selectedDs?.name || "";
-
-    if (!datasetNameValue) return;
-
-    setIsSubmitting(true);
-
-    try {
-      const studioConfig = convertFormDataToStudioConfig(
-        formData,
-        datasetNameValue,
-      );
-
-      // For code metrics, extract the class name from the code
-      // For other metrics, use the metric type
-      const metricConfig = studioConfig.evaluation.metrics[0];
-      let objectiveName: string = metricConfig.type;
-      if (
-        metricConfig.type === METRIC_TYPE.CODE &&
-        metricConfig.parameters &&
-        "code" in metricConfig.parameters
-      ) {
-        objectiveName = extractMetricNameFromCode(metricConfig.parameters.code);
-      }
-
-      const result = await createOptimization({
-        optimization: {
-          name: formData.name || undefined,
-          studio_config: studioConfig,
-          dataset_name: datasetNameValue,
-          objective_name: objectiveName,
-          status: OPTIMIZATION_STATUS.INITIALIZED,
-          project_id: activeProjectId ?? undefined,
-        },
-      });
-
-      if (result?.id) {
-        setLastSessionRunId(result.id);
-        navigate({
-          to: "/$workspaceName/projects/$projectId/optimizations/$optimizationId",
-          params: {
-            workspaceName,
-            projectId: activeProjectId!,
-            optimizationId: result.id,
-          },
-        });
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [
-    form,
-    datasets,
-    createOptimization,
-    navigate,
-    workspaceName,
-    activeProjectId,
-    setLastSessionRunId,
-  ]);
-
-  const handleCancel = useCallback(() => {
-    navigate({
-      to: "/$workspaceName/projects/$projectId/optimizations",
-      params: { workspaceName, projectId: activeProjectId! },
-    });
-  }, [navigate, workspaceName, activeProjectId]);
-
   const handleNameChange = useCallback(
-    (value: string) => {
-      form.setValue("name", value);
-      setBreadcrumbParam("optimizationsNew", "new", getBreadcrumbTitle(value));
-    },
-    [form, setBreadcrumbParam],
+    (value: string) => form.setValue("name", value, { shouldDirty: true }),
+    [form],
   );
 
-  useEffect(() => {
-    const initialName = form.getValues("name") ?? "";
-    setBreadcrumbParam(
-      "optimizationsNew",
-      "new",
-      getBreadcrumbTitle(initialName),
-    );
-
-    return () => setBreadcrumbParam("optimizationsNew", "new", "");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const { handleOptimizerTypeChange, handleOptimizerParamsChange } =
+    useOptimizerFormHandlers(form);
+  const {
+    handleMetricTypeChange,
+    handleMetricParamsChange,
+    getFirstMetricParamsError,
+  } = useMetricFormHandlers(form);
+  const { handleModelChange, handleModelConfigChange } =
+    useModelFormHandlers(form);
+  const { submitOptimization } = useSubmitOptimization({
+    form,
+    selectedDataset,
+  });
 
   return {
     form,
-    isSubmitting,
     activeProjectId,
     datasetId,
     optimizerType,
@@ -298,6 +125,11 @@ export const useOptimizationsNewFormHandlers = () => {
     config,
     datasetSample,
     datasetVariables,
+    missingDatasetVariables,
+    // Gate submit while EITHER the dataset record or its columns are still
+    // loading, so the missing-variable check can't be bypassed mid-load.
+    isDatasetLoading: isDatasetLoading || areColumnsLoading,
+    isDatasetError,
     handleDatasetChange,
     handleOptimizerTypeChange,
     handleOptimizerParamsChange,
@@ -305,8 +137,7 @@ export const useOptimizationsNewFormHandlers = () => {
     handleMetricParamsChange,
     handleModelConfigChange,
     handleModelChange,
-    handleSubmit,
-    handleCancel,
+    submitOptimization,
     handleNameChange,
     getFirstMetricParamsError,
   };

@@ -54,12 +54,12 @@ import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.publisher.SignalType;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -126,6 +126,8 @@ public interface TraceDAO {
     Mono<UUID> getProjectIdFromTrace(UUID traceId);
 
     Mono<Map<UUID, UUID>> getProjectIdsByTraceIds(List<UUID> traceIds);
+
+    Mono<Map<UUID, UUID>> getProjectIdsByTraceIdsBounded(Set<UUID> traceIds);
 
     Mono<Map<UUID, Instant>> getStartTimesByTraceIds(Set<UUID> traceIds, String workspaceId);
 
@@ -2091,6 +2093,26 @@ class TraceDAOImpl implements TraceDAO {
                 any(project_id) AS project_id
             FROM traces
             WHERE id IN :trace_ids
+            AND workspace_id = :workspace_id
+            GROUP BY id
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    /**
+     * Partition-bounded variant used on the delete path. id_at is MATERIALIZED as
+     * UUIDv7ToDateTime(toUUID(id)) (migration 000091), so bounding toMonday(id_at) by the id set's own
+     * min/max (mirrors SELECT_PROJECT_ID_FROM_TRACE) is exact - it never drops a valid id - while keeping
+     * the lookup on the ids' own weekly partitions instead of scanning all cold history once traces tier.
+     */
+    private static final String SELECT_PROJECT_IDS_BY_TRACE_IDS_BOUNDED = """
+            SELECT
+                id,
+                any(project_id) AS project_id
+            FROM traces
+            WHERE id IN :trace_ids
+            AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:min_id), 'UTC'))
+            AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:max_id), 'UTC'))
             AND workspace_id = :workspace_id
             GROUP BY id
             SETTINGS log_comment = '<log_comment>'
@@ -4416,8 +4438,6 @@ class TraceDAOImpl implements TraceDAO {
     public Mono<Map<UUID, UUID>> getProjectIdsByTraceIds(@NonNull List<UUID> traceIds) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(traceIds), "Argument 'traceIds' must not be empty");
 
-        log.info("Getting project_ids for '{}' trace_ids", traceIds.size());
-
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(SELECT_PROJECT_IDS_BY_TRACE_IDS, "get_project_ids_by_trace_ids",
                     workspaceId, userName, traceIds.size());
@@ -4425,15 +4445,34 @@ class TraceDAOImpl implements TraceDAO {
             var statement = connection.createStatement(template.render())
                     .bind("trace_ids", traceIds.toArray(UUID[]::new));
 
-            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
-                    .flatMapMany(result -> result.map((row, rowMetadata) -> Map.entry(row.get("id", UUID.class),
-                            row.get("project_id", UUID.class))))
-                    .collect(toMap(Map.Entry::getKey, Map.Entry::getValue))
-                    .doFinally(signalType -> {
-                        if (signalType == SignalType.ON_COMPLETE) {
-                            log.info("Got project_ids for '{}' trace_ids", traceIds.size());
-                        }
-                    });
+            return collectTraceIdToProjectId(statement);
+        }));
+    }
+
+    private Mono<Map<UUID, UUID>> collectTraceIdToProjectId(Statement statement) {
+        return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                .flatMapMany(result -> result.map((row, rowMetadata) -> Map.entry(row.get("id", UUID.class),
+                        row.get("project_id", UUID.class))))
+                .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    @Override
+    public Mono<Map<UUID, UUID>> getProjectIdsByTraceIdsBounded(Set<UUID> traceIds) {
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(traceIds), "Argument 'traceIds' must not be empty");
+
+        var minId = Collections.min(traceIds);
+        var maxId = Collections.max(traceIds);
+
+        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
+            var template = getSTWithLogComment(SELECT_PROJECT_IDS_BY_TRACE_IDS_BOUNDED,
+                    "get_project_ids_by_trace_ids_bounded", workspaceId, userName, traceIds.size());
+
+            var statement = connection.createStatement(template.render())
+                    .bind("trace_ids", traceIds.toArray(UUID[]::new))
+                    .bind("min_id", minId)
+                    .bind("max_id", maxId);
+
+            return collectTraceIdToProjectId(statement);
         }));
     }
 

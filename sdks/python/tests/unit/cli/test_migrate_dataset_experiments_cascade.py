@@ -26,6 +26,7 @@ from unittest.mock import MagicMock
 
 import datetime as dt
 import json
+import sys
 
 import pytest
 
@@ -1630,6 +1631,53 @@ class TestCascadeExperiments:
         # returned everything we expected.
         client.get_trace_content.assert_not_called()
 
+    def test_bulk_reads__pass_migration_page_size_as_max_batch_size(self) -> None:
+        # OPIK-7152: the cascade must cap the per-request page size on both
+        # bulk reads so the backend doesn't materialize a large page in heap
+        # and OOM mid-stream. Pin that both ``search_traces`` and
+        # ``search_spans`` are called with
+        # ``max_batch_size=MIGRATION_SEARCH_PAGE_SIZE`` (smaller than the SDK
+        # default of 2000), while ``max_results`` stays unbounded (fetch all,
+        # just in smaller pages).
+        experiment = _Experiment(id="src-exp-1", dataset_version_id="src-v-1")
+        items = [
+            _ExperimentItem(
+                id="src-item-0",
+                experiment_id="src-exp-1",
+                trace_id="src-trace-0",
+                dataset_item_id="src-ds-item-0",
+            )
+        ]
+        rest_client = _cascade_rest_client(
+            experiments_by_dataset={"src-dataset-1": [experiment]},
+            items_by_experiment={"experiment": items},
+            traces_by_id={"src-trace-0": _Trace(id="src-trace-0")},
+            spans_by_trace={
+                "src-trace-0": [_Span(id="span-0", parent_span_id=None, name="root")]
+            },
+        )
+        client = _client_with_recreate_capture(rest_client)
+
+        cascade_experiments(
+            client,
+            rest_client,
+            source_dataset_id="src-dataset-1",
+            target_dataset_name="MyDataset",
+            target_project_name="DestProject",
+            version_remap={"src-v-1": "dest-v-1"},
+            item_id_remap={"src-ds-item-0": "dest-ds-item-0"},
+            audit=_audit(),
+        )
+
+        page_size = cascade_module.MIGRATION_SEARCH_PAGE_SIZE
+        trace_kwargs = client.search_traces.call_args.kwargs
+        assert trace_kwargs["max_batch_size"] == page_size
+        assert trace_kwargs["max_results"] == sys.maxsize
+
+        span_kwargs = client.search_spans.call_args.kwargs
+        assert span_kwargs["max_batch_size"] == page_size
+        assert span_kwargs["max_results"] == sys.maxsize
+
     def test_inner_progress_callback__fires_per_trace_and_phase(self) -> None:
         # The outer progress callback fires once per experiment (which on a
         # long-running experiment can leave the bar visually frozen for
@@ -1837,6 +1885,7 @@ class TestPlannerCascadePlacement:
         rest_client = _planner_rest_client(
             [
                 _Page([_DatasetRow(id="src-1", name="MyDataset")]),
+                _Page([]),
                 _Page([]),
             ]
         )

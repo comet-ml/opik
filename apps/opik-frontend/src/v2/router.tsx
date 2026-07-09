@@ -12,7 +12,6 @@ import WorkspaceGuard from "@/v2/layout/WorkspaceGuard/WorkspaceGuard";
 import ExperimentsPageGuard from "@/v2/layout/ExperimentsPageGuard";
 import DashboardsPageGuard from "@/v2/layout/DashboardsPageGuard";
 import PlaygroundPageGuard from "@/v2/layout/PlaygroundPageGuard";
-import OptimizationStudioPageGuard from "@/v2/layout/OptimizationStudioPageGuard";
 import OptimizationsPageGuard from "@/v2/layout/OptimizationsPageGuard";
 import DatasetsPageGuard from "@/v2/layout/DatasetsPageGuard";
 import SMEPageLayout from "@/v2/layout/SMEPageLayout/SMEPageLayout";
@@ -46,10 +45,10 @@ import PairingPage from "@/v2/pages/PairingPage/PairingPage";
 import PairRouteVersionGuard from "@/shared/WorkspaceVersionResolver/PairRouteVersionGuard";
 import { createOAuthConsentRoute } from "@/shared/OAuthConsentPage/createOAuthConsentRoute";
 import OptimizationsPage from "@/v2/pages/OptimizationsPage/OptimizationsPage";
-import OptimizationsNewPage from "@/v2/pages/OptimizationsPage/OptimizationsNewPage/OptimizationsNewPage";
 import OptimizationPage from "@/v2/pages/OptimizationPage/OptimizationPage";
 import OptimizationCompareRedirect from "@/v2/pages/OptimizationPage/OptimizationCompareRedirect";
 import TrialsRedirect from "@/v2/pages/OptimizationPage/TrialsRedirect";
+import OptimizationsNewRedirect from "@/v2/pages/OptimizationPage/OptimizationsNewRedirect";
 import AlertEditPageGuard from "@/v2/layout/AlertEditPageGuard/AlertEditPageGuard";
 import AlertsPageGuard from "@/v2/layout/AlertsPageGuard";
 import PromptsPageGuard from "@/v2/layout/PromptsPageGuard";
@@ -439,26 +438,19 @@ const optimizationsListRoute = createRoute({
   component: OptimizationsPage,
 });
 
-const optimizationsNewRoute = createRoute({
-  path: "/new",
-  getParentRoute: () => optimizationsRoute,
-  component: OptimizationStudioPageGuard,
-  staticData: {
-    param: "optimizationsNew",
-    paramValue: "new",
-  },
-});
-
-const optimizationsNewIndexRoute = createRoute({
-  path: "/",
-  getParentRoute: () => optimizationsNewRoute,
-  component: OptimizationsNewPage,
-});
-
 const optimizationCompareRedirectRoute = createRoute({
   path: "/$datasetId/compare",
   getParentRoute: () => optimizationsRoute,
   component: OptimizationCompareRedirect,
+});
+
+// Back-compat: the new-run flow moved from `/optimizations/new` into a sidebar
+// (`/optimizations?new=true`). Keep the legacy path working — a static `/new`
+// also wins over the `/$optimizationId` detail route.
+const optimizationsNewRedirectRoute = createRoute({
+  path: "/new",
+  getParentRoute: () => optimizationsRoute,
+  component: OptimizationsNewRedirect,
 });
 
 const optimizationBaseRoute = createRoute({
@@ -691,7 +683,7 @@ const routeTree = rootRoute.addChildren([
           playgroundRoute.addChildren([playgroundIndexRoute]),
           optimizationsRoute.addChildren([
             optimizationsListRoute,
-            optimizationsNewRoute.addChildren([optimizationsNewIndexRoute]),
+            optimizationsNewRedirectRoute,
             optimizationCompareRedirectRoute,
             optimizationBaseRoute.addChildren([optimizationRoute, trialRoute]),
           ]),

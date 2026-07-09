@@ -3763,6 +3763,72 @@ class TracesResourceTest {
         }
 
         @Test
+        @DisplayName("delete traces batch spanning multiple projects without project id, then all are deleted")
+        void deleteTracesAcrossProjectsWithoutProjectId() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName1 = RandomStringUtils.secure().nextAlphanumeric(10);
+            var projectName2 = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var traces1 = buildTracesForProject(projectName1);
+            var traces2 = buildTracesForProject(projectName2);
+            traceResourceClient.batchCreateTraces(traces1, apiKey, workspaceName);
+            traceResourceClient.batchCreateTraces(traces2, apiKey, workspaceName);
+
+            var spans1 = buildSpansForTraces(projectName1, traces1);
+            var spans2 = buildSpansForTraces(projectName2, traces2);
+            batchCreateSpansAndAssert(spans1, apiKey, workspaceName);
+            batchCreateSpansAndAssert(spans2, apiKey, workspaceName);
+
+            getAndAssertPage(workspaceName, projectName1, null, List.of(), traces1, traces1.reversed(), List.of(),
+                    apiKey);
+            getAndAssertPage(workspaceName, projectName2, null, List.of(), traces2, traces2.reversed(), List.of(),
+                    apiKey);
+
+            // Single batch spanning both projects, with no project id set: the delete must resolve each trace's
+            // owning project and delete per project group, clearing both projects (and their spans).
+            var request = BatchDeleteByProject.builder()
+                    .ids(Stream.concat(traces1.stream(), traces2.stream())
+                            .map(Trace::id)
+                            .collect(Collectors.toUnmodifiableSet()))
+                    .build();
+            traceResourceClient.deleteTraces(request, workspaceName, apiKey);
+
+            getAndAssertPage(workspaceName, projectName1, null, List.of(), traces1, List.of(), List.of(), apiKey);
+            getAndAssertPage(workspaceName, projectName2, null, List.of(), traces2, List.of(), List.of(), apiKey);
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                getAndAssertPageSpans(workspaceName, projectName1, List.of(), spans1, List.of(), List.of(), apiKey);
+                getAndAssertPageSpans(workspaceName, projectName2, List.of(), spans2, List.of(), List.of(), apiKey);
+            });
+        }
+
+        private List<Trace> buildTracesForProject(String projectName) {
+            return PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .threadId(null)
+                            .build())
+                    .toList();
+        }
+
+        private List<Span> buildSpansForTraces(String projectName, List<Trace> traces) {
+            return traces.stream()
+                    .flatMap(trace -> PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                            .map(span -> span.toBuilder()
+                                    .projectName(projectName)
+                                    .traceId(trace.id())
+                                    .usage(null)
+                                    .feedbackScores(null)
+                                    .build()))
+                    .toList();
+        }
+
+        @Test
         void deleteTracesWithoutTraces() {
             var apiKey = UUID.randomUUID().toString();
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
@@ -4715,8 +4781,8 @@ class TracesResourceTest {
 
         @Test
         void deleteTraceDeletesTraceAndSpanComments() {
-            UUID traceId = traceResourceClient.createTrace(createTrace(), API_KEY,
-                    TEST_WORKSPACE);
+            Trace trace = createTrace();
+            UUID traceId = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
             List<Comment> expectedTraceComments = IntStream.range(0, 5)
                     .mapToObj(i -> traceResourceClient.generateAndCreateComment(traceId, API_KEY, TEST_WORKSPACE, 201))
                     .toList();
@@ -4726,7 +4792,7 @@ class TracesResourceTest {
             assertComments(expectedTraceComments, expectedTrace.comments());
 
             // Create span for the trace and span comments
-            var spanWithComments = createSpanWithCommentsAndAssert(traceId);
+            var spanWithComments = createSpanWithCommentsAndAssert(traceId, trace.projectName());
 
             traceResourceClient.deleteTrace(traceId, TEST_WORKSPACE, API_KEY);
 
@@ -4772,7 +4838,7 @@ class TracesResourceTest {
             assertComments(expectedTraceComments, expectedTrace.comments());
 
             // Create span for the trace and span comments
-            var spanWithComments = createSpanWithCommentsAndAssert(traces.getFirst().id());
+            var spanWithComments = createSpanWithCommentsAndAssert(traces.getFirst().id(), projectName);
 
             var request = BatchDeleteByProject.builder()
                     .ids(traces.stream().map(Trace::id).collect(Collectors.toUnmodifiableSet()))
@@ -4795,11 +4861,13 @@ class TracesResourceTest {
             });
         }
 
-        private Pair<UUID, List<Comment>> createSpanWithCommentsAndAssert(UUID traceId) {
-            // Create span for the trace and span comments
+        private Pair<UUID, List<Comment>> createSpanWithCommentsAndAssert(UUID traceId, String projectName) {
+            // Create span for the trace and span comments. A span shares its trace's project, so the span
+            // must be created in the same project - otherwise the trace-delete cascade (which scopes by the
+            // trace's project) would not reach it.
             UUID spanId = spanResourceClient.createSpan(
-                    factory.manufacturePojo(Span.class).toBuilder().traceId(traceId).build(), API_KEY,
-                    TEST_WORKSPACE);
+                    factory.manufacturePojo(Span.class).toBuilder().traceId(traceId).projectName(projectName).build(),
+                    API_KEY, TEST_WORKSPACE);
             List<Comment> expectedSpanComments = IntStream.range(0, 5)
                     .mapToObj(i -> spanResourceClient.generateAndCreateComment(spanId, API_KEY, TEST_WORKSPACE, 201))
                     .toList();

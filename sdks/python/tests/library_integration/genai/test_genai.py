@@ -5,7 +5,6 @@ from typing import Any, Dict
 import pytest
 from google import genai
 from google.genai.types import HttpOptions, GenerateContentConfig
-from google.genai import errors as genai_errors
 import opik
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.integrations.genai import track_genai
@@ -21,7 +20,6 @@ from ...testlib import (
     assert_dict_has_keys,
     assert_equal,
 )
-import tenacity
 
 pytestmark = pytest.mark.usefixtures("ensure_vertexai_configured")
 
@@ -38,19 +36,6 @@ EXPECTED_GOOGLE_USAGE_LOGGED_FORMAT = ANY_DICT.containing(
 )
 
 
-def _is_rate_limit_error(exception: Exception) -> bool:
-    if isinstance(exception, genai_errors.ClientError):
-        return exception.response.status_code == 429
-    return False
-
-
-retry_with_waiting_on_rate_limit_errors = tenacity.retry(
-    stop=tenacity.stop_after_attempt(3),
-    wait=tenacity.wait_incrementing(start=5, increment=5),
-    retry=tenacity.retry_if_exception(_is_rate_limit_error),
-)
-
-
 def _assert_metadata_contains_required_keys(metadata: Dict[str, Any]):
     REQUIRED_METADATA_KEYS = [
         "model",
@@ -61,7 +46,6 @@ def _assert_metadata_contains_required_keys(metadata: Dict[str, Any]):
     assert_dict_has_keys(metadata, REQUIRED_METADATA_KEYS)
 
 
-@retry_with_waiting_on_rate_limit_errors
 @pytest.mark.parametrize(
     "project_name, expected_project_name",
     [
@@ -131,7 +115,6 @@ def test_genai_client__generate_content__happyflow(
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
-@retry_with_waiting_on_rate_limit_errors
 def test_genai_client__async_generate_content__happyflow(fake_backend):
     client = genai.Client(
         vertexai=True,
@@ -187,7 +170,6 @@ def test_genai_client__async_generate_content__happyflow(fake_backend):
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
-@retry_with_waiting_on_rate_limit_errors
 @pytest.mark.asyncio
 async def test_genai_client__async_generate_content__opik_args__happyflow(fake_backend):
     client = genai.Client(
@@ -254,7 +236,6 @@ async def test_genai_client__async_generate_content__opik_args__happyflow(fake_b
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
-@retry_with_waiting_on_rate_limit_errors
 @pytest.mark.parametrize(
     "project_name, expected_project_name",
     [
@@ -331,7 +312,6 @@ def test_genai_client__generate_content_called_inside_another_tracked_function__
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
-@retry_with_waiting_on_rate_limit_errors
 def test_genai_client__async_generate_content_called_inside_another_tracked_function__happyflow(
     fake_backend,
 ):
@@ -400,7 +380,6 @@ def test_genai_client__async_generate_content_called_inside_another_tracked_func
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
-@retry_with_waiting_on_rate_limit_errors
 def test_genai_client__generate_content_stream__happyflow(fake_backend):
     client = genai.Client(
         vertexai=True,
@@ -459,7 +438,6 @@ def test_genai_client__generate_content_stream__happyflow(fake_backend):
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
-@retry_with_waiting_on_rate_limit_errors
 def test_genai_client__async_generate_content_stream__happyflow(fake_backend):
     client = genai.Client(
         vertexai=True,
@@ -520,7 +498,6 @@ def test_genai_client__async_generate_content_stream__happyflow(fake_backend):
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
-@retry_with_waiting_on_rate_limit_errors
 def test_genai_client__generate_content_stream_called_inside_another_tracked_function__generations_started_after_the_parent_span_closed__llm_span_attached_to_a_parent_function_span(
     fake_backend,
 ):
@@ -595,7 +572,6 @@ def test_genai_client__generate_content_stream_called_inside_another_tracked_fun
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
-@retry_with_waiting_on_rate_limit_errors
 def test_genai_client__async_generate_content_stream_called_inside_another_tracked_function__generations_started_after_the_parent_span_closed__llm_span_has_a_separate_trace(
     fake_backend,
 ):
@@ -673,7 +649,6 @@ def test_genai_client__async_generate_content_stream_called_inside_another_track
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
-@retry_with_waiting_on_rate_limit_errors
 @pytest.mark.parametrize(
     "project_name, expected_project_name",
     [
@@ -755,7 +730,6 @@ def test_genai_client__generate_content__opik_args__happyflow(
     _assert_metadata_contains_required_keys(llm_span_metadata)
 
 
-@retry_with_waiting_on_rate_limit_errors
 def test_genai_client__generate_content__cost_callback__sets_span_total_cost(
     fake_backend,
 ):
