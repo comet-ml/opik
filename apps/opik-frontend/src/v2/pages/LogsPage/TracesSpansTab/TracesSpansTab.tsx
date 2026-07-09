@@ -1211,13 +1211,16 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       },
     );
 
-  // Cheap "does this project have any (sdk) traces/spans?" probe for the empty-state decision.
-  // Hits the LIMIT-1 existence endpoint instead of a size:1 list query, which builds full-project
-  // trace/span/cost/feedback aggregations in ClickHouse regardless of the selected time range.
+  // Cheap "does this project have any traces/spans at all?" probe for the empty-state decision.
+  // Intentionally source-agnostic (the list above is sdk-scoped): a project whose only data is non-sdk
+  // (experiment/playground/optimization/evaluator) reports true, so onboarding shows only for genuinely
+  // empty projects. Hits the LIMIT-1 existence endpoint instead of a size:1 list query, which builds
+  // full-project trace/span/cost/feedback aggregations in ClickHouse regardless of the selected time range.
   const { exists: hasProjectData } = useTracesOrSpansExist(
     {
       projectId,
       type: type as TRACE_DATA_TYPE,
+      source: LOGS_SOURCE.sdk,
     },
     {
       enabled: isTableDataEnabled,

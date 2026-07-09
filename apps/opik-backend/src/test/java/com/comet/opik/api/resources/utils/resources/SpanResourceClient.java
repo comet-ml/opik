@@ -8,6 +8,7 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatchContainer;
 import com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
 import com.comet.opik.api.ProjectStats;
+import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.SpanBatchUpdate;
@@ -455,9 +456,32 @@ public class SpanResourceClient extends BaseCommentResourceClient {
     }
 
     public boolean existsSpans(String projectName, String apiKey, String workspaceName) {
+        return existsSpans(projectName, null, apiKey, workspaceName);
+    }
+
+    public boolean existsSpans(String projectName, Source source, String apiKey, String workspaceName) {
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("exists")
+                .queryParam("project_name", projectName);
+
+        if (source != null) {
+            webTarget = webTarget.queryParam("source", source.getValue());
+        }
+
+        try (var actualResponse = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+            assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return actualResponse.readEntity(ExistenceResponse.class).exists();
+        }
+    }
+
+    public boolean existsSpans(UUID projectId, String apiKey, String workspaceName) {
         try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("exists")
-                .queryParam("project_name", projectName)
+                .queryParam("project_id", projectId)
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)

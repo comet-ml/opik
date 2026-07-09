@@ -1,8 +1,10 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { QueryConfig, SPANS_KEY, SPANS_REST_ENDPOINT } from "@/api/api";
+import { LOGS_SOURCE } from "@/types/traces";
 
 type UseSpansExistParams = {
   projectId: string;
+  source?: LOGS_SOURCE;
 };
 
 export type UseSpansExistResponse = {
@@ -11,13 +13,13 @@ export type UseSpansExistResponse = {
 
 const getSpansExist = async (
   { signal }: QueryFunctionContext,
-  { projectId }: UseSpansExistParams,
+  { projectId, source }: UseSpansExistParams,
 ) => {
   const { data } = await api.get<UseSpansExistResponse>(
     `${SPANS_REST_ENDPOINT}exists`,
     {
       signal,
-      params: { project_id: projectId },
+      params: { project_id: projectId, ...(source && { source }) },
     },
   );
 

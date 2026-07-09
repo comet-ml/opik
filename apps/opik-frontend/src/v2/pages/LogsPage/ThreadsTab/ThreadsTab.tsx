@@ -617,13 +617,15 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     },
   );
 
-  // Cheap "does this project have any thread?" probe for the empty-state decision. Threads are
-  // traces with a thread_id, so this hits the LIMIT-1 trace existence endpoint scoped to
-  // thread_id != '' — avoiding the size:1 thread-aggregation scan over the whole project.
+  // Cheap "does this project have any thread?" probe for the empty-state decision. Hits the LIMIT-1
+  // existence endpoint scoped to threads — backed by trace_threads (the same table the list reads,
+  // and PK-prunable) and to the sdk source, matching the rendered thread list — avoiding the size:1
+  // thread-aggregation scan over the whole project.
   const { data: existenceData } = useTracesExist(
     {
       projectId,
       threadOnly: true,
+      source: LOGS_SOURCE.sdk,
     },
     {
       enabled: isTableDataEnabled,

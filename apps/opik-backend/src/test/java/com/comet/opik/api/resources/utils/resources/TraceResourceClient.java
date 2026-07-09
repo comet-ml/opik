@@ -11,6 +11,7 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectStats;
+import com.comet.opik.api.Source;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatch;
 import com.comet.opik.api.TraceBatchUpdate;
@@ -526,12 +527,21 @@ public class TraceResourceClient extends BaseCommentResourceClient {
     }
 
     public boolean existsTraces(UUID projectId, boolean threadOnly, String apiKey, String workspaceName) {
+        return existsTraces(projectId, threadOnly, null, apiKey, workspaceName);
+    }
+
+    public boolean existsTraces(UUID projectId, boolean threadOnly, Source source, String apiKey,
+            String workspaceName) {
         WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("exists")
                 .queryParam("project_id", projectId);
 
         if (threadOnly) {
             webTarget = webTarget.queryParam("thread_only", true);
+        }
+
+        if (source != null) {
+            webTarget = webTarget.queryParam("source", source.getValue());
         }
 
         try (var actualResponse = webTarget

@@ -1097,6 +1097,7 @@ public class SpanDAO {
             FROM spans
             WHERE workspace_id = :workspace_id
             AND project_id = :project_id
+            <if(source)> AND source IN (:source<if(source_legacy)>, :source_legacy<endif>) <endif>
             LIMIT 1
             SETTINGS log_comment = '<log_comment>'
             """;
@@ -2397,9 +2398,25 @@ public class SpanDAO {
                     var template = getSTWithLogComment(EXISTS_BY_PROJECT_ID, "exists_spans_by_project_id",
                             workspaceId, userName, "");
 
+                    var source = spanSearchCriteria.source();
+                    var sourceLegacy = source == null
+                            ? Optional.<String>empty()
+                            : Source.legacyFallbackDbValue(source.getValue());
+                    if (source != null) {
+                        template.add("source", true);
+                        if (sourceLegacy.isPresent()) {
+                            template.add("source_legacy", true);
+                        }
+                    }
+
                     var statement = connection.createStatement(template.render())
                             .bind("project_id", spanSearchCriteria.projectId())
                             .bind("workspace_id", workspaceId);
+
+                    if (source != null) {
+                        statement.bind("source", source.getValue());
+                        sourceLegacy.ifPresent(legacy -> statement.bind("source_legacy", legacy));
+                    }
 
                     Segment segment = startSegment("spans", "Clickhouse", "existsByProjectId");
 

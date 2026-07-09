@@ -83,6 +83,7 @@ import static com.comet.opik.api.Span.SpanField;
 import static com.comet.opik.api.Span.SpanPage;
 import static com.comet.opik.api.Span.View;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
+import static com.comet.opik.utils.ValidationUtils.parseLogsSource;
 import static com.comet.opik.utils.ValidationUtils.validateProjectNameAndProjectId;
 import static com.comet.opik.utils.ValidationUtils.validateTimeRangeParameters;
 
@@ -409,12 +410,14 @@ public class SpansResource {
     })
     @RateLimited(value = "spansExist:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     public Response spansExist(@QueryParam("project_id") UUID projectId,
-            @QueryParam("project_name") String projectName) {
+            @QueryParam("project_name") String projectName,
+            @QueryParam("source") @Schema(description = "Restrict the probe to a single ingestion source (e.g. 'sdk' for the Logs empty state), matching the rendered list's logs-source scope. Omit to probe any source.") String source) {
 
         validateProjectNameAndProjectId(projectName, projectId);
         var searchCriteria = SpanSearchCriteria.builder()
                 .projectName(projectName)
                 .projectId(projectId)
+                .source(parseLogsSource(source))
                 .sortingFields(List.of())
                 .build();
 

@@ -98,6 +98,7 @@ import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
 import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatchThread;
 import static com.comet.opik.api.TraceThread.TraceThreadPage;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
+import static com.comet.opik.utils.ValidationUtils.parseLogsSource;
 import static com.comet.opik.utils.ValidationUtils.validateProjectNameAndProjectId;
 import static com.comet.opik.utils.ValidationUtils.validateTimeRangeParameters;
 
@@ -450,6 +451,7 @@ public class TracesResource {
     @RateLimited(value = "tracesExist:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     public Response tracesExist(@QueryParam("project_id") UUID projectId,
             @QueryParam("project_name") String projectName,
+            @QueryParam("source") @Schema(description = "Restrict the probe to a single ingestion source (e.g. 'sdk' for the Logs empty state), matching the rendered list's logs-source scope. Omit to probe any source.") String source,
             @QueryParam("thread_only") @DefaultValue("false") @Schema(description = "When true, only considers traces that belong to a thread (thread_id is set) — used by the Threads empty state.") boolean threadOnly) {
 
         validateProjectNameAndProjectId(projectName, projectId);
@@ -457,6 +459,7 @@ public class TracesResource {
         var searchCriteria = TraceSearchCriteria.builder()
                 .projectName(projectName)
                 .projectId(projectId)
+                .source(parseLogsSource(source))
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();
