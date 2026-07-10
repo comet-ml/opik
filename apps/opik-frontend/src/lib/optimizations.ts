@@ -48,46 +48,26 @@ export const getBaselineCandidate = (
 ): AggregatedCandidate | undefined =>
   candidates?.find((c) => c.stepIndex === 0);
 
-// SDK-launched (non-Studio) runs store the optimizer as its Python class name
-// (e.g. "HierarchicalReflectiveOptimizer") in metadata.optimizer, whereas Studio
-// runs store the OPTIMIZER_TYPE enum value ("hierarchical_reflective"). Map the
-// class names onto the enum so both resolve to the same curated label.
-const OPTIMIZER_CLASS_TO_TYPE: Record<string, OPTIMIZER_TYPE> = {
-  GepaOptimizer: OPTIMIZER_TYPE.GEPA,
-  HierarchicalReflectiveOptimizer: OPTIMIZER_TYPE.HIERARCHICAL_REFLECTIVE,
-  EvolutionaryOptimizer: OPTIMIZER_TYPE.EVOLUTIONARY,
+// SDK-launched (non-Studio) runs report the optimizer as its Python class name
+// (e.g. "HierarchicalReflectiveOptimizer") in metadata.optimizer; map those to
+// display labels. Studio runs report the OPTIMIZER_TYPE enum value, resolved via
+// OPTIMIZER_OPTIONS below.
+const OPTIMIZER_CLASS_LABELS: Record<string, string> = {
+  GepaOptimizer: "GEPA optimizer",
+  HierarchicalReflectiveOptimizer: "Hierarchical Reflective",
+  EvolutionaryOptimizer: "Evolutionary",
 };
 
-/**
- * Last-resort humanization for a raw identifier we have no curated label for:
- * drops a trailing "Optimizer", splits PascalCase and snake/kebab-case, and
- * title-cases the result (e.g. "EvolutionaryOptimizer" -> "Evolutionary",
- * "some_custom_metric" -> "Some Custom Metric").
- */
-const prettifyIdentifier = (raw: string): string =>
-  raw
-    .replace(/Optimizer$/, "")
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/[_-]+/g, " ")
-    .trim()
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+export const getOptimizerLabel = (type: string): string =>
+  OPTIMIZER_CLASS_LABELS[type] ??
+  OPTIMIZER_OPTIONS.find((opt) => opt.value === type)?.label ??
+  type;
 
-export const getOptimizerLabel = (type: string): string => {
-  const normalized = OPTIMIZER_CLASS_TO_TYPE[type] ?? type;
-  return (
-    OPTIMIZER_OPTIONS.find((opt) => opt.value === normalized)?.label ??
-    prettifyIdentifier(type)
-  );
-};
-
-/** Human label for a metric, falling back to a prettified raw value, then an em dash. */
-export const getMetricLabel = (type?: string): string => {
-  if (!type) return "—";
-  return (
-    OPTIMIZATION_METRIC_OPTIONS.find((opt) => opt.value === type)?.label ??
-    prettifyIdentifier(type)
-  );
-};
+/** Human label for a metric type, falling back to the raw value then an em dash. */
+export const getMetricLabel = (type?: string): string =>
+  OPTIMIZATION_METRIC_OPTIONS.find((opt) => opt.value === type)?.label ??
+  type ??
+  "—";
 
 // Optimizer type from a run: studio_config, falling back to metadata.optimizer
 // (untyped) for older/non-Studio runs. Undefined when neither is present.

@@ -21,8 +21,10 @@ import {
   OptimizationTotalCostCell,
 } from "@/v2/pages/OptimizationsPage/OptimizationMetricCells";
 
-// Bumped to v2 keys to reset stale column prefs (drops the dead `deploy` id).
-export const SELECTED_COLUMNS_KEY = "optimizations-selected-columns-v2";
+// selected-columns bumped to v3 to roll out the default-visible Item source
+// column to existing users; width/order keys stay at v2 so those customizations
+// survive (matches how other tables bump only the selected-columns key).
+export const SELECTED_COLUMNS_KEY = "optimizations-selected-columns-v3";
 export const COLUMNS_WIDTH_KEY = "optimizations-columns-width-v2";
 export const COLUMNS_ORDER_KEY = "optimizations-columns-order-v2";
 
