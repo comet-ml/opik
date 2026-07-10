@@ -103,13 +103,11 @@ export const TrialPromptCell = (
       className="relative"
     >
       {isLarge ? (
-        <div className="comet-body-s h-full min-w-0 flex-1 overflow-y-auto whitespace-pre-line break-words">
+        <div className="h-full min-w-0 flex-1 overflow-y-auto whitespace-pre-line break-words">
           {preview || "-"}
         </div>
       ) : (
-        <span className="comet-body-s min-w-0 flex-1 truncate">
-          {preview || "-"}
-        </span>
+        <span className="min-w-0 flex-1 truncate">{preview || "-"}</span>
       )}
       {showDiff && (
         <HoverCard

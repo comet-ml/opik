@@ -75,7 +75,7 @@ export const TrialNumberCell = (context: TrialCellContext) => {
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      <span className="comet-body-s">Trial #{row.trialNumber}</span>
+      <span className="min-w-0 truncate">Trial #{row.trialNumber}</span>
     </CellWrapper>
   );
 };
@@ -87,7 +87,7 @@ export const TrialStepCell = (context: TrialCellContext) => {
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      <span className="comet-body-s">Step {row.stepIndex}</span>
+      <span className="min-w-0 truncate">Step {row.stepIndex}</span>
     </CellWrapper>
   );
 };
