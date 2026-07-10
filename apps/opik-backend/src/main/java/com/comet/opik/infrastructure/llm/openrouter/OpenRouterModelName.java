@@ -88,6 +88,8 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     BYTEDANCE_SEED_SEED_2_0_LITE("bytedance-seed/seed-2.0-lite"),
     BYTEDANCE_SEED_SEED_2_0_MINI("bytedance-seed/seed-2.0-mini"),
     BYTEDANCE_UI_TARS_1_5_7B("bytedance/ui-tars-1.5-7b"),
+    COGNITIVECOMPUTATIONS_DOLPHIN_MISTRAL_24B_VENICE_EDITION(
+            "cognitivecomputations/dolphin-mistral-24b-venice-edition"),
     COGNITIVECOMPUTATIONS_DOLPHIN_MISTRAL_24B_VENICE_EDITION_FREE(
             "cognitivecomputations/dolphin-mistral-24b-venice-edition:free"),
     COHERE_COMMAND_A("cohere/command-a"),
@@ -365,6 +367,12 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     OPENAI_GPT_5_4_PRO("openai/gpt-5.4-pro"),
     OPENAI_GPT_5_5("openai/gpt-5.5"),
     OPENAI_GPT_5_5_PRO("openai/gpt-5.5-pro"),
+    OPENAI_GPT_5_6_LUNA("openai/gpt-5.6-luna"),
+    OPENAI_GPT_5_6_LUNA_PRO("openai/gpt-5.6-luna-pro"),
+    OPENAI_GPT_5_6_SOL("openai/gpt-5.6-sol"),
+    OPENAI_GPT_5_6_SOL_PRO("openai/gpt-5.6-sol-pro"),
+    OPENAI_GPT_5_6_TERRA("openai/gpt-5.6-terra"),
+    OPENAI_GPT_5_6_TERRA_PRO("openai/gpt-5.6-terra-pro"),
     OPENAI_GPT_AUDIO("openai/gpt-audio"),
     OPENAI_GPT_AUDIO_MINI("openai/gpt-audio-mini"),
     OPENAI_GPT_CHAT_LATEST("openai/gpt-chat-latest"),
