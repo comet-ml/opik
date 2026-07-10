@@ -28,16 +28,19 @@ jobs:
             const pr = context.payload.pull_request;
             const prNumber = pr.number;
 
-            // Cool -> hot ramp (blue = smallest, red = largest). Traffic-light color lives
-            // on the GitHub label; the emoji makes size obvious at a glance in the label list.
+            // Uniform charcoal chip for every size label so the size metadata reads as one
+            // recessive family and doesn't compete with semantic labels (bug, Frontend, …) on
+            // a busy PR list. The cool -> hot ramp lives entirely in the per-bucket emoji
+            // (🔵 smallest -> 🔴 largest), which keeps its crisp shape on a neutral background.
             // maxSize is the inclusive upper bound of changed LOC (additions + deletions) for
             // the bucket; the last entry (null) catches everything above it.
+            const CHIP_COLOR = "2d3139";
             const BUCKETS = [
-              { name: "🔵 size/XS", color: "1d76db", maxSize: 19 },
-              { name: "🟢 size/S", color: "0e8a16", maxSize: 100 },
-              { name: "🟡 size/M", color: "fbca04", maxSize: 300 },
-              { name: "🟠 size/L", color: "d93f0b", maxSize: 600 },
-              { name: "🔴 size/XL", color: "b60205", maxSize: null },
+              { name: "🔵 size/XS", color: CHIP_COLOR, maxSize: 19 },
+              { name: "🟢 size/S", color: CHIP_COLOR, maxSize: 100 },
+              { name: "🟡 size/M", color: CHIP_COLOR, maxSize: 300 },
+              { name: "🟠 size/L", color: CHIP_COLOR, maxSize: 600 },
+              { name: "🔴 size/XL", color: CHIP_COLOR, maxSize: null },
             ];
             const MANAGED_LABELS = BUCKETS.map((b) => b.name);
 
