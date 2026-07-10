@@ -81,6 +81,10 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 ON CLUS
             toFloat64('nan'),
             dateDiff('microsecond', start_time, end_time) / 1000.0) CODEC(ZSTD(1)),
     id_at                DateTime('UTC') MATERIALIZED UUIDv7ToDateTime(toUUID(id)) CODEC(Delta, ZSTD(1)),  -- partition input, see header
+    -- Point lookups by id alone (project unknown) can't use the primary key, and retention/read paths also scan
+    -- id-ranges (id >= .. AND id < ..). id is the sort-key suffix and a UUIDv7 (time-ordered), so values cluster
+    -- within granules: minmax prunes both. Matches idx_spans_id.
+    INDEX idx_traces_id id TYPE minmax GRANULARITY 1,
     INDEX idx_traces_id_at id_at TYPE minmax GRANULARITY 1,  -- granule-level pruning on id_at within a partition
     -- Carried over from traces so the successor keeps the same read performance.
     INDEX idx_traces_source source TYPE set(0) GRANULARITY 1,
