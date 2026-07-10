@@ -8004,6 +8004,39 @@ paths:
             application/octet-stream:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/spans/exists:
+    get:
+      tags:
+      - Spans
+      summary: Check whether a project has spans
+      description: Returns whether the project has at least one span matching the
+        given scope. Cheap existence probe (LIMIT 1) used to drive empty-state decisions
+        without scanning or aggregating the whole project.
+      operationId: spansExist
+      parameters:
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: project_name
+        in: query
+        schema:
+          type: string
+      - name: source
+        in: query
+        schema:
+          type: string
+          description: "Restrict the probe to a single ingestion source (e.g. 'sdk'\
+            \ for the Logs empty state), matching the rendered list's logs-source\
+            \ scope. Omit to probe any source."
+      responses:
+        "200":
+          description: Span existence
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExistenceResponse"
   /v1/private/spans/comments/{commentId}:
     patch:
       tags:
@@ -8878,6 +8911,46 @@ paths:
             application/octet-stream:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/traces/exists:
+    get:
+      tags:
+      - Traces
+      summary: Check whether a project has traces
+      description: Returns whether the project has at least one trace matching the
+        given scope. Cheap existence probe (LIMIT 1) used to drive empty-state decisions
+        without scanning or aggregating the whole project.
+      operationId: tracesExist
+      parameters:
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: project_name
+        in: query
+        schema:
+          type: string
+      - name: source
+        in: query
+        schema:
+          type: string
+          description: "Restrict the probe to a single ingestion source (e.g. 'sdk'\
+            \ for the Logs empty state), matching the rendered list's logs-source\
+            \ scope. Omit to probe any source."
+      - name: thread_only
+        in: query
+        schema:
+          type: boolean
+          description: "When true, only considers traces that belong to a thread (thread_id\
+            \ is set) — used by the Threads empty state."
+          default: false
+      responses:
+        "200":
+          description: Trace existence
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExistenceResponse"
   /v1/private/traces/threads/{threadModelId}:
     patch:
       tags:
@@ -21405,6 +21478,13 @@ components:
           description: "Filter spans created up to this time (ISO-8601 format). If\
             \ not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
+    ExistenceResponse:
+      type: object
+      properties:
+        exists:
+          type: boolean
+          description: Whether the project has at least one matching entity for the
+            given scope
     TraceBatchUpdate:
       required:
       - ids
