@@ -140,10 +140,11 @@ export const FILTER_COLUMNS: ColumnData<Optimization>[] = [
   },
 ];
 
-// Default-visible columns; Run ID, Item source, Algorithm and Metric ship
-// hidden and are enabled from the Columns picker.
+// Default-visible columns; Run ID, Algorithm and Metric ship hidden and are
+// enabled from the Columns picker.
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "name",
+  "dataset_name",
   "created_at",
   "status",
   "pass_rate",

@@ -43,22 +43,19 @@ const OptimizationsToolbar: React.FC<OptimizationsToolbarProps> = ({
   onColumnsOrderChange,
 }) => {
   return (
-    <div className="mb-2 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
-      <div className="flex min-w-0 flex-1 items-center gap-2">
-        <FilterChipBar
-          {...filterChips}
-          prefix={
-            <SearchInput
-              searchText={search}
-              setSearchText={onSearchChange}
-              placeholder="Search"
-              className="w-[200px] shrink-0"
-              dimension="xs"
-            />
-          }
-        />
-      </div>
-      <div className="flex items-center gap-2">
+    // Search + right-aligned actions share the top row; the filter bar sits
+    // inline on wide screens (md+) but wraps to its own full-width line below
+    // the search on narrower screens, while the actions stay aligned with
+    // search on top.
+    <div className="mb-2 flex flex-wrap items-center gap-x-8 gap-y-2">
+      <SearchInput
+        searchText={search}
+        setSearchText={onSearchChange}
+        placeholder="Search"
+        className="order-1 w-[200px] shrink-0"
+        dimension="xs"
+      />
+      <div className="order-2 ml-auto flex items-center gap-2 md:order-3">
         {canDeleteOptimizationRuns && (
           <>
             <OptimizationsActionsPanel optimizations={selectedRows} />
@@ -81,6 +78,9 @@ const OptimizationsToolbar: React.FC<OptimizationsToolbarProps> = ({
           onRefresh={onRefresh}
           size="icon-2xs"
         />
+      </div>
+      <div className="order-3 w-full min-w-0 md:order-2 md:w-auto md:flex-1">
+        <FilterChipBar {...filterChips} />
       </div>
     </div>
   );

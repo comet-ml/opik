@@ -77,7 +77,8 @@ export const OptimizationAccuracyCell = (
         <FeedbackScoreTag
           label={feedbackScore.name}
           value={feedbackScore.value}
-          className="h-5 overflow-hidden"
+          size="sm"
+          className="overflow-hidden"
         />
       ) : (
         "-"
@@ -135,7 +136,7 @@ export const OptimizationTotalCostCell = (
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      <span className="comet-body-s">
+      <span className="comet-body-xs">
         {row.total_optimization_cost != null
           ? formatAsCurrency(row.total_optimization_cost)
           : "-"}

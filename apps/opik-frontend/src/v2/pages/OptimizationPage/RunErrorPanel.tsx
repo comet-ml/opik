@@ -44,7 +44,7 @@ const RunErrorPanel: React.FC<RunErrorPanelProps> = ({ optimization }) => {
             Optimization failed
           </h3>
         </div>
-        <p className="comet-body-s whitespace-pre-wrap break-words text-foreground">
+        <p className="comet-body-xs whitespace-pre-wrap break-words text-foreground">
           {errorMessage ??
             (logsFailedToLoad
               ? "The run ended with an error, but the logs could not be loaded."
@@ -62,9 +62,8 @@ const RunErrorPanel: React.FC<RunErrorPanelProps> = ({ optimization }) => {
         )}
         {logsFailedToLoad && (
           <Button
-            variant="outline"
-            size="sm"
-            className="mt-3"
+            variant="link"
+            className="comet-body-xs mt-2 h-auto p-0"
             onClick={() => refetch()}
           >
             Retry loading logs
