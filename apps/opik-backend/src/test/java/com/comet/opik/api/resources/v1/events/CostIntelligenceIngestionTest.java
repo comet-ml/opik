@@ -21,6 +21,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.redis.testcontainers.RedisContainer;
+import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -472,15 +473,16 @@ class CostIntelligenceIngestionTest {
                     .bind("workspace_id", workspaceId)
                     .bind("span_id", spanId.toString());
             return Mono.from(statement.execute())
-                    .flatMap(result -> Mono.from(result.map((row, meta) -> new CipxSpendRow(
-                            row.get("project_id", String.class),
-                            row.get("start_ms", Long.class),
-                            row.get("model", String.class),
-                            row.get("u_input", Long.class),
-                            row.get("u_cache_read", Long.class),
-                            row.get("u_cache_creation", Long.class),
-                            row.get("u_output", Long.class),
-                            row.get("query_source", String.class)))));
+                    .flatMap(result -> Mono.from(result.map((row, meta) -> CipxSpendRow.builder()
+                            .projectId(row.get("project_id", String.class))
+                            .startMs(row.get("start_ms", Long.class))
+                            .model(row.get("model", String.class))
+                            .uInput(row.get("u_input", Long.class))
+                            .uCacheRead(row.get("u_cache_read", Long.class))
+                            .uCacheCreation(row.get("u_cache_creation", Long.class))
+                            .uOutput(row.get("u_output", Long.class))
+                            .querySource(row.get("query_source", String.class))
+                            .build())));
         }).blockOptional();
     }
 
@@ -578,6 +580,7 @@ class CostIntelligenceIngestionTest {
     private record WorkspaceContext(String apiKey, String workspaceName, String workspaceId) {
     }
 
+    @Builder(toBuilder = true)
     private record CipxSpendRow(String projectId, Long startMs, String model, Long uInput, Long uCacheRead,
             Long uCacheCreation, Long uOutput, String querySource) {
     }
