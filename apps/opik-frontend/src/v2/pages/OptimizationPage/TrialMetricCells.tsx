@@ -10,9 +10,8 @@ import {
   formatAsPercentage,
 } from "@/lib/optimization-formatters";
 import { calcFormatterAwarePercentage } from "@/lib/percentage";
-import PercentageTrend, {
-  PercentageTrendType,
-} from "@/shared/PercentageTrend/PercentageTrend";
+import { PercentageTrendType } from "@/shared/PercentageTrend/PercentageTrend";
+import MetricTrendPill from "@/shared/PercentageTrend/MetricTrendPill";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 
 type TrialCellContext = CellContext<AggregatedCandidate, unknown>;
@@ -43,9 +42,9 @@ type TrialMetricCellProps = {
   suffix?: string;
 };
 
-// The trend tag sits before the value, and the pair is flush right (the
-// column types right-align via CellWrapper). The compact 20px "sm" tag fits
-// the 32px rows — the default 24px one overflows.
+// The trend pill sits before the value, and the pair is flush right (the
+// column types right-align via CellWrapper). Uses the shared MetricTrendPill
+// so trials render deltas identically to the optimization table.
 const TrialMetricCellContent: React.FunctionComponent<TrialMetricCellProps> = ({
   value,
   formatter,
@@ -54,7 +53,7 @@ const TrialMetricCellContent: React.FunctionComponent<TrialMetricCellProps> = ({
   suffix,
 }) => (
   <>
-    <PercentageTrend percentage={percentage} trend={trend} size="sm" />
+    <MetricTrendPill percentage={percentage} trend={trend} />
     {isNumber(value) ? (
       <TooltipWrapper content={String(value)}>
         <span>
@@ -117,7 +116,7 @@ export const TrialAccuracyCell = (context: TrialCellContext) => {
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className="gap-2"
+      className="gap-1.5"
     >
       <TrialMetricCellContent
         value={row.score}
@@ -148,7 +147,7 @@ export const TrialCandidateCostCell = (context: TrialCellContext) => {
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className="gap-2"
+      className="gap-1.5"
     >
       <TrialMetricCellContent
         value={row.runtimeCost}
@@ -179,7 +178,7 @@ export const TrialCandidateLatencyCell = (context: TrialCellContext) => {
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className="gap-2"
+      className="gap-1.5"
     >
       <TrialMetricCellContent
         value={row.latencyP50}
