@@ -122,6 +122,11 @@ module.exports = {
         "warning-box-icon-bg": "hsl(var(--warning-box-icon-bg))",
         "warning-box-icon-text": "hsl(var(--warning-box-icon-text))",
 
+        /* Recoverable-waste callout colors (AI Spend) */
+        "waste-bg": "var(--waste-bg)",
+        "waste-border": "var(--waste-border)",
+        "waste-text": "var(--waste-text)",
+
         /* Chart colors (Figma Design System) */
         "chart-blue": "var(--chart-blue)",
         "chart-yellow": "var(--chart-yellow)",
