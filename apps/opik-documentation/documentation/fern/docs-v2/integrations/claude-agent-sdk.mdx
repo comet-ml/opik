@@ -13,8 +13,11 @@ Claude Code telemetry is configured through environment variables.
 
 Use this guide when you want to configure Claude Code's official OpenTelemetry settings and align endpoint/header values with your Opik deployment mode.
 
-<Callout type="warning">
-Claude Code's monitoring docs currently describe OTel <b>metrics</b> and <b>events/logs</b> exporters. Opik tracing views are span-based. Verify your pipeline emits spans if your goal is trace visualization in Opik.
+<Callout type="info">
+Opik ingests OTel <b>trace spans</b>. Claude Code emits spans when you set
+<code>CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1</code> and <code>OTEL_TRACES_EXPORTER=otlp</code>.
+Prompt, tool I/O, and assistant output are <b>redacted by default</b> and are only captured on
+spans once you enable the content flags and the detailed-tracing beta below.
 </Callout>
 
 ## Opik OTLP endpoint modes
@@ -63,42 +66,55 @@ For full endpoint/header details, see [Opik OpenTelemetry overview](/integration
     </Tab>
 </Tabs>
 
-## Claude telemetry configuration (official pattern)
+## Minimal setup for full trace visibility
 
-Intent:
-Enable Claude Code telemetry and route supported OTel signals to your collector/backend.
+This is the minimal set of environment variables that captures the **user prompt, tool
+input/output, and assistant output** as spans in Opik (Opik Cloud shown; swap the endpoint for
+your deployment mode above). Set these before starting your Claude Agent SDK app, or `claude -p`
+(non-interactive) runs.
 
-Applies when:
-You run Claude Code with telemetry enabled via environment variables.
-
-Required fields:
-- `CLAUDE_CODE_ENABLE_TELEMETRY=1`
-- at least one exporter (`OTEL_METRICS_EXPORTER` or `OTEL_LOGS_EXPORTER`)
-
-Optional fields:
-- `OTEL_EXPORTER_OTLP_PROTOCOL`
-- `OTEL_EXPORTER_OTLP_ENDPOINT`
-- `OTEL_EXPORTER_OTLP_HEADERS`
-- per-signal overrides such as `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`
-
-Minimal valid setup:
+<Callout type="warning">
+Assistant output (block 4) relies on the detailed-tracing beta, which is only ungated for the
+Claude Agent SDK and non-interactive `claude -p`. In an **interactive** `claude` session that beta
+is gated, so you will get the user prompt and tool I/O but **not** `response.model_output`.
+</Callout>
 
 ```bash wordWrap
+# 1. Enable Claude Code telemetry and trace-span emission
 export CLAUDE_CODE_ENABLE_TELEMETRY=1
-export OTEL_METRICS_EXPORTER=otlp
-export OTEL_LOGS_EXPORTER=otlp
-export OTEL_EXPORTER_OTLP_PROTOCOL=grpc
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
-# Optional if your collector/export path requires auth
-export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer <token>"
-claude
+export CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1
+
+# 2. Export traces to Opik
+export OTEL_TRACES_EXPORTER=otlp
+export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
+
+# 3. Un-redact content (prompt + tool input/output)
+export OTEL_LOG_USER_PROMPTS=1
+export OTEL_LOG_TOOL_DETAILS=1
+export OTEL_LOG_TOOL_CONTENT=1
+
+# 4. Capture assistant/AI output on spans (detailed-tracing beta)
+export ENABLE_BETA_TRACING_DETAILED=1
+export BETA_TRACING_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
 ```
+
+### Why each block matters
+
+- **Blocks 1-2** get `claude_code.*` spans into Opik. Without `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1` Claude Code emits only metrics/logs (no spans), and nothing appears in Opik.
+- **Block 3** un-redacts the user prompt and tool input/output, which are redacted by default.
+- **Block 4** is required for **assistant/AI output**. Claude Code only puts response text on spans (`response.model_output`) under the detailed-tracing beta; otherwise it goes to the OTel *logs* signal, which Opik does not ingest. `BETA_TRACING_ENDPOINT` is a standard OTLP base URL — point it at the same Opik endpoint. Its exporter reuses `OTEL_EXPORTER_OTLP_HEADERS` (block 2), so the `Authorization` / `Comet-Workspace` headers Opik Cloud and Enterprise require are sent automatically; no separate header variable is needed. For the Claude Agent SDK and other non-interactive (`claude -p`) runs, this beta needs no additional server-side enablement.
+
+<Callout type="info">
+`OTEL_LOG_ASSISTANT_RESPONSES=1` also un-redacts response text, but on the OTel logs signal — which Opik has no receiver for. Use block 4 (detailed-tracing beta) to get assistant output into Opik.
+</Callout>
 
 ## Validation
 
-1. Start Claude with telemetry enabled.
-2. Confirm your OTLP backend receives `claude_code.*` metrics/events.
-3. If targeting Opik trace views, verify spans are emitted by your pipeline; metrics/logs alone will not appear as traces.
+1. Start your Claude Agent SDK app (or `claude -p`) with the variables above set.
+2. Open the target project in Opik and find the `claude_code.interaction` trace.
+3. Confirm the spans carry content: the user prompt (trace input), `tool_input` / tool output on `claude_code.tool` spans, and `response.model_output` on `claude_code.llm_request` spans.
 
 ## Source references
 

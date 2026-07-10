@@ -5,6 +5,7 @@ import com.comet.opik.api.evaluators.ProjectReference;
 import lombok.Builder;
 import org.jdbi.v3.json.Json;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -52,6 +53,7 @@ public record LlmAsJudgeAutomationRuleEvaluatorModel(
     public record LlmAsJudgeCode(LlmAsJudgeCodeParameters model,
             List<LlmAsJudgeCodeMessage> messages,
             Map<String, String> variables,
-            List<LlmAsJudgeCodeSchema> schema) {
+            List<LlmAsJudgeCodeSchema> schema,
+            BigDecimal maxCostUsd) {
     }
 }

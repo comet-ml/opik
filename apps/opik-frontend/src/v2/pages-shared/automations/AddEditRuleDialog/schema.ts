@@ -204,6 +204,11 @@ const LLMJudgeBaseSchema = z.object({
       },
       { message: "All score definition names should be unique" },
     ),
+  maxCostUsd: z
+    .number()
+    .positive({ message: "Budget must be a positive amount" })
+    .optional()
+    .nullable(),
 });
 
 export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
@@ -530,6 +535,7 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
     variables: data.variables ?? {},
     parsingVariablesError: false,
     schema: data.schema,
+    maxCostUsd: data.max_cost_usd ?? null,
   };
 };
 
@@ -561,5 +567,6 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     messages: convertLLMToProviderMessages(data.messages),
     variables: data.variables,
     schema: data.schema,
+    max_cost_usd: data.maxCostUsd ?? null,
   };
 };

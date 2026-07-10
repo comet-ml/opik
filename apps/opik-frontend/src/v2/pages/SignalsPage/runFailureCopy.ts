@@ -29,6 +29,12 @@ export const getRunFailureCopy = (reason?: string): RunFailureCopy => {
         description:
           "The run was never picked up (the service may have been restarting). Try again.",
       };
+    case "permission_denied":
+      return {
+        title: "Diagnostics couldn't access this project",
+        description:
+          "Agent Insights is missing the workspace permission needed to read this project's data. Contact your workspace admin.",
+      };
     case "internal_error":
       return {
         title: "Diagnostics run failed",

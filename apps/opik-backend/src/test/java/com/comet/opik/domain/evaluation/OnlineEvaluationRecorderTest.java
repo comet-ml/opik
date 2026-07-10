@@ -201,6 +201,40 @@ class OnlineEvaluationRecorderTest {
         assertThat(trace.source()).isEqualTo(Source.EVALUATOR);
         assertThat(trace.visibilityMode()).isEqualTo(VisibilityMode.HIDDEN);
         assertThat(trace.output().toString()).contains("Relevance").contains("relevant");
+        // No wrap-up happened -> no budget tag.
+        assertThat(trace.tags()).isNull();
+    }
+
+    @Test
+    void tagsFinalizedTraceWhenBudgetExceededFlagged() {
+        stubTraceWrites();
+        var scores = List.of(FeedbackScoreBatchItem.builder()
+                .name("Relevance").value(BigDecimal.valueOf(0.8)).reason("relevant").build());
+
+        var recorder = recorder();
+        // The scorer flags this once the spend budget trips and the agentic loop wraps up early.
+        recorder.flagBudgetExceeded();
+        var result = recorder.monitor(Mono.just(scores)).block();
+
+        // Flagging the budget must not alter monitor()'s pass-through contract.
+        assertThat(result).isSameAs(scores);
+        assertThat(capturedTrace().tags()).containsExactly("budget_exceeded");
+    }
+
+    @Test
+    void tagsFinalizedTraceWhenBudgetExceededFlaggedOnErrorPath() {
+        stubTraceWrites();
+        var boom = new IllegalStateException("bad");
+
+        var recorder = recorder();
+        // Budget can trip and the scoring Mono still error afterwards — the failed trace must carry
+        // the tag too, since failedTrace() applies it.
+        recorder.flagBudgetExceeded();
+        StepVerifier.create(recorder.monitor(Mono.<List<FeedbackScoreBatchItem>>error(boom)))
+                .expectErrorMatches(error -> error == boom)
+                .verify();
+
+        assertThat(capturedTrace().tags()).containsExactly("budget_exceeded");
     }
 
     @Test

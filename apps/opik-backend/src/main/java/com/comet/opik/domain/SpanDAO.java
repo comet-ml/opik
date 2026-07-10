@@ -1086,6 +1086,22 @@ public class SpanDAO {
             ;
             """;
 
+    /**
+     * Cheap "does the project have any span?" probe for the Logs empty state. Deliberately minimal — project
+     * scope only — so it is always a primary-key-prunable {@code LIMIT 1}. It intentionally does not support
+     * filters, search, trace_id, type, or time ranges: no consumer needs them, and adding them back would
+     * reintroduce a full-project COUNT fallback.
+     */
+    private static final String EXISTS_BY_PROJECT_ID = """
+            SELECT 1 AS exist
+            FROM spans
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            <if(source)> AND source IN (:source<if(source_legacy)>, :source_legacy<endif>) <endif>
+            LIMIT 1
+            SETTINGS log_comment = '<log_comment>'
+            """;
+
     private static final String COUNT_BY_PROJECT_ID = """
             <if(feedback_scores_filters || feedback_scores_empty_filters)>
             WITH <if(span_id_prefilter)>span_id_prefilter AS (
@@ -2374,6 +2390,42 @@ public class SpanDAO {
     public Mono<SpanPage> find(int page, int size, @NonNull SpanSearchCriteria spanSearchCriteria) {
         log.info("Finding span by '{}'", spanSearchCriteria);
         return countTotal(spanSearchCriteria).flatMap(total -> find(page, size, spanSearchCriteria, total));
+    }
+
+    @WithSpan
+    public Mono<Boolean> existsByProjectId(@NonNull SpanSearchCriteria spanSearchCriteria) {
+        return Mono.from(connectionFactory.create())
+                .flatMap(connection -> makeMonoContextAware((userName, workspaceId) -> {
+                    var template = getSTWithLogComment(EXISTS_BY_PROJECT_ID, "exists_spans_by_project_id",
+                            workspaceId, userName, "");
+
+                    var source = spanSearchCriteria.source();
+                    var sourceLegacy = source == null
+                            ? Optional.<String>empty()
+                            : Source.legacyFallbackDbValue(source.getValue());
+                    if (source != null) {
+                        template.add("source", true);
+                        if (sourceLegacy.isPresent()) {
+                            template.add("source_legacy", true);
+                        }
+                    }
+
+                    var statement = connection.createStatement(template.render())
+                            .bind("project_id", spanSearchCriteria.projectId())
+                            .bind("workspace_id", workspaceId);
+
+                    if (source != null) {
+                        statement.bind("source", source.getValue());
+                        sourceLegacy.ifPresent(legacy -> statement.bind("source_legacy", legacy));
+                    }
+
+                    Segment segment = startSegment("spans", "Clickhouse", "existsByProjectId");
+
+                    return Mono.from(statement.execute())
+                            .doFinally(signalType -> endSegment(segment))
+                            .flatMap(result -> Mono.from(result.map((row, metadata) -> true)))
+                            .defaultIfEmpty(false);
+                }));
     }
 
     private Mono<SpanPage> find(int page, int size, SpanSearchCriteria spanSearchCriteria, Long total) {

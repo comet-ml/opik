@@ -41,6 +41,17 @@ public class CostService {
             Map.entry("microsoft", "azure"),
             Map.entry("azure", "azure"),
             Map.entry("mistral", "mistral"));
+
+    // Online evaluation (and OTel ingestion) resolve models to LlmProvider serialized values whose names
+    // differ from the canonical price-table vocabulary. Normalize those to the single canonical provider
+    // at lookup so cost tracking and the per-evaluation spend budget work for every provider selectable
+    // for online evaluation. Only providers whose name actually differs need an entry: openai / anthropic
+    // / bedrock already equal their canonical name, and self-hosted providers (ollama, custom-llm) have no
+    // public pricing to map to. Vertex is unambiguous here because only Gemini models are offered on
+    // Vertex for online evaluation. Canonical names (and any not listed) pass through unchanged.
+    private static final Map<String, String> RUNTIME_PROVIDER_MAPPING = Map.of(
+            "gemini", "google_ai",
+            "vertex-ai", "google_vertexai");
     public static final String MODEL_PRICES_FILE = "model_prices_and_context_window.json";
     public static final String MODEL_PRICES_OVERRIDES_FILE = "model_prices_overrides.json";
     private static final String BEDROCK_PROVIDER = "bedrock";
@@ -105,6 +116,10 @@ public class CostService {
         if (StringUtils.isBlank(modelName) || StringUtils.isBlank(provider)) {
             return DEFAULT_COST;
         }
+
+        // Normalize runtime provider names ("gemini", "vertex-ai") to the canonical price-table provider
+        // so callers holding an LlmProvider value hit the same rows as callers passing the canonical name.
+        provider = RUNTIME_PROVIDER_MAPPING.getOrDefault(provider, provider);
 
         // Strip provider prefix if present (e.g. "openai/gpt-4o" -> "gpt-4o").
         // LiteLLM sends model names with provider prefix via gen_ai.request.model.

@@ -242,6 +242,7 @@ export * from "./ExecutionPolicy.js";
 export * from "./ExecutionPolicyCompare.js";
 export * from "./ExecutionPolicyPublic.js";
 export * from "./ExecutionPolicyWrite.js";
+export * from "./ExistenceResponse.js";
 export * from "./Experiment.js";
 export * from "./ExperimentEvaluationMethod.js";
 export * from "./ExperimentExecutionResponse.js";
