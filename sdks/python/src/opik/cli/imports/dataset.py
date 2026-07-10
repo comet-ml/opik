@@ -133,9 +133,18 @@ def import_datasets_from_directory(
                 # tags, so distinguish None (no tags field -> skip) from [].
                 if dataset_tags is not None:
                     try:
+                        # description is silently nulled by the backend when
+                        # omitted from this PUT (unlike tags/visibility, it
+                        # isn't COALESCEd against the existing row), so it
+                        # must be re-passed here to avoid wiping it.
+                        existing = client.rest_client.datasets.get_dataset_by_id(
+                            dataset.id
+                        )
                         client.rest_client.datasets.update_dataset(
                             dataset.id,
                             name=dataset_name,
+                            description=existing.description,
+                            visibility=existing.visibility,
                             tags=dataset_tags,
                         )
                         if debug:

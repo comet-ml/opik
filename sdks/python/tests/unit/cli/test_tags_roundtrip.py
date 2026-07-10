@@ -186,6 +186,43 @@ class TestDatasetTagsImport:
         client.rest_client.datasets.update_dataset.assert_called_once()
         assert client.rest_client.datasets.update_dataset.call_args.kwargs["tags"] == []
 
+    def test_import_dataset__existing_dataset_with_description__preserves_description(
+        self, tmp_path: Path
+    ) -> None:
+        # Tags-only import must not silently null out a description the
+        # destination dataset already had (the backend's update PUT doesn't
+        # COALESCE description against the existing row).
+        self._write_dataset(
+            tmp_path,
+            {"name": "ds", "tags": ["a"], "items": []},
+        )
+        client = self._make_client()
+        # Re-import onto a dataset that already exists (get_dataset succeeds).
+        existing_dataset = Mock()
+        existing_dataset.id = "existing-ds-id"
+        client.get_dataset = Mock(return_value=existing_dataset)
+        existing_remote = Mock()
+        existing_remote.description = "original description"
+        existing_remote.visibility = "private"
+        client.rest_client.datasets.get_dataset_by_id = Mock(
+            return_value=existing_remote
+        )
+
+        import_datasets_from_directory(
+            client=client,
+            source_dir=tmp_path,
+            project_name="proj",
+            dry_run=False,
+            name_pattern=None,
+            debug=False,
+        )
+
+        client.rest_client.datasets.update_dataset.assert_called_once()
+        call = client.rest_client.datasets.update_dataset.call_args
+        assert call.kwargs["description"] == "original description"
+        assert call.kwargs["visibility"] == "private"
+        assert call.kwargs["tags"] == ["a"]
+
     def test_import_dataset__update_dataset_raises__continues_and_inserts_items(
         self, tmp_path: Path
     ) -> None:
