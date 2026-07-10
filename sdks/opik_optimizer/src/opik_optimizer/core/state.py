@@ -153,6 +153,12 @@ def build_optimization_metadata(
     if getattr(optimizer, "name", None):
         metadata["name"] = optimizer.name
 
+    # Record the model on the optimization itself so the UI can show it as a
+    # header pill for SDK-launched runs (Studio runs carry it in studio_config).
+    model = getattr(optimizer, "model", None)
+    if model:
+        metadata["model"] = model
+
     agent_class_name: str | None = None
     if agent_class is not None:
         agent_class_name = getattr(agent_class, "__name__", None)

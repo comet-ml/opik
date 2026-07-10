@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from "react";
-import { diffLines } from "diff";
 import { ChevronDown, GitCompare } from "lucide-react";
 
 import GitCompareOff from "@/icons/git-compare-off.svg?react";
 import { cn } from "@/lib/utils";
+import TextDiff from "./TextDiff";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -51,33 +51,20 @@ type PromptComparisonProps = {
 };
 
 /**
- * Line-level diff: unchanged lines keep the full foreground color, added lines
- * get a green band and removed lines a struck-through red band (no word-level
- * inline highlighting, no tag pills).
+ * Prompt diff: unchanged lines stay clean, and within a changed line only the
+ * words that actually differ are highlighted (added green, removed struck-through
+ * red). Delegates to the shared word-level {@link ./TextDiff} so an unchanged
+ * leading sentence in an otherwise-edited paragraph is no longer painted as both
+ * removed and added.
  */
 const LineDiff: React.FC<{ base: string; current: string }> = ({
   base,
   current,
-}) => {
-  const parts = useMemo(() => diffLines(base, current), [base, current]);
-
-  return (
-    <div className="comet-body-s whitespace-pre-wrap break-words text-foreground">
-      {parts.map((part, index) => (
-        <div
-          key={index}
-          className={cn({
-            "bg-diff-added-bg text-diff-added-text": part.added,
-            "bg-diff-removed-bg text-diff-removed-text line-through":
-              part.removed,
-          })}
-        >
-          {part.value.replace(/\n$/, "")}
-        </div>
-      ))}
-    </div>
-  );
-};
+}) => (
+  <div className="comet-body-s break-words text-foreground">
+    <TextDiff content1={base} content2={current} mode="words" />
+  </div>
+);
 
 const PlainText: React.FC<{ text: string }> = ({ text }) => (
   <div className="comet-body-s whitespace-pre-wrap break-words text-foreground">

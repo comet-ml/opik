@@ -74,6 +74,21 @@ describe("getOptimizationConfigItems", () => {
     expect(items.metric?.parameters).toBeUndefined();
   });
 
+  it("resolves model and algorithm from metadata for SDK runs", () => {
+    const items = getOptimizationConfigItems({
+      id: "opt-3",
+      objective_name: "levenshtein_ratio",
+      metadata: {
+        optimizer: "HierarchicalReflectiveOptimizer",
+        model: "gpt-4o-mini",
+      },
+    } as unknown as Optimization);
+
+    expect(items.model).toBe("gpt-4o-mini");
+    expect(items.algorithmLabel).toBe("Hierarchical Reflective");
+    expect(items.metric?.label).toBe("Levenshtein");
+  });
+
   it("returns empty fields for a missing optimization", () => {
     const items = getOptimizationConfigItems(undefined);
     expect(items.model).toBeUndefined();

@@ -4,7 +4,11 @@ import {
   Optimization,
   OPTIMIZATION_STATUS,
 } from "@/types/optimizations";
-import { getMetricLabel, getOptimizerLabel } from "@/lib/optimizations";
+import {
+  getMetricLabel,
+  getOptimizerLabel,
+  getOptimizationOptimizerType,
+} from "@/lib/optimizations";
 
 export { getMetricLabel };
 
@@ -52,9 +56,10 @@ export interface OptimizationConfigItems {
 /**
  * Resolve the run-configuration items shown as header pills.
  *
- * Studio runs carry the full config under `studio_config`; SDK runs only have
- * `objective_name`, so the metric label falls back to that and the model /
- * algorithm pills are simply omitted.
+ * Studio runs carry the full config under `studio_config`. SDK-launched runs
+ * have no `studio_config`, so the algorithm and model fall back to the run
+ * `metadata` (optimizer class name + model, written by the optimizer SDK) and
+ * the metric label falls back to `objective_name`.
  */
 export const getOptimizationConfigItems = (
   optimization?: Optimization,
@@ -76,10 +81,17 @@ export const getOptimizationConfigItems = (
     };
   }
 
+  const optimizerType = optimization
+    ? getOptimizationOptimizerType(optimization)
+    : undefined;
+  const metadataModel = (
+    optimization?.metadata as { model?: string } | undefined
+  )?.model;
+
   return {
-    model: studioConfig?.llm_model?.model,
-    algorithmLabel: studioConfig?.optimizer?.type
-      ? getOptimizerLabel(studioConfig.optimizer.type)
+    model: studioConfig?.llm_model?.model ?? metadataModel,
+    algorithmLabel: optimizerType
+      ? getOptimizerLabel(optimizerType)
       : undefined,
     metric,
   };

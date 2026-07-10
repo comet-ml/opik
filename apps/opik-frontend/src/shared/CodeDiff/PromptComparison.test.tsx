@@ -54,9 +54,11 @@ describe("PromptComparison", () => {
       expect(screen.getByText("→ Trial")).toBeInTheDocument();
       expect(screen.getByText("Hide diff")).toBeInTheDocument();
 
-      // Both sides of the diff render (target removed, current added).
-      expect(container.textContent).toContain("baseline system text");
-      expect(container.textContent).toContain("current system text");
+      // Both sides of the diff render at word granularity: the changed words
+      // (baseline -> current) plus the unchanged shared remainder.
+      expect(container.textContent).toContain("baseline");
+      expect(container.textContent).toContain("current");
+      expect(container.textContent).toContain("system text");
     });
 
     it("hides the diff and shows only the current prompt when toggled", () => {

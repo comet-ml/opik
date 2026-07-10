@@ -14,6 +14,15 @@ import type { DotPosition } from "./ScatterDot";
 /** Minimum gap between the pinned card and the chart container's edges. */
 const CARD_EDGE_GAP = 4;
 
+// Estimated card height, used to keep the card inside the chart's vertical band
+// (mirrors the horizontal clamp). Keep in sync with TrialCard's layout: shell
+// padding (p-1.5), header (min-h-[22px]), the divider (py-1 + 1px rule), then
+// one row (h-6) per metric.
+const CARD_SHELL_V_PADDING = 12;
+const CARD_HEADER_HEIGHT = 22;
+const CARD_DIVIDER_HEIGHT = 9;
+const CARD_ROW_HEIGHT = 24;
+
 type UseBestTrialCardParams = {
   dotPositionsRef: React.MutableRefObject<Map<string, DotPosition>>;
   containerRef: React.RefObject<HTMLDivElement>;
@@ -77,6 +86,28 @@ const useBestTrialCard = ({
       Math.min(pos.cx - TRIAL_CARD_WIDTH / 2, maxLeft),
     );
 
+    // Clamp the card vertically the same way, so a low-scoring best dot doesn't
+    // push it past the chart's bottom edge onto the legend / links below. The
+    // chart plot is the first child (the ChartContainer); the card must stay
+    // within it. Card height is estimated from its metric-row count.
+    const rowCount =
+      1 +
+      (best.latencyP50 != null ? 1 : 0) +
+      (best.runtimeCost != null ? 1 : 0);
+    const cardHeight =
+      CARD_SHELL_V_PADDING +
+      CARD_HEADER_HEIGHT +
+      CARD_DIVIDER_HEIGHT +
+      rowCount * CARD_ROW_HEIGHT;
+    const chartHeight =
+      (containerRef.current.firstElementChild as HTMLElement | null)
+        ?.clientHeight ?? containerRect.height;
+    const maxTop = chartHeight - cardHeight - CARD_EDGE_GAP;
+    const top = Math.max(
+      CARD_EDGE_GAP,
+      Math.min(pos.cy + TOOLTIP_Y_OFFSET, maxTop),
+    );
+
     return createPortal(
       <div
         className={cn(
@@ -85,7 +116,7 @@ const useBestTrialCard = ({
         )}
         style={{
           left,
-          top: pos.cy + TOOLTIP_Y_OFFSET,
+          top,
         }}
       >
         <TrialCard

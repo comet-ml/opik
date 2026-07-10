@@ -36,7 +36,7 @@ const NavigationTag: React.FunctionComponent<NavigationTagProps> = ({
   icon,
 }) => {
   const resourceLabel = RESOURCE_MAP[resource].label;
-  const defaultTooltipContent = `Navigate to ${resourceLabel}: ${name}`;
+  const defaultTooltipContent = `Go to ${resourceLabel}: ${name}`;
 
   return (
     <ResourceLink
