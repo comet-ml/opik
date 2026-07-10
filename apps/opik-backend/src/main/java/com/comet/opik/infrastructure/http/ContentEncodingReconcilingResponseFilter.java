@@ -4,6 +4,7 @@ import jakarta.ws.rs.client.ClientRequestContext;
 import jakarta.ws.rs.client.ClientResponseContext;
 import jakarta.ws.rs.client.ClientResponseFilter;
 import jakarta.ws.rs.core.HttpHeaders;
+import lombok.NonNull;
 
 import java.util.Locale;
 import java.util.Set;
@@ -32,11 +33,11 @@ public class ContentEncodingReconcilingResponseFilter implements ClientResponseF
     private static final Set<String> TRANSPARENTLY_DECODED = Set.of("gzip", "x-gzip", "deflate");
 
     @Override
-    public void filter(ClientRequestContext requestContext, ClientResponseContext responseContext) {
+    public void filter(ClientRequestContext requestContext, @NonNull ClientResponseContext responseContext) {
         String contentEncoding = responseContext.getHeaderString(HttpHeaders.CONTENT_ENCODING);
 
         if (contentEncoding != null
-                && TRANSPARENTLY_DECODED.contains(contentEncoding.trim().toLowerCase(Locale.ROOT))) {
+                && TRANSPARENTLY_DECODED.contains(contentEncoding.strip().toLowerCase(Locale.ROOT))) {
             var headers = responseContext.getHeaders();
             headers.remove(HttpHeaders.CONTENT_ENCODING);
             headers.remove(HttpHeaders.CONTENT_LENGTH);
