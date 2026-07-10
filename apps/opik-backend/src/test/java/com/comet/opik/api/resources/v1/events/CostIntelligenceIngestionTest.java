@@ -118,7 +118,7 @@ class CostIntelligenceIngestionTest {
 
             var cipxSpan = factory.manufacturePojo(Span.class).toBuilder()
                     .projectName(projectName)
-                    .metadata(spanCipxMetadata("claude-sonnet-4-6", 100, 20, 5, 40))
+                    .metadata(spanCipxMetadata("claude-sonnet-4-6", 100, 20, 5, 40, "main"))
                     .build();
             var plainSpan = factory.manufacturePojo(Span.class).toBuilder()
                     .projectName(projectName)
@@ -135,6 +135,7 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().uCacheRead()).isEqualTo(20L);
                 assertThat(row.get().uCacheCreation()).isEqualTo(5L);
                 assertThat(row.get().uOutput()).isEqualTo(40L);
+                assertThat(row.get().querySource()).isEqualTo("main");
                 assertThat(row.get().projectId()).isNotBlank();
                 assertThat(row.get().startMs()).isEqualTo(cipxSpan.startTime().toEpochMilli());
             });
@@ -143,6 +144,25 @@ class CostIntelligenceIngestionTest {
             // listener has already decided this one: it must not have produced a row.
             assertThat(getCipxSpend(plainSpan.id(), ws.workspaceId())).isEmpty();
             assertThat(getCipxBlocks(plainSpan.id(), ws.workspaceId())).isEmpty();
+        }
+
+        @Test
+        @DisplayName("span with no query_source in cipx.call defaults to an empty string, not dropped")
+        void spanWithoutQuerySourceDefaultsToEmpty() {
+            var ws = newWorkspace();
+            String projectName = "cipx-" + UUID.randomUUID();
+
+            var span = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .metadata(spanCipxMetadataNoQuerySource("claude-sonnet-4-6", 100, 20, 5, 40))
+                    .build();
+            spanResourceClient.createSpan(span, ws.apiKey(), ws.workspaceName());
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                var row = getCipxSpend(span.id(), ws.workspaceId());
+                assertThat(row).isPresent();
+                assertThat(row.get().querySource()).isEmpty();
+            });
         }
 
         @Test
@@ -156,7 +176,7 @@ class CostIntelligenceIngestionTest {
             // output=40 (one output block absorbs it all).
             var span = factory.manufacturePojo(Span.class).toBuilder()
                     .projectName(projectName)
-                    .metadata(spanCipxMetadata("claude-sonnet-4-6", 100, 20, 5, 40))
+                    .metadata(spanCipxMetadata("claude-sonnet-4-6", 100, 20, 5, 40, "main"))
                     .build();
             spanResourceClient.createSpan(span, ws.apiKey(), ws.workspaceName());
 
@@ -365,13 +385,14 @@ class CostIntelligenceIngestionTest {
     }
 
     private static JsonNode spanCipxMetadata(String model, long input, long cacheRead, long cacheCreation,
-            long output) {
+            long output, String querySource) {
         return JsonUtils.getJsonNodeFromString(
                 """
                         {
                           "cipx": {
                             "call": {
                               "model": "%s",
+                              "query_source": "%s",
                               "usage": {
                                 "input_tokens": %d,
                                 "cache_read_input_tokens": %d,
@@ -386,6 +407,29 @@ class CostIntelligenceIngestionTest {
                               {"category":"mcp_tool_calls","side":"output","cache_status":"none","parent_category":"assistant","chars":30,"tool_name":"search","tool_server":"srv","tool_use_id":"tu1","resource":"res","kind":"tool"},
                               {"category":"tool_io","side":"input","cache_status":"unknown","parent_category":"context","chars":75,"tool_name":"Bash","tool_server":"","tool_use_id":"tu2","resource":"","kind":"tool"}
                             ]
+                          }
+                        }
+                        """
+                        .formatted(model, querySource, input, cacheRead, cacheCreation, output));
+    }
+
+    // No "query_source" key in cipx.call at all -- proves the DAO's asText("") default kicks in
+    // rather than a dropped/broken binding silently losing the whole row.
+    private static JsonNode spanCipxMetadataNoQuerySource(String model, long input, long cacheRead,
+            long cacheCreation, long output) {
+        return JsonUtils.getJsonNodeFromString(
+                """
+                        {
+                          "cipx": {
+                            "call": {
+                              "model": "%s",
+                              "usage": {
+                                "input_tokens": %d,
+                                "cache_read_input_tokens": %d,
+                                "cache_creation_input_tokens": %d,
+                                "output_tokens": %d
+                              }
+                            }
                           }
                         }
                         """
@@ -418,7 +462,8 @@ class CostIntelligenceIngestionTest {
                     project_id AS project_id,
                     toUnixTimestamp64Milli(start_time) AS start_ms,
                     model AS model,
-                    u_input, u_cache_read, u_cache_creation, u_output
+                    u_input, u_cache_read, u_cache_creation, u_output,
+                    query_source AS query_source
                 FROM cipx_spends FINAL
                 WHERE workspace_id = :workspace_id AND span_id = :span_id
                 """;
@@ -434,7 +479,8 @@ class CostIntelligenceIngestionTest {
                             row.get("u_input", Long.class),
                             row.get("u_cache_read", Long.class),
                             row.get("u_cache_creation", Long.class),
-                            row.get("u_output", Long.class)))));
+                            row.get("u_output", Long.class),
+                            row.get("query_source", String.class)))));
         }).blockOptional();
     }
 
@@ -533,7 +579,7 @@ class CostIntelligenceIngestionTest {
     }
 
     private record CipxSpendRow(String projectId, Long startMs, String model, Long uInput, Long uCacheRead,
-            Long uCacheCreation, Long uOutput) {
+            Long uCacheCreation, Long uOutput, String querySource) {
     }
 
     private record CipxBlockRow(Integer blockIdx, String src, String category, String tier, String lane,
