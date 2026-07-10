@@ -7,12 +7,14 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
 
 import java.beans.ConstructorProperties;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -37,7 +39,15 @@ public final class AutomationRuleEvaluatorLlmAsJudge extends AutomationRuleEvalu
                     View.Public.class, View.Write.class}) @NotNull LlmAsJudgeModelParameters model,
             @JsonView({View.Public.class, View.Write.class}) @NotNull List<LlmAsJudgeMessage> messages,
             @JsonView({View.Public.class, View.Write.class}) @NotNull Map<String, String> variables,
-            @JsonView({View.Public.class, View.Write.class}) @NotNull List<LlmAsJudgeOutputSchema> schema) {
+            @JsonView({View.Public.class, View.Write.class}) @NotNull List<LlmAsJudgeOutputSchema> schema,
+            @JsonView({View.Public.class, View.Write.class}) @Positive BigDecimal maxCostUsd) {
+
+        // Optional per-evaluation spend limit added after the fact; this overload keeps the prior
+        // positional shape working (callers get maxCostUsd = null = no limit).
+        public LlmAsJudgeCode(LlmAsJudgeModelParameters model, List<LlmAsJudgeMessage> messages,
+                Map<String, String> variables, List<LlmAsJudgeOutputSchema> schema) {
+            this(model, messages, variables, schema, null);
+        }
     }
 
     @ConstructorProperties({"id", "projectId", "projectName", "projects", "projectIds", "name", "samplingRate",

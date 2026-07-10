@@ -74,7 +74,7 @@ def reconstruct_remaps(
     rest_client: OpikApi,
     *,
     source_dataset_id: str,
-    source_name_after_rename: str,
+    source_name: str,
     source_project_name: Optional[str],
     dest_dataset_id: str,
     dest_name: str,
@@ -112,7 +112,7 @@ def reconstruct_remaps(
 
         _reconstruct_items_for_version_pair(
             rest_client,
-            source_name_after_rename=source_name_after_rename,
+            source_name=source_name,
             source_project_name=source_project_name,
             source_version_hash=source_version.version_hash,
             dest_name=dest_name,
@@ -132,7 +132,7 @@ def reconstruct_remaps(
 def _reconstruct_items_for_version_pair(
     rest_client: OpikApi,
     *,
-    source_name_after_rename: str,
+    source_name: str,
     source_project_name: Optional[str],
     source_version_hash: Optional[str],
     dest_name: str,
@@ -148,7 +148,7 @@ def _reconstruct_items_for_version_pair(
     """
     source_items = _stream_version_items_raw(
         rest_client,
-        dataset_name=source_name_after_rename,
+        dataset_name=source_name,
         project_name=source_project_name,
         version_hash=source_version_hash,
     )

@@ -143,7 +143,7 @@ def test_reconstruct__paired_versions_and_identity_items__remaps_built(
     remaps = reconstruct_remaps(
         rest,
         source_dataset_id="src-ds",
-        source_name_after_rename="ds_v1",
+        source_name="ds",
         source_project_name=None,
         dest_dataset_id="dst-ds",
         dest_name="ds",
@@ -173,7 +173,7 @@ def test_reconstruct__dest_ids_differ__content_hash_fallback_maps_them(
     remaps = reconstruct_remaps(
         rest,
         source_dataset_id="src-ds",
-        source_name_after_rename="ds_v1",
+        source_name="ds",
         source_project_name=None,
         dest_dataset_id="dst-ds",
         dest_name="ds",
@@ -198,7 +198,7 @@ def test_reconstruct__version_count_mismatch__raises_reconstruction_error(
         reconstruct_remaps(
             rest,
             source_dataset_id="src-ds",
-            source_name_after_rename="ds_v1",
+            source_name="ds",
             source_project_name=None,
             dest_dataset_id="dst-ds",
             dest_name="ds",
@@ -231,7 +231,7 @@ def test_reconstruct__optimizations__matched_by_name_into_remap(
     remaps = reconstruct_remaps(
         rest,
         source_dataset_id="src-ds",
-        source_name_after_rename="ds_v1",
+        source_name="ds",
         source_project_name=None,
         dest_dataset_id="dst-ds",
         dest_name="ds",

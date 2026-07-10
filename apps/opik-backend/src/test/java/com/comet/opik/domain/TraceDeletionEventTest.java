@@ -112,8 +112,10 @@ class TraceDeletionEventTest {
 
         traceResourceClient.deleteTrace(trace.id(), WORKSPACE_NAME, API_KEY);
 
-        // DELETE /traces/{id} deletes by id without a project scope, so no project_id is captured.
-        var expectedDeletionEvents = List.of(newExpectedDeletionEvent(null, trace.id()));
+        // DELETE /traces/{id} passes no project scope, but the delete path resolves each trace's owning
+        // project (to prune the delete on the (workspace_id, project_id) prefix), so the resolved project_id
+        // is captured.
+        var expectedDeletionEvents = List.of(newExpectedDeletionEvent(trace.projectId(), trace.id()));
         getAndAssertDeletionEvents(expectedDeletionEvents);
     }
 
@@ -132,8 +134,10 @@ class TraceDeletionEventTest {
                 .build();
         traceResourceClient.deleteTraces(batchDeleteByProject, WORKSPACE_NAME, API_KEY);
 
+        // Whether or not the caller scopes to a project, the delete path resolves each trace's owning project,
+        // so the resolved project_id is what gets captured (here all traces share one project).
         var expectedDeletionEvent = traces.stream()
-                .map(trace -> newExpectedDeletionEvent(projectId, trace.id()))
+                .map(trace -> newExpectedDeletionEvent(trace.projectId(), trace.id()))
                 .toList();
         getAndAssertDeletionEvents(expectedDeletionEvent);
     }

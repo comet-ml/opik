@@ -63,6 +63,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -334,6 +335,7 @@ class ManualEvaluationResourceTest {
                         .code(AutomationRuleEvaluatorSpanUserDefinedMetricPython.SpanUserDefinedMetricPythonCode
                                 .builder()
                                 .metric("def score(): return 1.0")
+                                .arguments(Map.of("output", "output.response"))
                                 .build())
                         .build();
                 ruleId1 = evaluatorResourceClient.createEvaluator(spanRule1, WORKSPACE_NAME, API_KEY);

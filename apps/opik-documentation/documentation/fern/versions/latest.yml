@@ -65,9 +65,12 @@ navigation:
           - page: Concepts
             path: ../docs-v2/tracing/concepts.mdx
             slug: concepts
-          - page: Debugging agents with Ollie and Opik Connect
+          - page: Debugging agents with Ollie
             path: ../docs-v2/observability/debug_agents.mdx
             slug: debug-agents
+          - page: Diagnostics
+            path: ../docs-v2/observability/diagnostics.mdx
+            slug: diagnostics
           - section: Advanced
             slug: /advanced
             contents:

@@ -41,7 +41,14 @@ from typing import Any, Dict, List, Optional, Set
 
 LOGGER = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 1
+# Bumped to 2 for OPIK-7162: the temp-destination ordering changed what the
+# resume handles are. v1 checkpoints stored ``source_name_after_rename`` and
+# assumed the destination already lived under the original name; v2 stores the
+# source's *original* name (it isn't renamed until success) and the temp
+# destination name (``<name>__migrating``). A v1 checkpoint therefore describes
+# a different physical layout, so ``load_or_create`` treats it as incompatible
+# and starts fresh rather than mis-resolving datasets.
+SCHEMA_VERSION = 2
 
 
 def checkpoint_key(workspace: str, project: str, dataset: str) -> str:
@@ -123,21 +130,26 @@ class MigrationCheckpoint:
     total_experiments: int = 0
     completed_experiment_ids: Set[str] = field(default_factory=set)
     in_flight: Optional[InFlightExperiment] = None
-    # Set True once the dataset-level phases (rename source -> _v1, create
-    # destination, replay versions, cascade optimizations) have all completed
-    # on some run. Those phases are NOT idempotent -- re-running them would
-    # collide on the rename and duplicate every version -- so a resumed run
-    # skips them entirely and rebuilds their in-memory maps read-only from the
-    # already-migrated destination (see ``reconstruct_remaps``). ``None`` on a
-    # checkpoint written before this field existed / a fresh run.
+    # Set True once the dataset-level phases (create temp destination, replay
+    # versions, cascade optimizations) have all completed on some run. Under the
+    # OPIK-7162 ordering these write into a TEMP-named destination and the source
+    # keeps its original name; the name handoff (rename source -> _v1, promote
+    # temp -> original) happens only at the very end. Replay isn't idempotent
+    # (it would duplicate versions), so a resumed run skips it and rebuilds the
+    # remaps read-only from the temp destination (see ``reconstruct_remaps``),
+    # then finishes the still-pending cascade + handoff.
     dataset_phase_done: bool = False
-    # The source dataset's id and its post-rename name (``<name>_v1``), captured
-    # once the rename lands. A resumed run resolves the source by this id/name
-    # (the original name now points at the DESTINATION dataset created by the
-    # first run, so re-resolving by the user-supplied name would pick the wrong
-    # dataset).
+    # The source dataset's id and its ORIGINAL name. Under the temp-dest ordering
+    # the source is not renamed until the run succeeds, so at resume time it
+    # still carries its original name -- unlike the pre-OPIK-7162 model, which
+    # stored the post-rename ``<name>_v1``. Resolved by id; the name is used for
+    # source-side item reads during remap reconstruction.
     source_dataset_id: Optional[str] = None
-    source_name_after_rename: Optional[str] = None
+    source_name: Optional[str] = None
+    # The temp destination name (``<name>__migrating``) the first run wrote into.
+    # A resumed run re-finds the destination by this name because the promote-to-
+    # original step hasn't run yet (it's part of the pending handoff).
+    temp_dest_name: Optional[str] = None
     schema_version: int = SCHEMA_VERSION
 
     @property
@@ -185,15 +197,17 @@ class MigrationCheckpoint:
         self.in_flight = None
 
     def mark_dataset_phase_done(
-        self, *, source_dataset_id: str, source_name_after_rename: str
+        self, *, source_dataset_id: str, source_name: str, temp_dest_name: str
     ) -> None:
-        """Record that rename/create/replay/optimizations have all completed,
-        along with the source dataset's id and post-rename name so a resumed
-        run can re-resolve the source and rebuild the remaps.
+        """Record that create-temp/replay/optimizations have all completed,
+        along with the source dataset's id + original name and the temp
+        destination name, so a resumed run can re-resolve both datasets and
+        rebuild the remaps before finishing the pending cascade + handoff.
         """
         self.dataset_phase_done = True
         self.source_dataset_id = source_dataset_id
-        self.source_name_after_rename = source_name_after_rename
+        self.source_name = source_name
+        self.temp_dest_name = temp_dest_name
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -205,7 +219,8 @@ class MigrationCheckpoint:
             "total_experiments": self.total_experiments,
             "dataset_phase_done": self.dataset_phase_done,
             "source_dataset_id": self.source_dataset_id,
-            "source_name_after_rename": self.source_name_after_rename,
+            "source_name": self.source_name,
+            "temp_dest_name": self.temp_dest_name,
             # Sorted for a stable, diff-friendly on-disk representation.
             "completed_experiment_ids": sorted(self.completed_experiment_ids),
             "in_flight": asdict(self.in_flight) if self.in_flight else None,
@@ -259,6 +274,22 @@ def _require_str_list(value: Any, field_name: str) -> List[str]:
     """
     if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
         raise ValueError(f"{field_name} must be a list of strings, got {value!r}")
+    return value
+
+
+def _require_opt_str(value: Any, field_name: str) -> Optional[str]:
+    """Return ``value`` if it's a string or ``None``, else raise ``ValueError``.
+
+    Guards the resume-handle fields (``source_dataset_id`` / ``source_name`` /
+    ``temp_dest_name``) loaded from a checkpoint: they flow unvalidated into
+    ``client.get_dataset(name=...)`` and ``stream_dataset_items(dataset_name=...)``
+    on resume, so a hand-edited non-string (list/dict/int) would otherwise reach
+    the API. Callers catch the ``ValueError`` and fall back to a fresh
+    checkpoint, matching the corrupt-JSON recovery contract used for the id
+    collections and ``dataset_phase_done``.
+    """
+    if value is not None and not isinstance(value, str):
+        raise ValueError(f"{field_name} must be a string or null, got {value!r}")
     return value
 
 
@@ -372,8 +403,13 @@ def load_or_create(
             path=path,
             total_experiments=int(data.get("total_experiments", 0)),
             dataset_phase_done=dataset_phase_done,
-            source_dataset_id=data.get("source_dataset_id"),
-            source_name_after_rename=data.get("source_name_after_rename"),
+            source_dataset_id=_require_opt_str(
+                data.get("source_dataset_id"), "source_dataset_id"
+            ),
+            source_name=_require_opt_str(data.get("source_name"), "source_name"),
+            temp_dest_name=_require_opt_str(
+                data.get("temp_dest_name"), "temp_dest_name"
+            ),
             completed_experiment_ids=set(completed_ids),
             in_flight=in_flight,
         )

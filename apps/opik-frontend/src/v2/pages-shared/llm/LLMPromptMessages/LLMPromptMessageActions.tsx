@@ -404,6 +404,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
                   resetKeyRef.current = resetKeyRef.current + 1;
                   setOpen("save");
                 }}
+                type="button"
               >
                 <Save />
               </Button>

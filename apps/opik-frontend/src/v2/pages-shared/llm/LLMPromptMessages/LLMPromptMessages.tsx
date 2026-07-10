@@ -23,7 +23,7 @@ import { DropdownOption } from "@/types/shared";
 import { ImprovePromptConfig } from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessageActions";
 import { JsonObject } from "@/types/shared";
 
-interface MessageValidationError {
+export interface MessageValidationError {
   content?: {
     message: string;
   };

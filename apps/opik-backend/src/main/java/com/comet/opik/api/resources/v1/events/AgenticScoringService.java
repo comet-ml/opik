@@ -71,6 +71,9 @@ public interface AgenticScoringService {
      *
      * @param contextSupplier builds and pre-seeds the tool context (invoked at subscription time)
      * @param scoreFn         issues a single LLM call (e.g. {@code request -> scoreTraceReactive(...)})
+     * @param costGuard       per-evaluation spend guard threaded into {@link ToolCallLoop} so the loop
+     *                        stops starting new turns once the budget is reached; pass
+     *                        {@link BudgetGuard#UNLIMITED} when the scope enforces no budget (e.g. span)
      * @param modelNameSupplier the judge model name, read only on the error-surfacing path — lazy so a
      *                          caller whose model accessor can throw/NPE on an incomplete message (e.g.
      *                          thread evals before the routing decision resolves it) never pays for it on
@@ -84,6 +87,7 @@ public interface AgenticScoringService {
             ChatRequest toolRequest, ChatRequest structuredRequest,
             Supplier<TraceToolContext> contextSupplier,
             Function<ChatRequest, Mono<ChatResponse>> scoreFn,
+            BudgetGuard costGuard,
             Supplier<String> modelNameSupplier, String logId,
             Logger userFacingLogger, Map<String, String> mdc,
             EvaluationRecorder recorder);
@@ -224,6 +228,7 @@ class AgenticScoringServiceImpl implements AgenticScoringService {
             @NonNull ChatRequest toolRequest, @NonNull ChatRequest structuredRequest,
             @NonNull Supplier<TraceToolContext> contextSupplier,
             @NonNull Function<ChatRequest, Mono<ChatResponse>> scoreFn,
+            @NonNull BudgetGuard costGuard,
             @NonNull Supplier<String> modelNameSupplier, String logId,
             @NonNull Logger userFacingLogger, @NonNull Map<String, String> mdc,
             @NonNull EvaluationRecorder recorder) {
@@ -246,7 +251,7 @@ class AgenticScoringServiceImpl implements AgenticScoringService {
 
             return ToolCallLoop.runWithWrapUp(
                     initialResponse, toolRequest, structuredRequest, followUpParameters, toolRegistry,
-                    scoreFn, messages, ctx, budget, logId, mdc, recorder)
+                    scoreFn, messages, ctx, budget, costGuard, logId, mdc, recorder)
                     .onErrorResume(error -> surfaceInjectedMediaFailure(error, ctx, modelNameSupplier.get(),
                             userFacingLogger, mdc));
         });

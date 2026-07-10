@@ -198,11 +198,15 @@ def test_migrate_dataset__crash_mid_cascade__resumes_without_duplicates(
     assert (
         len(checkpoint_data["completed_experiment_ids"]) == _CRASH_AFTER_N_EXPERIMENTS
     )
-    # The dataset phase (rename/create/replay/optimizations) finished before the
+    # The dataset phase (create-temp/replay/optimizations) finished before the
     # cascade started, so resume must skip it and reconstruct the remaps from
-    # the destination rather than re-running (and duplicating) it.
+    # the temp destination rather than re-running (and duplicating) it. Under the
+    # OPIK-7162 ordering the source keeps its original name until the run
+    # succeeds, and the destination is still under the temp name at crash time —
+    # the checkpoint records both so resume can re-resolve them.
     assert checkpoint_data["dataset_phase_done"] is True
-    assert checkpoint_data["source_name_after_rename"] == f"{dataset_name}_v1"
+    assert checkpoint_data["source_name"] == dataset_name
+    assert checkpoint_data["temp_dest_name"] == f"{dataset_name}__migrating"
     in_flight = checkpoint_data["in_flight"]
     assert in_flight is not None, "interrupted experiment must be recorded in flight"
     assert in_flight["dest_trace_ids"], (

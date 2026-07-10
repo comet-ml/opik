@@ -54,12 +54,12 @@ import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.publisher.SignalType;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -112,6 +112,9 @@ public interface TraceDAO {
 
     Mono<TracePage> find(int size, int page, TraceSearchCriteria traceSearchCriteria, Connection connection);
 
+    Mono<Boolean> existsByProjectId(TraceSearchCriteria traceSearchCriteria, boolean threadScoped,
+            Connection connection);
+
     Mono<Void> partialInsert(UUID projectId, TraceUpdate traceUpdate, UUID traceId, Connection connection);
 
     Mono<List<WorkspaceAndResourceId>> getTraceWorkspace(Set<UUID> traceIds, Connection connection);
@@ -126,6 +129,8 @@ public interface TraceDAO {
     Mono<UUID> getProjectIdFromTrace(UUID traceId);
 
     Mono<Map<UUID, UUID>> getProjectIdsByTraceIds(List<UUID> traceIds);
+
+    Mono<Map<UUID, UUID>> getProjectIdsByTraceIdsBounded(Set<UUID> traceIds);
 
     Mono<Map<UUID, Instant>> getStartTimesByTraceIds(Set<UUID> traceIds, String workspaceId);
 
@@ -1479,6 +1484,40 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
+    /**
+     * Cheap "does the project have any trace?" probe for the Logs empty state. Deliberately minimal —
+     * project scope only — so it is always a primary-key-prunable {@code LIMIT 1} (traces sort key is
+     * {@code (workspace_id, project_id, id)}). It intentionally does not support arbitrary filters, search, or
+     * time ranges: no consumer needs them, and adding them back would reintroduce a full-project COUNT fallback.
+     */
+    private static final String EXISTS_BY_PROJECT_ID = """
+            SELECT 1 AS exist
+            FROM traces
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            <if(source)> AND source IN (:source<if(source_legacy)>, :source_legacy<endif>) <endif>
+            LIMIT 1
+            SETTINGS log_comment = '<log_comment>'
+            """;
+
+    /**
+     * Thread-scoped variant backing the Threads tab empty state. Probes {@code trace_threads}, not
+     * {@code traces WHERE thread_id != ''}: {@code thread_id} is not in the {@code traces} sort key, and its
+     * only index there is a bloom filter that serves equality, not the {@code != ''} inequality — so that
+     * predicate could not prune and would scan the whole project on exactly the no-threads empty state it
+     * targets. {@code trace_threads} is ordered by {@code (workspace_id, project_id, thread_id, id)}, so project
+     * scope is primary-key-prunable, and it is the same table the Threads list reads (consistent empty state).
+     */
+    private static final String THREADS_EXISTS_BY_PROJECT_ID = """
+            SELECT 1 AS exist
+            FROM trace_threads
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            <if(source)> AND source IN (:source<if(source_legacy)>, :source_legacy<endif>) <endif>
+            LIMIT 1
+            SETTINGS log_comment = '<log_comment>'
+            """;
+
     private static final String COUNT_BY_PROJECT_ID = """
             WITH <if(trace_id_prefilter)>trace_id_prefilter AS (
                 SELECT DISTINCT id
@@ -2091,6 +2130,26 @@ class TraceDAOImpl implements TraceDAO {
                 any(project_id) AS project_id
             FROM traces
             WHERE id IN :trace_ids
+            AND workspace_id = :workspace_id
+            GROUP BY id
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    /**
+     * Partition-bounded variant used on the delete path. id_at is MATERIALIZED as
+     * UUIDv7ToDateTime(toUUID(id)) (migration 000091), so bounding toMonday(id_at) by the id set's own
+     * min/max (mirrors SELECT_PROJECT_ID_FROM_TRACE) is exact - it never drops a valid id - while keeping
+     * the lookup on the ids' own weekly partitions instead of scanning all cold history once traces tier.
+     */
+    private static final String SELECT_PROJECT_IDS_BY_TRACE_IDS_BOUNDED = """
+            SELECT
+                id,
+                any(project_id) AS project_id
+            FROM traces
+            WHERE id IN :trace_ids
+            AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:min_id), 'UTC'))
+            AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:max_id), 'UTC'))
             AND workspace_id = :workspace_id
             GROUP BY id
             SETTINGS log_comment = '<log_comment>'
@@ -3660,6 +3719,46 @@ class TraceDAOImpl implements TraceDAO {
 
     @Override
     @WithSpan
+    public Mono<Boolean> existsByProjectId(@NonNull TraceSearchCriteria traceSearchCriteria, boolean threadScoped,
+            @NonNull Connection connection) {
+        return makeMonoContextAware((userName, workspaceId) -> {
+            var template = getSTWithLogComment(
+                    threadScoped ? THREADS_EXISTS_BY_PROJECT_ID : EXISTS_BY_PROJECT_ID,
+                    threadScoped ? "exists_threads_by_project_id" : "exists_traces_by_project_id",
+                    workspaceId, userName, "");
+
+            var source = traceSearchCriteria.source();
+            var sourceLegacy = source == null
+                    ? Optional.<String>empty()
+                    : Source.legacyFallbackDbValue(source.getValue());
+            if (source != null) {
+                template.add("source", true);
+                if (sourceLegacy.isPresent()) {
+                    template.add("source_legacy", true);
+                }
+            }
+
+            var statement = connection.createStatement(template.render())
+                    .bind("project_id", traceSearchCriteria.projectId())
+                    .bind("workspace_id", workspaceId);
+
+            if (source != null) {
+                statement.bind("source", source.getValue());
+                sourceLegacy.ifPresent(legacy -> statement.bind("source_legacy", legacy));
+            }
+
+            Segment segment = startSegment("traces", "Clickhouse",
+                    threadScoped ? "existsThreadsByProjectId" : "existsByProjectId");
+
+            return Mono.from(statement.execute())
+                    .doFinally(signalType -> endSegment(segment));
+        })
+                .flatMap(result -> Mono.from(result.map((row, metadata) -> true)))
+                .defaultIfEmpty(false);
+    }
+
+    @Override
+    @WithSpan
     public Mono<Void> partialInsert(
             @NonNull UUID projectId,
             @NonNull TraceUpdate traceUpdate,
@@ -4416,8 +4515,6 @@ class TraceDAOImpl implements TraceDAO {
     public Mono<Map<UUID, UUID>> getProjectIdsByTraceIds(@NonNull List<UUID> traceIds) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(traceIds), "Argument 'traceIds' must not be empty");
 
-        log.info("Getting project_ids for '{}' trace_ids", traceIds.size());
-
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(SELECT_PROJECT_IDS_BY_TRACE_IDS, "get_project_ids_by_trace_ids",
                     workspaceId, userName, traceIds.size());
@@ -4425,15 +4522,34 @@ class TraceDAOImpl implements TraceDAO {
             var statement = connection.createStatement(template.render())
                     .bind("trace_ids", traceIds.toArray(UUID[]::new));
 
-            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
-                    .flatMapMany(result -> result.map((row, rowMetadata) -> Map.entry(row.get("id", UUID.class),
-                            row.get("project_id", UUID.class))))
-                    .collect(toMap(Map.Entry::getKey, Map.Entry::getValue))
-                    .doFinally(signalType -> {
-                        if (signalType == SignalType.ON_COMPLETE) {
-                            log.info("Got project_ids for '{}' trace_ids", traceIds.size());
-                        }
-                    });
+            return collectTraceIdToProjectId(statement);
+        }));
+    }
+
+    private Mono<Map<UUID, UUID>> collectTraceIdToProjectId(Statement statement) {
+        return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                .flatMapMany(result -> result.map((row, rowMetadata) -> Map.entry(row.get("id", UUID.class),
+                        row.get("project_id", UUID.class))))
+                .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    @Override
+    public Mono<Map<UUID, UUID>> getProjectIdsByTraceIdsBounded(Set<UUID> traceIds) {
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(traceIds), "Argument 'traceIds' must not be empty");
+
+        var minId = Collections.min(traceIds);
+        var maxId = Collections.max(traceIds);
+
+        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
+            var template = getSTWithLogComment(SELECT_PROJECT_IDS_BY_TRACE_IDS_BOUNDED,
+                    "get_project_ids_by_trace_ids_bounded", workspaceId, userName, traceIds.size());
+
+            var statement = connection.createStatement(template.render())
+                    .bind("trace_ids", traceIds.toArray(UUID[]::new))
+                    .bind("min_id", minId)
+                    .bind("max_id", maxId);
+
+            return collectTraceIdToProjectId(statement);
         }));
     }
 

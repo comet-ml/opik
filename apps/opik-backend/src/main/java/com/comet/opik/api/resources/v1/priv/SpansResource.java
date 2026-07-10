@@ -5,6 +5,7 @@ import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Comment;
 import com.comet.opik.api.CreateCommentResponse;
 import com.comet.opik.api.DeleteFeedbackScore;
+import com.comet.opik.api.ExistenceResponse;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatchContainer;
@@ -82,6 +83,7 @@ import static com.comet.opik.api.Span.SpanField;
 import static com.comet.opik.api.Span.SpanPage;
 import static com.comet.opik.api.Span.View;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
+import static com.comet.opik.utils.ValidationUtils.parseLogsSource;
 import static com.comet.opik.utils.ValidationUtils.validateProjectNameAndProjectId;
 import static com.comet.opik.utils.ValidationUtils.validateTimeRangeParameters;
 
@@ -399,6 +401,38 @@ public class SpansResource {
                 projectStats.stats().size(), workspaceId);
 
         return Response.ok(projectStats).build();
+    }
+
+    @GET
+    @Path("/exists")
+    @Operation(operationId = "spansExist", summary = "Check whether a project has spans", description = "Returns whether the project has at least one span matching the given scope. Cheap existence probe (LIMIT 1) used to drive empty-state decisions without scanning or aggregating the whole project.", responses = {
+            @ApiResponse(responseCode = "200", description = "Span existence", content = @Content(schema = @Schema(implementation = ExistenceResponse.class)))
+    })
+    @RateLimited(value = "spansExist:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
+    public Response spansExist(@QueryParam("project_id") UUID projectId,
+            @QueryParam("project_name") String projectName,
+            @QueryParam("source") @Schema(description = "Restrict the probe to a single ingestion source (e.g. 'sdk' for the Logs empty state), matching the rendered list's logs-source scope. Omit to probe any source.") String source) {
+
+        validateProjectNameAndProjectId(projectName, projectId);
+        var searchCriteria = SpanSearchCriteria.builder()
+                .projectName(projectName)
+                .projectId(projectId)
+                .source(parseLogsSource(source))
+                .sortingFields(List.of())
+                .build();
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Check spans existence by '{}' on workspaceId '{}'", searchCriteria, workspaceId);
+
+        boolean exists = spanService.existsByProjectId(searchCriteria)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Checked spans existence by '{}', exists '{}' on workspaceId '{}'", searchCriteria, exists,
+                workspaceId);
+
+        return Response.ok(ExistenceResponse.builder().exists(exists).build()).build();
     }
 
     @GET
