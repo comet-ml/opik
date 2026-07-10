@@ -13,6 +13,8 @@ dayjs.extend(customParseFormat);
 
 export const DEFAULT_DATE_FORMAT = "D MMM YYYY, h:mm A";
 const DATE_FORMAT_WITH_SECONDS = "D MMM YYYY, h:mm:ss A";
+/** Compact, sortable date-time, e.g. "2026-02-04 14:42". */
+export const SORTABLE_DATE_TIME_FORMAT = "YYYY-MM-DD HH:mm";
 
 type FormatDateConfig = {
   utc?: boolean;
