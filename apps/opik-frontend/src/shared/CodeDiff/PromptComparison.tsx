@@ -117,12 +117,17 @@ const TargetPicker: React.FC<{
           type="button"
           className="comet-body-s-accented inline-flex items-center gap-0.5 border-b border-foreground pb-px text-foreground outline-none"
         >
-          {selected.label}
-          {selected.caption && (
-            <span className="comet-body-xs text-muted-slate">
-              {selected.caption}
-            </span>
-          )}
+          {/* Label + caption share a baseline so "Parent" (14px) and its
+              "Trial #N" caption (12px) sit on the same line rather than
+              centre-aligning to different heights. */}
+          <span className="inline-flex items-baseline gap-0.5">
+            {selected.label}
+            {selected.caption && (
+              <span className="comet-body-xs text-muted-slate">
+                {selected.caption}
+              </span>
+            )}
+          </span>
           <ChevronDown className="size-3.5" />
         </button>
       </DropdownMenuTrigger>
@@ -237,7 +242,10 @@ const PromptComparison: React.FunctionComponent<PromptComparisonProps> = ({
         <div className="flex items-center justify-between pl-1">
           <div className="flex items-center gap-1.5">
             {showTitle ? (
-              <span className="comet-body-s-accented text-foreground">
+              // Mirror the picker's box (border-b + pb-px, here transparent) so
+              // the control bar keeps the same height when toggling into the
+              // diff view — otherwise the prompt cards jump down a couple px.
+              <span className="comet-body-s-accented inline-flex items-center border-b border-transparent pb-px text-foreground">
                 {title}
               </span>
             ) : (

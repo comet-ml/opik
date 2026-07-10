@@ -38,7 +38,6 @@ import { ChipDefinition, chipOptionsValue } from "@/shared/filter-chips/types";
 import { FEEDBACK_SCORE_OPERATORS } from "@/shared/filter-chips/chips/QueryBuilderChip/operators";
 import { DEFAULT_OPERATOR_MAP, OPERATORS_MAP } from "@/constants/filters";
 import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeedbackScoresNames";
-import ExplainerCallout from "@/shared/ExplainerCallout/ExplainerCallout";
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
 import useAppStore from "@/store/AppStore";
 import {
@@ -57,7 +56,6 @@ import FeedbackScoreHeader from "@/shared/DataTableHeaders/FeedbackScoreHeader";
 import { calculateHeightStyle } from "@/shared/DataTable/utils";
 import SectionHeader from "@/shared/DataTableHeaders/SectionHeader";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { generateDistinctColorMap } from "@/v2/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
 type FlattenedTrialItem = {
   id: string;
@@ -602,38 +600,17 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
 
   return (
     <>
-      <PageBodyStickyContainer direction="horizontal" limitWidth>
-        <ExplainerCallout
-          className="mb-3"
-          {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_trial_items]}
-        />
-      </PageBodyStickyContainer>
+      {/* Top row: section heading + table controls. The filter chips sit on
+          their own row below (see next container) so a long filter set never
+          crowds the controls. */}
       <PageBodyStickyContainer
-        className="mb-3 flex items-start justify-between gap-x-8 gap-y-2"
+        className="mb-3 flex items-center justify-between gap-x-8 gap-y-2"
         direction="bidirectional"
         limitWidth
       >
-        <div className="min-w-0 flex-1">
-          <FilterChipBar
-            chipsPinned={chipsPinned}
-            chipsUnpinned={chipsUnpinned}
-            values={chipValues}
-            managerOpen={chipManagerOpen}
-            onManagerOpenChange={setChipManagerOpen}
-            onApplyValue={applyChipValue}
-            onClearValue={clearChipValue}
-            onPinChip={pinChip}
-            onUnpinChip={unpinChip}
-            onClearAll={clearAllChips}
-            openChipId={openChipId}
-            onOpenChipIdChange={setOpenChipId}
-            prefix={
-              <h2 className="comet-title-xs mr-1 shrink-0">
-                {isTestSuite ? "Test items" : "Evaluation results"}
-              </h2>
-            }
-          />
-        </div>
+        <h2 className="comet-title-xs shrink-0">
+          {isTestSuite ? "Test items" : "Evaluation results"}
+        </h2>
         <div className="flex shrink-0 items-center gap-2">
           <DataTableRowHeightSelector
             type={height as ROW_HEIGHT}
@@ -652,6 +629,26 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
             size="2xs"
           ></ColumnsButton>
         </div>
+      </PageBodyStickyContainer>
+      <PageBodyStickyContainer
+        className="mb-3"
+        direction="horizontal"
+        limitWidth
+      >
+        <FilterChipBar
+          chipsPinned={chipsPinned}
+          chipsUnpinned={chipsUnpinned}
+          values={chipValues}
+          managerOpen={chipManagerOpen}
+          onManagerOpenChange={setChipManagerOpen}
+          onApplyValue={applyChipValue}
+          onClearValue={clearChipValue}
+          onPinChip={pinChip}
+          onUnpinChip={unpinChip}
+          onClearAll={clearAllChips}
+          openChipId={openChipId}
+          onOpenChipIdChange={setOpenChipId}
+        />
       </PageBodyStickyContainer>
       <PageBodyStickyContainer
         direction="horizontal"
