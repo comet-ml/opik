@@ -42,7 +42,7 @@ const MetricComparisonCell: React.FunctionComponent<
     return (
       <div className="flex items-center gap-1.5">
         {trendConfig && TrendIcon && (
-          <div className="inline-flex items-center gap-1 rounded-md border border-[var(--pill-neutral-border)] bg-[var(--pill-neutral-bg)] px-1.5 py-0.5">
+          <div className="inline-flex h-5 items-center gap-1 rounded-md border border-[var(--pill-neutral-border)] bg-[var(--pill-neutral-bg)] px-1.5">
             <TrendIcon
               className={cn(
                 "size-3 shrink-0",
