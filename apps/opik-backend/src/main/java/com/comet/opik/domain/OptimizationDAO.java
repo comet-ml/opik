@@ -31,6 +31,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -51,6 +52,14 @@ public interface OptimizationDAO {
         public static OptimizationSummary empty(UUID datasetId) {
             return new OptimizationSummary(datasetId, 0, null);
         }
+    }
+
+    /**
+     * A studio optimization whose latest status is non-terminal and older than the reaper threshold,
+     * i.e. stuck because the worker never advanced it. Carries {@code workspaceId} so the reconciler
+     * can seed the workspace context required to update the row and finalize its logs (OPIK-7159).
+     */
+    record StalledOptimization(UUID id, String workspaceId, OptimizationStatus status) {
     }
 
     Mono<Void> upsert(Optimization optimization);
@@ -81,6 +90,9 @@ public interface OptimizationDAO {
     Flux<OptimizationProjectMapping> computeOptimizationProjectMappingViaExperiments(Set<UUID> optimizationIds);
 
     Mono<Long> batchSetProjectId(Set<UUID> optimizationIds, UUID projectId);
+
+    Flux<StalledOptimization> findStalledStudioOptimizations(Duration initializedTimeout, Duration runningTimeout,
+            int limit);
 }
 
 @Singleton
@@ -221,6 +233,42 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 LIMIT 1 BY id
             )
             WHERE project_id = ''
+            SETTINGS log_comment = '<log_comment>'
+            """;
+
+    /**
+     * Studio runs whose latest row version is stuck in a non-terminal status past the reaper threshold
+     * (OPIK-7159). Dedups {@code ReplacingMergeTree} versions via {@code ORDER BY last_updated_at DESC
+     * LIMIT 1 BY id} and then filters the latest version's studio-flag/status/age in the OUTER query —
+     * so a run that has since reached a terminal status (or had its studio_config change) is never
+     * selected off a stale version. {@code INITIALIZED} (worker never started) and {@code RUNNING}
+     * (worker died mid-run) use separate thresholds because there is no per-progress heartbeat on the
+     * row. {@code studio_config} is a plain String column (no PK/skip-index), so this dedups over all
+     * optimizations; acceptable because the reaper runs infrequently and the post-dedup set is tiny.
+     */
+    private static final String FIND_STALLED_STUDIO_OPTIMIZATIONS = """
+            SELECT
+                id,
+                workspace_id,
+                status
+            FROM (
+                SELECT
+                    id,
+                    workspace_id,
+                    status,
+                    studio_config,
+                    last_updated_at
+                FROM optimizations
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            )
+            WHERE studio_config != ''
+              AND ((status = 'initialized'
+                    AND less(last_updated_at, subtractSeconds(now64(6), :initialized_timeout_seconds)))
+               OR (status = 'running'
+                    AND less(last_updated_at, subtractSeconds(now64(6), :running_timeout_seconds))))
+            ORDER BY last_updated_at ASC
+            LIMIT :limit
             SETTINGS log_comment = '<log_comment>'
             """;
 
@@ -1133,5 +1181,26 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 })
                 .flatMap(Result::getRowsUpdated)
                 .reduce(0L, Long::sum);
+    }
+
+    @Override
+    public Flux<StalledOptimization> findStalledStudioOptimizations(@NonNull Duration initializedTimeout,
+            @NonNull Duration runningTimeout, int limit) {
+        var details = "initializedTimeoutSeconds=%d, runningTimeoutSeconds=%d, limit=%d"
+                .formatted(initializedTimeout.toSeconds(), runningTimeout.toSeconds(), limit);
+        var template = FilterUtils.getSTWithLogComment(FIND_STALLED_STUDIO_OPTIMIZATIONS,
+                "find_stalled_studio_optimizations", "", "", details);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("initialized_timeout_seconds", initializedTimeout.toSeconds())
+                            .bind("running_timeout_seconds", runningTimeout.toSeconds())
+                            .bind("limit", limit);
+                    return Flux.from(statement.execute());
+                })
+                .flatMap(result -> result.map((row, metadata) -> new StalledOptimization(
+                        row.get("id", UUID.class),
+                        row.get("workspace_id", String.class),
+                        OptimizationStatus.fromString(row.get("status", String.class)))));
     }
 }

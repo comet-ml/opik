@@ -1,9 +1,13 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
+import dayjs from "dayjs";
 import {
   convertOptimizationVariableFormat,
   checkIsTestSuite,
   getOptimizationDefaultConfigByProvider,
+  isInitializationStalled,
+  INITIALIZED_STALL_THRESHOLD_SECONDS,
 } from "./optimizations";
+import { OPTIMIZATION_STATUS } from "@/types/optimizations";
 import {
   Experiment,
   EXPERIMENT_TYPE,
@@ -388,5 +392,55 @@ describe("getOptimizationDefaultConfigByProvider — Anthropic", () => {
     ) as LLMAnthropicConfigsType;
 
     expect(config.temperature).toBeUndefined();
+  });
+});
+
+describe("isInitializationStalled", () => {
+  const NOW = "2026-07-09T12:00:00.000Z";
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(NOW));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const secondsAgo = (n: number) =>
+    dayjs(NOW).subtract(n, "second").toISOString();
+
+  it("returns false for a run created just now", () => {
+    expect(
+      isInitializationStalled(OPTIMIZATION_STATUS.INITIALIZED, secondsAgo(1)),
+    ).toBe(false);
+  });
+
+  it("returns true once INITIALIZED exceeds the threshold", () => {
+    expect(
+      isInitializationStalled(
+        OPTIMIZATION_STATUS.INITIALIZED,
+        secondsAgo(INITIALIZED_STALL_THRESHOLD_SECONDS),
+      ),
+    ).toBe(true);
+  });
+
+  it("only stalls the INITIALIZED status, never RUNNING", () => {
+    expect(
+      isInitializationStalled(
+        OPTIMIZATION_STATUS.RUNNING,
+        secondsAgo(INITIALIZED_STALL_THRESHOLD_SECONDS * 100),
+      ),
+    ).toBe(false);
+  });
+
+  it("returns false when status or timestamp is missing or unparseable", () => {
+    expect(isInitializationStalled(undefined, secondsAgo(300))).toBe(false);
+    expect(
+      isInitializationStalled(OPTIMIZATION_STATUS.INITIALIZED, undefined),
+    ).toBe(false);
+    expect(
+      isInitializationStalled(OPTIMIZATION_STATUS.INITIALIZED, "not-a-date"),
+    ).toBe(false);
   });
 });

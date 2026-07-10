@@ -24,6 +24,10 @@ class OptimizationErrorResult(TypedDict):
     success: bool
     error: str
     traceback: str
+    # High-level, user-facing message classified at the source (the subprocess has
+    # the real exception type). Surfaced in the UI; ``error``/``traceback`` are the
+    # low-level detail kept for the logs. NotRequired for back-compat with older payloads.
+    user_message: NotRequired[str]
 
 
 class OptimizationCancelledResult(TypedDict):

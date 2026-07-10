@@ -8,6 +8,13 @@ import opik
 
 logger = logging.getLogger(__name__)
 
+# A status update is the only thing that moves a run off INITIALIZED, so a transient server-side
+# failure must not leave the run stuck. The SDK only retries on an HTTP *response* of 5xx/429/408/409,
+# and only when max_retries is supplied — so we opt in explicitly here. Note this does NOT cover
+# connection-level failures (dropped connection mid-deploy); those still rely on the backend
+# stalled-run reaper as the ultimate backstop (OPIK-7159).
+STATUS_UPDATE_MAX_RETRIES = 3
+
 
 class OptimizationStatusManager:
     """Manages optimization status updates.
@@ -35,7 +42,8 @@ class OptimizationStatusManager:
         logger.debug(f"Updating optimization {self.optimization_id} status to '{status}'")
         self.client.rest_client.optimizations.update_optimizations_by_id(
             self.optimization_id,
-            status=status
+            status=status,
+            request_options={"max_retries": STATUS_UPDATE_MAX_RETRIES},
         )
         logger.debug(f"Optimization {self.optimization_id} status updated to '{status}'")
     

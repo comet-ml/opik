@@ -372,9 +372,24 @@ def main():
         # Local import: an exception can fire before the deferred import above.
         from opik_backend.studio.types import OptimizationErrorResult
 
+        # Classify HERE, where the real exception object (typed Studio errors and
+        # provider SDK exceptions) is available, into a high-level user-facing
+        # message. Fall back to a generic message if even the classifier import
+        # fails (e.g. a very early environment failure).
+        try:
+            from opik_backend.studio.errors import to_user_facing_message
+
+            user_message = to_user_facing_message(e)
+        except Exception:
+            user_message = (
+                "The optimization run ran into an unexpected error and stopped. "
+                "Open the logs for the full details."
+            )
+
         error_output: OptimizationErrorResult = {
             "success": False,
             "error": str(e),
+            "user_message": user_message,
             "traceback": traceback.format_exc(),
         }
         print(json.dumps(error_output))

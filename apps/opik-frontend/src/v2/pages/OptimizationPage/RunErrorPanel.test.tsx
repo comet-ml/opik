@@ -7,7 +7,12 @@ import { Optimization } from "@/types/optimizations";
 vi.mock("@/api/optimizations/useOptimizationStudioLogs", () => ({
   default: () => ({
     data: {
-      content: "INFO run started\nValueError: reference key not found",
+      // Raw traceback (low-level) plus the backend's curated "[System]" message.
+      content: [
+        "INFO run started",
+        "ValueError: reference key not found",
+        "[System] A metric couldn't be evaluated. Check the metric configuration and that its reference keys exist in the dataset.",
+      ].join("\n"),
       url: null,
       expiresAt: null,
     },
@@ -21,13 +26,17 @@ const optimization = {
 } as unknown as Optimization;
 
 describe("RunErrorPanel", () => {
-  it("surfaces the failure reason from the logs plus a View logs action", () => {
+  it("surfaces the backend's high-level reason (not the raw traceback) plus a View logs action", () => {
     render(<RunErrorPanel optimization={optimization} />);
 
     expect(screen.getByText("Optimization failed")).toBeInTheDocument();
+    // High-level message shown; the raw "ValueError: ..." line is NOT surfaced here.
     expect(
-      screen.getByText("ValueError: reference key not found"),
+      screen.getByText(
+        "A metric couldn't be evaluated. Check the metric configuration and that its reference keys exist in the dataset.",
+      ),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/ValueError/)).not.toBeInTheDocument();
     expect(screen.getByText("View logs")).toBeInTheDocument();
   });
 });

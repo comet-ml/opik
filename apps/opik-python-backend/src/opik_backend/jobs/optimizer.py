@@ -25,6 +25,9 @@ from opik_backend.studio import (
     CancellationHandle,
     JobMessageParseError,
 )
+from opik_backend.studio.config import OPIK_URL
+from opik_backend.studio.errors import to_user_facing_message
+from opik_backend.studio.status_manager import STATUS_UPDATE_MAX_RETRIES
 from opik_backend.studio.types import (
     OptimizationCancelledResult,
     OptimizationJobResult,
@@ -42,6 +45,45 @@ OPTIMIZER_RUNNER_PATH = os.path.join(
 
 # Payload type constant for optimization jobs
 PAYLOAD_TYPE_OPTIMIZATION = "optimization"
+
+
+def _mark_optimization_error(context: OptimizationJobContext) -> None:
+    """Best-effort transition of the optimization to ERROR from the parent worker.
+
+    The subprocess only advances status once it reaches ``optimization_lifecycle`` (mark_running).
+    Any failure before that — bad stdin, import error, config parse error, Opik client init — leaves
+    the run stuck on INITIALIZED because the subprocess had no status manager to call. This runs in the
+    parent, which still has the job context, so it can flip the status and surface the failure fast
+    instead of waiting for the backend reaper's timeout.
+
+    Builds its own client with explicit args (no os.environ mutation) so it is safe to call from the
+    concurrent worker threads. Never raises: the backend stalled-run reaper is the ultimate backstop if
+    this cannot reach the API (which is also the case that made the run stuck in the first place).
+    """
+    try:
+        import opik
+
+        client = opik.Opik(
+            workspace=context.workspace_name,
+            api_key=context.opik_api_key or None,
+            host=OPIK_URL or None,
+            _show_misconfiguration_message=False,
+        )
+        client.rest_client.optimizations.update_optimizations_by_id(
+            str(context.optimization_id),
+            status="error",
+            request_options={"max_retries": STATUS_UPDATE_MAX_RETRIES},
+        )
+        logger.info(
+            "Marked optimization %s as ERROR from parent worker", context.optimization_id
+        )
+    except Exception as mark_error:
+        logger.error(
+            "Failed to mark optimization %s as ERROR from parent worker: %s",
+            context.optimization_id,
+            mark_error,
+            exc_info=True,
+        )
 
 
 def _parse_job_message(args: Tuple[Any, ...], kwargs: Dict[str, Any]) -> Dict[str, Any]:
@@ -161,9 +203,13 @@ def process_optimizer_job(*args: Any, **kwargs: Any) -> OptimizationJobResult:
         # Register with centralized cancellation monitor (auto-unregisters on exit)
         with CancellationHandle(str(context.optimization_id), on_cancelled=on_cancelled) as cancellation_handle:
             
+            # High-level, user-facing message classified inside the subprocess (where the real
+            # exception type is available). Captured here so the parent's except can surface it.
+            subprocess_user_message = None
+
             try:
                 logger.debug(f"Starting optimization subprocess for optimization {context.optimization_id}")
-                
+
                 # Execute optimization in isolated subprocess
                 result = executor.execute(
                     file_path=OPTIMIZER_RUNNER_PATH,
@@ -188,6 +234,8 @@ def process_optimizer_job(*args: Any, **kwargs: Any) -> OptimizationJobResult:
                 # Check for errors (only if not cancelled)
                 if "error" in result:
                     logger.error(f"Optimization failed: {result.get('error')}")
+                    # Carry the subprocess's high-level, user-facing message to the except below.
+                    subprocess_user_message = result.get("user_message")
                     # Surface the subprocess traceback (when present) so callers
                     # and CI see what failed inside the isolated process.
                     error_message = result.get("error", "Unknown error")
@@ -205,7 +253,36 @@ def process_optimizer_job(*args: Any, **kwargs: Any) -> OptimizationJobResult:
                 
                 logger.info(f"Optimization completed successfully: {context.optimization_id}")
                 return cast(OptimizationRunResult, result)
-            
+
+            except Exception as exc:
+                # Cancellation is a normal terminal state, not a failure — Java already moved the run
+                # to CANCELLED, so never override it with ERROR.
+                if cancellation_handle.was_cancelled:
+                    raise
+
+                # Guarantee the run reaches a terminal ERROR status even when the subprocess died
+                # before it could call mark_running/mark_error itself (parse/import/config/client-init
+                # failures). Surface a final reason line so the UI shows why, then re-raise so RQ still
+                # records the job as failed. mark_error inside the subprocess lifecycle already ran for
+                # in-lifecycle failures; marking error again here is idempotent.
+                logger.error(
+                    "Optimization %s failed in parent worker, marking as ERROR: %s",
+                    context.optimization_id,
+                    exc,
+                )
+                try:
+                    # Surface a single, high-level, user-facing line prefixed "[System]" so the UI can
+                    # show WHY without the low-level detail (the full traceback is already in the logs
+                    # via the subprocess's captured stdout/stderr). Prefer the message the subprocess
+                    # classified from the real exception type; for parent-level failures (job parse,
+                    # executor crash before the subprocess ran) classify the parent exception here.
+                    user_message = subprocess_user_message or to_user_facing_message(exc)
+                    log_collector.emit({"message": f"[System] {user_message}"})
+                except Exception as emit_error:
+                    logger.warning(f"Error emitting failure log line: {emit_error}")
+                _mark_optimization_error(context)
+                raise
+
             finally:
                 # Ensure log collector is closed (flushes remaining logs)
                 try:

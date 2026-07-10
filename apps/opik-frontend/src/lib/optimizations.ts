@@ -1,3 +1,4 @@
+import dayjs from "dayjs";
 import {
   OPTIMIZER_TYPE,
   OPTIMIZATION_STATUS,
@@ -103,6 +104,32 @@ export const IN_PROGRESS_OPTIMIZATION_STATUSES: OPTIMIZATION_STATUS[] = [
 ];
 
 export const OPTIMIZATION_ACTIVE_REFETCH_INTERVAL = 5000;
+
+/**
+ * How long a run may sit in INITIALIZED before the UI stops implying "starting
+ * any second now" and warns that it may have failed to launch. The worker calls
+ * mark_running within seconds of picking the job up, so a minute of silence is
+ * already abnormal — but this is kept above normal queue latency to avoid crying
+ * wolf when a run is merely waiting behind a backlog. The backend reaper is the
+ * authoritative terminal-state guarantee (OPIK-7159); this is only the earlier,
+ * softer signal shown while we wait for that to fire.
+ */
+export const INITIALIZED_STALL_THRESHOLD_SECONDS = 60;
+
+/**
+ * True when a run has been stuck in INITIALIZED past the stall threshold, i.e.
+ * the worker likely never picked it up. Only INITIALIZED can stall this way;
+ * RUNNING has no reliable client-side heartbeat, so it is left to the backend.
+ */
+export const isInitializationStalled = (
+  status?: OPTIMIZATION_STATUS,
+  createdAt?: string,
+): boolean => {
+  if (status !== OPTIMIZATION_STATUS.INITIALIZED || !createdAt) return false;
+  const created = dayjs(createdAt);
+  if (!created.isValid()) return false;
+  return dayjs().diff(created, "second") >= INITIALIZED_STALL_THRESHOLD_SECONDS;
+};
 
 export const ACTIVE_OPTIMIZATION_FILTER: Filters = [
   {

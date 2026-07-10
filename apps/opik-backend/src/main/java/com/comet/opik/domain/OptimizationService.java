@@ -69,6 +69,15 @@ public interface OptimizationService {
 
     // Studio methods
     Mono<OptimizationStudioLog> generateStudioLogsResponse(UUID optimizationId);
+
+    /**
+     * Transition studio runs stuck in a non-terminal status past the given thresholds to {@code ERROR},
+     * recording a human-readable reason in their logs (OPIK-7159). Called by the stalled-run reaper.
+     *
+     * @return the number of runs transitioned to ERROR in this pass.
+     */
+    Mono<Long> reconcileStalledStudioOptimizations(Duration initializedTimeout, Duration runningTimeout,
+            int batchSize);
 }
 
 @Singleton
@@ -318,8 +327,8 @@ class OptimizationServiceImpl implements OptimizationService {
                 .switchIfEmpty(Mono.error(failWithNotFound("Optimization", id)))
                 .flatMap(optimization -> Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-                    // USER_NAME is absent on the internal cancelOptimization() path, where only
-                    // WORKSPACE_ID is seeded — fall back and let AnalyticsService resolve identity.
+                    // Internal paths (cancelOptimization, the stalled-run reaper) seed USER_NAME with
+                    // SYSTEM_USER; getOrDefault keeps the analytics identity resolution tolerant.
                     String userName = ctx.getOrDefault(RequestContext.USER_NAME, null);
 
                     // Validate cancellation request for Studio optimizations
@@ -332,6 +341,22 @@ class OptimizationServiceImpl implements OptimizationService {
                                 "Cannot cancel optimization with status '%s'. Only optimizations with status %s can be cancelled."
                                         .formatted(optimization.status(), CANCELLABLE_STATUSES),
                                 Response.Status.CONFLICT));
+                    }
+
+                    // Never let a late status write overwrite an already-terminal Studio run with a
+                    // different terminal status — e.g. the worker's delayed ERROR after a user CANCELLED,
+                    // or the reaper racing a COMPLETED that landed just after its stale read (OPIK-7159).
+                    // Same-status writes and name-only updates still pass through; explicit cancellation
+                    // keeps its 409 above.
+                    boolean isTerminalOverwrite = optimization.studioConfig() != null
+                            && update.status() != null
+                            && optimization.status().isTerminal()
+                            && update.status() != optimization.status();
+                    if (isTerminalOverwrite) {
+                        log.info(
+                                "Skipping status update for optimization '{}': already terminal '{}', ignoring requested '{}'",
+                                id, optimization.status(), update.status());
+                        return Mono.just(0L);
                     }
 
                     return signalCancellationIfNeeded(id, optimization, update)
@@ -495,7 +520,14 @@ class OptimizationServiceImpl implements OptimizationService {
                 .build();
 
         update(optimizationId, optimizationUpdate)
-                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId))
+                // Headless path: seed BOTH keys. getById/update resolve through makeFluxContextAware /
+                // bindUserNameAndWorkspaceContextToStream, which call ctx.get(USER_NAME) and throw
+                // NoSuchElementException if it is absent — so WORKSPACE_ID alone silently fails the
+                // whole update (this is why enqueue-failure runs stayed INITIALIZED instead of
+                // CANCELLED, OPIK-7159).
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER))
                 .subscribeOn(Schedulers.boundedElastic())
                 .subscribe(
                         unused -> log.info("Cancelled optimization '{}'", optimizationId),
@@ -544,5 +576,67 @@ class OptimizationServiceImpl implements OptimizationService {
                     .expiresAt(expiresAt)
                     .build());
         });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> reconcileStalledStudioOptimizations(@NonNull Duration initializedTimeout,
+            @NonNull Duration runningTimeout, int batchSize) {
+        return optimizationDAO.findStalledStudioOptimizations(initializedTimeout, runningTimeout, batchSize)
+                // Sequential: stalled runs are rare and this keeps the reaper's DB/Redis footprint small.
+                .concatMap(stalled -> markStalledOptimizationAsError(stalled, initializedTimeout, runningTimeout))
+                .reduce(0L, Long::sum);
+    }
+
+    /**
+     * Best-effort transition of a single stalled run to ERROR. Records the reason in the run's logs first
+     * (so the UI can surface it even when the worker never produced any logs), then reuses the standard
+     * {@link #update} path — which finalizes logs and emits the completion analytics event. Never fails
+     * the overall pass: a single row's failure is logged and counted as 0.
+     */
+    private Mono<Long> markStalledOptimizationAsError(OptimizationDAO.StalledOptimization stalled,
+            Duration initializedTimeout, Duration runningTimeout) {
+        UUID id = stalled.id();
+        String workspaceId = stalled.workspaceId();
+        String reason = buildStalledReason(stalled.status(), initializedTimeout, runningTimeout);
+
+        log.warn("Reconciling stalled studio optimization '{}' (status '{}') to ERROR: {}",
+                id, stalled.status(), reason);
+
+        var update = OptimizationUpdate.builder().status(OptimizationStatus.ERROR).build();
+
+        // Re-read under the workspace context and only flip if the run is still non-terminal: this
+        // closes the (tiny) race where the worker reports a terminal status between the reaper's query
+        // and this update, which would otherwise overwrite a genuine completion/cancellation with ERROR.
+        return optimizationDAO.getById(id)
+                .filter(current -> CANCELLABLE_STATUSES.contains(current.status()))
+                .flatMap(current -> logSyncService.appendSystemLogLine(workspaceId, id, reason)
+                        .then(Mono.defer(() -> update(id, update)))
+                        .thenReturn(1L))
+                .switchIfEmpty(Mono.fromSupplier(() -> {
+                    log.info("Skipping stalled reconciliation for optimization '{}': no longer stalled", id);
+                    return 0L;
+                }))
+                // Headless path: seed BOTH keys — the DAO reads (makeFluxContextAware) require
+                // USER_NAME and throw if it is missing, which would make the reaper silently inert.
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER))
+                .onErrorResume(error -> {
+                    log.error("Failed to reconcile stalled studio optimization '{}'", id, error);
+                    return Mono.just(0L);
+                });
+    }
+
+    private String buildStalledReason(OptimizationStatus status, Duration initializedTimeout,
+            Duration runningTimeout) {
+        if (status == OptimizationStatus.RUNNING) {
+            return ("[System] Optimization failed: the run showed no activity for over %d hours without "
+                    + "completing and was marked as failed. The optimizer worker may have crashed or been terminated.")
+                    .formatted(runningTimeout.toHours());
+        }
+        return ("[System] Optimization failed to start: the optimizer worker did not begin processing within %d "
+                + "minutes and may be unavailable. The run was marked as failed.")
+                .formatted(initializedTimeout.toMinutes());
     }
 }
