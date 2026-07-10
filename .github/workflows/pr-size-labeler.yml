@@ -1,0 +1,141 @@
+name: 📏 Auto Label PR Size
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  size-labeler:
+    name: Label PR by size
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Compute size and apply label
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const pr = context.payload.pull_request;
+            const prNumber = pr.number;
+
+            // Uniform charcoal chip for every size label so the size metadata reads as one
+            // recessive family and doesn't compete with semantic labels (bug, Frontend, …) on
+            // a busy PR list. The cool -> hot ramp lives entirely in the per-bucket emoji
+            // (🔵 smallest -> 🔴 largest), which keeps its crisp shape on a neutral background.
+            // maxSize is the inclusive upper bound of changed LOC (additions + deletions) for
+            // the bucket; the last entry (null) catches everything above it.
+            const CHIP_COLOR = "2d3139";
+            const BUCKETS = [
+              { name: "🔵 size/XS", color: CHIP_COLOR, maxSize: 19 },
+              { name: "🟢 size/S", color: CHIP_COLOR, maxSize: 100 },
+              { name: "🟡 size/M", color: CHIP_COLOR, maxSize: 300 },
+              { name: "🟠 size/L", color: CHIP_COLOR, maxSize: 600 },
+              { name: "🔴 size/XL", color: CHIP_COLOR, maxSize: null },
+            ];
+            const MANAGED_LABELS = BUCKETS.map((b) => b.name);
+
+            // Lockfiles and generated clients dwarf the human-reviewed diff, so exclude them
+            // from the count — otherwise a lockfile bump mislabels a tiny PR as XL.
+            const IGNORE_GLOBS = [
+              "**/package-lock.json",
+              "**/yarn.lock",
+              "**/pnpm-lock.yaml",
+              "**/poetry.lock",
+              "**/uv.lock",
+              "sdks/python/src/opik/rest_api/**",
+              "sdks/typescript/src/opik/rest_api/**",
+              "**/*.snap",
+              "**/*.svg",
+              "**/*.png",
+            ];
+            const globToRegExp = (glob) => {
+              let re = "";
+              for (let i = 0; i < glob.length; i++) {
+                if (glob.startsWith("**/", i)) { re += "(?:[^/]+/)*"; i += 2; continue; }
+                if (glob.startsWith("**", i)) { re += ".*"; i += 1; continue; }
+                const c = glob[i];
+                if (c === "*") { re += "[^/]*"; continue; }
+                if (".+^${}()|[]\\".includes(c)) { re += "\\" + c; continue; }
+                re += c;
+              }
+              return new RegExp("^" + re + "$");
+            };
+            const ignoreRes = IGNORE_GLOBS.map(globToRegExp);
+            const isIgnored = (path) => ignoreRes.some((re) => re.test(path));
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner,
+              repo,
+              pull_number: prNumber,
+              per_page: 100,
+            });
+
+            const total = files
+              .filter((f) => !isIgnored(f.filename))
+              .reduce((sum, f) => sum + f.additions + f.deletions, 0);
+
+            const bucket =
+              BUCKETS.find((b) => b.maxSize !== null && total <= b.maxSize) ||
+              BUCKETS[BUCKETS.length - 1];
+            core.info(`PR #${prNumber}: ${total} changed LOC (excluding ignored files) -> ${bucket.name}`);
+
+            // Keep the label's color/emoji authoritative regardless of how it was first created.
+            try {
+              const { data: existing } = await github.rest.issues.getLabel({
+                owner,
+                repo,
+                name: bucket.name,
+              });
+              if (existing.color !== bucket.color) {
+                await github.rest.issues.updateLabel({
+                  owner,
+                  repo,
+                  name: bucket.name,
+                  color: bucket.color,
+                });
+              }
+            } catch (err) {
+              if (err.status !== 404) throw err;
+              await github.rest.issues.createLabel({
+                owner,
+                repo,
+                name: bucket.name,
+                color: bucket.color,
+              });
+            }
+
+            const current = pr.labels.map((l) => l.name);
+
+            for (const stale of current.filter(
+              (name) => MANAGED_LABELS.includes(name) && name !== bucket.name
+            )) {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner,
+                  repo,
+                  issue_number: prNumber,
+                  name: stale,
+                });
+              } catch (err) {
+                if (err.status !== 404) throw err;
+              }
+            }
+
+            if (!current.includes(bucket.name)) {
+              await github.rest.issues.addLabels({
+                owner,
+                repo,
+                issue_number: prNumber,
+                labels: [bucket.name],
+              });
+            }
