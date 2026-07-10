@@ -28,6 +28,10 @@ final class NoopEvaluationRecorder implements EvaluationRecorder {
     }
 
     @Override
+    public void flagBudgetExceeded() {
+    }
+
+    @Override
     public <T extends FeedbackScoreItem> Mono<List<T>> monitor(Mono<List<T>> scoring) {
         return scoring;
     }
