@@ -318,3 +318,7 @@ There are many ways to contribute to Opik:
 - Upvoting [popular feature requests](https://github.com/comet-ml/opik/issues?q=is%3Aissue+is%3Aopen+label%3A%22enhancement%22) to show your support
 
 To learn more about how to contribute to Opik, please see our [contributing guidelines](CONTRIBUTING.md).
+
+---
+
+*[Mukller](https://github.com/Mukller)*
