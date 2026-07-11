@@ -148,6 +148,22 @@ module.exports = {
         "accent-red": "var(--accent-red)",
         "accent-indigo": "var(--accent-indigo)",
 
+        /* Agent Insights — severity + issue-callout palette (see main.scss) */
+        "severity-critical": "var(--severity-critical)",
+        "severity-high": "var(--severity-high)",
+        "severity-medium": "var(--severity-medium)",
+        "severity-low": "var(--severity-low)",
+        "insight-error": "var(--insight-error)",
+        "insight-error-surface": "var(--insight-error-surface)",
+        "insight-warning": "var(--insight-warning)",
+        "insight-warning-surface": "var(--insight-warning-surface)",
+        "insight-accent": "var(--insight-accent)",
+        "insight-accent-surface": "var(--insight-accent-surface)",
+        "insight-info": "var(--insight-info)",
+        "insight-info-surface": "var(--insight-info-surface)",
+        "assertion-indicator": "var(--assertion-indicator)",
+        "dataset-version-accent": "var(--dataset-version-accent)",
+
         /* Template icon colors */
         "template-icon-metrics": "var(--template-icon-metrics)",
         "template-icon-performance": "var(--template-icon-performance)",

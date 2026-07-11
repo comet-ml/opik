@@ -9,10 +9,10 @@ export const SEVERITY_LABEL_MAP: Record<AGENT_INSIGHTS_ISSUE_SEVERITY, string> =
   };
 
 export const SEVERITY_DOT_MAP: Record<AGENT_INSIGHTS_ISSUE_SEVERITY, string> = {
-  [AGENT_INSIGHTS_ISSUE_SEVERITY.critical]: "bg-[#DC2626]",
-  [AGENT_INSIGHTS_ISSUE_SEVERITY.high]: "bg-[#F43F5E]",
-  [AGENT_INSIGHTS_ISSUE_SEVERITY.medium]: "bg-[#F59E0B]",
-  [AGENT_INSIGHTS_ISSUE_SEVERITY.low]: "bg-[#94A3B8]",
+  [AGENT_INSIGHTS_ISSUE_SEVERITY.critical]: "bg-severity-critical",
+  [AGENT_INSIGHTS_ISSUE_SEVERITY.high]: "bg-severity-high",
+  [AGENT_INSIGHTS_ISSUE_SEVERITY.medium]: "bg-severity-medium",
+  [AGENT_INSIGHTS_ISSUE_SEVERITY.low]: "bg-severity-low",
 };
 
 // Multi-day issues show the latest day's count (matches the prose) plus the

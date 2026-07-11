@@ -327,7 +327,7 @@ function DatasetVersionSelectBox({
               <SelectValue
                 placeholder={
                   <div className="flex w-full items-center">
-                    <TypeIcon className="mr-2 size-3 text-[#6bdf93]" />
+                    <TypeIcon className="mr-2 size-3 text-dataset-version-accent" />
                     <span className="truncate font-normal">
                       Select {typeLabel}
                     </span>
@@ -336,7 +336,7 @@ function DatasetVersionSelectBox({
               >
                 <div className="flex w-full items-center justify-between gap-1">
                   <div className="flex min-w-0 items-center gap-2">
-                    <TypeIcon className="size-3 shrink-0 text-[#6bdf93]" />
+                    <TypeIcon className="size-3 shrink-0 text-dataset-version-accent" />
                     <span className="min-w-0 truncate">
                       {selectedDataset?.name}
                     </span>

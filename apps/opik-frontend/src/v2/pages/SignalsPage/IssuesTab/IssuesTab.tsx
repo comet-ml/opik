@@ -123,7 +123,7 @@ const IconTile: React.FC<{ className?: string; children: React.ReactNode }> = ({
 
 const RunningBar: React.FC = () => (
   <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-muted">
-    <div className="absolute inset-y-0 left-0 w-2/5 animate-progress-indeterminate rounded-full bg-[#A78BFA]" />
+    <div className="absolute inset-y-0 left-0 w-2/5 animate-progress-indeterminate rounded-full bg-insight-accent" />
   </div>
 );
 
@@ -165,8 +165,8 @@ const FailedBanner: React.FC<{
   const { title, description } = getRunFailureCopy(reason);
   const [open, setOpen] = useState(false);
   return (
-    <div className="flex items-start gap-3 border-b border-border bg-[#F146681A] px-4 py-3">
-      <IconTile className="bg-[#F14668]">
+    <div className="flex items-start gap-3 border-b border-border bg-insight-error-surface px-4 py-3">
+      <IconTile className="bg-insight-error">
         <TriangleAlert className="size-4 text-white" />
       </IconTile>
       <div className="flex min-w-0 flex-1 flex-col gap-2">
@@ -206,8 +206,8 @@ const StaleResultsBanner: React.FC<{
   traceCount: number;
   onRun?: () => void;
 }> = ({ days, traceCount, onRun }) => (
-  <div className="flex items-start gap-3 border-b border-border bg-[#FB923C1A] px-4 py-3">
-    <IconTile className="bg-[#FB923C]">
+  <div className="flex items-start gap-3 border-b border-border bg-insight-warning-surface px-4 py-3">
+    <IconTile className="bg-insight-warning">
       <Clock className="size-4 text-white" />
     </IconTile>
     <div className="flex min-w-0 flex-1 flex-col gap-2">
@@ -418,7 +418,7 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
           )}
           {running && (
             <div className="flex items-start gap-3 border-b border-border bg-primary-50 px-4 py-3">
-              <IconTile className="bg-[#A78BFA]">
+              <IconTile className="bg-insight-accent">
                 <Radar className="size-4 text-black dark:text-white" />
               </IconTile>
               <div className="flex min-w-0 flex-1 flex-col gap-2.5">
@@ -449,9 +449,9 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
     if (running) {
       return (
         <ListEmptyState
-          className="bg-[#C4B5FD1A]"
+          className="bg-insight-accent-surface"
           icon={
-            <IconTile className="bg-[#A78BFA]">
+            <IconTile className="bg-insight-accent">
               <Radar className="size-4 text-black dark:text-white" />
             </IconTile>
           }
@@ -467,9 +467,9 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
       const { title, description } = getRunFailureCopy(failedReason);
       return (
         <ListEmptyState
-          className="bg-[#F146681A]"
+          className="bg-insight-error-surface"
           icon={
-            <IconTile className="bg-[#F14668]">
+            <IconTile className="bg-insight-error">
               <TriangleAlert className="size-4 text-white" />
             </IconTile>
           }
@@ -485,7 +485,7 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
     if (showResolved) {
       return (
         <ListEmptyState
-          className="bg-[#89DEFF1A]"
+          className="bg-insight-info-surface"
           icon={
             <IconTile className="bg-[var(--upload-chip-icon-bg)]">
               <Inbox className="size-3.5 text-black dark:text-white" />
@@ -513,7 +513,7 @@ const IssuesTab: React.FC<IssuesTabProps> = ({
       <ListEmptyState
         className="bg-[var(--upload-chip-bg)]"
         icon={
-          <IconTile className="bg-[#89DEFF] dark:bg-[#1E3A47]">
+          <IconTile className="bg-insight-info">
             <PartyPopper className="size-3.5 text-black dark:text-white" />
           </IconTile>
         }
