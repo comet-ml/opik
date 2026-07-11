@@ -941,6 +941,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .name(updatedEvaluator.getName())
                     .samplingRate(updatedEvaluator.getSamplingRate())
                     .enabled(updatedEvaluator.isEnabled())
+                    .triggerScope(updatedEvaluator.getTriggerScope())
                     .filters((List) updatedEvaluator.getFilters())
                     .code(updatedEvaluator.getCode())
                     .build();

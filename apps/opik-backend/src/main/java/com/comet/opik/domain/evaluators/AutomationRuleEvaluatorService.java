@@ -18,6 +18,7 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadLlm
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
+import com.comet.opik.api.evaluators.EvalTriggerScope;
 import com.comet.opik.api.evaluators.ProjectReference;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.AutomationRuleEvaluatorSortingFactory;
@@ -238,8 +239,12 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                 String filtersJson = AutomationModelEvaluatorMapper.INSTANCE.map(evaluatorUpdate.getFilters());
 
                 // Update base rule (project associations handled separately in junction table)
+                var triggerScope = evaluatorUpdate.getTriggerScope() != null
+                        ? evaluatorUpdate.getTriggerScope()
+                        : EvalTriggerScope.PRODUCTION;
                 int resultBase = dao.updateBaseRule(id, workspaceId, evaluatorUpdate.getName(),
-                        evaluatorUpdate.getSamplingRate(), evaluatorUpdate.isEnabled(), filtersJson);
+                        evaluatorUpdate.getSamplingRate(), evaluatorUpdate.isEnabled(),
+                        triggerScope.getValue(), filtersJson);
 
                 // Update project associations in junction table
                 projectsDAO.deleteByRuleIds(Set.of(id), workspaceId);

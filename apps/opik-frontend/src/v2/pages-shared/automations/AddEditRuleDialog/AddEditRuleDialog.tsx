@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from "@/ui/select";
 import {
+  EVAL_TRIGGER_SCOPE,
   EVALUATORS_RULE_SCOPE,
   EVALUATORS_RULE_TYPE,
   EvaluatorsRule,
@@ -209,6 +210,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       scope: formScope,
       type: getBackendRuleType(formScope, formUIRuleType),
       enabled: defaultRule?.enabled ?? true,
+      triggerScope: defaultRule?.trigger_scope ?? EVAL_TRIGGER_SCOPE.production,
       filters: normalizeFilters(
         defaultRule?.filters ?? [],
         (formScope === EVALUATORS_RULE_SCOPE.thread
@@ -259,6 +261,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
         scope: initialScope,
         type: defaultType,
         enabled: true,
+        triggerScope: EVAL_TRIGGER_SCOPE.production,
         filters: [],
         llmJudgeDetails: cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[initialScope]),
       });
@@ -272,6 +275,8 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
         scope: formScope,
         type: getBackendRuleType(formScope, formUIRuleType),
         enabled: defaultRule.enabled ?? true,
+        triggerScope:
+          defaultRule.trigger_scope ?? EVAL_TRIGGER_SCOPE.production,
         filters: normalizeFilters(
           defaultRule.filters ?? [],
           (formScope === EVALUATORS_RULE_SCOPE.thread
@@ -427,6 +432,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       project_ids: formData.projectIds,
       sampling_rate: formData.samplingRate,
       enabled: formData.enabled,
+      trigger_scope: formData.triggerScope,
       filters: validFilters,
       type: ruleType,
     };
@@ -616,6 +622,53 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                           checked={field.value}
                           onCheckedChange={field.onChange}
                         />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="triggerScope"
+                  render={({ field }) => (
+                    <FormItem>
+                      <Label className="flex items-center">
+                        Trigger scope{" "}
+                        <TooltipWrapper content="Choose whether this rule fires on production traces, experiment traces, or both.">
+                          <Info className="ml-1 size-4 text-light-slate" />
+                        </TooltipWrapper>
+                      </Label>
+                      <FormControl>
+                        <div className="flex">
+                          <ToggleGroup
+                            type="single"
+                            data-testid="add-edit-rule-dialog-trigger-scope"
+                            value={field.value}
+                            onValueChange={(value: EVAL_TRIGGER_SCOPE) => {
+                              if (!value) return;
+                              field.onChange(value);
+                            }}
+                          >
+                            <ToggleGroupItem
+                              value={EVAL_TRIGGER_SCOPE.production}
+                              aria-label="Production traces"
+                            >
+                              Production traces
+                            </ToggleGroupItem>
+                            <ToggleGroupItem
+                              value={EVAL_TRIGGER_SCOPE.experiment}
+                              aria-label="Experiment traces"
+                            >
+                              Experiment traces
+                            </ToggleGroupItem>
+                            <ToggleGroupItem
+                              value={EVAL_TRIGGER_SCOPE.both}
+                              aria-label="Both"
+                            >
+                              Both
+                            </ToggleGroupItem>
+                          </ToggleGroup>
+                        </div>
                       </FormControl>
                     </FormItem>
                   )}
