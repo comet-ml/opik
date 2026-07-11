@@ -198,6 +198,10 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                 }
             };
 
+            if (evaluator.triggerScope() == null) {
+                evaluator = evaluator.withTriggerScope(EvalTriggerScope.PRODUCTION);
+            }
+
             try {
                 log.debug("Creating {} AutomationRuleEvaluator with id '{}' in projectIds '{}' and workspaceId '{}'",
                         evaluator.type(), id, evaluator.projectIds(), workspaceId);

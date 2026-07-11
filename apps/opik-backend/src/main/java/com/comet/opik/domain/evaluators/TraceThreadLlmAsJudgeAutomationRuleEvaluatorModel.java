@@ -46,6 +46,11 @@ public record TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel(
     }
 
     @Override
+    public AutomationRuleEvaluatorModel<?> withTriggerScope(EvalTriggerScope triggerScope) {
+        return toBuilder().triggerScope(triggerScope).build();
+    }
+
+    @Override
     public AutomationRuleEvaluatorModel<?> withProjectDetails(
             UUID projectId, String projectName, SortedSet<ProjectReference> projects) {
         return toBuilder().projectId(projectId).projectName(projectName).projects(projects).build();

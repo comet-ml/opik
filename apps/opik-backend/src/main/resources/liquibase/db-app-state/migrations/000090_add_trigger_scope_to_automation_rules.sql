@@ -1,5 +1,6 @@
 --liquibase formatted sql
 --changeset miguelg:000090_add_trigger_scope_to_automation_rules
+--comment: Add trigger_scope to evaluation rules (production/experiment/both) for OPIK-6741
 
 ALTER TABLE automation_rules ADD COLUMN trigger_scope ENUM('production', 'experiment', 'both') NOT NULL DEFAULT 'production';
 
