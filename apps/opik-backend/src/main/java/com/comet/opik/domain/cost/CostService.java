@@ -41,7 +41,8 @@ public class CostService {
             Map.entry("microsoft", "azure"),
             Map.entry("azure", "azure"),
             Map.entry("mistral", "mistral"),
-            Map.entry("xai", "xai"));
+            Map.entry("xai", "xai"),
+            Map.entry("deepseek", "deepseek"));
 
     // Online evaluation (and OTel ingestion) resolve models to LlmProvider serialized values whose names
     // differ from the canonical price-table vocabulary. Normalize those to the single canonical provider
@@ -63,6 +64,7 @@ public class CostService {
                     "openai", SpanCostCalculator::textGenerationWithCacheCostOpenAI,
                     "azure", SpanCostCalculator::textGenerationWithCacheCostOpenAI,
                     "xai", SpanCostCalculator::textGenerationWithCacheCostOpenAI,
+                    "deepseek", SpanCostCalculator::textGenerationWithCacheCostOpenAI,
                     "bedrock", SpanCostCalculator::textGenerationWithCacheCostBedrock,
                     "bedrock_converse", SpanCostCalculator::textGenerationWithCacheCostBedrock,
                     "vertex_ai-language-models", SpanCostCalculator::textGenerationWithCacheCostGoogle,
