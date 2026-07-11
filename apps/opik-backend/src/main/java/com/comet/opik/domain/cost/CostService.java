@@ -462,7 +462,13 @@ public class CostService {
         BigDecimal cc = parseTierRate(cacheCreationInputTokenPrice);
         BigDecimal cr = parseTierRate(cacheReadInputTokenPrice);
         if (isPositive(in) || isPositive(out) || isPositive(cc) || isPositive(cr)) {
-            tiers.add(new ModelPrice.PromptTier(threshold, in, out, cc, cr));
+            tiers.add(ModelPrice.PromptTier.builder()
+                    .threshold(threshold)
+                    .inputPrice(in)
+                    .outputPrice(out)
+                    .cacheCreationInputTokenPrice(cc)
+                    .cacheReadInputTokenPrice(cr)
+                    .build());
         }
     }
 

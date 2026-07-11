@@ -43,6 +43,7 @@ public record ModelPrice(
      * but only {@code input}/{@code output} at 128K and 272K, so cache fields on those tiers
      * are typically zero and correctly no-op via {@link #applicableTier}.
      */
+    @Builder(toBuilder = true)
     public record PromptTier(
             int threshold,
             @NonNull BigDecimal inputPrice,
