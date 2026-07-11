@@ -119,6 +119,11 @@ Review the diff using Opik domain knowledge from `.agents/skills/` and `.agents/
 - Types: TypeScript type safety, no unnecessary `any`
 - Performance: Unnecessary re-renders, large bundle imports
 - Accessibility: Proper ARIA attributes, keyboard navigation
+- **Design fidelity**: Apply the `frontend-design-fidelity` skill
+  (`.agents/skills/frontend-design-fidelity/SKILL.md`) — the design team's recurring review flags:
+  correct component variant/size, on-scale typography (no raw `text-[..px]`/`font-[600]`), tokens over
+  raw hex/arbitrary spacing, hover/active/empty/loading/error states, tooltips on icon buttons, and
+  dark-mode contrast. This catches the highest-frequency design comments before they reach a designer.
 
 #### SDKs (`sdks/**`)
 - API compatibility: Breaking changes flagged
