@@ -42,7 +42,8 @@ public class CostService {
             Map.entry("azure", "azure"),
             Map.entry("mistral", "mistral"),
             Map.entry("xai", "xai"),
-            Map.entry("deepseek", "deepseek"));
+            Map.entry("deepseek", "deepseek"),
+            Map.entry("perplexity", "perplexity"));
 
     // Online evaluation (and OTel ingestion) resolve models to LlmProvider serialized values whose names
     // differ from the canonical price-table vocabulary. Normalize those to the single canonical provider

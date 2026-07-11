@@ -662,6 +662,34 @@ class CostServiceTest {
     }
 
     /**
+     * Covers registering {@code perplexity} as a canonical provider so that the 16 non-zero-cost
+     * entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "perplexity"} (the {@code sonar} family and legacy
+     * {@code perplexity/llama-*} / {@code perplexity/codellama-*} models) are no longer silently
+     * dropped at load time. No Perplexity model publishes cache rates today, so all Perplexity
+     * requests route through {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("providePerplexityProviderCases")
+    void calculateCostHandlesPerplexityModels(String model, Map<String, Integer> usage, String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, "perplexity", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> providePerplexityProviderCases() {
+        // perplexity/sonar: input 1e-6, output 1e-6
+        // 1000 * 1e-6 + 200 * 1e-6 = 0.001 + 0.0002 = 0.0012
+        // perplexity/sonar-pro: input 3e-6, output 1.5e-5 (distinct rates for the two dimensions)
+        // 1000 * 3e-6 + 200 * 1.5e-5 = 0.003 + 0.003 = 0.006
+        return Stream.of(
+                Arguments.of("perplexity/sonar",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.0012"),
+                Arguments.of("perplexity/sonar-pro",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.006"));
+    }
+
+    /**
      * Test for issue #5130: Bedrock model names carry a version-pin suffix like
      * "anthropic.claude-opus-4-6-v1:0" while the pricing database stores the base name
      * "anthropic.claude-opus-4-6-v1". Stripping the ":N" pin lets these price correctly.
