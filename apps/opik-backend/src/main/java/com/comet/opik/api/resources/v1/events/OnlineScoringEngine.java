@@ -22,6 +22,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import com.google.api.gax.rpc.InvalidArgumentException;
+import com.google.common.annotations.VisibleForTesting;
 import com.jayway.jsonpath.JsonPath;
 import dev.langchain4j.data.message.AudioContent;
 import dev.langchain4j.data.message.ChatMessage;
@@ -352,6 +353,7 @@ public class OnlineScoringEngine {
      * sentinel variables (like {@code spans}). Used by {@link #capReplacements} to decide which
      * keys to leave uncapped.
      */
+    @VisibleForTesting
     static Set<String> userMappedVariableKeys(Map<String, String> variables) {
         var keys = new HashSet<>(variables.keySet());
         keys.removeIf(k -> SENTINEL_VARIABLE_VALUES.contains(variables.get(k)));
@@ -364,6 +366,7 @@ public class OnlineScoringEngine {
      * variables should be uncapped — capping them forces non-deterministic tool drill-down
      * (OPIK-7110).
      */
+    @VisibleForTesting
     static Map<String, String> capReplacements(Map<String, String> replacements,
             int maxReplacementChars, String drillDownHint, Set<String> uncappedKeys) {
         return replacements.entrySet().stream().collect(Collectors.toMap(
