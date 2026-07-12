@@ -133,8 +133,11 @@ jobs:
 
                 # A url is broken only if it NEVER returned OK across all its sightings (a link seen
                 # 200 once is fine even if a later retry blipped). "Good" = 2xx/3xx/SKP. 403 = auth
-                # wall (ignored). status 0 = gave up → re-verified below (same class as the crash).
-                # Everything else (4xx/5xx) that has no good sighting is a real broken link.
+                # wall (ignored). Transient-under-crawl-load statuses — 0 (gave up), 429 (rate
+                # limited), and 5xx (Fern/preview erroring under burst; verified: our own preview
+                # pages 500 mid-crawl yet return 200 on a direct fetch) — are NOT reported here;
+                # they go to the SSRF-guarded re-verify below and are kept only if still failing.
+                # Only a 4xx other than 403/429 with no good sighting is an immediate broken link.
                 awk -F'\t' '$1 ~ /^(2|3)/ || $1=="SKP" {print $2}' crawl_norm.tsv | sort -u > good_urls.txt
                 BROKEN_LINKS=""
                 seen_broken=""
@@ -145,10 +148,10 @@ jobs:
                   BROKEN_LINKS=$(printf '%s\n❌ Broken link: %s (%s)' "$BROKEN_LINKS" "$url" "$label")
                 }
 
-                # Real broken links: status is not 2xx/3xx/SKP/403/0, and the url never had a good
-                # sighting. One line per url (dedup on the url, first bad status wins).
+                # Immediate broken links: a hard 4xx (not 403/429, not a 5xx/0 transient) with no
+                # good sighting. One line per url (dedup on the url, first bad status wins).
                 while IFS=$'\t' read -r st url; do
-                  case "$st" in 2*|3*|SKP|403|0) continue ;; esac
+                  case "$st" in 2*|3*|5*|SKP|403|429|0) continue ;; esac
                   grep -qxF "$url" good_urls.txt && continue
                   case "$seen_broken" in *"|$url|"*) continue ;; esac
                   seen_broken="$seen_broken|$url|"
@@ -176,17 +179,18 @@ jobs:
                 sys.exit(0)
                 PY
 
-                # Re-verify the status-0 give-ups one at a time (there are only ever a handful;
-                # capped so a pathological run can't serialize hundreds of curls into the job
-                # timeout). curl -L follows redirects, but the SSRF guard runs on the initial
-                # url; a link that resolves 2xx/3xx on its own was never really broken.
+                # Re-verify the transient-class links one at a time (capped so a pathological run
+                # can't serialize hundreds of curls into the job timeout). curl -L follows
+                # redirects, but the SSRF guard runs on the initial url; a link that resolves
+                # 2xx/3xx on its own was never really broken.
                 MAX_REVERIFY=25
-                # status-0 give-ups with no good sighting; these are the crawl's own transient
-                # false positives (routinely 200 on a direct fetch), re-verified below.
-                REVERIFY_URLS=$(awk -F'\t' '$1=="0"{print $2}' crawl_norm.tsv | sort -u \
+                # Transient statuses with no good sighting — 0 (gave up), 429 (rate limited), 5xx
+                # (Fern/preview erroring under crawl load). These routinely return 200 on a direct
+                # fetch, so re-check before reporting; kept only if still failing.
+                REVERIFY_URLS=$(awk -F'\t' '$1=="0" || $1=="429" || $1 ~ /^5/ {print $2}' crawl_norm.tsv | sort -u \
                   | grep -vxF -f good_urls.txt || true)
                 total_reverify=$(printf '%s\n' "$REVERIFY_URLS" | grep -c . || true)
-                echo "Re-verifying $total_reverify status-0 give-up link(s), cap $MAX_REVERIFY..."
+                echo "Re-verifying $total_reverify transient (0/429/5xx) link(s), cap $MAX_REVERIFY..."
                 count=0
                 still_broken=0
                 while IFS= read -r url; do
