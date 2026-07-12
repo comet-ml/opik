@@ -85,11 +85,18 @@ jobs:
                     2>&1 | grep -E '^\[[A-Z0-9]+\] https?://' >> crawl_lines.txt || true
                 }
 
+                # Each crawl crashes at a random point, so a 2nd pass reaches links the 1st never
+                # got to before dying — the union covers more. The per-attempt unique-count log
+                # below quantifies how much attempt 2 actually adds, to decide if it's worth its
+                # ~8 min (tune MAX_CRAWL_ATTEMPTS from that data).
                 MAX_CRAWL_ATTEMPTS=2
+                prev_unique=0
                 for attempt in $(seq 1 "$MAX_CRAWL_ATTEMPTS"); do
                   echo "Crawl attempt $attempt/$MAX_CRAWL_ATTEMPTS..."
                   crawl
-                  echo "  attempt $attempt: $(wc -l < crawl_lines.txt) cumulative link lines captured."
+                  cum_unique=$(grep -oE '^\[[A-Z0-9]+\] https?://[^ ]+' crawl_lines.txt | awk '{print $2}' | sort -u | wc -l | tr -d ' ')
+                  echo "  attempt $attempt: $(wc -l < crawl_lines.txt) cumulative lines, $cum_unique cumulative unique urls (+$((cum_unique - prev_unique)) new this attempt)."
+                  prev_unique=$cum_unique
                 done
 
                 # A crash can cut the final line mid-url (file won't end in a newline). Drop that
@@ -197,9 +204,12 @@ jobs:
                   # The give-ups are transient by definition, and a single curl can itself blip
                   # (000/timeout), so try up to 3 times and clear on the first 2xx/3xx. Only a
                   # link that fails all three is reported broken.
+                  # `|| true`: curl exits non-zero on timeout (28) / connect-fail, and the step
+                  # runs under `bash -e` — an unguarded failure here aborts the whole step before
+                  # the report is written. Tolerate it; an empty code falls through to "broken".
                   code=000
                   for _try in 1 2 3; do
-                    code=$(curl -sL -o /dev/null -w "%{http_code}" --max-time 15 "$url" 2>/dev/null)
+                    code=$(curl -sL -o /dev/null -w "%{http_code}" --max-time 15 "$url" 2>/dev/null || true)
                     case "$code" in 2*|3*) break ;; esac
                     sleep 2
                   done
