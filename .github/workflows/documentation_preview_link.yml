@@ -47,22 +47,29 @@ jobs:
                 echo -e "\n\n" >> preview_url.txt
 
                 # linkinator@7.x crashes the whole Node process on ANY unhandled stream 'error'
-                # event — a CloudFront keep-alive socket reaped mid-read (ECONNRESET) or a
-                # request abort both throw and kill the crawl with no JSON written. There is no
-                # flag that fixes this (it's a bug in the tool), and every knob that adds socket
-                # churn makes it worse: --concurrency > 25 crashes reliably; --timeout turns each
-                # timeout into a crashing abort; --retry-errors hammers failing links until the
-                # crawl hangs. So: crawl at 25 (empirically the only survivable concurrency),
-                # keep only --retry (safe, bounded 429/Retry-After handling), skip the big
-                # off-preview trees we don't own, send stderr to the step log (NOT /dev/null) so
-                # a crash is diagnosable, and simply retry the whole crawl until it yields valid
-                # JSON. The crash is a random per-socket event, so a fresh attempt usually
-                # succeeds; timeout-minutes above budgets for a second ~17-min run.
+                # event — a CloudFront keep-alive socket reaped mid-read ("other side closed").
+                # It's a listener leak in the tool (MaxListenersExceededWarning on [Fetch]): the
+                # crash probability grows with the number of requests, so our ~4k-page crawl
+                # (docs publish TWO version trees, latest + v1) crashes on the CI runner every
+                # time — verified: no successful run in weeks. No flag or concurrency fixes it
+                # (--concurrency >25 crashes faster, 5 is too slow to finish, --timeout/--retry-errors
+                # make it worse), and --format json writes nothing until the very end, so a crash
+                # discards ALL findings — the check then silently reports zero broken links.
+                #
+                # So we DON'T rely on the crawl completing. We stream linkinator's per-link output
+                # (--verbosity INFO, one "[STATUS] url" line per link) to a log as it goes, let it
+                # crash if it must (|| true), and parse whatever it emitted BEFORE dying. Every link
+                # checked up to the crash point is still reported — partial results beat none. We
+                # retry to extend coverage, keeping the union of links seen across attempts.
+                # Trade-off vs JSON: the stream omits the "on page" parent, so reports name the
+                # broken url without the linking page. Acceptable to stop losing real findings.
+                : > crawl_lines.txt
                 crawl() {
                   npx linkinator ${{ steps.generate-docs.outputs.URL }} \
                     --recurse \
                     --concurrency 25 \
                     --retry \
+                    --verbosity INFO \
                     --skip "search\/v2\/key" \
                     --skip "https://ai.google.dev/gemini-api" \
                     --skip "https://ai.google.dev/aistudio" \
@@ -75,29 +82,37 @@ jobs:
                     --skip "files.buildwithfern.com" \
                     --skip "github.com" \
                     --skip "raw.githubusercontent.com" \
-                    --format json > linkinator_results.json || true
+                    2>&1 | grep -E '^\[[A-Z0-9]+\] https?://' >> crawl_lines.txt || true
                 }
-                json_ok() { jq -e 'type == "object" and (.links | type == "array")' linkinator_results.json > /dev/null 2>&1; }
 
                 MAX_CRAWL_ATTEMPTS=2
                 for attempt in $(seq 1 "$MAX_CRAWL_ATTEMPTS"); do
                   echo "Crawl attempt $attempt/$MAX_CRAWL_ATTEMPTS..."
                   crawl
-                  if json_ok; then
-                    echo "Crawl attempt $attempt produced valid JSON."
-                    break
-                  fi
-                  echo "Crawl attempt $attempt produced no valid JSON (likely an unhandled-socket-error crash)."
+                  echo "  attempt $attempt: $(wc -l < crawl_lines.txt) cumulative link lines captured."
                 done
 
-                PREVIEW_ORIGIN=$(echo "${{ steps.generate-docs.outputs.URL }}" | grep -oE '^https?://[^/]+')
+                # A crash can cut the final line mid-url (file won't end in a newline). Drop that
+                # truncated last line so a partial "[404] https://half-a-ur" can't become a bogus
+                # broken link: if the file lacks a trailing newline, delete its last line first.
+                # Then normalize to "STATUS<tab>url" (only fully-formed "[STATUS] url" lines match).
+                # POSIX sed/sort/grep, no gawk extension.
+                if [ -s crawl_lines.txt ] && [ -n "$(tail -c1 crawl_lines.txt)" ]; then
+                  sed '$d' crawl_lines.txt > crawl_lines.trimmed && mv crawl_lines.trimmed crawl_lines.txt
+                fi
+                sed -nE 's/^\[([A-Z0-9]+)\] (https?:\/\/[^ ]+).*/\1\t\2/p' crawl_lines.txt | sort -u > crawl_norm.tsv
 
-                # linkinator exits non-zero both when it finds broken links and when it
-                # crashes mid-crawl (e.g. unhandled ECONNRESET), so trust the output, not
-                # the exit code: invalid/missing JSON means the crawl didn't complete.
-                if ! json_ok; then
+                CHECKED_TOTAL=$(cut -f2 crawl_norm.tsv | sort -u | wc -l | tr -d ' ')
+                echo "Crawl reached $CHECKED_TOTAL unique link(s) across $MAX_CRAWL_ATTEMPTS attempt(s)."
+                echo "Status breakdown (per sighting):"
+                cut -f1 crawl_norm.tsv | sort | uniq -c | sed 's/^/  /'
+
+                # Fail loud (never silent) if the crawl barely started — a near-empty capture
+                # means the run is not trustworthy and a human should re-run, NOT a green pass.
+                MIN_LINKS=200
+                if [ "$CHECKED_TOTAL" -lt "$MIN_LINKS" ]; then
                   {
-                    echo "⚠️ The link check did not complete (likely a crawl crash or timeout). Please re-run this check."
+                    echo "⚠️ The link check did not complete (crawl reached only $CHECKED_TOTAL links, expected ≥ $MIN_LINKS). Please re-run this check."
                     echo ""
                     echo "---"
                     echo "📌 Results for commit ${{ github.sha }}"
@@ -106,33 +121,29 @@ jobs:
                   exit 0
                 fi
 
-                # Progress to the step log (not the PR comment) so a slow run is diagnosable:
-                # show that the crawl finished and the status breakdown it produced.
-                echo "Crawl complete: $(jq '.links | length' linkinator_results.json) links checked."
-                echo "Status breakdown:"
-                jq -r '.links | group_by(.status) | map("  \(.[0].status // "none"): \(length)") | .[]' linkinator_results.json
+                # A url is broken only if it NEVER returned OK across all its sightings (a link seen
+                # 200 once is fine even if a later retry blipped). "Good" = 2xx/3xx/SKP. 403 = auth
+                # wall (ignored). status 0 = gave up → re-verified below (same class as the crash).
+                # Everything else (4xx/5xx) that has no good sighting is a real broken link.
+                awk -F'\t' '$1 ~ /^(2|3)/ || $1=="SKP" {print $2}' crawl_norm.tsv | sort -u > good_urls.txt
+                BROKEN_LINKS=""
+                seen_broken=""
 
-                # Real HTTP errors, deduped by url — one broken sidebar link otherwise
-                # multiplies into hundreds of lines and overflows GitHub's 65,536-char
-                # comment limit. 403s are auth walls (not broken), so they are excluded.
-                # status 0 means linkinator gave up on a link mid-crawl (a reaped socket, the
-                # same failure class as the crash) rather than a real 4xx/5xx — these routinely
-                # return 200 when fetched on their own, so they are excluded here and re-verified
-                # below, reported only if still unreachable.
-                BROKEN_LINKS=$(jq -r --arg origin "$PREVIEW_ORIGIN" '
-                  [.links[] | select(.state != "OK" and .status != 403 and .status != 0)]
-                  | group_by(.url) | map(.[0]) | .[]
-                  | "❌ Broken link: \(.url) (\(.status))\n   ↳ on page: \((.parent // "") | sub("^" + $origin; ""))"
-                ' linkinator_results.json)
-
-                # `↳ on page` strips the ephemeral preview host, leaving a stable, greppable
-                # doc path. Append one report entry for a re-verified url that is still broken.
+                # `on page` is unavailable in stream mode; report the broken url and its status.
                 report_broken() {
-                  local url=$1 label=$2 parent
-                  parent=$(jq -r --arg u "$url" --arg origin "$PREVIEW_ORIGIN" \
-                    '(first(.links[] | select(.url == $u)).parent // "") | sub("^" + $origin; "")' linkinator_results.json)
-                  BROKEN_LINKS=$(printf '%s\n❌ Broken link: %s (%s)\n   ↳ on page: %s' "$BROKEN_LINKS" "$url" "$label" "$parent")
+                  local url=$1 label=$2
+                  BROKEN_LINKS=$(printf '%s\n❌ Broken link: %s (%s)' "$BROKEN_LINKS" "$url" "$label")
                 }
+
+                # Real broken links: status is not 2xx/3xx/SKP/403/0, and the url never had a good
+                # sighting. One line per url (dedup on the url, first bad status wins).
+                while IFS=$'\t' read -r st url; do
+                  case "$st" in 2*|3*|SKP|403|0) continue ;; esac
+                  grep -qxF "$url" good_urls.txt && continue
+                  case "$seen_broken" in *"|$url|"*) continue ;; esac
+                  seen_broken="$seen_broken|$url|"
+                  report_broken "$url" "$st"
+                done < crawl_norm.tsv
 
                 # SSRF guard: a PR author controls the doc links, so before curling one we
                 # require http(s) and reject any host resolving into a private/loopback/
@@ -160,7 +171,10 @@ jobs:
                 # timeout). curl -L follows redirects, but the SSRF guard runs on the initial
                 # url; a link that resolves 2xx/3xx on its own was never really broken.
                 MAX_REVERIFY=25
-                REVERIFY_URLS=$(jq -r '[.links[] | select(.status == 0) | .url] | unique | .[]' linkinator_results.json)
+                # status-0 give-ups with no good sighting; these are the crawl's own transient
+                # false positives (routinely 200 on a direct fetch), re-verified below.
+                REVERIFY_URLS=$(awk -F'\t' '$1=="0"{print $2}' crawl_norm.tsv | sort -u \
+                  | grep -vxF -f good_urls.txt || true)
                 total_reverify=$(printf '%s\n' "$REVERIFY_URLS" | grep -c . || true)
                 echo "Re-verifying $total_reverify status-0 give-up link(s), cap $MAX_REVERIFY..."
                 count=0
@@ -213,7 +227,7 @@ jobs:
                   echo "No broken links found" >> preview_url.txt
                 fi
 
-                rm -f linkinator_results.json
+                rm -f crawl_lines.txt crawl_norm.tsv good_urls.txt
 
                 {
                   echo ""
