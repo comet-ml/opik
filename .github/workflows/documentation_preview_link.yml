@@ -13,11 +13,10 @@ concurrency:
 jobs:
     run:
         runs-on: ubuntu-latest
-        # A single crawl at --concurrency 25 takes ~17 min (the docs publish two version
-        # trees, latest + v1, ~4k pages total; 25 is the only concurrency the crawl survives
-        # — see the crawl comment below). linkinator crashes on any unhandled socket error,
-        # so we retry the whole crawl until it yields valid JSON; 30 min leaves room for a
-        # second attempt after a first-attempt crash.
+        # linkinator crashes ~8 min into the crawl (unhandled socket error; see the crawl
+        # comment below) after reaching ~4k unique links — we parse that partial output rather
+        # than needing a clean finish. 30 min leaves ample room for the crash, the conditional
+        # re-crawl on an unusually early crash, and the status-0 re-verify.
         timeout-minutes: 30
         permissions: write-all
         steps:
@@ -85,19 +84,23 @@ jobs:
                     2>&1 | grep -E '^\[[A-Z0-9]+\] https?://' >> crawl_lines.txt || true
                 }
 
-                # Each crawl crashes at a random point, so a 2nd pass reaches links the 1st never
-                # got to before dying — the union covers more. The per-attempt unique-count log
-                # below quantifies how much attempt 2 actually adds, to decide if it's worth its
-                # ~8 min (tune MAX_CRAWL_ATTEMPTS from that data).
-                MAX_CRAWL_ATTEMPTS=2
-                prev_unique=0
-                for attempt in $(seq 1 "$MAX_CRAWL_ATTEMPTS"); do
-                  echo "Crawl attempt $attempt/$MAX_CRAWL_ATTEMPTS..."
+                # The crawl crashes at a roughly DETERMINISTIC point (where the listener leak
+                # trips), not a random one — measured: attempt 1 reached 3976 unique urls, a full
+                # 2nd pass added +0 new. So a blind retry just wastes ~8 min re-walking the same
+                # pages. Run once; only re-crawl if attempt 1 reached suspiciously few links (an
+                # unusually early crash), where a fresh pass might get further. Common case: one
+                # ~8-min crawl, well inside the timeout.
+                RECRAWL_THRESHOLD=1000
+                unique_urls() { grep -oE '^\[[A-Z0-9]+\] https?://[^ ]+' crawl_lines.txt | awk '{print $2}' | sort -u | wc -l | tr -d ' '; }
+                echo "Crawl attempt 1..."
+                crawl
+                u1=$(unique_urls)
+                echo "  attempt 1: $(wc -l < crawl_lines.txt) lines, $u1 unique urls."
+                if [ "$u1" -lt "$RECRAWL_THRESHOLD" ]; then
+                  echo "  attempt 1 reached only $u1 (< $RECRAWL_THRESHOLD) — likely an early crash; re-crawling once to extend coverage..."
                   crawl
-                  cum_unique=$(grep -oE '^\[[A-Z0-9]+\] https?://[^ ]+' crawl_lines.txt | awk '{print $2}' | sort -u | wc -l | tr -d ' ')
-                  echo "  attempt $attempt: $(wc -l < crawl_lines.txt) cumulative lines, $cum_unique cumulative unique urls (+$((cum_unique - prev_unique)) new this attempt)."
-                  prev_unique=$cum_unique
-                done
+                  echo "  after attempt 2: $(wc -l < crawl_lines.txt) lines, $(unique_urls) unique urls."
+                fi
 
                 # A crash can cut the final line mid-url (file won't end in a newline). Drop that
                 # truncated last line so a partial "[404] https://half-a-ur" can't become a bogus
@@ -110,7 +113,7 @@ jobs:
                 sed -nE 's/^\[([A-Z0-9]+)\] (https?:\/\/[^ ]+).*/\1\t\2/p' crawl_lines.txt | sort -u > crawl_norm.tsv
 
                 CHECKED_TOTAL=$(cut -f2 crawl_norm.tsv | sort -u | wc -l | tr -d ' ')
-                echo "Crawl reached $CHECKED_TOTAL unique link(s) across $MAX_CRAWL_ATTEMPTS attempt(s)."
+                echo "Crawl reached $CHECKED_TOTAL unique link(s)."
                 echo "Status breakdown (per sighting):"
                 cut -f1 crawl_norm.tsv | sort | uniq -c | sed 's/^/  /'
 
