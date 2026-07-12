@@ -233,7 +233,7 @@ class Opik:
 
     def _display_created_dataset_url(self, dataset_name: str, dataset_id: str) -> None:
         dataset_url = url_helpers.get_dataset_url_by_id(
-            dataset_id, self._config.url_override
+            dataset_id, self._config.url_override, self._workspace
         )
 
         LOGGER.info(f'Created a "{dataset_name}" dataset at {dataset_url}.')
