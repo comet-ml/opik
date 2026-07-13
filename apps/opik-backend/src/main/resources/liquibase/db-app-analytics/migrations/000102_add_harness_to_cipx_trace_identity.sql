@@ -10,3 +10,4 @@ ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.cipx_trace_identities ON CLUSTER '{clu
     ADD COLUMN IF NOT EXISTS harness LowCardinality(String);
 
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.cipx_trace_identities ON CLUSTER '{cluster}' DROP COLUMN IF EXISTS harness;
+
