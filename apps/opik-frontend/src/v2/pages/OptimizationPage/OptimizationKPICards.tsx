@@ -58,6 +58,11 @@ type OptimizationKPICardsProps = {
   optimizationCreatedAt?: string;
   optimizationLastUpdatedAt?: string;
   isInProgress?: boolean;
+  /**
+   * Heuristic flag: the run COMPLETED but scored nothing usable (OPIK-7029). When
+   * set, the score card shows a caption so a degenerate run isn't a bare 0%/-.
+   */
+  scoringFailed?: boolean;
 };
 
 const OptimizationKPICards: React.FunctionComponent<
@@ -71,6 +76,7 @@ const OptimizationKPICards: React.FunctionComponent<
   optimizationCreatedAt,
   optimizationLastUpdatedAt,
   isInProgress,
+  scoringFailed,
 }) => {
   const kpiData = useMemo(
     () => ({
@@ -99,6 +105,12 @@ const OptimizationKPICards: React.FunctionComponent<
     <div className="grid grid-cols-4 gap-4">
       {configs.map((config) => {
         const field = CANDIDATE_KEY_MAP[config.key];
+        // Caption the score card when the run scored nothing usable, so the
+        // 0%/- reads as "scoring failed" rather than a genuine result.
+        const caption =
+          scoringFailed && config.key === "score"
+            ? "No usable scores — check the logs."
+            : undefined;
         return (
           <MetricKPICard
             key={config.key}
@@ -108,6 +120,7 @@ const OptimizationKPICards: React.FunctionComponent<
             current={bestCandidate?.[field] as MetricValue}
             formatter={config.formatter}
             trend={config.trend}
+            caption={caption}
           />
         );
       })}

@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from typing import Dict, Any, NotRequired, Optional, List, TypedDict, Union
 from uuid import UUID
 
+from .exceptions import InvalidConfigError
+
 
 class OptimizationRunResult(TypedDict):
     """Successful result emitted by ``optimizer_runner`` and returned by
@@ -127,52 +129,59 @@ class OptimizationConfig:
     @classmethod
     def from_dict(cls, config: Dict[str, Any]) -> "OptimizationConfig":
         """Parse config dict into typed object.
-        
+
         Args:
             config: Configuration dictionary from job message
-            
+
         Returns:
             OptimizationConfig instance
-            
-        Raises:
-            KeyError: If required fields are missing
-            ValueError: If metrics list is empty
-        """
-        # Extract metric config (use first metric for now)
-        metric_config_list = config["evaluation"]["metrics"]
-        if not metric_config_list:
-            raise ValueError("At least one metric must be defined")
-        
-        metric_config = metric_config_list[0]
-        
-        # Convert prompt messages template syntax from {{var}} (FE-style) to {var} (optimizer-style)
-        prompt_messages = []
-        for msg in config["prompt"]["messages"]:
-            converted_msg = {
-                "role": msg["role"],
-                "content": _convert_template_syntax(msg["content"]) if isinstance(msg["content"], str) else msg["content"]
-            }
-            prompt_messages.append(converted_msg)
-        
-        # The optimizer's own model (optional) is carried inside the optimizer
-        # parameters. Pull it out so the remaining params can be passed as
-        # kwargs to the optimizer constructor without colliding with `model`.
-        optimizer_params = dict(config["optimizer"].get("parameters", {}))
-        optimizer_model = optimizer_params.pop("model", None)
-        optimizer_model_params = optimizer_params.pop("model_parameters", None)
 
-        return cls(
-            dataset_name=config["dataset_name"],
-            prompt_messages=prompt_messages,
-            model=config["llm_model"]["model"],
-            model_params=config["llm_model"].get("parameters", {}),
-            metric_type=metric_config["type"],
-            metric_params=metric_config.get("parameters", {}),
-            optimizer_type=config["optimizer"]["type"],
-            optimizer_params=optimizer_params,
-            optimizer_model=optimizer_model,
-            optimizer_model_params=optimizer_model_params,
-        )
+        Raises:
+            InvalidConfigError: If required fields are missing or values are invalid
+        """
+        try:
+            # Extract metric config (use first metric for now)
+            metric_config_list = config["evaluation"]["metrics"]
+            if not metric_config_list:
+                raise ValueError("At least one metric must be defined")
+
+            metric_config = metric_config_list[0]
+
+            # Convert prompt messages template syntax from {{var}} (FE-style) to {var} (optimizer-style)
+            prompt_messages = []
+            for msg in config["prompt"]["messages"]:
+                converted_msg = {
+                    "role": msg["role"],
+                    "content": _convert_template_syntax(msg["content"]) if isinstance(msg["content"], str) else msg["content"]
+                }
+                prompt_messages.append(converted_msg)
+
+            # The optimizer's own model (optional) is carried inside the optimizer
+            # parameters. Pull it out so the remaining params can be passed as
+            # kwargs to the optimizer constructor without colliding with `model`.
+            optimizer_params = dict(config["optimizer"].get("parameters", {}))
+            optimizer_model = optimizer_params.pop("model", None)
+            optimizer_model_params = optimizer_params.pop("model_parameters", None)
+
+            return cls(
+                dataset_name=config["dataset_name"],
+                prompt_messages=prompt_messages,
+                model=config["llm_model"]["model"],
+                model_params=config["llm_model"].get("parameters", {}),
+                metric_type=metric_config["type"],
+                metric_params=metric_config.get("parameters", {}),
+                optimizer_type=config["optimizer"]["type"],
+                optimizer_params=optimizer_params,
+                optimizer_model=optimizer_model,
+                optimizer_model_params=optimizer_model_params,
+            )
+        except InvalidConfigError:
+            raise
+        except KeyError as exc:
+            field = str(exc).strip("'\"")
+            raise InvalidConfigError(field, f"Required configuration field '{field}' is missing") from exc
+        except ValueError as exc:
+            raise InvalidConfigError("metrics", str(exc)) from exc
 
 
 @dataclass

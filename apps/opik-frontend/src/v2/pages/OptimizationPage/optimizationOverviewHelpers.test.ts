@@ -1,12 +1,35 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  computeEmptyRunWarning,
   getCompletedRunDurationSeconds,
   getOptimizationDurationSeconds,
   getOptimizationRefetchInterval,
 } from "./optimizationOverviewHelpers";
-import { OPTIMIZATION_STATUS } from "@/types/optimizations";
+import { AggregatedCandidate, OPTIMIZATION_STATUS } from "@/types/optimizations";
 import { OPTIMIZATION_ACTIVE_REFETCH_INTERVAL } from "@/lib/optimizations";
+
+const makeCandidate = (
+  overrides: Partial<AggregatedCandidate> & {
+    candidateId: string;
+    stepIndex: number;
+  },
+): AggregatedCandidate => ({
+  id: overrides.candidateId,
+  parentCandidateIds: [],
+  trialNumber: 1,
+  score: undefined,
+  runtimeCost: undefined,
+  latencyP50: undefined,
+  totalTraceCount: 0,
+  totalDatasetItemCount: 0,
+  passedCount: 0,
+  totalCount: 0,
+  experimentIds: [],
+  name: "test",
+  created_at: "2025-01-01T00:00:00Z",
+  ...overrides,
+});
 
 describe("getOptimizationDurationSeconds", () => {
   it("returns the wall-clock seconds between created and end", () => {
@@ -79,6 +102,74 @@ describe("getCompletedRunDurationSeconds", () => {
         optimizationCreatedAt: undefined,
       }),
     ).toBeUndefined();
+  });
+});
+
+describe("computeEmptyRunWarning", () => {
+  it("does not warn while the run is unfinished or errored", () => {
+    const candidates = [makeCandidate({ candidateId: "a", stepIndex: 0 })];
+    expect(
+      computeEmptyRunWarning(candidates, OPTIMIZATION_STATUS.RUNNING),
+    ).toBe(false);
+    expect(
+      computeEmptyRunWarning(candidates, OPTIMIZATION_STATUS.INITIALIZED),
+    ).toBe(false);
+    expect(computeEmptyRunWarning(candidates, OPTIMIZATION_STATUS.ERROR)).toBe(
+      false,
+    );
+    expect(computeEmptyRunWarning(candidates, undefined)).toBe(false);
+  });
+
+  it("warns on a COMPLETED run where no non-baseline trial scored", () => {
+    const candidates = [
+      // A scored baseline does not count — it is expected on every run.
+      makeCandidate({ candidateId: "base", stepIndex: 0, score: 0.5 }),
+      makeCandidate({
+        candidateId: "a",
+        stepIndex: 1,
+        score: undefined,
+        parentCandidateIds: ["base"],
+      }),
+      makeCandidate({
+        candidateId: "b",
+        stepIndex: 2,
+        score: undefined,
+        parentCandidateIds: ["a"],
+      }),
+    ];
+    expect(
+      computeEmptyRunWarning(candidates, OPTIMIZATION_STATUS.COMPLETED),
+    ).toBe(true);
+  });
+
+  it("warns on a COMPLETED run that produced no non-baseline trials at all", () => {
+    const candidates = [
+      makeCandidate({ candidateId: "base", stepIndex: 0, score: 0.5 }),
+    ];
+    expect(
+      computeEmptyRunWarning(candidates, OPTIMIZATION_STATUS.COMPLETED),
+    ).toBe(true);
+  });
+
+  it("does not warn when at least one non-baseline trial scored", () => {
+    const candidates = [
+      makeCandidate({ candidateId: "base", stepIndex: 0, score: 0.5 }),
+      makeCandidate({
+        candidateId: "a",
+        stepIndex: 1,
+        score: undefined,
+        parentCandidateIds: ["base"],
+      }),
+      makeCandidate({
+        candidateId: "b",
+        stepIndex: 1,
+        score: 0.7,
+        parentCandidateIds: ["base"],
+      }),
+    ];
+    expect(
+      computeEmptyRunWarning(candidates, OPTIMIZATION_STATUS.COMPLETED),
+    ).toBe(false);
   });
 });
 

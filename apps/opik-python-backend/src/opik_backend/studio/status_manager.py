@@ -94,7 +94,6 @@ def optimization_lifecycle(status_manager: OptimizationStatusManager):
     try:
         status_manager.mark_running()
         yield status_manager
-        status_manager.mark_completed()
     except Exception as e:
         logger.error(f"Optimization failed, marking as error: {e}")
         try:
@@ -105,6 +104,18 @@ def optimization_lifecycle(status_manager: OptimizationStatusManager):
                 exc_info=True
             )
         raise  # Re-raise the original exception
+    else:
+        # mark_completed is outside the try/except so a transient completion-callback
+        # failure (network blip, Opik-key expiry) does NOT flip a successfully-finished
+        # run to ERROR. If mark_completed raises, the run stays RUNNING and the backend
+        # stalled-run reaper will eventually move it to ERROR (OPIK-7159 backstop).
+        try:
+            status_manager.mark_completed()
+        except Exception as completed_error:
+            logger.error(
+                f"Failed to update status to 'completed': {completed_error}",
+                exc_info=True
+            )
     finally:
         status_manager.close()
 

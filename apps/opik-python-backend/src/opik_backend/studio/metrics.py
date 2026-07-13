@@ -340,9 +340,17 @@ class MetricFactory:
             )
         
         logger.debug(f"Building metric: {metric_type} with params: {metric_params}")
-        metric_fn = cls._BUILDERS[metric_type](
-            metric_params, model, dataset_items_provider=dataset_items_provider,
-        )
+        try:
+            metric_fn = cls._BUILDERS[metric_type](
+                metric_params, model, dataset_items_provider=dataset_items_provider,
+            )
+        except InvalidMetricError:
+            raise
+        except (TypeError, ValueError) as exc:
+            raise InvalidMetricError(
+                metric_type,
+                f"Builder rejected the provided parameters: {exc}",
+            ) from exc
         logger.debug(f"Created metric function: {metric_fn.__name__}")
         return metric_fn
 

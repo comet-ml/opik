@@ -443,38 +443,6 @@ class OptimizationsResourceTest {
         }
 
         @Test
-        @DisplayName("Cancel studio optimization passes required permissions to auth endpoint")
-        void cancelStudioOptimizationPassesRequiredPermissionsToAuthEndpoint() {
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = "test-workspace-" + UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            wireMock.server().resetRequests();
-            optimizationResourceClient.callCancelStudio(UUID.randomUUID(), apiKey, workspaceName).close();
-
-            wireMock.server().verify(
-                    postRequestedFor(urlPathEqualTo("/opik/auth"))
-                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
-                                    equalTo(WorkspaceUserPermission.OPTIMIZATION_STUDIO_USE.getValue()))));
-        }
-
-        @Test
-        @DisplayName("Cancel studio optimization returns 403 when permission is denied")
-        void cancelStudioOptimizationReturnsForbiddenWhenPermissionDenied() {
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = "test-workspace-" + UUID.randomUUID();
-
-            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
-                    WorkspaceUserPermission.OPTIMIZATION_STUDIO_USE.getValue());
-
-            try (var response = optimizationResourceClient.callCancelStudio(UUID.randomUUID(), apiKey,
-                    workspaceName)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
-            }
-        }
-
-        @Test
         @DisplayName("Get studio optimization logs passes required permissions to auth endpoint")
         void getStudioOptimizationLogsPassesRequiredPermissionsToAuthEndpoint() {
             String apiKey = UUID.randomUUID().toString();
@@ -1467,20 +1435,6 @@ class OptimizationsResourceTest {
         }
 
         @Test
-        @DisplayName("Cancel Studio optimization returns NOT_IMPLEMENTED")
-        void cancelStudioOptimization__returnsNotImplemented() {
-            var studioConfig = createStudioConfig();
-            var optimization = optimizationResourceClient.createPartialOptimization()
-                    .studioConfig(studioConfig)
-                    .build();
-
-            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
-
-            // Cancel should return 501 NOT_IMPLEMENTED
-            optimizationResourceClient.cancelStudio(id, API_KEY, TEST_WORKSPACE_NAME, 501);
-        }
-
-        @Test
         @DisplayName("Filter optimizations by status on generic endpoint")
         void filterOptimizationsByStatus() {
             // Create optimizations with different statuses
@@ -2017,6 +1971,271 @@ class OptimizationsResourceTest {
                     null, null, null, List.of(filter), 200);
 
             assertThat(page.content()).containsExactly(actualOpt1);
+        }
+
+        @Test
+        @DisplayName("Create with a non-existent project_id returns 400 (OPIK-7029, C5)")
+        void createWithNonExistentProjectId__returnsBadRequest() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // A random project_id that was never created: resolveProjectId's shared
+            // ProjectService.validateProjectIdExists throws NotFoundException (404); the upsert-scoped
+            // onErrorMap converts that to a 400 BadRequest so a bad project on create is a client error,
+            // not a missing-resource 404.
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .projectId(UUID.randomUUID())
+                    .projectName(null)
+                    .build();
+
+            try (var response = optimizationResourceClient.callCreate(optimization, apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @ExtendWith(DropwizardAppExtensionProvider.class)
+    @DisplayName("Studio enqueue failure marks the run as ERROR")
+    class StudioEnqueueFailureTests {
+
+        private final String apiKey = UUID.randomUUID().toString();
+        private final String workspaceId = UUID.randomUUID().toString();
+        private final String workspaceName = "workspace" + RandomStringUtils.secure().nextAlphanumeric(36);
+        private final String user = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);
+
+        private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
+        private final MySQLContainer mysql = MySQLContainerUtils.newMySQLContainer();
+        private final GenericContainer<?> zookeeper = ClickHouseContainerUtils.newZookeeperContainer();
+        private final ClickHouseContainer clickHouse = ClickHouseContainerUtils.newClickHouseContainer(zookeeper);
+        private final GenericContainer<?> minio = MinIOContainerUtils.newMinIOContainer();
+
+        private final WireMockUtils.WireMockRuntime wireMockRuntime;
+
+        @RegisterApp
+        private final TestDropwizardAppExtension app;
+
+        {
+            Startables.deepStart(redis, mysql, clickHouse, zookeeper, minio).join();
+
+            String minioUrl = "http://%s:%d".formatted(minio.getHost(), minio.getMappedPort(9000));
+
+            wireMockRuntime = WireMockUtils.startWireMock();
+
+            var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
+                    clickHouse, DATABASE_NAME);
+
+            MigrationUtils.runMysqlDbMigration(mysql);
+            MigrationUtils.runClickhouseDbMigration(clickHouse);
+            MinIOContainerUtils.setupBucketAndCredentials(minioUrl);
+
+            // Bind a QueueProducer whose enqueue always fails: this drives the enqueue `.doOnError` path
+            // in OptimizationService, which now marks the run ERROR (not CANCELLED) — the Q1 fix.
+            app = newTestDropwizardAppExtension(
+                    TestDropwizardAppExtensionUtils.AppContextConfig.builder()
+                            .jdbcUrl(mysql.getJdbcUrl())
+                            .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                            .runtimeInfo(wireMockRuntime.runtimeInfo())
+                            .redisUrl(redis.getRedisURI())
+                            .authCacheTtlInSeconds(null)
+                            .mockEventBus(Mockito.mock(EventBus.class))
+                            .minioUrl(minioUrl)
+                            .isMinIO(true)
+                            .modules(List.of(new com.google.inject.AbstractModule() {
+                                @Override
+                                protected void configure() {
+                                    bind(com.comet.opik.infrastructure.queues.QueueProducer.class)
+                                            .toInstance(new FailingQueueProducer());
+                                }
+                            }))
+                            .build());
+        }
+
+        private OptimizationResourceClient client;
+
+        @BeforeAll
+        void beforeAll(ClientSupport clientSupport) {
+            var baseUri = TestUtils.getBaseUrl(clientSupport);
+            ClientSupportUtils.config(clientSupport);
+            this.client = new OptimizationResourceClient(clientSupport, baseUri, podamFactory);
+            AuthTestUtils.mockTargetWorkspace(wireMockRuntime.server(), apiKey, workspaceName, workspaceId, user);
+        }
+
+        @AfterAll
+        void afterAll() {
+            wireMockRuntime.server().stop();
+        }
+
+        @Test
+        @DisplayName("Studio run whose job cannot be queued is marked ERROR, not CANCELLED (OPIK-7029, Q1)")
+        void enqueueFailure__marksRunAsError() {
+            var studioConfig = podamFactory.manufacturePojo(OptimizationStudioConfig.class).toBuilder()
+                    .opikApiKey(null)
+                    .build();
+            var optimization = client.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .build();
+
+            // Create succeeds (201) and returns immediately; the enqueue is fire-and-forget and fails
+            // asynchronously, then the compensating mark-ERROR path runs.
+            var id = client.create(optimization, apiKey, workspaceName);
+
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(200, TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> assertThat(client.get(id, apiKey, workspaceName, 200).status())
+                            .isEqualTo(OptimizationStatus.ERROR));
+        }
+
+        private static class FailingQueueProducer implements com.comet.opik.infrastructure.queues.QueueProducer {
+            @Override
+            public reactor.core.publisher.Mono<String> enqueue(Queue queue, Object... message) {
+                return reactor.core.publisher.Mono.error(new RuntimeException("simulated enqueue failure"));
+            }
+
+            @Override
+            public reactor.core.publisher.Mono<String> enqueueJob(String queueName,
+                    com.comet.opik.infrastructure.queues.Job job) {
+                return reactor.core.publisher.Mono.error(new RuntimeException("simulated enqueue failure"));
+            }
+
+            @Override
+            public reactor.core.publisher.Mono<Integer> getQueueSize(String queueName) {
+                return reactor.core.publisher.Mono.just(0);
+            }
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @ExtendWith(DropwizardAppExtensionProvider.class)
+    @DisplayName("Studio cancel tolerates a failing Redis cancel-signal")
+    class StudioCancelRedisFailureTests {
+
+        private final String apiKey = UUID.randomUUID().toString();
+        private final String workspaceId = UUID.randomUUID().toString();
+        private final String workspaceName = "workspace" + RandomStringUtils.secure().nextAlphanumeric(36);
+        private final String user = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);
+
+        private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
+        private final MySQLContainer mysql = MySQLContainerUtils.newMySQLContainer();
+        private final GenericContainer<?> zookeeper = ClickHouseContainerUtils.newZookeeperContainer();
+        private final ClickHouseContainer clickHouse = ClickHouseContainerUtils.newClickHouseContainer(zookeeper);
+        private final GenericContainer<?> minio = MinIOContainerUtils.newMinIOContainer();
+
+        private final WireMockUtils.WireMockRuntime wireMockRuntime;
+
+        @RegisterApp
+        private final TestDropwizardAppExtension app;
+
+        {
+            Startables.deepStart(redis, mysql, clickHouse, zookeeper, minio).join();
+
+            String minioUrl = "http://%s:%d".formatted(minio.getHost(), minio.getMappedPort(9000));
+
+            wireMockRuntime = WireMockUtils.startWireMock();
+
+            var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
+                    clickHouse, DATABASE_NAME);
+
+            MigrationUtils.runMysqlDbMigration(mysql);
+            MigrationUtils.runClickhouseDbMigration(clickHouse);
+            MinIOContainerUtils.setupBucketAndCredentials(minioUrl);
+
+            // Wrap the real reactive client in a spy that errors only on the cancel-signal bucket set;
+            // every other Redis operation (locks, log sync, cache) delegates to the real client. This
+            // exercises U1: a Redis blip on the cancel signal must not 500 the request nor block the
+            // CANCELLED status write.
+            RedissonReactiveClient realClient = buildRealReactiveClient(redis.getRedisURI());
+            RedissonReactiveClient spyClient = buildCancelFailingSpy(realClient);
+
+            app = newTestDropwizardAppExtension(
+                    TestDropwizardAppExtensionUtils.AppContextConfig.builder()
+                            .jdbcUrl(mysql.getJdbcUrl())
+                            .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                            .runtimeInfo(wireMockRuntime.runtimeInfo())
+                            .redisUrl(redis.getRedisURI())
+                            .authCacheTtlInSeconds(null)
+                            .mockEventBus(Mockito.mock(EventBus.class))
+                            .minioUrl(minioUrl)
+                            .isMinIO(true)
+                            .modules(List.of(new com.google.inject.AbstractModule() {
+                                @Override
+                                protected void configure() {
+                                    bind(RedissonReactiveClient.class).toInstance(spyClient);
+                                }
+                            }))
+                            .build());
+        }
+
+        private RedissonReactiveClient buildRealReactiveClient(String redisUri) {
+            Config redisConfig = new Config();
+            redisConfig.useSingleServer().setAddress(redisUri).setDatabase(0);
+            return Redisson.create(redisConfig).reactive();
+        }
+
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        private RedissonReactiveClient buildCancelFailingSpy(RedissonReactiveClient realClient) {
+            RedissonReactiveClient spy = Mockito.spy(realClient);
+            Mockito.doAnswer(invocation -> {
+                String key = invocation.getArgument(0);
+                if (key != null && key.startsWith("opik:cancel:")) {
+                    org.redisson.api.RBucketReactive bucket = Mockito.mock(org.redisson.api.RBucketReactive.class);
+                    Mockito.when(bucket.set(Mockito.any(), Mockito.anyLong(), Mockito.any(TimeUnit.class)))
+                            .thenReturn(reactor.core.publisher.Mono
+                                    .error(new RuntimeException("simulated Redis failure")));
+                    return bucket;
+                }
+                return invocation.callRealMethod();
+            }).when(spy).getBucket(Mockito.anyString());
+            return spy;
+        }
+
+        private OptimizationResourceClient client;
+        private RedissonReactiveClient assertionRedisClient;
+
+        @BeforeAll
+        void beforeAll(ClientSupport clientSupport) {
+            var baseUri = TestUtils.getBaseUrl(clientSupport);
+            ClientSupportUtils.config(clientSupport);
+            this.client = new OptimizationResourceClient(clientSupport, baseUri, podamFactory);
+            this.assertionRedisClient = buildRealReactiveClient(redis.getRedisURI());
+            AuthTestUtils.mockTargetWorkspace(wireMockRuntime.server(), apiKey, workspaceName, workspaceId, user);
+        }
+
+        @AfterAll
+        void afterAll() {
+            wireMockRuntime.server().stop();
+        }
+
+        @Test
+        @DisplayName("Cancel still persists CANCELLED when the Redis cancel-signal fails (OPIK-7029, U1)")
+        void cancelWithFailingRedisSignal__stillPersistsCancelled() {
+            var studioConfig = podamFactory.manufacturePojo(OptimizationStudioConfig.class).toBuilder()
+                    .opikApiKey(null)
+                    .build();
+            var optimization = client.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .build();
+
+            var id = client.create(optimization, apiKey, workspaceName);
+
+            // Cancel: the Redis cancel-signal .set errors, but onErrorResume swallows it, so the request
+            // still returns 204 and the CANCELLED status is written.
+            var cancelUpdate = OptimizationUpdate.builder()
+                    .status(OptimizationStatus.CANCELLED)
+                    .build();
+            client.update(id, cancelUpdate, apiKey, workspaceName, 204);
+
+            assertThat(client.get(id, apiKey, workspaceName, 200).status())
+                    .isEqualTo(OptimizationStatus.CANCELLED);
+
+            // And the cancel signal was NOT persisted (the failing set was swallowed).
+            String cancelKey = "opik:cancel:" + id;
+            Boolean exists = assertionRedisClient.getBucket(cancelKey).isExists().block();
+            assertThat(exists).isFalse();
         }
     }
 

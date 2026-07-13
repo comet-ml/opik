@@ -249,6 +249,22 @@ def process_optimizer_job(*args: Any, **kwargs: Any) -> OptimizationJobResult:
                             f"{error_message}\n\n"
                             f"Subprocess traceback:\n{subprocess_traceback}"
                         )
+                    elif subprocess_user_message is None:
+                        # W15: the subprocess exited with an error but emitted neither its
+                        # own user_message nor a traceback. That's the signature of an
+                        # OS-killed process (OOM / SIGKILL, non-zero/negative exit code):
+                        # it died before optimizer_runner could report its own failure.
+                        # Make the message explicit so to_user_facing_message classifies it
+                        # as the out-of-memory case instead of falling through to generic.
+                        logger.error(
+                            "Optimization subprocess for %s produced no error report — "
+                            "treating as an unexpected termination (possible OOM/kill).",
+                            context.optimization_id,
+                        )
+                        error_message = (
+                            f"{error_message} — the optimizer subprocess terminated "
+                            "unexpectedly with a non-zero exit and may have run out of memory."
+                        )
                     raise Exception(error_message)
                 
                 logger.info(f"Optimization completed successfully: {context.optimization_id}")

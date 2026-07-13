@@ -1,6 +1,6 @@
 import dayjs from "dayjs";
 
-import { OPTIMIZATION_STATUS } from "@/types/optimizations";
+import { AggregatedCandidate, OPTIMIZATION_STATUS } from "@/types/optimizations";
 import {
   IN_PROGRESS_OPTIMIZATION_STATUSES,
   OPTIMIZATION_ACTIVE_REFETCH_INTERVAL,
@@ -60,6 +60,35 @@ export const getCompletedRunDurationSeconds = ({
     optimizationCreatedAt,
     optimizationLastUpdatedAt ?? latestTrialCreatedAt,
   );
+};
+
+/**
+ * Heuristic detector for a "silent COMPLETED" run — the OPIK-7029 gap where a
+ * run finishes normally but every evaluation failed to score, so it looks like
+ * a plain empty run (dashes, "No data to show") with no error or warning.
+ *
+ * The rule: the run is terminal-COMPLETED **and** no candidate that actually
+ * ran an optimization step produced a usable score. The baseline (stepIndex 0)
+ * is deliberately excluded from the "did anything score?" check — a scored
+ * baseline is expected on every run and does not mean the optimizer produced
+ * anything, so a run whose only score is the baseline is still degenerate.
+ * A run with zero non-baseline candidates counts as empty too (the optimizer
+ * generated nothing to evaluate).
+ *
+ * This is a client-only heuristic; it can't tell a genuine all-zero run from an
+ * all-failed one (Wave 2 threads exact scoring-health counts from the backend).
+ * It only fires on COMPLETED — ERROR runs are already handled by RunErrorPanel,
+ * and in-progress runs legitimately have unscored candidates.
+ */
+export const computeEmptyRunWarning = (
+  candidates: AggregatedCandidate[],
+  status?: OPTIMIZATION_STATUS,
+): boolean => {
+  if (status !== OPTIMIZATION_STATUS.COMPLETED) return false;
+
+  const nonBaselineCandidates = candidates.filter((c) => c.stepIndex !== 0);
+  // No trials at all, or none of the trials scored → no usable optimization result.
+  return nonBaselineCandidates.every((c) => c.score == null);
 };
 
 /**

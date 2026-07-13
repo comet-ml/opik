@@ -22,6 +22,7 @@ import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
@@ -176,6 +177,11 @@ class OptimizationServiceImpl implements OptimizationService {
         boolean isStudioOptimization = optimization.studioConfig() != null;
 
         return resolveProjectId(optimization)
+                // A bad project_id supplied on create is a client mistake, not a missing resource on this
+                // endpoint — map the shared ProjectService NotFoundException (404) to a 400 here only, so
+                // we don't change ProjectService.validateProjectIdExists (used elsewhere) (OPIK-7029, C5).
+                .onErrorMap(NotFoundException.class,
+                        e -> new BadRequestException(e.getMessage(), e))
                 .flatMap(resolvedProjectId -> datasetService.getOrCreateDataset(optimization.datasetName(),
                         resolvedProjectId.orElse(null))
                         .map(datasetId -> new AbstractMap.SimpleEntry<>(resolvedProjectId.orElse(null), datasetId)))
@@ -327,8 +333,8 @@ class OptimizationServiceImpl implements OptimizationService {
                 .switchIfEmpty(Mono.error(failWithNotFound("Optimization", id)))
                 .flatMap(optimization -> Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-                    // Internal paths (cancelOptimization, the stalled-run reaper) seed USER_NAME with
-                    // SYSTEM_USER; getOrDefault keeps the analytics identity resolution tolerant.
+                    // Internal paths (markOptimizationFailedToStart, the stalled-run reaper) seed USER_NAME
+                    // with SYSTEM_USER; getOrDefault keeps the analytics identity resolution tolerant.
                     String userName = ctx.getOrDefault(RequestContext.USER_NAME, null);
 
                     // Validate cancellation request for Studio optimizations
@@ -413,6 +419,15 @@ class OptimizationServiceImpl implements OptimizationService {
         return redisClient.getBucket(cancelKey)
                 .set("1", ttlSeconds, TimeUnit.SECONDS)
                 .doOnSuccess(__ -> log.debug("Set cancellation signal in Redis for optimization '{}'", id))
+                // Best-effort: a Redis blip must not 500 the cancel request nor block the CANCELLED status
+                // write. The worker also polls the DB status, so the missed signal is not the only stop
+                // path; swallowing it (like OptimizationLogSyncService.appendSystemLogLine) keeps cancel
+                // idempotent and lets the .then(update) still persist CANCELLED (OPIK-7029, U1).
+                .onErrorResume(error -> {
+                    log.warn("Failed to set cancellation signal in Redis for optimization '{}'; "
+                            + "persisting CANCELLED status anyway", id, error);
+                    return Mono.empty();
+                })
                 .then();
     }
 
@@ -460,9 +475,9 @@ class OptimizationServiceImpl implements OptimizationService {
             String opikApiKey) {
         if (workspaceName == null) {
             log.error(
-                    "Cannot enqueue Studio optimization job for id: '{}' - workspaceName is null, marking as CANCELLED",
+                    "Cannot enqueue Studio optimization job for id: '{}' - workspaceName is null, marking as ERROR",
                     optimization.id());
-            cancelOptimization(optimization.id(), workspaceId);
+            markOptimizationFailedToStart(optimization.id(), workspaceId);
             return;
         }
 
@@ -487,9 +502,9 @@ class OptimizationServiceImpl implements OptimizationService {
                         jobId -> log.info("Studio optimization job enqueued successfully for id: '{}', jobId: '{}'",
                                 optimization.id(), jobId))
                 .doOnError(error -> {
-                    log.error("Failed to enqueue Studio optimization job for id: '{}', marking as CANCELLED",
+                    log.error("Failed to enqueue Studio optimization job for id: '{}', marking as ERROR",
                             optimization.id(), error);
-                    cancelOptimization(optimization.id(), workspaceId);
+                    markOptimizationFailedToStart(optimization.id(), workspaceId);
                 })
                 .subscribe();
     }
@@ -514,24 +529,34 @@ class OptimizationServiceImpl implements OptimizationService {
         }
     }
 
-    private void cancelOptimization(UUID optimizationId, String workspaceId) {
+    /**
+     * The job could not be queued (Redis unreachable, or the workspace name never resolved), so the
+     * worker will never run and the run would otherwise sit INITIALIZED until the reaper collects it.
+     * Mark it ERROR now with a human-readable reason — modeled on {@link #markStalledOptimizationAsError}:
+     * record the reason in the run's logs first (so the UI surfaces it even though the worker produced
+     * no logs), then reuse the standard {@link #update} path. Enqueue failure is not user-initiated, so
+     * ERROR (not CANCELLED) is the honest status (OPIK-7029, Q1).
+     */
+    private void markOptimizationFailedToStart(UUID optimizationId, String workspaceId) {
+        String reason = "[System] Optimization failed to start: the run could not be queued.";
+
         var optimizationUpdate = OptimizationUpdate.builder()
-                .status(OptimizationStatus.CANCELLED)
+                .status(OptimizationStatus.ERROR)
                 .build();
 
-        update(optimizationId, optimizationUpdate)
+        logSyncService.appendSystemLogLine(workspaceId, optimizationId, reason)
+                .then(Mono.defer(() -> update(optimizationId, optimizationUpdate)))
                 // Headless path: seed BOTH keys. getById/update resolve through makeFluxContextAware /
                 // bindUserNameAndWorkspaceContextToStream, which call ctx.get(USER_NAME) and throw
                 // NoSuchElementException if it is absent — so WORKSPACE_ID alone silently fails the
-                // whole update (this is why enqueue-failure runs stayed INITIALIZED instead of
-                // CANCELLED, OPIK-7159).
+                // whole update (this is why enqueue-failure runs stayed INITIALIZED, OPIK-7159/7029).
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, workspaceId)
                         .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER))
                 .subscribeOn(Schedulers.boundedElastic())
                 .subscribe(
-                        unused -> log.info("Cancelled optimization '{}'", optimizationId),
-                        error -> log.error("Failed to cancel optimization '{}'", optimizationId, error));
+                        unused -> log.info("Marked optimization '{}' as ERROR (failed to start)", optimizationId),
+                        error -> log.error("Failed to mark optimization '{}' as ERROR", optimizationId, error));
     }
 
     private List<Optimization> enrichOptimizations(List<Optimization> optimizations, String workspaceId) {
