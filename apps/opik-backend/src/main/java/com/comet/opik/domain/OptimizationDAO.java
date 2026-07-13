@@ -19,6 +19,7 @@ import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -59,7 +60,8 @@ public interface OptimizationDAO {
      * i.e. stuck because the worker never advanced it. Carries {@code workspaceId} so the reconciler
      * can seed the workspace context required to update the row and finalize its logs (OPIK-7159).
      */
-    record StalledOptimization(UUID id, String workspaceId, OptimizationStatus status) {
+    @Builder(toBuilder = true)
+    record StalledOptimization(@NonNull UUID id, @NonNull String workspaceId, @NonNull OptimizationStatus status) {
     }
 
     Mono<Void> upsert(Optimization optimization);
@@ -1198,9 +1200,10 @@ class OptimizationDAOImpl implements OptimizationDAO {
                             .bind("limit", limit);
                     return Flux.from(statement.execute());
                 })
-                .flatMap(result -> result.map((row, metadata) -> new StalledOptimization(
-                        row.get("id", UUID.class),
-                        row.get("workspace_id", String.class),
-                        OptimizationStatus.fromString(row.get("status", String.class)))));
+                .flatMap(result -> result.map((row, metadata) -> StalledOptimization.builder()
+                        .id(row.get("id", UUID.class))
+                        .workspaceId(row.get("workspace_id", String.class))
+                        .status(OptimizationStatus.fromString(row.get("status", String.class)))
+                        .build()));
     }
 }
