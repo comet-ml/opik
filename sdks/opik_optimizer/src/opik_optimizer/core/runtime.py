@@ -20,6 +20,7 @@ from ..api_objects.types import MetricFunction
 from ..core.results import OptimizationResult, OptimizationRound
 from ..core.state import AlgorithmResult, OptimizationContext
 from ..utils.logging import debug_log
+from ..utils.scoring import improves_over
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..base_optimizer import BaseOptimizer
@@ -104,8 +105,34 @@ def select_result_prompts(
     return best_prompts, initial_prompts
 
 
+def _apply_reused_baseline(
+    details: dict[str, Any],
+    best_score: float | None,
+    baseline_score: float | None,
+) -> None:
+    """Set the ``reused_baseline`` flag on ``details``.
+
+    OPIK-7038: True when no trial STRICTLY beat the baseline score (a tie keeps
+    the seed). A ``None`` baseline means we can't claim to have reused it, so the
+    flag defaults to False. This is an SDK result signal carried in ``details``
+    (alongside ``finish_reason``/``stopped_early``); surfacing it to the backend
+    and UI is separate plumbing. It is derived from the same tie policy the
+    optimizers apply, so it matches keep-original-on-tie. NOTE: it is score-
+    derived — for it to be a reliable "the seed prompt was returned" signal, the
+    optimizer must return the seed when it does not beat the baseline (GEPA,
+    few-shot, and — as of this change — evolutionary do).
+    """
+    details["reused_baseline"] = baseline_score is not None and not improves_over(
+        best_score, baseline_score
+    )
+
+
 def build_early_result(**kwargs: Any) -> OptimizationResult:
     score = kwargs["score"]
+    details = kwargs["details"]
+    # Early/baseline-only result: the returned prompt IS the baseline, so this is
+    # by definition a reused baseline (no improving trial was produced).
+    _apply_reused_baseline(details, score, score)
     return OptimizationResult(
         optimizer=kwargs["optimizer_name"],
         prompt=kwargs["prompt"],
@@ -154,6 +181,10 @@ def build_final_result(
 
     details.update(optimizer_metadata)
     details.update(algorithm_result.metadata)
+
+    # Canonical, algorithm-agnostic "kept the original prompt" signal (OPIK-7038).
+    # Set last so it is authoritative over any per-optimizer metadata.
+    _apply_reused_baseline(details, algorithm_result.best_score, context.baseline_score)
 
     history_entries = _coerce_history_entries(algorithm_result.history)
     if not history_entries:
