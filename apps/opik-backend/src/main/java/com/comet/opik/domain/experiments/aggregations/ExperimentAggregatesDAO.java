@@ -1602,17 +1602,13 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
 
     /**
      * Distinct project_ids this experiment's items reference; always emits exactly one Set
-     * (possibly empty when no traces with project_id are found). See
-     * {@link #GET_PROJECT_IDS}.
-     * <p>
-     * The result stream is folded with {@code reduceWith} rather than terminated with
-     * {@code single()}: the R2DBC result publisher can emit more than one element, which makes
-     * {@code single()}/{@code singleOrEmpty()} throw {@code IndexOutOfBoundsException}. Unioning
-     * the emitted sets always yields exactly one Set and is idempotent for the single-row result.
+     * (possibly empty when no traces with project_id are found). See {@link #GET_PROJECT_IDS} and
+     * {@link #unionProjectIdChunks(Flux)}.
      */
     @Override
     public Mono<Set<UUID>> getProjectIds(UUID experimentId) {
-        return asyncTemplate.nonTransaction(connection -> makeFluxContextAware((userName, workspaceId) -> {
+        return asyncTemplate.nonTransaction(connection -> unionProjectIdChunks(makeFluxContextAware((userName,
+                workspaceId) -> {
             var template = getSTWithLogComment(GET_PROJECT_IDS,
                     "getProjectIds", workspaceId, userName, experimentId.toString());
 
@@ -1625,10 +1621,21 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                             .stream(row.get("project_ids", String[].class))
                             .map(UUID::fromString)
                             .collect(Collectors.toUnmodifiableSet())));
-        }).reduceWith(() -> new HashSet<UUID>(), (allProjectIds, projectIds) -> {
+        })));
+    }
+
+    /**
+     * Folds the project_id chunks emitted by the result stream into a single immutable Set. Using
+     * {@code reduceWith} (rather than {@code single()}/{@code singleOrEmpty()}) is deliberate: the
+     * R2DBC result publisher can emit more than one element, which would make {@code single()}
+     * throw {@code IndexOutOfBoundsException}. Unioning always yields exactly one Set (empty when
+     * the stream is empty) and is idempotent for the normal single-row result.
+     */
+    static Mono<Set<UUID>> unionProjectIdChunks(Flux<Set<UUID>> projectIdChunks) {
+        return projectIdChunks.reduceWith(() -> new HashSet<UUID>(), (allProjectIds, projectIds) -> {
             allProjectIds.addAll(projectIds);
             return allProjectIds;
-        }).map(Set::copyOf));
+        }).map(Set::copyOf);
     }
 
     private Mono<TraceAggregations> getTraceAggregations(UUID experimentId, Set<UUID> projectIds, UUID labelProjectId) {
