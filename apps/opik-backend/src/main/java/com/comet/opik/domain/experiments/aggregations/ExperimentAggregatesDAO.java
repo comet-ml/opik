@@ -42,6 +42,7 @@ import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
@@ -1631,6 +1632,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
      * throw {@code IndexOutOfBoundsException}. Unioning always yields exactly one Set (empty when
      * the stream is empty) and is idempotent for the normal single-row result.
      */
+    @VisibleForTesting
     static Mono<Set<UUID>> unionProjectIdChunks(Flux<Set<UUID>> projectIdChunks) {
         return projectIdChunks.reduceWith(() -> new HashSet<UUID>(), (allProjectIds, projectIds) -> {
             allProjectIds.addAll(projectIds);
