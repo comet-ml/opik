@@ -47,4 +47,6 @@ public class LlmProviderClientConfig {
     @Valid @NotNull private VertexAIClientConfig vertexAIClient;
 
     private String openRouterUrl;
+
+    private String requestyUrl;
 }
