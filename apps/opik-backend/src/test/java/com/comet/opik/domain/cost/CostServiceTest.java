@@ -585,6 +585,44 @@ class CostServiceTest {
     }
 
     /**
+     * Covers both branches of registering {@code xai} as a canonical provider so that the 40
+     * xai-tagged entries in {@code model_prices_and_context_window.json} (the full grok-2, grok-3,
+     * grok-4 and grok-code families) are no longer silently dropped at load time:
+     * <ul>
+     *   <li>xai model with no cache rates falls through to {@link SpanCostCalculator#textGenerationCost}.</li>
+     *   <li>xai model with cache rates routes through
+     *       {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI} — xAI's cost calculator in
+     *       LiteLLM delegates to {@code generic_cost_per_token} using OpenAI-shape
+     *       {@code prompt_tokens_details.cached_tokens}, so the same subtract-from-total logic
+     *       used for OpenAI/Azure applies unchanged here.</li>
+     * </ul>
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideXaiProviderCases")
+    void calculateCostHandlesXaiModels(String description, String model, Map<String, Integer> usage,
+            String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, "xai", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideXaiProviderCases() {
+        // xai/grok-2: input 2e-6, output 1e-5 (no cache rates) -> textGenerationCost
+        // 1000 * 2e-6 + 200 * 1e-5 = 0.002 + 0.002 = 0.004
+        // xai/grok-3: input 3e-6, output 1.5e-5, cache_read 7.5e-7 -> textGenerationWithCacheCostOpenAI
+        // non-cached input = 1000 - 300 = 700
+        // 700 * 3e-6 + 200 * 1.5e-5 + 300 * 7.5e-7 = 0.0021 + 0.003 + 0.000225 = 0.005325
+        return Stream.of(
+                Arguments.of("plain text-generation route", "xai/grok-2",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.004"),
+                Arguments.of("cache-aware route via OpenAI calc", "xai/grok-3",
+                        Map.of("original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 200,
+                                "original_usage.prompt_tokens_details.cached_tokens", 300),
+                        "0.005325"));
+    }
+
+    /**
      * Test for issue #5130: Bedrock model names carry a version-pin suffix like
      * "anthropic.claude-opus-4-6-v1:0" while the pricing database stores the base name
      * "anthropic.claude-opus-4-6-v1". Stripping the ":N" pin lets these price correctly.
