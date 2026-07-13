@@ -8,32 +8,18 @@
 @layer base {
   :root {
     /* Design system colors */
-    --primary: 239 89% 64%;
-    --primary-hover: 238 62% 51%;
     --primary-active: 238 65% 43%;
-    --secondary: 240 93% 95%;
     --primary-100: 235 85% 97%;
     --primary-50: 240 71% 99%;
-    --white: #ffffff;
 
-    --foreground-secondary: 224 71% 4%;
     --new-foreground-secondary: 210 40% 98%;
-    --muted-gray: 218 11% 65%;
-    --muted-disabled: 220 14% 96%;
 
-    --muted-slate: 215 16% 47%;
-    --light-slate: 215 20% 65%;
     --tree-line: 213 16% 88%;
-    --slate-300: 213 27% 84%;
     --border: 214 32% 92%;
     --secondary-foreground: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
 
     --background: 0 0% 100%;
-    --foreground: 224 17% 26%;
     --loading-overlay: 0 0% 100%;
-
-    --soft-background: 240 20% 99%;
 
     /* other colors */
     --tooltip: 224 17% 26%;
@@ -54,7 +40,6 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 239 89% 64%;
 
-    --warning: 348 86% 61%;
     --success: 142 64% 32%;
 
     /* Gray scale for utility classes */
@@ -64,9 +49,6 @@
     --special-button: #19a979;
     --special-button-hover: #1e8a66;
     --special-button-active: #1a7557;
-
-    /* Toggle colors */
-    --toggle-outline-active: #f3f4fe;
 
     /* Dataset/test-suite upload chip colors */
     --upload-chip-bg: #bae6fd1a;
@@ -86,18 +68,7 @@
     /* Chart colors */
     --chart-tick-stroke: #94a3b8;
     --chart-grid-stroke: #f1f5f8;
-    --chart-blue: #5899da;
-    --chart-yellow: #f4b400;
-    --chart-green: #19a979;
-    --chart-red: #ef6868;
-    --chart-burgundy: #bf399e;
-    --chart-purple: #945fcf;
     --chart-violet: #7c3aed;
-    --chart-pink: #ed4a7b;
-    --chart-orange: #fb9341;
-    --chart-teal: #12a4b4;
-    --chart-gray-light: #ebf2f5;
-    --chart-gray-dark: #45575f;
 
     /* Template icon colors */
     --template-icon-metrics: #5899da;
@@ -197,31 +168,13 @@
 
     /* Tag variant background and text colors */
     --tag-gray-bg: #f3f4f6;
-    --tag-purple-bg: #efe2fd;
-    --tag-purple-text: #491b7e;
-    --tag-burgundy-bg: #fde2f6;
-    --tag-burgundy-text: #72275f;
-    --tag-pink-bg: #fde2ea;
-    --tag-pink-text: #822c45;
-    --tag-red-bg: #ffd2d2;
-    --tag-red-text: #4e1d1d;
     --tag-orange-bg: #fee3d7;
     --tag-orange-text: #73422b;
-    --tag-yellow-bg: #fef0c8;
-    --tag-yellow-text: #675523;
-    --tag-green-bg: #dafbf0;
-    --tag-green-text: #295747;
 
     --tag-lime-bg: #a3e635;
     --tag-lime-text: #1a2e05;
-    --tag-turquoise-bg: #cdf5f9;
-    --tag-turquoise-text: #15545b;
-    --tag-blue-bg: #e2effd;
-    --tag-blue-text: #19426b;
     --tag-lavender-bg: #e5e5fe;
     --tag-lavender-text: #3b3b8e;
-
-    --click-blue: #262ab5;
 
     /* Trace/span type colors */
     --type-trace: #945fcf;

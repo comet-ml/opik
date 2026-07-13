@@ -1,0 +1,61 @@
+{
+  "charts.blue": { "cssVar": "--chart-blue", "format": "hex" },
+  "charts.blue-dark": { "cssVar": "--tag-blue-text", "format": "hex" },
+  "charts.blue-light": { "cssVar": "--tag-blue-bg", "format": "hex" },
+  "charts.burgundy": { "cssVar": "--chart-burgundy", "format": "hex" },
+  "charts.burgundy-dark": { "cssVar": "--tag-burgundy-text", "format": "hex" },
+  "charts.burgundy-light": { "cssVar": "--tag-burgundy-bg", "format": "hex" },
+  "charts.gray-dark": { "cssVar": "--chart-gray-dark", "format": "hex" },
+  "charts.gray-light": { "cssVar": "--chart-gray-light", "format": "hex" },
+  "charts.green": { "cssVar": "--chart-green", "format": "hex" },
+  "charts.green-dark": { "cssVar": "--tag-green-text", "format": "hex" },
+  "charts.green-light": { "cssVar": "--tag-green-bg", "format": "hex" },
+  "charts.orange": { "cssVar": "--chart-orange", "format": "hex" },
+  "charts.pink": { "cssVar": "--chart-pink", "format": "hex" },
+  "charts.pink-dark": { "cssVar": "--tag-pink-text", "format": "hex" },
+  "charts.pink-light": { "cssVar": "--tag-pink-bg", "format": "hex" },
+  "charts.purple": { "cssVar": "--chart-purple", "format": "hex" },
+  "charts.purple-dark": { "cssVar": "--tag-purple-text", "format": "hex" },
+  "charts.purple-light": { "cssVar": "--tag-purple-bg", "format": "hex" },
+  "charts.red": { "cssVar": "--chart-red", "format": "hex" },
+  "charts.red-dark": { "cssVar": "--tag-red-text", "format": "hex" },
+  "charts.red-light": { "cssVar": "--tag-red-bg", "format": "hex" },
+  "charts.turquoise": { "cssVar": "--chart-teal", "format": "hex" },
+  "charts.turquoise-dark": {
+    "cssVar": "--tag-turquoise-text",
+    "format": "hex"
+  },
+  "charts.turquoise-light": { "cssVar": "--tag-turquoise-bg", "format": "hex" },
+  "charts.yellow": { "cssVar": "--chart-yellow", "format": "hex" },
+  "charts.yellow-dark": { "cssVar": "--tag-yellow-text", "format": "hex" },
+  "charts.yellow-light": { "cssVar": "--tag-yellow-bg", "format": "hex" },
+  "comet.click-blue": { "cssVar": "--click-blue", "format": "hex" },
+  "comet.foreground": { "cssVar": "--foreground", "format": "hsl-triple" },
+  "comet.hover-blue": { "cssVar": "--primary-hover", "format": "hsl-triple" },
+  "comet.primary-blue": { "cssVar": "--primary", "format": "hsl-triple" },
+  "comet.primary-blue-100": {
+    "cssVar": "--toggle-outline-active",
+    "format": "hex"
+  },
+  "comet.secondary-blue": { "cssVar": "--secondary", "format": "hsl-triple" },
+  "comet.warning": { "cssVar": "--warning", "format": "hsl-triple" },
+  "comet.white": { "cssVar": "--white", "format": "hex" },
+  "tailwind.border": { "cssVar": "--border", "format": "hsl-triple" },
+  "tailwind.disabled": { "cssVar": "--muted-disabled", "format": "hsl-triple" },
+  "tailwind.foreground-secondary": {
+    "cssVar": "--foreground-secondary",
+    "format": "hsl-triple"
+  },
+  "tailwind.light-slate": { "cssVar": "--light-slate", "format": "hsl-triple" },
+  "tailwind.muted-gray": { "cssVar": "--muted-gray", "format": "hsl-triple" },
+  "tailwind.muted-slate": { "cssVar": "--muted-slate", "format": "hsl-triple" },
+  "tailwind.primary-foreground": {
+    "cssVar": "--primary-foreground",
+    "format": "hsl-triple"
+  },
+  "tailwind.slate-300": { "cssVar": "--slate-300", "format": "hsl-triple" },
+  "tailwind.soft-background": {
+    "cssVar": "--soft-background",
+    "format": "hsl-triple"
+  }
+}

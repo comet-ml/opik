@@ -26,7 +26,12 @@
     "e2e:debug": "playwright test --debug",
     "postinstall": "patch-package",
     "deps:validate": "depcruise src --config --ignore-known .dependency-cruiser-known-violations.json",
-    "deps:baseline": "depcruise src --config --output-type baseline > .dependency-cruiser-known-violations.json"
+    "deps:baseline": "depcruise src --config --output-type baseline > .dependency-cruiser-known-violations.json",
+    "tokens:build": "style-dictionary build --config design-tokens/style-dictionary.config.mjs",
+    "tokens:reconcile": "node design-tokens/reconcile.mjs",
+    "tokens:export": "node --env-file=.env design-tokens/export.mjs",
+    "figma:check": "tsc --noEmit && figma connect parse",
+    "figma:icons": "node --env-file=.env scripts/generate-icon-mappings.mjs"
   },
   "dependencies": {
     "@codemirror/lang-json": "^6.0.1",
@@ -131,6 +136,7 @@
     "zustand": "^4.5.2"
   },
   "devDependencies": {
+    "@figma/code-connect": "^1.4.9",
     "@playwright/test": "^1.58.1",
     "@tailwindcss/typography": "^0.5.16",
     "@tanstack/react-query-devtools": "^5.45.0",
@@ -167,6 +173,7 @@
     "postcss": "^8.4.38",
     "prettier": "^3.1.1",
     "sass": "^1.77.5",
+    "style-dictionary": "^5.5.0",
     "stylelint": "^16.8.0",
     "stylelint-config-recommended-scss": "^14.1.0",
     "stylelint-prettier": "^5.0.0",

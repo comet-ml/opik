@@ -1,0 +1,10 @@
+{
+  "codeConnect": {
+    "parser": "react",
+    "include": ["src/ui/**/*.tsx", "src/shared/**/*.tsx"],
+    "importPaths": {
+      "src/ui/*": "@/ui/*",
+      "src/shared/*": "@/shared/*"
+    }
+  }
+}

@@ -18,6 +18,7 @@ export type SelectBoxProps<DataType> = {
   options: DropdownOption<DataType>[];
   className?: string;
   variant?: "outline" | "ghost";
+  size?: "default" | "sm";
   placeholder?: string;
   disabled?: boolean;
   testId?: string;
@@ -32,6 +33,7 @@ export const SelectBox = <ValueType extends string>({
   options,
   className,
   variant = "outline",
+  size = "default",
   placeholder = "Select value",
   disabled = false,
   renderOption,
@@ -45,6 +47,7 @@ export const SelectBox = <ValueType extends string>({
     <Select value={value} onValueChange={onChange} disabled={disabled}>
       <SelectTrigger
         id={id}
+        size={size}
         className={cn(
           variantClass,
           "data-[placeholder]:text-light-slate data-[placeholder]:dark:disabled:text-muted-gray",

@@ -1,9 +1,25 @@
 import * as React from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
 import { usePortalContainer } from "@/lib/portal-container";
+
+const selectTriggerVariants = cva(
+  "group flex w-full gap-2 items-center justify-between rounded-md border border-input bg-background px-3 py-2 placeholder:text-light-slate focus:outline-none focus:border-primary hover:shadow-sm hover:disabled:shadow-none disabled:cursor-not-allowed disabled:bg-muted-disabled disabled:text-muted-gray disabled:placeholder:text-muted-gray [&>span]:line-clamp-1",
+  {
+    variants: {
+      size: {
+        default: "h-10 text-sm",
+        sm: "h-8 text-xs",
+      },
+    },
+    defaultVariants: {
+      size: "default",
+    },
+  },
+);
 
 const Select = SelectPrimitive.Root;
 
@@ -13,14 +29,12 @@ const SelectValue = SelectPrimitive.Value;
 
 const SelectTrigger = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Trigger>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>
->(({ className, children, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> &
+    VariantProps<typeof selectTriggerVariants>
+>(({ className, children, size, ...props }, ref) => (
   <SelectPrimitive.Trigger
     ref={ref}
-    className={cn(
-      "group flex h-10 w-full gap-2 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-light-slate focus:outline-none focus:border-primary hover:shadow-sm hover:disabled:shadow-none disabled:cursor-not-allowed disabled:bg-muted-disabled disabled:text-muted-gray disabled:placeholder:text-muted-gray [&>span]:line-clamp-1",
-      className,
-    )}
+    className={cn(selectTriggerVariants({ size, className }))}
     {...props}
   >
     {children}

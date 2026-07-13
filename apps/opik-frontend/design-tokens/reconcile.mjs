@@ -1,0 +1,268 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Figma tokens whose natural code counterpart failed value verification;
+// tracked here so drift shows up as an explicit mismatch instead of noise.
+const EXPECTED_COUNTERPARTS = {
+  "comet.success": "--success",
+  "tailwind.new-secondary-foreground": "--new-foreground-secondary",
+  "charts.orange-light": "--tag-orange-bg",
+  "charts.orange-dark": "--tag-orange-text",
+};
+
+const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const scss = fs.readFileSync(path.join(root, "src/main.scss"), "utf8");
+const generatedCss = fs.readFileSync(
+  path.join(root, "src/styles/tokens.generated.css"),
+  "utf8",
+);
+const tokens = JSON.parse(
+  fs.readFileSync(path.join(root, "design-tokens/tokens.json"), "utf8"),
+);
+const nameMap = JSON.parse(
+  fs.readFileSync(path.join(root, "design-tokens/name-map.json"), "utf8"),
+);
+
+function parseVarsBlock(source, selector) {
+  const start = source.indexOf(`${selector} {`);
+  const open = source.indexOf("{", start);
+  let depth = 1;
+  let i = open + 1;
+  while (depth > 0 && i < source.length) {
+    if (source[i] === "{") depth++;
+    if (source[i] === "}") depth--;
+    i++;
+  }
+  const vars = {};
+  for (const match of source
+    .slice(open + 1, i - 1)
+    .matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) {
+    vars[match[1]] = match[2].trim().replace(/\s+/g, " ");
+  }
+  return vars;
+}
+
+function hexToRgb(hex) {
+  const value = hex.replace("#", "");
+  if (value.length !== 6) return null;
+  return [0, 2, 4].map((offset) =>
+    parseInt(value.slice(offset, offset + 2), 16),
+  );
+}
+
+function hslToRgb(h, s, l) {
+  s /= 100;
+  l /= 100;
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const hp = (((h % 360) + 360) % 360) / 60;
+  const x = c * (1 - Math.abs((hp % 2) - 1));
+  const m = l - c / 2;
+  const rgb = [
+    [c, x, 0],
+    [x, c, 0],
+    [0, c, x],
+    [0, x, c],
+    [x, 0, c],
+    [c, 0, x],
+  ][Math.floor(hp) % 6];
+  return rgb.map((channel) => Math.round((channel + m) * 255));
+}
+
+function cssValueToRgb(value) {
+  if (value.startsWith("#")) return hexToRgb(value);
+  const triple = value.match(/^([\d.]+)[,\s]+([\d.]+)%[,\s]+([\d.]+)%$/);
+  if (triple) return hslToRgb(+triple[1], +triple[2], +triple[3]);
+  return null;
+}
+
+function maxChannelDelta(a, b) {
+  return Math.max(...a.map((channel, index) => Math.abs(channel - b[index])));
+}
+
+const rootVars = parseVarsBlock(scss, ":root");
+const darkVars = parseVarsBlock(scss, ".dark");
+const generatedVars = parseVarsBlock(generatedCss, ":root");
+
+const flatTokens = [];
+(function walk(node, prefix) {
+  for (const [key, value] of Object.entries(node)) {
+    if (value && typeof value === "object" && "$value" in value) {
+      flatTokens.push({
+        path: [...prefix, key].join("."),
+        type: value.$type,
+        value: value.$value,
+      });
+    } else if (value && typeof value === "object") {
+      walk(value, [...prefix, key]);
+    }
+  }
+})(tokens, []);
+
+const moved = [];
+const keptMismatches = [];
+for (const [figmaPath, { cssVar }] of Object.entries(nameMap)) {
+  const generatedValue = generatedVars[cssVar];
+  if (!(cssVar in rootVars)) {
+    moved.push({ figmaPath, cssVar, generatedValue });
+  } else {
+    keptMismatches.push({
+      figmaPath,
+      cssVar,
+      generatedValue,
+      codeValue: rootVars[cssVar],
+    });
+  }
+}
+
+const newInFigma = flatTokens.filter((token) => !(token.path in nameMap));
+
+const counterpartMismatches = [];
+for (const [figmaPath, cssVar] of Object.entries(EXPECTED_COUNTERPARTS)) {
+  const token = flatTokens.find((entry) => entry.path === figmaPath);
+  const codeValue = rootVars[cssVar];
+  if (!token || !codeValue) continue;
+  const figmaRgb = hexToRgb(token.value);
+  const codeRgb = cssValueToRgb(codeValue);
+  counterpartMismatches.push({
+    figmaPath,
+    figmaValue: token.value,
+    cssVar,
+    codeValue,
+    delta: figmaRgb && codeRgb ? maxChannelDelta(figmaRgb, codeRgb) : null,
+  });
+}
+
+function nearestRootVar(hex) {
+  const figmaRgb = hexToRgb(hex);
+  if (!figmaRgb) return null;
+  let best = null;
+  for (const [name, value] of Object.entries(rootVars)) {
+    const codeRgb = cssValueToRgb(value);
+    if (!codeRgb) continue;
+    const delta = maxChannelDelta(figmaRgb, codeRgb);
+    if (!best || delta < best.delta || (delta === best.delta && value === hex))
+      best = { name, value, delta };
+  }
+  return best && best.delta <= 24 ? best : null;
+}
+
+const mappedVars = new Set(Object.values(nameMap).map((entry) => entry.cssVar));
+const codeOnly = Object.keys(rootVars).filter((name) => !mappedVars.has(name));
+
+const movedWithDark = moved.filter((entry) => entry.cssVar in darkVars);
+const movedWithoutDark = moved.filter((entry) => !(entry.cssVar in darkVars));
+
+const lines = [];
+lines.push("# Token reconciliation v2: Figma export vs opik-frontend");
+lines.push("");
+lines.push(
+  "Generated by `npm run tokens:reconcile` from design-tokens/tokens.json, design-tokens/name-map.json, src/styles/tokens.generated.css and src/main.scss.",
+);
+lines.push("");
+lines.push(`- Figma tokens exported: ${flatTokens.length}`);
+lines.push(
+  `- Mapped to code variables (name-map.json): ${Object.keys(nameMap).length}`,
+);
+lines.push(
+  `- main.scss :root custom properties remaining: ${
+    Object.keys(rootVars).length
+  }`,
+);
+lines.push("");
+
+lines.push(`## Moved to tokens.generated.css: ${moved.length}`);
+lines.push("");
+lines.push(
+  "These variables are no longer defined in main.scss :root; the generated file owns their light-mode value.",
+);
+lines.push("");
+for (const entry of moved) {
+  lines.push(
+    `- ${entry.figmaPath} -> ${entry.cssVar}: ${entry.generatedValue}`,
+  );
+}
+lines.push("");
+
+lines.push(
+  `## Value mismatches: ${
+    keptMismatches.length + counterpartMismatches.length
+  }`,
+);
+lines.push("");
+lines.push(
+  "Mapped but kept in main.scss (generated value differs from the hand-maintained one):",
+);
+for (const entry of keptMismatches) {
+  lines.push(
+    `- ${entry.figmaPath} -> ${entry.cssVar}: figma-derived \`${entry.generatedValue}\` vs code \`${entry.codeValue}\` (generated value is shadowed by main.scss)`,
+  );
+}
+if (keptMismatches.length === 0) lines.push("- none");
+lines.push("");
+lines.push(
+  "Expected counterparts that failed value verification (not mapped):",
+);
+for (const entry of counterpartMismatches) {
+  lines.push(
+    `- ${entry.figmaPath} ${entry.figmaValue} vs ${entry.cssVar}: ${
+      entry.codeValue
+    }${entry.delta !== null ? ` (max channel delta ${entry.delta})` : ""}`,
+  );
+}
+if (counterpartMismatches.length === 0) lines.push("- none");
+lines.push("");
+
+lines.push(`## New in Figma (no mapped code variable): ${newInFigma.length}`);
+lines.push("");
+lines.push(
+  "Emitted into tokens.generated.css under their figma-derived name; nothing in the app consumes them yet.",
+);
+lines.push("");
+for (const token of newInFigma) {
+  if (token.type === "color") {
+    const nearest = nearestRootVar(token.value);
+    lines.push(
+      `- ${token.path} (color): ${token.value}${
+        nearest
+          ? ` — closest code value: ${nearest.name}: ${nearest.value} (delta ${nearest.delta})`
+          : ""
+      }`,
+    );
+  } else {
+    lines.push(`- ${token.path} (${token.type})`);
+  }
+}
+lines.push("");
+
+lines.push(
+  `## Code-only tokens (main.scss :root, not sourced from Figma): ${codeOnly.length}`,
+);
+lines.push("");
+lines.push(codeOnly.join(", "));
+lines.push("");
+
+lines.push("## Dark-mode gap");
+lines.push("");
+lines.push(
+  `The Figma export is light-mode only. All ${moved.length} moved variables rely on the .dark overrides that remain hand-maintained in main.scss (${movedWithDark.length} have a .dark override).`,
+);
+if (movedWithoutDark.length > 0) {
+  lines.push("");
+  lines.push(
+    "Moved variables WITHOUT a .dark override (light value now applies in dark mode too):",
+  );
+  for (const entry of movedWithoutDark) {
+    lines.push(`- ${entry.cssVar}`);
+  }
+}
+lines.push("");
+
+process.stdout.write(lines.join("\n"));
+console.error(
+  `moved=${moved.length} mismatches=${
+    keptMismatches.length + counterpartMismatches.length
+  } new-in-figma=${newInFigma.length} code-only=${
+    codeOnly.length
+  } moved-without-dark=${movedWithoutDark.length}`,
+);

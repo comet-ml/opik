@@ -1,0 +1,80 @@
+/**
+ * AUTO-GENERATED — DO NOT EDIT.
+ * Source: Figma "Opik Design System" styles, exported to design-tokens/tokens.json (DTCG).
+ * Rebuild with: npm run tokens:build
+ *
+ * Imported by src/index.tsx (before main.scss). Tokens mapped in
+ * design-tokens/name-map.json are emitted under their code variable name and
+ * replace the light-mode :root definitions that used to live in src/main.scss;
+ * the .dark overrides stay in main.scss and win the cascade by source order.
+ */
+
+:root {
+  --body-accented: 500 16px/24px Inter;
+  --body-regular: 400 16px/24px Inter;
+  --body-small: 400 14px/20px Inter;
+  --body-small-accented: 500 14px/20px Inter;
+  --body-xsmall: 400 12px/16px Inter;
+  --body-xsmall-accented: 500 12px/16px Inter;
+  --chart-blue: #5899da;
+  --tag-blue-text: #19426b;
+  --tag-blue-bg: #e2effd;
+  --chart-burgundy: #bf399e;
+  --tag-burgundy-text: #72275f;
+  --tag-burgundy-bg: #fde2f6;
+  --charts-gray: #6c8893;
+  --chart-gray-dark: #45575f;
+  --chart-gray-light: #ebf2f5;
+  --chart-green: #19a979;
+  --tag-green-text: #295747;
+  --tag-green-bg: #dafbf0;
+  --chart-orange: #fb9341;
+  --charts-orange-dark: #734a2b;
+  --charts-orange-light: #fee8d7;
+  --chart-pink: #ed4a7b;
+  --tag-pink-text: #822c45;
+  --tag-pink-bg: #fde2ea;
+  --chart-purple: #945fcf;
+  --tag-purple-text: #491b7e;
+  --tag-purple-bg: #efe2fd;
+  --chart-red: #ef6868;
+  --tag-red-text: #4e1d1d;
+  --tag-red-bg: #ffd2d2;
+  --chart-teal: #12a4b4;
+  --tag-turquoise-text: #15545b;
+  --tag-turquoise-bg: #cdf5f9;
+  --chart-yellow: #f4b400;
+  --tag-yellow-text: #675523;
+  --tag-yellow-bg: #fef0c8;
+  --code-regular: 400 16px/20px "Ubuntu Mono";
+  --code-small: 400 15px/18px "Ubuntu Mono";
+  --click-blue: #262ab5;
+  --foreground: 224 17% 26%;
+  --primary-hover: 238 62% 51%;
+  --primary: 239 89% 64%;
+  --toggle-outline-active: #f3f4fe;
+  --secondary: 240 93% 95%;
+  --comet-success: #00d41f;
+  --warning: 348 86% 61%;
+  --white: #ffffff;
+  --shadow-large: 0px 2px 4px -2px #0000001a, 0px 4px 6px -1px #0000001a;
+  --shadow-medium: 0px 1px 3px 0px #0000001a, 0px 1px 2px -1px #0000001a;
+  --shadow-small: 0px 1px 2px 0px #0000000d;
+  --shadow-xlarge: 0px 10px 15px -3px #0000001a, 0px 4px 6px -4px #0000001a;
+  --border: 214 32% 91%;
+  --muted-disabled: 220 14% 96%;
+  --foreground-secondary: 224 71% 4%;
+  --light-slate: 215 20% 65%;
+  --muted-gray: 218 11% 65%;
+  --muted-slate: 215 16% 47%;
+  --tailwind-new-secondary-foreground: #f1f5f9;
+  --primary-foreground: 210 40% 98%;
+  --slate-300: 213 27% 84%;
+  --soft-background: 240 20% 99%;
+  --title-large: 500 24px/32px Inter;
+  --title-medium: 500 20px/28px Inter;
+  --title-small: 500 18px/28px Inter;
+  --title-xlarge: 500 28px/32px Inter;
+  --title-xsmall: 500 16px/20px Inter;
+  --title-xxsmall: 500 14px/18px Inter;
+}

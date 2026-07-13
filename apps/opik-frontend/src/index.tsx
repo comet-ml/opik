@@ -8,6 +8,7 @@ import usePluginsStore from "@/store/PluginsStore";
 import { APP_VERSION } from "@/constants/app";
 import { runLocalStorageMigrations } from "@/lib/ls-migrations";
 
+import "./styles/tokens.generated.css";
 import "./main.scss";
 import { IS_SENTRY_ENABLED, SENTRY_DSN, SENTRY_MODE } from "@/config";
 
