@@ -6,35 +6,25 @@ import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
-import com.comet.opik.api.resources.utils.MySQLContainerUtils;
-import com.comet.opik.api.resources.utils.RedisContainerUtils;
-import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
-import com.comet.opik.api.resources.utils.WireMockUtils;
-import com.comet.opik.extensions.DropwizardAppExtensionProvider;
-import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.SentinelTranslation;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.redis.testcontainers.RedisContainer;
 import io.r2dbc.spi.Row;
 import lombok.Builder;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
-import org.testcontainers.mysql.MySQLContainer;
 import reactor.core.publisher.Mono;
-import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.nio.charset.StandardCharsets;
@@ -50,7 +40,6 @@ import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
 import static com.comet.opik.utils.TruncationUtils.createSlimJsonString;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
@@ -63,7 +52,6 @@ import static org.assertj.core.api.Assertions.within;
  * the materialized columns, the UUIDv7-derived partition key) and the cutover mapping against it.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@ExtendWith(DropwizardAppExtensionProvider.class)
 class TracesLocalV2TableTest {
 
     /**
@@ -73,36 +61,19 @@ class TracesLocalV2TableTest {
 
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
-    private final RedisContainer redisContainer = RedisContainerUtils.newRedisContainer();
-    private final MySQLContainer mySQLContainer = MySQLContainerUtils.newMySQLContainer();
     private final GenericContainer<?> zookeeperContainer = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer clickHouseContainer = ClickHouseContainerUtils
             .newClickHouseContainer(zookeeperContainer);
-
-    private final WireMockRuntime wireMock;
 
     private final TransactionTemplateAsync transactionTemplateAsync;
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
-    @RegisterApp
-    private final TestDropwizardAppExtension app;
-
     {
-        Startables.deepStart(redisContainer, mySQLContainer, clickHouseContainer, zookeeperContainer).join();
-        wireMock = WireMockUtils.startWireMock();
-        var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
-                clickHouseContainer, DATABASE_NAME);
-        MigrationUtils.runMysqlDbMigration(mySQLContainer);
+        Startables.deepStart(zookeeperContainer, clickHouseContainer).join();
         MigrationUtils.runClickhouseDbMigration(clickHouseContainer);
-        transactionTemplateAsync = TransactionTemplateAsync.create(databaseAnalyticsFactory.build());
-        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
-                TestDropwizardAppExtensionUtils.AppContextConfig.builder()
-                        .jdbcUrl(mySQLContainer.getJdbcUrl())
-                        .databaseAnalyticsFactory(databaseAnalyticsFactory)
-                        .runtimeInfo(wireMock.runtimeInfo())
-                        .redisUrl(redisContainer.getRedisURI())
-                        .build());
+        transactionTemplateAsync = TransactionTemplateAsync.create(
+                ClickHouseContainerUtils.newDatabaseAnalyticsFactory(clickHouseContainer, DATABASE_NAME).build());
     }
 
     /**
