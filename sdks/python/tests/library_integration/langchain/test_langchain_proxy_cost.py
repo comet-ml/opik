@@ -5,44 +5,64 @@ points at an OpenAI-compatible proxy, the provider is auto-detected as the proxy
 hostname (so the backend can't price the call) and the proxy-reported cost from
 the ``x-litellm-response-cost`` response header is never captured.
 
-They run fully offline: a fake chat model carries the same ``response_metadata``
-a real LiteLLM proxy surfaces through LangChain.
-
-The nested ``headers`` shape below was captured from a real LiteLLM proxy driving
-``langchain_openai.ChatOpenAI(include_response_headers=True)`` — LangChain only
-surfaces response headers (where the cost lives) when that flag is set.
+The end-to-end tests drive the real ``langchain_openai`` + ``openai`` stack
+through a mocked HTTP transport that mimics a LiteLLM proxy — real request/
+response parsing, but no network and no spend. The response headers below were
+captured from a real local LiteLLM proxy; LangChain only surfaces them (under
+``response_metadata["headers"]``) when ``include_response_headers=True`` is set.
 """
 
+import httpx
 import pytest
-from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
-from langchain_core.messages import AIMessage
+from langchain_openai import ChatOpenAI
 
 from opik import LLMProvider
 from opik.integrations.langchain import OpikTracer
 from opik.integrations.langchain import response_cost_extractors
 from ...testlib import ANY_BUT_NONE, ANY_DICT, SpanModel, TraceModel, assert_equal
 
-# Faithful to the shape a LiteLLM proxy surfaces in LangChain's response_metadata
-# for an AWS Bedrock model. The cost header is nested under "headers" (verified
-# against a real litellm proxy); note it is a string in scientific notation.
-LITELLM_PROXY_RESPONSE_METADATA = {
-    "model_provider": "openai",
-    "model_name": "eu.anthropic.claude-haiku-4-5",
-    "finish_reason": "stop",
-    "headers": {
-        "x-litellm-call-id": "2a8d6603-6471-4eee-a0c4-5b9724b70d08",
-        "x-litellm-model-id": "b93a836b35cc4858c11e17345818a56ef9e5a51744a774694f2453140f7afdee",
-        "x-litellm-response-cost": "3.5e-05",
-    },
+PROXY_MODEL = "eu.anthropic.claude-haiku-4-5"
+
+# Headers a LiteLLM proxy attaches to its response; x-litellm-response-cost
+# carries the pre-computed request cost (a string, in scientific notation).
+LITELLM_PROXY_HEADERS = {
+    "content-type": "application/json",
+    "x-litellm-call-id": "2a8d6603-6471-4eee-a0c4-5b9724b70d08",
+    "x-litellm-model-id": "b93a836b35cc4858c11e17345818a56ef9e5a51744a774694f2453140f7afdee",
+    "x-litellm-version": "1.83.14",
+    "x-litellm-response-cost": "3.5e-05",
 }
 
 
-def _proxy_chat_model() -> GenericFakeChatModel:
-    message = AIMessage(
-        content="Paris is the capital of France.",
-        response_metadata=dict(LITELLM_PROXY_RESPONSE_METADATA),
+def _proxy_response(request: httpx.Request) -> httpx.Response:
+    body = {
+        "id": "chatcmpl-mock",
+        "object": "chat.completion",
+        "created": 1,
+        "model": PROXY_MODEL,
+        "choices": [
+            {
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": "Paris is the capital of France.",
+                },
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
+    }
+    return httpx.Response(200, json=body, headers=LITELLM_PROXY_HEADERS)
+
+
+def _proxy_chat_model() -> ChatOpenAI:
+    return ChatOpenAI(
+        model="mock-model",
+        base_url="http://litellm.local:4000",
+        api_key="sk-anything",
+        include_response_headers=True,  # required for the cost header to surface
+        http_client=httpx.Client(transport=httpx.MockTransport(_proxy_response)),
     )
-    return GenericFakeChatModel(messages=iter([message]))
 
 
 def test_langchain__proxy_cost_is_captured_from_response_metadata(fake_backend):
@@ -55,7 +75,7 @@ def test_langchain__proxy_cost_is_captured_from_response_metadata(fake_backend):
 
     expected_trace = TraceModel(
         id=ANY_BUT_NONE,
-        name="GenericFakeChatModel",
+        name="ChatOpenAI",
         input=ANY_BUT_NONE,
         output=ANY_BUT_NONE,
         metadata=ANY_DICT,
@@ -66,12 +86,15 @@ def test_langchain__proxy_cost_is_captured_from_response_metadata(fake_backend):
             SpanModel(
                 id=ANY_BUT_NONE,
                 type="llm",
-                name="GenericFakeChatModel",
+                name="ChatOpenAI",
                 input=ANY_BUT_NONE,
                 output=ANY_BUT_NONE,
                 metadata=ANY_DICT,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
+                usage=ANY_BUT_NONE,
+                model=ANY_BUT_NONE,
+                provider=ANY_BUT_NONE,
                 total_cost=3.5e-05,
                 spans=[],
                 source="sdk",
@@ -113,10 +136,10 @@ def test_langchain__provider_override_with_enum_is_normalized_to_string(fake_bac
 
 def test_langchain__provider_override_with_callable_resolves_per_run(fake_backend):
     def resolve_provider(run_dict):
-        model = run_dict["outputs"]["generations"][-1][-1]["message"]["kwargs"][
+        metadata = run_dict["outputs"]["generations"][-1][-1]["message"]["kwargs"][
             "response_metadata"
-        ]["model_name"]
-        return "bedrock" if "anthropic" in model else None
+        ]
+        return "bedrock" if "anthropic" in metadata.get("model_name", "") else None
 
     callback = OpikTracer(provider=resolve_provider)
 
