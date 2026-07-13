@@ -3,6 +3,7 @@ import { keepPreviousData } from "@tanstack/react-query";
 import { RowSelectionState } from "@tanstack/react-table";
 import useOptimizationsList from "@/api/optimizations/useOptimizationsList";
 import { Optimization } from "@/types/optimizations";
+import { Filters } from "@/types/filters";
 import {
   ACTIVE_OPTIMIZATION_FILTER,
   IN_PROGRESS_OPTIMIZATION_STATUSES,
@@ -20,6 +21,8 @@ type UseOptimizationsViewParams = {
   workspaceName: string;
   projectId?: string;
   datasetId?: string;
+  /** Extra filters (e.g. status) sent through the list filter builder. */
+  filters?: Filters;
   search?: string;
   page: number;
   rowSelection: RowSelectionState;
@@ -31,6 +34,7 @@ export const useOptimizationsView = ({
   workspaceName,
   projectId,
   datasetId,
+  filters,
   search,
   page,
   rowSelection,
@@ -61,6 +65,7 @@ export const useOptimizationsView = ({
         workspaceName,
         projectId,
         datasetId: datasetId || "",
+        filters,
         search: search || "",
         page,
         size: DEFAULT_PAGE_SIZE,
