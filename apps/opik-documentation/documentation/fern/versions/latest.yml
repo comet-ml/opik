@@ -794,6 +794,9 @@ navigation:
               - page: OpenRouter
                 path: ../docs-v2/integrations/openrouter.mdx
                 slug: openrouter
+              - page: Requesty
+                path: ../docs-v2/integrations/requesty.mdx
+                slug: requesty
               - page: Portkey
                 path: ../docs-v2/integrations/portkey.mdx
                 slug: portkey

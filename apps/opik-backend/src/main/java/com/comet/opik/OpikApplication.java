@@ -29,6 +29,7 @@ import com.comet.opik.infrastructure.llm.gemini.GeminiModule;
 import com.comet.opik.infrastructure.llm.ollama.OllamaModule;
 import com.comet.opik.infrastructure.llm.openai.OpenAIModule;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModule;
+import com.comet.opik.infrastructure.llm.requesty.RequestyModule;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModule;
 import com.comet.opik.infrastructure.ratelimit.RateLimitModule;
 import com.comet.opik.infrastructure.redis.RedisModule;
@@ -104,7 +105,8 @@ public class OpikApplication extends Application<OpikConfiguration> {
                         new RateLimitModule(), new NameGeneratorModule(), new HttpModule(), new EventModule(),
                         new ConfigurationModule(), new CacheModule(), new JobModule(), new AnthropicModule(),
                         new GeminiModule(), new OpenAIModule(), new OpenRouterModule(), new LlmModule(),
-                        new AwsModule(), new UsageLimitModule(), new VertexAIModule(), new CustomLlmModule(),
+                        new RequestyModule(), new AwsModule(), new UsageLimitModule(), new VertexAIModule(),
+                        new CustomLlmModule(),
                         new OllamaModule(), new FreeModelModule(), new ToolsModule())
                 .installers(JobGuiceyInstaller.class)
                 .listen(new OpikGuiceyLifecycleEventListener(), new EventListenerRegistrar())

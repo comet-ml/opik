@@ -1,0 +1,73 @@
+---
+description: Start here to integrate Opik into your Requesty-based genai application
+  for end-to-end LLM observability, unit testing, and optimization.
+headline: Requesty | Opik Documentation
+og:description: Learn to integrate Opik with Requesty using OpenAI SDK for seamless
+  access to AI models via a unified API.
+og:site_name: Opik Documentation
+og:title: Integrate Requesty with Opik Easily
+title: Observability for Requesty with Opik
+canonical-url: https://www.comet.com/docs/opik/integrations/requesty
+---
+
+This guide explains how to integrate Opik with Requesty using the OpenAI SDK. Requesty provides a unified, OpenAI-compatible API for accessing many AI models through a single interface.
+
+## Getting started
+
+First, ensure you have both `opik` and `openai` packages installed:
+
+```bash
+pip install opik openai
+```
+
+You'll also need a Requesty API key which you can get from [Requesty](https://app.requesty.ai/api-keys).
+
+## Tracking Requesty API calls
+
+```python
+from opik.integrations.openai import track_openai
+from openai import OpenAI
+
+# Initialize the OpenAI client with Requesty base URL
+client = OpenAI(
+    base_url="https://router.requesty.ai/v1",
+    api_key="YOUR_REQUESTY_API_KEY"
+)
+client = track_openai(client)
+
+# Optional analytics headers
+headers = {
+    "HTTP-Referer": "YOUR_SITE_URL",  # Optional. Site URL for analytics
+    "X-Title": "YOUR_SITE_NAME"  # Optional. Site title for analytics
+}
+
+response = client.chat.completions.create(
+    model="openai/gpt-4o-mini",  # You can use any model available on Requesty
+    extra_headers=headers,
+    messages=[
+        {"role": "user", "content": "Hello, world!"}
+    ],
+    temperature=0.7,
+    max_tokens=100
+)
+
+print(response.choices[0].message.content)
+```
+
+## Available Models
+
+Requesty provides access to a wide variety of models from different providers, addressed using the `provider/model` naming convention (for example `openai/gpt-4o-mini`, `anthropic/claude-sonnet-4-5`, `deepseek/deepseek-chat`).
+
+You can find the complete list of available models in the [Requesty model list](https://app.requesty.ai/router/list).
+
+## Supported Methods
+
+Requesty supports the following methods:
+
+### Chat Completions
+
+- `client.chat.completions.create()`: Works with all models
+- Provides standard chat completion functionality
+- Compatible with the OpenAI SDK interface
+
+For detailed information about available methods, parameters, and best practices, refer to the [Requesty documentation](https://docs.requesty.ai).

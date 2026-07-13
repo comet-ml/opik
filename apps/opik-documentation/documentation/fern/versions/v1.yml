@@ -603,6 +603,9 @@ navigation:
               - page: OpenRouter
                 path: ../docs/tracing/integrations/openrouter.mdx
                 slug: openrouter
+              - page: Requesty
+                path: ../docs/tracing/integrations/requesty.mdx
+                slug: requesty
               - page: Portkey
                 path: ../docs/tracing/integrations/portkey.mdx
                 slug: portkey
