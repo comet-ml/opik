@@ -1,0 +1,141 @@
+---
+description: Start here to integrate Opik into your DaoXE-based genai application
+  for end-to-end LLM observability, unit testing, and optimization.
+headline: DaoXE | Opik Documentation
+og:description: Learn to integrate Opik with DaoXE using the OpenAI SDK for multi-model
+  multi-protocol gateway tracing and evaluation.
+og:site_name: Opik Documentation
+og:title: Integrate DaoXE with Opik for Multi-Protocol LLM Access
+title: Observability for DaoXE with Opik
+---
+
+[DaoXE](https://daoxe.com) is a multi-model multi-protocol API gateway. It exposes OpenAI-compatible Chat Completions and Responses endpoints, Anthropic Messages (Claude protocol) paths, and image-compatible endpoints where available, with model IDs taken from your account catalog rather than a fixed public list.
+
+This guide explains how to integrate Opik with DaoXE using the OpenAI SDK for Chat Completions-style traffic. DaoXE provides OpenAI-compatible API endpoints that allow you to use the standard OpenAI client while routing through the gateway.
+
+<Note>
+  DaoXE is not available in mainland China.
+</Note>
+
+## Getting started
+
+First, ensure you have both `opik` and `openai` packages installed:
+
+```bash
+pip install opik openai
+```
+
+You'll also need a DaoXE API key from [DaoXE](https://daoxe.com).
+
+## Tracking DaoXE API calls
+
+```python
+from opik.integrations.openai import track_openai
+from openai import OpenAI
+
+# Initialize the OpenAI client with the DaoXE base URL
+client = OpenAI(
+    base_url="https://daoxe.com/v1",
+    api_key="YOUR_DAOXE_API_KEY",
+)
+client = track_openai(client)
+
+response = client.chat.completions.create(
+    # Use a model ID from your DaoXE account catalog
+    model="YOUR_DAOXE_MODEL_ID",
+    messages=[
+        {"role": "user", "content": "Hello, world!"}
+    ],
+    temperature=0.7,
+    max_tokens=100,
+)
+
+print(response.choices[0].message.content)
+```
+
+## Available Models
+
+DaoXE provides access to multiple model providers and modalities through a single gateway. Exact model IDs, pricing, and availability depend on your account and the current catalog—use placeholders or IDs from your DaoXE dashboard rather than hardcoding a public list.
+
+Protocol coverage typically includes:
+
+- OpenAI Chat Completions
+- OpenAI Responses
+- Anthropic Messages (Claude protocol)
+- Image-compatible endpoints where enabled for your account
+
+You can find the complete list of models available to your account in the [DaoXE](https://daoxe.com) dashboard or pricing page.
+
+## Supported Methods
+
+### Chat Completions
+
+- `client.chat.completions.create()`: Works with OpenAI-compatible chat models on DaoXE
+- Compatible with the OpenAI SDK interface when `base_url` is set to `https://daoxe.com/v1`
+
+### Other protocols
+
+DaoXE also supports Anthropic Messages (`/v1/messages`) and related client paths. Opik's `track_openai` helper covers the OpenAI SDK path shown above; for non-OpenAI SDKs, use Opik's manual `@track` decorator or the integration that matches your client.
+
+For detailed information about available methods, parameters, and best practices, refer to the DaoXE documentation.
+
+## Advanced Usage
+
+### Using with `@track` decorator
+
+You can combine the tracked client with Opik's `@track` decorator for comprehensive tracing:
+
+```python
+from opik import track
+from opik.integrations.openai import track_openai
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://daoxe.com/v1",
+    api_key="YOUR_DAOXE_API_KEY",
+)
+client = track_openai(client)
+
+@track
+def analyze_data_with_ai(query: str):
+    """Analyze data using DaoXE-routed models."""
+
+    response = client.chat.completions.create(
+        model="YOUR_DAOXE_MODEL_ID",
+        messages=[
+            {"role": "user", "content": query}
+        ],
+    )
+
+    return response.choices[0].message.content
+
+# Call the tracked function
+result = analyze_data_with_ai("Analyze this business data...")
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Authentication Errors**: Ensure your API key is correct and has the necessary permissions
+2. **Model Not Found**: Verify the model ID is available on your DaoXE account catalog
+3. **Rate Limiting**: DaoXE may have rate limits; implement appropriate retry logic
+4. **Base URL Issues**: Ensure the base URL is `https://daoxe.com/v1` (include `/v1`)
+5. **Regional Availability**: DaoXE is not available in mainland China
+
+### Getting Help
+
+- Check the [DaoXE](https://daoxe.com) documentation for API-specific details
+- Check Opik documentation for tracing and evaluation features
+- Open an issue on the [Opik GitHub repository](https://github.com/comet-ml/opik/issues) for Opik-side problems
+
+## Next Steps
+
+Once you have DaoXE integrated with Opik, you can:
+
+- [Evaluate your LLM applications](/evaluation/overview) using Opik's evaluation framework
+- [Create datasets](/evaluation/advanced/manage_datasets) to test and improve your models
+- [Set up feedback collection](/tracing/advanced/annotate_traces) to gather human evaluations
+- [Monitor performance](/tracing/concepts) across different models and configurations
+
+For more information about using Opik with OpenAI-compatible APIs, see the [OpenAI integration guide](/integrations/openai).

@@ -785,6 +785,9 @@ navigation:
               - page: Anannas AI
                 path: ../docs-v2/integrations/anannas.mdx
                 slug: anannas
+              - page: DaoXE
+                path: ../docs-v2/integrations/daoxe.mdx
+                slug: daoxe
               - page: Helicone
                 path: ../docs-v2/integrations/helicone.mdx
                 slug: helicone
