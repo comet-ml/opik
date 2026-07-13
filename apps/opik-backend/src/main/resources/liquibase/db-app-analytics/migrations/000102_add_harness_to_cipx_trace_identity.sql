@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset andriid:000101_add_harness_to_cipx_trace_identity
+--changeset andriid:000102_add_harness_to_cipx_trace_identity
 --comment: Add harness (cipx coding harness: claude_code / codex / ...) to cipx_trace_identities for the composition harness node
 
 -- cipx stamps metadata.cipx.session.harness per trace ("claude_code", "codex", ...); the proxy sets it
