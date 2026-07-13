@@ -245,7 +245,7 @@ def evaluate(
     Note:
         If you need access to the raw evaluation result, use `evaluate_with_result` or set `return_evaluation_result=True`.
     """
-    score, result, _health = _evaluate_internal(
+    score, result = _evaluate_internal(
         dataset=dataset,
         evaluated_task=evaluated_task,
         metric=metric,
@@ -287,7 +287,7 @@ def evaluate_with_result(
     """
     Run evaluation and return both the aggregate score and the underlying Opik result.
     """
-    score, result, _health = _evaluate_internal(
+    return _evaluate_internal(
         dataset=dataset,
         evaluated_task=evaluated_task,
         metric=metric,
@@ -300,7 +300,6 @@ def evaluate_with_result(
         verbose=verbose,
         use_evaluate_on_dict_items=use_evaluate_on_dict_items,
     )
-    return score, result
 
 
 def _normalize_id(value: Any) -> str | None:
@@ -553,12 +552,11 @@ def _evaluate_internal(
     opik_evaluation_result.EvaluationResult
     | opik_evaluation_result.EvaluationResultOnDictItems
     | None,
-    dict[str, int],
 ]:
     items = dataset.get_items(n_samples)
     if not items:
         logger.debug("Empty dataset; returning 0.0")
-        return 0.0, None, {"failed_count": 0, "total_count": 0}
+        return 0.0, None
 
     items, dataset_item_ids = _filter_items_by_ids(
         items=items,
@@ -600,7 +598,7 @@ def _evaluate_internal(
         )
 
     if not evaluation_result.test_results:
-        return 0.0, evaluation_result, {"failed_count": 0, "total_count": 0}
+        return 0.0, evaluation_result
 
     # Filter score results to only include the objective metric
     objective_metric_name = metric.__name__
@@ -609,9 +607,7 @@ def _evaluate_internal(
     )
 
     if not objective_score_results:
-        return 0.0, evaluation_result, {"failed_count": 0, "total_count": 0}
-
-    health = compute_scoring_health(objective_score_results)
+        return 0.0, evaluation_result
 
     _validate_objective_scores(
         objective_score_results, objective_metric_name=objective_metric_name
@@ -620,4 +616,4 @@ def _evaluate_internal(
     avg_score = _average_finite_scores(
         objective_score_results, objective_metric_name=objective_metric_name
     )
-    return avg_score, evaluation_result, health
+    return avg_score, evaluation_result
