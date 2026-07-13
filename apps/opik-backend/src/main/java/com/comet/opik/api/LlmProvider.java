@@ -14,6 +14,7 @@ public enum LlmProvider {
     ANTHROPIC("anthropic"),
     GEMINI("gemini"),
     OPEN_ROUTER("openrouter"),
+    REQUESTY("requesty"),
     VERTEX_AI("vertex-ai"),
     BEDROCK("bedrock"),
     OLLAMA("ollama"),
