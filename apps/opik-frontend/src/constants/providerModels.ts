@@ -2342,6 +2342,557 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     },
   ],
 
+  [PROVIDER_TYPE.ORCA_ROUTER]: [
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_AUTO,
+      label: "orcarouter/auto",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_ANTHROPIC_CLAUDE_FABLE_5,
+      label: "orcarouter/anthropic/claude-fable-5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_ANTHROPIC_CLAUDE_HAIKU_4_5,
+      label: "orcarouter/anthropic/claude-haiku-4.5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_ANTHROPIC_CLAUDE_OPUS_4_1,
+      label: "orcarouter/anthropic/claude-opus-4.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_ANTHROPIC_CLAUDE_OPUS_4_5,
+      label: "orcarouter/anthropic/claude-opus-4.5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_ANTHROPIC_CLAUDE_OPUS_4_6,
+      label: "orcarouter/anthropic/claude-opus-4.6",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_ANTHROPIC_CLAUDE_OPUS_4_7,
+      label: "orcarouter/anthropic/claude-opus-4.7",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_ANTHROPIC_CLAUDE_OPUS_4_8,
+      label: "orcarouter/anthropic/claude-opus-4.8",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_ANTHROPIC_CLAUDE_SONNET_4_5,
+      label: "orcarouter/anthropic/claude-sonnet-4.5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_ANTHROPIC_CLAUDE_SONNET_4_6,
+      label: "orcarouter/anthropic/claude-sonnet-4.6",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_ANTHROPIC_CLAUDE_SONNET_5,
+      label: "orcarouter/anthropic/claude-sonnet-5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_DEEPSEEK_DEEPSEEK_CHAT,
+      label: "orcarouter/deepseek/deepseek-chat",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_DEEPSEEK_DEEPSEEK_REASONER,
+      label: "orcarouter/deepseek/deepseek-reasoner",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_DEEPSEEK_DEEPSEEK_V4_FLASH,
+      label: "orcarouter/deepseek/deepseek-v4-flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_DEEPSEEK_DEEPSEEK_V4_PRO,
+      label: "orcarouter/deepseek/deepseek-v4-pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_GOOGLE_GEMINI_2_5_FLASH,
+      label: "orcarouter/google/gemini-2.5-flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_GOOGLE_GEMINI_2_5_FLASH_LITE,
+      label: "orcarouter/google/gemini-2.5-flash-lite",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_GOOGLE_GEMINI_2_5_PRO,
+      label: "orcarouter/google/gemini-2.5-pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_GOOGLE_GEMINI_3_FLASH_PREVIEW,
+      label: "orcarouter/google/gemini-3-flash-preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_GOOGLE_GEMINI_3_1_FLASH_LITE,
+      label: "orcarouter/google/gemini-3.1-flash-lite",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_GOOGLE_GEMINI_3_1_FLASH_LITE_PREVIEW,
+      label: "orcarouter/google/gemini-3.1-flash-lite-preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_GOOGLE_GEMINI_3_1_PRO_PREVIEW,
+      label: "orcarouter/google/gemini-3.1-pro-preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_GOOGLE_GEMINI_3_1_PRO_PREVIEW_CUSTOMTOOLS,
+      label: "orcarouter/google/gemini-3.1-pro-preview-customtools",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_GOOGLE_GEMINI_3_5_FLASH,
+      label: "orcarouter/google/gemini-3.5-flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_GOOGLE_GEMINI_FLASH_LATEST,
+      label: "orcarouter/google/gemini-flash-latest",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_GOOGLE_GEMINI_FLASH_LITE_LATEST,
+      label: "orcarouter/google/gemini-flash-lite-latest",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_GOOGLE_GEMINI_PRO_LATEST,
+      label: "orcarouter/google/gemini-pro-latest",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_GOOGLE_GEMINI_ROBOTICS_ER_1_6_PREVIEW,
+      label: "orcarouter/google/gemini-robotics-er-1.6-preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_GOOGLE_GEMMA_4_26B_A4B_IT,
+      label: "orcarouter/google/gemma-4-26b-a4b-it",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_GOOGLE_GEMMA_4_31B_IT,
+      label: "orcarouter/google/gemma-4-31b-it",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_GROK_GROK_4_3,
+      label: "orcarouter/grok/grok-4.3",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_GROK_GROK_4_5,
+      label: "orcarouter/grok/grok-4.5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_KIMI_KIMI_K2_5,
+      label: "orcarouter/kimi/kimi-k2.5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_KIMI_KIMI_K2_6,
+      label: "orcarouter/kimi/kimi-k2.6",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_KIMI_KIMI_K2_7_CODE,
+      label: "orcarouter/kimi/kimi-k2.7-code",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_MINIMAX_MINIMAX_M2_5,
+      label: "orcarouter/minimax/minimax-m2.5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_MINIMAX_MINIMAX_M2_5_HIGHSPEED,
+      label: "orcarouter/minimax/minimax-m2.5-highspeed",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_MINIMAX_MINIMAX_M2_7,
+      label: "orcarouter/minimax/minimax-m2.7",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_MINIMAX_MINIMAX_M2_7_HIGHSPEED,
+      label: "orcarouter/minimax/minimax-m2.7-highspeed",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_MINIMAX_MINIMAX_M3,
+      label: "orcarouter/minimax/minimax-m3",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OBSIDIAN_QWEN3_6_35B_A3B,
+      label: "orcarouter/obsidian/Qwen3.6-35B-A3B",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OBSIDIAN_GEMMA_4_26B_A4B,
+      label: "orcarouter/obsidian/gemma-4-26B-A4B",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_3_5_TURBO,
+      label: "orcarouter/openai/gpt-3.5-turbo",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_3_5_TURBO_0125,
+      label: "orcarouter/openai/gpt-3.5-turbo-0125",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_3_5_TURBO_1106,
+      label: "orcarouter/openai/gpt-3.5-turbo-1106",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_3_5_TURBO_16K,
+      label: "orcarouter/openai/gpt-3.5-turbo-16k",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_4,
+      label: "orcarouter/openai/gpt-4",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_4_0613,
+      label: "orcarouter/openai/gpt-4-0613",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_4_TURBO,
+      label: "orcarouter/openai/gpt-4-turbo",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_4_TURBO_2024_04_09,
+      label: "orcarouter/openai/gpt-4-turbo-2024-04-09",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_4_1,
+      label: "orcarouter/openai/gpt-4.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_4_1_2025_04_14,
+      label: "orcarouter/openai/gpt-4.1-2025-04-14",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_4_1_MINI,
+      label: "orcarouter/openai/gpt-4.1-mini",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_4_1_MINI_2025_04_14,
+      label: "orcarouter/openai/gpt-4.1-mini-2025-04-14",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_4_1_NANO,
+      label: "orcarouter/openai/gpt-4.1-nano",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_4_1_NANO_2025_04_14,
+      label: "orcarouter/openai/gpt-4.1-nano-2025-04-14",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_4O,
+      label: "orcarouter/openai/gpt-4o",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_4O_2024_05_13,
+      label: "orcarouter/openai/gpt-4o-2024-05-13",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_4O_2024_08_06,
+      label: "orcarouter/openai/gpt-4o-2024-08-06",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_4O_2024_11_20,
+      label: "orcarouter/openai/gpt-4o-2024-11-20",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_4O_MINI,
+      label: "orcarouter/openai/gpt-4o-mini",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_4O_MINI_2024_07_18,
+      label: "orcarouter/openai/gpt-4o-mini-2024-07-18",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_4O_MINI_SEARCH_PREVIEW,
+      label: "orcarouter/openai/gpt-4o-mini-search-preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_4O_MINI_SEARCH_PREVIEW_2025_03_11,
+      label: "orcarouter/openai/gpt-4o-mini-search-preview-2025-03-11",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_4O_SEARCH_PREVIEW,
+      label: "orcarouter/openai/gpt-4o-search-preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_4O_SEARCH_PREVIEW_2025_03_11,
+      label: "orcarouter/openai/gpt-4o-search-preview-2025-03-11",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5,
+      label: "orcarouter/openai/gpt-5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_2025_08_07,
+      label: "orcarouter/openai/gpt-5-2025-08-07",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_CHAT_LATEST,
+      label: "orcarouter/openai/gpt-5-chat-latest",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_CODEX,
+      label: "orcarouter/openai/gpt-5-codex",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_MINI,
+      label: "orcarouter/openai/gpt-5-mini",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_MINI_2025_08_07,
+      label: "orcarouter/openai/gpt-5-mini-2025-08-07",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_NANO,
+      label: "orcarouter/openai/gpt-5-nano",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_NANO_2025_08_07,
+      label: "orcarouter/openai/gpt-5-nano-2025-08-07",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_PRO,
+      label: "orcarouter/openai/gpt-5-pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_PRO_2025_10_06,
+      label: "orcarouter/openai/gpt-5-pro-2025-10-06",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_SEARCH_API,
+      label: "orcarouter/openai/gpt-5-search-api",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_SEARCH_API_2025_10_14,
+      label: "orcarouter/openai/gpt-5-search-api-2025-10-14",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_1,
+      label: "orcarouter/openai/gpt-5.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_1_2025_11_13,
+      label: "orcarouter/openai/gpt-5.1-2025-11-13",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_1_CHAT_LATEST,
+      label: "orcarouter/openai/gpt-5.1-chat-latest",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_1_CODEX,
+      label: "orcarouter/openai/gpt-5.1-codex",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_1_CODEX_MINI,
+      label: "orcarouter/openai/gpt-5.1-codex-mini",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_2,
+      label: "orcarouter/openai/gpt-5.2",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_2_2025_12_11,
+      label: "orcarouter/openai/gpt-5.2-2025-12-11",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_2_CHAT_LATEST,
+      label: "orcarouter/openai/gpt-5.2-chat-latest",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_2_CODEX,
+      label: "orcarouter/openai/gpt-5.2-codex",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_2_PRO,
+      label: "orcarouter/openai/gpt-5.2-pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_2_PRO_2025_12_11,
+      label: "orcarouter/openai/gpt-5.2-pro-2025-12-11",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_3_CHAT_LATEST,
+      label: "orcarouter/openai/gpt-5.3-chat-latest",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_3_CODEX,
+      label: "orcarouter/openai/gpt-5.3-codex",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_4,
+      label: "orcarouter/openai/gpt-5.4",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_4_2026_03_05,
+      label: "orcarouter/openai/gpt-5.4-2026-03-05",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_4_MINI,
+      label: "orcarouter/openai/gpt-5.4-mini",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_4_MINI_2026_03_17,
+      label: "orcarouter/openai/gpt-5.4-mini-2026-03-17",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_4_NANO,
+      label: "orcarouter/openai/gpt-5.4-nano",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_4_NANO_2026_03_17,
+      label: "orcarouter/openai/gpt-5.4-nano-2026-03-17",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_4_PRO,
+      label: "orcarouter/openai/gpt-5.4-pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_4_PRO_2026_03_05,
+      label: "orcarouter/openai/gpt-5.4-pro-2026-03-05",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_5,
+      label: "orcarouter/openai/gpt-5.5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_5_2026_04_23,
+      label: "orcarouter/openai/gpt-5.5-2026-04-23",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_5_PRO,
+      label: "orcarouter/openai/gpt-5.5-pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_5_PRO_2026_04_23,
+      label: "orcarouter/openai/gpt-5.5-pro-2026-04-23",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_6_LUNA,
+      label: "orcarouter/openai/gpt-5.6-luna",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_6_SOL,
+      label: "orcarouter/openai/gpt-5.6-sol",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_OPENAI_GPT_5_6_TERRA,
+      label: "orcarouter/openai/gpt-5.6-terra",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_QWEN_QWEN3_MAX,
+      label: "orcarouter/qwen/qwen3-max",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_QWEN_QWEN3_MAX_PREVIEW,
+      label: "orcarouter/qwen/qwen3-max-preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_QWEN_QWEN3_VL_235B_A22B_INSTRUCT,
+      label: "orcarouter/qwen/qwen3-vl-235b-a22b-instruct",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_QWEN_QWEN3_VL_235B_A22B_THINKING,
+      label: "orcarouter/qwen/qwen3-vl-235b-a22b-thinking",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_QWEN_QWEN3_VL_8B_INSTRUCT,
+      label: "orcarouter/qwen/qwen3-vl-8b-instruct",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_QWEN_QWEN3_VL_8B_THINKING,
+      label: "orcarouter/qwen/qwen3-vl-8b-thinking",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_QWEN_QWEN3_5_122B_A10B,
+      label: "orcarouter/qwen/qwen3.5-122b-a10b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_QWEN_QWEN3_5_27B,
+      label: "orcarouter/qwen/qwen3.5-27b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_QWEN_QWEN3_5_35B_A3B,
+      label: "orcarouter/qwen/qwen3.5-35b-a3b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_QWEN_QWEN3_5_397B_A17B,
+      label: "orcarouter/qwen/qwen3.5-397b-a17b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_QWEN_QWEN3_5_FLASH,
+      label: "orcarouter/qwen/qwen3.5-flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_QWEN_QWEN3_5_FLASH_2026_02_23,
+      label: "orcarouter/qwen/qwen3.5-flash-2026-02-23",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_QWEN_QWEN3_5_PLUS,
+      label: "orcarouter/qwen/qwen3.5-plus",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_QWEN_QWEN3_5_PLUS_2026_02_15,
+      label: "orcarouter/qwen/qwen3.5-plus-2026-02-15",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_QWEN_QWEN3_6_35B_A3B,
+      label: "orcarouter/qwen/qwen3.6-35b-a3b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_QWEN_QWEN3_6_FLASH,
+      label: "orcarouter/qwen/qwen3.6-flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_QWEN_QWEN3_6_FLASH_2026_04_16,
+      label: "orcarouter/qwen/qwen3.6-flash-2026-04-16",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_QWEN_QWEN3_6_PLUS,
+      label: "orcarouter/qwen/qwen3.6-plus",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_QWEN_QWEN3_6_PLUS_2026_04_02,
+      label: "orcarouter/qwen/qwen3.6-plus-2026-04-02",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_QWEN_QWEN3_7_MAX,
+      label: "orcarouter/qwen/qwen3.7-max",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_QWEN_QWEN3_7_MAX_2026_05_20,
+      label: "orcarouter/qwen/qwen3.7-max-2026-05-20",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_QWEN_QWEN3_7_PLUS,
+      label: "orcarouter/qwen/qwen3.7-plus",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_TENCENT_HUNYUAN_A13B_INSTRUCT,
+      label: "orcarouter/tencent/Hunyuan-A13B-Instruct",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_TENCENT_HY3_PREVIEW,
+      label: "orcarouter/tencent/Hy3-preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_Z_AI_GLM_4_5,
+      label: "orcarouter/z-ai/glm-4.5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_Z_AI_GLM_4_5_AIR,
+      label: "orcarouter/z-ai/glm-4.5-air",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_Z_AI_GLM_4_6,
+      label: "orcarouter/z-ai/glm-4.6",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_Z_AI_GLM_4_7,
+      label: "orcarouter/z-ai/glm-4.7",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_Z_AI_GLM_5,
+      label: "orcarouter/z-ai/glm-5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_Z_AI_GLM_5_1,
+      label: "orcarouter/z-ai/glm-5.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ORCAROUTER_Z_AI_GLM_5_2,
+      label: "orcarouter/z-ai/glm-5.2",
+    },
+  ],
+
   [PROVIDER_TYPE.GEMINI]: [
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH,

@@ -17970,6 +17970,7 @@ components:
           - anthropic
           - gemini
           - openrouter
+          - orcarouter
           - vertex-ai
           - bedrock
           - ollama
@@ -18037,6 +18038,7 @@ components:
           - anthropic
           - gemini
           - openrouter
+          - orcarouter
           - vertex-ai
           - bedrock
           - ollama
@@ -18100,6 +18102,7 @@ components:
           - anthropic
           - gemini
           - openrouter
+          - orcarouter
           - vertex-ai
           - bedrock
           - ollama
@@ -20785,6 +20788,7 @@ components:
       - openaiProviderEnabled
       - openrouterProviderEnabled
       - opikAIEnabled
+      - orcarouterProviderEnabled
       - projectHomepageEnabled
       - pythonEvaluatorEnabled
       - spanLlmAsJudgeEnabled
@@ -20829,6 +20833,8 @@ components:
         geminiProviderEnabled:
           type: boolean
         openrouterProviderEnabled:
+          type: boolean
+        orcarouterProviderEnabled:
           type: boolean
         vertexaiProviderEnabled:
           type: boolean

@@ -4,7 +4,16 @@ import typing
 
 ProviderApiKeyProvider = typing.Union[
     typing.Literal[
-        "openai", "anthropic", "gemini", "openrouter", "vertex-ai", "bedrock", "ollama", "custom-llm", "opik-free"
+        "openai",
+        "anthropic",
+        "gemini",
+        "openrouter",
+        "orcarouter",
+        "vertex-ai",
+        "bedrock",
+        "ollama",
+        "custom-llm",
+        "opik-free",
     ],
     typing.Any,
 ]

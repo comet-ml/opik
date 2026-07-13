@@ -37,6 +37,7 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.ANTHROPIC_PROVIDER_ENABLED]: false,
   [FeatureToggleKeys.GEMINI_PROVIDER_ENABLED]: false,
   [FeatureToggleKeys.OPENROUTER_PROVIDER_ENABLED]: false,
+  [FeatureToggleKeys.ORCAROUTER_PROVIDER_ENABLED]: false,
   [FeatureToggleKeys.VERTEXAI_PROVIDER_ENABLED]: false,
   [FeatureToggleKeys.BEDROCK_PROVIDER_ENABLED]: false,
   [FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED]: false,

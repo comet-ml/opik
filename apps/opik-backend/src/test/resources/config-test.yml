@@ -516,6 +516,9 @@ llmProviderClient:
   # Default: https://openrouter.ai/api/v1
   # Description: OpenRouter API URL
   openRouterUrl: https://openrouter.ai/api/v1
+  # Default: https://api.orcarouter.ai/v1
+  # Description: OrcaRouter API URL
+  orcaRouterUrl: https://api.orcarouter.ai/v1
 
 # Configuration for cache manager
 cacheManager:
@@ -726,6 +729,9 @@ serviceToggles:
   # Default: true
   # Description: Whether or not OpenRouter provider is enabled
   openrouterProviderEnabled: "true"
+  # Default: true
+  # Description: Whether or not OrcaRouter provider is enabled
+  orcarouterProviderEnabled: "true"
   # Default: true
   # Description: Whether or not Vertex AI provider is enabled
   vertexaiProviderEnabled: "true"
