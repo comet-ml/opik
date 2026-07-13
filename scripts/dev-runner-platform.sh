@@ -228,10 +228,31 @@ build_platform_backend() {
 # ReactWebappServerApplication self-migrates its schema on startup, so it only
 # needs the DB + accounts to exist (mirrors comet-mini's init_sql). Runs as the
 # opik root user (root/opik) against the dev-runner MySQL.
+#
+# Prefers a host-installed `mysql` client (connecting to the host-mapped
+# 127.0.0.1:${MYSQL_PORT}); when none is on PATH it falls back to the client
+# shipped inside the dev MySQL container via `docker exec`, so no local MySQL
+# install is required. The container is this worktree's docker-compose `mysql`
+# service, named `${RESOURCE_PREFIX}-mysql-1` (RESOURCE_PREFIX ==
+# COMPOSE_PROJECT_NAME); inside it we connect over the internal 127.0.0.1:3306.
 provision_platform_backend_mysql() {
-    require_command mysql
-    log_info "Provisioning EM 'logger' database + users on Opik MySQL (localhost:${MYSQL_PORT})..."
-    if mysql -h 127.0.0.1 -P "${MYSQL_PORT}" -u root -popik --connect-timeout=10 <<'SQL'
+    # Build the argv that pipes the SQL below into a mysql client. Prefer the
+    # host client; otherwise exec into the dev MySQL container.
+    local -a mysql_cmd
+    if command -v mysql &>/dev/null; then
+        log_info "Provisioning EM 'logger' database + users on Opik MySQL (host client, localhost:${MYSQL_PORT})..."
+        mysql_cmd=(mysql -h 127.0.0.1 -P "${MYSQL_PORT}" -u root -popik --connect-timeout=10)
+    else
+        require_command docker
+        local mysql_container="${RESOURCE_PREFIX}-mysql-1"
+        if ! docker ps --format '{{.Names}}' | grep -qx "$mysql_container"; then
+            log_error "No host 'mysql' client found and dev MySQL container '$mysql_container' is not running; cannot provision EM 'logger' database"
+            return 1
+        fi
+        log_info "Provisioning EM 'logger' database + users on Opik MySQL (container ${mysql_container})..."
+        mysql_cmd=(docker exec -i "$mysql_container" mysql -h 127.0.0.1 -u root -popik --connect-timeout=10)
+    fi
+    if "${mysql_cmd[@]}" <<'SQL'
 CREATE DATABASE IF NOT EXISTS `logger` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 -- comet-backend's Liquibase creates TRIGGERs/functions; Opik's MySQL has binlog
 -- on and the 'user' account isn't SUPER, so allow non-super creators (what
