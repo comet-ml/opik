@@ -1,8 +1,10 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.attachment.AttachmentInfo;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.Constants;
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.api.resources.v1.events.tools.CompressionTier;
 import com.comet.opik.api.resources.v1.events.tools.EntityRef;
@@ -33,10 +35,15 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.request.ToolChoice;
 import dev.langchain4j.model.chat.response.ChatResponse;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.LongCounter;
 import jakarta.inject.Inject;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RedissonReactiveClient;
 import org.slf4j.Logger;
 import reactor.core.publisher.Mono;
@@ -62,6 +69,12 @@ import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 @Slf4j
 public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<TraceToScoreLlmAsJudge> {
 
+    private static final String ONLINE_SCORING_NAMESPACE = "online_scoring";
+    private static final AttributeKey<String> WORKSPACE_ID_KEY = AttributeKey.stringKey("workspace_id");
+    private static final AttributeKey<String> WORKSPACE_NAME_KEY = AttributeKey.stringKey("workspace_name");
+    private static final AttributeKey<String> PATH_KEY = AttributeKey.stringKey("path");
+    private static final AttributeKey<String> TRIGGER_KEY = AttributeKey.stringKey("trigger");
+
     private final ChatCompletionService aiProxyService;
     private final Logger userFacingLogger;
     private final LlmProviderFactory llmProviderFactory;
@@ -74,6 +87,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final OnlineEvaluationRecorder onlineEvaluationRecorder;
     private final AttachmentService attachmentService;
+    private final LongCounter routingDecisions;
 
     @Inject
     public OnlineScoringLlmAsJudgeScorer(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
@@ -105,6 +119,10 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.onlineEvaluationRecorder = onlineEvaluationRecorder;
         this.attachmentService = attachmentService;
+        this.routingDecisions = GlobalOpenTelemetry.getMeter(ONLINE_SCORING_NAMESPACE)
+                .counterBuilder("online_scoring_agentic_routing_total")
+                .setDescription("Agentic vs inline routing decisions per evaluation, by trigger and workspace")
+                .build();
     }
 
     /**
@@ -614,7 +632,33 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             log.debug("Trace '{}' rule references {{trace}}; switching to agentic-tools mode",
                     message.trace().id());
         }
+
+        recordRoutingDecision(message, useTools, experimentIdPath, overSizeThreshold, traceVariablePath);
         return useTools;
+    }
+
+    private void recordRoutingDecision(TraceToScoreLlmAsJudge message, boolean useTools,
+            boolean experimentIdPath, boolean overSizeThreshold, boolean traceVariablePath) {
+        String path = useTools ? "agentic" : "inline";
+        String trigger = "none";
+        if (useTools) {
+            if (experimentIdPath) {
+                trigger = "experiment_id";
+            } else if (overSizeThreshold) {
+                trigger = "size_threshold";
+            } else if (traceVariablePath) {
+                trigger = "trace_variable";
+            } else {
+                trigger = "attachments";
+            }
+        }
+        String wsId = message.workspaceId();
+        String wsName = StringUtils.defaultIfBlank(message.workspaceName(), wsId);
+        routingDecisions.add(1, Attributes.of(
+                PATH_KEY, path,
+                TRIGGER_KEY, trigger,
+                WORKSPACE_ID_KEY, wsId,
+                WORKSPACE_NAME_KEY, wsName));
     }
 
     // Package-private for unit tests.

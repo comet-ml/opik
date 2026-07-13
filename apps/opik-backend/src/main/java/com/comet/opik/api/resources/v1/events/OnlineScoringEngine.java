@@ -22,6 +22,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import com.google.api.gax.rpc.InvalidArgumentException;
+import com.google.common.annotations.VisibleForTesting;
 import com.jayway.jsonpath.JsonPath;
 import dev.langchain4j.data.message.AudioContent;
 import dev.langchain4j.data.message.ChatMessage;
@@ -80,6 +81,9 @@ public class OnlineScoringEngine {
     private static final String TRACE_VARIABLE_NAME = "trace";
     private static final String SPAN_VARIABLE_NAME = "span";
 
+    private static final Set<String> SENTINEL_VARIABLE_VALUES = Set.of(
+            SPANS_VARIABLE_NAME, TRACE_VARIABLE_NAME, SPAN_VARIABLE_NAME);
+
     private static final ObjectMapper OBJECT_MAPPER = JsonUtils.getMapper();
 
     private static final Pattern JSON_BLOCK_PATTERN = Pattern.compile(
@@ -126,11 +130,13 @@ public class OnlineScoringEngine {
 
     /**
      * Variant of {@link #prepareLlmRequest(LlmAsJudgeCode, Trace, StructuredOutputStrategy, PromptType, List)}
-     * that caps each rendered variable substitution at {@code maxReplacementChars}. Values longer
-     * than the cap are replaced with their first {@code maxReplacementChars} chars followed by
-     * {@code drillDownHint}. Used by the test-suite-assertion (tool-enabled) path, so a 50K-token
-     * trace's input/output doesn't get pasted verbatim into the prompt — the agent can pull the
-     * full content via the {@code read} tool when it actually needs it.
+     * that caps sentinel variable substitutions (e.g. {@code {{spans}}}) at {@code maxReplacementChars}
+     * while leaving user-mapped variables (e.g. {@code output}, {@code expected_output}) uncapped.
+     *
+     * <p>User-mapped variables are the scoring data the judge needs to evaluate — capping them forces
+     * the LLM to drill down via tools, which is non-deterministic and produces intermittent
+     * "Insufficient data" failures (OPIK-7110). Sentinel variables are structural context that the
+     * judge can optionally drill into via {@code read}/{@code jq} tools.
      */
     public static ChatRequest prepareLlmRequest(
             @NonNull LlmAsJudgeCode evaluatorCode, Trace trace,
@@ -150,7 +156,9 @@ public class OnlineScoringEngine {
                 evaluatorCode.messages(), promptType, spans);
         injectTraceIntoReplacements(replacements, evaluatorCode.variables(),
                 evaluatorCode.messages(), promptType, traceStructureJson);
-        Map<String, String> capped = capReplacements(replacements, maxReplacementChars, drillDownHint);
+        Set<String> userMappedKeys = userMappedVariableKeys(evaluatorCode.variables());
+        Map<String, String> capped = capReplacements(replacements, maxReplacementChars,
+                drillDownHint, userMappedKeys);
         var renderedMessages = renderMessagesWithReplacements(evaluatorCode.messages(), capped, promptType);
         return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
     }
@@ -339,11 +347,33 @@ public class OnlineScoringEngine {
         }
     }
 
+    /**
+     * Returns the set of replacement-map keys that correspond to user-mapped variables (trace
+     * sections like {@code output}, {@code input.question}, or literal constants) as opposed to
+     * sentinel variables (like {@code spans}). Used by {@link #capReplacements} to decide which
+     * keys to leave uncapped.
+     */
+    @VisibleForTesting
+    static Set<String> userMappedVariableKeys(Map<String, String> variables) {
+        var keys = new HashSet<>(variables.keySet());
+        keys.removeIf(k -> SENTINEL_VARIABLE_VALUES.contains(variables.get(k)));
+        return keys;
+    }
+
+    /**
+     * Caps replacement values at {@code maxReplacementChars}, skipping keys in
+     * {@code uncappedKeys}. Pass {@code Set.of()} to cap everything. User-mapped scoring
+     * variables should be uncapped — capping them forces non-deterministic tool drill-down
+     * (OPIK-7110).
+     */
+    @VisibleForTesting
     static Map<String, String> capReplacements(Map<String, String> replacements,
-            int maxReplacementChars, String drillDownHint) {
+            int maxReplacementChars, String drillDownHint, Set<String> uncappedKeys) {
         return replacements.entrySet().stream().collect(Collectors.toMap(
                 Map.Entry::getKey,
-                e -> StringTruncator.truncate(e.getValue(), maxReplacementChars, drillDownHint),
+                e -> uncappedKeys.contains(e.getKey())
+                        ? e.getValue()
+                        : StringTruncator.truncate(e.getValue(), maxReplacementChars, drillDownHint),
                 (a, b) -> b,
                 LinkedHashMap::new));
     }
@@ -386,10 +416,9 @@ public class OnlineScoringEngine {
     /**
      * Tool-mode variant of {@link #prepareSpanLlmRequest(AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode, Span, StructuredOutputStrategy)}
      * used by the span scorer's agentic-tools path: injects the pre-built {@code {{span}}} structure
-     * (span id + the span's own attachment {@code file_name}s) and caps each rendered substitution at
-     * {@code maxReplacementChars}, appending {@code drillDownHint} to over-cap values so a huge span
-     * input/output doesn't pre-load context — the agent pulls the rest via {@code read} / {@code jq}.
-     * Span templates always render with {@link PromptType#MUSTACHE} (span rules carry no prompt type).
+     * (span id + the span's own attachment {@code file_name}s) and caps sentinel variable substitutions
+     * (e.g. {@code {{span}}}) at {@code maxReplacementChars} while leaving user-mapped variables
+     * uncapped (OPIK-7110). Span templates always render with {@link PromptType#MUSTACHE}.
      */
     public static ChatRequest prepareSpanLlmRequest(
             @NonNull AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode evaluatorCode,
@@ -399,7 +428,9 @@ public class OnlineScoringEngine {
         Map<String, String> replacements = toReplacements(evaluatorCode.variables(), span);
         injectSpanIntoReplacements(replacements, evaluatorCode.variables(),
                 evaluatorCode.messages(), PromptType.MUSTACHE, spanStructureJson);
-        Map<String, String> capped = capReplacements(replacements, maxReplacementChars, drillDownHint);
+        Set<String> userMappedKeys = userMappedVariableKeys(evaluatorCode.variables());
+        Map<String, String> capped = capReplacements(replacements, maxReplacementChars,
+                drillDownHint, userMappedKeys);
         var renderedMessages = renderMessagesWithReplacements(evaluatorCode.messages(), capped, PromptType.MUSTACHE);
         return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
     }
