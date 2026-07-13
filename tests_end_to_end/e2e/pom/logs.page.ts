@@ -101,9 +101,15 @@ export class LogsPage {
     });
   }
 
-  /** Breadcrumb link for the current project, shown when navigated to /logs. */
+  /**
+   * The current project's item in the breadcrumb, shown when navigated to /logs.
+   * Matched by text rather than role: older UIs render it as a link, newer ones
+   * (project menu redesign) as a dropdown button — the name is present in both.
+   */
   breadcrumbProjectLink(projectName: string): Locator {
-    return this.page.getByRole('navigation', { name: 'breadcrumb' }).getByRole('link', { name: projectName });
+    return this.page
+      .getByRole('navigation', { name: 'breadcrumb' })
+      .getByText(projectName, { exact: true });
   }
 
   get traceRows(): Locator {

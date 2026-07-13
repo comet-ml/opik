@@ -36,7 +36,7 @@ PLATFORM_ENABLED=true ./scripts/dev-runner.sh --restart   # then also --start/--
 #                 http://localhost:9100/opik   (Opik, comet mode)
 ```
 
-Env vars (`COMET_BACKEND_PATH`, `COMET_REACT_PATH`, `EM_JAVA_HOME`, `EM_*_PORT`)
+Env vars (`COMET_BACKEND_PATH`, `COMET_REACT_PATH`, `PLATFORM_JAVA_HOME`, `PLATFORM_*_PORT`)
 and `--platform-build` are documented in `./scripts/dev-runner.sh --help`.
 
 ## URLs
