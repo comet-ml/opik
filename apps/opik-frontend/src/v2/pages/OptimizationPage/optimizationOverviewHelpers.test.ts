@@ -6,7 +6,10 @@ import {
   getOptimizationDurationSeconds,
   getOptimizationRefetchInterval,
 } from "./optimizationOverviewHelpers";
-import { AggregatedCandidate, OPTIMIZATION_STATUS } from "@/types/optimizations";
+import {
+  AggregatedCandidate,
+  OPTIMIZATION_STATUS,
+} from "@/types/optimizations";
 import { OPTIMIZATION_ACTIVE_REFETCH_INTERVAL } from "@/lib/optimizations";
 
 const makeCandidate = (

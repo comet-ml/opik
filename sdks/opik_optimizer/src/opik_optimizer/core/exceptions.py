@@ -7,7 +7,7 @@ class ScoringFailedError(RuntimeError):
     """Raised when the objective metric failed to score a run's evaluation items.
 
     This surfaces the OPIK-7029 "silent COMPLETED" gap: when the LLM-as-judge (or
-    any objective metric) raises or returns unparseable output for enough of the
+    any objective metric) raises or returns unparsable output for enough of the
     evaluation items, the run should fail loudly (ERROR) instead of completing with
     a misleading ``0.0`` score.
 
@@ -29,9 +29,7 @@ class ScoringFailedError(RuntimeError):
 
         if message is None:
             metric_label = (
-                f" '{objective_metric_name}'"
-                if objective_metric_name
-                else ""
+                f" '{objective_metric_name}'" if objective_metric_name else ""
             )
             message = (
                 f"The objective metric{metric_label} failed to score "

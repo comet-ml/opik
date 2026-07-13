@@ -103,9 +103,7 @@ def test_validate_objective_scores_raises_when_all_items_failed() -> None:
     scores = [_failed_score(), _failed_score(), _failed_score()]
 
     with pytest.raises(ScoringFailedError) as exc_info:
-        evaluation._validate_objective_scores(
-            scores, objective_metric_name="objective"
-        )
+        evaluation._validate_objective_scores(scores, objective_metric_name="objective")
 
     err = exc_info.value
     assert err.failed == 3
@@ -123,9 +121,7 @@ def test_validate_objective_scores_does_not_raise_below_threshold(
 
     with caplog.at_level(logging.WARNING):
         # Must return normally (no exception) below threshold.
-        evaluation._validate_objective_scores(
-            scores, objective_metric_name="objective"
-        )
+        evaluation._validate_objective_scores(scores, objective_metric_name="objective")
 
     assert "failed on 1/2" in caplog.text
 

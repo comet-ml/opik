@@ -36,7 +36,7 @@ type MockHandlers = {
 const makeHandlers = (overrides: MockHandlers) => ({
   form: {
     formState: makeFormState({ isSubmitting: overrides.isSubmitting ?? false }),
-    handleSubmit: vi.fn(() => (_e: unknown) => Promise.resolve()),
+    handleSubmit: vi.fn(() => () => Promise.resolve()),
   },
   activeProjectId: "proj-1",
   optimizerType: "gepa",
@@ -84,7 +84,7 @@ const renderContent = ({
   isDatasetError?: boolean;
 } = {}) => {
   mockUseHandlers.mockReturnValue(
-    makeHandlers({ model, isDatasetError }) as ReturnType<
+    makeHandlers({ model, isDatasetError }) as unknown as ReturnType<
       typeof useOptimizationsNewFormHandlers
     >,
   );

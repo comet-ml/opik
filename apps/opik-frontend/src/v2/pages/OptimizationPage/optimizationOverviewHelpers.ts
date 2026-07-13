@@ -1,6 +1,9 @@
 import dayjs from "dayjs";
 
-import { AggregatedCandidate, OPTIMIZATION_STATUS } from "@/types/optimizations";
+import {
+  AggregatedCandidate,
+  OPTIMIZATION_STATUS,
+} from "@/types/optimizations";
 import {
   IN_PROGRESS_OPTIMIZATION_STATUSES,
   OPTIMIZATION_ACTIVE_REFETCH_INTERVAL,
