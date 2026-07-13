@@ -81,7 +81,9 @@ const ProjectMenuContent: React.FC<ProjectMenuContentProps> = ({
     search: isSearching ? search : undefined,
     sorting: isSearching ? undefined : RECENTLY_UPDATED_SORTING,
     page: 1,
-    size: isSearching ? SEARCH_RESULTS_SIZE : RECENTLY_UPDATED_SIZE,
+    size: isSearching
+      ? SEARCH_RESULTS_SIZE
+      : RECENTLY_UPDATED_SIZE + pinnedProjects.length,
   });
 
   const projects = useMemo(() => projectsData?.content ?? [], [projectsData]);
@@ -91,18 +93,23 @@ const ProjectMenuContent: React.FC<ProjectMenuContentProps> = ({
     [projects],
   );
 
-  const handleSelect = useCallback(
-    (projectId: string) => {
-      onClose();
-      const target = resolveProjectSwitchTarget(
+  const resolveTarget = useCallback(
+    (projectId: string) =>
+      resolveProjectSwitchTarget(
         router.state.matches,
         router.state.location.search as Record<string, unknown>,
         workspaceName,
         projectId,
-      );
-      navigate(target);
+      ),
+    [router, workspaceName],
+  );
+
+  const handleSelect = useCallback(
+    (projectId: string) => {
+      onClose();
+      navigate(resolveTarget(projectId));
     },
-    [navigate, onClose, router, workspaceName],
+    [navigate, onClose, resolveTarget],
   );
 
   const handleTogglePin = useCallback(
@@ -155,7 +162,7 @@ const ProjectMenuContent: React.FC<ProjectMenuContentProps> = ({
       isSelected={project.id === activeProjectId}
       isPinned={isPinned(project.id)}
       fullDataAvailable={fullDataAvailable}
-      workspaceName={workspaceName}
+      linkTarget={resolveTarget(project.id)}
       onSelect={handleSelect}
       onTogglePin={handleTogglePin}
       onRequestEdit={setEditTarget}
@@ -172,7 +179,9 @@ const ProjectMenuContent: React.FC<ProjectMenuContentProps> = ({
       );
     }
 
-    const recentlyUpdated = projects.filter((project) => !isPinned(project.id));
+    const recentlyUpdated = projects
+      .filter((project) => !isPinned(project.id))
+      .slice(0, RECENTLY_UPDATED_SIZE);
 
     return (
       <div className="min-h-0 flex-1 overflow-auto">

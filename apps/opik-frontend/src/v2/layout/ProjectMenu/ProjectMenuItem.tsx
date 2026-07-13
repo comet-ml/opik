@@ -15,13 +15,14 @@ import { usePermissions } from "@/contexts/PermissionsContext";
 import { DEFAULT_PROJECT_NAME, Project } from "@/types/projects";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ProjectAvatar from "@/shared/ProjectIcon/ProjectAvatar";
+import { ProjectSwitchTarget } from "./resolveProjectSwitchTarget";
 
 interface ProjectMenuItemProps {
   project: Project;
   isSelected: boolean;
   isPinned: boolean;
   fullDataAvailable: boolean;
-  workspaceName: string;
+  linkTarget: ProjectSwitchTarget;
   onSelect: (projectId: string) => void;
   onTogglePin: (project: Project, pinned: boolean) => void;
   onRequestEdit: (project: Project) => void;
@@ -33,7 +34,7 @@ const ProjectMenuItem: React.FC<ProjectMenuItemProps> = ({
   isSelected,
   isPinned,
   fullDataAvailable,
-  workspaceName,
+  linkTarget,
   onSelect,
   onTogglePin,
   onRequestEdit,
@@ -57,8 +58,9 @@ const ProjectMenuItem: React.FC<ProjectMenuItemProps> = ({
       )}
     >
       <Link
-        to="/$workspaceName/projects/$projectId/home"
-        params={{ workspaceName, projectId: project.id }}
+        to={linkTarget.to}
+        params={linkTarget.params}
+        search={linkTarget.search}
         className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 outline-none"
         onClick={(e) => {
           if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
