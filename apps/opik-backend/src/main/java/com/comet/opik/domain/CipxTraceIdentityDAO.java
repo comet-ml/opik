@@ -54,11 +54,15 @@ public class CipxTraceIdentityDAO {
         public static TraceIdentityRow from(UUID traceId, UUID projectId, JsonNode metadata, Instant startTime) {
             JsonNode session = metadata.path("cipx").path("session");
             JsonNode identity = session.path("identity");
+            String userUuid = identity.path("user_uuid").asText("");
+            if (userUuid.isEmpty()) {
+                userUuid = identity.path("user_id").asText("");
+            }
             return TraceIdentityRow.builder()
                     .traceId(traceId.toString())
                     .projectId(projectId != null ? projectId.toString() : "")
                     .startTime(startTime)
-                    .userUuid(identity.path("user_uuid").asText(""))
+                    .userUuid(userUuid)
                     .userEmail(identity.path("email").asText(""))
                     .userDisplayName(identity.path("display_name").asText(""))
                     .repository(session.path("repository").path("remote").asText(""))
