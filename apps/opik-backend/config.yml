@@ -95,6 +95,16 @@ databaseAnalytics:
   #  Default: 1s
   #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
   healthCheckTimeout: ${ANALYTICS_DB_HEALTH_CHECK_TIMEOUT:-1s}
+  #  Default: false
+  #  Description: Gates the 'clickhouse-cluster' health check, which fails readiness when the Distributed cluster
+  #   definition ('cluster') isn't visible from the node. Leave false for single-shard / non-Distributed deployments;
+  #   turn true only for the Distributed (Hyperscale) topology.
+  clusterHealthCheckEnabled: ${ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED:-false}
+  #  Default: false
+  #  Description: Gates the 'clickhouse-cold-storage-disk' health check, which fails readiness when the 'cold_s3'
+  #   tiered-storage disk isn't reachable from the node. Leave false for deployments without tier storage (OSS Docker);
+  #   turn true only once the S3 disk is activated.
+  coldStorageDiskHealthCheckEnabled: ${ANALYTICS_DB_COLD_STORAGE_DISK_HEALTH_CHECK_ENABLED:-false}
 
 # Description: Cutover toggles migrating the trace analytics columns to non-nullable, sentinel-defaulted form.
 databaseAnalyticsDataModel:
@@ -176,6 +186,17 @@ health:
     # the whole backend out of readiness/traffic.
     - name: clickhouse-readonly-freeform-sql
       critical: false
+      type: ready
+    # Toggle-gated (databaseAnalytics.clusterHealthCheckEnabled). When the toggle is off the probe reports healthy
+    # without querying ClickHouse, so single-shard / OSS environments are unaffected. When on, a node that can't see
+    # the Distributed cluster definition can't serve distributed queries and must be pulled from rotation.
+    - name: clickhouse-cluster
+      critical: true
+      type: ready
+    # Toggle-gated (databaseAnalytics.coldStorageDiskHealthCheckEnabled). Off by default so deployments without tier
+    # storage are unaffected. When on, a node that can't reach the cold_s3 S3 disk must be pulled from rotation.
+    - name: clickhouse-cold-storage-disk
+      critical: true
       type: ready
     - name: mysql
       critical: true
