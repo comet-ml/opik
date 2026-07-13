@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Label } from "@/ui/label";
+import { FormErrorSkeleton } from "@/ui/form";
 import { CodeMetricParameters } from "@/types/optimizations";
 import CodeMirror from "@uiw/react-codemirror";
 import { python } from "@codemirror/lang-python";
@@ -11,6 +12,7 @@ import { cn } from "@/lib/utils";
 interface CodeMetricConfigsProps {
   configs: Partial<CodeMetricParameters>;
   onChange: (configs: Partial<CodeMetricParameters>) => void;
+  error?: string;
 }
 
 const DEFAULT_CODE = `from opik.evaluation.metrics import BaseMetric
@@ -37,7 +39,11 @@ const CODEMIRROR_BASIC_SETUP = {
   highlightActiveLine: true,
 } as const;
 
-const CodeMetricConfigs = ({ configs, onChange }: CodeMetricConfigsProps) => {
+const CodeMetricConfigs = ({
+  configs,
+  onChange,
+  error,
+}: CodeMetricConfigsProps) => {
   const theme = useCodemirrorTheme();
   const [isFocused, setIsFocused] = useState(false);
 
@@ -51,6 +57,7 @@ const CodeMetricConfigs = ({ configs, onChange }: CodeMetricConfigsProps) => {
           className={cn(
             "overflow-hidden rounded-md border bg-primary-foreground transition-colors",
             isFocused && "border-primary",
+            error && !isFocused && "border-destructive",
           )}
         >
           <CodeMirror
@@ -66,6 +73,7 @@ const CodeMetricConfigs = ({ configs, onChange }: CodeMetricConfigsProps) => {
             basicSetup={CODEMIRROR_BASIC_SETUP}
           />
         </div>
+        {error && <FormErrorSkeleton>{error}</FormErrorSkeleton>}
         <p className="text-xs text-muted-slate">
           Define a class that extends <code>BaseMetric</code> with a{" "}
           <code>score</code> method that takes <code>output</code> (the LLM

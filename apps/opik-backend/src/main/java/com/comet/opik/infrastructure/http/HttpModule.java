@@ -37,6 +37,14 @@ public class HttpModule extends DropwizardAwareModule<OpikConfiguration> {
      */
     @VisibleForTesting
     public static Client buildClient(JerseyClientBuilder builder, JerseyClientConfiguration config) {
+        if (config.isGzipEnabled()) {
+            // With gzip enabled, Dropwizard leaves Apache HttpClient's transparent content decompression
+            // ON and also registers Jersey's GZipDecoder. HttpClient decodes the entity but the stale
+            // 'Content-Encoding: gzip' header survives into the Jersey response, so GZipDecoder gunzips the
+            // already-plain stream and readEntity throws 'ZipException: Not in GZIP format'. Reconciling the
+            // header once HttpClient has decoded keeps exactly one decode while still advertising gzip.
+            builder.withProvider(new ContentEncodingReconcilingResponseFilter());
+        }
         return builder
                 .using(config)
                 .using(Jackson.newObjectMapper())

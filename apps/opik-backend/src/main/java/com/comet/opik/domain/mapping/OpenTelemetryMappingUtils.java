@@ -26,7 +26,11 @@ public class OpenTelemetryMappingUtils {
 
     private static final Map<String, String> USAGE_KEYS_MAPPING = Map.of(
             "input_tokens", "prompt_tokens",
-            "output_tokens", "completion_tokens");
+            "output_tokens", "completion_tokens",
+            // Claude Code emits short cache-token names; normalize to the names the Anthropic
+            // cache-cost path (SpanCostCalculator) recognizes, otherwise cache pricing is skipped.
+            "cache_read_tokens", "cache_read_input_tokens",
+            "cache_creation_tokens", "cache_creation_input_tokens");
 
     /**
      * Extracts a value from an AnyValue object and writes it to a specified JSON field in an ObjectNode.
@@ -78,6 +82,12 @@ public class OpenTelemetryMappingUtils {
         }
     }
 
+    // Prefix rules (e.g. `gen_ai.usage.`) carry the usage name in the suffix; exact-match rules
+    // (e.g. Claude Code's `input_tokens`) use the full key.
+    private static String usageKey(OpenTelemetryMappingRule rule, String key) {
+        return rule.isPrefix() ? key.substring(rule.getRule().length()) : key;
+    }
+
     /**
      * Extracts usage-related fields from a given value and adds them to the usage map.
      * The method supports extracting usage from integer values, string values, and JSON objects.
@@ -91,7 +101,7 @@ public class OpenTelemetryMappingUtils {
             @NonNull String key, @NonNull AnyValue value) {
         // usage might appear as single int or string values as well as a JSON object
         if (value.hasIntValue()) {
-            var actualKey = key.substring(rule.getRule().length());
+            var actualKey = usageKey(rule, key);
             usage.put(USAGE_KEYS_MAPPING.getOrDefault(actualKey, actualKey), (int) value.getIntValue());
         } else if (value.hasStringValue()) {
             boolean extracted = tryExtractUsageFromString(usage, rule, key, value.getStringValue());
@@ -221,7 +231,7 @@ public class OpenTelemetryMappingUtils {
             String key, String stringValue) {
         try {
             int intValue = Integer.parseInt(stringValue);
-            var actualKey = key.substring(rule.getRule().length());
+            var actualKey = usageKey(rule, key);
             usage.put(USAGE_KEYS_MAPPING.getOrDefault(actualKey, actualKey), intValue);
             return true;
         } catch (NumberFormatException e) {

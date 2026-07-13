@@ -24,6 +24,18 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   ],
   [PROVIDER_TYPE.OPEN_AI]: [
     {
+      value: PROVIDER_MODEL_TYPE.GPT_5_6_LUNA,
+      label: "GPT 5.6 Luna",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_5_6_SOL,
+      label: "GPT 5.6 Sol",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_5_6_TERRA,
+      label: "GPT 5.6 Terra",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GPT_5_5,
       label: "GPT 5.5",
     },
@@ -168,6 +180,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.AION_LABS_AION_2_0,
       label: "aion-labs/aion-2.0",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.AION_LABS_AION_3_0,
+      label: "aion-labs/aion-3.0",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.AION_LABS_AION_3_0_MINI,
+      label: "aion-labs/aion-3.0-mini",
     },
     {
       value: PROVIDER_MODEL_TYPE.AION_LABS_AION_RP_LLAMA_3_1_8B,
@@ -424,6 +444,11 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.BYTEDANCE_UI_TARS_1_5_7B,
       label: "bytedance/ui-tars-1.5-7b",
+    },
+    {
+      value:
+        PROVIDER_MODEL_TYPE.COGNITIVECOMPUTATIONS_DOLPHIN_MISTRAL_24B_VENICE_EDITION,
+      label: "cognitivecomputations/dolphin-mistral-24b-venice-edition",
     },
     {
       value:
@@ -1223,6 +1248,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "nex-agi/deepseek-v3.1-nex-n1",
     },
     {
+      value: PROVIDER_MODEL_TYPE.NEX_AGI_NEX_N2_MINI,
+      label: "nex-agi/nex-n2-mini",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.NEX_AGI_NEX_N2_PRO,
       label: "nex-agi/nex-n2-pro",
     },
@@ -1522,6 +1551,30 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_5_PRO,
       label: "openai/gpt-5.5-pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_6_LUNA,
+      label: "openai/gpt-5.6-luna",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_6_LUNA_PRO,
+      label: "openai/gpt-5.6-luna-pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_6_SOL,
+      label: "openai/gpt-5.6-sol",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_6_SOL_PRO,
+      label: "openai/gpt-5.6-sol-pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_6_TERRA,
+      label: "openai/gpt-5.6-terra",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_6_TERRA_PRO,
+      label: "openai/gpt-5.6-terra-pro",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_AUDIO,
@@ -2036,12 +2089,20 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "tencent/hunyuan-a13b-instruct",
     },
     {
+      value: PROVIDER_MODEL_TYPE.TENCENT_HY3,
+      label: "tencent/hy3",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.TENCENT_HY3_PREVIEW,
       label: "tencent/hy3-preview",
     },
     {
       value: PROVIDER_MODEL_TYPE.TENCENT_HY3_PREVIEW_FREE,
       label: "tencent/hy3-preview:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.TENCENT_HY3_FREE,
+      label: "tencent/hy3:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.THEDRUMMER_ANUBIS_70B_V1_1,
@@ -2146,6 +2207,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.X_AI_GROK_4_3,
       label: "x-ai/grok-4.3",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.X_AI_GROK_4_5,
+      label: "x-ai/grok-4.5",
     },
     {
       value: PROVIDER_MODEL_TYPE.X_AI_GROK_BUILD_0_1,
@@ -2270,6 +2335,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_MINI_LATEST,
       label: "~openai/gpt-mini-latest",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.X_AI_GROK_LATEST,
+      label: "~x-ai/grok-latest",
     },
   ],
 

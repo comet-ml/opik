@@ -97,6 +97,7 @@ def import_prompts_from_directory(
                 metadata = current_version.get("metadata")
                 prompt_type = current_version.get("type")
                 template_structure = current_version.get("template_structure", "text")
+                tags = current_version.get("tags")
 
                 # Validate prompt content exists
                 if prompt_content is None:
@@ -142,6 +143,7 @@ def import_prompts_from_directory(
                             messages=prompt_content,
                             metadata=metadata,
                             type=prompt_type_enum,
+                            tags=tags,
                             project_name=project_name,
                         )
                         if debug:
@@ -164,6 +166,7 @@ def import_prompts_from_directory(
                             prompt=prompt_content,
                             metadata=metadata,
                             type=prompt_type_enum,
+                            tags=tags,
                             project_name=project_name,
                         )
                         if debug:

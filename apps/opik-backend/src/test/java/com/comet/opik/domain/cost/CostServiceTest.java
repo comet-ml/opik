@@ -179,6 +179,68 @@ class CostServiceTest {
                 Arguments.of("above threshold uses tier rate", 300_000, "0.765"));
     }
 
+    /**
+     * Whole-prompt tier semantics for {@code *_above_128k_tokens} rates: once the prompt strictly
+     * exceeds 128K every token bills at the tier rate; exactly at the threshold the base rate
+     * still applies. {@code gemini-1.5-flash} is the reachable model at this threshold (input
+     * 7.5e-8 base, 1.5e-7 above 128k — 2x).
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideGeminiAbove128kTierCases")
+    void calculateCostAppliesAbove128kTierPricingForGemini(String description, int promptTokens,
+            String expectedCost) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", promptTokens,
+                "completion_tokens", 1_000,
+                "original_usage.prompt_token_count", promptTokens,
+                "original_usage.candidates_token_count", 1_000);
+
+        BigDecimal cost = CostService.calculateCost("gemini/gemini-1.5-flash", "google_ai", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideGeminiAbove128kTierCases() {
+        // gemini-1.5-flash base: input 7.5e-8 / output 0; above_128k: input 1.5e-7 (output stays 0).
+        return Stream.of(
+                // 128_000 * 7.5e-8 + 1_000 * 0 = 0.0096
+                Arguments.of("at threshold uses base rate", 128_000, "0.0096"),
+                // 200_000 * 1.5e-7 + 1_000 * 0 = 0.030
+                Arguments.of("above threshold uses tier rate", 200_000, "0.030"));
+    }
+
+    /**
+     * Whole-prompt tier semantics for {@code *_above_272k_tokens} rates: once the prompt strictly
+     * exceeds 272K every token bills at the tier rate. Reachable models include the OpenAI GPT-5.4
+     * and GPT-5.5 families (and their Azure-hosted twins). {@code gpt-5.4} publishes cache rates
+     * too, so it routes through {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI} —
+     * confirming that the effective-rate helpers cover the OpenAI cache path, not just the Google
+     * and Anthropic ones.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideGpt54Above272kTierCases")
+    void calculateCostAppliesAbove272kTierPricingForOpenAI(String description, int promptTokens,
+            String expectedCost) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", promptTokens,
+                "completion_tokens", 1_000,
+                "original_usage.prompt_tokens", promptTokens,
+                "original_usage.completion_tokens", 1_000);
+
+        BigDecimal cost = CostService.calculateCost("gpt-5.4", "openai", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideGpt54Above272kTierCases() {
+        // gpt-5.4 base: input 2.5e-6 / output 1.5e-5; above_272k: input 5e-6 / output 2.25e-5.
+        return Stream.of(
+                // 272_000 * 2.5e-6 + 1_000 * 1.5e-5 = 0.68 + 0.015 = 0.695
+                Arguments.of("at threshold uses base rate", 272_000, "0.695"),
+                // 300_000 * 5e-6 + 1_000 * 2.25e-5 = 1.5 + 0.0225 = 1.5225
+                Arguments.of("above threshold uses tier rate", 300_000, "1.5225"));
+    }
+
     @Test
     void calculateCostUsesGoogleCacheCalculatorWhenCachePricesConfigured_issue6976() {
         Map<String, Integer> usage = Map.of(
@@ -341,6 +403,28 @@ class CostServiceTest {
     }
 
     /**
+     * Online evaluation resolves models to LlmProvider serialized values ("gemini", "vertex-ai") that
+     * differ from the canonical price-table vocabulary ("google_ai", "google_vertexai"). calculateCost
+     * must map them so every provider selectable for online evaluation is cost-tracked instead of
+     * silently pricing at zero.
+     */
+    @ParameterizedTest
+    @MethodSource
+    void calculateCost_mapsOnlineEvaluationProviderNames(String modelName, String provider) {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost(modelName, provider, usage, null);
+
+        assertThat(cost).isGreaterThan(BigDecimal.ZERO);
+    }
+
+    private static Stream<Arguments> calculateCost_mapsOnlineEvaluationProviderNames() {
+        return Stream.of(
+                Arguments.of("gemini-2.5-flash", "gemini"), // -> google_ai
+                Arguments.of("vertex_ai/gemini-2.5-flash", "vertex-ai")); // -> google_vertexai
+    }
+
+    /**
      * Overrides file: alias entries should resolve to the target's pricing.
      */
     @ParameterizedTest
@@ -498,6 +582,83 @@ class CostServiceTest {
                                 "original_usage.completion_tokens", 200,
                                 "original_usage.prompt_tokens_details.cached_tokens", 300),
                         "0.00315"));
+    }
+
+    /**
+     * Covers both branches of registering {@code xai} as a canonical provider so that the 40
+     * xai-tagged entries in {@code model_prices_and_context_window.json} (the full grok-2, grok-3,
+     * grok-4 and grok-code families) are no longer silently dropped at load time:
+     * <ul>
+     *   <li>xai model with no cache rates falls through to {@link SpanCostCalculator#textGenerationCost}.</li>
+     *   <li>xai model with cache rates routes through
+     *       {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI} — xAI's cost calculator in
+     *       LiteLLM delegates to {@code generic_cost_per_token} using OpenAI-shape
+     *       {@code prompt_tokens_details.cached_tokens}, so the same subtract-from-total logic
+     *       used for OpenAI/Azure applies unchanged here.</li>
+     * </ul>
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideXaiProviderCases")
+    void calculateCostHandlesXaiModels(String description, String model, Map<String, Integer> usage,
+            String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, "xai", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideXaiProviderCases() {
+        // xai/grok-2: input 2e-6, output 1e-5 (no cache rates) -> textGenerationCost
+        // 1000 * 2e-6 + 200 * 1e-5 = 0.002 + 0.002 = 0.004
+        // xai/grok-3: input 3e-6, output 1.5e-5, cache_read 7.5e-7 -> textGenerationWithCacheCostOpenAI
+        // non-cached input = 1000 - 300 = 700
+        // 700 * 3e-6 + 200 * 1.5e-5 + 300 * 7.5e-7 = 0.0021 + 0.003 + 0.000225 = 0.005325
+        return Stream.of(
+                Arguments.of("plain text-generation route", "xai/grok-2",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.004"),
+                Arguments.of("cache-aware route via OpenAI calc", "xai/grok-3",
+                        Map.of("original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 200,
+                                "original_usage.prompt_tokens_details.cached_tokens", 300),
+                        "0.005325"));
+    }
+
+    /**
+     * Covers both branches of registering {@code deepseek} as a canonical provider so that the 12
+     * deepseek-tagged entries in {@code model_prices_and_context_window.json} (the
+     * {@code deepseek-chat} / {@code deepseek-reasoner} / {@code deepseek/deepseek-v3} /
+     * {@code deepseek/deepseek-v4-*} families) are no longer silently dropped at load time:
+     * <ul>
+     *   <li>DeepSeek model with no cache rates falls through to {@link SpanCostCalculator#textGenerationCost}.</li>
+     *   <li>DeepSeek model with cache rates routes through
+     *       {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI} — DeepSeek's cost calculator
+     *       in LiteLLM ({@code litellm/llms/deepseek/cost_calculator.py}) delegates to
+     *       {@code generic_cost_per_token}, so its usage payload follows the same OpenAI shape
+     *       (cached tokens flattened under {@code prompt_tokens_details.cached_tokens}).</li>
+     * </ul>
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideDeepseekProviderCases")
+    void calculateCostHandlesDeepseekModels(String description, String model, Map<String, Integer> usage,
+            String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, "deepseek", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideDeepseekProviderCases() {
+        // deepseek/deepseek-coder: input 1.4e-7, output 2.8e-7 (no cache rates) -> textGenerationCost
+        // 1000 * 1.4e-7 + 200 * 2.8e-7 = 0.00014 + 0.000056 = 0.000196
+        // deepseek/deepseek-chat: input 2.8e-7, output 4.2e-7, cache_read 2.8e-8 -> textGenerationWithCacheCostOpenAI
+        // non-cached input = 1000 - 300 = 700
+        // 700 * 2.8e-7 + 200 * 4.2e-7 + 300 * 2.8e-8 = 0.000196 + 0.000084 + 0.0000084 = 0.0002884
+        return Stream.of(
+                Arguments.of("plain text-generation route", "deepseek/deepseek-coder",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.000196"),
+                Arguments.of("cache-aware route via OpenAI calc", "deepseek/deepseek-chat",
+                        Map.of("original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 200,
+                                "original_usage.prompt_tokens_details.cached_tokens", 300),
+                        "0.0002884"));
     }
 
     /**

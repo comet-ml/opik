@@ -18,6 +18,7 @@ export type { GetTraceThreadsRequest } from "./GetTraceThreadsRequest.js";
 export type { TraceBatchUpdate } from "./TraceBatchUpdate.js";
 export type { TraceBatchWrite } from "./TraceBatchWrite.js";
 export type { TraceSearchStreamRequestPublic } from "./TraceSearchStreamRequestPublic.js";
+export type { TracesExistRequest } from "./TracesExistRequest.js";
 export type { TraceThreadBatchIdentifier } from "./TraceThreadBatchIdentifier.js";
 export type { TraceThreadBatchUpdate } from "./TraceThreadBatchUpdate.js";
 export type { TraceThreadSearchStreamRequest } from "./TraceThreadSearchStreamRequest.js";

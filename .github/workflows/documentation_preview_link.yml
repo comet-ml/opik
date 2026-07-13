@@ -20,7 +20,8 @@ jobs:
               uses: actions/checkout@v6
                 
             - name: Install Fern
-              run: npm install -g fern-api@4.71.5
+              working-directory: apps/opik-documentation/documentation
+              run: npm install
 
             - name: Generate preview URL
               id: generate-docs
@@ -28,7 +29,7 @@ jobs:
               env:
                   FERN_TOKEN: ${{ secrets.FERN_TOKEN }}
               run: |
-                  OUTPUT=$(fern generate --docs --preview 2>&1) || true
+                  OUTPUT=$(npx fern generate --docs --preview 2>&1) || true
                   echo "$OUTPUT"
                   URL=$(echo "$OUTPUT" | grep -oP 'Published docs to \K.*(?= \()')
                   echo "Preview URL: $URL"

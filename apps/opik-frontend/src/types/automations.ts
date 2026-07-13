@@ -34,6 +34,7 @@ export interface LLMJudgeObject {
   messages: ProviderMessageType[];
   variables?: Record<string, string>;
   schema: LLMJudgeSchema[];
+  max_cost_usd?: number | null;
 }
 
 export interface LLMJudgeDetails {

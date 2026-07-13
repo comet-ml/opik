@@ -100,13 +100,17 @@ def _build_fake_client(
     destination_rows: List[_DatasetRow],
     items: List[Dict[str, object]],
     target_project_exists: bool = True,
+    stale_temp_rows: Optional[List[_DatasetRow]] = None,
 ) -> MagicMock:
     """Construct an opik.Opik mock matching the executor's call surface.
 
-    The find_datasets mock returns ``source_rows`` for the first lookup
-    (source resolution) and ``destination_rows`` for the second (preflight
-    conflict check). The planner places those calls in a fixed order, so a
-    side-effect list is the simplest way to drive both branches deterministically.
+    The planner makes three workspace ``find_datasets`` lookups in a fixed
+    order: (1) source resolution, (2) the ``<name>_v1`` rename-target
+    collision pre-flight, and (3) the ``<name>__migrating`` stale-temp
+    lookup (OPIK-7162). A side-effect list drives all three deterministically.
+    ``destination_rows`` feeds the ``_v1`` check; the stale-temp lookup
+    returns empty by default (no leftover temp) unless ``stale_temp_rows``
+    is supplied.
 
     ``items`` is a list of dicts; we materialize them as DatasetItem
     dataclasses for the streaming mock (matches the real `__internal_api__
@@ -129,9 +133,11 @@ def _build_fake_client(
     rest_client.datasets.find_datasets.side_effect = [
         _Page(source_rows),
         _Page(destination_rows),
+        _Page(stale_temp_rows or []),
     ]
     rest_client.datasets.update_dataset = MagicMock()
     rest_client.datasets.create_dataset = MagicMock()
+    rest_client.datasets.delete_dataset = MagicMock()
 
     client = MagicMock()
     client.rest_client = rest_client
@@ -169,18 +175,20 @@ def _build_fake_client(
     insert_mock = MagicMock()
     dest_dataset.__internal_api__insert_items_as_dataclasses__ = insert_mock
 
-    # Source name after the executor's RenameSource step is ``<orig>_v1``;
-    # dest keeps the original. Route by suffix so the executor can resolve the
-    # destination in ``_replay_versions`` BEFORE any source streaming happens
-    # (the prior call-sequence-based heuristic broke once that lookup moved
-    # earlier in the cascade).
+    # Under the OPIK-7162 ordering the destination is written under the temp
+    # name ``<orig>__migrating`` for the whole copy, then promoted to the
+    # original name at the end. The executor resolves the destination by name
+    # in ``_replay_versions`` (temp name) and again in ``PromoteDestination``
+    # (temp name -> id). The source is never resolved via ``get_dataset`` any
+    # more (item reads stream by name on the rest_client), so route the temp
+    # name (and anything else) to the destination dataset.
     source_orig_name = source_rows[0].name if source_rows else ""
-    renamed_source = f"{source_orig_name}_v1"
+    temp_name = f"{source_orig_name}__migrating"
 
     def _get_dataset(name: str, project_name: Optional[str] = None) -> MagicMock:
-        if name == renamed_source:
-            return source_dataset
-        return dest_dataset
+        if name == temp_name:
+            return dest_dataset
+        return source_dataset
 
     client.get_dataset.side_effect = _get_dataset
     client.create_dataset = MagicMock()

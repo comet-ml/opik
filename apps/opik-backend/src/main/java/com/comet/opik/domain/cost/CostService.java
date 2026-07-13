@@ -40,7 +40,20 @@ public class CostService {
             Map.entry("elastic", "elastic"),
             Map.entry("microsoft", "azure"),
             Map.entry("azure", "azure"),
-            Map.entry("mistral", "mistral"));
+            Map.entry("mistral", "mistral"),
+            Map.entry("xai", "xai"),
+            Map.entry("deepseek", "deepseek"));
+
+    // Online evaluation (and OTel ingestion) resolve models to LlmProvider serialized values whose names
+    // differ from the canonical price-table vocabulary. Normalize those to the single canonical provider
+    // at lookup so cost tracking and the per-evaluation spend budget work for every provider selectable
+    // for online evaluation. Only providers whose name actually differs need an entry: openai / anthropic
+    // / bedrock already equal their canonical name, and self-hosted providers (ollama, custom-llm) have no
+    // public pricing to map to. Vertex is unambiguous here because only Gemini models are offered on
+    // Vertex for online evaluation. Canonical names (and any not listed) pass through unchanged.
+    private static final Map<String, String> RUNTIME_PROVIDER_MAPPING = Map.of(
+            "gemini", "google_ai",
+            "vertex-ai", "google_vertexai");
     public static final String MODEL_PRICES_FILE = "model_prices_and_context_window.json";
     public static final String MODEL_PRICES_OVERRIDES_FILE = "model_prices_overrides.json";
     private static final String BEDROCK_PROVIDER = "bedrock";
@@ -50,6 +63,8 @@ public class CostService {
             .of("anthropic", SpanCostCalculator::textGenerationWithCacheCostAnthropic,
                     "openai", SpanCostCalculator::textGenerationWithCacheCostOpenAI,
                     "azure", SpanCostCalculator::textGenerationWithCacheCostOpenAI,
+                    "xai", SpanCostCalculator::textGenerationWithCacheCostOpenAI,
+                    "deepseek", SpanCostCalculator::textGenerationWithCacheCostOpenAI,
                     "bedrock", SpanCostCalculator::textGenerationWithCacheCostBedrock,
                     "bedrock_converse", SpanCostCalculator::textGenerationWithCacheCostBedrock,
                     "vertex_ai-language-models", SpanCostCalculator::textGenerationWithCacheCostGoogle,
@@ -105,6 +120,10 @@ public class CostService {
         if (StringUtils.isBlank(modelName) || StringUtils.isBlank(provider)) {
             return DEFAULT_COST;
         }
+
+        // Normalize runtime provider names ("gemini", "vertex-ai") to the canonical price-table provider
+        // so callers holding an LlmProvider value hit the same rows as callers passing the canonical name.
+        provider = RUNTIME_PROVIDER_MAPPING.getOrDefault(provider, provider);
 
         // Strip provider prefix if present (e.g. "openai/gpt-4o" -> "gpt-4o").
         // LiteLLM sends model names with provider prefix via gen_ai.request.model.
@@ -394,23 +413,25 @@ public class CostService {
         BigDecimal outputAudioTokenPrice = Optional.ofNullable(modelCost.outputCostPerAudioToken())
                 .map(BigDecimal::new)
                 .orElse(BigDecimal.ZERO);
-        // Tier rates: above_200k_tokens variants. Models without a tier (most) leave these null
-        // in the LiteLLM JSON; we default to zero and the effective-price helpers on ModelPrice
-        // fall through to the base rate in that case.
-        BigDecimal inputPriceAbove200kTokens = Optional.ofNullable(modelCost.inputCostPerTokenAbove200kTokens())
-                .map(BigDecimal::new)
-                .orElse(BigDecimal.ZERO);
-        BigDecimal outputPriceAbove200kTokens = Optional.ofNullable(modelCost.outputCostPerTokenAbove200kTokens())
-                .map(BigDecimal::new)
-                .orElse(BigDecimal.ZERO);
-        BigDecimal cacheCreationInputTokenPriceAbove200kTokens = Optional
-                .ofNullable(modelCost.cacheCreationInputTokenCostAbove200kTokens())
-                .map(BigDecimal::new)
-                .orElse(BigDecimal.ZERO);
-        BigDecimal cacheReadInputTokenPriceAbove200kTokens = Optional
-                .ofNullable(modelCost.cacheReadInputTokenCostAbove200kTokens())
-                .map(BigDecimal::new)
-                .orElse(BigDecimal.ZERO);
+        // Whole-prompt tiers: LiteLLM's above_{128k,200k,272k}_tokens rates replace the base
+        // rate wholesale once the prompt strictly exceeds the threshold. Only include a tier
+        // when at least one of its rates is non-zero; that keeps the tier list empty for the
+        // ~99% of models with no tier fields configured. Sorted DESCENDING so the effective
+        // helpers on ModelPrice pick the highest applicable tier without extra bookkeeping.
+        // Reachable models today: Gemini 1.5 Flash at 128K, Gemini 2.5 Pro / Claude Sonnet 4.5
+        // at 200K, GPT-5.4 and GPT-5.5 (openai and azure) at 272K.
+        List<ModelPrice.PromptTier> promptTiers = new ArrayList<>();
+        addTierIfPresent(promptTiers, ModelPrice.TIER_THRESHOLD_272K,
+                modelCost.inputCostPerTokenAbove272kTokens(), modelCost.outputCostPerTokenAbove272kTokens(),
+                null, null);
+        addTierIfPresent(promptTiers, ModelPrice.TIER_THRESHOLD_200K,
+                modelCost.inputCostPerTokenAbove200kTokens(), modelCost.outputCostPerTokenAbove200kTokens(),
+                modelCost.cacheCreationInputTokenCostAbove200kTokens(),
+                modelCost.cacheReadInputTokenCostAbove200kTokens());
+        addTierIfPresent(promptTiers, ModelPrice.TIER_THRESHOLD_128K,
+                modelCost.inputCostPerTokenAbove128kTokens(), modelCost.outputCostPerTokenAbove128kTokens(),
+                null, null);
+
         ModelMode mode = ModelMode.fromValue(modelCost.mode());
 
         BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator = resolveCalculator(provider, mode,
@@ -427,11 +448,36 @@ public class CostService {
                 .inputAudioTokenPrice(inputAudioTokenPrice)
                 .outputAudioTokenPrice(outputAudioTokenPrice)
                 .calculator(calculator)
-                .inputPriceAbove200kTokens(inputPriceAbove200kTokens)
-                .outputPriceAbove200kTokens(outputPriceAbove200kTokens)
-                .cacheCreationInputTokenPriceAbove200kTokens(cacheCreationInputTokenPriceAbove200kTokens)
-                .cacheReadInputTokenPriceAbove200kTokens(cacheReadInputTokenPriceAbove200kTokens)
+                .promptTiers(List.copyOf(promptTiers))
                 .build();
+    }
+
+    /**
+     * Append one {@link ModelPrice.PromptTier} to {@code tiers} when at least one of the
+     * per-rate JSON strings is non-null and parses to a positive amount. Nulls (rate not
+     * published for this tier — e.g. LiteLLM does not carry cache rates at 128K/272K) are
+     * treated as ZERO by the tier record and skipped by the effective-price helpers.
+     */
+    private static void addTierIfPresent(List<ModelPrice.PromptTier> tiers, int threshold,
+            String inputPrice, String outputPrice,
+            String cacheCreationInputTokenPrice, String cacheReadInputTokenPrice) {
+        BigDecimal in = parseTierRate(inputPrice);
+        BigDecimal out = parseTierRate(outputPrice);
+        BigDecimal cc = parseTierRate(cacheCreationInputTokenPrice);
+        BigDecimal cr = parseTierRate(cacheReadInputTokenPrice);
+        if (isPositive(in) || isPositive(out) || isPositive(cc) || isPositive(cr)) {
+            tiers.add(ModelPrice.PromptTier.builder()
+                    .threshold(threshold)
+                    .inputPrice(in)
+                    .outputPrice(out)
+                    .cacheCreationInputTokenPrice(cc)
+                    .cacheReadInputTokenPrice(cr)
+                    .build());
+        }
+    }
+
+    private static BigDecimal parseTierRate(String raw) {
+        return Optional.ofNullable(raw).map(BigDecimal::new).orElse(BigDecimal.ZERO);
     }
 
     private static String parseModelName(String modelName) {

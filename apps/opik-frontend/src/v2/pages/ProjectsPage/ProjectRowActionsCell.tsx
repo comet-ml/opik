@@ -10,11 +10,13 @@ import { MoreHorizontal, Pencil, Trash } from "lucide-react";
 import React, { useCallback, useRef, useState } from "react";
 import { DEFAULT_PROJECT_NAME, Project } from "@/types/projects";
 import { CellContext } from "@tanstack/react-table";
-import AddEditProjectDialog from "@/v2/pages/ProjectsPage/AddEditProjectDialog";
+import AddEditProjectDialog from "@/v2/pages-shared/ProjectsPage/AddEditProjectDialog";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import useProjectDeleteMutation from "@/api/projects/useProjectDeleteMutation";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
+import { setActiveProject } from "@/hooks/useActiveProjectInitializer";
 
 export const ProjectRowActionsCell: React.FC<CellContext<Project, unknown>> = (
   context,
@@ -31,12 +33,21 @@ export const ProjectRowActionsCell: React.FC<CellContext<Project, unknown>> = (
   const canDelete = canDeleteProjects && !isDefaultProject;
 
   const { mutate } = useProjectDeleteMutation();
+  const activeProjectId = useActiveProjectId();
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const deleteProjectHandler = useCallback(() => {
-    mutate({
-      projectId: project.id,
-    });
-  }, [project.id, mutate]);
+    mutate(
+      { projectId: project.id },
+      {
+        onSuccess: () => {
+          if (project.id === activeProjectId) {
+            setActiveProject(workspaceName, null);
+          }
+        },
+      },
+    );
+  }, [project.id, mutate, activeProjectId, workspaceName]);
 
   return (
     <CellWrapper

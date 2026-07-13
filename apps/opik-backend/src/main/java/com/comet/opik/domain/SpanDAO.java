@@ -36,7 +36,6 @@ import io.r2dbc.spi.RowMetadata;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -611,21 +610,6 @@ public class SpanDAO {
             ;
             """;
 
-    private static final String SELECT_SPAN_REFS_BY_SPAN_IDS = """
-            SELECT
-                id,
-                project_id,
-                trace_id,
-                start_time
-            FROM spans
-            WHERE workspace_id = :workspace_id
-            AND id IN :ids
-            ORDER BY id, last_updated_at DESC
-            LIMIT 1 BY id
-            SETTINGS log_comment = '<log_comment>'
-            ;
-            """;
-
     private static final String SELECT_BY_IDS = """
             WITH feedback_scores_deduped AS (
                 SELECT workspace_id,
@@ -1102,6 +1086,22 @@ public class SpanDAO {
             ;
             """;
 
+    /**
+     * Cheap "does the project have any span?" probe for the Logs empty state. Deliberately minimal — project
+     * scope only — so it is always a primary-key-prunable {@code LIMIT 1}. It intentionally does not support
+     * filters, search, trace_id, type, or time ranges: no consumer needs them, and adding them back would
+     * reintroduce a full-project COUNT fallback.
+     */
+    private static final String EXISTS_BY_PROJECT_ID = """
+            SELECT 1 AS exist
+            FROM spans
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            <if(source)> AND source IN (:source<if(source_legacy)>, :source_legacy<endif>) <endif>
+            LIMIT 1
+            SETTINGS log_comment = '<log_comment>'
+            """;
+
     private static final String COUNT_BY_PROJECT_ID = """
             <if(feedback_scores_filters || feedback_scores_empty_filters)>
             WITH <if(span_id_prefilter)>span_id_prefilter AS (
@@ -1261,6 +1261,7 @@ public class SpanDAO {
                 UUIDv7ToDateTime(toUUID(min(id))) AS oldest_span_time
             FROM spans
             WHERE workspace_id = :workspace_id
+            AND trace_id >= :lower_bound
             AND trace_id \\< :cutoff_id
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -2194,45 +2195,6 @@ public class SpanDAO {
                 .flatMap(this::mapToDto);
     }
 
-    /** A persisted span's project, trace, and start_time — the fields needed to build its cipx_spends row.
-     *  project_id/trace_id are immutable (sort key); start_time is the stored value, not derived. */
-    @Builder(toBuilder = true)
-    public record SpanRef(@NonNull UUID projectId, @NonNull UUID traceId, @NonNull Instant startTime) {
-    }
-
-    /**
-     * Resolves span -> (project_id, trace_id, start_time) for the given spans, keyed off {@code workspaceId}
-     * explicitly rather than the reactive request context, so it can run from the Cost Intelligence subscriber (an
-     * async event listener with no request scope). A batch span update matches spans by id + workspace and carries
-     * none of these per span, and start_time must come from the stored span (not the UUIDv7 timestamp) so a cipx
-     * update doesn't rewrite it for backfilled/imported spans. Deduped with LIMIT 1 BY id (latest last_updated_at
-     * wins) rather than FINAL, so it stays cheap on the ingestion path. Spans missing from ClickHouse are absent.
-     */
-    @WithSpan
-    public Mono<Map<UUID, SpanRef>> getSpanRefsBySpanIds(@NonNull Set<UUID> spanIds, @NonNull String workspaceId) {
-        if (spanIds.isEmpty()) {
-            return Mono.just(Map.of());
-        }
-        log.info("Getting span refs for '{}' span_ids", spanIds.size());
-        return Mono.from(connectionFactory.create())
-                .flatMap(connection -> {
-                    var template = getSTWithLogComment(SELECT_SPAN_REFS_BY_SPAN_IDS,
-                            "get_span_refs_by_span_ids", workspaceId, "", spanIds.size());
-                    var statement = connection.createStatement(template.render())
-                            .bind("ids", spanIds.toArray(UUID[]::new))
-                            .bind("workspace_id", workspaceId);
-                    return Flux.from(statement.execute())
-                            .flatMap(result -> result.map((row, metadata) -> Map.entry(
-                                    row.get("id", UUID.class),
-                                    SpanRef.builder()
-                                            .projectId(row.get("project_id", UUID.class))
-                                            .traceId(row.get("trace_id", UUID.class))
-                                            .startTime(row.get("start_time", Instant.class))
-                                            .build())))
-                            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-                });
-    }
-
     private Mono<List<UUID>> getTargetProjectIdsForSpans(Set<UUID> ids) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
@@ -2428,6 +2390,42 @@ public class SpanDAO {
     public Mono<SpanPage> find(int page, int size, @NonNull SpanSearchCriteria spanSearchCriteria) {
         log.info("Finding span by '{}'", spanSearchCriteria);
         return countTotal(spanSearchCriteria).flatMap(total -> find(page, size, spanSearchCriteria, total));
+    }
+
+    @WithSpan
+    public Mono<Boolean> existsByProjectId(@NonNull SpanSearchCriteria spanSearchCriteria) {
+        return Mono.from(connectionFactory.create())
+                .flatMap(connection -> makeMonoContextAware((userName, workspaceId) -> {
+                    var template = getSTWithLogComment(EXISTS_BY_PROJECT_ID, "exists_spans_by_project_id",
+                            workspaceId, userName, "");
+
+                    var source = spanSearchCriteria.source();
+                    var sourceLegacy = source == null
+                            ? Optional.<String>empty()
+                            : Source.legacyFallbackDbValue(source.getValue());
+                    if (source != null) {
+                        template.add("source", true);
+                        if (sourceLegacy.isPresent()) {
+                            template.add("source_legacy", true);
+                        }
+                    }
+
+                    var statement = connection.createStatement(template.render())
+                            .bind("project_id", spanSearchCriteria.projectId())
+                            .bind("workspace_id", workspaceId);
+
+                    if (source != null) {
+                        statement.bind("source", source.getValue());
+                        sourceLegacy.ifPresent(legacy -> statement.bind("source_legacy", legacy));
+                    }
+
+                    Segment segment = startSegment("spans", "Clickhouse", "existsByProjectId");
+
+                    return Mono.from(statement.execute())
+                            .doFinally(signalType -> endSegment(segment))
+                            .flatMap(result -> Mono.from(result.map((row, metadata) -> true)))
+                            .defaultIfEmpty(false);
+                }));
     }
 
     private Mono<SpanPage> find(int page, int size, SpanSearchCriteria spanSearchCriteria, Long total) {
@@ -3255,7 +3253,8 @@ public class SpanDAO {
      * @return velocity estimate with oldest span time, or empty Mono if no data exists
      * @throws io.r2dbc.spi.R2dbcException with code 158 (TOO_MANY_ROWS) for huge workspaces
      */
-    public Mono<VelocityEstimate> estimateVelocityForRetention(@NonNull String workspaceId, @NonNull UUID cutoffId) {
+    public Mono<VelocityEstimate> estimateVelocityForRetention(@NonNull String workspaceId, @NonNull UUID lowerBound,
+            @NonNull UUID cutoffId) {
         log.debug("Estimating retention velocity for workspace '{}'", workspaceId);
 
         var template = getSTWithLogComment(ESTIMATE_VELOCITY_FOR_RETENTION,
@@ -3265,6 +3264,7 @@ public class SpanDAO {
                 .flatMap(connection -> {
                     var statement = connection.createStatement(template.render())
                             .bind("workspace_id", workspaceId)
+                            .bind("lower_bound", lowerBound)
                             .bind("cutoff_id", cutoffId);
 
                     return Mono.from(statement.execute())

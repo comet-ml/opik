@@ -32,7 +32,7 @@
         <wiremock.version>3.13.1</wiremock.version>
         <redisson.version>4.6.1</redisson.version>
         <opentelmetry.version>2.29.0</opentelmetry.version>
-        <aws.java.sdk.version>2.46.5</aws.java.sdk.version>
+        <aws.java.sdk.version>2.47.5</aws.java.sdk.version>
         <json-path.version>3.0.0</json-path.version>
         <jackson-jq.version>1.6.1</jackson-jq.version>
         <mainClass>com.comet.opik.OpikApplication</mainClass>
@@ -449,6 +449,12 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers-junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit-junit5</artifactId>
+            <version>1.4.2</version>
             <scope>test</scope>
         </dependency>
         <dependency>

@@ -51,6 +51,14 @@ export const getOptimizerLabel = (type: string): string => {
   return OPTIMIZER_OPTIONS.find((opt) => opt.value === type)?.label || type;
 };
 
+// Optimizer type from a run: studio_config, falling back to metadata.optimizer
+// (untyped) for older/non-Studio runs. Undefined when neither is present.
+export const getOptimizationOptimizerType = (
+  row: Pick<Optimization, "studio_config" | "metadata">,
+): string | undefined =>
+  row.studio_config?.optimizer?.type ??
+  (row.metadata as { optimizer?: string } | undefined)?.optimizer;
+
 export const getBestOptimizationScore = (
   row: Pick<
     Optimization,
@@ -136,8 +144,7 @@ export const getDefaultMetricConfig = (
   switch (metricType) {
     case METRIC_TYPE.EQUALS:
       return {
-        reference_key:
-          DEFAULT_JSON_SCHEMA_VALIDATOR_METRIC_CONFIGS.REFERENCE_KEY,
+        reference_key: DEFAULT_EQUALS_METRIC_CONFIGS.REFERENCE_KEY,
         case_sensitive: DEFAULT_EQUALS_METRIC_CONFIGS.CASE_SENSITIVE,
       };
     case METRIC_TYPE.JSON_SCHEMA_VALIDATOR:

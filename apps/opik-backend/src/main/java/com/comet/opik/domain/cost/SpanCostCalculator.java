@@ -39,9 +39,10 @@ class SpanCostCalculator {
                 ? Math.max(0, completionTokens - audioOutputTokens)
                 : completionTokens;
 
-        return modelPrice.inputPrice().multiply(BigDecimal.valueOf(nonAudioPromptTokens))
+        return modelPrice.effectiveInputPrice(promptTokens).multiply(BigDecimal.valueOf(nonAudioPromptTokens))
                 .add(inputAudioRate.multiply(BigDecimal.valueOf(audioInputTokens)))
-                .add(modelPrice.outputPrice().multiply(BigDecimal.valueOf(nonAudioCompletionTokens)))
+                .add(modelPrice.effectiveOutputPrice(promptTokens)
+                        .multiply(BigDecimal.valueOf(nonAudioCompletionTokens)))
                 .add(outputAudioRate.multiply(BigDecimal.valueOf(audioOutputTokens)));
     }
 
@@ -53,6 +54,9 @@ class SpanCostCalculator {
 
         // Get the input tokens (SDK version below 1.6.0 logged prompt_tokens, while 1.6.0+ logged original_usage.prompt_tokens)
         int inputTokens = usage.getOrDefault("original_usage.prompt_tokens", usage.getOrDefault("prompt_tokens", 0));
+        // Keep the total prompt-token count for tier evaluation: which above_NNNk rate applies is
+        // decided on the whole prompt, not on the post-cache-subtraction remainder.
+        int totalPromptTokens = inputTokens;
 
         // Get the cached read input tokens; fall back to OTel bare key for LiteLLM/OTel spans
         int cachedReadInputTokens = usage.getOrDefault("original_usage.prompt_tokens_details.cached_tokens",
@@ -105,11 +109,12 @@ class SpanCostCalculator {
             outputTokens = Math.max(0, outputTokens - audioOutputTokens);
         }
 
-        return modelPrice.inputPrice().multiply(BigDecimal.valueOf(inputTokens))
+        return modelPrice.effectiveInputPrice(totalPromptTokens).multiply(BigDecimal.valueOf(inputTokens))
                 .add(inputAudioRate.multiply(BigDecimal.valueOf(audioInputTokens)))
-                .add(modelPrice.outputPrice().multiply(BigDecimal.valueOf(outputTokens)))
+                .add(modelPrice.effectiveOutputPrice(totalPromptTokens).multiply(BigDecimal.valueOf(outputTokens)))
                 .add(outputAudioRate.multiply(BigDecimal.valueOf(audioOutputTokens)))
-                .add(modelPrice.cacheReadInputTokenPrice().multiply(BigDecimal.valueOf(cachedReadInputTokens)));
+                .add(modelPrice.effectiveCacheReadInputTokenPrice(totalPromptTokens)
+                        .multiply(BigDecimal.valueOf(cachedReadInputTokens)));
     }
 
     public static BigDecimal textGenerationWithCacheCostAnthropic(@NonNull ModelPrice modelPrice,

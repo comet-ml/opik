@@ -85,7 +85,7 @@ databaseAnalytics:
   #   - failover=3
   #   - custom_http_params=max_query_size=100000000
   #  Description: query parameters that will be added to the connection string
-  queryParameters: ${ANALYTICS_DB_QUERY_PARAMETERS:-health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=250,async_insert_busy_timeout_min_ms=100,async_insert=1,wait_for_async_insert=1,async_insert_use_adaptive_busy_timeout=1,async_insert_deduplicate=1,use_skip_indexes_if_final=1}
+  queryParameters: ${ANALYTICS_DB_QUERY_PARAMETERS:-health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=250,async_insert_busy_timeout_min_ms=100,async_insert=1,wait_for_async_insert=1,async_insert_use_adaptive_busy_timeout=1,async_insert_deduplicate=1,use_skip_indexes_if_final=1,optimize_skip_unused_shards=1,do_not_merge_across_partitions_select_final=1,distributed_product_mode=local}
   #  Default: unset (inherits the async_insert_busy_timeout_max_ms=250 carried by queryParameters above)
   #  Description: Optional override (ms) for async_insert_busy_timeout_max_ms in the custom_http_params chain of
   #   queryParameters above; only applied when that setting is already present there, otherwise it is not injected.
@@ -95,6 +95,16 @@ databaseAnalytics:
   #  Default: 1s
   #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
   healthCheckTimeout: ${ANALYTICS_DB_HEALTH_CHECK_TIMEOUT:-1s}
+  #  Default: false
+  #  Description: Gates the 'clickhouse-cluster' health check, which fails readiness when the Distributed cluster
+  #   definition ('cluster') isn't visible from the node. Leave false for single-shard / non-Distributed deployments;
+  #   turn true only for the Distributed (Hyperscale) topology.
+  clusterHealthCheckEnabled: ${ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED:-false}
+  #  Default: false
+  #  Description: Gates the 'clickhouse-cold-storage-disk' health check, which fails readiness when the 'cold_s3'
+  #   tiered-storage disk isn't reachable from the node. Leave false for deployments without tier storage (OSS Docker);
+  #   turn true only once the S3 disk is activated.
+  coldStorageDiskHealthCheckEnabled: ${ANALYTICS_DB_COLD_STORAGE_DISK_HEALTH_CHECK_ENABLED:-false}
 
 # Description: Cutover toggles migrating the trace analytics columns to non-nullable, sentinel-defaulted form.
 databaseAnalyticsDataModel:
@@ -105,6 +115,16 @@ databaseAnalyticsDataModel:
   #   while false a legitimate epoch end time round-trips unchanged instead of reading as null.
   #   Flip in lockstep with the cutover EXCHANGE.
   traceColumnsNonNullable: ${ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE:-false}
+  #  Default: false
+  #  Description: Leave false at deploy time. Turn true once the trace backfill starts so trace deletes also
+  #   record the deleted ids in the deletion_events_local bridge; without it those deletes are lost from the table
+  #   copy. Scope capture to the backfill-to-cutover window.
+  traceDeletionEventsCaptureEnabled: ${ANALYTICS_DB_DATA_MODEL_TRACE_DELETION_EVENTS_CAPTURE_ENABLED:-false}
+  #  Default: 1000
+  #  Description: Rows per INSERT into the deletion_events_local bridge. A single delete batch can carry more ids
+  #   than the ClickHouse driver binds reliably in one statement (5 columns per row), so the insert is split into
+  #   chunks of this size.
+  deletionEventsInsertBatchSize: ${ANALYTICS_DB_DATA_MODEL_DELETION_EVENTS_INSERT_BATCH_SIZE:-1000}
 
 # Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
 #   window, protecting data quality.
@@ -166,6 +186,17 @@ health:
     # the whole backend out of readiness/traffic.
     - name: clickhouse-readonly-freeform-sql
       critical: false
+      type: ready
+    # Toggle-gated (databaseAnalytics.clusterHealthCheckEnabled). When the toggle is off the probe reports healthy
+    # without querying ClickHouse, so single-shard / OSS environments are unaffected. When on, a node that can't see
+    # the Distributed cluster definition can't serve distributed queries and must be pulled from rotation.
+    - name: clickhouse-cluster
+      critical: true
+      type: ready
+    # Toggle-gated (databaseAnalytics.coldStorageDiskHealthCheckEnabled). Off by default so deployments without tier
+    # storage are unaffected. When on, a node that can't reach the cold_s3 S3 disk must be pulled from rotation.
+    - name: clickhouse-cold-storage-disk
+      critical: true
       type: ready
     - name: mysql
       critical: true
@@ -389,6 +420,31 @@ experimentDenormalization:
   # Description: Number of entries to trim in a single operation when streamMaxLen is exceeded.
   streamTrimLimit: ${OPIK_REDIS_EXPERIMENT_DENORM_STREAM_TRIM_LIMIT:-100}
 
+# Configuration for buffering projects.last_updated_trace_at updates in Redis and flushing them to MySQL
+# periodically, instead of writing MySQL synchronously on every trace-created/updated event. Keeps the
+# high-frequency ingestion path off the contended `projects` row (avoids lock contention / connection churn).
+projectLastUpdatedFlush:
+  # Default: false
+  # Description: When enabled, trace events buffer the per-project last-updated timestamp in Redis and a job
+  #   flushes it to MySQL; when disabled, the timestamp is written to MySQL synchronously per event (legacy).
+  enabled: ${PROJECT_LAST_UPDATED_FLUSH_ENABLED:-false}
+  # Default: true
+  # Description: When enabled (and the feature above is on), schedule the periodic flush job. Set false to buffer in
+  #   Redis without a scheduler (e.g. tests that invoke the job manually).
+  jobEnabled: ${PROJECT_LAST_UPDATED_FLUSH_JOB_ENABLED:-true}
+  # Default: 30s
+  # Description: Interval at which the flush job drains the Redis buffer into MySQL (min 1s)
+  jobInterval: ${PROJECT_LAST_UPDATED_FLUSH_JOB_INTERVAL:-30s}
+  # Default: 25s
+  # Description: Time the flush job holds the distributed lock (kept below jobInterval so it releases each cycle)
+  jobLockTime: ${PROJECT_LAST_UPDATED_FLUSH_JOB_LOCK_TIME:-25s}
+  # Default: 500ms
+  # Description: Time the flush job waits to acquire the lock before giving up (100ms-5s)
+  jobLockWaitTime: ${PROJECT_LAST_UPDATED_FLUSH_JOB_LOCK_WAIT_TIME:-500ms}
+  # Default: 500
+  # Description: Maximum number of ZSET entries to read per page when flushing pending projects (10-5000)
+  jobBatchSize: ${PROJECT_LAST_UPDATED_FLUSH_JOB_BATCH_SIZE:-500}
+
 # Configuration for rate limit. This is not enabled by default for open source installations.
 # If enabled, rate limit is applied to creation and update of various entities including traces, spans, projects,
 # prompts, feedback definitions, experiments, datasets and dataset items
@@ -543,6 +599,32 @@ rateLimit:
       userFacingBucketName: get_trace_stats
       # Description: Rate limit error message
       errorMessage: "You have exceeded the rate limit for this operation. Please try again later."
+    tracesExist:
+      # Default: 30
+      # Description: how many tracesExist empty-state probes are allowed per workspace in the specified time bucket
+      limit: ${RATE_LIMIT_TRACES_EXIST_EVENTS_PER_WORKSPACE_LIMIT:-30}
+      # Default: 60
+      # Description: Time bucket size in seconds
+      durationInSeconds: ${RATE_LIMIT_WORKSPACE_EVENTS_DURATION_IN_SEC:-60}
+      # Description: Header name to use for rate limiting
+      headerName: Traces-Exist
+      # Description: User facing bucket name
+      userFacingBucketName: traces_exist
+      # Description: Rate limit error message
+      errorMessage: "You have exceeded the rate limit for this operation. Please try again later."
+    spansExist:
+      # Default: 30
+      # Description: how many spansExist empty-state probes are allowed per workspace in the specified time bucket
+      limit: ${RATE_LIMIT_SPANS_EXIST_EVENTS_PER_WORKSPACE_LIMIT:-30}
+      # Default: 60
+      # Description: Time bucket size in seconds
+      durationInSeconds: ${RATE_LIMIT_WORKSPACE_EVENTS_DURATION_IN_SEC:-60}
+      # Description: Header name to use for rate limiting
+      headerName: Spans-Exist
+      # Description: User facing bucket name
+      userFacingBucketName: spans_exist
+      # Description: Rate limit error message
+      errorMessage: "You have exceeded the rate limit for this operation. Please try again later."
     mcpOAuthRegister:
       # Default: 20
       # Description: Max dynamic client registrations (RFC 7591) accepted per source IP in the specified time bucket
@@ -661,6 +743,20 @@ onlineScoring:
   #   tool. The URL is consumed within a single tool-call round; 120 s is ample for most providers.
   #   Capped at 3600 s — longer-lived URLs are a security risk if the URL leaks.
   agenticToolsS3PresignTtlSeconds: ${ONLINE_SCORING_AGENTIC_TOOLS_S3_PRESIGN_TTL_SECONDS:-120}
+  # Default: 4000
+  # Description: Per-variable substitution cap (in characters) for the {{trace}}/{{span}} structure-injection
+  #   and agentic-tools paths. Large enough that small entity input/output renders inline, small enough that a
+  #   huge entity doesn't blow context (the agent fetches the rest via the read tool). 500-100000.
+  maxPromptFieldChars: ${ONLINE_SCORING_MAX_PROMPT_FIELD_CHARS:-4000}
+  # Default: 5
+  # Description: Attachment-upload race tolerance for the {{trace}}/{{span}} structures — how many times the
+  #   attachment lookup is retried when the entity references an attachment that isn't persisted yet. Interim
+  #   guard (0-20; 0 disables retrying) pending the pre-evaluation dispatch delay (OPIK-7224).
+  attachmentFetchMaxRetries: ${ONLINE_SCORING_ATTACHMENT_FETCH_MAX_RETRIES:-5}
+  # Default: 300ms
+  # Description: Delay between attachment-lookup retries (see attachmentFetchMaxRetries). Worst-case added
+  #   latency ≈ attachmentFetchMaxRetries × this, and only for entities that expect an attachment. 50ms-5s.
+  attachmentFetchRetryDelay: ${ONLINE_SCORING_ATTACHMENT_FETCH_RETRY_DELAY:-300ms}
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
@@ -1021,7 +1117,11 @@ cacheManager:
     # Default: {}
     # Description: Dynamically created caches with their respective time to live in seconds
     automationRules: ${CACHE_MANAGER_AUTOMATION_RULES_DURATION:-PT1S}
-    workspace_metadata: ${CACHE_MANAGER_WORKSPACE_METADATA_DURATION:-PT1H}
+    # Default: PT1H
+    # Description: Cache TTL for the per-project size estimate (ScopeMetadata) gating dynamic sorting.
+    # The estimate scans all of the project's spans, so cache misses are expensive by design.
+    # Renamed from the orphaned workspace_metadata entry, which no code referenced.
+    project_metadata: ${CACHE_MANAGER_PROJECT_METADATA_DURATION:-PT1H}
     # Default: PT5M
     # Description: Cache TTL for workspace version determination results, applied per workspace
     # Scope: Per workspace (cache key includes workspace ID)

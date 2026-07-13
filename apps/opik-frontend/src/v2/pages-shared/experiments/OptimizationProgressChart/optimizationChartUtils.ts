@@ -37,7 +37,8 @@ export const TRIAL_STATUS_LABELS: Record<TrialStatus, string> = {
   baseline: "Baseline",
   passed: "Passed",
   evaluating: "Evaluating",
-  pruned: "Pruned",
+  // Internal status key stays "pruned"; user-facing label is "Discarded".
+  pruned: "Discarded",
   running: "Running",
 };
 
