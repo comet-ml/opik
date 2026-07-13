@@ -344,8 +344,8 @@ class MyMetric(BaseMetric)
 '''
         with pytest.raises(InvalidMetricError) as exc_info:
             MetricFactory.build("code", {"code": code}, "model")
-        
-        assert "Invalid Python code" in str(exc_info.value)
+
+        assert "invalid Python code" in str(exc_info.value)
 
     def test_code_metric_no_basemetric_class_raises_error(self):
         """Test that code without a BaseMetric subclass raises error at build time.
@@ -378,8 +378,172 @@ def my_metric(dataset_item, llm_output):
         # Should raise InvalidMetricError during build (validation step)
         with pytest.raises(InvalidMetricError) as exc_info:
             MetricFactory.build("code", {"code": code}, "model")
-        
+
         assert "BaseMetric" in str(exc_info.value)
+
+    def test_code_metric_required_kwarg_key_now_builds(self):
+        """A metric reading a required dataset key must build without score().
+
+        Regression guard for OPIK-7172: the old build-time probe ran
+        score(output="") with no dataset columns, so a metric doing
+        kwargs["x"] threw KeyError and was killed at build though it scores
+        fine on real data. Build now only validates + instantiates (no
+        score()), so the metric builds and scores correctly against real data.
+        """
+        code = '''
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+class StrictKwargMetric(BaseMetric):
+    def __init__(self, name: str = "strict_kwarg"):
+        super().__init__(name=name)
+
+    def score(self, output, **kwargs):
+        # Required key: absent under the old dummy-payload probe -> KeyError.
+        expected = kwargs["expected_value"]
+        return ScoreResult(
+            name=self.name,
+            value=1.0 if output == expected else 0.0,
+            reason=f"Expected: {expected}",
+        )
+'''
+        # Building must NOT raise (no score() call at build time).
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        assert metric_fn.__name__ == "strict_kwarg"
+
+        # And it scores correctly once real data is available.
+        result = metric_fn({"expected_value": "hi"}, "hi")
+        assert result.value == 1.0
+        assert result.name == "strict_kwarg"
+
+    def test_code_metric_runtime_score_error_returns_zero(self):
+        """A metric that raises inside score() builds, then scores 0.0 at run time.
+
+        This preserves the asymmetry the fix intends: build-time is now purely
+        static (validate + instantiate), while a genuine score() failure on real
+        data is still swallowed to ScoreResult(0.0) with an explanatory reason.
+        """
+        code = '''
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+class BoomMetric(BaseMetric):
+    def __init__(self, name: str = "boom"):
+        super().__init__(name=name)
+
+    def score(self, output, **kwargs):
+        raise ValueError("kaboom")
+'''
+        # Builds fine: no score() at build time.
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+
+        # Runtime score() error is caught and reported as 0.0 with an
+        # explanatory (traceback-derived, truncated) reason.
+        result = metric_fn({}, "anything")
+        assert result.value == 0.0
+        assert "Error" in result.reason
+
+    def test_code_metric_arguments_map_renames_column_strict_signature(self):
+        """A STRICT signature + rename map + EXTRA columns must still score.
+
+        Regression guard for OPIK-7172: ``score(self, output, reference)`` has no
+        ``**kwargs``, so any un-consumed dataset column (here ``category`` and
+        ``id``) splatted into the call would land as an unexpected keyword ->
+        TypeError -> swallowed to ScoreResult(0.0). The build-time
+        ``accepts_var_keyword`` detection must restrict ``data`` to ``output`` +
+        the mapped ``reference`` only, so the metric scores its real, non-trivial
+        result (matching -> 1.0, mismatch -> 0.0) instead of a masked 0.0.
+        """
+        code = '''
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+class RenameMetric(BaseMetric):
+    def __init__(self, name: str = "rename"):
+        super().__init__(name=name)
+
+    def score(self, output, reference):
+        return ScoreResult(
+            name=self.name,
+            value=1.0 if output == reference else 0.0,
+            reason=f"reference={reference}",
+        )
+'''
+        metric_fn = MetricFactory.build(
+            "code",
+            {"code": code, "arguments": {"reference": "expected_answer"}},
+            "model",
+        )
+
+        # Dataset item carries EXTRA columns not in the arguments map. A strict
+        # signature would blow up on these if they were splatted.
+        item = {"expected_answer": "Paris", "category": "geo", "id": "abc-123"}
+
+        # A genuine match must score a NON-TRIVIAL 1.0 (not a masked 0.0 from a
+        # swallowed TypeError), and the mapped column must arrive under 'reference'.
+        match = metric_fn(item, "Paris")
+        assert match.value == 1.0
+        assert "Paris" in match.reason
+
+        # A genuine mismatch scores 0.0 for the right reason.
+        no_match = metric_fn(item, "London")
+        assert no_match.value == 0.0
+        assert "Paris" in no_match.reason
+
+    def test_code_metric_arguments_map_keeps_kwargs_backcompat(self):
+        """Unmapped columns are still splatted for **kwargs metrics.
+
+        With an 'arguments' map present, a column NOT consumed as a rename
+        source is still passed through, so a **kwargs metric keeps seeing it
+        (back-compat). The renamed param also arrives under its new name.
+        """
+        code = '''
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+class MixedMetric(BaseMetric):
+    def __init__(self, name: str = "mixed"):
+        super().__init__(name=name)
+
+    def score(self, output, reference, **kwargs):
+        extra = kwargs.get("category", "")
+        return ScoreResult(
+            name=self.name,
+            value=1.0 if (output == reference and extra == "geo") else 0.0,
+            reason=f"reference={reference}, category={extra}",
+        )
+'''
+        metric_fn = MetricFactory.build(
+            "code",
+            {"code": code, "arguments": {"reference": "expected_answer"}},
+            "model",
+        )
+
+        result = metric_fn(
+            {"expected_answer": "Paris", "category": "geo"}, "Paris"
+        )
+        assert result.value == 1.0
+
+    def test_code_metric_no_arguments_map_full_splat(self):
+        """No 'arguments' map preserves the historical full-splat behavior."""
+        code = '''
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+class SplatMetric(BaseMetric):
+    def __init__(self, name: str = "splat"):
+        super().__init__(name=name)
+
+    def score(self, output, **kwargs):
+        return ScoreResult(
+            name=self.name,
+            value=1.0 if kwargs.get("expected_answer") == output else 0.0,
+            reason="splat",
+        )
+'''
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        result = metric_fn({"expected_answer": "42"}, "42")
+        assert result.value == 1.0
 
 
 class TestJsonPathReferenceKey:

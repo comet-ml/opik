@@ -310,7 +310,7 @@ class OptimizationServiceImpl implements OptimizationService {
 
     @Override
     public Mono<Long> update(@NonNull UUID id, @NonNull OptimizationUpdate update) {
-        if (update.name() == null && update.status() == null) {
+        if (update.name() == null && update.status() == null && update.errorInfo() == null) {
             return Mono.empty();
         }
 

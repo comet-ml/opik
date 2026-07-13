@@ -15,11 +15,13 @@ import OptimizationHeader from "./OptimizationHeader";
 import OptimizationTrialsControls from "./OptimizationTrialsControls";
 import OptimizationTrialsTable from "./OptimizationTrialsTable";
 import OptimizationKPICards from "./OptimizationKPICards";
+import OptimizationLogs from "@/v2/pages-shared/optimizations/OptimizationLogs";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 enum OPTIMIZATION_TAB {
   OVERVIEW = "overview",
   TRIALS = "trials",
+  LOGS = "logs",
 }
 
 const OptimizationPage: React.FC = () => {
@@ -134,9 +136,11 @@ const OptimizationPage: React.FC = () => {
     return <Loader />;
   }
 
+  const isStudioOptimization = Boolean(optimization?.studio_config);
+
   const canRerun =
     canUseOptimizationStudio &&
-    Boolean(optimization?.studio_config) &&
+    isStudioOptimization &&
     Boolean(optimization?.id) &&
     optimization?.status &&
     !IN_PROGRESS_OPTIMIZATION_STATUSES.includes(optimization.status);
@@ -148,7 +152,7 @@ const OptimizationPage: React.FC = () => {
           optimization={optimization}
           status={optimization?.status}
           optimizationId={optimization?.id}
-          isStudioOptimization={Boolean(optimization?.studio_config)}
+          isStudioOptimization={isStudioOptimization}
           canRerun={canRerun}
         />
       </div>
@@ -165,6 +169,11 @@ const OptimizationPage: React.FC = () => {
           <TabsTrigger variant="underline" value={OPTIMIZATION_TAB.TRIALS}>
             Trials
           </TabsTrigger>
+          {isStudioOptimization && (
+            <TabsTrigger variant="underline" value={OPTIMIZATION_TAB.LOGS}>
+              Logs
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value={OPTIMIZATION_TAB.OVERVIEW} className="mt-0 pt-4">
@@ -245,6 +254,15 @@ const OptimizationPage: React.FC = () => {
             />
           </div>
         </TabsContent>
+
+        {isStudioOptimization && (
+          <TabsContent
+            value={OPTIMIZATION_TAB.LOGS}
+            className="mt-0 flex h-[600px] pt-4"
+          >
+            <OptimizationLogs optimization={optimization ?? null} />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

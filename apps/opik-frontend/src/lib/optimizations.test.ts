@@ -3,6 +3,7 @@ import {
   convertOptimizationVariableFormat,
   checkIsTestSuite,
   getOptimizationDefaultConfigByProvider,
+  extractKwargsKeysFromPython,
 } from "./optimizations";
 import {
   Experiment,
@@ -368,6 +369,144 @@ describe("convertOptimizationVariableFormat", () => {
       const expected = "Line 1 {{var1}}\n\tLine 2 {{var2}}\r\nLine 3";
       expect(convertOptimizationVariableFormat(input)).toBe(expected);
     });
+  });
+});
+
+describe("extractKwargsKeysFromPython", () => {
+  it("extracts a default-less kwargs.get(...) key as required", () => {
+    const code = `
+def score(self, output, **kwargs):
+    label = kwargs.get("label")
+    return label
+`;
+    expect(extractKwargsKeysFromPython(code)).toEqual(["label"]);
+  });
+
+  it("does NOT treat kwargs.get(x, default) as a required column", () => {
+    // A supplied default means the metric tolerates a missing column, so it
+    // must never hard-block submit (OPIK-7172 review fix).
+    const code = `
+def score(self, output, **kwargs):
+    label = kwargs.get("label", "")
+    other = kwargs.get('category', None)
+    return label, other
+`;
+    expect(extractKwargsKeysFromPython(code)).toEqual([]);
+  });
+
+  it("returns only the required key when default-ful and required mix", () => {
+    const code = `
+def score(self, output, **kwargs):
+    a = kwargs.get("optional_col", "fallback")
+    b = kwargs["required_col"]
+    return a, b
+`;
+    expect(extractKwargsKeysFromPython(code)).toEqual(["required_col"]);
+  });
+
+  it("extracts a kwargs[...] subscript key", () => {
+    const code = `
+def score(self, output, **kwargs):
+    return kwargs["expected_value"]
+`;
+    expect(extractKwargsKeysFromPython(code)).toEqual(["expected_value"]);
+  });
+
+  it("extracts multiple distinct keys, de-duplicated", () => {
+    const code = `
+def score(self, output, **kwargs):
+    a = kwargs.get("category")
+    b = kwargs.get('category')
+    c = kwargs["reference"]
+    return a, b, c
+`;
+    expect(extractKwargsKeysFromPython(code).sort()).toEqual([
+      "category",
+      "reference",
+    ]);
+  });
+
+  it("never treats 'output' as a required dataset column", () => {
+    // `output` is always injected by the backend, so even a literal
+    // `kwargs.get("output")` access must not be flagged as a missing column.
+    const code = `kwargs.get("output")`;
+    expect(extractKwargsKeysFromPython(code)).toEqual([]);
+  });
+
+  it("returns an empty list for code with no kwargs access", () => {
+    const code = `
+def score(self, output):
+    return output
+`;
+    expect(extractKwargsKeysFromPython(code)).toEqual([]);
+  });
+
+  it("returns an empty list for empty code", () => {
+    expect(extractKwargsKeysFromPython("")).toEqual([]);
+  });
+
+  it("does not resolve dynamic (non-literal) kwargs access", () => {
+    // A variable key can't be statically resolved — documented limitation,
+    // not a false positive to guard against.
+    const code = `
+def score(self, output, **kwargs):
+    key = "label"
+    return kwargs.get(key)
+`;
+    expect(extractKwargsKeysFromPython(code)).toEqual([]);
+  });
+
+  it("ignores kwargs access mentioned inside a # comment", () => {
+    const code = `
+def score(self, output, **kwargs):
+    # historically this read kwargs.get("legacy_col")
+    return kwargs["real_col"]
+`;
+    expect(extractKwargsKeysFromPython(code)).toEqual(["real_col"]);
+  });
+
+  it("ignores kwargs access mentioned inside a docstring", () => {
+    const code = `
+def score(self, output, **kwargs):
+    """Example: kwargs.get("doc_col") or kwargs['other_doc'].
+
+    kwargs["also_in_doc"] should not count either.
+    """
+    return kwargs.get("real_col")
+`;
+    expect(extractKwargsKeysFromPython(code)).toEqual(["real_col"]);
+  });
+
+  it("ignores a kwargs literal appearing inside a normal string", () => {
+    const code = `
+def score(self, output, **kwargs):
+    msg = "kwargs.get('in_string')"
+    return kwargs["actual"]
+`;
+    expect(extractKwargsKeysFromPython(code)).toEqual(["actual"]);
+  });
+});
+
+// The unknown-column check that gates submission
+// (`useOptimizationsNewFormHandlers.missingDatasetVariables`) is exactly this
+// diff: dataset columns referenced by the code metric (via `extractKwargsKeysFromPython`
+// plus any explicit `arguments` map values) that are absent from the item
+// source's actual columns.
+describe("extractKwargsKeysFromPython — unknown-column detection", () => {
+  it("flags a referenced key that is not among the dataset's columns", () => {
+    const code = `kwargs.get("nonexistent_column")`;
+    const datasetVariables = ["text", "label"];
+    const referenced = extractKwargsKeysFromPython(code);
+    const missing = referenced.filter((key) => !datasetVariables.includes(key));
+    expect(missing).toEqual(["nonexistent_column"]);
+  });
+
+  it("does not flag a referenced key that matches a dataset column", () => {
+    const code = `kwargs.get("label")`;
+    const datasetVariables = ["text", "label"];
+    const referenced = extractKwargsKeysFromPython(code);
+    const missing = referenced.filter((key) => !datasetVariables.includes(key));
+    expect(missing).toEqual([]);
   });
 });
 

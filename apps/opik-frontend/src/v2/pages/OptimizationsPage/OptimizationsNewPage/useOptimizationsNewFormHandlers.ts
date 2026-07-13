@@ -6,6 +6,7 @@ import useDatasetById from "@/api/datasets/useDatasetById";
 import { METRIC_TYPE } from "@/types/optimizations";
 import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { extractMessageContent, safelyGetPromptVariables } from "@/lib/prompt";
+import { extractKwargsKeysFromPython } from "@/lib/optimizations";
 import { OptimizationConfigFormType } from "@/v2/pages-shared/optimizations/OptimizationConfigForm/schema";
 import useDatasetSamplePreview from "./useDatasetSamplePreview";
 import { useOptimizerFormHandlers } from "./formHandlers/useOptimizerFormHandlers";
@@ -61,6 +62,24 @@ export const useOptimizationsNewFormHandlers = () => {
       };
       collect(params.task_introduction);
       collect(params.evaluation_criteria);
+    }
+
+    // Code metrics read dataset columns two ways, both of which must exist in
+    // the item source: dynamic `kwargs["x"]` accesses (static-scanned) and the
+    // explicit rename map (`arguments`: score() param → dataset column). Empty
+    // mappings are skipped — an unmapped param falls back to a same-named column
+    // backend-side, so a blank row is not a missing-column error.
+    if (metricType === METRIC_TYPE.CODE && metricParams) {
+      const params = metricParams as {
+        code?: string;
+        arguments?: Record<string, string>;
+      };
+      extractKwargsKeysFromPython(params.code ?? "").forEach((key) =>
+        referenced.add(key),
+      );
+      Object.values(params.arguments ?? {}).forEach((column) => {
+        if (column) referenced.add(column);
+      });
     }
 
     return [...referenced].filter((tag) => !datasetVariables.includes(tag));

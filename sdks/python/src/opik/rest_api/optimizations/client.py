@@ -317,6 +317,7 @@ class OptimizationsClient:
         *,
         name: typing.Optional[str] = OMIT,
         status: typing.Optional[OptimizationUpdateStatus] = OMIT,
+        error_info: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -329,6 +330,8 @@ class OptimizationsClient:
         name : typing.Optional[str]
 
         status : typing.Optional[OptimizationUpdateStatus]
+
+        error_info : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -344,7 +347,7 @@ class OptimizationsClient:
         client.optimizations.update_optimizations_by_id(id='id', )
         """
         _response = self._raw_client.update_optimizations_by_id(
-            id, name=name, status=status, request_options=request_options
+            id, name=name, status=status, error_info=error_info, request_options=request_options
         )
         return _response.data
 
@@ -695,6 +698,7 @@ class AsyncOptimizationsClient:
         *,
         name: typing.Optional[str] = OMIT,
         status: typing.Optional[OptimizationUpdateStatus] = OMIT,
+        error_info: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -707,6 +711,8 @@ class AsyncOptimizationsClient:
         name : typing.Optional[str]
 
         status : typing.Optional[OptimizationUpdateStatus]
+
+        error_info : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -725,7 +731,7 @@ class AsyncOptimizationsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.update_optimizations_by_id(
-            id, name=name, status=status, request_options=request_options
+            id, name=name, status=status, error_info=error_info, request_options=request_options
         )
         return _response.data
 

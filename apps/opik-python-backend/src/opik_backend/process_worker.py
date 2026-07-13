@@ -27,6 +27,32 @@ def get_metric_class(module: ModuleType) -> Type[BaseMetric]:
         if issubclass(cls, BaseMetric) and cls is not BaseMetric:
             return cls
 
+def _score_accepts_var_keyword(metric: BaseMetric) -> bool:
+    """Whether the metric's ``score()`` declares a ``**kwargs`` (VAR_KEYWORD) param.
+
+    Consumed by the code-metric data assembly (studio/metrics.py): a strict
+    signature such as ``score(self, output, reference)`` must NOT receive extra
+    dataset columns as unexpected keywords, whereas a ``score(self, output,
+    **kwargs)`` signature is happy to absorb the remaining columns.
+
+    ``BaseMetric.__init__`` wraps ``score`` with ``opik.track`` (via
+    ``functools.wraps``), so the bound method is hidden behind a wrapper; we
+    ``inspect.unwrap`` to recover the real signature. If introspection fails we
+    stay permissive (assume ``**kwargs``) so we never starve a metric of columns
+    it actually needs -- that only preserves the historical full-splat behavior.
+    """
+    score = getattr(metric, "score", None)
+    if score is None:
+        return True
+    try:
+        sig = inspect.signature(inspect.unwrap(score))
+    except (ValueError, TypeError):
+        return True
+    return any(
+        p.kind is inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+    )
+
+
 def to_scores(score_result: Union[ScoreResult, List[ScoreResult]]) -> List[ScoreResult]:
     scores = []
     if isinstance(score_result, ScoreResult):
@@ -72,6 +98,71 @@ def run_user_code(code: str, data: dict, payload_type: Optional[str] = None) -> 
     scores = to_scores(score_result)
 
     return {"scores": [score.__dict__ for score in scores]}
+
+
+def validate_user_code(code: str) -> dict:
+    """Statically validate a metric's ``code`` and return its ``name`` WITHOUT scoring.
+
+    Build-time counterpart to :func:`run_user_code`: it compiles the code,
+    executes it into an isolated module, locates the ``BaseMetric`` subclass and
+    instantiates it to read ``metric.name`` — but never calls ``score()``.
+    Skipping ``score()`` is the whole point: the previous build-time probe ran
+    ``score(output="")`` with no dataset columns, so any metric that reads a
+    required dataset-derived keyword (e.g. ``kwargs["x"]``) was wrongly rejected
+    at build even though it scores fine on real data (OPIK-7172).
+
+    The error taxonomy mirrors the sandbox executor's ``scoring_runner.py`` so
+    that build-time and score-time failures read consistently:
+
+    - invalid Python (syntax error or module-level exec failure)
+    - no ``BaseMetric`` subclass present
+    - the metric class could not be instantiated
+
+    Build-time trust boundary (accepted per OPIK-7172 plan decision 2 — the
+    subprocess is the isolation boundary): the module-level user code (the
+    ``exec`` below) and the metric's ``__init__`` (instantiation below) run
+    **in-process and unsandboxed**, inside the already-isolated optimizer
+    subprocess. This is deliberate: build-time only needs to validate the code
+    and read the metric ``name`` cheaply, and ``score()`` — the untrusted
+    per-item hot path — is **never** called here. Per-score execution is what
+    still honors ``PYTHON_CODE_EXECUTOR_STRATEGY`` (docker/process sandboxing)
+    via ``studio/metrics.py::_run_code_metric``. If a hard sandbox is ever
+    required for module import / ``__init__`` too, this static validation would
+    need to move behind the executor.
+
+    Returns ``{"name": <metric name>, "accepts_var_keyword": <bool>}`` on
+    success, or ``{"code": 400, "error": <message>}`` on failure. The
+    ``accepts_var_keyword`` flag reports whether ``score()`` declares
+    ``**kwargs`` so the caller can decide whether extra dataset columns are safe
+    to splat (see :func:`_score_accepts_var_keyword`).
+    """
+    try:
+        compile(code, "<metric>", "exec")
+    except SyntaxError:
+        stacktrace = "\n".join(traceback.format_exc().splitlines()[3:])
+        return {"code": 400, "error": f"Field 'code' contains invalid Python code: {stacktrace}"}
+
+    module = ModuleType(str(uuid.uuid4()))
+    try:
+        exec(code, module.__dict__)
+    except Exception:
+        stacktrace = "\n".join(traceback.format_exc().splitlines()[3:])
+        return {"code": 400, "error": f"Field 'code' contains invalid Python code: {stacktrace}"}
+
+    metric_class = get_metric_class(module)
+    if metric_class is None:
+        return {"code": 400, "error": "Field 'code' in the request doesn't contain a subclass implementation of 'opik.evaluation.metrics.BaseMetric'"}
+
+    try:
+        metric = metric_class()
+    except Exception:
+        stacktrace = "\n".join(traceback.format_exc().splitlines()[3:])
+        return {"code": 400, "error": f"The provided 'code' field could not be instantiated: {stacktrace}"}
+
+    return {
+        "name": getattr(metric, "name", None),
+        "accepts_var_keyword": _score_accepts_var_keyword(metric),
+    }
 
 
 def worker_process_main(connection):

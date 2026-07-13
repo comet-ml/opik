@@ -742,49 +742,113 @@ def _build_code_metric(params: Dict[str, Any], model: str, **kwargs) -> Callable
     Args:
         params: Metric parameters
             - code (str): Python code containing a BaseMetric subclass
+            - arguments (Dict[str, str], optional): Rename-capable map from a
+              score() parameter name to a dataset column name (see the
+              "arguments-map contract" below). Absent/empty preserves the
+              historical full-splat behavior.
         model: LLM model (not used for this metric)
-        
+
     Returns:
         Metric function with signature (dataset_item, llm_output) -> ScoreResult
-        
+
     Raises:
         InvalidMetricError: If code is missing or invalid
+
+    arguments-map contract (consumed here; produced by the mapping UI):
+        ``params["arguments"]`` is an optional ``{score_param: dataset_column}``
+        dict. At scoring time ``isolated_metric`` assembles the ``score()``
+        kwargs as follows:
+          - ``output`` is ALWAYS injected from the LLM response and never
+            overridden by the map.
+          - Each mapped param exposes its dataset column's value under the
+            param name (so ``score(self, reference)`` can read column
+            ``expected_answer`` via ``{"reference": "expected_answer"}``).
+          - Whether the remaining (unmapped) dataset columns are also splatted
+            depends on the metric's ``score()`` signature, detected at build
+            time (``accepts_var_keyword``):
+              * ``score(self, output, **kwargs)`` (VAR_KEYWORD present) -> the
+                remaining columns (minus those consumed as a rename source) ARE
+                splatted, so unmapped params resolve by same name and
+                ``**kwargs`` keeps receiving the rest (back-compat).
+              * ``score(self, output, reference)`` (strict, no ``**kwargs``) ->
+                the remaining columns are NOT splatted. Passing them would land
+                as unexpected keyword arguments -> ``TypeError`` -> swallowed to
+                ``ScoreResult(0.0)`` (OPIK-7172). ``data`` is restricted to
+                ``output`` + the mapped params only.
+          - No/empty ``arguments`` -> full splat of the whole dataset item
+            (historical behavior), regardless of signature.
     """
     code = params.get("code")
     if not code:
         raise InvalidMetricError("code", "Missing 'code' parameter for code metric")
-    
+
     logger.info(f"Building code metric (code length: {len(code)} chars)")
-    
-    # Validate code and extract metric name by running it once with dummy data
-    # This gets the actual metric.name attribute from the instantiated class
-    # Uses the same secure executor infrastructure (Docker or Process) as actual scoring
-    try:
-        # Do a quick validation run with dummy data to extract the metric name
-        validation_response = _run_code_metric(code, {"output": ""})
-        
-        if "error" in validation_response:
-            raise InvalidMetricError("code", f"Invalid Python code: {validation_response['error']}")
-        
-        # Extract the metric name from the first score result
-        scores = validation_response.get("scores", [])
-        if scores and scores[0].get("name"):
-            metric_name = scores[0]["name"]
-        else:
-            metric_name = "code"
-        logger.info(f"Extracted metric name from class: {metric_name}")
-        
-    except InvalidMetricError:
-        raise
-    except Exception as e:
-        raise InvalidMetricError("code", f"Failed to validate metric code: {e}")
-    
+
+    # Optional rename-capable arguments map (score() param -> dataset column).
+    arguments = params.get("arguments") or {}
+    if not isinstance(arguments, dict):
+        logger.warning(
+            f"Ignoring non-dict 'arguments' for code metric: {type(arguments).__name__}"
+        )
+        arguments = {}
+
+    # Statically validate the code and read the metric name WITHOUT calling
+    # score(). Executing score() with a dummy empty payload (the previous
+    # behavior) rejected any metric that reads a required dataset-derived
+    # keyword (e.g. kwargs["x"]) even though it scores fine on real data
+    # (OPIK-7172). Validation runs in-process here because the optimization job
+    # already runs inside an isolated subprocess; per-score isolation
+    # (Docker/process) still applies at scoring time via _run_code_metric.
+    from opik_backend.process_worker import validate_user_code
+
+    validation = validate_user_code(code)
+    if "error" in validation:
+        raise InvalidMetricError("code", validation["error"])
+
+    metric_name = validation.get("name") or "code"
+    # Whether score() declares **kwargs, detected at build time. Governs whether
+    # unmapped dataset columns are safe to splat: a strict signature (no
+    # **kwargs) would reject extra columns as unexpected keywords -> TypeError ->
+    # swallowed to 0.0 (OPIK-7172). Default True keeps the historical full-splat
+    # behavior when the flag is somehow absent.
+    accepts_var_keyword = validation.get("accepts_var_keyword", True)
+    logger.info(
+        f"Extracted metric name from class: {metric_name} "
+        f"(accepts_var_keyword={accepts_var_keyword})"
+    )
+
     def isolated_metric(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
-        """Execute the metric using the configured executor strategy."""
-        # Merge data: output + dataset_item fields
-        # This matches metric.score(**data) interface in process_worker.py
-        data = {"output": llm_output, **dataset_item}
-        
+        """Execute the metric using the configured executor strategy.
+
+        Builds the score() kwargs from the optional rename-capable ``arguments``
+        map — see the "arguments-map contract" in the enclosing docstring.
+        """
+        if arguments:
+            data: Dict[str, Any] = {}
+            consumed_columns = set()
+            for param, column in arguments.items():
+                if column in dataset_item:
+                    data[param] = dataset_item[column]
+                    consumed_columns.add(column)
+            if accepts_var_keyword:
+                # **kwargs signature: splat remaining fields (skipping columns
+                # already consumed as a rename source) so unmapped params resolve
+                # by same name and **kwargs metrics still receive the rest.
+                # setdefault keeps an explicit mapping winning over a same-named
+                # column.
+                for key, value in dataset_item.items():
+                    if key not in consumed_columns:
+                        data.setdefault(key, value)
+            # Strict signature (no **kwargs): skip the remaining-column splat.
+            # Extra columns would arrive as unexpected keyword arguments and
+            # raise TypeError, which _run_code_metric swallows to 0.0. Restrict
+            # data to output + the explicitly mapped params only.
+            # output is always the LLM response, regardless of the map.
+            data["output"] = llm_output
+        else:
+            # Back-compat: no mapping -> splat the whole item.
+            data = {"output": llm_output, **dataset_item}
+
         logger.debug(f"Executing code metric with data keys: {list(data.keys())}")
         
         # Execute using the executor infrastructure (same as automations evaluator)
@@ -819,5 +883,10 @@ def _build_code_metric(params: Dict[str, Any], model: str, **kwargs) -> Callable
             reason=score.get("reason", "")
         )
     
+    # objective_name follows the metric's class `.name` (read via
+    # validate_user_code) rather than the emitted ScoreResult.name. Intentional:
+    # the name is known at build time without running score(), so it is stable
+    # for the objective before any item is scored. The two diverge only if a
+    # metric returns a ScoreResult with a different name than its class .name.
     isolated_metric.__name__ = metric_name
     return isolated_metric

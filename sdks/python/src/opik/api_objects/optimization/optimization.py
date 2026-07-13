@@ -32,14 +32,20 @@ class Optimization:
         status: Optional[
             Literal["running", "completed", "cancelled", "initialized", "error"]
         ] = None,
+        error_info: Optional[str] = None,
     ) -> None:
         LOGGER.debug(
             f"Updating optimization {self.id} with name {name} and status {status}"
         )
+        # Only forward error_info when supplied; passing None would serialize an
+        # explicit null and could clobber a previously-persisted reason on a
+        # subsequent non-error update.
+        extra = {"error_info": error_info} if error_info is not None else {}
         self._rest_client.optimizations.update_optimizations_by_id(
             id=self.id,
             name=name,
             status=status,
+            **extra,
         )
 
     def fetch_content(self) -> rest_api_types.OptimizationPublic:

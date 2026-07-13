@@ -410,6 +410,7 @@ class RawOptimizationsClient:
         *,
         name: typing.Optional[str] = OMIT,
         status: typing.Optional[OptimizationUpdateStatus] = OMIT,
+        error_info: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -422,6 +423,8 @@ class RawOptimizationsClient:
         name : typing.Optional[str]
 
         status : typing.Optional[OptimizationUpdateStatus]
+
+        error_info : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -436,6 +439,7 @@ class RawOptimizationsClient:
             json={
                 "name": name,
                 "status": status,
+                "error_info": error_info,
             },
             headers={
                 "content-type": "application/json",
@@ -885,6 +889,7 @@ class AsyncRawOptimizationsClient:
         *,
         name: typing.Optional[str] = OMIT,
         status: typing.Optional[OptimizationUpdateStatus] = OMIT,
+        error_info: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -897,6 +902,8 @@ class AsyncRawOptimizationsClient:
         name : typing.Optional[str]
 
         status : typing.Optional[OptimizationUpdateStatus]
+
+        error_info : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -911,6 +918,7 @@ class AsyncRawOptimizationsClient:
             json={
                 "name": name,
                 "status": status,
+                "error_info": error_info,
             },
             headers={
                 "content-type": "application/json",

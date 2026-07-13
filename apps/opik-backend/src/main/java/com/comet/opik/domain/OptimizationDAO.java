@@ -235,6 +235,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 status,
                 metadata,
                 studio_config,
+                error_info,
                 created_by,
                 last_updated_by,
                 last_updated_at
@@ -249,6 +250,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 :status,
                 :metadata,
                 :studio_config,
+                :error_info,
                 :created_by,
                 :last_updated_by,
                 COALESCE(parseDateTime64BestEffortOrNull(:last_updated_at, 6), now64(6))
@@ -557,7 +559,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
     private static final String UPDATE_BY_ID = """
             INSERT INTO optimizations (
-            	id, dataset_id, name, workspace_id, project_id, objective_name, status, metadata, created_at, created_by, last_updated_by, studio_config
+            	id, dataset_id, name, workspace_id, project_id, objective_name, status, metadata, created_at, created_by, last_updated_by, studio_config, error_info
             )
             SELECT
                 id,
@@ -571,7 +573,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 created_at,
                 created_by,
                 :user_name as last_updated_by,
-                studio_config
+                studio_config,
+                <if(error_info)> :error_info <else> error_info <endif> as error_info
             FROM optimizations
             WHERE id = :id
             AND workspace_id = :workspace_id
@@ -582,7 +585,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
     private static final String SET_DATASET_DELETED_TO_TRUE_BY_DATASET_ID = """
             INSERT INTO optimizations (
-            	id, dataset_id, name, workspace_id, project_id, objective_name, status, metadata, created_at, created_by, last_updated_at, last_updated_by, dataset_deleted, studio_config
+            	id, dataset_id, name, workspace_id, project_id, objective_name, status, metadata, created_at, created_by, last_updated_at, last_updated_by, dataset_deleted, studio_config, error_info
             )
             SELECT
                 id,
@@ -598,7 +601,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 last_updated_at,
                 last_updated_by,
                 true as dataset_deleted,
-                studio_config
+                studio_config,
+                error_info
             FROM optimizations
             WHERE workspace_id = :workspace_id
             AND dataset_id IN :dataset_ids
@@ -884,7 +888,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 .bind("project_id", optimization.projectId() != null ? optimization.projectId().toString() : "")
                 .bind("objective_name", optimization.objectiveName())
                 .bind("status", optimization.status().getValue())
-                .bind("metadata", getStringOrDefault(optimization.metadata()));
+                .bind("metadata", getStringOrDefault(optimization.metadata()))
+                .bind("error_info", StringUtils.defaultString(optimization.errorInfo()));
 
         if (optimization.studioConfig() != null) {
             try {
@@ -945,6 +950,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     .status(OptimizationStatus.fromString(row.get("status", String.class)))
                     .metadata(getJsonNodeOrDefault(row.get("metadata", String.class)))
                     .studioConfig(studioConfig)
+                    .errorInfo(row.get("error_info", String.class))
                     .createdAt(row.get("created_at", Instant.class))
                     .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                     .createdBy(row.get("created_by", String.class))
@@ -999,6 +1005,9 @@ class OptimizationDAOImpl implements OptimizationDAO {
         Optional.ofNullable(update.status())
                 .ifPresent(status -> template.add("status", status.getValue()));
 
+        Optional.ofNullable(update.errorInfo())
+                .ifPresent(errorInfo -> template.add("error_info", errorInfo));
+
         return template;
     }
 
@@ -1010,6 +1019,9 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
         Optional.ofNullable(update.status())
                 .ifPresent(status -> statement.bind("status", status.getValue()));
+
+        Optional.ofNullable(update.errorInfo())
+                .ifPresent(errorInfo -> statement.bind("error_info", errorInfo));
 
         statement.bind("id", id);
 

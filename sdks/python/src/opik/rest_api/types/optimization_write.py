@@ -28,6 +28,11 @@ class OptimizationWrite(UniversalBaseModel):
     status: OptimizationWriteStatus
     metadata: typing.Optional[JsonListStringWrite] = None
     studio_config: typing.Optional[OptimizationStudioConfigWrite] = None
+    error_info: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Failure reason persisted when the optimization ends in error
+    """
+
     last_updated_at: typing.Optional[dt.datetime] = None
 
     if IS_PYDANTIC_V2:

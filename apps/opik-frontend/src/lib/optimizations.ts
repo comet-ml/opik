@@ -72,6 +72,133 @@ export const extractMetricNameFromCode = (code: string): string => {
   return extractMetricNameFromPythonCode(code) || "code";
 };
 
+// Dataset columns a code metric REQUIRES via `kwargs`. The backend splats the
+// dataset item into `score(**kwargs)`, so a required `kwargs["x"]` /
+// default-less `kwargs.get("x")` access references a dataset column that must
+// exist in the item source (mirrors extractMetricNameFromPythonCode's
+// static-scan approach).
+//
+// Only *required* accesses are returned (they gate submit):
+//   - `kwargs["x"]`               -> required (KeyError if absent)
+//   - `kwargs.get("x")`           -> required (no fallback -> None, likely a bug)
+//   - `kwargs.get("x", default)`  -> NOT required (a default is supplied), so it
+//                                    must never hard-block submit.
+//
+// Comments and string/docstring literals are stripped (best-effort, via a small
+// state machine) before the scan, so a `kwargs.get("x")` mention buried inside a
+// docstring or `# comment` is not mistaken for a real column access. Dynamic
+// access (e.g. `kwargs.get(var)`) can't be resolved statically and stays a
+// runtime concern. `output` is always injected by the backend, so it is never
+// treated as a required column.
+export const extractKwargsKeysFromPython = (code: string): string[] => {
+  if (!code) return [];
+
+  const keys = new Set<string>();
+  const n = code.length;
+  const isIdentChar = (c: string | undefined) =>
+    c !== undefined && /[A-Za-z0-9_]/.test(c);
+
+  // Read a quoted string starting at `code[start]` (a quote char). Returns the
+  // literal contents and the index just past the closing quote.
+  const readQuoted = (
+    start: number,
+    quote: string,
+  ): { value: string; end: number } => {
+    let k = start + 1;
+    let value = "";
+    while (k < n) {
+      if (code[k] === "\\") {
+        value += code[k + 1] ?? "";
+        k += 2;
+        continue;
+      }
+      if (code[k] === quote) {
+        k += 1;
+        break;
+      }
+      value += code[k];
+      k += 1;
+    }
+    return { value, end: k };
+  };
+
+  let i = 0;
+  while (i < n) {
+    const ch = code[i];
+
+    // Skip `#` comments to end of line.
+    if (ch === "#") {
+      while (i < n && code[i] !== "\n") i += 1;
+      continue;
+    }
+
+    // Skip string / docstring literals (single, double, and triple-quoted).
+    if (ch === '"' || ch === "'") {
+      const triple = code.slice(i, i + 3) === ch.repeat(3);
+      const closing = triple ? ch.repeat(3) : ch;
+      i += closing.length;
+      while (i < n) {
+        if (code[i] === "\\") {
+          i += 2;
+          continue;
+        }
+        if (code.slice(i, i + closing.length) === closing) {
+          i += closing.length;
+          break;
+        }
+        i += 1;
+      }
+      continue;
+    }
+
+    // A `kwargs` identifier access in code (not part of a longer identifier).
+    if (
+      code.startsWith("kwargs", i) &&
+      !isIdentChar(code[i - 1]) &&
+      !isIdentChar(code[i + 6])
+    ) {
+      let j = i + 6;
+      while (j < n && /\s/.test(code[j])) j += 1;
+
+      // kwargs["x"] / kwargs['x'] -> required.
+      if (code[j] === "[") {
+        j += 1;
+        while (j < n && /\s/.test(code[j])) j += 1;
+        if (code[j] === '"' || code[j] === "'") {
+          const { value, end } = readQuoted(j, code[j]);
+          if (value && value !== "output") keys.add(value);
+          i = end;
+          continue;
+        }
+      }
+
+      // kwargs.get("x") / kwargs.get("x", default)
+      if (code.startsWith(".get", j)) {
+        j += 4;
+        while (j < n && /\s/.test(code[j])) j += 1;
+        if (code[j] === "(") {
+          j += 1;
+          while (j < n && /\s/.test(code[j])) j += 1;
+          if (code[j] === '"' || code[j] === "'") {
+            const { value, end } = readQuoted(j, code[j]);
+            // A default arg (a `,` after the key) makes the column optional.
+            let k = end;
+            while (k < n && /\s/.test(code[k])) k += 1;
+            const hasDefault = code[k] === ",";
+            if (value && value !== "output" && !hasDefault) keys.add(value);
+            i = end;
+            continue;
+          }
+        }
+      }
+    }
+
+    i += 1;
+  }
+
+  return [...keys];
+};
+
 export const getObjectiveLabel = (
   isTestSuite?: boolean,
   objectiveName?: string,

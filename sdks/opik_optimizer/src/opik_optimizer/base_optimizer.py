@@ -1444,7 +1444,20 @@ class BaseOptimizer(ABC):
                     best_score=result.score,
                     prompt=result_prompt,
                 )
-                self._finalize_optimization(context, status="error")
+                # Graceful failure: run_optimization caught the error and
+                # returned instead of raising, so there is no exception for
+                # status_manager to turn into a reason. Persist an explicit
+                # error_info anyway (consistent with P3's mark_error threading)
+                # so the run doesn't surface as "error" with a blank reason.
+                self._finalize_optimization(
+                    context,
+                    status="error",
+                    error_info=(
+                        "Optimization stopped early with an error "
+                        "(finish_reason='error'); the failing step's traceback is "
+                        "in the run logs."
+                    ),
+                )
                 debug_log(
                     "optimize_end",
                     optimizer=self.__class__.__name__,
@@ -1487,7 +1500,9 @@ class BaseOptimizer(ABC):
                 f"Optimization object exists: {context.optimization is not None}"
             )
             try:
-                self._finalize_optimization(context, status="error")
+                self._finalize_optimization(
+                    context, status="error", error_info=str(e)
+                )
             except Exception as finalize_error:
                 logger.error(
                     f"Failed to finalize optimization status: {finalize_error}",
@@ -1761,14 +1776,17 @@ class BaseOptimizer(ABC):
         )
 
     def _update_optimization(
-        self, optimization: optimization.Optimization, status: str
+        self,
+        optimization: optimization.Optimization,
+        status: str,
+        error_info: str | None = None,
     ) -> bool:
         # FIXME: remove when a solution is added to opik's optimization.update method
         count = 0
         last_error = None
         while count < 3:
             try:
-                optimization.update(status=status)
+                optimization.update(status=status, error_info=error_info)
                 logger.debug(f"Successfully updated optimization status to {status}")
                 return True
             except ApiError as e:
@@ -1801,9 +1819,12 @@ class BaseOptimizer(ABC):
         self,
         context: OptimizationContext,
         status: str = "completed",
+        error_info: str | None = None,
     ) -> None:
         if context.optimization is not None:
-            updated = self._update_optimization(context.optimization, status)
+            updated = self._update_optimization(
+                context.optimization, status, error_info=error_info
+            )
             if updated:
                 logger.debug(
                     f"Optimization {context.optimization_id} status updated to {status}."

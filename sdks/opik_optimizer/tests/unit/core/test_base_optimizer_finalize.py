@@ -32,7 +32,12 @@ class TestFinalizeOptimization:
 
         optimizer._finalize_optimization(context, status="completed")
 
-        mock_optimization.update.assert_called_with(status="completed")
+        # error_info defaults to None on the success path (only failures pass a
+        # reason); it is threaded through so the graceful-error path can persist
+        # one (OPIK-7172).
+        mock_optimization.update.assert_called_with(
+            status="completed", error_info=None
+        )
 
     def test_handles_none_optimization(self, optimizer) -> None:
         """Should not raise when optimization is None."""

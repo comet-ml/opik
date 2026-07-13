@@ -58,6 +58,12 @@ export interface NumericalSimilarityMetricParameters {
 
 export interface CodeMetricParameters {
   code: string;
+  // Rename-capable map from a `score()` parameter name to a dataset column
+  // name. Consumed by the backend `_build_code_metric` arguments contract:
+  // each entry exposes `dataset_item[column]` under `param` in the score()
+  // kwargs. `output` is always injected by the backend and never mapped here.
+  // Empty/absent → the backend splats the whole dataset item (back-compat).
+  arguments?: Record<string, string>;
 }
 
 export type MetricParameters =
@@ -150,6 +156,7 @@ export interface Optimization {
   dataset_name: string;
   metadata?: object;
   studio_config?: OptimizationStudioConfig;
+  error_info?: string;
   feedback_scores?: AggregatedFeedbackScore[];
   experiment_scores?: AggregatedFeedbackScore[];
   num_trials: number;

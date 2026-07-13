@@ -29,6 +29,11 @@ class Optimization(UniversalBaseModel):
     status: OptimizationStatus
     metadata: typing.Optional[JsonListString] = None
     studio_config: typing.Optional[OptimizationStudioConfig] = None
+    error_info: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Failure reason persisted when the optimization ends in error
+    """
+
     dataset_id: typing.Optional[str] = None
     num_trials: typing.Optional[int] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScoreAverage]] = None

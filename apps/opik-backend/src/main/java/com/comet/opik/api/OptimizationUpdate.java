@@ -8,5 +8,5 @@ import lombok.Builder;
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public record OptimizationUpdate(String name, OptimizationStatus status) {
+public record OptimizationUpdate(String name, OptimizationStatus status, String errorInfo) {
 }
