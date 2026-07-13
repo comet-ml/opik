@@ -73,7 +73,14 @@ export interface BreakdownConfig {
 export interface ProjectMetricsWidget {
   type: WIDGET_TYPE.PROJECT_METRICS;
   config: {
+    // Single-project selection (per-project metrics endpoint).
     projectId?: string;
+    // Workspace-level selection (aggregate across projects). When present, the widget queries the
+    // workspace metrics endpoint with this explicit set. Empty means "not configured".
+    projectIds?: string[];
+    // Aggregate across every project in the workspace, resolved server-side (dynamic, not a frozen snapshot).
+    // Takes precedence over projectIds; the workspace endpoint receives an empty project list as the "all" signal.
+    allProjects?: boolean;
     metricType: string;
     chartType?: CHART_TYPE.line | CHART_TYPE.bar;
     traceFilters?: Filters;
@@ -97,8 +104,15 @@ export interface ProjectStatsCardWidget {
   type: WIDGET_TYPE.PROJECT_STATS_CARD;
   config: {
     source: TRACE_DATA_TYPE;
-    projectId: string;
+    // Single-project selection (stats endpoint). Workspace/multi-project selection uses projectIds.
+    projectId?: string;
+    projectIds?: string[];
+    // Aggregate across every project in the workspace, resolved server-side (dynamic, not a frozen snapshot).
+    // Takes precedence over projectIds; the workspace endpoint receives an empty project list as the "all" signal.
+    allProjects?: boolean;
     metric: string;
+    // Selected token-usage key when metric is the workspace span-token-usage total.
+    usageMetric?: string;
     traceFilters?: Filters;
     spanFilters?: Filters;
   } & Record<string, unknown>;
