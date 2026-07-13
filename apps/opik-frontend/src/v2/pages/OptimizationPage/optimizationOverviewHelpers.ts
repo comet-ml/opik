@@ -3,6 +3,7 @@ import dayjs from "dayjs";
 import {
   AggregatedCandidate,
   OPTIMIZATION_STATUS,
+  OptimizationScoringHealth,
 } from "@/types/optimizations";
 import {
   IN_PROGRESS_OPTIMIZATION_STATUSES,
@@ -92,6 +93,94 @@ export const computeEmptyRunWarning = (
   const nonBaselineCandidates = candidates.filter((c) => c.stepIndex !== 0);
   // No trials at all, or none of the trials scored → no usable optimization result.
   return nonBaselineCandidates.every((c) => c.score == null);
+};
+
+/**
+ * Produces the user-facing body message for the empty-run warning panel and the
+ * KPI score-card caption. Two code paths:
+ *
+ *  1. **Exact count** (Wave 2, OPIK-7159): when `scoring_health` is present
+ *     and `total_count > 0`, the backend persisted the real numbers. The copy
+ *     uses `failed_count` / `total_count` directly and distinguishes:
+ *       - all failed  → "All N items failed to score …"
+ *       - partial     → "N of M items failed to score …"
+ *       - singular    → "1 item" not "1 items"
+ *
+ *  2. **Heuristic fallback** (Wave 1, no backend data): returns the static
+ *     message that was already shown before Wave 2 — exact backward compat.
+ *
+ * Returns `null` when the health data says nothing failed (failed_count === 0),
+ * which lets the caller skip rendering the warning entirely.
+ */
+export const getEmptyRunWarningMessage = (
+  scoringHealth?: OptimizationScoringHealth,
+): string | null => {
+  // --- Exact-count path (backend-provided, OPIK-7159 Wave 2) ---
+  if (scoringHealth && scoringHealth.total_count > 0) {
+    const { failed_count, total_count } = scoringHealth;
+
+    if (failed_count === 0) {
+      // Backend says nothing failed — suppress the warning.
+      return null;
+    }
+
+    if (failed_count >= total_count) {
+      // Every item failed — use the stronger framing. The noun agrees with
+      // total_count, so a one-item dataset reads "The item …" not "All 1 item …".
+      const lead =
+        total_count === 1
+          ? "The item failed to score."
+          : `All ${total_count} items failed to score.`;
+      return (
+        `${lead} ` +
+        "The metric may have errored on every evaluation. " +
+        "Open the logs, check the metric and model, then run it again."
+      );
+    }
+
+    // Partial failure — softer framing. A partial failure always has
+    // total_count >= 2 (failed_count is >= 1 and strictly less than total),
+    // so the noun is always plural ("1 of 5 items", never "1 of 5 item").
+    return (
+      `${failed_count} of ${total_count} items failed to score. ` +
+      "Some evaluations did not produce a usable result. " +
+      "Open the logs to see which items failed, then run it again."
+    );
+  }
+
+  // --- Heuristic fallback (Wave 1, no backend data) ---
+  return "This run finished but produced no usable scores — the metric may have failed on every item. Open the logs, check the metric and model, then run it again.";
+};
+
+/**
+ * Shortened version of {@link getEmptyRunWarningMessage} for the KPI score-card
+ * caption, where space is tight. Returns `null` for the same conditions
+ * (nothing failed, or scoring_health absent but `isEmptyRun` is false).
+ *
+ * When `isEmptyRun` is false and `scoring_health` is absent, returns null —
+ * callers gate on `isEmptyRun` already, so this helper is only called when a
+ * warning is appropriate.
+ */
+export const getEmptyRunKPICaption = (
+  isEmptyRun: boolean,
+  scoringHealth?: OptimizationScoringHealth,
+): string | null => {
+  if (!isEmptyRun) return null;
+
+  if (scoringHealth && scoringHealth.total_count > 0) {
+    const { failed_count, total_count } = scoringHealth;
+    if (failed_count === 0) return null;
+
+    if (failed_count >= total_count) {
+      return total_count === 1
+        ? "The item failed to score — check the logs."
+        : `All ${total_count} items failed to score — check the logs.`;
+    }
+    return `${failed_count} of ${total_count} items failed to score — check the logs.`;
+  }
+
+  // Heuristic fallback (Wave 1).
+  return "No usable scores — check the logs.";
 };
 
 /**

@@ -242,7 +242,10 @@ const OptimizationPage: React.FC = () => {
               )}
             {optimization && isEmptyCompletedRun && (
               <div className="shrink-0">
-                <EmptyRunWarningPanel optimization={optimization} />
+                <EmptyRunWarningPanel
+                  optimization={optimization}
+                  scoringHealth={optimization.metadata?.scoring_health}
+                />
               </div>
             )}
             <div className="shrink-0">
@@ -255,6 +258,7 @@ const OptimizationPage: React.FC = () => {
                 optimizationCreatedAt={optimization?.created_at}
                 optimizationLastUpdatedAt={optimization?.last_updated_at}
                 scoringFailed={isEmptyCompletedRun}
+                scoringHealth={optimization?.metadata?.scoring_health}
                 isInProgress={
                   !!optimization?.status &&
                   IN_PROGRESS_OPTIMIZATION_STATUSES.includes(

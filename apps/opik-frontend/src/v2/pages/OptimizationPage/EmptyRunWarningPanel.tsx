@@ -2,17 +2,21 @@ import React, { useMemo, useState } from "react";
 import { TriangleAlert } from "lucide-react";
 
 import { Button } from "@/ui/button";
-import { Optimization } from "@/types/optimizations";
+import { Optimization, OptimizationScoringHealth } from "@/types/optimizations";
 import useOptimizationStudioLogs from "@/api/optimizations/useOptimizationStudioLogs";
 import { convertTerminalOutputToHtml } from "@/lib/terminalOutput";
 import OptimizationLogsFullscreenDialog from "@/v2/pages-shared/optimizations/OptimizationLogs/OptimizationLogsFullscreenDialog";
+import { getEmptyRunWarningMessage } from "./optimizationOverviewHelpers";
 
 type EmptyRunWarningPanelProps = {
   optimization: Optimization;
+  /**
+   * Exact scoring-health counts from the backend (OPIK-7159 Wave 2). When
+   * present and `total_count > 0`, the panel body shows the exact failed/total
+   * numbers. When absent, falls back to the Wave-1 heuristic copy.
+   */
+  scoringHealth?: OptimizationScoringHealth;
 };
-
-const EMPTY_RUN_WARNING_MESSAGE =
-  "This run finished but produced no usable scores — the metric may have failed on every item. Open the logs, check the metric and model, then run it again.";
 
 /**
  * Shown when a run ends in COMPLETED but produced no usable scores (the
@@ -23,10 +27,18 @@ const EMPTY_RUN_WARNING_MESSAGE =
  * It mirrors the ERROR-gated {@link ./RunErrorPanel} markup but reads as a
  * WARNING (amber) rather than a failure (destructive), because the run did
  * technically complete — the scores are simply unusable.
+ *
+ * When `scoringHealth` is provided (OPIK-7159 Wave 2), the body shows the
+ * exact failed/total item count. Otherwise, the Wave-1 heuristic copy is used.
  */
 const EmptyRunWarningPanel: React.FC<EmptyRunWarningPanelProps> = ({
   optimization,
+  scoringHealth,
 }) => {
+  // Resolve the body message: exact count when available, heuristic otherwise.
+  const warningMessage =
+    getEmptyRunWarningMessage(scoringHealth) ??
+    "This run finished but produced no usable scores — the metric may have failed on every item. Open the logs, check the metric and model, then run it again.";
   const [open, setOpen] = useState(false);
   const { data, dataUpdatedAt } = useOptimizationStudioLogs(
     { optimizationId: optimization.id },
@@ -51,7 +63,7 @@ const EmptyRunWarningPanel: React.FC<EmptyRunWarningPanelProps> = ({
           </h3>
         </div>
         <p className="comet-body-xs whitespace-pre-wrap break-words text-warning-box-text">
-          {EMPTY_RUN_WARNING_MESSAGE}
+          {warningMessage}
         </p>
         {logContent && (
           <Button

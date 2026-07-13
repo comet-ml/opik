@@ -617,7 +617,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 project_id,
                 objective_name,
                 <if(status)> :status <else> status <endif> as status,
-                metadata,
+                <if(metadata)> :metadata <else> metadata <endif> as metadata,
                 created_at,
                 created_by,
                 :user_name as last_updated_by,
@@ -1049,6 +1049,12 @@ class OptimizationDAOImpl implements OptimizationDAO {
         Optional.ofNullable(update.status())
                 .ifPresent(status -> template.add("status", status.getValue()));
 
+        // When absent, the SELECT carries the existing metadata column forward untouched. When present,
+        // the update.metadata() is already the FULL merged object (see OptimizationService.update) — a
+        // new ReplacingMergeTree version must carry the complete metadata, never a delta.
+        Optional.ofNullable(update.metadata())
+                .ifPresent(metadata -> template.add("metadata", true));
+
         return template;
     }
 
@@ -1060,6 +1066,9 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
         Optional.ofNullable(update.status())
                 .ifPresent(status -> statement.bind("status", status.getValue()));
+
+        Optional.ofNullable(update.metadata())
+                .ifPresent(metadata -> statement.bind("metadata", getStringOrDefault(metadata)));
 
         statement.bind("id", id);
 

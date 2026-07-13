@@ -16,6 +16,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.queues.Queue;
 import com.comet.opik.infrastructure.queues.QueueProducer;
+import com.comet.opik.utils.JsonUtils;
 import com.google.common.base.Preconditions;
 import com.google.common.eventbus.EventBus;
 import com.google.inject.ImplementedBy;
@@ -325,7 +326,7 @@ class OptimizationServiceImpl implements OptimizationService {
 
     @Override
     public Mono<Long> update(@NonNull UUID id, @NonNull OptimizationUpdate update) {
-        if (update.name() == null && update.status() == null) {
+        if (update.name() == null && update.status() == null && update.metadata() == null) {
             return Mono.empty();
         }
 
@@ -365,8 +366,19 @@ class OptimizationServiceImpl implements OptimizationService {
                         return Mono.just(0L);
                     }
 
+                    // Merge any incoming metadata onto the existing metadata BEFORE handing it to the DAO,
+                    // so the new ReplacingMergeTree row carries the full object (provided keys overwrite,
+                    // existing keys like optimizer/model are preserved). When update.metadata() is null the
+                    // effective update stays null and the DAO carries the existing column forward untouched
+                    // — this keeps Wave-0 status-only updates from wiping metadata (OPIK-7159 regression risk).
+                    OptimizationUpdate effectiveUpdate = update.metadata() == null
+                            ? update
+                            : update.toBuilder()
+                                    .metadata(JsonUtils.merge(optimization.metadata(), update.metadata()))
+                                    .build();
+
                     return signalCancellationIfNeeded(id, optimization, update)
-                            .then(optimizationDAO.update(id, update))
+                            .then(optimizationDAO.update(id, effectiveUpdate))
                             .doOnSuccess(__ -> {
                                 // Sync logs when optimization reaches terminal status
                                 // Safe to call multiple times - just syncs and reduces TTL

@@ -13,8 +13,14 @@ import {
   formatAsCurrency,
 } from "@/lib/optimization-formatters";
 import { Experiment } from "@/types/datasets";
-import { AggregatedCandidate } from "@/types/optimizations";
-import { getCompletedRunDurationSeconds } from "./optimizationOverviewHelpers";
+import {
+  AggregatedCandidate,
+  OptimizationScoringHealth,
+} from "@/types/optimizations";
+import {
+  getCompletedRunDurationSeconds,
+  getEmptyRunKPICaption,
+} from "./optimizationOverviewHelpers";
 
 type MetricValue = number | undefined;
 
@@ -63,6 +69,13 @@ type OptimizationKPICardsProps = {
    * set, the score card shows a caption so a degenerate run isn't a bare 0%/-.
    */
   scoringFailed?: boolean;
+  /**
+   * Exact scoring-health counts from the backend (OPIK-7159 Wave 2). When
+   * present and `total_count > 0`, the score card caption shows the exact
+   * failed/total numbers. When absent, falls back to the Wave-1 heuristic copy.
+   * Only used when `scoringFailed` is true.
+   */
+  scoringHealth?: OptimizationScoringHealth;
 };
 
 const OptimizationKPICards: React.FunctionComponent<
@@ -77,6 +90,7 @@ const OptimizationKPICards: React.FunctionComponent<
   optimizationLastUpdatedAt,
   isInProgress,
   scoringFailed,
+  scoringHealth,
 }) => {
   const kpiData = useMemo(
     () => ({
@@ -107,9 +121,11 @@ const OptimizationKPICards: React.FunctionComponent<
         const field = CANDIDATE_KEY_MAP[config.key];
         // Caption the score card when the run scored nothing usable, so the
         // 0%/- reads as "scoring failed" rather than a genuine result.
+        // When scoringHealth is present, show exact counts; otherwise fall back
+        // to the Wave-1 heuristic copy.
         const caption =
-          scoringFailed && config.key === "score"
-            ? "No usable scores — check the logs."
+          config.key === "score"
+            ? getEmptyRunKPICaption(!!scoringFailed, scoringHealth) ?? undefined
             : undefined;
         return (
           <MetricKPICard

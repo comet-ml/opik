@@ -4,9 +4,15 @@ Verifies that a failure in mark_completed() does NOT cause mark_error() to be
 called — a successfully-finished run must never be flipped to ERROR by a
 transient completion-callback failure. If mark_completed raises, the run stays
 RUNNING and the backend stalled-run reaper handles it (OPIK-7159 backstop).
+
+Also verifies scoring_health forwarding (W18-C / OPIK-7043):
+- When the SDK result carries details["scoring_health"], the completion payload
+  includes metadata.scoring_health.
+- When absent or malformed, no metadata key is sent and the completion path
+  never raises.
 """
 
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -202,3 +208,194 @@ class TestOptimizationLifecycleMarkRunningFails:
                 pass  # pragma: no cover
 
         sm.close.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Scoring-health / metadata forwarding (W18-C / OPIK-7043)
+# ---------------------------------------------------------------------------
+
+
+def _make_real_status_manager() -> OptimizationStatusManager:
+    """Return a real OptimizationStatusManager with a mocked Opik client.
+
+    Unlike _make_status_manager() (which mocks the whole object), this uses
+    the actual class so we can test real method logic such as
+    set_completion_metadata / mark_completed / update_status.
+    """
+    mock_client = MagicMock()
+    return OptimizationStatusManager(
+        client=mock_client, optimization_id="test-opt-id-123"
+    )
+
+
+class TestScoringHealthForwarding:
+    """set_completion_metadata queues scoring_health; mark_completed forwards it."""
+
+    def test_mark_completed_includes_metadata_when_scoring_health_set(self):
+        """When scoring_health is queued, mark_completed passes it to update_status."""
+        sm = _make_real_status_manager()
+        scoring_health = {"failed_count": 3, "total_count": 10}
+        sm.set_completion_metadata({"scoring_health": scoring_health})
+
+        with patch.object(sm, "update_status") as mock_update:
+            sm.mark_completed()
+
+        mock_update.assert_called_once_with(
+            "completed",
+            metadata={"scoring_health": {"failed_count": 3, "total_count": 10}},
+        )
+
+    def test_mark_completed_omits_metadata_when_none_queued(self):
+        """When no metadata was queued, mark_completed calls update_status without metadata."""
+        sm = _make_real_status_manager()
+
+        with patch.object(sm, "update_status") as mock_update:
+            sm.mark_completed()
+
+        mock_update.assert_called_once_with("completed", metadata=None)
+
+    def test_pending_metadata_cleared_after_mark_completed(self):
+        """_pending_metadata is reset to None after mark_completed consumes it."""
+        sm = _make_real_status_manager()
+        sm.set_completion_metadata(
+            {"scoring_health": {"failed_count": 1, "total_count": 5}}
+        )
+
+        with patch.object(sm, "update_status"):
+            sm.mark_completed()
+
+        assert sm._pending_metadata is None
+
+    def test_explicit_metadata_arg_takes_precedence_over_pending(self):
+        """An explicit metadata kwarg to mark_completed overrides _pending_metadata."""
+        sm = _make_real_status_manager()
+        sm.set_completion_metadata(
+            {"scoring_health": {"failed_count": 0, "total_count": 5}}
+        )
+        explicit_meta = {"scoring_health": {"failed_count": 99, "total_count": 99}}
+
+        with patch.object(sm, "update_status") as mock_update:
+            sm.mark_completed(metadata=explicit_meta)
+
+        mock_update.assert_called_once_with("completed", metadata=explicit_meta)
+
+    def test_update_status_uses_typed_client_when_no_metadata(self):
+        """update_status uses the typed SDK client when no metadata is given."""
+        sm = _make_real_status_manager()
+        sm.update_status("running")
+
+        sm.client.rest_client.optimizations.update_optimizations_by_id.assert_called_once_with(
+            "test-opt-id-123",
+            status="running",
+            request_options={"max_retries": 3},
+        )
+
+    def test_update_status_uses_raw_http_client_when_metadata_given(self):
+        """update_status falls through to the underlying HTTP client when metadata is provided."""
+        sm = _make_real_status_manager()
+        scoring_health = {"failed_count": 2, "total_count": 8}
+
+        # A 2xx response means the raw PUT succeeded — no fallback should fire.
+        raw_client = sm.client.rest_client.optimizations._raw_client
+        http_client = raw_client._client_wrapper.httpx_client
+        http_client.request.return_value.status_code = 200
+
+        sm.update_status("completed", metadata={"scoring_health": scoring_health})
+
+        # The typed client must NOT be called when the metadata path succeeds.
+        sm.client.rest_client.optimizations.update_optimizations_by_id.assert_not_called()
+
+        # The underlying HTTP client IS called with the full payload.
+        http_client.request.assert_called_once_with(
+            "v1/private/optimizations/test-opt-id-123",
+            method="PUT",
+            json={
+                "status": "completed",
+                "metadata": {"scoring_health": scoring_health},
+            },
+            headers={"content-type": "application/json"},
+            request_options={"max_retries": 3},
+        )
+
+    def test_metadata_put_rejected_falls_back_to_typed_status_only(self):
+        """A non-2xx on the metadata PUT falls back to the typed status-only
+        update so the run still transitions (scoring_health is best-effort)."""
+        sm = _make_real_status_manager()
+        raw_client = sm.client.rest_client.optimizations._raw_client
+        http_client = raw_client._client_wrapper.httpx_client
+        http_client.request.return_value.status_code = 400
+
+        sm.update_status(
+            "completed",
+            metadata={"scoring_health": {"failed_count": 1, "total_count": 1}},
+        )
+
+        http_client.request.assert_called_once()
+        # Fallback: the status still lands via the typed client, no metadata.
+        sm.client.rest_client.optimizations.update_optimizations_by_id.assert_called_once_with(
+            "test-opt-id-123",
+            status="completed",
+            request_options={"max_retries": 3},
+        )
+
+    def test_metadata_put_raising_falls_back_to_typed_status_only(self):
+        """A transport-level failure on the metadata PUT also falls back so the
+        completion never gets stuck behind the scoring_health nicety."""
+        sm = _make_real_status_manager()
+        raw_client = sm.client.rest_client.optimizations._raw_client
+        http_client = raw_client._client_wrapper.httpx_client
+        http_client.request.side_effect = RuntimeError("connection dropped")
+
+        sm.update_status(
+            "completed",
+            metadata={"scoring_health": {"failed_count": 1, "total_count": 2}},
+        )
+
+        sm.client.rest_client.optimizations.update_optimizations_by_id.assert_called_once_with(
+            "test-opt-id-123",
+            status="completed",
+            request_options={"max_retries": 3},
+        )
+
+    def test_set_completion_metadata_none_leaves_no_pending(self):
+        """Explicitly passing None to set_completion_metadata results in no metadata sent."""
+        sm = _make_real_status_manager()
+        sm.set_completion_metadata(None)
+
+        with patch.object(sm, "update_status") as mock_update:
+            sm.mark_completed()
+
+        mock_update.assert_called_once_with("completed", metadata=None)
+
+
+class TestScoringHealthGuard:
+    """The completion path must never raise due to a missing/malformed scoring_health."""
+
+    def test_lifecycle_succeeds_without_scoring_health_queued(self):
+        """optimization_lifecycle still marks completed when no metadata is queued."""
+        sm = _make_status_manager()
+
+        with optimization_lifecycle(sm):
+            pass  # body succeeds, no set_completion_metadata called
+
+        sm.mark_completed.assert_called_once()
+
+    def test_lifecycle_succeeds_with_scoring_health_queued_via_real_manager(self):
+        """End-to-end: the lifecycle's mark_completed carries the queued metadata."""
+        sm = _make_real_status_manager()
+        sm.set_completion_metadata(
+            {"scoring_health": {"failed_count": 1, "total_count": 4}}
+        )
+
+        with (
+            patch.object(sm, "mark_running"),
+            patch.object(sm, "close"),
+            patch.object(sm, "update_status") as mock_update,
+            patch.object(sm, "mark_error"),
+        ):
+            sm.mark_completed()
+
+        mock_update.assert_called_once_with(
+            "completed",
+            metadata={"scoring_health": {"failed_count": 1, "total_count": 4}},
+        )

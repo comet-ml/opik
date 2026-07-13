@@ -115,6 +115,27 @@ public class JsonUtils {
     }
 
     /**
+     * Shallow-merges {@code overrides} on top of {@code base}, returning a new node.
+     * Keys present in {@code overrides} are added/replaced; keys only in {@code base} are preserved.
+     * Non-object inputs are treated as empty; if both are null/non-object, {@code overrides} is returned
+     * as-is (or {@code base} when {@code overrides} is null).
+     */
+    public static JsonNode merge(JsonNode base, JsonNode overrides) {
+        if (overrides == null) {
+            return base;
+        }
+        if (base == null || !base.isObject()) {
+            return overrides;
+        }
+        ObjectNode result = MAPPER.createObjectNode();
+        result.setAll((ObjectNode) base);
+        if (overrides.isObject()) {
+            result.setAll((ObjectNode) overrides);
+        }
+        return result;
+    }
+
+    /**
      * Creates a new empty ArrayNode.
      *
      * @return A new ArrayNode instance

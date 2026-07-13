@@ -179,6 +179,15 @@ def build_final_result(
         "verbose": optimizer.verbose,
     }
 
+    # Always populate scoring_health so downstream layers (worker, UI) can rely on
+    # the key being present.  The counts reflect the BEST/final candidate's evaluation
+    # (updated in BaseOptimizer.evaluate / evaluate_with_result whenever a new best is
+    # recorded). When all items scored successfully failed_count=0.
+    details["scoring_health"] = context.scoring_health or {
+        "failed_count": 0,
+        "total_count": 0,
+    }
+
     details.update(optimizer_metadata)
     details.update(algorithm_result.metadata)
 

@@ -840,9 +840,16 @@ class OptimizationsResourceTest {
         // Update optimization
         optimizationResourceClient.update(id, update, API_KEY, TEST_WORKSPACE_NAME, 204);
 
+        // Incoming metadata is merged onto the existing metadata (provided keys overwrite, existing keys
+        // preserved); when absent the existing metadata is carried forward untouched.
+        var expectedMetadata = update.metadata() != null
+                ? JsonUtils.merge(optimization.metadata(), update.metadata())
+                : optimization.metadata();
+
         optimization = optimization.toBuilder().id(id)
                 .name(update.name() != null ? update.name() : optimization.name())
                 .status(update.status() != null ? update.status() : optimization.status())
+                .metadata(expectedMetadata)
                 .build();
 
         var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
@@ -854,7 +861,51 @@ class OptimizationsResourceTest {
         return Stream.of(
                 arguments(podamFactory.manufacturePojo(OptimizationUpdate.class)),
                 arguments(podamFactory.manufacturePojo(OptimizationUpdate.class).toBuilder().name(null).build()),
-                arguments(podamFactory.manufacturePojo(OptimizationUpdate.class).toBuilder().status(null).build()));
+                arguments(podamFactory.manufacturePojo(OptimizationUpdate.class).toBuilder().status(null).build()),
+                arguments(podamFactory.manufacturePojo(OptimizationUpdate.class).toBuilder().metadata(null).build()));
+    }
+
+    @Test
+    @DisplayName("Update optimization metadata: merges into existing metadata, preserving other keys")
+    void updateMetadataMergesAndPreservesExistingKeys() {
+        // Create optimization with a pre-existing metadata key (e.g. optimizer) that Wave-0 code relies on
+        var initialMetadata = JsonUtils.getJsonNodeFromString(
+                JsonUtils.writeValueAsString(Map.of("optimizer", "MetaPromptOptimizer", "model", "gpt-4o")));
+        var optimization = optimizationResourceClient.createPartialOptimization()
+                .metadata(initialMetadata)
+                .build();
+        var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+        // Update with a scoring_health metadata payload (the feature contract with PY-4)
+        var scoringHealth = JsonUtils.getJsonNodeFromString(
+                JsonUtils.writeValueAsString(
+                        Map.of("scoring_health", Map.of("failed_count", 2, "total_count", 5))));
+        var update = OptimizationUpdate.builder()
+                .status(OptimizationStatus.COMPLETED)
+                .metadata(scoringHealth)
+                .build();
+        optimizationResourceClient.update(id, update, API_KEY, TEST_WORKSPACE_NAME, 204);
+
+        var afterMerge = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+
+        // scoring_health added
+        assertThat(afterMerge.metadata().get("scoring_health").get("failed_count").asInt()).isEqualTo(2);
+        assertThat(afterMerge.metadata().get("scoring_health").get("total_count").asInt()).isEqualTo(5);
+        // pre-existing keys preserved (not clobbered)
+        assertThat(afterMerge.metadata().get("optimizer").asText()).isEqualTo("MetaPromptOptimizer");
+        assertThat(afterMerge.metadata().get("model").asText()).isEqualTo("gpt-4o");
+        assertThat(afterMerge.status()).isEqualTo(OptimizationStatus.COMPLETED);
+
+        // A subsequent status-only update (no metadata) must leave the merged metadata untouched
+        var statusOnly = OptimizationUpdate.builder()
+                .status(OptimizationStatus.COMPLETED)
+                .build();
+        optimizationResourceClient.update(id, statusOnly, API_KEY, TEST_WORKSPACE_NAME, 204);
+
+        var afterStatusOnly = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+        assertThat(afterStatusOnly.metadata()).isEqualTo(afterMerge.metadata());
+        assertThat(afterStatusOnly.metadata().get("optimizer").asText()).isEqualTo("MetaPromptOptimizer");
+        assertThat(afterStatusOnly.metadata().get("scoring_health").get("failed_count").asInt()).isEqualTo(2);
     }
 
     @Nested

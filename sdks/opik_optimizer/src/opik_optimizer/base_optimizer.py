@@ -22,6 +22,7 @@ from opik.evaluation.evaluation_result import (
 
 from .core import evaluation as task_evaluator
 from .core import runtime
+from .core.evaluation import compute_scoring_health
 from .utils.display.run import OptimizationRunDisplay, RunDisplay
 from .utils.reporting import convert_tqdm_to_rich
 from .api_objects import chat_prompt
@@ -56,6 +57,24 @@ from .utils.prompt_roles import normalize_optimizable_roles
 
 # Don't use unsupported params:
 litellm.drop_params = True
+
+
+def _compute_scoring_health_from_result(
+    evaluation_result: EvaluationResult | EvaluationResultOnDictItems,
+    *,
+    metric_name: str,
+) -> dict[str, int]:
+    """Extract scoring health counts from an EvaluationResult.
+
+    Returns ``{"failed_count": N, "total_count": M}`` for the objective metric
+    scores in the given result.  Always returns a valid dict; falls back to
+    ``{"failed_count": 0, "total_count": 0}`` when no objective scores are found.
+    """
+    objective_scores = task_evaluator._extract_objective_scores(
+        evaluation_result, metric_name
+    )
+    return compute_scoring_health(objective_scores)
+
 
 # Set up logging:
 logger = logging.getLogger(__name__)
@@ -688,7 +707,7 @@ class BaseOptimizer(ABC):
                 else convert_tqdm_to_rich("  Evaluation", verbose=self.verbose)
             )
             with progress_ctx:
-                score = self.evaluate_prompt(
+                raw_result = self.evaluate_prompt(
                     prompt=prompts,
                     dataset=context.evaluation_dataset,
                     metric=context.metric,
@@ -700,15 +719,35 @@ class BaseOptimizer(ABC):
                     verbose=self.verbose,
                     allow_tool_use=context.allow_tool_use,
                     sampling_tag=sampling_tag,
+                    return_evaluation_result=True,
                 )
         except Exception:
             context.finish_reason = "error"
             context.should_stop = True
             logger.exception("Evaluation failed; stopping optimization.")
             raise
+        # raw_result is EvaluationResult (normal path) or float (mocked/legacy path).
+        if isinstance(raw_result, (EvaluationResult, EvaluationResultOnDictItems)):
+            score = self._score_from_evaluation_result(
+                raw_result, metric_name=context.metric.__name__
+            )
+            eval_result_for_health: (
+                EvaluationResult | EvaluationResultOnDictItems | None
+            ) = raw_result
+        else:
+            score = raw_result
+            eval_result_for_health = None
         coerced_score = self._coerce_score(score)
         prev_best_score = context.current_best_score
         self.on_trial(context, prompts, coerced_score, prev_best_score)
+
+        # Update scoring health whenever a new best is recorded.
+        if (
+            prev_best_score is None or coerced_score > prev_best_score
+        ) and eval_result_for_health is not None:
+            context.scoring_health = _compute_scoring_health_from_result(
+                eval_result_for_health, metric_name=context.metric.__name__
+            )
 
         # Check early stop conditions - SET FLAG, don't raise
         self._should_stop_context(context)
@@ -787,6 +826,13 @@ class BaseOptimizer(ABC):
         coerced_score = self._coerce_score(score)
         prev_best_score = context.current_best_score
         self.on_trial(context, prompts, coerced_score, prev_best_score)
+
+        # Update scoring health whenever a new best is recorded.
+        if prev_best_score is None or coerced_score > prev_best_score:
+            context.scoring_health = _compute_scoring_health_from_result(
+                evaluation_result, metric_name=context.metric.__name__
+            )
+
         self._should_stop_context(context)
         return coerced_score, evaluation_result
 

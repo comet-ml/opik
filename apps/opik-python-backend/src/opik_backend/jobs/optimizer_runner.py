@@ -69,7 +69,9 @@ logging.getLogger("LiteLLM").setLevel(logging.WARNING)
 # Configure opik_optimizer log level separately (default: DEBUG to show optimizer output)
 # This can be set via OPIK_OPTIMIZER_LOG_LEVEL env var (automatically inherited by subprocess)
 OPTIMIZER_LOG_LEVEL = os.environ.get("OPIK_OPTIMIZER_LOG_LEVEL", "DEBUG").upper()
-logging.getLogger("opik_optimizer").setLevel(getattr(logging, OPTIMIZER_LOG_LEVEL, logging.DEBUG))
+logging.getLogger("opik_optimizer").setLevel(
+    getattr(logging, OPTIMIZER_LOG_LEVEL, logging.DEBUG)
+)
 
 # Suppress Pydantic serialization warnings from LiteLLM
 # These occur due to LiteLLM's varying response structures across providers
@@ -185,9 +187,7 @@ def route_litellm_calls_through_gateway(workspace_name):
 
     litellm.completion = completion_with_workspace
     litellm.acompletion = acompletion_with_workspace
-    logger.debug(
-        "Routing LiteLLM calls through gateway with Comet-Workspace header"
-    )
+    logger.debug("Routing LiteLLM calls through gateway with Comet-Workspace header")
 
 
 def _gateway_model(model: str) -> str:
@@ -282,6 +282,7 @@ def main():
         from opik_backend.studio.types import (
             OptimizationConfig,
             OptimizationRunResult,
+            ScoringHealth,
         )
         from opik_backend.studio.helpers import (
             initialize_opik_client,
@@ -360,6 +361,43 @@ def main():
                     output["optimized_prompt"] = result.prompt
                 else:
                     output["optimized_prompt"] = str(result.prompt)
+
+            # Extract scoring_health from the SDK result's details dict and
+            # forward it to the backend as metadata.scoring_health so the UI
+            # can show an exact failed/total count.  Guard against older SDK
+            # versions that do not set this field: never crash the completion
+            # path over a missing or malformed count.
+            try:
+                details = getattr(result, "details", None) or {}
+                scoring_health_raw = (
+                    details.get("scoring_health") if isinstance(details, dict) else None
+                )
+                scoring_health: ScoringHealth | None = None
+                if (
+                    isinstance(scoring_health_raw, dict)
+                    and isinstance(scoring_health_raw.get("failed_count"), int)
+                    and isinstance(scoring_health_raw.get("total_count"), int)
+                ):
+                    scoring_health = ScoringHealth(
+                        failed_count=scoring_health_raw["failed_count"],
+                        total_count=scoring_health_raw["total_count"],
+                    )
+            except Exception as sh_err:
+                logger.warning(
+                    "Failed to extract scoring_health from result: %s", sh_err
+                )
+                scoring_health = None
+
+            if scoring_health is not None:
+                output["scoring_health"] = scoring_health
+                status_manager.set_completion_metadata(
+                    {"scoring_health": scoring_health}
+                )
+                logger.debug(
+                    "Queued scoring_health metadata for completion: failed=%d total=%d",
+                    scoring_health["failed_count"],
+                    scoring_health["total_count"],
+                )
 
         # Output result as JSON on last line of stdout
         print(json.dumps(output))
