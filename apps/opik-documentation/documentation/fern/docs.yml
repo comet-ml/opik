@@ -235,6 +235,9 @@ redirects:
   - source: "/docs/opik/tracing/integrations/haystack"
     destination: "/docs/opik/integrations/haystack"
     permanent: true
+  - source: "/docs/opik/tracing/integrations/hermes"
+    destination: "/docs/opik/integrations/hermes"
+    permanent: true
   - source: "/docs/opik/tracing/integrations/instructor"
     destination: "/docs/opik/integrations/instructor"
     permanent: true
