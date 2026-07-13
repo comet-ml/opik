@@ -84,7 +84,7 @@ backend, and frontend services for development workflows.
 
 **EM / Platform Mode** (Opik-team only — opt-in via `PLATFORM_ENABLED=true`):
 
-Runs the Comet EM/Platform stack (`comet-backend` + `comet-react`, auto-detected sibling checkouts) alongside Opik behind a single-origin proxy, with Opik in comet mode. Off by default; Standard/BE-only dev is unaffected. See `--help` for env vars (`COMET_BACKEND_PATH`, `COMET_REACT_PATH`, `EM_JAVA_HOME`, `EM_*_PORT`).
+Runs the Comet EM/Platform stack (`comet-backend` + `comet-react`, auto-detected sibling checkouts) alongside Opik behind a single-origin proxy, with Opik in comet mode. Off by default; Standard/BE-only dev is unaffected. See `--help` for env vars (`COMET_BACKEND_PATH`, `COMET_REACT_PATH`, `PLATFORM_JAVA_HOME`, `PLATFORM_*_PORT`).
 
 | Command | Description |
 |---------|-------------|
