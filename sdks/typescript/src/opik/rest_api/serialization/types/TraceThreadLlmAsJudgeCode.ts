@@ -14,6 +14,7 @@ export const TraceThreadLlmAsJudgeCode: core.serialization.ObjectSchema<
     model: LlmAsJudgeModelParameters,
     messages: core.serialization.list(LlmAsJudgeMessage),
     schema: core.serialization.list(LlmAsJudgeOutputSchema),
+    maxCostUsd: core.serialization.property("max_cost_usd", core.serialization.number().optional()),
 });
 
 export declare namespace TraceThreadLlmAsJudgeCode {
@@ -21,5 +22,6 @@ export declare namespace TraceThreadLlmAsJudgeCode {
         model: LlmAsJudgeModelParameters.Raw;
         messages: LlmAsJudgeMessage.Raw[];
         schema: LlmAsJudgeOutputSchema.Raw[];
+        max_cost_usd?: number | null;
     }
 }

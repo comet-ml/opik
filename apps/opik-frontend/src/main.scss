@@ -281,6 +281,11 @@
     --warning-box-icon-bg: 45 93% 58%;
     --warning-box-icon-text: 32 85% 32%;
 
+    /* Recoverable-waste callout (AI Spend) */
+    --waste-bg: #fee8d7;
+    --waste-border: #fb9341;
+    --waste-text: #000000;
+
     --selection-bar: 237 68% 29%;
     --row-selected: 235 85% 97%;
 
@@ -526,6 +531,11 @@
     --warning-box-text: 48 96% 64%;
     --warning-box-icon-bg: 32 95% 44%;
     --warning-box-icon-text: 45 93% 58%;
+
+    /* Recoverable-waste callout (AI Spend) - Dark Mode */
+    --waste-bg: #fb934126;
+    --waste-border: #fb9341;
+    --waste-text: #fee8d7;
 
     --selection-bar: 237 58% 39%;
     --row-selected: 0 0% 15%;

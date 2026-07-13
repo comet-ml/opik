@@ -255,6 +255,27 @@ component:
       enabled: true
     podDisruptionBudget:
       enabled: false
+    # Init container that blocks startup until Redis is reachable. Rendered only
+    # when the RQ worker is enabled (RQ_WORKER_ENABLED unset or != "false") AND
+    # bundled Redis is deployed (redis.enabled: true). Skipped automatically for
+    # managed/external Redis (redis.enabled: false) — no StatefulSet boot race
+    # there, and the default host below would not resolve.
+    waitForRedis:
+      # Explicit opt-out for bundled-Redis installs. Has no effect when
+      # redis.enabled is false (the wait is already skipped in that case).
+      enabled: true
+      redis:
+        # Empty by default so the template falls back to redis.fullnameOverride
+        # (then "opik-redis-master"). Set explicitly to target a different host.
+        host: ""
+        port: 6379
+      image:
+        registry: docker.io
+        repository: busybox
+        tag: "1.36"
+      # Resource requests/limits for the `wait-for-redis-service` init container.
+      # Empty ({}) by default — no resources set.
+      resources: {}
     env:
       PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY: *registry
       PYTHON_CODE_EXECUTOR_IMAGE_NAME: "opik-sandbox-executor-python"

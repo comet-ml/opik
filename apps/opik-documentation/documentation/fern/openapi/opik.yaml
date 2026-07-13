@@ -11624,6 +11624,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeOutputSchema"
+        max_cost_usd:
+          type: number
     LlmAsJudgeMessage:
       required:
       - role
@@ -11839,6 +11841,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeOutputSchema"
+        max_cost_usd:
+          type: number
     TraceThreadUserDefinedMetricPythonCode:
       required:
       - metric
@@ -12059,6 +12063,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeOutputSchema_Write"
+        max_cost_usd:
+          type: number
     LlmAsJudgeMessageContent_Write:
       required:
       - type
@@ -12259,6 +12265,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeOutputSchema_Write"
+        max_cost_usd:
+          type: number
     TraceThreadUserDefinedMetricPythonCode_Write:
       required:
       - metric
@@ -12519,6 +12527,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeOutputSchema_Public"
+        max_cost_usd:
+          type: number
     LlmAsJudgeMessageContent_Public:
       required:
       - type
@@ -12734,6 +12744,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeOutputSchema_Public"
+        max_cost_usd:
+          type: number
     TraceThreadUserDefinedMetricPythonCode_Public:
       required:
       - metric
