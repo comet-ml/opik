@@ -17,7 +17,11 @@ import {
 } from "@/ui/form";
 import VisualizationCardSelector from "@/v2/pages-shared/dashboards/widgets/shared/VisualizationCardSelector/VisualizationCardSelector";
 import { LoadableSelectBox } from "@/shared/LoadableSelectBox/LoadableSelectBox";
-import ProjectsSelectBox from "@/v2/pages-shared/automations/ProjectsSelectBox";
+import ProjectsSelectBox, {
+  useProjectsSelectData,
+} from "@/v2/pages-shared/automations/ProjectsSelectBox";
+import { Checkbox } from "@/ui/checkbox";
+import { Label } from "@/ui/label";
 import ProjectWidgetFiltersSection from "@/v2/pages-shared/dashboards/widgets/shared/ProjectWidgetFiltersSection/ProjectWidgetFiltersSection";
 import FeedbackDefinitionsAndScoresSelectBox, {
   ScoreSource,
@@ -34,6 +38,11 @@ import {
 import get from "lodash/get";
 
 import { METRIC_NAME_TYPE } from "@/api/projects/useProjectMetric";
+import {
+  WORKSPACE_TIME_SERIES_METRIC_OPTIONS,
+  isWorkspaceMetric,
+  isMultiProjectSelection,
+} from "@/lib/dashboard/workspaceMetrics";
 import useProjectTokenUsageNames from "@/api/projects/useProjectTokenUsageNames";
 import { DEFAULT_DATE_PRESET } from "@/v2/pages-shared/traces/MetricDateRangeSelect/constants";
 import {
@@ -134,6 +143,13 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
   const metricType = config.metricType || "";
   const chartType = config.chartType || CHART_TYPE.line;
   const localProjectId = config.projectId;
+  const allProjects = Boolean(config.allProjects);
+  const localProjectIds = useMemo<string[]>(
+    () =>
+      (config.projectIds as string[] | undefined) ??
+      (localProjectId ? [localProjectId] : []),
+    [config.projectIds, localProjectId],
+  );
 
   const traceFilters = useMemo<Filter[]>(
     () => (config.traceFilters as Filter[] | undefined) || [],
@@ -177,7 +193,25 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
     };
   });
   const hasRuntimeProjectId = !!runtimeContext.projectId;
-  const projectId = runtimeContext.projectId || localProjectId || "";
+  // "All projects" has no selected project to source option lists from, so borrow the first project in the workspace
+  // (from the cache the project dropdown already populated) as a representative for those lookups.
+  const { projects: workspaceProjects } = useProjectsSelectData({});
+  // Representative project for loading option lists (usage keys, feedback scores, filter/breakdown autocompletes)
+  // and the preview: the runtime project, else the first selected project, else (for "all projects") any project.
+  const projectId =
+    runtimeContext.projectId ||
+    localProjectIds[0] ||
+    (allProjects ? workspaceProjects[0]?.id ?? "" : "");
+
+  // Selecting more than one project (or "all projects") aggregates across projects, which only supports span metrics.
+  const isMultiProject = isMultiProjectSelection(
+    runtimeContext.projectId,
+    localProjectIds,
+    allProjects,
+  );
+  const metricOptions = isMultiProject
+    ? WORKSPACE_TIME_SERIES_METRIC_OPTIONS
+    : METRIC_OPTIONS;
 
   const selectedMetric = METRIC_OPTIONS.find((m) => m.value === metricType);
   const isTraceMetric = !metricType || selectedMetric?.filterType === "trace";
@@ -240,7 +274,7 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
     defaultValues: {
       metricType,
       chartType,
-      projectId,
+      projectIds: localProjectIds,
       traceFilters,
       threadFilters,
       spanFilters,
@@ -327,13 +361,60 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
     });
   };
 
-  const handleProjectChange = (projectId: string) => {
-    updatePreviewWidget({
-      config: {
-        ...config,
-        projectId,
-      },
-    });
+  // Aggregating across projects only supports span metrics. When a selection becomes multi-project while a non-span
+  // metric is chosen, fall back to span token usage and clear metric-specific selections (config + form together).
+  const resetToWorkspaceMetric = (nextConfig: typeof config) => {
+    nextConfig.metricType = METRIC_NAME_TYPE.SPAN_TOKEN_USAGE;
+    nextConfig.traceFilters = [];
+    nextConfig.threadFilters = [];
+    nextConfig.spanFilters = [];
+    nextConfig.feedbackScores = [];
+    nextConfig.durationMetrics = [];
+    nextConfig.usageMetrics = [];
+    nextConfig.breakdown = { field: BREAKDOWN_FIELD.NONE };
+    form.setValue("metricType", METRIC_NAME_TYPE.SPAN_TOKEN_USAGE);
+    form.setValue("breakdown.field", BREAKDOWN_FIELD.NONE);
+    form.setValue("traceFilters", []);
+    form.setValue("threadFilters", []);
+    form.setValue("spanFilters", []);
+    form.setValue("feedbackScores", []);
+    form.setValue("durationMetrics", []);
+    form.setValue("usageMetrics", []);
+  };
+
+  const handleProjectsChange = (projectIds: string[]) => {
+    // projectIds is the single source of truth for an explicit selection; drop the legacy single-project field and
+    // the "all projects" flag (picking specific projects is a bounded selection, not the workspace-wide aggregate).
+    const nextConfig = { ...config, projectIds, allProjects: false };
+    delete nextConfig.projectId;
+    form.setValue("projectIds", projectIds);
+    form.setValue("allProjects", false);
+
+    if (
+      isMultiProjectSelection(runtimeContext.projectId, projectIds, false) &&
+      !isWorkspaceMetric(metricType)
+    ) {
+      resetToWorkspaceMetric(nextConfig);
+    }
+    // No reverse branch when dropping back to a single project: SPAN_TOKEN_USAGE is also a valid per-project metric,
+    // so there is nothing workspace-only to clear (unlike the stats-card editor, whose workspace metrics differ).
+
+    updatePreviewWidget({ config: nextConfig });
+  };
+
+  const handleAllProjectsChange = (checked: boolean) => {
+    // "All projects" is the workspace-wide aggregate; it clears any explicit selection and (like a 2+ selection) only
+    // supports span metrics, so apply the same fallback when turning it on.
+    const nextConfig = { ...config, allProjects: checked, projectIds: [] };
+    delete nextConfig.projectId;
+    form.setValue("allProjects", checked);
+    form.setValue("projectIds", []);
+
+    if (checked && !isWorkspaceMetric(metricType)) {
+      resetToWorkspaceMetric(nextConfig);
+    }
+
+    updatePreviewWidget({ config: nextConfig });
   };
 
   const handleFeedbackScoresChange = (newFeedbackScores: string[]) => {
@@ -408,23 +489,40 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
       <div className="space-y-4">
         <FormField
           control={form.control}
-          name="projectId"
+          name="projectIds"
           render={({ field, formState }) => {
-            const validationErrors = get(formState.errors, ["projectId"]);
+            const validationErrors = get(formState.errors, ["projectIds"]);
             return (
               <FormItem>
                 <FormLabel>Project</FormLabel>
+                <div className="flex items-center space-x-2 pb-1">
+                  <Checkbox
+                    id="metrics-all-projects"
+                    checked={allProjects}
+                    onCheckedChange={(checked) =>
+                      handleAllProjectsChange(checked === true)
+                    }
+                    disabled={hasRuntimeProjectId}
+                  />
+                  <Label
+                    htmlFor="metrics-all-projects"
+                    className="comet-body-s cursor-pointer font-normal"
+                  >
+                    All projects in the workspace
+                  </Label>
+                </div>
                 <FormControl>
                   <ProjectsSelectBox
                     className={cn("flex-1", {
                       "border-destructive": Boolean(validationErrors?.message),
                     })}
-                    value={field.value || ""}
+                    multiselect
+                    value={field.value || []}
                     onValueChange={(value) => {
                       field.onChange(value);
-                      handleProjectChange(value);
+                      handleProjectsChange(value);
                     }}
-                    disabled={hasRuntimeProjectId}
+                    disabled={hasRuntimeProjectId || allProjects}
                   />
                 </FormControl>
                 <FormMessage />
@@ -451,7 +549,7 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
                       field.onChange(value);
                       handleMetricTypeChange(value);
                     }}
-                    options={METRIC_OPTIONS}
+                    options={metricOptions}
                     placeholder="Select a metric type"
                   />
                 </FormControl>
