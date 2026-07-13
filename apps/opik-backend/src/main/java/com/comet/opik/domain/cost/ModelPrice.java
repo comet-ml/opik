@@ -4,8 +4,11 @@ import lombok.Builder;
 import lombok.NonNull;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 
 @Builder(toBuilder = true)
 public record ModelPrice(
@@ -18,23 +21,14 @@ public record ModelPrice(
         @NonNull BigDecimal inputAudioTokenPrice,
         @NonNull BigDecimal outputAudioTokenPrice,
         @NonNull BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator,
-        @NonNull BigDecimal inputPriceAbove128kTokens,
-        @NonNull BigDecimal outputPriceAbove128kTokens,
-        @NonNull BigDecimal inputPriceAbove200kTokens,
-        @NonNull BigDecimal outputPriceAbove200kTokens,
-        @NonNull BigDecimal cacheCreationInputTokenPriceAbove200kTokens,
-        @NonNull BigDecimal cacheReadInputTokenPriceAbove200kTokens,
-        @NonNull BigDecimal inputPriceAbove272kTokens,
-        @NonNull BigDecimal outputPriceAbove272kTokens) {
+        @NonNull List<PromptTier> promptTiers) {
 
     /**
      * Whole-prompt tier thresholds for the {@code *_above_NNNk_tokens} rates published by
-     * LiteLLM: when the total prompt size strictly exceeds one, every token in the request
-     * bills at that tier's rate (matches LiteLLM's {@code _get_token_base_cost}, which
-     * replaces the base rate wholesale). Models today publish at most one applicable
-     * threshold (e.g. Gemini 1.5 Flash at 128k, Gemini 2.5 Pro at 200k, GPT-5.4/5.5 at 272k),
-     * but the effective-price helpers below check descending so that if a model ever
-     * publishes multiple tiers, the highest applicable one wins.
+     * LiteLLM. When the total prompt strictly exceeds a threshold the tier's rate replaces the
+     * base rate wholesale (matches LiteLLM's {@code _get_token_base_cost}). Reachable models
+     * today: Gemini 1.5 Flash at 128K, Gemini 2.5 Pro / Claude Sonnet 4.5 at 200K, GPT-5.4 /
+     * GPT-5.5 (openai and azure) at 272K.
      */
     public static final int TIER_THRESHOLD_128K = 128_000;
 
@@ -43,9 +37,25 @@ public record ModelPrice(
     public static final int TIER_THRESHOLD_272K = 272_000;
 
     /**
-     * Returns a builder pre-populated with zero rates and the no-op {@code defaultCost} calculator.
-     * Callers only override the fields they care about, which keeps test fixtures and the empty
-     * placeholder concise without re-introducing overloaded constructors.
+     * One prompt-size tier for a model: the threshold plus each rate the tier overrides. Any
+     * rate left at {@link BigDecimal#ZERO} means "this tier does not override that rate — fall
+     * through to a lower tier or the base rate." LiteLLM publishes the four rates below at 200K
+     * but only {@code input}/{@code output} at 128K and 272K, so cache fields on those tiers
+     * are typically zero and correctly no-op via {@link #applicableTier}.
+     */
+    @Builder(toBuilder = true)
+    public record PromptTier(
+            int threshold,
+            @NonNull BigDecimal inputPrice,
+            @NonNull BigDecimal outputPrice,
+            @NonNull BigDecimal cacheCreationInputTokenPrice,
+            @NonNull BigDecimal cacheReadInputTokenPrice) {
+    }
+
+    /**
+     * Returns a builder pre-populated with zero rates, the no-op {@code defaultCost} calculator,
+     * and an empty tier list. Callers only override the fields they care about, which keeps test
+     * fixtures and the empty placeholder concise without re-introducing overloaded constructors.
      */
     public static ModelPriceBuilder defaultBuilder() {
         return builder()
@@ -58,14 +68,7 @@ public record ModelPrice(
                 .inputAudioTokenPrice(BigDecimal.ZERO)
                 .outputAudioTokenPrice(BigDecimal.ZERO)
                 .calculator(SpanCostCalculator::defaultCost)
-                .inputPriceAbove128kTokens(BigDecimal.ZERO)
-                .outputPriceAbove128kTokens(BigDecimal.ZERO)
-                .inputPriceAbove200kTokens(BigDecimal.ZERO)
-                .outputPriceAbove200kTokens(BigDecimal.ZERO)
-                .cacheCreationInputTokenPriceAbove200kTokens(BigDecimal.ZERO)
-                .cacheReadInputTokenPriceAbove200kTokens(BigDecimal.ZERO)
-                .inputPriceAbove272kTokens(BigDecimal.ZERO)
-                .outputPriceAbove272kTokens(BigDecimal.ZERO);
+                .promptTiers(List.of());
     }
 
     public static ModelPrice empty() {
@@ -73,48 +76,34 @@ public record ModelPrice(
     }
 
     public BigDecimal effectiveInputPrice(int totalPromptTokens) {
-        return effectiveTieredPrice(totalPromptTokens, inputPrice,
-                inputPriceAbove128kTokens, inputPriceAbove200kTokens, inputPriceAbove272kTokens);
+        return applicableTier(totalPromptTokens, PromptTier::inputPrice).orElse(inputPrice);
     }
 
     public BigDecimal effectiveOutputPrice(int totalPromptTokens) {
-        return effectiveTieredPrice(totalPromptTokens, outputPrice,
-                outputPriceAbove128kTokens, outputPriceAbove200kTokens, outputPriceAbove272kTokens);
+        return applicableTier(totalPromptTokens, PromptTier::outputPrice).orElse(outputPrice);
     }
 
     public BigDecimal effectiveCacheCreationInputTokenPrice(int totalPromptTokens) {
-        return useTier(totalPromptTokens, TIER_THRESHOLD_200K, cacheCreationInputTokenPriceAbove200kTokens)
-                ? cacheCreationInputTokenPriceAbove200kTokens
-                : cacheCreationInputTokenPrice;
+        return applicableTier(totalPromptTokens, PromptTier::cacheCreationInputTokenPrice)
+                .orElse(cacheCreationInputTokenPrice);
     }
 
     public BigDecimal effectiveCacheReadInputTokenPrice(int totalPromptTokens) {
-        return useTier(totalPromptTokens, TIER_THRESHOLD_200K, cacheReadInputTokenPriceAbove200kTokens)
-                ? cacheReadInputTokenPriceAbove200kTokens
-                : cacheReadInputTokenPrice;
+        return applicableTier(totalPromptTokens, PromptTier::cacheReadInputTokenPrice)
+                .orElse(cacheReadInputTokenPrice);
     }
 
     /**
-     * Shared descending-threshold traversal for input/output tiered rates so both effective-price
-     * accessors stay in lock-step. Highest applicable tier wins (272K, then 200K, then 128K); if
-     * none apply — either because the prompt is below every threshold or because the tier rate is
-     * zero (unpublished) — the base rate is returned.
+     * Walk {@code promptTiers} — which callers store sorted DESCENDING by threshold — and return
+     * the first tier whose threshold is strictly exceeded by {@code totalPromptTokens} AND whose
+     * requested rate is greater than zero. Highest applicable tier wins; zero-valued rates never
+     * suppress a lower tier's rate or the base rate.
      */
-    private static BigDecimal effectiveTieredPrice(int totalPromptTokens, BigDecimal baseRate,
-            BigDecimal above128kRate, BigDecimal above200kRate, BigDecimal above272kRate) {
-        if (useTier(totalPromptTokens, TIER_THRESHOLD_272K, above272kRate)) {
-            return above272kRate;
-        }
-        if (useTier(totalPromptTokens, TIER_THRESHOLD_200K, above200kRate)) {
-            return above200kRate;
-        }
-        if (useTier(totalPromptTokens, TIER_THRESHOLD_128K, above128kRate)) {
-            return above128kRate;
-        }
-        return baseRate;
-    }
-
-    private static boolean useTier(int totalPromptTokens, int threshold, BigDecimal tierRate) {
-        return totalPromptTokens > threshold && tierRate.compareTo(BigDecimal.ZERO) > 0;
+    private Optional<BigDecimal> applicableTier(int totalPromptTokens, Function<PromptTier, BigDecimal> rate) {
+        return promptTiers.stream()
+                .filter(tier -> totalPromptTokens > tier.threshold())
+                .map(rate)
+                .filter(price -> price.compareTo(BigDecimal.ZERO) > 0)
+                .findFirst();
     }
 }
