@@ -18,8 +18,12 @@ import java.util.UUID;
 
 /**
  * Request for workspace-level span metrics aggregated across projects. When {@code projectIds} is empty, the service
- * resolves it to every project in the workspace before querying, so the aggregation always runs against an explicit,
- * bounded project set (never an unconstrained workspace-wide span scan); otherwise only the given projects are used.
+ * resolves it to every project in the workspace before querying, so the aggregation always runs against an explicit
+ * project set rather than a workspace-only predicate; otherwise only the given projects are used. This prunes well on
+ * the spans primary key for small and moderate selections, but it is bounded to the workspace's projects, not cheap:
+ * for a tenant with many projects, {@code project_id IN (<all ids>)} reads roughly the same granules as a full
+ * workspace span scan, because the {@code id}/time window cannot prune at the primary-key level across many disjoint
+ * project prefixes.
  * {@code intervalEnd} is optional and defaults to "now" server-side, mirroring the per-project metrics endpoint.
  */
 @Builder(toBuilder = true)

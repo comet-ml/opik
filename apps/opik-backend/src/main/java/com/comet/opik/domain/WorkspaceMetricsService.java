@@ -87,8 +87,11 @@ class WorkspaceMetricsServiceImpl implements WorkspaceMetricsService {
     }
 
     // "All projects" (empty projectIds) is resolved into the explicit set of workspace project ids so the DAO always
-    // queries a bounded `project_id IN (...)` list that prunes on the spans primary key, never an unconstrained
-    // workspace-wide scan. An explicit selection passes through unchanged; a workspace with no projects yields nothing.
+    // queries a bounded `project_id IN (...)` list. This prunes well on the spans primary key for small and moderate
+    // selections, but it is only bounded to the workspace's projects: for a tenant with many projects, IN(<all ids>)
+    // reads roughly the same granules as a full workspace scan, since the id/time window can't prune at the primary-key
+    // level across many disjoint project prefixes. An explicit selection passes through unchanged; a workspace with no
+    // projects yields nothing.
     private Mono<WorkspaceSpanMetricRequest> resolveProjectIds(WorkspaceSpanMetricRequest request) {
         if (CollectionUtils.isNotEmpty(request.projectIds())) {
             return Mono.just(request);
