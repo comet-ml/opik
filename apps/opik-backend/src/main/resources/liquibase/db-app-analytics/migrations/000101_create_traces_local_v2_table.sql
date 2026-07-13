@@ -25,12 +25,12 @@
 --     ordering the dominant access path relies on; Opik analytics are workspace/project-scoped and exact, so
 --     sampling would not earn back that cost. Everything else (codecs, TTL, skip indexes, storage policy) is
 --     ALTER-able later, though re-compressing or materializing an index on the full table is a heavy mutation.
--- Compression (per ClickHouse codec guidance): timestamps use Delta + ZSTD(1) (monotonic, irregularly spaced);
--- the length counters use T64 + ZSTD(1) (narrow integers); UUID ids and large free-text use ZSTD(3) (compress
--- once, read many); other variable strings/arrays/floats use ZSTD(1) (the recommended general-purpose baseline).
--- Fixed-width low-entropy columns (the Enum8s, the UInt8 flag, the constant threshold, the LowCardinality
--- column and the run-length-friendly leading key workspace_id) are left on the server default, where LZ4 is
--- comparable and decompresses faster.
+-- Compression: timestamps use Delta + ZSTD(1) (monotonic, irregularly spaced); the length counters use
+-- T64 + ZSTD(1) (narrow integers); large free-text (input, output, metadata and their slim/truncated forms)
+-- uses ZSTD(3). Everything else variable — the UUID id columns, workspace_id, the constant threshold and the
+-- shorter strings/arrays/floats — uses ZSTD(1), the general-purpose baseline; for the UUIDv7 id columns,
+-- benchmarking showed higher ZSTD levels did not improve (and slightly hurt) the ratio. The Enum8s, the UInt8
+-- flag and the LowCardinality column are left on the server default, where LZ4 is comparable and faster to decode.
 -- The engine uses its own ZooKeeper path ('.../traces_local_v2'): two replicated tables cannot share a replica
 -- path, so it must differ from `traces` while both exist. A replica path is independent of the table name, so
 -- it stays valid after a later rename/swap.
@@ -38,9 +38,9 @@
 -- keeping this DDL identical across all deployments.
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 ON CLUSTER '{cluster}'
 (
-    id                   FixedString(36)        CODEC(ZSTD(3)),
-    workspace_id         String,
-    project_id           FixedString(36)        CODEC(ZSTD(3)),
+    id                   FixedString(36)        CODEC(ZSTD(1)),
+    workspace_id         String                 CODEC(ZSTD(1)),
+    project_id           FixedString(36)        CODEC(ZSTD(1)),
     name                 String                 DEFAULT ''       CODEC(ZSTD(1)),
     start_time           DateTime64(6, 'UTC')   DEFAULT now64(6) CODEC(Delta, ZSTD(1)),
     end_time             DateTime64(6, 'UTC')   DEFAULT toDateTime64('1970-01-01 00:00:00', 6) CODEC(Delta, ZSTD(1)),  -- epoch = not ended yet
@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 ON CLUS
     error_info           String                 DEFAULT ''       CODEC(ZSTD(1)),
     thread_id            String                 DEFAULT ''       CODEC(ZSTD(1)),
     visibility_mode      Enum8('unknown' = 0, 'default' = 1, 'hidden' = 2) DEFAULT 'default',
-    truncation_threshold UInt64                 DEFAULT 10001,   -- 10 KB + 1 byte, threshold for the truncated_* columns
+    truncation_threshold UInt64                 DEFAULT 10001    CODEC(ZSTD(1)),   -- 10 KB + 1 byte, threshold for the truncated_* columns
     input_slim           String                 DEFAULT ''       CODEC(ZSTD(3)),
     output_slim          String                 DEFAULT ''       CODEC(ZSTD(3)),
     -- NaN = not measured (0 is a valid value); CH has no nan() literal. ZSTD (not Gorilla/FPC, which need
