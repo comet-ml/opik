@@ -439,6 +439,13 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.service.type | string | `"ClusterIP"` |  |
 | component.python-backend.serviceAccount.create | bool | `true` |  |
 | component.python-backend.serviceAccount.name | string | `"opik-python-backend"` |  |
+| component.python-backend.waitForRedis.enabled | bool | `true` |  |
+| component.python-backend.waitForRedis.image.registry | string | `"docker.io"` |  |
+| component.python-backend.waitForRedis.image.repository | string | `"busybox"` |  |
+| component.python-backend.waitForRedis.image.tag | string | `"1.36"` |  |
+| component.python-backend.waitForRedis.redis.host | string | `""` |  |
+| component.python-backend.waitForRedis.redis.port | int | `6379` |  |
+| component.python-backend.waitForRedis.resources | object | `{}` |  |
 | demoDataJob.enabled | bool | `true` |  |
 | fullnameOverride | string | `""` |  |
 | global.argocd | bool | `false` |  |
