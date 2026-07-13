@@ -241,14 +241,22 @@ public interface LlmProviderLangChainMapper {
         return t.getMessage() != null && t.getMessage().contains("{");
     }
 
+    /**
+     * Every caller is an OpenAI-compatible provider, whose error payload carries a String
+     * {@code code} (e.g. {@code "rate_limit_exceeded"}). {@link OpenRouterErrorMessage} types
+     * {@code code} as {@code Integer}, so attempting it first made Jackson throw
+     * {@code InvalidFormatException} (wrapped as {@code UncheckedIOException}) on every such error,
+     * logging a full WARN stack before the OpenAI fallback recovered. Attempt the OpenAI model
+     * first so the common path parses on the first try; keep OpenRouter as a defensive fallback.
+     */
     default Optional<ErrorMessage> getErrorObject(@NonNull Throwable throwable, @NonNull Logger log) {
 
-        Optional<ErrorMessage> errorMessage = getErrorMessage(throwable, log, OpenRouterErrorMessage.class);
+        Optional<ErrorMessage> errorMessage = getErrorMessage(throwable, log, OpenAiErrorMessage.class);
 
         if (errorMessage.isPresent()) {
             return errorMessage;
         }
 
-        return getErrorMessage(throwable, log, OpenAiErrorMessage.class);
+        return getErrorMessage(throwable, log, OpenRouterErrorMessage.class);
     }
 }
