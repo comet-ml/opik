@@ -56,6 +56,19 @@ public class DatabaseAnalyticsFactory {
     // Optional socket timeout, applied in buildClient() only when set (null = library default of 0/no timeout).
     private Duration clientSocketTimeout;
 
+    /**
+     * Gates the {@code clickhouse-cluster} health check. Off for single-shard / non-Distributed
+     * deployments; on only for the Distributed (Hyperscale) topology where the cluster definition
+     * must be visible from every node.
+     */
+    private boolean clusterHealthCheckEnabled;
+
+    /**
+     * Gates the {@code clickhouse-cold-storage-disk} health check. Off for deployments without tier
+     * storage (OSS Docker); on only once the {@code cold_s3} S3 disk is activated.
+     */
+    private boolean coldStorageDiskHealthCheckEnabled;
+
     public ConnectionFactory build() {
         var queryParametersOverrides = getQueryParametersOverrides(queryParameters);
         var options = queryParametersOverrides == null ? "" : "?%s".formatted(queryParametersOverrides);

@@ -1,7 +1,6 @@
 package com.comet.opik.infrastructure.db;
 
 import com.clickhouse.client.api.Client;
-import com.clickhouse.client.api.query.QueryResponse;
 import com.clickhouse.client.api.query.QuerySettings;
 import com.google.common.base.Preconditions;
 import lombok.Getter;
@@ -12,6 +11,7 @@ import ru.vyarus.dropwizard.guice.module.installer.feature.health.NamedHealthChe
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 
 /**
  * Shared probe shape for ClickHouse v2 HTTP health checks: bounded {@code SELECT 1} with a
@@ -21,7 +21,9 @@ import java.util.concurrent.TimeUnit;
  * <p>Subclasses pass their name via the constructor and may override {@link #check()} to
  * short-circuit before delegating to {@code super.check()} (e.g. when a feature toggle disables
  * the underlying capability), or override {@link #newQuerySettings()} when their user runs under
- * a profile that forbids per-query setting changes.
+ * a profile that forbids per-query setting changes. Subclasses running a different query drive it
+ * through {@link #executeProbe(CompletableFuture, Function)} so the timeout, cancellation and
+ * {@code log_comment} handling live in one place.
  */
 abstract class AbstractClickHouseHealthCheck extends NamedHealthCheck {
 
@@ -35,8 +37,11 @@ abstract class AbstractClickHouseHealthCheck extends NamedHealthCheck {
      */
     private static final String MAX_EXECUTION_TIME = "max_execution_time";
 
-    private final Client clickHouseClient;
-    private final Duration healthCheckTimeout;
+    private static final String LOG_COMMENT = "log_comment";
+    private static final String LOG_COMMENT_TEMPLATE = "health_check:%s";
+
+    protected final Client clickHouseClient;
+    protected final Duration healthCheckTimeout;
 
     /**
      * Server-side ceiling aligned with the call-site deadline so ClickHouse aborts a stuck probe
@@ -62,9 +67,20 @@ abstract class AbstractClickHouseHealthCheck extends NamedHealthCheck {
 
     @Override
     protected Result check() {
-        var queryFuture = clickHouseClient.query(SELECT_1_QUERY, newQuerySettings());
-        try (var _ = queryFuture.get(healthCheckTimeout.toMillis(), TimeUnit.MILLISECONDS)) {
-            return Result.healthy();
+        return executeProbe(clickHouseClient.query(SELECT_1_QUERY, newQuerySettings()), response -> Result.healthy());
+    }
+
+    /**
+     * Runs a probe query under the shared deadline and cancellation contract: the caller-side
+     * {@code future.get(healthCheckTimeout)} bounds the wait, {@code onResult} maps the (auto-closed)
+     * result to a {@link Result}, and any interrupt/failure cancels the in-flight query so it doesn't
+     * keep running server-side. Subclasses supply the future (via {@link #newQuerySettings()}) and the
+     * result mapping; the flow lives here so timeout and cancellation fixes stay in one place.
+     */
+    protected <T extends AutoCloseable> Result executeProbe(CompletableFuture<T> queryFuture,
+            Function<? super T, Result> onResult) {
+        try (var result = queryFuture.get(healthCheckTimeout.toMillis(), TimeUnit.MILLISECONDS)) {
+            return onResult.apply(result);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             return getUnhealthyAndCancelQuery(queryFuture, exception);
@@ -76,7 +92,8 @@ abstract class AbstractClickHouseHealthCheck extends NamedHealthCheck {
     /**
      * Per-call probe settings, built fresh each invocation because {@link QuerySettings} is not
      * thread-safe. Default carries the server-side {@code max_execution_time} cap from
-     * {@link #queryMaxExecutionTimeSeconds}; the caller-side {@code future.get(healthCheckTimeout)}
+     * {@link #queryMaxExecutionTimeSeconds} plus a {@code log_comment} tagging the query with this
+     * probe's name in {@code system.query_log}; the caller-side {@code future.get(healthCheckTimeout)}
      * remains the deadline on top.
      *
      * <p>Subclasses whose user runs under a profile that forbids per-query setting changes
@@ -85,13 +102,15 @@ abstract class AbstractClickHouseHealthCheck extends NamedHealthCheck {
      * ClickHouse rejects the probe with a {@code READONLY} error.
      */
     protected QuerySettings newQuerySettings() {
-        return new QuerySettings().serverSetting(MAX_EXECUTION_TIME, String.valueOf(queryMaxExecutionTimeSeconds));
+        return new QuerySettings()
+                .serverSetting(MAX_EXECUTION_TIME, String.valueOf(queryMaxExecutionTimeSeconds))
+                .serverSetting(LOG_COMMENT, LOG_COMMENT_TEMPLATE.formatted(name));
     }
 
     /**
      * Cancel on failure so the query doesn't keep running server-side.
      */
-    private Result getUnhealthyAndCancelQuery(CompletableFuture<QueryResponse> queryFuture, Exception exception) {
+    protected Result getUnhealthyAndCancelQuery(CompletableFuture<?> queryFuture, Exception exception) {
         queryFuture.cancel(true);
         return Result.unhealthy(exception);
     }
