@@ -216,7 +216,8 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
             return;
         }
 
-        scheduleRepeatingJob(ClickHousePartitionMetricsJob.class, partitionMetricsConfig.getInterval(), null);
+        scheduleRepeatingJob(ClickHousePartitionMetricsJob.class,
+                partitionMetricsConfig.getInterval().toJavaDuration(), null);
     }
 
     private void setAgentInsightsReportJob() {

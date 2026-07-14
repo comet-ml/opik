@@ -1,29 +1,32 @@
 package com.comet.opik.infrastructure;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
+import io.dropwizard.util.Duration;
+import io.dropwizard.validation.MaxDuration;
+import io.dropwizard.validation.MinDuration;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
-import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 @Data
 public class PartitionMetricsConfig {
 
     @JsonProperty
-    private boolean enabled = false;
+    private boolean enabled;
 
     /**
-     * How often the partition-health poll runs (seconds). The poll reads {@code system.parts}
-     * metadata plus a lightweight {@code _row_exists} mask scan per LWD table; on a large cluster
-     * a full cycle costs a few seconds and a few GiB of highly compressible column reads, so 5 min
-     * is a safe default. A distributed lock ensures a single instance polls per interval.
+     * How often the partition-health poll runs. The poll reads {@code system.parts} metadata plus a
+     * lightweight {@code _row_exists} mask scan per LWD table; on a large cluster a full cycle costs
+     * a few seconds and a few GiB of highly compressible column reads, so 5 min is a safe default.
+     * A distributed lock ensures a single instance polls per interval.
      */
-    @JsonProperty
-    @Min(30) @Max(3600) private int intervalSeconds = 300;
+    @NotNull @JsonProperty
+    @MinDuration(value = 30, unit = TimeUnit.SECONDS)
+    @MaxDuration(value = 1, unit = TimeUnit.HOURS)
+    private Duration interval;
 
     /**
      * Comma-separated tables to scan for lightweight-deleted (LWD-masked) rows via
@@ -33,21 +36,16 @@ public class PartitionMetricsConfig {
      * <p>Stored as a scalar rather than a YAML list so it binds cleanly from a comma-separated
      * environment override (Dropwizard substitutes {@code ${...}} into the raw YAML before parsing,
      * so a comma-separated env value cannot bind to a {@code List}). {@link #getLwdTables()} splits,
-     * trims and drops blanks; individual names are validated as plain identifiers at the point of
+     * strips and drops blanks; individual names are validated as plain identifiers at the point of
      * interpolation.
      */
     @NotNull @JsonProperty
-    private String lwdTables = "traces,spans";
+    private String lwdTables;
 
-    /** Derived: interval between polls. */
-    public Duration getInterval() {
-        return Duration.ofSeconds(intervalSeconds);
-    }
-
-    /** Derived: the parsed, trimmed, blank-free list of LWD tables. */
+    /** Derived: the parsed, stripped, blank-free list of LWD tables. */
     public List<String> getLwdTables() {
         return Arrays.stream(lwdTables.split(","))
-                .map(String::trim)
+                .map(String::strip)
                 .filter(table -> !table.isEmpty())
                 .toList();
     }

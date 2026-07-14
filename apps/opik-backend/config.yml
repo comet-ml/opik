@@ -1034,8 +1034,8 @@ retention:
 # publishes opik.clickhouse.partition.* gauges. A distributed lock keeps a single instance polling.
 partitionMetrics:
   enabled: ${PARTITION_METRICS_ENABLED:-false}
-  # Poll interval in seconds (default 5 min). Min 30, max 3600.
-  intervalSeconds: ${PARTITION_METRICS_INTERVAL_SECONDS:-300}
+  # Poll interval (default 5 min). Min 30s, max 1h.
+  interval: ${PARTITION_METRICS_INTERVAL:-5m}
   # Tables scanned for lightweight-deleted (masked) rows. Comma-separated env override.
   lwdTables: ${PARTITION_METRICS_LWD_TABLES:-traces,spans}
 

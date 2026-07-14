@@ -9,16 +9,18 @@ import io.dropwizard.jobs.Job;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
-import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.quartz.DisallowConcurrentExecution;
 import org.quartz.InterruptableJob;
 import org.quartz.JobExecutionContext;
+import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import reactor.util.function.Tuple2;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
@@ -56,8 +58,12 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
     private static final AttributeKey<String> TABLE_KEY = stringKey("table");
     private static final AttributeKey<String> PARTITION_KEY = stringKey("partition");
 
+    @Builder(toBuilder = true)
     private record Snapshot(List<PartitionStat> partitionStats, List<LwdStat> lwdStats) {
-        private static final Snapshot EMPTY = new Snapshot(List.of(), List.of());
+        private static final Snapshot EMPTY = Snapshot.builder()
+                .partitionStats(List.of())
+                .lwdStats(List.of())
+                .build();
     }
 
     private final ClickHousePartitionMetricsDAO partitionMetricsDAO;
@@ -66,8 +72,7 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
 
     private final AtomicBoolean interrupted = new AtomicBoolean(false);
     private final AtomicReference<Snapshot> snapshot = new AtomicReference<>(Snapshot.EMPTY);
-
-    private final LongCounter runCounter;
+    private final AtomicReference<Disposable> currentExecution = new AtomicReference<>();
 
     @Inject
     public ClickHousePartitionMetricsJob(
@@ -109,11 +114,6 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
         // Per-(table, partition) series sourced from the LWD mask scan.
         registerLwdGauge(meter, "opik.clickhouse.partition.lwd_rows",
                 "Number of lightweight-deleted (masked) rows per partition", LwdStat::lwdRows);
-
-        this.runCounter = meter
-                .counterBuilder("opik.clickhouse.partition_metrics.run")
-                .setDescription("Number of partition-health metric poll runs, tagged by result")
-                .build();
     }
 
     @Override
@@ -129,6 +129,9 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
         // failure must not sink the cheap, reliable system.parts gauges, so it degrades to an empty
         // list and the LWD gauges simply stop reporting until the next successful poll.
         Mono<Void> refresh = Mono.defer(() -> {
+            if (interrupted.get()) {
+                return Mono.empty();
+            }
             Mono<List<LwdStat>> lwdRowCounts = partitionMetricsDAO.getLwdRowCounts(config.getLwdTables())
                     .onErrorResume(e -> {
                         log.warn("ClickHouse partition metrics: LWD row-count scan failed, "
@@ -141,29 +144,36 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
                     .then();
         });
 
-        try {
-            lockService.bestEffortLock(
-                    RUN_LOCK,
-                    refresh,
-                    Mono.fromRunnable(() -> {
-                        log.debug(
-                                "ClickHouse partition metrics: another instance holds the poll lock, clearing snapshot");
-                        snapshot.set(Snapshot.EMPTY);
-                        runCounter.add(1, Attributes.of(stringKey("result"), "skipped_lock"));
-                    }),
-                    config.getInterval(),
-                    Duration.ZERO,
-                    true) // holdUntilExpiry: exactly one instance polls per interval
-                    .block();
-        } catch (Exception e) {
-            log.error("ClickHouse partition metrics poll failed", e);
-            runCounter.add(1, Attributes.of(stringKey("result"), "error"));
-        }
+        var subscription = lockService.bestEffortLock(
+                RUN_LOCK,
+                refresh,
+                Mono.fromRunnable(() -> {
+                    log.debug(
+                            "ClickHouse partition metrics: another instance holds the poll lock, clearing snapshot");
+                    snapshot.set(Snapshot.EMPTY);
+                }),
+                config.getInterval().toJavaDuration(),
+                Duration.ZERO,
+                true) // holdUntilExpiry: exactly one instance polls per interval
+                .onErrorResume(throwable -> {
+                    if (interrupted.get()) {
+                        log.warn("ClickHouse partition metrics poll interrupted", throwable);
+                    } else {
+                        log.error("ClickHouse partition metrics poll failed", throwable);
+                    }
+                    return Mono.empty();
+                })
+                .doFinally(signal -> currentExecution.set(null))
+                .subscribeOn(Schedulers.boundedElastic())
+                .subscribe();
+        currentExecution.set(subscription);
     }
 
     private void updateSnapshot(Tuple2<List<PartitionStat>, List<LwdStat>> result) {
-        snapshot.set(new Snapshot(result.getT1(), result.getT2()));
-        runCounter.add(1, Attributes.of(stringKey("result"), "success"));
+        snapshot.set(Snapshot.builder()
+                .partitionStats(result.getT1())
+                .lwdStats(result.getT2())
+                .build());
         log.debug("ClickHouse partition metrics refreshed: '{}' partitions, '{}' LWD partitions",
                 result.getT1().size(), result.getT2().size());
     }
@@ -190,6 +200,10 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
     public void interrupt() {
         interrupted.set(true);
         log.info("ClickHouse partition metrics job interrupted");
+        var execution = currentExecution.get();
+        if (execution != null && !execution.isDisposed()) {
+            execution.dispose();
+        }
     }
 
     private static Attributes attributes(String table, String partition) {

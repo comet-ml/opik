@@ -142,14 +142,13 @@ class ClickHousePartitionMetricsDAOTest {
                     .isGreaterThan(Instant.now().minusSeconds(600).getEpochSecond());
         });
 
-        // Lightweight-delete a subset and assert the DAO's masked-row count matches ClickHouse
-        // ground truth (cross-checking the DAO SQL rather than an exact physical-row count keeps
-        // the assertion robust to ReplacingMergeTree duplicates).
+        // Delete a subset through the trace API — the same path prod uses, which issues a
+        // lightweight delete — and assert the DAO's masked-row count matches ClickHouse ground
+        // truth (cross-checking the DAO SQL rather than an exact physical-row count keeps the
+        // assertion robust to ReplacingMergeTree duplicates).
         int toDelete = 5;
-        var idList = traceIds.stream().limit(toDelete)
-                .map(id -> "'%s'".formatted(id))
-                .toList();
-        execute("DELETE FROM traces WHERE id IN (%s)".formatted(String.join(",", idList)));
+        traceIds.stream().limit(toDelete)
+                .forEach(id -> traceResourceClient.deleteTrace(id, workspaceName, apiKey));
 
         Awaitility.await().atMost(30, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).untilAsserted(() -> {
             long daoLwd = partitionMetricsDAO.getLwdRowCounts(List.of("traces")).block().stream()
@@ -168,14 +167,6 @@ class ClickHousePartitionMetricsDAOTest {
                 .filter(stat -> stat.table().equals("traces"))
                 .findFirst()
                 .orElse(null);
-    }
-
-    private void execute(String sql) {
-        Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> connection.createStatement(sql).execute())
-                .flatMap(result -> Mono.from(result.getRowsUpdated()))
-                .then()
-                .block();
     }
 
     private long queryLong(String sql) {
