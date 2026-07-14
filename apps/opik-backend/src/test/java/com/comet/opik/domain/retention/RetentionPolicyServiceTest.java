@@ -16,6 +16,7 @@ import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.retention.RetentionPeriod;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.SpanDAO;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -48,6 +49,7 @@ import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -116,11 +118,12 @@ class RetentionPolicyServiceTest {
     private RetentionEstimationService estimationService;
     private TransactionTemplateAsync templateAsync;
     private IdGenerator idGenerator;
+    private SpanDAO spanDAO;
 
     @BeforeAll
     void beforeAll(ClientSupport client, @Jit RetentionPolicyService retentionPolicyService,
             @Jit RetentionCatchUpService catchUpService, @Jit RetentionEstimationService estimationService,
-            TransactionTemplateAsync templateAsync, IdGenerator idGenerator) {
+            TransactionTemplateAsync templateAsync, IdGenerator idGenerator, @Jit SpanDAO spanDAO) {
         var baseURI = TestUtils.getBaseUrl(client);
         ClientSupportUtils.config(client);
 
@@ -129,6 +132,7 @@ class RetentionPolicyServiceTest {
         this.catchUpService = catchUpService;
         this.templateAsync = templateAsync;
         this.idGenerator = idGenerator;
+        this.spanDAO = spanDAO;
         this.retentionClient = new RetentionRuleResourceClient(client, baseURI);
         this.traceClient = new TraceResourceClient(client, baseURI);
         this.spanClient = new SpanResourceClient(client, baseURI);
@@ -353,6 +357,98 @@ class RetentionPolicyServiceTest {
 
             assertThat(countRows("traces", wsId)).isZero();
             assertThat(countRowsById("traces", sameWeekOldTraceId)).isZero();
+        }
+    }
+
+    @Nested
+    @DisplayName("SpanDAO retention id_at predicate")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class SpanRetentionIdAtPredicate {
+
+        /**
+         * Isolates the {@code toMonday(id_at)} predicate on the unbounded delete path by calling
+         * {@link SpanDAO#deleteForRetention} directly at every day-of-week cutoff. Monday is excluded: a span one
+         * day before a Monday cutoff falls in the previous ISO week, so it would not exercise the upper bound
+         * {@code toMonday(id_at) < addWeeks(toMonday(cutoff), 1)} — the point of this test is that a span sharing the
+         * cutoff's week is still deleted, wherever in the week the cutoff lands.
+         */
+        @EnumSource(value = DayOfWeek.class, names = {"MONDAY"}, mode = EnumSource.Mode.EXCLUDE)
+        @ParameterizedTest
+        void deleteForRetentionRemovesSpanSharingTheCutoffWeek(DayOfWeek cutoffDay) {
+            var wsName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var wsId = UUID.randomUUID().toString();
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, wsName, wsId, USER);
+
+            var cutoffDate = LocalDate.now(ZoneOffset.UTC).minusDays(90)
+                    .with(TemporalAdjusters.previousOrSame(cutoffDay));
+            var cutoff = cutoffDate.atStartOfDay(ZoneOffset.UTC).toInstant();
+
+            // One day before the cutoff: inside the id-range window and in the cutoff's own ISO week.
+            var oldTime = cutoff.minus(1, ChronoUnit.DAYS);
+            var spanId = idGenerator.generateId(oldTime);
+            var traceId = idGenerator.generateId(oldTime);
+            createTestSpan(spanId, traceId, API_KEY, wsName);
+            waitForRows("spans", wsId, 1);
+
+            var cutoffId = idGenerator.generateId(cutoff);
+            var lowerBound = idGenerator.generateId(cutoff.minus(3, ChronoUnit.DAYS));
+            spanDAO.deleteForRetention(List.of(wsId), cutoffId, lowerBound).block();
+
+            assertThat(countRows("spans", wsId)).isZero();
+            assertThat(countRowsById("spans", spanId)).isZero();
+        }
+
+        @Test
+        @DisplayName("Bounded delete removes old spans in window, keeps recent")
+        void deleteForRetentionBoundedRemovesOldSpansKeepsRecent() {
+            var wsName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var wsId = UUID.randomUUID().toString();
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, wsName, wsId, USER);
+
+            Instant now = Instant.now();
+            var oldTime = now.minus(61, ChronoUnit.DAYS);
+            var recentTime = now.minus(5, ChronoUnit.DAYS);
+
+            var oldSpanId = idGenerator.generateId(oldTime);
+            var oldTraceId = idGenerator.generateId(oldTime);
+            var recentSpanId = idGenerator.generateId(recentTime);
+            var recentTraceId = idGenerator.generateId(recentTime);
+
+            createTestSpan(oldSpanId, oldTraceId, API_KEY, wsName);
+            createTestSpan(recentSpanId, recentTraceId, API_KEY, wsName);
+            waitForRows("spans", wsId, 2);
+
+            var cutoffId = idGenerator.generateId(now.minus(60, ChronoUnit.DAYS));
+            var lowerBound = idGenerator.generateId(now.minus(65, ChronoUnit.DAYS));
+            spanDAO.deleteForRetentionBounded(Map.of(wsId, lowerBound), cutoffId, lowerBound).block();
+
+            assertThat(countRows("spans", wsId)).isEqualTo(1);
+            assertThat(countRowsById("spans", recentSpanId)).isEqualTo(1);
+            assertThat(countRowsById("spans", oldSpanId)).isZero();
+        }
+
+        @Test
+        @DisplayName("Count reports only spans inside the retention window")
+        void countForRetentionCountsOnlySpansInWindow() {
+            var wsName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var wsId = UUID.randomUUID().toString();
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, wsName, wsId, USER);
+
+            Instant now = Instant.now();
+            var oldTime = now.minus(61, ChronoUnit.DAYS);
+            var recentTime = now.minus(5, ChronoUnit.DAYS);
+
+            createTestSpan(idGenerator.generateId(oldTime), idGenerator.generateId(oldTime), API_KEY, wsName);
+            createTestSpan(idGenerator.generateId(recentTime), idGenerator.generateId(recentTime), API_KEY, wsName);
+            waitForRows("spans", wsId, 2);
+
+            var cutoffId = idGenerator.generateId(now.minus(60, ChronoUnit.DAYS));
+            var lowerBound = idGenerator.generateId(now.minus(65, ChronoUnit.DAYS));
+            var count = spanDAO.countForRetention(List.of(wsId), cutoffId, lowerBound).block();
+
+            // Only the 61-day-old span is inside [lowerBound, cutoff); the recent one is excluded by the id-range,
+            // and the id_at bounds are a no-op pre-cutover (they never narrow the result).
+            assertThat(count).isEqualTo(1);
         }
     }
 
