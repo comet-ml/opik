@@ -134,34 +134,33 @@ def truncate_span_writes(
     return [truncate_span_write_if_needed(span, max_size_mb) for span in spans]
 
 
-def truncate_create_span_kwargs_if_needed(
-    create_span_kwargs: Dict[str, Any], max_size_mb: float
+def truncate_span_kwargs_if_needed(
+    span_kwargs: Dict[str, Any], max_size_mb: float
 ) -> None:
-    """Truncate oversized fields on the single-span create payload, in place.
+    """Truncate oversized fields on a single-span create/update payload, in place.
 
-    Used on the non-batched path (``use_batching=False``).
+    Used on the non-batched create path (``use_batching=False``) and on the
+    span-update path, so an oversized ``output``/``input``/``metadata`` sent via
+    ``update_span`` (e.g. ``span.end(output=...)`` after the create was already
+    flushed) is capped the same way as on create.
     """
-    original_size_mb = sequence_splitter.get_payload_size_MB(create_span_kwargs)
+    original_size_mb = sequence_splitter.get_payload_size_MB(span_kwargs)
     if original_size_mb <= max_size_mb:
         return
 
     def measure(overrides: Dict[str, Any]) -> float:
-        return sequence_splitter.get_payload_size_MB(
-            {**create_span_kwargs, **overrides}
-        )
+        return sequence_splitter.get_payload_size_MB({**span_kwargs, **overrides})
 
-    updates = _plan_truncation(
-        measure, _field_sizes_mb(create_span_kwargs.get), max_size_mb
-    )
+    updates = _plan_truncation(measure, _field_sizes_mb(span_kwargs.get), max_size_mb)
     if not updates:
         return
 
-    create_span_kwargs.update(updates)
+    span_kwargs.update(updates)
     _log_truncation(
-        create_span_kwargs.get("id"),
+        span_kwargs.get("id"),
         original_size_mb,
         max_size_mb,
         list(updates),
-        still_oversized=sequence_splitter.get_payload_size_MB(create_span_kwargs)
+        still_oversized=sequence_splitter.get_payload_size_MB(span_kwargs)
         > max_size_mb,
     )

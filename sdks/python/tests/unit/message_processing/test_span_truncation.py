@@ -78,20 +78,20 @@ def test_truncate_span_write__original_is_not_mutated():
     assert span.output is original_output  # frozen model untouched
 
 
-def test_truncate_create_span_kwargs__oversized__truncated_in_place(caplog):
+def test_truncate_span_kwargs__oversized__truncated_in_place(caplog):
     kwargs = {"id": "span-id", "output": _big_value(21), "input": {"prompt": "small"}}
 
     with caplog.at_level("WARNING"):
-        span_truncation.truncate_create_span_kwargs_if_needed(kwargs, LIMIT_MB)
+        span_truncation.truncate_span_kwargs_if_needed(kwargs, LIMIT_MB)
 
     assert kwargs["output"]["opik_truncated"] is True
     assert kwargs["input"] == {"prompt": "small"}
     assert "span-id" in caplog.text
 
 
-def test_truncate_create_span_kwargs__within_limit__untouched():
+def test_truncate_span_kwargs__within_limit__untouched():
     kwargs = {"id": "span-id", "output": {"result": "small"}}
-    span_truncation.truncate_create_span_kwargs_if_needed(kwargs, LIMIT_MB)
+    span_truncation.truncate_span_kwargs_if_needed(kwargs, LIMIT_MB)
     assert kwargs["output"] == {"result": "small"}
 
 
@@ -150,3 +150,48 @@ def test_process_create_span__oversized_field_truncated_before_send():
         if isinstance(v, dict) and v.get("opik_truncated") is True
     ]
     assert truncated, "expected an oversized field to be truncated"
+
+
+def _update_span_message(**fields) -> messages.UpdateSpanMessage:
+    defaults = dict(
+        span_id="span-id",
+        parent_span_id=None,
+        trace_id="trace-id",
+        project_name="my-project",
+        end_time=None,
+        input=None,
+        output=None,
+        metadata=None,
+        tags=None,
+        usage=None,
+        model=None,
+        provider=None,
+        error_info=None,
+        total_cost=None,
+        source="sdk",
+    )
+    defaults.update(fields)
+    return messages.UpdateSpanMessage(**defaults)
+
+
+def test_process_update_span__oversized_field_truncated_before_send():
+    # An oversized output attached via update_span (e.g. span.end(output=...)
+    # after the create was flushed) must be capped, not bypass the limit.
+    processor = _processor(max_span_payload_size_mb=LIMIT_MB)
+    message = _update_span_message(output=_big_value(21), input={"prompt": "small"})
+
+    processor._process_update_span_message(message)
+
+    sent_kwargs = processor._rest_client.spans.update_span.call_args.kwargs
+    assert sent_kwargs["output"]["opik_truncated"] is True
+    assert sent_kwargs["input"] == {"prompt": "small"}
+
+
+def test_process_update_span__limit_disabled__no_truncation():
+    processor = _processor(max_span_payload_size_mb=None)
+    message = _update_span_message(output=_big_value(21))
+
+    processor._process_update_span_message(message)
+
+    sent_kwargs = processor._rest_client.spans.update_span.call_args.kwargs
+    assert sent_kwargs["output"] == _big_value(21)  # unchanged when disabled

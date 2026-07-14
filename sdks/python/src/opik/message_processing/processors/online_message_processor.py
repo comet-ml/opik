@@ -230,7 +230,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         # Enforce the per-span size limit right before sending, after attachment
         # extraction has already stripped/uploaded large attachments.
         if self._max_span_payload_size_mb is not None:
-            span_truncation.truncate_create_span_kwargs_if_needed(
+            span_truncation.truncate_span_kwargs_if_needed(
                 cleaned_create_span_kwargs, self._max_span_payload_size_mb
             )
 
@@ -268,6 +268,14 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             fields_to_anonymize=message.fields_to_anonymize(),
             object_type="span",
         )
+
+        # Enforce the per-span size limit on updates too: an oversized
+        # output/input/metadata attached via update_span (e.g. span.end(output=...)
+        # once the create was already flushed) would otherwise bypass the cap.
+        if self._max_span_payload_size_mb is not None:
+            span_truncation.truncate_span_kwargs_if_needed(
+                cleaned_update_span_kwargs, self._max_span_payload_size_mb
+            )
 
         LOGGER.debug("Update span request: %s", cleaned_update_span_kwargs)
         self._rest_client.spans.update_span(**cleaned_update_span_kwargs)

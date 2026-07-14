@@ -166,7 +166,7 @@ def create_connection_resources(
             retry_interval_seconds=config.unauthorized_message_type_retry_interval,
             max_retry_count=config.unauthorized_message_type_max_retry_count,
         ),
-        max_span_payload_size_mb=config.max_span_payload_size_megabytes,
+        max_span_payload_size_mb=config.max_span_payload_size_mb,
     )
     streamer_ = streamer_constructors.construct_online_streamer(
         file_uploader=file_uploader,
