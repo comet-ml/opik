@@ -48,10 +48,7 @@ setup(
         # - Exclude 1.81.*, 1.82.*, 1.83.0-1.83.6: CVE-2026-42208 (SQL injection in proxy auth path,
         #   affects 1.81.16-1.83.6, fixed in 1.83.7).
         #   See: https://docs.litellm.ai/blog/cve-2026-42208-litellm-proxy-sql-injection
-        # - Exclude 1.92.*: core completion() eagerly imports litellm.proxy modules that require
-        #   fastapi/orjson (proxy-only extras), so any completion crashes without litellm[proxy].
-        #   Reverted in 1.93. See litellm/main.py -> responses.mcp.litellm_proxy_mcp_handler.
-        "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*",
+        "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6",
         "openai",
         "pydantic-settings>=2.0.0,<3.0.0,!=2.9.0",
         "pydantic>=2.0.0,<3.0.0",
