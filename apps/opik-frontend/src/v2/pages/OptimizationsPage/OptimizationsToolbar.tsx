@@ -43,11 +43,25 @@ const OptimizationsToolbar: React.FC<OptimizationsToolbarProps> = ({
   onColumnsOrderChange,
 }) => {
   return (
-    // Mirror the logs / traces toolbar: right-aligned actions on the top row,
-    // and the search as the FilterChipBar prefix so it shares one wrapping row
-    // with the filter chips (which wrap to further lines as they grow).
-    <div className="mb-2 flex flex-col gap-2">
-      <div className="flex items-center justify-end gap-2">
+    // Single row: the search (FilterChipBar prefix) and filter chips fill the
+    // left and wrap to further lines as they grow; the actions (delete /
+    // columns / refresh) stay right-aligned, top-aligned with the first line.
+    <div className="mb-2 flex items-start gap-2">
+      <div className="min-w-0 flex-1">
+        <FilterChipBar
+          {...filterChips}
+          prefix={
+            <SearchInput
+              searchText={search}
+              setSearchText={onSearchChange}
+              placeholder="Search"
+              className="w-[200px] shrink-0"
+              dimension="xs"
+            />
+          }
+        />
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
         {canDeleteOptimizationRuns && (
           <>
             <OptimizationsActionsPanel optimizations={selectedRows} />
@@ -71,18 +85,6 @@ const OptimizationsToolbar: React.FC<OptimizationsToolbarProps> = ({
           size="icon-2xs"
         />
       </div>
-      <FilterChipBar
-        {...filterChips}
-        prefix={
-          <SearchInput
-            searchText={search}
-            setSearchText={onSearchChange}
-            placeholder="Search"
-            className="w-[200px] shrink-0"
-            dimension="xs"
-          />
-        }
-      />
     </div>
   );
 };
