@@ -106,8 +106,9 @@ const TargetPicker: React.FC<{
         >
           {/* Label + caption share a baseline so "Parent" (14px) and its
               "Trial #N" caption (12px) sit on the same line rather than
-              centre-aligning to different heights. */}
-          <span className="inline-flex items-baseline gap-0.5">
+              centre-aligning to different heights, with a small gap between
+              them (design QA round 2). */}
+          <span className="inline-flex items-baseline gap-1.5">
             {selected.label}
             {selected.caption && (
               <span className="comet-body-xs text-muted-slate">
