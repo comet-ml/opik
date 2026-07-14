@@ -1031,6 +1031,13 @@ alertProjectMigration:
   schedulerQueuedTaskCap: 50
   schedulerThreadTtl: 10s
 
+partitionMetrics:
+  enabled: false
+  # Poll interval (default 5 min). Min 30s, max 1h.
+  interval: 5m
+  # Tables scanned for lightweight-deleted (masked) rows. Comma-separated env override.
+  lwdTables: traces,spans
+
 # Shared configuration for V1 → V2 entity project migration jobs
 # Centralised so all migration jobs (experiments, datasets, etc.) share the same exclusion list
 migration:
