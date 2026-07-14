@@ -67,6 +67,13 @@ def get_dataset_url_by_id(
     return f"{domain_root}opik/{workspace}/projects/{project_id}/datasets/{dataset_id}/items"
 
 
+def get_test_suite_url_by_id(
+    base_url: str, workspace: str, project_id: str, test_suite_id: str
+) -> str:
+    domain_root = get_base_url(base_url)
+    return f"{domain_root}opik/{workspace}/projects/{project_id}/test-suites/{test_suite_id}/items"
+
+
 def get_project_url_by_id(base_url: str, project_id: str, workspace: str) -> str:
     domain_root = get_base_url(base_url)
     return f"{domain_root}opik/{workspace}/projects/{project_id}/"

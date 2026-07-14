@@ -246,6 +246,21 @@ class Opik:
 
         LOGGER.info(f'Created a "{dataset_name}" dataset at {dataset_url}.')
 
+    def _display_created_test_suite_url(
+        self, test_suite_name: str, test_suite_id: str, project_name: str
+    ) -> None:
+        project_id = rest_helpers.resolve_project_id_by_name(
+            self._rest_client, project_name
+        )
+        test_suite_url = url_helpers.get_test_suite_url_by_id(
+            base_url=self._config.url_override,
+            workspace=self._dereferenced_workspace(),
+            project_id=project_id,
+            test_suite_id=test_suite_id,
+        )
+
+        LOGGER.info(f'Created a "{test_suite_name}" test suite at {test_suite_url}.')
+
     def auth_check(self) -> None:
         """
         Checks if current API key user has an access to the configured workspace and its content.
@@ -1496,7 +1511,7 @@ class Opik:
         )
 
         project_name = self._resolve_project_name(project_name)
-        rest_operations.create_test_suite_dataset(
+        suite_id = rest_operations.create_test_suite_dataset(
             rest_client=self._rest_client,
             dataset_name=name,
             project_name=project_name,
@@ -1512,6 +1527,12 @@ class Opik:
             rest_client=self._rest_client,
             dataset_items_count=0,
             client=self,
+        )
+
+        self._display_created_test_suite_url(
+            test_suite_name=name,
+            test_suite_id=suite_id,
+            project_name=project_name,
         )
 
         return test_suite.TestSuite(

@@ -522,6 +522,9 @@ class TestOpikClientCreateTestSuite:
             patch.object(
                 self.mock_rest_datasets, "apply_dataset_item_changes"
             ) as self.mock_apply_changes,
+            patch.object(
+                self.opik_client_, "_display_created_test_suite_url"
+            ) as self.mock_display_url,
         ):
             yield
 
@@ -619,6 +622,17 @@ class TestOpikClientCreateTestSuite:
             )
 
         self.mock_create_dataset.assert_not_called()
+
+    def test_create_test_suite__logs_url_after_creation(self):
+        """Verify create_test_suite calls _display_created_test_suite_url with name, id, and project."""
+        result = self.opik_client_.create_test_suite(name="my-suite")
+        suite_id = result.id  # triggers cached_property fetch
+
+        self.mock_display_url.assert_called_once_with(
+            test_suite_name="my-suite",
+            test_suite_id=suite_id,
+            project_name="default-project",
+        )
 
 
 class TestOpikClientDeleteDataset:
