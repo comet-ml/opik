@@ -9,6 +9,7 @@ from typing import (
     TYPE_CHECKING,
     Callable,
     NamedTuple,
+    Union,
 )
 import contextvars
 from uuid import UUID
@@ -21,13 +22,14 @@ import opik
 from opik import context_storage, dict_utils, llm_usage, tracing_runtime_config
 from opik.api_objects import span, trace
 from opik.decorator import arguments_helpers, span_creation_handler
-from opik.types import DistributedTraceHeadersDict, ErrorInfoDict
+from opik.types import DistributedTraceHeadersDict, ErrorInfoDict, LLMProvider
 from opik.validation import parameters_validator
 from . import (
     base_llm_patcher,
     run_parse_helpers,
     opik_encoder_extension,
     provider_usage_extractors,
+    response_cost_extractors,
 )
 
 from ...api_objects import helpers
@@ -45,6 +47,28 @@ language_models.BaseLLM.dict = base_llm_patcher.base_llm_dict_patched()
 # A callable that receives an error string and returns True if the error should be skipped,
 # or False otherwise.
 SkipErrorCallback = Callable[[str], bool]
+
+# A fixed provider to record on an LLM span: a plain string or an LLMProvider.
+ProviderOverride = Union[str, LLMProvider]
+
+
+class ProviderResolverContext(NamedTuple):
+    """What a provider-resolver callback receives for a single LLM run.
+
+    ``model`` is the model name parsed from the run and is the usual routing key
+    (e.g. return "bedrock" when it contains "anthropic"). ``run`` is the raw
+    LangChain run dict, an escape hatch for routing on anything ``model`` alone
+    can't express.
+    """
+
+    model: Optional[str]
+    run: Dict[str, Any]
+
+
+# A callable that receives a ProviderResolverContext and returns the provider to
+# record for that specific run. Returning None falls back to the provider
+# auto-detected from the run.
+ProviderResolver = Callable[[ProviderResolverContext], Optional[ProviderOverride]]
 
 # Placeholder output dictionary used when errors are intentionally skipped
 # via the skip_error_callback. This signals that the output was not produced
@@ -78,6 +102,7 @@ class OpikTracer(BaseTracer):
         thread_id: Optional[str] = None,
         skip_error_callback: Optional[SkipErrorCallback] = None,
         opik_context_read_only_mode: bool = False,
+        provider: Optional[Union[ProviderOverride, ProviderResolver]] = None,
         **kwargs: Any,
     ) -> None:
         """
@@ -103,6 +128,18 @@ class OpikTracer(BaseTracer):
                 * If True, OpikTracer will not modify the context storage and only create spans/traces from LangChain's Run objects.
                   This might be useful when the environment doesn't support proper context isolation for concurrent operations and you
                   want to avoid modifying the Opik context stack due to unsafety.
+            provider: The provider to record on LLM spans, used by the backend for
+                cost calculation. Useful when calls are routed through an
+                OpenAI-compatible proxy (e.g. a LiteLLM gateway), where the provider
+                would otherwise be auto-detected as the proxy's hostname and no cost
+                could be computed. Accepts:
+                * a string or ``opik.LLMProvider`` to apply to every LLM span (the
+                  common single-provider case), or
+                * a callable receiving a ``ProviderResolverContext`` (``.model`` is
+                  the parsed model name, ``.run`` the raw run dict) and returning
+                  the provider for that specific run (for chains/graphs that mix
+                  providers). Returning None from the callable falls back to the
+                  auto-detected provider for that run.
             **kwargs: Additional arguments passed to the parent class constructor.
         """
         validator = parameters_validator.create_validator(
@@ -155,6 +192,8 @@ class OpikTracer(BaseTracer):
         self._skip_error_callback = skip_error_callback
 
         self._opik_context_read_only_mode = opik_context_read_only_mode
+
+        self._provider = provider
 
     @property
     def _opik_client(self) -> opik.Opik:
@@ -623,6 +662,12 @@ class OpikTracer(BaseTracer):
             if usage_info is None:
                 usage_info = llm_usage.LLMUsageInfo()
 
+            provider_override = self._resolve_provider(run_dict, usage_info.model)
+            if provider_override is not None:
+                usage_info.provider = provider_override
+
+            total_cost = response_cost_extractors.try_extract_response_cost(run_dict)
+
             # workaround for `.astream()` method usage
             if span_data.input == {"input": ""} or span_data.input == {"input": {}}:
                 span_data.input = run_dict["inputs"]
@@ -649,6 +694,7 @@ class OpikTracer(BaseTracer):
                 ),
                 provider=usage_info.provider,
                 model=usage_info.model,
+                total_cost=total_cost,
             )
 
             if tracing_runtime_config.is_tracing_active():
@@ -661,6 +707,35 @@ class OpikTracer(BaseTracer):
                     span_id=span_data.id
                 )
                 self._opik_context_storage.pop_span_data(ensure_id=span_data.id)
+
+    def _resolve_provider(
+        self, run_dict: Dict[str, Any], model: Optional[str]
+    ) -> Optional[str]:
+        if self._provider is None:
+            return None
+
+        if callable(self._provider):
+            context = ProviderResolverContext(model=model, run=run_dict)
+            try:
+                resolved: Optional[ProviderOverride] = self._provider(context)
+            except Exception:
+                # A user callback must never break trace logging: warn and fall
+                # back to the auto-detected provider for this run.
+                LOGGER.warning(
+                    "The provider resolver callback raised an exception; falling "
+                    "back to the auto-detected provider.",
+                    exc_info=True,
+                )
+                return None
+        else:
+            resolved = self._provider
+
+        if isinstance(resolved, LLMProvider):
+            # Normalize to the plain string value so a bare enum member never
+            # leaks into logs/spans as "LLMProvider.OPENAI".
+            return resolved.value
+
+        return resolved
 
     def _should_skip_error(self, error_str: str) -> bool:
         if self._skip_error_callback is None:
