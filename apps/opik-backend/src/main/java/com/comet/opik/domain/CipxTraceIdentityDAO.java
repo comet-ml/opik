@@ -48,20 +48,26 @@ public class CipxTraceIdentityDAO {
             @NonNull String userDisplayName,
             @NonNull String repository,
             @NonNull String sessionId,
+            @NonNull String harness,
             int schemaVersion) {
 
         public static TraceIdentityRow from(UUID traceId, UUID projectId, JsonNode metadata, Instant startTime) {
             JsonNode session = metadata.path("cipx").path("session");
             JsonNode identity = session.path("identity");
+            String userUuid = identity.path("user_uuid").asText("");
+            if (userUuid.isEmpty()) {
+                userUuid = identity.path("user_id").asText("");
+            }
             return TraceIdentityRow.builder()
                     .traceId(traceId.toString())
                     .projectId(projectId != null ? projectId.toString() : "")
                     .startTime(startTime)
-                    .userUuid(identity.path("user_uuid").asText(""))
+                    .userUuid(userUuid)
                     .userEmail(identity.path("email").asText(""))
                     .userDisplayName(identity.path("display_name").asText(""))
                     .repository(session.path("repository").path("remote").asText(""))
                     .sessionId(session.path("session_id").asText(""))
+                    .harness(session.path("harness").asText(""))
                     .schemaVersion(session.path("schema_version").asInt(0))
                     .build();
         }
@@ -72,7 +78,7 @@ public class CipxTraceIdentityDAO {
     private static final String INSERT = """
             INSERT INTO cipx_trace_identities
                 (workspace_id, project_id, trace_id, start_time, user_uuid,
-                 user_email, user_display_name, repository, session_id, schema_version)
+                 user_email, user_display_name, repository, session_id, harness, schema_version)
             SETTINGS log_comment = '<log_comment>'
             FORMAT Values
                 <items:{item |
@@ -86,6 +92,7 @@ public class CipxTraceIdentityDAO {
                         :user_display_name<item.index>,
                         :repository<item.index>,
                         :session_id<item.index>,
+                        :harness<item.index>,
                         :schema_version<item.index>
                     )
                     <if(item.hasNext)>,<endif>
@@ -116,7 +123,7 @@ public class CipxTraceIdentityDAO {
         // Positional binds: the driver resolves named binds with a linear indexOf over the statement's
         // parameter list (quadratic per statement), while bind(int) is a direct array write. Indices
         // follow the placeholders' first-appearance order in the rendered SQL: workspace_id once at 0
-        // (repeats dedup), then 9 parameters per row tuple in template order.
+        // (repeats dedup), then 10 parameters per row tuple in template order.
         statement.bind(0, workspaceId);
         int index = 1;
         for (TraceIdentityRow row : rows) {
@@ -128,6 +135,7 @@ public class CipxTraceIdentityDAO {
                     .bind(index++, row.userDisplayName())
                     .bind(index++, row.repository())
                     .bind(index++, row.sessionId())
+                    .bind(index++, row.harness())
                     .bind(index++, row.schemaVersion());
         }
 
