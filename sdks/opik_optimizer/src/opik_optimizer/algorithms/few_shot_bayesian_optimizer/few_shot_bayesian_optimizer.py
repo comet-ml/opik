@@ -37,6 +37,7 @@ from ...utils.prompt_library import PromptOverrides
 from ...utils.logging import debug_log
 from ...constants import normalize_eval_threads
 from ...utils.prompt_roles import apply_role_constraints, count_disallowed_role_updates
+from ...utils.scoring import improves_over
 from ...utils.multimodal import preserve_multimodal_message_structure
 from . import types
 from . import prompts as few_shot_prompts
@@ -787,8 +788,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             "demo_examples", []
         )
 
-        if best_score <= baseline_score:
-            # Optimization didn't improve, return original prompts without placeholder
+        if not improves_over(best_score, baseline_score):
+            # Tie policy (OPIK-7038): keep the seed unless a candidate STRICTLY
+            # beats the baseline. Return original prompts without placeholder.
             best_score = baseline_score
             best_prompts = original_prompts
         else:
