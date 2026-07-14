@@ -5,13 +5,17 @@ import MetricPopoverContent from "./MetricPopoverContent";
 import { METRIC_TYPE } from "@/types/optimizations";
 
 describe("MetricPopoverContent", () => {
-  it("shows the metric label as the heading", () => {
+  it("does not render a redundant metric-name title (the pill already names it)", () => {
     render(
       <MetricPopoverContent
-        metric={{ type: METRIC_TYPE.G_EVAL, label: "Custom (G-Eval)" }}
+        metric={{
+          type: METRIC_TYPE.G_EVAL,
+          label: "Custom (G-Eval)",
+          parameters: { task_introduction: "Judge the answer" },
+        }}
       />,
     );
-    expect(screen.getByText("Custom (G-Eval)")).toBeInTheDocument();
+    expect(screen.queryByText("Custom (G-Eval)")).not.toBeInTheDocument();
   });
 
   it("renders G-Eval parameters with human labels", () => {

@@ -31,7 +31,7 @@ const OptimizationMetricPill: React.FC<OptimizationMetricPillProps> = ({
         </OptimizationConfigPill>
       </button>
     </HoverCardTrigger>
-    <HoverCardContent align="start" className="w-72">
+    <HoverCardContent align="start" className="w-72 p-1.5">
       <MetricPopoverContent metric={metric} />
     </HoverCardContent>
   </HoverCard>

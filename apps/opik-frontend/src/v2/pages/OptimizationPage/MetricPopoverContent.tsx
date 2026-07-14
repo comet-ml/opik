@@ -1,5 +1,6 @@
 import React from "react";
 
+import { Separator } from "@/ui/separator";
 import {
   OptimizationMetricItem,
   METRIC_PARAMETER_LABELS,
@@ -10,7 +11,12 @@ type MetricPopoverContentProps = {
   metric: OptimizationMetricItem;
 };
 
-/** Read-only summary of a metric's configuration, shown inside the pill popover. */
+/**
+ * Read-only summary of a metric's configuration, shown inside the pill popover.
+ * Layout mirrors the Figma spec (686-53189): no title (the pill already names
+ * the metric), each parameter is an accented label over a muted value, and a
+ * divider separates the parameter blocks.
+ */
 const MetricPopoverContent: React.FC<MetricPopoverContentProps> = ({
   metric,
 }) => {
@@ -18,28 +24,28 @@ const MetricPopoverContent: React.FC<MetricPopoverContentProps> = ({
     ([, value]) => value !== undefined,
   );
 
+  if (entries.length === 0) {
+    return (
+      <p className="comet-body-xs p-1 text-muted-slate">
+        No additional configuration
+      </p>
+    );
+  }
+
   return (
-    <div className="flex flex-col gap-3">
-      <h4 className="comet-body-s-accented text-foreground">{metric.label}</h4>
-      {entries.length === 0 ? (
-        <p className="comet-body-xs text-muted-slate">
-          No additional configuration
-        </p>
-      ) : (
-        <dl className="flex flex-col gap-2">
-          {entries.map(([key, value]) => (
-            <div key={key} className="flex flex-col gap-0.5">
-              <dt className="comet-body-xs text-muted-slate">
-                {METRIC_PARAMETER_LABELS[key] ?? key}
-              </dt>
-              <dd className="comet-body-xs whitespace-pre-wrap break-words text-foreground">
-                {formatMetricParameterValue(value)}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      )}
-    </div>
+    <dl className="flex flex-col">
+      {entries.map(([key, value], index) => (
+        <React.Fragment key={key}>
+          {index > 0 && <Separator className="my-1 bg-border" />}
+          <dt className="comet-body-xs-accented px-1 pb-0.5 pt-1 leading-4 text-foreground">
+            {METRIC_PARAMETER_LABELS[key] ?? key}
+          </dt>
+          <dd className="comet-body-xs whitespace-pre-wrap break-words p-1 leading-4 text-muted-slate">
+            {formatMetricParameterValue(value)}
+          </dd>
+        </React.Fragment>
+      ))}
+    </dl>
   );
 };
 
