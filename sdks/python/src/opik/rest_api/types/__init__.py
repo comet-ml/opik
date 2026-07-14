@@ -191,6 +191,8 @@ from .boolean_feedback_detail import BooleanFeedbackDetail
 from .boolean_feedback_detail_create import BooleanFeedbackDetailCreate
 from .boolean_feedback_detail_public import BooleanFeedbackDetailPublic
 from .boolean_feedback_detail_update import BooleanFeedbackDetailUpdate
+from .breakdown_config import BreakdownConfig
+from .breakdown_config_field import BreakdownConfigField
 from .breakdown_config_public import BreakdownConfigPublic
 from .breakdown_config_public_field import BreakdownConfigPublicField
 from .bridge_command import BridgeCommand
@@ -871,6 +873,8 @@ __all__ = [
     "BooleanFeedbackDetailCreate",
     "BooleanFeedbackDetailPublic",
     "BooleanFeedbackDetailUpdate",
+    "BreakdownConfig",
+    "BreakdownConfigField",
     "BreakdownConfigPublic",
     "BreakdownConfigPublicField",
     "BridgeCommand",

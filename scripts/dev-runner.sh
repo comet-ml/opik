@@ -157,7 +157,7 @@ find_jar_files() {
     while IFS= read -r -d '' jar; do
         jar_files+=("$jar")
     done < <(find target -maxdepth 1 -type f -name 'opik-backend-*.jar' ! -name '*original*' ! -name '*sources*' ! -name '*javadoc*' -print0)
-    
+
     if [ "${#jar_files[@]}" -eq 0 ]; then
         return 1  # No JAR files found
     elif [ "${#jar_files[@]}" -eq 1 ]; then
@@ -168,13 +168,13 @@ find_jar_files() {
         for jar in "${jar_files[@]}"; do
             log_warning "  - $jar"
         done
-        
+
         # Sort JAR files by version (assuming semantic versioning in filename)
         JAR_FILE=$(printf '%s\n' "${jar_files[@]}" | sort -V | tail -n 1)
         log_warning "Automatically selected JAR with highest version: $JAR_FILE"
         log_warning "To use a different JAR, clean up target/ directory and rebuild"
     fi
-    
+
     return 0  # JAR file found and selected
 }
 
@@ -182,10 +182,10 @@ find_jar_files() {
 # Args: $1 = mode (--infra or --local-be or etc.)
 start_docker_services() {
     local mode="$1"
-    
+
     log_info "Starting Docker services..."
     cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; exit 1; }
-    
+
     if ./opik.sh "$mode"; then
         log_success "Docker services started successfully"
     else
@@ -198,10 +198,10 @@ start_docker_services() {
 # Args: $1 = mode (--infra or --local-be or etc.)
 stop_docker_services() {
     local mode="$1"
-    
+
     log_info "Stopping Docker services..."
     cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; exit 1; }
-    
+
     if ./opik.sh "$mode" --stop; then
         log_success "Docker services stopped"
     else
@@ -213,7 +213,7 @@ stop_docker_services() {
 # Args: $1 = mode (--infra or --local-be or etc.)
 verify_docker_services() {
     local mode="$1"
-    
+
     cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; exit 1; }
     ./opik.sh "$mode" --verify >/dev/null 2>&1
     return $?
@@ -782,8 +782,10 @@ start_cost_api_local() {
         AUTH_ENABLED="$cost_api_auth" \
         CLICKHOUSE_HOST=localhost CLICKHOUSE_PORT="$CLICKHOUSE_HTTP_PORT" \
         CLICKHOUSE_DATABASE=opik CLICKHOUSE_USER=opik CLICKHOUSE_PASSWORD=opik \
-        MYSQL_HOST=localhost MYSQL_PORT="$MYSQL_PORT" \
-        MYSQL_DATABASE=opik MYSQL_USER=opik MYSQL_PASSWORD=opik \
+        OPIK_DB_HOST=localhost OPIK_DB_PORT="$MYSQL_PORT" \
+        OPIK_DB_NAME=opik OPIK_DB_USERNAME=opik OPIK_DB_PASSWORD=opik \
+        AI_COST_DB_HOST=localhost AI_COST_DB_PORT="$MYSQL_PORT" \
+        AI_COST_DB_NAME=opik AI_COST_DB_USERNAME=opik AI_COST_DB_PASSWORD=opik \
         PORT="$AI_COST_BACKEND_PORT" \
         nohup uv run uvicorn cost_api.main:app --host 0.0.0.0 --port "$AI_COST_BACKEND_PORT" \
             > "$COST_API_LOG_FILE" 2>&1 &
@@ -1089,7 +1091,7 @@ stop_backend() {
                 fi
                 sleep 1
             done
-            
+
             # Force kill if still running
             if kill -0 "$BACKEND_PID" 2>/dev/null; then
                 log_warning "Force killing backend..."
@@ -1123,7 +1125,7 @@ stop_frontend() {
                 fi
                 sleep 1
             done
-            
+
             # Force kill if still running (kill main process and find children)
             if kill -0 "$FRONTEND_PID" 2>/dev/null; then
                 log_warning "Force killing frontend..."
@@ -1151,13 +1153,13 @@ stop_frontend() {
     # Clean up any orphaned processes by looking for processes with our frontend directory path
     # This is safe and compatible across Unix systems
     ORPHANED_PIDS=$(pgrep -f "$FRONTEND_DIR" 2>/dev/null || true)
-    
+
     if [ -n "$ORPHANED_PIDS" ]; then
         for PID in $ORPHANED_PIDS; do
             if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
                 # Get process info to verify it's actually our frontend process
                 PROCESS_INFO=$(ps -p "$PID" -o comm,args --no-headers 2>/dev/null || true)
-                
+
                 # Only kill if it's an npm/node/vite process AND contains our directory path
                 if [[ "$PROCESS_INFO" =~ (npm|node|vite) ]] && [[ "$PROCESS_INFO" =~ $FRONTEND_DIR ]]; then
                     log_warning "Cleaning up orphaned process: PID $PID - $PROCESS_INFO"
@@ -1250,7 +1252,7 @@ show_access_information() {
 
 create_demo_data() {
     local mode="$1"
-    
+
     log_info "Creating demo data..."
     cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; return 1; }
 
@@ -1454,7 +1456,7 @@ restart_services() {
 # Function for quick restart (only rebuild backend, keep infrastructure running)
 quick_restart_services() {
     log_info "=== Quick Restart (Backend Only) ==="
-    
+
     # Check if infrastructure is running, start it if not
     log_info "Step 1/7: Checking Docker infrastructure..."
     if verify_local_be_fe; then
@@ -1465,7 +1467,7 @@ quick_restart_services() {
         log_info "Running DB migrations..."
         run_db_migrations
     fi
-    
+
     log_info "Step 2/8: Stopping frontend..."
     stop_frontend
     log_info "Step 3/8: Stopping backend..."
@@ -1490,9 +1492,9 @@ quick_restart_services() {
     local package_json="$FRONTEND_DIR/package.json"
     local package_lock="$FRONTEND_DIR/package-lock.json"
     local node_modules="$FRONTEND_DIR/node_modules"
-    
+
     local needs_install=false
-    
+
     if [ ! -d "$node_modules" ]; then
         log_info "node_modules not found, will install dependencies"
         needs_install=true
@@ -1505,7 +1507,7 @@ quick_restart_services() {
     else
         log_info "Frontend dependencies are up to date, skipping npm install"
     fi
-    
+
     if [ "$needs_install" = true ]; then
         build_frontend
     fi

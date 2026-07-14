@@ -46,6 +46,7 @@ from .core.state import (
     prepare_experiment_config,
 )
 from .utils.logging import debug_log
+from .utils.scoring import improves_over
 from .utils.prompt_library import PromptLibrary, PromptOverrides
 from .utils.candidate_selection import select_candidate
 from .utils import rng as rng_utils
@@ -802,7 +803,9 @@ class BaseOptimizer(ABC):
     ) -> None:
         """Common evaluation-complete logic (shared by legacy/new hooks)."""
         context.trials_completed += 1
-        if prev_best_score is None or score > prev_best_score:
+        # Tie policy (OPIK-7038): only a STRICT improvement replaces the running
+        # best; a tie keeps the incumbent (seeded from the baseline).
+        if prev_best_score is None or improves_over(score, prev_best_score):
             context.current_best_score = score
             context.current_best_prompt = prompts
         runtime.evaluation_progress(

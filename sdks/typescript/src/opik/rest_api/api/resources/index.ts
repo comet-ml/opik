@@ -88,4 +88,6 @@ export * from "./traces/types/index.js";
 export * from "./welcomeWizard/client/requests/index.js";
 export * as welcomeWizard from "./welcomeWizard/index.js";
 export * as workspacePermissions from "./workspacePermissions/index.js";
+export * from "./workspaces/client/requests/index.js";
 export * as workspaces from "./workspaces/index.js";
+export * from "./workspaces/types/index.js";
