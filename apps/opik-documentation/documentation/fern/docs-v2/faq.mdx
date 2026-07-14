@@ -162,14 +162,14 @@ For questions about rate limits, reach out to us on [Slack](https://chat.comet.c
 Yes. To keep ingestion fast and reliable, Opik enforces size limits on logged data:
 
 - **Per field (~20 MB):** each span/trace `input`, `output`, and `metadata` should stay under ~20 MB.
-  The Opik SDK automatically truncates a larger field before sending - the span is still recorded
-  (marked truncated) and a warning is logged.
+  Recent Opik SDK versions truncate a larger field client-side before sending - the span is still
+  recorded (with the oversized field replaced by a truncation marker) and a warning is logged.
 - **Per request:** a single ingestion batch is capped at roughly **~50 MB compressed** (on the wire)
   and **~256 MB uncompressed**. Larger requests are rejected before they're fully processed
   (`413`, or `400` for an oversized single document).
 
 If you need to keep large content - documents, full retrieval results, images, or audio - log it as
-an [attachment](/tracing/advanced/log_multimodal_traces) instead of inline in `input`/`output`.
+an [attachment](/tracing/advanced/log_multimodal_traces#size-limits) instead of inline in `input`/`output`.
 Attachments store the full payload and keep your traces lightweight. As a rule of thumb, log the
 top-K results, IDs, or a summary rather than an entire result set or corpus.
 
@@ -256,9 +256,12 @@ as an entire retrieval result set or document inline. To fix it:
 
 - Log only what you need to observe - top-K results, IDs, or a summary - instead of full result sets
   or documents.
-- Move large content to [attachments](/tracing/advanced/log_multimodal_traces) instead of inline
-  `input`/`output`.
-- Upgrade to the latest Opik SDK, which truncates oversized fields client-side automatically.
+- Move large content to [attachments](/tracing/advanced/log_multimodal_traces#size-limits) instead
+  of inline `input`/`output`.
+- Upgrade to the latest Opik SDK, which truncates an oversized span field client-side before sending
+  so individual spans stay within the per-field limit. This addresses oversized single spans; a very
+  large batch (many or large spans in one request) can still be rejected, so reduce the payload or
+  use attachments in that case.
 
 ## How can I diagnose issues with Opik?
 

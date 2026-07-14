@@ -14,6 +14,22 @@ and output of your LLM, but also images, videos and audio and any other media.
   <img src="/img/tracing/attachments.png" />
 </Frame>
 
+## Size limits
+
+To keep ingestion fast and reliable, Opik enforces size limits on logged data:
+
+- **Per field (~20 MB):** each span/trace `input`, `output`, and `metadata` should stay under
+  ~20 MB. The Opik SDK truncates a larger field client-side before sending (marking it and logging
+  a warning), so individual spans stay within the limit.
+- **Per request:** a single ingestion batch is capped at roughly **~50 MB compressed** and
+  **~256 MB uncompressed**; larger requests are rejected (`413`, or `400` for an oversized single
+  document).
+
+Attachments are the recommended way to keep large content without hitting these limits: instead of
+embedding a large payload inline in `input`/`output`, log it as an attachment (below). The full
+payload is stored via object storage while your traces stay lightweight. As a rule of thumb, log
+summaries, top-K results, or IDs inline and attach anything large.
+
 ## Logging Attachments
 
 In the Python SDK, you can use the `Attachment` type to add files to your traces.
