@@ -124,12 +124,22 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
         }
 
         // Deferred so the DAO calls (and their query rendering) run only once the lock is held —
-        // bestEffortLock subscribes to this Mono only after acquiring the permit.
-        Mono<Void> refresh = Mono.defer(() -> Mono
-                .zip(partitionMetricsDAO.getPartitionStats(),
-                        partitionMetricsDAO.getLwdRowCounts(config.getLwdTables()))
-                .doOnNext(this::updateSnapshot)
-                .then());
+        // bestEffortLock subscribes to this Mono only after acquiring the permit. The LWD scan is
+        // the expensive, failure-prone arm (full-table mask scan needing a read-write CH user); its
+        // failure must not sink the cheap, reliable system.parts gauges, so it degrades to an empty
+        // list and the LWD gauges simply stop reporting until the next successful poll.
+        Mono<Void> refresh = Mono.defer(() -> {
+            Mono<List<LwdStat>> lwdRowCounts = partitionMetricsDAO.getLwdRowCounts(config.getLwdTables())
+                    .onErrorResume(e -> {
+                        log.warn("ClickHouse partition metrics: LWD row-count scan failed, "
+                                + "partition gauges still refreshed", e);
+                        return Mono.just(List.of());
+                    });
+            return Mono
+                    .zip(partitionMetricsDAO.getPartitionStats(), lwdRowCounts)
+                    .doOnNext(this::updateSnapshot)
+                    .then();
+        });
 
         try {
             lockService.bestEffortLock(
