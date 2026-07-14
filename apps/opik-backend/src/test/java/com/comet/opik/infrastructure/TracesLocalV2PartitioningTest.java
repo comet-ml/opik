@@ -1,7 +1,9 @@
-package com.comet.opik.domain;
+package com.comet.opik.infrastructure;
 
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
+import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.JsonUtils;

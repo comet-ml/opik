@@ -1,4 +1,4 @@
-package com.comet.opik.domain;
+package com.comet.opik.infrastructure;
 
 import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.Source;
@@ -6,6 +6,8 @@ import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.DurationUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
+import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
