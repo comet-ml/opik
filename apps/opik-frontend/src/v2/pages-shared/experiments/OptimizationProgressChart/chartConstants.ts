@@ -12,10 +12,11 @@ export const SELECTION_RING_STROKE_OPACITY = 0.4;
 // Hover growth applied on top of the base radius
 export const DOT_RADIUS_HOVER_GROWTH = 1;
 
-// Fixed, enlarged invisible hit area around each dot. Larger than the biggest
-// visible dot (best + hover growth) so the dot is easy to hover and the
-// grow-on-hover animation never shifts the hover target.
-export const HIT_AREA_RADIUS = 18;
+// Max cursor→dot distance (px) matched by the nearest-dot hover/click handler.
+// Dots are resolved by proximity on the chart container instead of per-dot hit
+// areas, so overlapping clustered dots can no longer fight over the pointer
+// (which flickered the hover and made dense fan-outs impossible to target).
+export const HOVER_HIT_DISTANCE = 22;
 
 /** Resolve a dot's radius from its best/hover state. */
 export const getDotRadius = ({

@@ -6,6 +6,7 @@ import {
   buildTrialCardModel,
   buildEdgePath,
   getUniqueSteps,
+  findNearestDot,
   getTrialStatusLabel,
   getTrialDotColor,
   TRIAL_STATUS_COLORS,
@@ -609,5 +610,38 @@ describe("buildTrialCardModel", () => {
     expect(model.rows).toHaveLength(1);
     expect(model.rows[0]).toEqual({ label: "Score", value: "-" });
     expect(model.statusLabel).toBe("Discarded in step 2");
+  });
+});
+
+describe("findNearestDot", () => {
+  const positions: Array<[string, { cx: number; cy: number }]> = [
+    ["a", { cx: 10, cy: 10 }],
+    ["b", { cx: 40, cy: 12 }],
+    ["c", { cx: 42, cy: 30 }],
+  ];
+
+  it("returns the closest dot within maxDistance", () => {
+    expect(findNearestDot(positions, 12, 11, 22)?.candidateId).toBe("a");
+    expect(findNearestDot(positions, 41, 28, 22)?.candidateId).toBe("c");
+  });
+
+  it("returns null when nothing is within maxDistance", () => {
+    expect(findNearestDot(positions, 200, 200, 22)).toBeNull();
+    expect(findNearestDot([], 10, 10, 22)).toBeNull();
+  });
+
+  it("picks a single winner among overlapping clustered dots (no thrash)", () => {
+    // b and c sit ~18px apart — both inside a 22px radius from (41,20). Exactly
+    // one is returned (the nearer, b), which is what kills the flicker.
+    const hit = findNearestDot(positions, 41, 20, 22);
+    expect(hit?.candidateId).toBe("b");
+  });
+
+  it("resolves ties to the last (topmost-drawn) dot", () => {
+    const tie: Array<[string, { cx: number; cy: number }]> = [
+      ["under", { cx: 0, cy: 0 }],
+      ["over", { cx: 0, cy: 0 }],
+    ];
+    expect(findNearestDot(tie, 0, 0, 22)?.candidateId).toBe("over");
   });
 });

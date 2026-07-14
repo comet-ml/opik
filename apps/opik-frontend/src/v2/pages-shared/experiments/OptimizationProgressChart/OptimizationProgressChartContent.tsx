@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   XAxis,
   CartesianGrid,
@@ -23,6 +23,7 @@ import {
   CandidateDataPoint,
   buildTrendLineEdges,
   getUniqueSteps,
+  findNearestDot,
 } from "./optimizationChartUtils";
 import type { InProgressInfo } from "./optimizationChartUtils";
 import {
@@ -30,6 +31,7 @@ import {
   CHART_MARGIN,
   X_AXIS_PADDING,
   X_DOMAIN_EXTRA,
+  HOVER_HIT_DISTANCE,
 } from "./chartConstants";
 import useScatterDot from "./ScatterDot";
 import type { DotPosition } from "./ScatterDot";
@@ -199,11 +201,52 @@ const OptimizationProgressChartContent: React.FC<
     hoveredCandidateId: hoveredTrial?.candidateId,
     pulsingCandidateId,
     selectedTrialId,
-    onTrialSelect,
-    onTrialClick,
     isTestSuite,
-    setHoveredTrial,
   });
+
+  // Resolve the dot nearest the cursor (within HOVER_HIT_DISTANCE). One handler
+  // on the container replaces the per-dot hit areas, so overlapping clustered
+  // dots can't fight over the pointer. Dot coords are relative to the chart
+  // SVG, so distances are measured from that surface's top-left.
+  const findNearestCandidate = useCallback(
+    (clientX: number, clientY: number) => {
+      const surface = containerRef.current?.querySelector(".recharts-surface");
+      const rect = (surface ?? containerRef.current)?.getBoundingClientRect();
+      if (!rect) return null;
+      return findNearestDot(
+        dotPositionsRef.current,
+        clientX - rect.left,
+        clientY - rect.top,
+        HOVER_HIT_DISTANCE,
+      );
+    },
+    [],
+  );
+
+  const handlePointerMove = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const nearest = findNearestCandidate(e.clientX, e.clientY);
+      setHoveredTrial((prev) =>
+        nearest?.candidateId === prev?.candidateId ? prev : nearest,
+      );
+    },
+    [findNearestCandidate],
+  );
+
+  const handlePointerLeave = useCallback(() => setHoveredTrial(null), []);
+
+  const handleChartClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const nearest = findNearestCandidate(e.clientX, e.clientY);
+      if (!nearest) return;
+      if (onTrialClick) {
+        onTrialClick(nearest.candidateId);
+      } else {
+        onTrialSelect?.(nearest.candidateId);
+      }
+    },
+    [findNearestCandidate, onTrialClick, onTrialSelect],
+  );
 
   const renderEdges = useChartEdges({ edges, chartData, overlapOffsets });
 
@@ -243,7 +286,14 @@ const OptimizationProgressChartContent: React.FC<
       : undefined;
 
   return (
-    <div ref={containerRef} className="relative">
+    <div
+      ref={containerRef}
+      className="relative"
+      style={{ cursor: hoveredTrial ? "pointer" : "default" }}
+      onMouseMove={handlePointerMove}
+      onMouseLeave={handlePointerLeave}
+      onClick={handleChartClick}
+    >
       <ChartContainer config={CHART_CONFIG} className="h-40 w-full">
         <ComposedChart data={positionedData} margin={CHART_MARGIN}>
           <CartesianGrid

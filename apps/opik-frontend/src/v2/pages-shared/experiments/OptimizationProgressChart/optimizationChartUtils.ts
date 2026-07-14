@@ -434,6 +434,35 @@ export const getUniqueSteps = (items: { stepIndex: number }[]): number[] => {
   return Array.from(steps).sort((a, b) => a - b);
 };
 
+export type DotHit = { candidateId: string; cx: number; cy: number };
+
+/**
+ * Nearest dot to (x, y) within `maxDistance` px, or null when none is close
+ * enough. Powers the chart's single hover/click handler instead of overlapping
+ * per-dot hit areas: proximity is unambiguous, so clustered dots can't fight
+ * over the pointer. Ties resolve to the last match in iteration order, i.e. the
+ * dot drawn on top.
+ */
+export const findNearestDot = (
+  positions: Iterable<[string, { cx: number; cy: number }]>,
+  x: number,
+  y: number,
+  maxDistance: number,
+): DotHit | null => {
+  let nearest: DotHit | null = null;
+  let nearestDistSq = maxDistance * maxDistance;
+  for (const [candidateId, pos] of positions) {
+    const dx = pos.cx - x;
+    const dy = pos.cy - y;
+    const distSq = dx * dx + dy * dy;
+    if (distSq <= nearestDistSq) {
+      nearestDistSq = distSq;
+      nearest = { candidateId, cx: pos.cx, cy: pos.cy };
+    }
+  }
+  return nearest;
+};
+
 /** A dot position on the chart, in pixel space. */
 export type ChartPoint = { cx: number; cy: number };
 
