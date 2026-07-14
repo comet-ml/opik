@@ -55,6 +55,7 @@ const useBestTrialCard = ({
         chartData={chartData}
         isTestSuite={isTestSuite}
         bestCandidateId={bestCandidateId}
+        boundaryElement={containerRef.current}
       />,
       containerRef.current,
     );

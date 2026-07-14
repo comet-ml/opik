@@ -17,6 +17,10 @@ type ChartTooltipProps = {
   chartData: CandidateDataPoint[];
   isTestSuite?: boolean;
   bestCandidateId?: string;
+  /** Constrain the popover to this element (the chart container) so it flips /
+   *  shifts to stay inside the chart rather than overflowing onto surrounding
+   *  content. */
+  boundaryElement?: Element | null;
 };
 
 /**
@@ -34,6 +38,7 @@ const ChartTooltip: React.FC<ChartTooltipProps> = ({
   chartData,
   isTestSuite,
   bestCandidateId,
+  boundaryElement,
 }) => {
   const chartPoint = chartData.find(
     (d) => d.candidateId === hoveredTrial.candidateId,
@@ -43,7 +48,10 @@ const ChartTooltip: React.FC<ChartTooltipProps> = ({
   const isBest = hoveredTrial.candidateId === bestCandidateId;
 
   return (
-    <Popover open>
+    // Keyed by candidate so the popover remounts when the target dot changes —
+    // Radix only positions on mount, so without this the card content updates
+    // but stays anchored to the previous dot when moving quickly between dots.
+    <Popover key={hoveredTrial.candidateId} open>
       <PopoverAnchor asChild>
         <div
           className="absolute size-0"
@@ -54,6 +62,8 @@ const ChartTooltip: React.FC<ChartTooltipProps> = ({
         side="top"
         align="center"
         sideOffset={TOOLTIP_Y_OFFSET}
+        collisionBoundary={boundaryElement ?? undefined}
+        collisionPadding={4}
         onOpenAutoFocus={(e) => e.preventDefault()}
         className={cn("pointer-events-none", TRIAL_CARD_SHELL_CLASS)}
       >

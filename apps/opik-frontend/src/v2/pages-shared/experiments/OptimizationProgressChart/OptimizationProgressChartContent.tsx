@@ -357,6 +357,7 @@ const OptimizationProgressChartContent: React.FC<
           chartData={chartData}
           isTestSuite={isTestSuite}
           bestCandidateId={bestCandidateId}
+          boundaryElement={containerRef.current}
         />
       )}
 
