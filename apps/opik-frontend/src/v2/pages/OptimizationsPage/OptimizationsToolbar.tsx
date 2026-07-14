@@ -43,46 +43,46 @@ const OptimizationsToolbar: React.FC<OptimizationsToolbarProps> = ({
   onColumnsOrderChange,
 }) => {
   return (
-    // Two rows: the top row holds the search (left) and the right-aligned
-    // actions (delete / columns / refresh); the filters sit on their own
-    // dedicated row below as a full-width block.
+    // Mirror the logs / traces toolbar: right-aligned actions on the top row,
+    // and the search as the FilterChipBar prefix so it shares one wrapping row
+    // with the filter chips (which wrap to further lines as they grow).
     <div className="mb-2 flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-2">
-        <SearchInput
-          searchText={search}
-          setSearchText={onSearchChange}
-          placeholder="Search"
-          className="w-[200px] shrink-0"
-          dimension="xs"
+      <div className="flex items-center justify-end gap-2">
+        {canDeleteOptimizationRuns && (
+          <>
+            <OptimizationsActionsPanel optimizations={selectedRows} />
+            <Separator orientation="vertical" className="mx-[2px] h-4" />
+          </>
+        )}
+        <ColumnsButton
+          columns={columns}
+          selectedColumns={selectedColumns}
+          onSelectionChange={onSelectedColumnsChange}
+          order={columnsOrder}
+          onOrderChange={onColumnsOrderChange}
+          layout="labeled"
+          size="2xs"
         />
-        <div className="flex items-center gap-2">
-          {canDeleteOptimizationRuns && (
-            <>
-              <OptimizationsActionsPanel optimizations={selectedRows} />
-              <Separator orientation="vertical" className="mx-[2px] h-4" />
-            </>
-          )}
-          <ColumnsButton
-            columns={columns}
-            selectedColumns={selectedColumns}
-            onSelectionChange={onSelectedColumnsChange}
-            order={columnsOrder}
-            onOrderChange={onColumnsOrderChange}
-            layout="labeled"
-            size="2xs"
-          />
-          <Separator orientation="vertical" className="mx-[2px] h-4" />
-          <RefreshButton
-            tooltip="Refresh optimizations list"
-            isFetching={isFetching}
-            onRefresh={onRefresh}
-            size="icon-2xs"
-          />
-        </div>
+        <Separator orientation="vertical" className="mx-[2px] h-4" />
+        <RefreshButton
+          tooltip="Refresh optimizations list"
+          isFetching={isFetching}
+          onRefresh={onRefresh}
+          size="icon-2xs"
+        />
       </div>
-      <div className="min-w-0">
-        <FilterChipBar {...filterChips} />
-      </div>
+      <FilterChipBar
+        {...filterChips}
+        prefix={
+          <SearchInput
+            searchText={search}
+            setSearchText={onSearchChange}
+            placeholder="Search"
+            className="w-[200px] shrink-0"
+            dimension="xs"
+          />
+        }
+      />
     </div>
   );
 };
