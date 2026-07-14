@@ -52,6 +52,7 @@ type OptimizationProgressChartContentProps = {
   isTestSuite?: boolean;
   isInProgress?: boolean;
   inProgressInfo?: InProgressInfo;
+  suppressBestTrialCard?: boolean;
 };
 
 const CHART_CONFIG = {
@@ -81,6 +82,7 @@ const OptimizationProgressChartContent: React.FC<
   isTestSuite,
   isInProgress = false,
   inProgressInfo,
+  suppressBestTrialCard = false,
 }) => {
   const steps = useMemo(() => getUniqueSteps(chartData), [chartData]);
 
@@ -274,6 +276,7 @@ const OptimizationProgressChartContent: React.FC<
     candidateMap,
     chartData,
     isTestSuite,
+    suppress: suppressBestTrialCard,
   });
 
   const xDomain = useMemo(() => {

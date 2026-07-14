@@ -14,6 +14,8 @@ type UseBestTrialCardParams = {
   candidateMap: Map<string, AggregatedCandidate>;
   chartData: CandidateDataPoint[];
   isTestSuite?: boolean;
+  /** Skip rendering entirely (e.g. while the trial sidebar is open). */
+  suppress?: boolean;
 };
 
 /**
@@ -34,9 +36,11 @@ const useBestTrialCard = ({
   candidateMap,
   chartData,
   isTestSuite,
+  suppress = false,
 }: UseBestTrialCardParams) =>
   useCallback(() => {
     if (
+      suppress ||
       bestCandidateId == null ||
       containerRef.current == null ||
       (hoveredCandidateId != null && hoveredCandidateId !== bestCandidateId)
@@ -67,6 +71,7 @@ const useBestTrialCard = ({
     candidateMap,
     chartData,
     isTestSuite,
+    suppress,
   ]);
 
 export default useBestTrialCard;

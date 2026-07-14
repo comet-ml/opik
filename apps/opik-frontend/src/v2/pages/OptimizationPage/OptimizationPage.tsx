@@ -261,6 +261,7 @@ const OptimizationPage: React.FC = () => {
                 isRunningMiniBatches={isRunningMiniBatches}
                 selectedTrialId={selectedTrialId}
                 onTrialSelect={setSelectedTrialId}
+                suppressBestTrialCard={trialSidebar.open}
               />
             </div>
 

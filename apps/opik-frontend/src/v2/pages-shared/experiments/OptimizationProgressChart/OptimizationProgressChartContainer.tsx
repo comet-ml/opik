@@ -27,6 +27,10 @@ type OptimizationProgressChartContainerProps = {
   isTestSuite?: boolean;
   inProgressInfo?: InProgressInfo;
   isRunningMiniBatches?: boolean;
+  /** Skip the always-open best-trial card while the trial sidebar is open: it
+   *  and the sidebar share one portal root, and no z-index sits both above the
+   *  overview and below the panel, so it would otherwise float over the panel. */
+  suppressBestTrialCard?: boolean;
 };
 
 const OptimizationProgressChartContainer: React.FC<
@@ -42,6 +46,7 @@ const OptimizationProgressChartContainer: React.FC<
   isTestSuite,
   inProgressInfo,
   isRunningMiniBatches,
+  suppressBestTrialCard,
 }) => {
   const isInProgress =
     !!status && IN_PROGRESS_OPTIMIZATION_STATUSES.includes(status);
@@ -99,6 +104,7 @@ const OptimizationProgressChartContainer: React.FC<
         isTestSuite={isTestSuite}
         isInProgress={isInProgress}
         inProgressInfo={inProgressInfo}
+        suppressBestTrialCard={suppressBestTrialCard}
       />
     );
   };
