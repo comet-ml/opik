@@ -16,27 +16,31 @@ type ChartTooltipProps = {
   candidate: AggregatedCandidate;
   chartData: CandidateDataPoint[];
   isTestSuite?: boolean;
+  bestCandidateId?: string;
 };
 
 /**
- * Trial card shown over the hovered dot (non-best dots only — the best trial
- * has its own always-visible pinned card, see useBestTrialCard). Built on the
- * core Popover so it portals above the app chrome (no longer clipped behind
- * the side menu), animates in, and reuses the shared popover shell. An
- * invisible anchor is pinned at the dot's coordinates; the content
- * flips/shifts to stay on screen.
+ * Trial card shown over a dot — the hovered dot, or the best trial by default
+ * (see useBestTrialCard, which reuses this same popover). Built on the core
+ * Popover so it portals above the app chrome (no longer clipped behind the side
+ * menu), animates in, and reuses the shared popover shell. An invisible anchor
+ * is pinned at the dot's coordinates; the content flips/shifts to stay on
+ * screen. When the dot is the best trial, the card shows the "Best trial"
+ * header styling.
  */
 const ChartTooltip: React.FC<ChartTooltipProps> = ({
   hoveredTrial,
   candidate,
   chartData,
   isTestSuite,
+  bestCandidateId,
 }) => {
   const chartPoint = chartData.find(
     (d) => d.candidateId === hoveredTrial.candidateId,
   );
   const status = chartPoint?.status ?? "passed";
   const stepIndex = chartPoint?.stepIndex ?? 0;
+  const isBest = hoveredTrial.candidateId === bestCandidateId;
 
   return (
     <Popover open>
@@ -58,6 +62,7 @@ const ChartTooltip: React.FC<ChartTooltipProps> = ({
           status={status}
           stepIndex={stepIndex}
           isTestSuite={isTestSuite}
+          isBest={isBest}
         />
       </PopoverContent>
     </Popover>
