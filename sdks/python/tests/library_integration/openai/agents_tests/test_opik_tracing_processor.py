@@ -911,6 +911,9 @@ def test_opik_tracing_processor__agent_called_in_another_tracked_function__agent
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=trace_tree)
 
 
+@pytest.mark.skip(
+    reason="Temporarily disabled: Vertex AI 429 RESOURCE_EXHAUSTED quota failures in CI"
+)
 def test_opik_tracing_processor__litellm_vertex_ai_model__provider_is_google_vertexai(
     fake_backend,
 ):

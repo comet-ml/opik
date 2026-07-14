@@ -46,7 +46,13 @@ _GEMINI_MODEL = (
     "model, opik_provider",
     [
         (_OPENAI_MODEL, "openai"),
-        (_GEMINI_MODEL, "google_vertexai"),
+        pytest.param(
+            _GEMINI_MODEL,
+            "google_vertexai",
+            marks=pytest.mark.skip(
+                reason="Temporarily disabled: Vertex AI 429 RESOURCE_EXHAUSTED quota failures in CI"
+            ),
+        ),
         (f"bedrock/{llm_constants.BEDROCK_CLAUDE_SONNET}", "bedrock"),
         (f"anthropic/{llm_constants.ANTHROPIC_CLAUDE_SONNET}", "anthropic"),
     ],
