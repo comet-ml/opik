@@ -55,6 +55,12 @@ class KpiCardDAOImpl implements KpiCardDAO {
     private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
     private final @NonNull OpikConfiguration configuration;
 
+    /**
+     * trace_costs buckets the TOTAL_COST KPI into current/previous periods keyed on trace_id (a
+     * UUIDv7 matching the trace id used for the count/error/duration split) and is CROSS JOINed as a
+     * single row, avoiding the per-trace LEFT JOIN whose hash build dominated peak memory on large
+     * projects. Identical results; the trace_id IN (traces_filtered) semijoin is retained. OPIK-7319.
+     */
     private static final String GET_TRACE_KPI_CARDS = """
             WITH feedback_scores_deduped AS (
                 SELECT workspace_id,
@@ -186,12 +192,17 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     <endif>
                 ) AS t
             ), trace_costs AS (
-                SELECT trace_id, sum(total_estimated_cost) AS cost
-                FROM spans FINAL
-                WHERE workspace_id = :workspace_id AND project_id = :project_id
-                  AND id >= :uuid_from_time AND id \\<= :uuid_to_time
-                  AND trace_id IN (SELECT id FROM traces_filtered)
-                GROUP BY trace_id
+                SELECT
+                    SUMIf(cost, trace_id >= :id_current_start AND trace_id \\<= :id_end) AS current_total_cost,
+                    SUMIf(cost, trace_id >= :id_prior_start AND trace_id \\< :id_current_start) AS previous_total_cost
+                FROM (
+                    SELECT trace_id, sum(total_estimated_cost) AS cost
+                    FROM spans FINAL
+                    WHERE workspace_id = :workspace_id AND project_id = :project_id
+                      AND id >= :uuid_from_time AND id \\<= :uuid_to_time
+                      AND trace_id IN (SELECT id FROM traces_filtered)
+                    GROUP BY trace_id
+                )
             )
             SELECT
                 COUNTIf(tf.id >= :id_current_start AND tf.id \\<= :id_end) AS current_count,
@@ -206,10 +217,10 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     / COUNTIf(tf.id >= :id_prior_start AND tf.id \\< :id_current_start)) AS previous_error_rate,
                 AVGIf(tf.duration, tf.id >= :id_current_start AND tf.id \\<= :id_end) AS current_avg_duration,
                 AVGIf(tf.duration, tf.id >= :id_prior_start AND tf.id \\< :id_current_start) AS previous_avg_duration,
-                SUMIf(tc.cost, tf.id >= :id_current_start AND tf.id \\<= :id_end) AS current_total_cost,
-                SUMIf(tc.cost, tf.id >= :id_prior_start AND tf.id \\< :id_current_start) AS previous_total_cost
+                any(tc.current_total_cost) AS current_total_cost,
+                any(tc.previous_total_cost) AS previous_total_cost
             FROM traces_filtered tf
-            LEFT JOIN trace_costs tc ON tf.id = tc.trace_id
+            CROSS JOIN trace_costs tc
             SETTINGS log_comment = '<log_comment>';
             """;
 

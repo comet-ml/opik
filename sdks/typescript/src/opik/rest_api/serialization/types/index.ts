@@ -121,6 +121,8 @@ export * from "./BooleanFeedbackDetail.js";
 export * from "./BooleanFeedbackDetailCreate.js";
 export * from "./BooleanFeedbackDetailPublic.js";
 export * from "./BooleanFeedbackDetailUpdate.js";
+export * from "./BreakdownConfig.js";
+export * from "./BreakdownConfigField.js";
 export * from "./BreakdownConfigPublic.js";
 export * from "./BreakdownConfigPublicField.js";
 export * from "./BridgeCommand.js";

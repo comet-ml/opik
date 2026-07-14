@@ -9218,6 +9218,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
       deprecated: true
+  /v1/private/workspaces/metrics/spans:
+    post:
+      tags:
+      - Workspaces
+      summary: Get workspace span metric
+      description: "Gets a span metric time series aggregated across the workspace.\
+        \ When project_ids is empty, all projects in the workspace are included; otherwise\
+        \ only the given projects."
+      operationId: getWorkspaceSpanMetric
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceSpanMetricRequest"
+      responses:
+        "200":
+          description: Workspace span metric
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceMetricResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/workspaces/versions:
     get:
       tags:
@@ -22414,6 +22441,80 @@ components:
               \ values (e.g. #FF0000). Max 10000 entries."
           description: "Workspace-level color map. Maps label names to hex color values\
             \ (e.g. #FF0000). Max 10000 entries."
+    BreakdownConfig:
+      type: object
+      properties:
+        field:
+          type: string
+          enum:
+          - none
+          - tags
+          - metadata
+          - name
+          - error_info
+          - error_type
+          - model
+          - provider
+          - type
+        metadata_key:
+          type: string
+        sub_metric:
+          type: string
+    WorkspaceSpanMetricRequest:
+      required:
+      - interval_start
+      type: object
+      properties:
+        project_ids:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            format: uuid
+        metric_type:
+          type: string
+          enum:
+          - FEEDBACK_SCORES
+          - TRACE_COUNT
+          - TOKEN_USAGE
+          - DURATION
+          - COST
+          - GUARDRAILS_FAILED_COUNT
+          - THREAD_COUNT
+          - THREAD_DURATION
+          - THREAD_FEEDBACK_SCORES
+          - SPAN_FEEDBACK_SCORES
+          - SPAN_COUNT
+          - SPAN_DURATION
+          - SPAN_TOKEN_USAGE
+          - TRACE_AVERAGE_DURATION
+          - TRACE_ERROR_RATE
+          - SPAN_AVERAGE_DURATION
+          - SPAN_COST
+          - SPAN_ERROR_RATE
+          - THREAD_AVERAGE_DURATION
+          - THREAD_COST
+        interval:
+          type: string
+          enum:
+          - HOURLY
+          - DAILY
+          - WEEKLY
+          - TOTAL
+        breakdown:
+          $ref: "#/components/schemas/BreakdownConfig"
+        filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/SpanFilter"
+        interval_start:
+          type: string
+          format: date-time
+        interval_end:
+          type: string
+          format: date-time
+        start_before_end:
+          type: boolean
     WorkspaceVersion:
       type: object
       properties:
