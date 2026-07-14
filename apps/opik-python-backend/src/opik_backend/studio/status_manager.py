@@ -40,17 +40,43 @@ class OptimizationStatusManager:
                 update (e.g. an exception whose ``str(e)`` is "").
         """
         logger.debug(f"Updating optimization {self.optimization_id} status to '{status}'")
-        kwargs = {"status": status}
+        body = {"status": status}
         # Only persist a non-blank reason: an empty string would overwrite a
         # previously-stored error_info with "" (the REST update gates on
         # `is not None`, not on emptiness).
         if error_info is not None and error_info.strip():
-            kwargs["error_info"] = error_info[:MAX_ERROR_INFO_LENGTH]
-        self.client.rest_client.optimizations.update_optimizations_by_id(
-            self.optimization_id,
-            **kwargs,
-        )
+            body["error_info"] = error_info[:MAX_ERROR_INFO_LENGTH]
+        self._send_update(body)
         logger.debug(f"Optimization {self.optimization_id} status updated to '{status}'")
+
+    def _send_update(self, body: dict) -> None:
+        """Persist an optimization update, tolerating an older opik SDK.
+
+        The python-backend pins a released ``opik`` whose typed
+        ``update_optimizations_by_id`` may predate the ``error_info`` field
+        (added in the monorepo SDK, not yet in the pinned release). When the
+        typed call rejects the ``error_info`` kwarg, fall back to the SDK's
+        pre-configured httpx client so the reason still reaches the backend
+        (it accepts snake_case fields and ignores unknown ones). Without this,
+        a build-time failure marks ``error`` via a call that raises
+        ``TypeError`` — swallowed by ``optimization_lifecycle`` — leaving the
+        run stuck at ``running``. Once the SDK ships ``error_info``, the typed
+        call handles it and this fallback is never exercised.
+        """
+        optimizations = self.client.rest_client.optimizations
+        try:
+            optimizations.update_optimizations_by_id(self.optimization_id, **body)
+            return
+        except TypeError:
+            logger.debug(
+                "Installed opik SDK lacks the 'error_info' update field; "
+                "sending the optimization update via the raw REST client."
+            )
+        optimizations._raw_client._client_wrapper.httpx_client.request(
+            f"v1/private/optimizations/{self.optimization_id}",
+            method="PUT",
+            json=body,
+        ).raise_for_status()
 
     def mark_running(self) -> None:
         """Mark optimization as running."""
