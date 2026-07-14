@@ -1,17 +1,20 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { Coins } from "lucide-react";
+import dayjs from "dayjs";
 
 import {
   KPICard,
   MetricKPICard,
   getMetricKPICardConfigs,
 } from "@/v2/pages-shared/experiments/KPICard/KPICard";
+import { StatCard } from "@/ui/stat-card";
 import {
   formatAsDuration,
   formatAsCurrency,
 } from "@/lib/optimization-formatters";
 import { Experiment } from "@/types/datasets";
 import { AggregatedCandidate } from "@/types/optimizations";
+import { getCompletedRunDurationSeconds } from "./optimizationOverviewHelpers";
 
 type MetricValue = number | undefined;
 
@@ -22,28 +25,28 @@ const CANDIDATE_KEY_MAP: Record<string, keyof AggregatedCandidate> = {
 };
 
 type ElapsedDurationProps = {
-  startTime: number;
+  /** ISO timestamp the run started at. */
+  startedAt: string;
 };
 
 const ElapsedDuration: React.FunctionComponent<ElapsedDurationProps> = ({
-  startTime,
+  startedAt,
 }) => {
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => dayjs());
 
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
+    const id = setInterval(() => setNow(dayjs()), 1000);
     return () => clearInterval(id);
   }, []);
 
-  const elapsed = (now - startTime) / 1000;
+  const start = dayjs(startedAt);
+  if (!start.isValid()) return null;
 
+  // `true` keeps fractional seconds so the ticking caption reads smoothly.
+  const elapsed = now.diff(start, "second", true);
   if (elapsed <= 0) return null;
 
-  return (
-    <span className="comet-body-xs text-muted-slate">
-      {formatAsDuration(elapsed)} total
-    </span>
-  );
+  return <StatCard.Caption>{formatAsDuration(elapsed)} total</StatCard.Caption>;
 };
 
 type OptimizationKPICardsProps = {
@@ -53,6 +56,7 @@ type OptimizationKPICardsProps = {
   isTestSuite?: boolean;
   objectiveName?: string;
   optimizationCreatedAt?: string;
+  optimizationLastUpdatedAt?: string;
   isInProgress?: boolean;
 };
 
@@ -65,33 +69,29 @@ const OptimizationKPICards: React.FunctionComponent<
   isTestSuite,
   objectiveName,
   optimizationCreatedAt,
+  optimizationLastUpdatedAt,
   isInProgress,
 }) => {
-  const kpiData = useMemo(() => {
-    const totalOptCost = experiments.reduce(
-      (sum, e) => sum + (e.total_estimated_cost ?? 0),
-      0,
-    );
-
-    let totalDuration: number | undefined;
-    if (optimizationCreatedAt && experiments.length > 0 && !isInProgress) {
-      const start = new Date(optimizationCreatedAt).getTime();
-      const end = new Date(
-        experiments.reduce(
-          (latest, e) => (e.created_at > latest ? e.created_at : latest),
-          experiments[0].created_at,
-        ),
-      ).getTime();
-      totalDuration = (end - start) / 1000;
-    }
-
-    return { totalOptCost, totalDuration };
-  }, [experiments, optimizationCreatedAt, isInProgress]);
-
-  const startTime = useMemo(() => {
-    if (!optimizationCreatedAt) return undefined;
-    return new Date(optimizationCreatedAt).getTime();
-  }, [optimizationCreatedAt]);
+  const kpiData = useMemo(
+    () => ({
+      totalOptCost: experiments.reduce(
+        (sum, e) => sum + (e.total_estimated_cost ?? 0),
+        0,
+      ),
+      totalDuration: getCompletedRunDurationSeconds({
+        isInProgress,
+        optimizationCreatedAt,
+        optimizationLastUpdatedAt,
+        trialCreatedTimes: experiments.map((e) => e.created_at),
+      }),
+    }),
+    [
+      experiments,
+      optimizationCreatedAt,
+      optimizationLastUpdatedAt,
+      isInProgress,
+    ],
+  );
 
   const configs = getMetricKPICardConfigs({ isTestSuite, objectiveName });
 
@@ -113,23 +113,23 @@ const OptimizationKPICards: React.FunctionComponent<
       })}
 
       <KPICard icon={Coins} label="Optimization cost">
-        <div className="flex items-baseline gap-1.5">
-          <span className="comet-body-s-accented">
-            {kpiData.totalOptCost > 0
-              ? formatAsCurrency(kpiData.totalOptCost)
-              : "-"}
-          </span>
-          {isInProgress && startTime != null ? (
-            <ElapsedDuration startTime={startTime} />
-          ) : (
-            kpiData.totalDuration != null &&
-            kpiData.totalDuration > 0 && (
-              <span className="comet-body-xs text-muted-slate">
-                {formatAsDuration(kpiData.totalDuration)} total
-              </span>
-            )
-          )}
-        </div>
+        <StatCard.Value
+          className={kpiData.totalOptCost > 0 ? "" : "text-muted-slate"}
+        >
+          {kpiData.totalOptCost > 0
+            ? formatAsCurrency(kpiData.totalOptCost)
+            : "-"}
+        </StatCard.Value>
+        {isInProgress && optimizationCreatedAt ? (
+          <ElapsedDuration startedAt={optimizationCreatedAt} />
+        ) : (
+          kpiData.totalDuration != null &&
+          kpiData.totalDuration > 0 && (
+            <StatCard.Caption>
+              {formatAsDuration(kpiData.totalDuration)} total
+            </StatCard.Caption>
+          )
+        )}
       </KPICard>
     </div>
   );

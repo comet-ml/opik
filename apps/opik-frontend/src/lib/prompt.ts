@@ -121,6 +121,23 @@ export const extractOpenAIMessages = (
     }
   }
 
+  // A single-prompt optimizer run serializes the prompt as a one-key wrapper
+  // { <prompt-name>: [...messages] } — the name defaults to "chat-prompt" but
+  // is any custom ChatPrompt.name the user set. Unwrap that as a single prompt
+  // (checked before the named/multi path, which would otherwise read the sole
+  // key as a prompt name and render it as raw JSON). Multi-prompt runs have
+  // more than one key and still fall through to extractNamedPrompts below.
+  if (isObject(data) && !isArray(data)) {
+    const values = Object.values(data as Record<string, unknown>);
+    if (
+      values.length === 1 &&
+      isArray(values[0]) &&
+      isValidOpenAIMessages(values[0])
+    ) {
+      return values[0];
+    }
+  }
+
   return null;
 };
 
