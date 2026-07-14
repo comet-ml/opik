@@ -28,7 +28,9 @@ PROXY_MODEL = "eu.anthropic.claude-haiku-4-5"
 LITELLM_PROXY_HEADERS = {
     "content-type": "application/json",
     "x-litellm-call-id": "2a8d6603-6471-4eee-a0c4-5b9724b70d08",
-    "x-litellm-model-id": "b93a836b35cc4858c11e17345818a56ef9e5a51744a774694f2453140f7afdee",
+    "x-litellm-model-id": (
+        "b93a836b35cc4858c11e17345818a56ef9e5a51744a774694f2453140f7afdee"
+    ),
     "x-litellm-version": "1.83.14",
     "x-litellm-response-cost": "3.5e-05",
 }
@@ -65,7 +67,7 @@ def _proxy_chat_model() -> ChatOpenAI:
     )
 
 
-def test_langchain__proxy_cost_is_captured_from_response_metadata(fake_backend):
+def test_langchain__proxy_cost_in_response_metadata__recorded_on_span(fake_backend):
     callback = OpikTracer()
 
     _proxy_chat_model().invoke(
@@ -107,7 +109,7 @@ def test_langchain__proxy_cost_is_captured_from_response_metadata(fake_backend):
     assert_equal(expected_trace, fake_backend.trace_trees[0])
 
 
-def test_langchain__provider_override_with_string(fake_backend):
+def test_langchain__provider_override_with_string__recorded_on_span(fake_backend):
     callback = OpikTracer(provider="bedrock")
 
     _proxy_chat_model().invoke(
@@ -121,7 +123,7 @@ def test_langchain__provider_override_with_string(fake_backend):
     assert llm_span.total_cost == 3.5e-05
 
 
-def test_langchain__provider_override_with_enum_is_normalized_to_string(fake_backend):
+def test_langchain__provider_override_with_enum__normalized_to_string(fake_backend):
     callback = OpikTracer(provider=LLMProvider.BEDROCK)
 
     _proxy_chat_model().invoke(
@@ -134,12 +136,9 @@ def test_langchain__provider_override_with_enum_is_normalized_to_string(fake_bac
     assert isinstance(llm_span.provider, str)
 
 
-def test_langchain__provider_override_with_callable_resolves_per_run(fake_backend):
-    def resolve_provider(run_dict):
-        metadata = run_dict["outputs"]["generations"][-1][-1]["message"]["kwargs"][
-            "response_metadata"
-        ]
-        return "bedrock" if "anthropic" in metadata.get("model_name", "") else None
+def test_langchain__provider_override_with_callable__resolved_per_run(fake_backend):
+    def resolve_provider(context):
+        return "bedrock" if "anthropic" in (context.model or "") else None
 
     callback = OpikTracer(provider=resolve_provider)
 
@@ -150,6 +149,25 @@ def test_langchain__provider_override_with_callable_resolves_per_run(fake_backen
 
     llm_span = fake_backend.trace_trees[0].spans[0]
     assert llm_span.provider == "bedrock"
+
+
+def test_langchain__provider_resolver_raises__falls_back_to_autodetection(fake_backend):
+    def resolve_provider(context):
+        raise ValueError("boom")
+
+    callback = OpikTracer(provider=resolve_provider)
+
+    _proxy_chat_model().invoke(
+        "What is the capital of France?", config={"callbacks": [callback]}
+    )
+    callback.flush()
+
+    # The failing callback must not break trace logging; the span is still logged
+    # with the auto-detected provider and the proxy cost.
+    assert len(fake_backend.trace_trees) == 1
+    llm_span = fake_backend.trace_trees[0].spans[0]
+    assert llm_span.provider is not None
+    assert llm_span.total_cost == 3.5e-05
 
 
 @pytest.mark.parametrize(
@@ -166,7 +184,9 @@ def test_langchain__provider_override_with_callable_resolves_per_run(fake_backen
         ({}, None),
     ],
 )
-def test_try_extract_response_cost(response_metadata, expected_cost):
+def test_try_extract_response_cost__response_metadata_variants__returns_expected_cost(
+    response_metadata, expected_cost
+):
     run_dict = {
         "outputs": {
             "generations": [

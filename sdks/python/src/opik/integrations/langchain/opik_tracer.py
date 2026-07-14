@@ -48,12 +48,27 @@ language_models.BaseLLM.dict = base_llm_patcher.base_llm_dict_patched()
 # or False otherwise.
 SkipErrorCallback = Callable[[str], bool]
 
-# The provider to record on an LLM span. Either a fixed provider (string or
-# LLMProvider), or a callable that receives the LangChain run dict and returns
-# the provider for that specific run (returning None falls back to the provider
-# auto-detected from the run).
+# A fixed provider to record on an LLM span: a plain string or an LLMProvider.
 ProviderOverride = Union[str, LLMProvider]
-ProviderResolver = Callable[[Dict[str, Any]], Optional[ProviderOverride]]
+
+
+class ProviderResolverContext(NamedTuple):
+    """What a provider-resolver callback receives for a single LLM run.
+
+    ``model`` is the model name parsed from the run and is the usual routing key
+    (e.g. return "bedrock" when it contains "anthropic"). ``run`` is the raw
+    LangChain run dict, an escape hatch for routing on anything ``model`` alone
+    can't express.
+    """
+
+    model: Optional[str]
+    run: Dict[str, Any]
+
+
+# A callable that receives a ProviderResolverContext and returns the provider to
+# record for that specific run. Returning None falls back to the provider
+# auto-detected from the run.
+ProviderResolver = Callable[[ProviderResolverContext], Optional[ProviderOverride]]
 
 # Placeholder output dictionary used when errors are intentionally skipped
 # via the skip_error_callback. This signals that the output was not produced
@@ -120,8 +135,9 @@ class OpikTracer(BaseTracer):
                 could be computed. Accepts:
                 * a string or ``opik.LLMProvider`` to apply to every LLM span (the
                   common single-provider case), or
-                * a callable receiving the LangChain run dict and returning the
-                  provider for that specific run (for chains/graphs that mix
+                * a callable receiving a ``ProviderResolverContext`` (``.model`` is
+                  the parsed model name, ``.run`` the raw run dict) and returning
+                  the provider for that specific run (for chains/graphs that mix
                   providers). Returning None from the callable falls back to the
                   auto-detected provider for that run.
             **kwargs: Additional arguments passed to the parent class constructor.
@@ -646,7 +662,8 @@ class OpikTracer(BaseTracer):
             if usage_info is None:
                 usage_info = llm_usage.LLMUsageInfo()
 
-            if (provider_override := self._resolve_provider(run_dict)) is not None:
+            provider_override = self._resolve_provider(run_dict, usage_info.model)
+            if provider_override is not None:
                 usage_info.provider = provider_override
 
             total_cost = response_cost_extractors.try_extract_response_cost(run_dict)
@@ -691,13 +708,27 @@ class OpikTracer(BaseTracer):
                 )
                 self._opik_context_storage.pop_span_data(ensure_id=span_data.id)
 
-    def _resolve_provider(self, run_dict: Dict[str, Any]) -> Optional[str]:
+    def _resolve_provider(
+        self, run_dict: Dict[str, Any], model: Optional[str]
+    ) -> Optional[str]:
         if self._provider is None:
             return None
 
-        resolved = (
-            self._provider(run_dict) if callable(self._provider) else self._provider
-        )
+        if callable(self._provider):
+            context = ProviderResolverContext(model=model, run=run_dict)
+            try:
+                resolved: Optional[ProviderOverride] = self._provider(context)
+            except Exception:
+                # A user callback must never break trace logging: warn and fall
+                # back to the auto-detected provider for this run.
+                LOGGER.warning(
+                    "The provider resolver callback raised an exception; falling "
+                    "back to the auto-detected provider.",
+                    exc_info=True,
+                )
+                return None
+        else:
+            resolved = self._provider
 
         if isinstance(resolved, LLMProvider):
             # Normalize to the plain string value so a bare enum member never
