@@ -156,6 +156,8 @@ from .types import (
     BooleanFeedbackDetailCreate,
     BooleanFeedbackDetailPublic,
     BooleanFeedbackDetailUpdate,
+    BreakdownConfig,
+    BreakdownConfigField,
     BreakdownConfigPublic,
     BreakdownConfigPublicField,
     BridgeCommand,
@@ -782,6 +784,7 @@ from .spans import (
     SpanSearchStreamRequestPublicType,
 )
 from .traces import TraceSearchStreamRequestPublicExcludeItem
+from .workspaces import WorkspaceSpanMetricRequestInterval, WorkspaceSpanMetricRequestMetricType
 
 __all__ = [
     "Agent",
@@ -944,6 +947,8 @@ __all__ = [
     "BooleanFeedbackDetailCreate",
     "BooleanFeedbackDetailPublic",
     "BooleanFeedbackDetailUpdate",
+    "BreakdownConfig",
+    "BreakdownConfigField",
     "BreakdownConfigPublic",
     "BreakdownConfigPublicField",
     "BridgeCommand",
@@ -1505,6 +1510,8 @@ __all__ = [
     "WorkspaceMetricsSummaryResponse",
     "WorkspaceNameHolder",
     "WorkspaceProjectUserCount",
+    "WorkspaceSpanMetricRequestInterval",
+    "WorkspaceSpanMetricRequestMetricType",
     "WorkspaceSpansCount",
     "WorkspaceTraceCount",
     "WorkspaceUserPermissions",
