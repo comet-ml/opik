@@ -875,6 +875,7 @@ class OptimizationsResourceTest {
         optimization = optimization.toBuilder().id(id)
                 .name(update.name() != null ? update.name() : optimization.name())
                 .status(update.status() != null ? update.status() : optimization.status())
+                .errorInfo(update.errorInfo() != null ? update.errorInfo() : optimization.errorInfo())
                 .build();
 
         var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);

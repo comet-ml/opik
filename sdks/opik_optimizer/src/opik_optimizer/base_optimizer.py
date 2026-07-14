@@ -1500,9 +1500,7 @@ class BaseOptimizer(ABC):
                 f"Optimization object exists: {context.optimization is not None}"
             )
             try:
-                self._finalize_optimization(
-                    context, status="error", error_info=str(e)
-                )
+                self._finalize_optimization(context, status="error", error_info=str(e))
             except Exception as finalize_error:
                 logger.error(
                     f"Failed to finalize optimization status: {finalize_error}",
