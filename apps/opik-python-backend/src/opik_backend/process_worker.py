@@ -1,3 +1,4 @@
+import ast
 import signal
 import sys
 import traceback
@@ -14,43 +15,128 @@ from .payload_types import PayloadType
 # Set up logging for the worker
 logger = logging.getLogger("process_worker")
 handler = logging.StreamHandler(sys.stderr)
-formatter = logging.Formatter('[%(asctime)s] Worker PID %(process)d: [%(levelname)s] %(message)s')
+formatter = logging.Formatter(
+    "[%(asctime)s] Worker PID %(process)d: [%(levelname)s] %(message)s"
+)
 handler.setFormatter(formatter)
 if not logger.hasHandlers():
     logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
 
-def get_metric_class(module: ModuleType) -> Type[BaseMetric]:   
+def get_metric_class(module: ModuleType) -> Type[BaseMetric]:
     for _, cls in inspect.getmembers(module, inspect.isclass):
         # Find user-defined subclasses of BaseMetric (not BaseMetric itself)
         if issubclass(cls, BaseMetric) and cls is not BaseMetric:
             return cls
 
-def _score_accepts_var_keyword(metric: BaseMetric) -> bool:
-    """Whether the metric's ``score()`` declares a ``**kwargs`` (VAR_KEYWORD) param.
 
-    Consumed by the code-metric data assembly (studio/metrics.py): a strict
-    signature such as ``score(self, output, reference)`` must NOT receive extra
-    dataset columns as unexpected keywords, whereas a ``score(self, output,
-    **kwargs)`` signature is happy to absorb the remaining columns.
+def _find_basemetric_classdef(tree: ast.AST) -> Optional[ast.ClassDef]:
+    """First ClassDef that directly subclasses ``BaseMetric`` (by name), or None.
 
-    ``BaseMetric.__init__`` wraps ``score`` with ``opik.track`` (via
-    ``functools.wraps``), so the bound method is hidden behind a wrapper; we
-    ``inspect.unwrap`` to recover the real signature. If introspection fails we
-    stay permissive (assume ``**kwargs``) so we never starve a metric of columns
-    it actually needs -- that only preserves the historical full-splat behavior.
+    Static counterpart to :func:`get_metric_class` used at build time so no user
+    code is executed. Matches a base written as ``BaseMetric`` or
+    ``something.BaseMetric``. Indirect subclassing (via an intermediate user
+    base) is not resolvable statically and is treated as "no subclass" — a rare
+    case for these single-file metrics.
     """
-    score = getattr(metric, "score", None)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef):
+            for base in node.bases:
+                name = (
+                    base.id
+                    if isinstance(base, ast.Name)
+                    else base.attr
+                    if isinstance(base, ast.Attribute)
+                    else None
+                )
+                if name == "BaseMetric":
+                    return node
+    return None
+
+
+def _score_funcdef(cls: ast.ClassDef):
+    for node in cls.body:
+        if (
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == "score"
+        ):
+            return node
+    return None
+
+
+def _score_accepts_var_keyword_ast(cls: ast.ClassDef) -> bool:
+    """Whether ``score()`` declares ``**kwargs`` (VAR_KEYWORD), read statically.
+
+    A strict signature such as ``score(self, output, reference)`` must NOT
+    receive extra dataset columns as unexpected keywords; a ``**kwargs``
+    signature absorbs the remaining columns (studio/metrics.py data assembly).
+    Permissive default (``True``) when no ``score()`` is found so we never starve
+    a metric of columns — preserving the historical full-splat behavior.
+    """
+    score = _score_funcdef(cls)
     if score is None:
         return True
-    try:
-        sig = inspect.signature(inspect.unwrap(score))
-    except (ValueError, TypeError):
-        return True
-    return any(
-        p.kind is inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+    return score.args.kwarg is not None
+
+
+def _score_params_ast(cls: ast.ClassDef) -> List[str]:
+    """Declared ``score()`` parameter names (excluding ``self``), read statically.
+
+    Used to restrict the kwargs passed to a strict (no-``**kwargs``) signature so
+    only its declared params are supplied — never extra dataset columns.
+    """
+    score = _score_funcdef(cls)
+    if score is None:
+        return []
+    args = score.args
+    names = [
+        p.arg
+        for p in (list(args.posonlyargs) + list(args.args) + list(args.kwonlyargs))
+    ]
+    return [n for n in names if n != "self"]
+
+
+def _metric_name_ast(cls: ast.ClassDef) -> Optional[str]:
+    """Best-effort static metric name: the string default of ``__init__``'s
+    ``name`` param, else a class-level ``name = "..."``, else None (caller falls
+    back to "code"). Dynamic/computed names aren't resolvable statically."""
+    init = next(
+        (
+            n
+            for n in cls.body
+            if isinstance(n, ast.FunctionDef) and n.name == "__init__"
+        ),
+        None,
     )
+    if init is not None:
+        args = init.args
+        positional = list(args.posonlyargs) + list(args.args)
+        defaults = list(args.defaults)
+        if defaults:
+            for p, d in zip(positional[-len(defaults) :], defaults):
+                if (
+                    p.arg == "name"
+                    and isinstance(d, ast.Constant)
+                    and isinstance(d.value, str)
+                ):
+                    return d.value
+        for p, d in zip(args.kwonlyargs, args.kw_defaults):
+            if (
+                p.arg == "name"
+                and isinstance(d, ast.Constant)
+                and isinstance(d.value, str)
+            ):
+                return d.value
+    for node in cls.body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(t, ast.Name) and t.id == "name" for t in node.targets
+        ):
+            if isinstance(node.value, ast.Constant) and isinstance(
+                node.value.value, str
+            ):
+                return node.value.value
+    return None
 
 
 def to_scores(score_result: Union[ScoreResult, List[ScoreResult]]) -> List[ScoreResult]:
@@ -75,16 +161,22 @@ def run_user_code(code: str, data: dict, payload_type: Optional[str] = None) -> 
         exec(code, module.__dict__)
     except Exception as e:
         stacktrace = "\n".join(traceback.format_exc().splitlines()[3:])
-        return {"code": 400, "error": f"Field 'code' contains invalid Python code: {stacktrace}"}
+        return {
+            "code": 400,
+            "error": f"Field 'code' contains invalid Python code: {stacktrace}",
+        }
 
     metric_class = get_metric_class(module)
     if metric_class is None:
-        return {"code": 400, "error": "Field 'code' in the request doesn't contain a subclass implementation of 'opik.evaluation.metrics.BaseMetric'"}
+        return {
+            "code": 400,
+            "error": "Field 'code' in the request doesn't contain a subclass implementation of 'opik.evaluation.metrics.BaseMetric'",
+        }
 
     score_result: Union[ScoreResult, List[ScoreResult]] = []
     try:
         metric = metric_class()
-        
+
         # Handle trace_thread type differently - pass data as first positional argument
         if payload_type == PayloadType.TRACE_THREAD.value:
             score_result = metric.score(data)
@@ -93,75 +185,64 @@ def run_user_code(code: str, data: dict, payload_type: Optional[str] = None) -> 
             score_result = metric.score(**data)
     except Exception as e:
         stacktrace = "\n".join(traceback.format_exc().splitlines()[3:])
-        return {"code": 400, "error": f"The provided 'code' and 'data' fields can't be evaluated: {stacktrace}"}
-            
+        return {
+            "code": 400,
+            "error": f"The provided 'code' and 'data' fields can't be evaluated: {stacktrace}",
+        }
+
     scores = to_scores(score_result)
 
     return {"scores": [score.__dict__ for score in scores]}
 
 
 def validate_user_code(code: str) -> dict:
-    """Statically validate a metric's ``code`` and return its ``name`` WITHOUT scoring.
+    """Statically validate a metric's ``code`` via ``ast`` — WITHOUT executing it.
 
-    Build-time counterpart to :func:`run_user_code`: it compiles the code,
-    executes it into an isolated module, locates the ``BaseMetric`` subclass and
-    instantiates it to read ``metric.name`` — but never calls ``score()``.
-    Skipping ``score()`` is the whole point: the previous build-time probe ran
-    ``score(output="")`` with no dataset columns, so any metric that reads a
-    required dataset-derived keyword (e.g. ``kwargs["x"]``) was wrongly rejected
-    at build even though it scores fine on real data (OPIK-7172).
+    Build-time counterpart to :func:`run_user_code`. It only *parses* the code
+    (``ast.parse``, never ``exec``) to (a) catch syntax errors, (b) confirm a
+    ``BaseMetric`` subclass is present, and (c) extract the metric ``name`` plus
+    the ``score()`` parameter shape. **No untrusted user code runs at build
+    time** — neither module-level statements nor ``__init__`` — closing the
+    earlier gap where those ran in-process outside the sandbox. The only
+    execution of user code remains ``score()`` at scoring time, which still
+    honors ``PYTHON_CODE_EXECUTOR_STRATEGY`` (docker/process) via
+    ``studio/metrics.py::_run_code_metric``.
 
-    The error taxonomy mirrors the sandbox executor's ``scoring_runner.py`` so
-    that build-time and score-time failures read consistently:
+    Not running ``score()`` also fixes the original false-rejection (OPIK-7172):
+    the previous probe ran ``score(output="")`` with no dataset columns, so any
+    metric requiring a dataset-derived keyword was wrongly rejected at build.
 
-    - invalid Python (syntax error or module-level exec failure)
+    Error taxonomy mirrors the sandbox executor's ``scoring_runner.py``:
+
+    - invalid Python (syntax error)
     - no ``BaseMetric`` subclass present
-    - the metric class could not be instantiated
 
-    Build-time trust boundary (accepted per OPIK-7172 plan decision 2 — the
-    subprocess is the isolation boundary): the module-level user code (the
-    ``exec`` below) and the metric's ``__init__`` (instantiation below) run
-    **in-process and unsandboxed**, inside the already-isolated optimizer
-    subprocess. This is deliberate: build-time only needs to validate the code
-    and read the metric ``name`` cheaply, and ``score()`` — the untrusted
-    per-item hot path — is **never** called here. Per-score execution is what
-    still honors ``PYTHON_CODE_EXECUTOR_STRATEGY`` (docker/process sandboxing)
-    via ``studio/metrics.py::_run_code_metric``. If a hard sandbox is ever
-    required for module import / ``__init__`` too, this static validation would
-    need to move behind the executor.
-
-    Returns ``{"name": <metric name>, "accepts_var_keyword": <bool>}`` on
-    success, or ``{"code": 400, "error": <message>}`` on failure. The
-    ``accepts_var_keyword`` flag reports whether ``score()`` declares
-    ``**kwargs`` so the caller can decide whether extra dataset columns are safe
-    to splat (see :func:`_score_accepts_var_keyword`).
+    Returns ``{"name", "accepts_var_keyword", "score_params"}`` on success
+    (``name`` may be ``None`` when it isn't a static string literal — the caller
+    falls back to "code"; ``score_params`` lists ``score()``'s declared
+    parameters excluding ``self``, used to restrict a strict signature's kwargs),
+    or ``{"code": 400, "error": <message>}`` on failure. Indirect subclassing
+    and dynamically-computed names aren't resolvable statically.
     """
     try:
-        compile(code, "<metric>", "exec")
-    except SyntaxError:
-        stacktrace = "\n".join(traceback.format_exc().splitlines()[3:])
-        return {"code": 400, "error": f"Field 'code' contains invalid Python code: {stacktrace}"}
+        tree = ast.parse(code)
+    except SyntaxError as exc:
+        return {
+            "code": 400,
+            "error": f"Field 'code' contains invalid Python code: {exc}",
+        }
 
-    module = ModuleType(str(uuid.uuid4()))
-    try:
-        exec(code, module.__dict__)
-    except Exception:
-        stacktrace = "\n".join(traceback.format_exc().splitlines()[3:])
-        return {"code": 400, "error": f"Field 'code' contains invalid Python code: {stacktrace}"}
-
-    metric_class = get_metric_class(module)
+    metric_class = _find_basemetric_classdef(tree)
     if metric_class is None:
-        return {"code": 400, "error": "Field 'code' in the request doesn't contain a subclass implementation of 'opik.evaluation.metrics.BaseMetric'"}
-
-    try:
-        metric = metric_class()
-    except Exception:
-        stacktrace = "\n".join(traceback.format_exc().splitlines()[3:])
-        return {"code": 400, "error": f"The provided 'code' field could not be instantiated: {stacktrace}"}
+        return {
+            "code": 400,
+            "error": "Field 'code' in the request doesn't contain a subclass implementation of 'opik.evaluation.metrics.BaseMetric'",
+        }
 
     return {
-        "name": getattr(metric, "name", None),
-        "accepts_var_keyword": _score_accepts_var_keyword(metric),
+        "name": _metric_name_ast(metric_class),
+        "accepts_var_keyword": _score_accepts_var_keyword_ast(metric_class),
+        "score_params": _score_params_ast(metric_class),
     }
 
 
@@ -172,7 +253,7 @@ def worker_process_main(connection):
     try:
         # Signal READY to the parent process via the pipe
         connection.send("READY")
-        
+
         # Keep reading commands until told to exit or pipe closes
         while True:
             try:
@@ -180,25 +261,31 @@ def worker_process_main(connection):
                 command_data = connection.recv()
                 if command_data is None or command_data.get("command") == "EXIT":
                     break
-                    
+
                 # Parse the command (code, data, and payload_type)
-                code = command_data.get('code', '')
-                input_data = command_data.get('data', {})
-                payload_type = command_data.get('payload_type')
-                
+                code = command_data.get("code", "")
+                input_data = command_data.get("data", {})
+                payload_type = command_data.get("payload_type")
+
                 # Execute the code
                 result = run_user_code(code, input_data, payload_type)
-                
+
                 # Return the result via the pipe
                 connection.send(result)
             except EOFError as e:
                 # This occurs when the parent closes the pipe, e.g., during shutdown.
                 # The worker will break from its loop and be terminated by SIGTERM from the parent.
-                logger.info(f"Received EOF error, probably parent closed the pipe: {str(e)}")
+                logger.info(
+                    f"Received EOF error, probably parent closed the pipe: {str(e)}"
+                )
                 break
             except Exception as e:
                 # Report any errors via the pipe
-                error_msg = {"code": 500, "error": f"Worker error: {str(e)}", "traceback": traceback.format_exc()}
+                error_msg = {
+                    "code": 500,
+                    "error": f"Worker error: {str(e)}",
+                    "traceback": traceback.format_exc(),
+                }
                 try:
                     connection.send(error_msg)
                 except Exception as send_e:
@@ -209,7 +296,11 @@ def worker_process_main(connection):
     except Exception as e:
         # If we get an error during initialization, log it and exit
         # Also try to send error over pipe if possible
-        error_payload = {"code": 500, "error": f"Worker initialization error: {str(e)}", "traceback": traceback.format_exc()}
+        error_payload = {
+            "code": 500,
+            "error": f"Worker initialization error: {str(e)}",
+            "traceback": traceback.format_exc(),
+        }
         try:
             connection.send(error_payload)
         except Exception:

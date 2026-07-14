@@ -950,7 +950,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     .status(OptimizationStatus.fromString(row.get("status", String.class)))
                     .metadata(getJsonNodeOrDefault(row.get("metadata", String.class)))
                     .studioConfig(studioConfig)
-                    .errorInfo(row.get("error_info", String.class))
+                    .errorInfo(StringUtils.defaultString(row.get("error_info", String.class)))
                     .createdAt(row.get("created_at", Instant.class))
                     .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                     .createdBy(row.get("created_by", String.class))
