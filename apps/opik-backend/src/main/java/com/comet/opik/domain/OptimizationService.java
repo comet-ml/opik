@@ -36,6 +36,7 @@ import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import reactor.util.context.Context;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -552,23 +553,37 @@ class OptimizationServiceImpl implements OptimizationService {
     private void markOptimizationFailedToStart(UUID optimizationId, String workspaceId) {
         String reason = "[System] Optimization failed to start: the run could not be queued.";
 
-        var optimizationUpdate = OptimizationUpdate.builder()
-                .status(OptimizationStatus.ERROR)
-                .build();
-
-        logSyncService.appendSystemLogLine(workspaceId, optimizationId, reason)
-                .then(Mono.defer(() -> update(optimizationId, optimizationUpdate)))
-                // Headless path: seed BOTH keys. getById/update resolve through makeFluxContextAware /
-                // bindUserNameAndWorkspaceContextToStream, which call ctx.get(USER_NAME) and throw
-                // NoSuchElementException if it is absent — so WORKSPACE_ID alone silently fails the
-                // whole update (this is why enqueue-failure runs stayed INITIALIZED, OPIK-7159/7029).
-                .contextWrite(ctx -> ctx
-                        .put(RequestContext.WORKSPACE_ID, workspaceId)
-                        .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER))
+        appendSystemReasonAndMarkError(workspaceId, optimizationId, reason)
+                .contextWrite(headlessSystemContext(workspaceId))
                 .subscribeOn(Schedulers.boundedElastic())
                 .subscribe(
                         unused -> log.info("Marked optimization '{}' as ERROR (failed to start)", optimizationId),
                         error -> log.error("Failed to mark optimization '{}' as ERROR", optimizationId, error));
+    }
+
+    /**
+     * Shared "record a system reason, then flip to ERROR" workflow used by both the enqueue-failure path
+     * ({@link #markOptimizationFailedToStart}) and the stalled-run reaper ({@link #markStalledOptimizationAsError}):
+     * append the {@code [System]} line to the run's logs first (so the UI can surface it even when the worker
+     * produced no logs), then reuse the standard {@link #update} path (which finalizes logs + emits the
+     * completion event). Callers apply {@link #headlessSystemContext} and their own subscribe/guard semantics.
+     */
+    private Mono<Long> appendSystemReasonAndMarkError(String workspaceId, UUID optimizationId, String reason) {
+        var errorUpdate = OptimizationUpdate.builder().status(OptimizationStatus.ERROR).build();
+        return logSyncService.appendSystemLogLine(workspaceId, optimizationId, reason)
+                .then(Mono.defer(() -> update(optimizationId, errorUpdate)));
+    }
+
+    /**
+     * Headless reactive context both system-driven transitions need. Seed BOTH keys: getById/update resolve
+     * through makeFluxContextAware / bindUserNameAndWorkspaceContextToStream, which call ctx.get(USER_NAME)
+     * and throw NoSuchElementException if it is absent — so WORKSPACE_ID alone silently fails the whole
+     * update (this is why enqueue-failure / stalled runs otherwise stayed non-terminal, OPIK-7159/7029).
+     */
+    private static Function<Context, Context> headlessSystemContext(String workspaceId) {
+        return ctx -> ctx
+                .put(RequestContext.WORKSPACE_ID, workspaceId)
+                .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER);
     }
 
     private List<Optimization> enrichOptimizations(List<Optimization> optimizations, String workspaceId) {
@@ -640,25 +655,17 @@ class OptimizationServiceImpl implements OptimizationService {
         log.warn("Reconciling stalled studio optimization '{}' (status '{}') to ERROR: {}",
                 id, stalled.status(), reason);
 
-        var update = OptimizationUpdate.builder().status(OptimizationStatus.ERROR).build();
-
         // Re-read under the workspace context and only flip if the run is still non-terminal: this
         // closes the (tiny) race where the worker reports a terminal status between the reaper's query
         // and this update, which would otherwise overwrite a genuine completion/cancellation with ERROR.
         return optimizationDAO.getById(id)
                 .filter(current -> CANCELLABLE_STATUSES.contains(current.status()))
-                .flatMap(current -> logSyncService.appendSystemLogLine(workspaceId, id, reason)
-                        .then(Mono.defer(() -> update(id, update)))
-                        .thenReturn(1L))
+                .flatMap(current -> appendSystemReasonAndMarkError(workspaceId, id, reason).thenReturn(1L))
                 .switchIfEmpty(Mono.fromSupplier(() -> {
                     log.info("Skipping stalled reconciliation for optimization '{}': no longer stalled", id);
                     return 0L;
                 }))
-                // Headless path: seed BOTH keys — the DAO reads (makeFluxContextAware) require
-                // USER_NAME and throw if it is missing, which would make the reaper silently inert.
-                .contextWrite(ctx -> ctx
-                        .put(RequestContext.WORKSPACE_ID, workspaceId)
-                        .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER))
+                .contextWrite(headlessSystemContext(workspaceId))
                 .onErrorResume(error -> {
                     log.error("Failed to reconcile stalled studio optimization '{}'", id, error);
                     return Mono.just(0L);

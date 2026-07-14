@@ -53,11 +53,14 @@ const OptimizationsNewPageContent: React.FC<
   // will fail server-side with an auth error. We can only detect *missing*
   // keys client-side (invalid keys need a backend check — follow-up).
   // Only flag this once the keys query has settled to avoid a transient flash.
+  //
+  // Compare the selected model against the current provider-backed set directly
+  // (no `availableModels.length` guard): a stale/dirty `model` that survives a
+  // provider-key refetch — including when the set becomes empty — must still be
+  // caught, otherwise the warning hides and submit stays enabled for a run that
+  // will fail server-side.
   const isMissingProviderKey =
-    providerKeysReady &&
-    Boolean(model) &&
-    availableModels.length > 0 &&
-    !availableModels.includes(model);
+    providerKeysReady && Boolean(model) && !availableModels.includes(model);
 
   const { isSubmitting } = form.formState;
 

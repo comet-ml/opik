@@ -167,10 +167,10 @@ describe("OptimizationsNewPageContent — missing provider key (F1)", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("does NOT show the warning when availableModels is empty (no providers configured at all)", () => {
-    // When no providers are configured, availableModels is empty.
-    // The submit is already disabled via !model — don't additionally warn
-    // about a missing key when the user simply hasn't configured any provider.
+  it("shows the warning when a model is selected but availableModels is empty (stale model after key removal)", () => {
+    // A dirty `model` can survive a provider-key refetch that empties the
+    // provider-backed set. The selected model is no longer backed, so we must
+    // still warn + disable submit rather than let a doomed run through.
     renderContent({
       model: "openai/gpt-4o",
       availableModels: [],
@@ -178,8 +178,11 @@ describe("OptimizationsNewPageContent — missing provider key (F1)", () => {
     });
 
     expect(
-      screen.queryByText(/Add or check the API key for this provider/),
-    ).not.toBeInTheDocument();
+      screen.getByText(/Add or check the API key for this provider/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Optimize prompt/i }),
+    ).toBeDisabled();
   });
 
   it("the submit button is enabled when the model's provider has a configured key", () => {

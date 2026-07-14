@@ -1,10 +1,13 @@
 """Data types and context objects for Optimization Studio."""
 
+import logging
 import re
 from dataclasses import dataclass
 from typing import Dict, Any, NotRequired, Optional, List, TypedDict, Union
 
 from .exceptions import InvalidConfigError
+
+logger = logging.getLogger(__name__)
 
 
 class ScoringHealth(TypedDict):
@@ -17,6 +20,30 @@ class ScoringHealth(TypedDict):
 
     failed_count: int
     total_count: int
+
+
+def extract_scoring_health(result: Any) -> Optional[ScoringHealth]:
+    """Pull ``{failed_count, total_count}`` off an SDK ``OptimizationResult``.
+
+    Reads ``result.details["scoring_health"]``. Returns ``None`` when the field
+    is absent or malformed (older SDK versions), and never raises — the
+    completion path must not fail over a missing or bad count.
+    """
+    try:
+        details = getattr(result, "details", None) or {}
+        raw = details.get("scoring_health") if isinstance(details, dict) else None
+        if (
+            isinstance(raw, dict)
+            and isinstance(raw.get("failed_count"), int)
+            and isinstance(raw.get("total_count"), int)
+        ):
+            return ScoringHealth(
+                failed_count=raw["failed_count"],
+                total_count=raw["total_count"],
+            )
+    except Exception as exc:  # pragma: no cover - defensive; never break completion
+        logger.warning("Failed to extract scoring_health from result: %s", exc)
+    return None
 
 
 class OptimizationRunResult(TypedDict):
