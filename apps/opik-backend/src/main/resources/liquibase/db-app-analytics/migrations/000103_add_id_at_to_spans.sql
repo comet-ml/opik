@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset thiagoh:000103_add_id_at_to_spans
+--changeset thiagohora:000103_add_id_at_to_spans
 --comment: Add id_at materialized column to spans for future weekly partitioning
 
 -- Adds id_at so retention/read predicates can target the future partition expression now
