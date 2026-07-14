@@ -215,14 +215,21 @@ const OptimizationProgressChartContent: React.FC<
       const surface = containerRef.current?.querySelector(".recharts-surface");
       const rect = (surface ?? containerRef.current)?.getBoundingClientRect();
       if (!rect) return null;
+      // ScatterDot writes into dotPositionsRef but never deletes, so a candidate
+      // removed from chartData can leave a stale position. Only consider dots
+      // present in the current chart so a stale entry can't be hit or block a
+      // live dot.
+      const livePositions = [...dotPositionsRef.current].filter(([id]) =>
+        candidateMap.has(id),
+      );
       return findNearestDot(
-        dotPositionsRef.current,
+        livePositions,
         clientX - rect.left,
         clientY - rect.top,
         HOVER_HIT_DISTANCE,
       );
     },
-    [],
+    [candidateMap],
   );
 
   const handlePointerMove = useCallback(
