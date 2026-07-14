@@ -13,7 +13,7 @@ would actually be sent inline is measured and truncated.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from .batching import sequence_splitter
 from ..rest_api.types import span_write
@@ -42,68 +42,89 @@ def _truncation_marker(
 
 def _log_truncation(
     span_id: Optional[str],
-    total_size_mb: float,
+    original_size_mb: float,
     max_size_mb: float,
     truncated_fields: List[str],
+    still_oversized: bool,
 ) -> None:
     LOGGER.warning(
         "Span '%s' (%.1f MB) exceeded the per-span size limit of %s MB; "
         "truncated field(s): %s. Log large payloads as attachments to avoid "
         "truncation: %s",
         span_id,
-        total_size_mb,
+        original_size_mb,
         max_size_mb,
         ", ".join(truncated_fields),
         _DOCS_URL,
     )
+    if still_oversized:
+        LOGGER.warning(
+            "Span '%s' still exceeds the %s MB limit after truncating every "
+            "truncatable field - the remaining size comes from other fields. It "
+            "may be rejected by the backend.",
+            span_id,
+            max_size_mb,
+        )
 
 
-def _plan_field_truncation(
-    field_values: Dict[str, Any], total_size_mb: float, max_size_mb: float
+def _plan_truncation(
+    measure_with_overrides: Callable[[Dict[str, Any]], float],
+    field_sizes_mb: Dict[str, float],
+    max_size_mb: float,
 ) -> Dict[str, Any]:
     """Decide which fields to replace with a marker.
 
-    Replaces the largest fields first until the projected span size drops below
-    the limit. Returns a mapping ``{field_name: marker}`` (empty if nothing needs
-    truncating).
+    Replaces the largest fields first, **re-measuring the real serialized size**
+    (including non-truncatable fields and overhead) after each replacement, and
+    stops as soon as the span fits. Returns ``{field_name: marker}`` (empty if
+    nothing needs truncating).
     """
-    field_sizes_mb = {
-        name: sequence_splitter.get_payload_size_MB(value)
-        for name, value in field_values.items()
-        if value is not None
-    }
-
     updates: Dict[str, Any] = {}
-    projected_size_mb = total_size_mb
     for name in sorted(field_sizes_mb, key=lambda n: field_sizes_mb[n], reverse=True):
-        if projected_size_mb <= max_size_mb:
+        if measure_with_overrides(updates) <= max_size_mb:
             break
         original_size_bytes = int(field_sizes_mb[name] * 1024 * 1024)
         updates[name] = _truncation_marker(name, original_size_bytes, max_size_mb)
-        projected_size_mb -= field_sizes_mb[name]
-
     return updates
+
+
+def _field_sizes_mb(get_field: Callable[[str], Any]) -> Dict[str, float]:
+    return {
+        name: sequence_splitter.get_payload_size_MB(get_field(name))
+        for name in _TRUNCATABLE_FIELDS
+        if get_field(name) is not None
+    }
 
 
 def truncate_span_write_if_needed(
     span: span_write.SpanWrite, max_size_mb: float
 ) -> span_write.SpanWrite:
     """Return a copy of ``span`` with oversized fields truncated, or ``span`` unchanged."""
-    total_size_mb = sequence_splitter.get_payload_size_MB(span)
-    if total_size_mb <= max_size_mb:
+    original_size_mb = sequence_splitter.get_payload_size_MB(span)
+    if original_size_mb <= max_size_mb:
         return span
 
-    field_values = {name: getattr(span, name, None) for name in _TRUNCATABLE_FIELDS}
-    updates = _plan_field_truncation(field_values, total_size_mb, max_size_mb)
+    def measure(overrides: Dict[str, Any]) -> float:
+        candidate = span.model_copy(update=overrides) if overrides else span
+        return sequence_splitter.get_payload_size_MB(candidate)
+
+    updates = _plan_truncation(
+        measure, _field_sizes_mb(lambda n: getattr(span, n, None)), max_size_mb
+    )
     if not updates:
         return span
 
-    _log_truncation(
-        getattr(span, "id", None), total_size_mb, max_size_mb, list(updates)
-    )
     # SpanWrite is frozen; model_copy(update=...) builds a new instance without
     # re-validating, so the marker dict is accepted on the JSON fields.
-    return span.model_copy(update=updates)
+    result = span.model_copy(update=updates)
+    _log_truncation(
+        getattr(span, "id", None),
+        original_size_mb,
+        max_size_mb,
+        list(updates),
+        still_oversized=sequence_splitter.get_payload_size_MB(result) > max_size_mb,
+    )
+    return result
 
 
 def truncate_span_writes(
@@ -120,16 +141,27 @@ def truncate_create_span_kwargs_if_needed(
 
     Used on the non-batched path (``use_batching=False``).
     """
-    total_size_mb = sequence_splitter.get_payload_size_MB(create_span_kwargs)
-    if total_size_mb <= max_size_mb:
+    original_size_mb = sequence_splitter.get_payload_size_MB(create_span_kwargs)
+    if original_size_mb <= max_size_mb:
         return
 
-    field_values = {name: create_span_kwargs.get(name) for name in _TRUNCATABLE_FIELDS}
-    updates = _plan_field_truncation(field_values, total_size_mb, max_size_mb)
+    def measure(overrides: Dict[str, Any]) -> float:
+        return sequence_splitter.get_payload_size_MB(
+            {**create_span_kwargs, **overrides}
+        )
+
+    updates = _plan_truncation(
+        measure, _field_sizes_mb(create_span_kwargs.get), max_size_mb
+    )
     if not updates:
         return
 
-    _log_truncation(
-        create_span_kwargs.get("id"), total_size_mb, max_size_mb, list(updates)
-    )
     create_span_kwargs.update(updates)
+    _log_truncation(
+        create_span_kwargs.get("id"),
+        original_size_mb,
+        max_size_mb,
+        list(updates),
+        still_oversized=sequence_splitter.get_payload_size_MB(create_span_kwargs)
+        > max_size_mb,
+    )
