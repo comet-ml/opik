@@ -1,4 +1,5 @@
 import base64
+import json
 import urllib.parse
 from typing import Final
 
@@ -28,15 +29,11 @@ def get_ui_url() -> str:
 
 
 def get_experiment_url_by_id(
-    dataset_id: str, experiment_id: str, url_override: str
+    dataset_id: str, experiment_id: str, base_url: str, workspace: str
 ) -> str:
-    encoded_opik_url = base64.b64encode(url_override.encode("utf-8")).decode("utf-8")
-
-    project_path = urllib.parse.quote(
-        f"v1/session/redirect/experiments/?experiment_id={experiment_id}&dataset_id={dataset_id}&path={encoded_opik_url}",
-        safe=ALLOWED_URL_CHARACTERS,
-    )
-    return urllib.parse.urljoin(ensure_ending_slash(url_override), project_path)
+    domain_root = get_base_url(base_url)
+    experiments_param = urllib.parse.quote(json.dumps([experiment_id]))
+    return f"{domain_root}opik/{workspace}/experiments/{dataset_id}/compare?experiments={experiments_param}"
 
 
 def get_project_url_by_workspace(

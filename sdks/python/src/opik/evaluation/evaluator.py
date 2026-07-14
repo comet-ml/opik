@@ -408,7 +408,8 @@ def __internal_api__run_test_suite__(
         experiment_url = url_helpers.get_experiment_url_by_id(
             experiment_id=experiment_.id,
             dataset_id=suite_dataset.id,
-            url_override=client.config.url_override,
+            base_url=client.config.url_override,
+            workspace=client._workspace,
         )
         report.display_evaluation_in_progress(experiment_url)
 
@@ -603,7 +604,8 @@ def _evaluate_task(
     experiment_url = url_helpers.get_experiment_url_by_id(
         experiment_id=experiment.id,
         dataset_id=dataset.id,
-        url_override=client.config.url_override,
+        base_url=client.config.url_override,
+        workspace=client._workspace,
     )
 
     report.display_experiment_link(experiment_url=experiment_url)
@@ -736,7 +738,8 @@ def _evaluate_test_suite_task(
     experiment_url = url_helpers.get_experiment_url_by_id(
         experiment_id=experiment.id,
         dataset_id=dataset.id,
-        url_override=client.config.url_override,
+        base_url=client.config.url_override,
+        workspace=client._workspace,
     )
 
     evaluation_result_ = evaluation_result.EvaluationResult(
@@ -881,7 +884,8 @@ def evaluate_experiment(
     experiment_url = url_helpers.get_experiment_url_by_id(
         experiment_id=experiment.id,
         dataset_id=dataset_.id,
-        url_override=client.config.url_override,
+        base_url=client.config.url_override,
+        workspace=client._workspace,
     )
 
     report.display_experiment_link(experiment_url=experiment_url)
@@ -1185,7 +1189,8 @@ def evaluate_prompt(
     experiment_url = url_helpers.get_experiment_url_by_id(
         experiment_id=experiment.id,
         dataset_id=dataset.id,
-        url_override=client.config.url_override,
+        base_url=client.config.url_override,
+        workspace=client._workspace,
     )
 
     report.display_experiment_link(experiment_url=experiment_url)
