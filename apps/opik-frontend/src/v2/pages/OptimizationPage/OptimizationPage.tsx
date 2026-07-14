@@ -120,6 +120,17 @@ const OptimizationPage: React.FC = () => {
     !!optimization?.status &&
     IN_PROGRESS_OPTIMIZATION_STATUSES.includes(optimization.status);
 
+  // A finished run where no trial strictly beat the baseline: the optimizer
+  // kept the original prompt. Only assert this once the run is completed —
+  // mid-run the best candidate can still change. When it holds, present the
+  // kept original (baseline) as the result prompt, matching the SDK.
+  const noImprovement =
+    optimization?.status === OPTIMIZATION_STATUS.COMPLETED &&
+    improvedOverBaseline === false;
+  const resultCandidate = noImprovement
+    ? baselineCandidate ?? bestCandidate
+    : bestCandidate;
+
   // Single status source for the chart, the trials table, and the sidebar's
   // status card.
   const statusMap = useMemo(
@@ -253,15 +264,15 @@ const OptimizationPage: React.FC = () => {
               />
             </div>
 
-            {bestCandidate && (
+            {resultCandidate && (
               <div className="shrink-0">
                 <BestTrialPrompt
-                  bestCandidate={bestCandidate}
+                  bestCandidate={resultCandidate}
                   candidates={candidates}
                   experiments={experiments}
-                  noImprovement={improvedOverBaseline === false}
+                  noImprovement={noImprovement}
                   onViewTrial={() =>
-                    handleTrialClick(bestCandidate.candidateId)
+                    handleTrialClick(resultCandidate.candidateId)
                   }
                 />
               </div>
