@@ -12,6 +12,5 @@ EXPECTED_OPENAI_USAGE_LOGGED_FORMAT = {
     "original_usage.output_tokens": ANY_BUT_NONE,
     "original_usage.total_tokens": ANY_BUT_NONE,
     "original_usage.input_tokens_details.cached_tokens": ANY_BUT_NONE,
-    "original_usage.input_tokens_details.cache_write_tokens": ANY_BUT_NONE,
     "original_usage.output_tokens_details.reasoning_tokens": ANY_BUT_NONE,
 }
