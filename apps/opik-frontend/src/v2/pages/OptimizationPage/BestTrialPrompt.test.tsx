@@ -80,6 +80,29 @@ describe("BestTrialPrompt", () => {
     expect(onViewTrial).toHaveBeenCalledTimes(1);
   });
 
+  it("shows the no-improvement callout only when noImprovement is set", () => {
+    const message = /No improvement over baseline/i;
+
+    const { rerender } = render(
+      <BestTrialPrompt
+        bestCandidate={best}
+        candidates={[baseline, best]}
+        experiments={experiments}
+      />,
+    );
+    expect(screen.queryByText(message)).not.toBeInTheDocument();
+
+    rerender(
+      <BestTrialPrompt
+        bestCandidate={best}
+        candidates={[baseline, best]}
+        experiments={experiments}
+        noImprovement
+      />,
+    );
+    expect(screen.getByText(message)).toBeInTheDocument();
+  });
+
   it("renders nothing when the best trial has no resolvable prompt", () => {
     const { container } = render(
       <BestTrialPrompt

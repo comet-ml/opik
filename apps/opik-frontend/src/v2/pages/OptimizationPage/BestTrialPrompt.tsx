@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ArrowUpRight, GitCompare } from "lucide-react";
+import { ArrowUpRight, GitCompare, Info } from "lucide-react";
 
 import GitCompareOff from "@/icons/git-compare-off.svg?react";
 import { AggregatedCandidate } from "@/types/optimizations";
@@ -11,6 +11,13 @@ type BestTrialPromptProps = {
   bestCandidate: AggregatedCandidate;
   candidates: AggregatedCandidate[];
   experiments: Experiment[];
+  /**
+   * True when no trial strictly beat the baseline, so the optimizer kept the
+   * original prompt as the result (mirrors the SDK tie policy, OPIK-7038). We
+   * surface it here so the UI winner doesn't silently disagree with the SDK's
+   * optimized_prompt.
+   */
+  noImprovement?: boolean;
   onViewTrial?: () => void;
 };
 
@@ -23,6 +30,7 @@ const BestTrialPrompt: React.FC<BestTrialPromptProps> = ({
   bestCandidate,
   candidates,
   experiments,
+  noImprovement = false,
   onViewTrial,
 }) => {
   const { current, targets } = usePromptComparisonTargets(
@@ -76,6 +84,14 @@ const BestTrialPrompt: React.FC<BestTrialPromptProps> = ({
           )}
         </div>
       </div>
+      {noImprovement && (
+        <div className="flex items-center gap-1.5 rounded-md bg-[hsl(var(--warning-box-bg))] px-2.5 py-1.5 text-[hsl(var(--warning-box-text))]">
+          <Info className="size-3.5 shrink-0" />
+          <span className="comet-body-xs">
+            No improvement over baseline — the original prompt was kept.
+          </span>
+        </div>
+      )}
       <PromptComparison
         current={current}
         targets={targets}

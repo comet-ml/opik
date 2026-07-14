@@ -51,6 +51,7 @@ const OptimizationPage: React.FC = () => {
     setPageSize,
 
     bestCandidate,
+    improvedOverBaseline,
     baselineCandidate,
     baselineExperiment,
     inProgressInfo,
@@ -258,6 +259,7 @@ const OptimizationPage: React.FC = () => {
                   bestCandidate={bestCandidate}
                   candidates={candidates}
                   experiments={experiments}
+                  noImprovement={improvedOverBaseline === false}
                   onViewTrial={() =>
                     handleTrialClick(bestCandidate.candidateId)
                   }
