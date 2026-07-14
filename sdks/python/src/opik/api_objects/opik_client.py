@@ -8,6 +8,7 @@ import threading
 import weakref
 from typing import (
     Any,
+    Callable,
     Dict,
     List,
     Optional,
@@ -231,35 +232,36 @@ class Opik:
             )
             self._project_name_most_recent_trace = project_name
 
-    def _display_created_dataset_url(
-        self, dataset_name: str, dataset_id: str, project_name: str
+    def _log_created_resource_url(
+        self,
+        *,
+        kind: str,
+        name: str,
+        project_name: str,
+        build_url: Callable[[str, str], str],
     ) -> None:
-        project_id = rest_helpers.resolve_project_id_by_name(
-            self._rest_client, project_name
-        )
-        dataset_url = url_helpers.get_dataset_url_by_id(
-            base_url=self._config.url_override,
-            workspace=self._dereferenced_workspace(),
-            project_id=project_id,
-            dataset_id=dataset_id,
-        )
+        """Log the direct, project-scoped URL of a just-created resource.
 
-        LOGGER.info(f'Created a "{dataset_name}" dataset at {dataset_url}.')
+        Best-effort: the resource is already persisted by the time this runs,
+        so a failure to resolve the project or workspace must not turn a
+        successful creation into an error. ``build_url`` receives the resolved
+        ``(workspace, project_id)``.
+        """
+        try:
+            project_id = rest_helpers.resolve_project_id_by_name(
+                self._rest_client, project_name
+            )
+            url = build_url(self._dereferenced_workspace(), project_id)
+        except Exception:
+            LOGGER.debug(
+                "Could not resolve the URL for the created %s %r",
+                kind,
+                name,
+                exc_info=True,
+            )
+            return
 
-    def _display_created_test_suite_url(
-        self, test_suite_name: str, test_suite_id: str, project_name: str
-    ) -> None:
-        project_id = rest_helpers.resolve_project_id_by_name(
-            self._rest_client, project_name
-        )
-        test_suite_url = url_helpers.get_test_suite_url_by_id(
-            base_url=self._config.url_override,
-            workspace=self._dereferenced_workspace(),
-            project_id=project_id,
-            test_suite_id=test_suite_id,
-        )
-
-        LOGGER.info(f'Created a "{test_suite_name}" test suite at {test_suite_url}.')
+        LOGGER.info(f'Created a "{name}" {kind} at {url}.')
 
     def auth_check(self) -> None:
         """
@@ -1290,8 +1292,16 @@ class Opik:
             client=self,
         )
 
-        self._display_created_dataset_url(
-            dataset_name=name, dataset_id=result.id, project_name=project_name
+        self._log_created_resource_url(
+            kind="dataset",
+            name=name,
+            project_name=project_name,
+            build_url=lambda workspace, project_id: url_helpers.get_dataset_url_by_id(
+                base_url=self._config.url_override,
+                workspace=workspace,
+                project_id=project_id,
+                dataset_id=result.id,
+            ),
         )
 
         return result
@@ -1529,10 +1539,16 @@ class Opik:
             client=self,
         )
 
-        self._display_created_test_suite_url(
-            test_suite_name=name,
-            test_suite_id=suite_id,
+        self._log_created_resource_url(
+            kind="test suite",
+            name=name,
             project_name=project_name,
+            build_url=lambda workspace, project_id: url_helpers.get_test_suite_url_by_id(
+                base_url=self._config.url_override,
+                workspace=workspace,
+                project_id=project_id,
+                test_suite_id=suite_id,
+            ),
         )
 
         return test_suite.TestSuite(
