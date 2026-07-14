@@ -226,11 +226,17 @@ const OptimizationProgressChartContent: React.FC<
   const handlePointerMove = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       const nearest = findNearestCandidate(e.clientX, e.clientY);
+      // The best trial's popover is already shown by default, so hovering the
+      // best dot is a no-op: promoting it to the "hovered" trial would swap the
+      // default popover for an identical hovered one and remount it. Treat the
+      // best dot as no hover so its open popover stays put.
+      const next =
+        nearest && nearest.candidateId !== bestCandidateId ? nearest : null;
       setHoveredTrial((prev) =>
-        nearest?.candidateId === prev?.candidateId ? prev : nearest,
+        next?.candidateId === prev?.candidateId ? prev : next,
       );
     },
-    [findNearestCandidate],
+    [findNearestCandidate, bestCandidateId],
   );
 
   const handlePointerLeave = useCallback(() => setHoveredTrial(null), []);
