@@ -1,0 +1,152 @@
+import datetime as dt
+from unittest import mock
+
+
+from opik.message_processing import span_truncation, messages
+from opik.message_processing.batching import sequence_splitter
+from opik.message_processing.processors import online_message_processor
+from opik.rest_api.types import span_write
+
+from ...testlib import fake_message_factory
+
+ONE_MEGABYTE = fake_message_factory.ONE_MEGABYTE
+LIMIT_MB = 20.0
+
+
+def _span_write(**fields) -> span_write.SpanWrite:
+    return span_write.SpanWrite(
+        id="span-id",
+        trace_id="trace-id",
+        name="my-span",
+        start_time=dt.datetime.now(tz=dt.timezone.utc),
+        **fields,
+    )
+
+
+def _big_value(megabytes: int):
+    return {"payload": "x" * (megabytes * ONE_MEGABYTE)}
+
+
+# --------------------------------------------------------------------------- #
+# span_truncation module
+# --------------------------------------------------------------------------- #
+
+
+def test_truncate_span_write__within_limit__returned_unchanged():
+    span = _span_write(input={"prompt": "small"}, output={"result": "small"})
+
+    result = span_truncation.truncate_span_write_if_needed(span, LIMIT_MB)
+
+    assert result is span  # identity preserved, nothing copied
+    assert result.input == {"prompt": "small"}
+
+
+def test_truncate_span_write__oversized_output__truncated_and_under_limit(caplog):
+    span = _span_write(input={"prompt": "small"}, output=_big_value(21))
+    assert sequence_splitter.get_payload_size_MB(span) > LIMIT_MB
+
+    with caplog.at_level("WARNING"):
+        result = span_truncation.truncate_span_write_if_needed(span, LIMIT_MB)
+
+    # the oversized field is replaced with a marker, the small one is untouched
+    assert result.output["opik_truncated"] is True
+    assert result.output["original_size_bytes"] > 20 * ONE_MEGABYTE
+    assert result.input == {"prompt": "small"}
+    # the resulting span now fits under the limit
+    assert sequence_splitter.get_payload_size_MB(result) <= LIMIT_MB
+    # a warning naming the span + field was logged
+    assert "span-id" in caplog.text and "output" in caplog.text
+
+
+def test_truncate_span_write__truncates_largest_field_first():
+    # output is huge, input is moderately large but on its own is under the limit
+    span = _span_write(input=_big_value(5), output=_big_value(30))
+
+    result = span_truncation.truncate_span_write_if_needed(span, LIMIT_MB)
+
+    assert result.output["opik_truncated"] is True  # largest field truncated
+    assert result.input == span.input  # smaller field kept, span now under limit
+    assert sequence_splitter.get_payload_size_MB(result) <= LIMIT_MB
+
+
+def test_truncate_span_write__original_is_not_mutated():
+    span = _span_write(output=_big_value(21))
+    original_output = span.output
+
+    span_truncation.truncate_span_write_if_needed(span, LIMIT_MB)
+
+    assert span.output is original_output  # frozen model untouched
+
+
+def test_truncate_create_span_kwargs__oversized__truncated_in_place(caplog):
+    kwargs = {"id": "span-id", "output": _big_value(21), "input": {"prompt": "small"}}
+
+    with caplog.at_level("WARNING"):
+        span_truncation.truncate_create_span_kwargs_if_needed(kwargs, LIMIT_MB)
+
+    assert kwargs["output"]["opik_truncated"] is True
+    assert kwargs["input"] == {"prompt": "small"}
+    assert "span-id" in caplog.text
+
+
+def test_truncate_create_span_kwargs__within_limit__untouched():
+    kwargs = {"id": "span-id", "output": {"result": "small"}}
+    span_truncation.truncate_create_span_kwargs_if_needed(kwargs, LIMIT_MB)
+    assert kwargs["output"] == {"result": "small"}
+
+
+# --------------------------------------------------------------------------- #
+# processor integration (truncation happens right before the BE send)
+# --------------------------------------------------------------------------- #
+
+
+def _processor(max_span_payload_size_mb):
+    return online_message_processor.OpikMessageProcessor(
+        rest_client=mock.MagicMock(),
+        file_upload_manager=mock.MagicMock(),
+        fallback_replay_manager=mock.MagicMock(),
+        unauthorized_message_types_registry=mock.MagicMock(),
+        max_span_payload_size_mb=max_span_payload_size_mb,
+    )
+
+
+def test_process_create_spans_batch__oversized_span_truncated_before_send():
+    processor = _processor(max_span_payload_size_mb=LIMIT_MB)
+    big_span = _span_write(output=_big_value(21))
+    small_span = _span_write(output={"result": "small"})
+    message = messages.CreateSpansBatchMessage(batch=[big_span, small_span])
+
+    processor._process_create_spans_batch_message(message)
+
+    sent = processor._rest_client.spans.create_spans.call_args.kwargs["spans"]
+    assert sent[0].output["opik_truncated"] is True  # oversized span truncated
+    assert sent[1].output == {"result": "small"}  # small span passed through
+
+
+def test_process_create_spans_batch__limit_disabled__no_truncation():
+    processor = _processor(max_span_payload_size_mb=None)
+    big_span = _span_write(output=_big_value(21))
+    message = messages.CreateSpansBatchMessage(batch=[big_span])
+
+    processor._process_create_spans_batch_message(message)
+
+    sent = processor._rest_client.spans.create_spans.call_args.kwargs["spans"]
+    assert sent[0].output == big_span.output  # unchanged when disabled
+
+
+def test_process_create_span__oversized_field_truncated_before_send():
+    processor = _processor(max_span_payload_size_mb=LIMIT_MB)
+    span_message = fake_message_factory.fake_span_create_message_batch(
+        count=1, approximate_span_size=21 * ONE_MEGABYTE
+    )[0]
+
+    processor._process_create_span_message(span_message)
+
+    sent_kwargs = processor._rest_client.spans.create_span.call_args.kwargs
+    # the oversized field was replaced with a truncation marker
+    truncated = [
+        v
+        for k, v in sent_kwargs.items()
+        if isinstance(v, dict) and v.get("opik_truncated") is True
+    ]
+    assert truncated, "expected an oversized field to be truncated"

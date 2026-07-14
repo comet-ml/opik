@@ -21,6 +21,7 @@ def create_message_processors_chain(
     file_upload_manager: base_upload_manager.BaseFileUploadManager,
     fallback_replay_manager: replay_manager.ReplayManager,
     unauthorized_message_types_registry: permissions.UnauthorizedMessageTypeRegistry,
+    max_span_payload_size_mb: Optional[float] = None,
 ) -> message_processors.ChainedMessageProcessor:
     """
     Creates a chain of message processors by combining an online processor and a
@@ -50,6 +51,7 @@ def create_message_processors_chain(
         file_upload_manager=file_upload_manager,
         fallback_replay_manager=fallback_replay_manager,
         unauthorized_message_types_registry=unauthorized_message_types_registry,
+        max_span_payload_size_mb=max_span_payload_size_mb,
     )
     # is not active by default - will be activated during evaluation
     local = local_emulator_message_processor.LocalEmulatorMessageProcessor(active=False)

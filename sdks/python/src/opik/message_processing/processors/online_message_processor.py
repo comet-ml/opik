@@ -1,5 +1,5 @@
 import logging
-from typing import Callable, Dict, Type, Any
+from typing import Callable, Dict, Type, Any, List, Optional
 
 import httpx
 import pydantic
@@ -15,10 +15,11 @@ from opik.rest_api.types import (
     feedback_score_batch_item_thread,
     guardrail,
     experiment_item,
+    span_write,
 )
 
 from . import assertion_results_processor, message_processors
-from .. import encoder_helpers, messages, permissions
+from .. import encoder_helpers, messages, permissions, span_truncation
 from ..replay import replay_manager, db_manager
 
 
@@ -36,11 +37,15 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         fallback_replay_manager: replay_manager.ReplayManager,
         unauthorized_message_types_registry: permissions.UnauthorizedMessageTypeRegistry,
         batch_memory_limit_mb: int = 50,
+        max_span_payload_size_mb: Optional[float] = None,
         active: bool = True,
     ):
         self._rest_client = rest_client
         self._file_uploader = file_upload_manager
         self._batch_memory_limit_mb = batch_memory_limit_mb
+        # Per-span size limit (MB). Oversized spans are truncated right before
+        # sending. None disables the check.
+        self._max_span_payload_size_mb = max_span_payload_size_mb
         self._is_active = active
         self._replay_manager = fallback_replay_manager
         self._unauthorized_message_types_registry = unauthorized_message_types_registry
@@ -222,6 +227,13 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             object_type="span",
         )
 
+        # Enforce the per-span size limit right before sending, after attachment
+        # extraction has already stripped/uploaded large attachments.
+        if self._max_span_payload_size_mb is not None:
+            span_truncation.truncate_create_span_kwargs_if_needed(
+                cleaned_create_span_kwargs, self._max_span_payload_size_mb
+            )
+
         LOGGER.debug("Create span request: %s", cleaned_create_span_kwargs)
         self._rest_client.spans.create_span(**cleaned_create_span_kwargs)
 
@@ -346,8 +358,15 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         self, message: messages.CreateSpansBatchMessage
     ) -> None:
         LOGGER.debug("Create spans batch request of size %d", len(message.batch))
-        self._rest_client.spans.create_spans(spans=message.batch)
-        LOGGER.debug("Sent spans batch of size %d", len(message.batch))
+        # Enforce the per-span size limit right before sending, after attachment
+        # extraction has already stripped/uploaded large attachments.
+        batch: List[span_write.SpanWrite] = message.batch
+        if self._max_span_payload_size_mb is not None:
+            batch = span_truncation.truncate_span_writes(
+                batch, self._max_span_payload_size_mb
+            )
+        self._rest_client.spans.create_spans(spans=batch)
+        LOGGER.debug("Sent spans batch of size %d", len(batch))
 
     def _process_create_traces_batch_message(
         self, message: messages.CreateTraceBatchMessage

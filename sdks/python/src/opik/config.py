@@ -247,6 +247,14 @@ class OpikConfig(pydantic_settings.BaseSettings):
     If set to True, attachments larger than `min_base64_embedded_attachment_size` will be extracted from spans/traces and uploaded to the Opik backend.
     """
 
+    max_span_payload_size_megabytes: int = 20
+    """
+    Maximum size (in MB) of a single span's serialized payload (input/output/metadata combined),
+    measured right before it is sent to the backend (after attachments have been extracted).
+    Spans exceeding this limit have their largest field(s) replaced with a truncation marker and a
+    warning is logged. Log large payloads as attachments instead to avoid truncation.
+    """
+
     connection_monitor_ping_interval: float = 10
     """
     Interval in seconds between OPIK server's connection monitoring pings.
