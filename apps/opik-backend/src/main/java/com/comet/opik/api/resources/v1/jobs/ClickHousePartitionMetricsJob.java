@@ -57,16 +57,15 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
     private static final AttributeKey<String> PARTITION_KEY = stringKey("partition");
 
     private record Snapshot(List<PartitionStat> partitionStats, List<LwdStat> lwdStats) {
+        private static final Snapshot EMPTY = new Snapshot(List.of(), List.of());
     }
-
-    private static final Snapshot EMPTY = new Snapshot(List.of(), List.of());
 
     private final ClickHousePartitionMetricsDAO partitionMetricsDAO;
     private final LockService lockService;
     private final PartitionMetricsConfig config;
 
     private final AtomicBoolean interrupted = new AtomicBoolean(false);
-    private final AtomicReference<Snapshot> snapshot = new AtomicReference<>(EMPTY);
+    private final AtomicReference<Snapshot> snapshot = new AtomicReference<>(Snapshot.EMPTY);
 
     private final LongCounter runCounter;
 
@@ -124,11 +123,13 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
             return;
         }
 
-        Mono<Void> refresh = Mono
+        // Deferred so the DAO calls (and their query rendering) run only once the lock is held —
+        // bestEffortLock subscribes to this Mono only after acquiring the permit.
+        Mono<Void> refresh = Mono.defer(() -> Mono
                 .zip(partitionMetricsDAO.getPartitionStats(),
                         partitionMetricsDAO.getLwdRowCounts(config.getLwdTables()))
                 .doOnNext(this::updateSnapshot)
-                .then();
+                .then());
 
         try {
             lockService.bestEffortLock(
@@ -137,7 +138,7 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
                     Mono.fromRunnable(() -> {
                         log.debug(
                                 "ClickHouse partition metrics: another instance holds the poll lock, clearing snapshot");
-                        snapshot.set(EMPTY);
+                        snapshot.set(Snapshot.EMPTY);
                         runCounter.add(1, Attributes.of(stringKey("result"), "skipped_lock"));
                     }),
                     config.getInterval(),
