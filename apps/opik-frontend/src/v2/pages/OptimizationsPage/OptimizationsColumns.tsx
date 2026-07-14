@@ -24,7 +24,7 @@ import {
 // selected-columns bumped to v3 to roll out the default-visible Item source
 // column to existing users; width/order keys stay at v2 so those customizations
 // survive (matches how other tables bump only the selected-columns key).
-export const SELECTED_COLUMNS_KEY = "optimizations-selected-columns-v3";
+export const SELECTED_COLUMNS_KEY = "optimizations-selected-columns-v4";
 export const COLUMNS_WIDTH_KEY = "optimizations-columns-width-v2";
 export const COLUMNS_ORDER_KEY = "optimizations-columns-order-v2";
 
@@ -142,11 +142,13 @@ export const FILTER_COLUMNS: ColumnData<Optimization>[] = [
   },
 ];
 
-// Default-visible columns; Run ID, Algorithm and Metric ship hidden and are
-// enabled from the Columns picker.
+// Default-visible columns; Run ID ships hidden and is enabled from the Columns
+// picker. Algorithm and Metric are shown by default (design QA round 2).
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "name",
   "dataset_name",
+  "algorithm",
+  "metric",
   "created_at",
   "status",
   "pass_rate",
