@@ -15,6 +15,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.fasterxml.jackson.databind.type.CollectionType;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.google.common.annotations.VisibleForTesting;
 import dev.langchain4j.model.openai.internal.chat.Message;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
@@ -44,32 +45,35 @@ public class JsonUtils {
     private static volatile ObjectMapper MAPPER;
 
     static {
-        // Initialize with default (20MB - Jackson default) until OpikApplication configures it
-        MAPPER = createConfiguredMapper(StreamReadConstraints.DEFAULT_MAX_STRING_LEN);
-        log.info("JsonUtils initialized with default maxStringLength: '{}'",
+        // Initialize with defaults (20MB string, unlimited document) until OpikApplication configures it
+        MAPPER = createConfiguredMapper(StreamReadConstraints.DEFAULT_MAX_STRING_LEN, -1L);
+        log.info("JsonUtils initialized with default maxStringLength: '{}', maxDocumentLength: unlimited",
                 StreamReadConstraints.DEFAULT_MAX_STRING_LEN);
     }
 
     /**
-     * Configures JsonUtils with the limit from config.yml.
+     * Configures JsonUtils with the limits from config.yml.
      * Called by OpikApplication during startup.
      *
-     * @param maxStringLength Maximum string length in bytes
+     * @param maxStringLength   Maximum single string value length in bytes
+     * @param maxDocumentLength Maximum whole-document length in bytes ({@code <= 0} means unlimited)
      */
-    public static synchronized void configure(int maxStringLength) {
-        MAPPER = createConfiguredMapper(maxStringLength);
-        log.info("JsonUtils configured with maxStringLength: '{}' bytes ('{}'MB)",
-                maxStringLength, maxStringLength / 1024 / 1024);
+    public static synchronized void configure(int maxStringLength, long maxDocumentLength) {
+        MAPPER = createConfiguredMapper(maxStringLength, maxDocumentLength);
+        log.info("JsonUtils configured with maxStringLength: '{}' bytes ('{}'MB), maxDocumentLength: '{}' bytes",
+                maxStringLength, maxStringLength / 1024 / 1024, maxDocumentLength);
     }
 
     /**
      * Creates and configures an ObjectMapper with the specified limits.
      * This configuration matches the Dropwizard ObjectMapper setup in OpikApplication.
      *
-     * @param maxStringLength Maximum string length in bytes
+     * @param maxStringLength   Maximum single string value length in bytes
+     * @param maxDocumentLength Maximum whole-document length in bytes ({@code <= 0} means unlimited)
      * @return Configured ObjectMapper instance
      */
-    private static ObjectMapper createConfiguredMapper(int maxStringLength) {
+    @VisibleForTesting
+    static ObjectMapper createConfiguredMapper(int maxStringLength, long maxDocumentLength) {
         ObjectMapper mapper = new ObjectMapper();
 
         // Basic configuration matching Dropwizard defaults
@@ -87,9 +91,11 @@ public class JsonUtils {
                 .addDeserializer(Message.class, OpenAiMessageJsonDeserializer.INSTANCE)
                 .addDeserializer(Duration.class, StrictDurationDeserializer.INSTANCE));
 
-        // Configure stream read constraints
+        // Configure stream read constraints (maxDocumentLength <= 0 is normalized to "unlimited"
+        // by the builder, matching the static-init default before configure() runs).
         StreamReadConstraints readConstraints = StreamReadConstraints.builder()
                 .maxStringLength(maxStringLength)
+                .maxDocumentLength(maxDocumentLength)
                 .build();
         mapper.getFactory().setStreamReadConstraints(readConstraints);
 

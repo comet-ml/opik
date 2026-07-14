@@ -292,6 +292,12 @@ jacksonConfig:
   #   This configuration is used by both HTTP layer and internal JSON processing for consistency,
   #   preventing memory exhaustion from extremely large base64-encoded attachments before they can be stripped
   maxStringLength: 262144000
+  # Test-only caps, intentionally LOWER than the shipped defaults (512MB self-hosted / 256MB cloud)
+  # so the guard tests trip at modest payload sizes instead of generating >512MB bodies. These
+  # values are calibrated to the LargePayloadTests payloads (253MB string, 280MB doc, 51MB request);
+  # they exercise the 400/413 mechanism, while JacksonConfigTest verifies the real shipped defaults.
+  maxDocumentLength: 268435456
+  maxRequestSizeBytes: 52428800
 
 # Configuration for batch operations
 batchOperations:

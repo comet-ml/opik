@@ -4400,11 +4400,13 @@ class SpansResourceTest {
         }
 
         @Test
-        @DisplayName("Create span with multiple large attachments under individual limit - should succeed")
-        void createSpan__whenMultipleLargeAttachmentsUnderIndividualLimit__thenSucceed() throws Exception {
-            // Given: Create THREE 70MB attachments (each ~93MB as base64)
-            // Total payload: ~280MB, but each individual string is under 250MB limit
-            // This verifies the limit is per-string, not per total payload
+        @DisplayName("Create span whose total document exceeds maxDocumentLength - should return 400 Bad Request")
+        void createSpan__whenTotalDocumentExceedsMaxDocumentLength__thenReject() throws Exception {
+            // Given: THREE 70MB attachments (~93MB base64 each). Each individual string is under the
+            // 250MB maxStringLength, but the whole document (~280MB) exceeds maxDocumentLength (256MB).
+            // Verifies the per-document guard (OPIK-7334) rejects an oversized batch even when every
+            // single value is within the per-string limit - i.e. there is now a per-total cap, not
+            // only a per-string one.
             int videoSizeBytes = 70 * 1024 * 1024; // 70MB each -> ~93MB base64 each
             String base64Video1 = AttachmentPayloadUtilsTest.createValidPngBase64(videoSizeBytes);
             String base64Video2 = AttachmentPayloadUtilsTest.createValidJpegBase64(videoSizeBytes);
@@ -4428,33 +4430,48 @@ class SpansResourceTest {
                     .feedbackScores(null)
                     .build();
 
-            // When: Create the span
-            UUID spanId = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+            // When: Attempt to create the span
+            // Then: rejected mid-parse with 400 Bad Request (document length exceeded), before a
+            // multi-GB node tree is materialized - so no attachment stripping / S3 upload happens.
+            try (Response response = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE, 400)) {
+                var errorResponse = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                assertThat(errorResponse).isNotNull();
+                assertThat(errorResponse.getMessage())
+                        .containsIgnoringCase("Document length")
+                        .containsIgnoringCase("exceeds the maximum allowed");
+            }
+        }
 
-            // Then: Should succeed and attachments should be stripped
-            assertThat(spanId).isNotNull();
+        @Test
+        @DisplayName("Create span request whose Content-Length exceeds maxRequestSizeBytes - should return 413")
+        void createSpan__whenRequestContentLengthExceedsLimit__thenReject413() {
+            // The default test client (GrizzlyConnectorProvider) streams chunked and never sends a
+            // Content-Length, so it bypasses RequestSizeLimitFilter. A BUFFERED client sets
+            // Content-Length, exercising the pre-parse 413 guard (OPIK-7333) end-to-end.
+            String oversizedJson = "\"" + "a".repeat(51 * 1024 * 1024) + "\""; // 51MB > 50MB limit, valid JSON
 
-            // Verify attachments were stripped
-            Awaitility.await()
-                    .pollInterval(500, TimeUnit.MILLISECONDS)
-                    .atMost(30, TimeUnit.SECONDS)
-                    .untilAsserted(() -> {
-                        Span retrievedSpan = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY, true);
-                        assertThat(retrievedSpan).isNotNull();
+            // Grizzly connector + Expect: 100-continue so the server can reject on the Content-Length
+            // header before the body is sent. (BUFFERED makes a real Content-Length be sent; without
+            // Expect-continue the JDK connector throws "error writing to server" when the server 413s
+            // mid-upload.)
+            var config = new org.glassfish.jersey.client.ClientConfig();
+            config.connectorProvider(new org.glassfish.jersey.grizzly.connector.GrizzlyConnectorProvider());
+            config.property(org.glassfish.jersey.client.ClientProperties.REQUEST_ENTITY_PROCESSING,
+                    org.glassfish.jersey.client.RequestEntityProcessing.BUFFERED);
+            config.property(org.glassfish.jersey.client.ClientProperties.EXPECT_100_CONTINUE, true);
 
-                        String inputString = retrievedSpan.input().toString();
-                        String outputString = retrievedSpan.output().toString();
+            try (var bufferedClient = jakarta.ws.rs.client.ClientBuilder.newClient(config)) {
+                try (Response response = bufferedClient.target("%s/v1/private/spans".formatted(baseURI))
+                        .request()
+                        .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                        .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                        .post(Entity.json(oversizedJson))) {
 
-                        // All three videos should be stripped
-                        assertThat(inputString).doesNotContain(base64Video1);
-                        assertThat(inputString).doesNotContain(base64Video2);
-                        assertThat(outputString).doesNotContain(base64Video3);
-
-                        // Should have attachment references
-                        assertThat(inputString).containsPattern("\\[input-attachment-\\d+-\\d+\\.png\\]");
-                        assertThat(inputString).containsPattern("\\[input-attachment-\\d+-\\d+\\.(jpg|jpeg)\\]");
-                        assertThat(outputString).containsPattern("\\[output-attachment-\\d+-\\d+\\.png\\]");
-                    });
+                    assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_REQUEST_TOO_LONG); // 413
+                    assertThat(response.readEntity(String.class))
+                            .containsIgnoringCase("exceeds the maximum allowed size");
+                }
+            }
         }
     }
 
