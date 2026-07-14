@@ -149,6 +149,11 @@
     /* Config link icon color */
     --color-fuchsia: #db46ef;
 
+    /* Optimization trial colors (progress chart + best-trial markers) */
+    --trial-pruned: #f0abfc; /* fuchsia-300 */
+    --trial-best: #701a75; /* fuchsia-900 */
+    --trial-best-ring: #f0abfc; /* fuchsia-300 */
+
     /* Error indicator colors */
     --error-indicator-background: #ffd2d2;
     --error-indicator-text: #822c45;
@@ -377,6 +382,13 @@
 
     /* Config link icon color - Dark Mode */
     --color-fuchsia: #c850c0;
+
+    /* Optimization trial colors - Dark Mode. The best marker's two-tone
+       inverts: a bright center with a dim ring so it pops on dark
+       backgrounds, and pruned dots dim to fuchsia-800 to read as faded. */
+    --trial-pruned: #86198f; /* fuchsia-800 */
+    --trial-best: #f0abfc; /* fuchsia-300 */
+    --trial-best-ring: #86198f; /* fuchsia-800 */
 
     /* Edit badge colors - Dark Mode */
     --edit-badge-bg: #cc4730;
