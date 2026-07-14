@@ -36,7 +36,14 @@ export const getCandidatePrompt = (
     if (config && typeof config === "object") {
       const record = config as Record<string, unknown>;
       const prompt = record.prompt ?? record.prompt_messages;
-      if (prompt != null) return prompt;
+      // Skip an empty-string prompt: it would yield no diff rows and render a
+      // blank section instead of the "No prompt available." fallback. Treat it
+      // as absent so a later experiment (or the null fallback) is used.
+      if (
+        prompt != null &&
+        !(typeof prompt === "string" && prompt.trim() === "")
+      )
+        return prompt;
     }
   }
   return null;

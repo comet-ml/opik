@@ -253,6 +253,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
 
   const dynamicDatasetColumns = useMemo(() => {
     return (data?.columns ?? [])
+      .slice()
       .sort((c1, c2) => c1.name.localeCompare(c2.name))
       .map<DynamicColumn>((c) => ({
         id: c.name,
@@ -263,6 +264,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
 
   const dynamicOutputColumns = useMemo(() => {
     return (experimentsOutputData?.columns ?? [])
+      .slice()
       .sort((c1, c2) => c1.name.localeCompare(c2.name))
       .map<DynamicColumn>((c) => ({
         id: `${EXPERIMENT_ITEM_OUTPUT_PREFIX}.${c.name}`,
