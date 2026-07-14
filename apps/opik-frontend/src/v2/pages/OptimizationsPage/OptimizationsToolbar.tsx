@@ -43,44 +43,44 @@ const OptimizationsToolbar: React.FC<OptimizationsToolbarProps> = ({
   onColumnsOrderChange,
 }) => {
   return (
-    // Search + right-aligned actions share the top row; the filter bar sits
-    // inline on wide screens (lg+) but wraps to its own full-width line below
-    // the search on narrower screens, while the actions stay aligned with
-    // search on top. Gated at lg (1024px) so the filters drop to their own row
-    // on smaller laptops / split views, not just tablet widths.
-    <div className="mb-2 flex flex-wrap items-center gap-x-8 gap-y-2">
-      <SearchInput
-        searchText={search}
-        setSearchText={onSearchChange}
-        placeholder="Search"
-        className="order-1 w-[200px] shrink-0"
-        dimension="xs"
-      />
-      <div className="order-2 ml-auto flex items-center gap-2 lg:order-3">
-        {canDeleteOptimizationRuns && (
-          <>
-            <OptimizationsActionsPanel optimizations={selectedRows} />
-            <Separator orientation="vertical" className="mx-[2px] h-4" />
-          </>
-        )}
-        <ColumnsButton
-          columns={columns}
-          selectedColumns={selectedColumns}
-          onSelectionChange={onSelectedColumnsChange}
-          order={columnsOrder}
-          onOrderChange={onColumnsOrderChange}
-          layout="labeled"
-          size="2xs"
+    // Two rows: the top row holds the search (left) and the right-aligned
+    // actions (delete / columns / refresh); the filters sit on their own
+    // dedicated row below as a full-width block.
+    <div className="mb-2 flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <SearchInput
+          searchText={search}
+          setSearchText={onSearchChange}
+          placeholder="Search"
+          className="w-[200px] shrink-0"
+          dimension="xs"
         />
-        <Separator orientation="vertical" className="mx-[2px] h-4" />
-        <RefreshButton
-          tooltip="Refresh optimizations list"
-          isFetching={isFetching}
-          onRefresh={onRefresh}
-          size="icon-2xs"
-        />
+        <div className="flex items-center gap-2">
+          {canDeleteOptimizationRuns && (
+            <>
+              <OptimizationsActionsPanel optimizations={selectedRows} />
+              <Separator orientation="vertical" className="mx-[2px] h-4" />
+            </>
+          )}
+          <ColumnsButton
+            columns={columns}
+            selectedColumns={selectedColumns}
+            onSelectionChange={onSelectedColumnsChange}
+            order={columnsOrder}
+            onOrderChange={onColumnsOrderChange}
+            layout="labeled"
+            size="2xs"
+          />
+          <Separator orientation="vertical" className="mx-[2px] h-4" />
+          <RefreshButton
+            tooltip="Refresh optimizations list"
+            isFetching={isFetching}
+            onRefresh={onRefresh}
+            size="icon-2xs"
+          />
+        </div>
       </div>
-      <div className="order-3 w-full min-w-0 lg:order-2 lg:w-auto lg:flex-1">
+      <div className="min-w-0">
         <FilterChipBar {...filterChips} />
       </div>
     </div>
