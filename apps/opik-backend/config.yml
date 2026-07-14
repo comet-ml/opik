@@ -1051,6 +1051,15 @@ retention:
     # Earliest date for catch-up cursor start (service launch date)
     serviceStartDate: ${RETENTION_CATCH_UP_SERVICE_START_DATE:-2024-09-01}
 
+# ClickHouse partition-health observability (OPIK-6904). Polls system.parts + the LWD mask and
+# publishes opik.clickhouse.partition.* gauges. A distributed lock keeps a single instance polling.
+partitionMetrics:
+  enabled: ${PARTITION_METRICS_ENABLED:-false}
+  # Poll interval (default 5 min). Min 30s, max 1h.
+  interval: ${PARTITION_METRICS_INTERVAL:-5m}
+  # Tables scanned for lightweight-deleted (masked) rows. Comma-separated env override.
+  lwdTables: ${PARTITION_METRICS_LWD_TABLES:-traces,spans}
+
 # LLM providers client configuration
 llmProviderClient:
   # Default: 3
