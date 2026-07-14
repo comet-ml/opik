@@ -360,34 +360,31 @@ class RetentionPolicyServiceTest {
         }
     }
 
+    /**
+     * Exercises the {@code toMonday(id_at)} predicate on all three SpanDAO retention paths by calling each DAO
+     * method directly. Every test pins the cutoff to a given weekday and places the deletable span one day before
+     * it, so the span shares the cutoff's ISO week — the case that stresses the upper bound
+     * {@code toMonday(id_at) < addWeeks(toMonday(cutoff), 1)}. Monday is excluded from every path: a span one day
+     * before a Monday cutoff falls in the <em>previous</em> ISO week, so it would not reach that boundary.
+     * <p>
+     * All paths run against the current (unpartitioned) {@code spans} schema, so the {@code trace_id} id-range still
+     * drives the result and the {@code id_at} bounds are a verified no-op pre-cutover — they must never drop a row
+     * the id-range selects.
+     */
     @Nested
     @DisplayName("SpanDAO retention id_at predicate")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class SpanRetentionIdAtPredicate {
 
-        /**
-         * Isolates the {@code toMonday(id_at)} predicate on the unbounded delete path by calling
-         * {@link SpanDAO#deleteForRetention} directly at every day-of-week cutoff. Monday is excluded: a span one
-         * day before a Monday cutoff falls in the previous ISO week, so it would not exercise the upper bound
-         * {@code toMonday(id_at) < addWeeks(toMonday(cutoff), 1)} — the point of this test is that a span sharing the
-         * cutoff's week is still deleted, wherever in the week the cutoff lands.
-         */
         @EnumSource(value = DayOfWeek.class, names = {"MONDAY"}, mode = EnumSource.Mode.EXCLUDE)
         @ParameterizedTest
         void deleteForRetentionRemovesSpanSharingTheCutoffWeek(DayOfWeek cutoffDay) {
-            var wsName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
-            var wsId = UUID.randomUUID().toString();
-            AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, wsName, wsId, USER);
-
-            var cutoffDate = LocalDate.now(ZoneOffset.UTC).minusDays(90)
-                    .with(TemporalAdjusters.previousOrSame(cutoffDay));
-            var cutoff = cutoffDate.atStartOfDay(ZoneOffset.UTC).toInstant();
+            var wsId = newWorkspace();
+            var cutoff = cutoffAtWeekday(cutoffDay);
 
             // One day before the cutoff: inside the id-range window and in the cutoff's own ISO week.
-            var oldTime = cutoff.minus(1, ChronoUnit.DAYS);
-            var spanId = idGenerator.generateId(oldTime);
-            var traceId = idGenerator.generateId(oldTime);
-            createTestSpan(spanId, traceId, API_KEY, wsName);
+            var spanId = idGenerator.generateId(cutoff.minus(1, ChronoUnit.DAYS));
+            createTestSpan(spanId, idGenerator.generateId(cutoff.minus(1, ChronoUnit.DAYS)), API_KEY, wsName(wsId));
             waitForRows("spans", wsId, 1);
 
             var cutoffId = idGenerator.generateId(cutoff);
@@ -398,57 +395,67 @@ class RetentionPolicyServiceTest {
             assertThat(countRowsById("spans", spanId)).isZero();
         }
 
-        @Test
-        @DisplayName("Bounded delete removes old spans in window, keeps recent")
-        void deleteForRetentionBoundedRemovesOldSpansKeepsRecent() {
-            var wsName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
-            var wsId = UUID.randomUUID().toString();
-            AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, wsName, wsId, USER);
+        @EnumSource(value = DayOfWeek.class, names = {"MONDAY"}, mode = EnumSource.Mode.EXCLUDE)
+        @ParameterizedTest
+        void deleteForRetentionBoundedRemovesSpanSharingTheCutoffWeekKeepsRecent(DayOfWeek cutoffDay) {
+            var wsId = newWorkspace();
+            var cutoff = cutoffAtWeekday(cutoffDay);
 
-            Instant now = Instant.now();
-            var oldTime = now.minus(61, ChronoUnit.DAYS);
-            var recentTime = now.minus(5, ChronoUnit.DAYS);
-
-            var oldSpanId = idGenerator.generateId(oldTime);
-            var oldTraceId = idGenerator.generateId(oldTime);
-            var recentSpanId = idGenerator.generateId(recentTime);
-            var recentTraceId = idGenerator.generateId(recentTime);
-
-            createTestSpan(oldSpanId, oldTraceId, API_KEY, wsName);
-            createTestSpan(recentSpanId, recentTraceId, API_KEY, wsName);
+            // Deletable span one day before the cutoff (same ISO week); recent span after the cutoff must survive.
+            var oldSpanId = idGenerator.generateId(cutoff.minus(1, ChronoUnit.DAYS));
+            var recentSpanId = idGenerator.generateId(cutoff.plus(20, ChronoUnit.DAYS));
+            createTestSpan(oldSpanId, idGenerator.generateId(cutoff.minus(1, ChronoUnit.DAYS)), API_KEY, wsName(wsId));
+            createTestSpan(recentSpanId, idGenerator.generateId(cutoff.plus(20, ChronoUnit.DAYS)), API_KEY,
+                    wsName(wsId));
             waitForRows("spans", wsId, 2);
 
-            var cutoffId = idGenerator.generateId(now.minus(60, ChronoUnit.DAYS));
-            var lowerBound = idGenerator.generateId(now.minus(65, ChronoUnit.DAYS));
+            var cutoffId = idGenerator.generateId(cutoff);
+            var lowerBound = idGenerator.generateId(cutoff.minus(3, ChronoUnit.DAYS));
             spanDAO.deleteForRetentionBounded(Map.of(wsId, lowerBound), cutoffId, lowerBound).block();
 
             assertThat(countRows("spans", wsId)).isEqualTo(1);
-            assertThat(countRowsById("spans", recentSpanId)).isEqualTo(1);
             assertThat(countRowsById("spans", oldSpanId)).isZero();
+            assertThat(countRowsById("spans", recentSpanId)).isEqualTo(1);
         }
 
-        @Test
-        @DisplayName("Count reports only spans inside the retention window")
-        void countForRetentionCountsOnlySpansInWindow() {
-            var wsName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
-            var wsId = UUID.randomUUID().toString();
-            AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, wsName, wsId, USER);
+        @EnumSource(value = DayOfWeek.class, names = {"MONDAY"}, mode = EnumSource.Mode.EXCLUDE)
+        @ParameterizedTest
+        void countForRetentionCountsSpanSharingTheCutoffWeekOnly(DayOfWeek cutoffDay) {
+            var wsId = newWorkspace();
+            var cutoff = cutoffAtWeekday(cutoffDay);
 
-            Instant now = Instant.now();
-            var oldTime = now.minus(61, ChronoUnit.DAYS);
-            var recentTime = now.minus(5, ChronoUnit.DAYS);
-
-            createTestSpan(idGenerator.generateId(oldTime), idGenerator.generateId(oldTime), API_KEY, wsName);
-            createTestSpan(idGenerator.generateId(recentTime), idGenerator.generateId(recentTime), API_KEY, wsName);
+            // In-window span one day before the cutoff (same ISO week); recent span after the cutoff is excluded.
+            createTestSpan(idGenerator.generateId(cutoff.minus(1, ChronoUnit.DAYS)),
+                    idGenerator.generateId(cutoff.minus(1, ChronoUnit.DAYS)), API_KEY, wsName(wsId));
+            createTestSpan(idGenerator.generateId(cutoff.plus(20, ChronoUnit.DAYS)),
+                    idGenerator.generateId(cutoff.plus(20, ChronoUnit.DAYS)), API_KEY, wsName(wsId));
             waitForRows("spans", wsId, 2);
 
-            var cutoffId = idGenerator.generateId(now.minus(60, ChronoUnit.DAYS));
-            var lowerBound = idGenerator.generateId(now.minus(65, ChronoUnit.DAYS));
+            var cutoffId = idGenerator.generateId(cutoff);
+            var lowerBound = idGenerator.generateId(cutoff.minus(3, ChronoUnit.DAYS));
             var count = spanDAO.countForRetention(List.of(wsId), cutoffId, lowerBound).block();
 
-            // Only the 61-day-old span is inside [lowerBound, cutoff); the recent one is excluded by the id-range,
-            // and the id_at bounds are a no-op pre-cutover (they never narrow the result).
+            // Only the same-week span is inside [lowerBound, cutoff); the recent one is excluded by the id-range.
             assertThat(count).isEqualTo(1);
+        }
+
+        // Start of a UTC day on the ISO week of cutoffDay, ~90 days back — far enough that any retention cutoff lands
+        // here and stable across weekdays.
+        private Instant cutoffAtWeekday(DayOfWeek cutoffDay) {
+            return LocalDate.now(ZoneOffset.UTC).minusDays(90)
+                    .with(TemporalAdjusters.previousOrSame(cutoffDay))
+                    .atStartOfDay(ZoneOffset.UTC).toInstant();
+        }
+
+        // Registers an isolated workspace whose name is derived from its id, so wsName(id) recovers it.
+        private String newWorkspace() {
+            var wsId = UUID.randomUUID().toString();
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, wsName(wsId), wsId, USER);
+            return wsId;
+        }
+
+        private String wsName(String wsId) {
+            return "workspace-" + wsId;
         }
     }
 
