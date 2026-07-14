@@ -16,14 +16,21 @@ and output of your LLM, but also images, videos and audio and any other media.
 
 ## Size limits
 
-To keep ingestion fast and reliable, Opik enforces size limits on logged data:
+To keep ingestion fast and reliable, Opik enforces size limits on **inline** content - what you put
+directly in a span/trace `input`, `output`, or `metadata`:
 
-- **Per field (~20 MB):** each span/trace `input`, `output`, and `metadata` should stay under
-  ~20 MB. The Opik SDK truncates a larger field client-side before sending (marking it and logging
-  a warning), so individual spans stay within the limit.
+- **Per field (~20 MB):** inline, non-media field content should stay under ~20 MB. Recent Opik SDK
+  versions truncate a larger field client-side before sending (replacing it with a truncation marker
+  and logging a warning), so individual spans stay within the limit.
 - **Per request:** a single ingestion batch is capped at roughly **~50 MB compressed** and
   **~256 MB uncompressed**; larger requests are rejected (`413`, or `400` for an oversized single
   document).
+
+**Base64 media is handled separately and is not bound by the two limits above.** When you embed
+base64-encoded media in a field, the SDK automatically extracts anything larger than ~250 KB and
+uploads it as an attachment - a separate upload, not part of the JSON ingestion request - so a
+single embedded media value can be up to **100 MB**. See [Embedded base64 size
+limits](#embedded-base64-size-limits) below.
 
 Attachments are the recommended way to keep large content without hitting these limits: instead of
 embedding a large payload inline in `input`/`output`, log it as an attachment (below). The full
@@ -328,9 +335,9 @@ For base64-encoded content larger than 250KB, Opik automatically extracts and st
 
 When you retrieve your traces or spans later, the attachments are automatically included by default. For faster queries when you don't need the attachment data, use the `strip_attachments=true` parameter.
 
-### Size Limits
+### Embedded base64 size limits
 
-Opik Cloud supports embedded attachments up to **100MB per field**. This limit applies to individual string values in your `input`, `output`, or `metadata` fields.
+Opik Cloud supports embedded attachments up to **100MB per field**. This limit applies to individual base64 string values in your `input`, `output`, or `metadata` fields, and is separate from the [inline field/request limits](#size-limits) above - because base64 media above ~250KB is extracted and uploaded as an attachment rather than sent inline.
 
 <Note>
 Base64 encoding increases file size by about 33%. For example, a 75MB video becomes ~100MB when base64-encoded.
