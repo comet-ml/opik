@@ -265,6 +265,51 @@ for chunk in llm.stream("Hello", config={"callbacks": [opik_tracer]}):
   View the complete list of supported models and providers on the [Supported Models](/v1/tracing/cost_tracking) page.
 </Tip>
 
+### Using a proxy (LiteLLM, etc.)
+
+When LangChain's `ChatOpenAI` points at an OpenAI-compatible proxy (such as a LiteLLM gateway), cost tracking can break in two ways: the provider recorded on each LLM span defaults to the proxy's hostname, which Opik doesn't recognize and therefore can't price; and the cost the proxy already computed isn't captured.
+
+**Overriding the provider.** Pass `provider` to `OpikTracer` so the backend can price the call. It accepts a string or an `opik.LLMProvider`:
+
+```python
+from opik.integrations.langchain import OpikTracer
+
+# Record "bedrock" as the provider on every LLM span
+opik_tracer = OpikTracer(provider="bedrock")
+```
+
+If a single chain or graph mixes providers, pass a callable that returns the provider for each run. It receives a context with the model name parsed from that run, so routing is usually a one-liner. Return `None` to fall back to the auto-detected provider:
+
+```python
+def resolve_provider(context):
+    if "anthropic" in (context.model or ""):
+        return "bedrock"
+    return None  # fall back to auto-detection
+
+opik_tracer = OpikTracer(provider=resolve_provider)
+```
+
+`context.model` is normalized by Opik, so this routing doesn't depend on the proxy's response shape. For advanced cases the raw LangChain run dict is also available as `context.run`.
+
+**Provider-reported cost passthrough.** Some proxies return the exact cost of a request in a response header. `OpikTracer` captures it automatically and records it on the span, taking priority over Opik's own estimate. LiteLLM's `x-litellm-response-cost` header is supported out of the box.
+
+For LangChain to expose those response headers to Opik, create the chat model with `include_response_headers=True`:
+
+```python
+from langchain_openai import ChatOpenAI
+from opik.integrations.langchain import OpikTracer
+
+llm = ChatOpenAI(
+    model="my-model",
+    base_url="https://my-litellm-proxy.example.com",
+    api_key="<proxy API key>",
+    include_response_headers=True,  # required for the proxy to surface the cost header
+)
+
+opik_tracer = OpikTracer(provider="bedrock")
+llm.invoke("Hello", config={"callbacks": [opik_tracer]})
+```
+
 ## Settings tags and metadata
 
 You can customize the `OpikTracer` callback to include additional metadata, logging options, and conversation threading:
