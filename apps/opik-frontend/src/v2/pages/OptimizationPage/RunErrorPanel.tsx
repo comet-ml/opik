@@ -49,6 +49,20 @@ const RunErrorPanel: React.FC<RunErrorPanelProps> = ({ optimization }) => {
             (logsFailedToLoad
               ? "The run ended with an error, but the logs could not be loaded."
               : "The run ended with an error. Open the logs for details.")}
+          {logsFailedToLoad && (
+            <>
+              {" "}
+              {/* Inline, text-sized underlined link — not a block button on its
+                  own line (design QA round 2). */}
+              <Button
+                variant="link"
+                className="comet-body-xs inline h-auto p-0 align-baseline underline"
+                onClick={() => refetch()}
+              >
+                Retry
+              </Button>
+            </>
+          )}
         </p>
         {logContent && (
           <Button
@@ -58,15 +72,6 @@ const RunErrorPanel: React.FC<RunErrorPanelProps> = ({ optimization }) => {
             onClick={() => setOpen(true)}
           >
             View logs
-          </Button>
-        )}
-        {logsFailedToLoad && (
-          <Button
-            variant="link"
-            className="comet-body-xs mt-2 h-auto p-0"
-            onClick={() => refetch()}
-          >
-            Retry loading logs
           </Button>
         )}
       </div>
