@@ -1,5 +1,6 @@
-package com.comet.opik.domain;
+package com.comet.opik.infrastructure.metrics;
 
+import com.comet.opik.utils.template.TemplateUtils;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.ConnectionFactory;
 import jakarta.inject.Inject;
@@ -7,6 +8,7 @@ import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import lombok.Builder;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -18,6 +20,9 @@ import java.util.regex.Pattern;
  * Section 11.1). Sources per-(table, partition) size, row, part and activity data from
  * {@code system.parts}, and lightweight-deleted (LWD-masked) row counts from the tables
  * themselves. Everything is {@code active}-parts-only and scoped to the analytics database.
+ *
+ * <p>This is infrastructure observability, not application domain: it reports on the storage
+ * engine's internal state rather than any business entity.
  */
 @ImplementedBy(ClickHousePartitionMetricsDAOImpl.class)
 public interface ClickHousePartitionMetricsDAO {
@@ -36,6 +41,7 @@ public interface ClickHousePartitionMetricsDAO {
     Mono<List<LwdStat>> getLwdRowCounts(List<String> tables);
 }
 
+@Slf4j
 @Singleton
 class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO {
 
@@ -59,6 +65,7 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
             FROM system.parts
             WHERE database = :database_name AND active
             GROUP BY table, partition_id
+            SETTINGS log_comment = '<log_comment>'
             """;
 
     /**
@@ -74,16 +81,18 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
      * the masked rows are filtered out and the count is always 0.
      *
      * <p>{@code max_execution_time} and {@code priority} bound the scan so it can never contend with
-     * customer query load, even on a pathologically large future partition.
+     * customer query load, even on a pathologically large future partition. The table name is
+     * rendered by the template engine after being validated as a plain identifier, so it is never
+     * an injection vector.
      */
     private static final String LWD_ROWS_SQL = """
             SELECT
                 _partition_id AS partition_id,
                 toInt64(count()) AS lwd_rows
-            FROM %s
+            FROM <table>
             WHERE _row_exists = 0
             GROUP BY _partition_id
-            SETTINGS apply_deleted_mask = 0, max_execution_time = 30, priority = 100
+            SETTINGS apply_deleted_mask = 0, max_execution_time = 30, priority = 100, log_comment = '<log_comment>'
             """;
 
     private final ConnectionFactory connectionFactory;
@@ -99,8 +108,11 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
 
     @Override
     public Mono<List<PartitionStat>> getPartitionStats() {
+        String query = TemplateUtils.newST(PARTITION_STATS_SQL)
+                .add("log_comment", "partition_metrics_partition_stats")
+                .render();
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> connection.createStatement(PARTITION_STATS_SQL)
+                .flatMapMany(connection -> connection.createStatement(query)
                         .bind("database_name", databaseName)
                         .execute())
                 .flatMap(result -> result.map((row, rowMetadata) -> PartitionStat.builder()
@@ -118,15 +130,28 @@ class ClickHousePartitionMetricsDAOImpl implements ClickHousePartitionMetricsDAO
     @Override
     public Mono<List<LwdStat>> getLwdRowCounts(@NonNull List<String> tables) {
         return Flux.fromIterable(tables)
-                .filter(table -> IDENTIFIER.matcher(table).matches())
-                .flatMap(table -> Mono.from(connectionFactory.create())
-                        .flatMapMany(connection -> connection.createStatement(LWD_ROWS_SQL.formatted(table))
-                                .execute())
-                        .flatMap(result -> result.map((row, rowMetadata) -> LwdStat.builder()
-                                .table(table)
-                                .partition(row.get("partition_id", String.class))
-                                .lwdRows(row.get("lwd_rows", Long.class))
-                                .build())))
+                .filter(this::isValidTable)
+                .flatMap(table -> {
+                    String query = TemplateUtils.newST(LWD_ROWS_SQL)
+                            .add("table", table)
+                            .add("log_comment", "partition_metrics_lwd_rows")
+                            .render();
+                    return Mono.from(connectionFactory.create())
+                            .flatMapMany(connection -> connection.createStatement(query).execute())
+                            .flatMap(result -> result.map((row, rowMetadata) -> LwdStat.builder()
+                                    .table(table)
+                                    .partition(row.get("partition_id", String.class))
+                                    .lwdRows(row.get("lwd_rows", Long.class))
+                                    .build()));
+                })
                 .collectList();
+    }
+
+    private boolean isValidTable(String table) {
+        if (table != null && IDENTIFIER.matcher(table).matches()) {
+            return true;
+        }
+        log.warn("Skipping invalid LWD table name: '{}'", table);
+        return false;
     }
 }

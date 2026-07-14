@@ -1,10 +1,10 @@
 package com.comet.opik.api.resources.v1.jobs;
 
-import com.comet.opik.domain.ClickHousePartitionMetricsDAO;
-import com.comet.opik.domain.ClickHousePartitionMetricsDAO.LwdStat;
-import com.comet.opik.domain.ClickHousePartitionMetricsDAO.PartitionStat;
 import com.comet.opik.infrastructure.PartitionMetricsConfig;
 import com.comet.opik.infrastructure.lock.LockService;
+import com.comet.opik.infrastructure.metrics.ClickHousePartitionMetricsDAO;
+import com.comet.opik.infrastructure.metrics.ClickHousePartitionMetricsDAO.LwdStat;
+import com.comet.opik.infrastructure.metrics.ClickHousePartitionMetricsDAO.PartitionStat;
 import io.dropwizard.jobs.Job;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.ToLongFunction;
 
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
@@ -80,6 +81,7 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
 
         Meter meter = GlobalOpenTelemetry.get().getMeter("opik.clickhouse");
 
+        // Aggregated one series per table (partition count is the only non-per-partition metric).
         meter.gaugeBuilder("opik.clickhouse.partition.count").ofLongs()
                 .setDescription("Number of active partitions per table")
                 .buildWithCallback(measurement -> {
@@ -91,38 +93,23 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
                             Attributes.of(TABLE_KEY, table)));
                 });
 
-        meter.gaugeBuilder("opik.clickhouse.partition.size_bytes").ofLongs()
-                .setDescription("Total size on disk of active parts per partition")
-                .buildWithCallback(measurement -> snapshot.get().partitionStats()
-                        .forEach(stat -> measurement.record(stat.bytes(), attributes(stat.table(), stat.partition()))));
+        // Per-(table, partition) series sourced from system.parts.
+        registerPartitionGauge(meter, "opik.clickhouse.partition.size_bytes",
+                "Total size on disk of active parts per partition", PartitionStat::bytes);
+        registerPartitionGauge(meter, "opik.clickhouse.partition.max_part_size_bytes",
+                "Largest single active part size per partition (max by table = largest active part)",
+                PartitionStat::maxPartBytes);
+        registerPartitionGauge(meter, "opik.clickhouse.partition.parts",
+                "Number of active parts per partition", PartitionStat::parts);
+        registerPartitionGauge(meter, "opik.clickhouse.partition.rows",
+                "Total physical rows (including LWD-masked) of active parts per partition", PartitionStat::rows);
+        registerPartitionGauge(meter, "opik.clickhouse.partition.last_activity_seconds",
+                "Unix timestamp of the most recent part modification per partition",
+                PartitionStat::lastActivityEpochSeconds);
 
-        meter.gaugeBuilder("opik.clickhouse.partition.max_part_size_bytes").ofLongs()
-                .setDescription("Largest single active part size per partition (max by table = largest active part)")
-                .buildWithCallback(measurement -> snapshot.get().partitionStats()
-                        .forEach(stat -> measurement.record(stat.maxPartBytes(),
-                                attributes(stat.table(), stat.partition()))));
-
-        meter.gaugeBuilder("opik.clickhouse.partition.parts").ofLongs()
-                .setDescription("Number of active parts per partition")
-                .buildWithCallback(measurement -> snapshot.get().partitionStats()
-                        .forEach(stat -> measurement.record(stat.parts(), attributes(stat.table(), stat.partition()))));
-
-        meter.gaugeBuilder("opik.clickhouse.partition.rows").ofLongs()
-                .setDescription("Total physical rows (including LWD-masked) of active parts per partition")
-                .buildWithCallback(measurement -> snapshot.get().partitionStats()
-                        .forEach(stat -> measurement.record(stat.rows(), attributes(stat.table(), stat.partition()))));
-
-        meter.gaugeBuilder("opik.clickhouse.partition.last_activity_seconds").ofLongs()
-                .setDescription("Unix timestamp of the most recent part modification per partition")
-                .buildWithCallback(measurement -> snapshot.get().partitionStats()
-                        .forEach(stat -> measurement.record(stat.lastActivityEpochSeconds(),
-                                attributes(stat.table(), stat.partition()))));
-
-        meter.gaugeBuilder("opik.clickhouse.partition.lwd_rows").ofLongs()
-                .setDescription("Number of lightweight-deleted (masked) rows per partition")
-                .buildWithCallback(measurement -> snapshot.get().lwdStats()
-                        .forEach(stat -> measurement.record(stat.lwdRows(),
-                                attributes(stat.table(), stat.partition()))));
+        // Per-(table, partition) series sourced from the LWD mask scan.
+        registerLwdGauge(meter, "opik.clickhouse.partition.lwd_rows",
+                "Number of lightweight-deleted (masked) rows per partition", LwdStat::lwdRows);
 
         this.runCounter = meter
                 .counterBuilder("opik.clickhouse.partition_metrics.run")
@@ -166,8 +153,26 @@ public class ClickHousePartitionMetricsJob extends Job implements InterruptableJ
     private void updateSnapshot(Tuple2<List<PartitionStat>, List<LwdStat>> result) {
         snapshot.set(new Snapshot(result.getT1(), result.getT2()));
         runCounter.add(1, Attributes.of(stringKey("result"), "success"));
-        log.debug("ClickHouse partition metrics refreshed: {} partitions, {} LWD partitions",
+        log.debug("ClickHouse partition metrics refreshed: '{}' partitions, '{}' LWD partitions",
                 result.getT1().size(), result.getT2().size());
+    }
+
+    private void registerPartitionGauge(Meter meter, String name, String description,
+            ToLongFunction<PartitionStat> extractor) {
+        meter.gaugeBuilder(name).ofLongs()
+                .setDescription(description)
+                .buildWithCallback(measurement -> snapshot.get().partitionStats()
+                        .forEach(stat -> measurement.record(extractor.applyAsLong(stat),
+                                attributes(stat.table(), stat.partition()))));
+    }
+
+    private void registerLwdGauge(Meter meter, String name, String description,
+            ToLongFunction<LwdStat> extractor) {
+        meter.gaugeBuilder(name).ofLongs()
+                .setDescription(description)
+                .buildWithCallback(measurement -> snapshot.get().lwdStats()
+                        .forEach(stat -> measurement.record(extractor.applyAsLong(stat),
+                                attributes(stat.table(), stat.partition()))));
     }
 
     @Override

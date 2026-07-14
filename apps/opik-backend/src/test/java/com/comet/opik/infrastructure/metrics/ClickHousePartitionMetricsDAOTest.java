@@ -1,4 +1,4 @@
-package com.comet.opik.domain;
+package com.comet.opik.infrastructure.metrics;
 
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Trace;
@@ -12,10 +12,10 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
-import com.comet.opik.domain.ClickHousePartitionMetricsDAO.LwdStat;
-import com.comet.opik.domain.ClickHousePartitionMetricsDAO.PartitionStat;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.metrics.ClickHousePartitionMetricsDAO.LwdStat;
+import com.comet.opik.infrastructure.metrics.ClickHousePartitionMetricsDAO.PartitionStat;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;

@@ -1037,7 +1037,7 @@ partitionMetrics:
   # Poll interval in seconds (default 5 min). Min 30, max 3600.
   intervalSeconds: ${PARTITION_METRICS_INTERVAL_SECONDS:-300}
   # Tables scanned for lightweight-deleted (masked) rows. Comma-separated env override.
-  lwdTables: ${PARTITION_METRICS_LWD_TABLES:-[traces, spans]}
+  lwdTables: ${PARTITION_METRICS_LWD_TABLES:-traces,spans}
 
 # LLM providers client configuration
 llmProviderClient:
