@@ -432,12 +432,14 @@ class TestOpikClientCreateDataset:
         assert result.dataset_items_count == 0
 
     def test_create_dataset__logs_url_after_creation(self):
-        """Verify create_dataset calls _display_created_dataset_url with name and dataset id."""
+        """Verify create_dataset calls _display_created_dataset_url with name, dataset id, and project."""
         result = self.opik_client_.create_dataset(name="my-dataset")
         dataset_id = result.id  # triggers cached_property fetch
 
         self.mock_display_url.assert_called_once_with(
-            dataset_name="my-dataset", dataset_id=dataset_id
+            dataset_name="my-dataset",
+            dataset_id=dataset_id,
+            project_name="default-project",
         )
 
 

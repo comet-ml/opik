@@ -60,14 +60,11 @@ def get_project_url_by_trace_id(trace_id: str, url_override: str) -> str:
     return urllib.parse.urljoin(ensure_ending_slash(url_override), project_path)
 
 
-def get_dataset_url_by_id(dataset_id: str, url_override: str) -> str:
-    encoded_opik_url = base64.b64encode(url_override.encode("utf-8")).decode("utf-8")
-
-    project_path = urllib.parse.quote(
-        f"v1/session/redirect/datasets/?dataset_id={dataset_id}&path={encoded_opik_url}",
-        safe=ALLOWED_URL_CHARACTERS,
-    )
-    return urllib.parse.urljoin(ensure_ending_slash(url_override), project_path)
+def get_dataset_url_by_id(
+    base_url: str, workspace: str, project_id: str, dataset_id: str
+) -> str:
+    domain_root = get_base_url(base_url)
+    return f"{domain_root}opik/{workspace}/projects/{project_id}/datasets/{dataset_id}/items"
 
 
 def get_project_url_by_id(base_url: str, project_id: str, workspace: str) -> str:

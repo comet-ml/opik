@@ -55,3 +55,30 @@ def test_get_ui_url__url_override__only_strips_api_suffix(
         lambda: OpikConfig(url_override=url_override),
     )
     assert url_helpers.get_ui_url() == expected_ui_url
+
+
+@pytest.mark.parametrize(
+    ("base_url", "expected_dataset_url"),
+    [
+        (
+            "http://localhost:5173/api",
+            "http://localhost:5173/opik/my-workspace/projects/project-id/datasets/dataset-id/items",
+        ),
+        (
+            "https://www.comet.com/opik/api/",
+            "https://www.comet.com/opik/my-workspace/projects/project-id/datasets/dataset-id/items",
+        ),
+    ],
+)
+def test_get_dataset_url_by_id__returns_direct_project_scoped_url(
+    base_url: str, expected_dataset_url: str
+) -> None:
+    assert (
+        url_helpers.get_dataset_url_by_id(
+            base_url=base_url,
+            workspace="my-workspace",
+            project_id="project-id",
+            dataset_id="dataset-id",
+        )
+        == expected_dataset_url
+    )

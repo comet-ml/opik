@@ -231,9 +231,17 @@ class Opik:
             )
             self._project_name_most_recent_trace = project_name
 
-    def _display_created_dataset_url(self, dataset_name: str, dataset_id: str) -> None:
+    def _display_created_dataset_url(
+        self, dataset_name: str, dataset_id: str, project_name: str
+    ) -> None:
+        project_id = rest_helpers.resolve_project_id_by_name(
+            self._rest_client, project_name
+        )
         dataset_url = url_helpers.get_dataset_url_by_id(
-            dataset_id, self._config.url_override
+            base_url=self._config.url_override,
+            workspace=self._dereferenced_workspace(),
+            project_id=project_id,
+            dataset_id=dataset_id,
         )
 
         LOGGER.info(f'Created a "{dataset_name}" dataset at {dataset_url}.')
@@ -1267,7 +1275,9 @@ class Opik:
             client=self,
         )
 
-        self._display_created_dataset_url(dataset_name=name, dataset_id=result.id)
+        self._display_created_dataset_url(
+            dataset_name=name, dataset_id=result.id, project_name=project_name
+        )
 
         return result
 
@@ -2218,17 +2228,22 @@ class Opik:
             str: URL
         """
 
-        dereferenced_workspace = self._workspace
-        if dereferenced_workspace == opik_config.OPIK_WORKSPACE_DEFAULT_NAME:
-            dereferenced_workspace = (
-                self._rest_client.check.get_workspace_name().workspace_name
-            )
-
         project_name = self._resolve_project_name(project_name)
 
         return url_helpers.get_project_url_by_workspace(
-            workspace=dereferenced_workspace, project_name=project_name
+            workspace=self._dereferenced_workspace(), project_name=project_name
         )
+
+    def _dereferenced_workspace(self) -> str:
+        """Resolve the configured workspace to the concrete workspace name.
+
+        The self-hosted default ``"default"`` placeholder is looked up against
+        the backend so URLs point at the actual workspace.
+        """
+        if self._workspace == opik_config.OPIK_WORKSPACE_DEFAULT_NAME:
+            return self._rest_client.check.get_workspace_name().workspace_name
+
+        return self._workspace
 
     def get_threads_client(self) -> threads_client.ThreadsClient:
         """
