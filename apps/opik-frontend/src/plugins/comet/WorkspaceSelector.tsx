@@ -33,7 +33,6 @@ const WorkspaceSelector: React.FC = () => {
     sortedOrganizations,
 
     shouldShowDropdown,
-    hasMultipleOrganizations,
   } = useWorkspaceSelectorData();
 
   const displayName = calculateWorkspaceName(workspaceName);
@@ -82,7 +81,6 @@ const WorkspaceSelector: React.FC = () => {
           currentOrganization={currentOrganization}
           sortedWorkspaces={sortedWorkspaces}
           sortedOrganizations={sortedOrganizations}
-          hasMultipleOrganizations={hasMultipleOrganizations}
           isOrgSubmenuOpen={isOrgSubmenuOpen}
           setIsOrgSubmenuOpen={setIsOrgSubmenuOpen}
           setIsDropdownOpen={setIsDropdownOpen}
