@@ -318,6 +318,45 @@ class CustomNamedMetric(BaseMetric):
 
         assert result.name == "my_custom_metric_name"
 
+    def test_code_metric_name_from_super_init_literal(self):
+        """Name recovered from ``super().__init__(name="...")`` when there is no
+        ``name`` __init__ param (the most common idiom). Regression guard: the
+        static AST extractor must not silently fall back to "code" here."""
+        code = """
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+class SuperInitMetric(BaseMetric):
+    def __init__(self):
+        super().__init__(name="my_super_metric")
+
+    def score(self, output, **kwargs):
+        return ScoreResult(name=self.name, value=1.0, reason="Test")
+"""
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        assert metric_fn.__name__ == "my_super_metric"
+        result = metric_fn({}, "test output")
+        assert result.name == "my_super_metric"
+
+    def test_code_metric_aliased_basemetric_import_builds(self):
+        """A class subclassing an aliased ``BaseMetric`` import
+        (``import BaseMetric as BM``) must still be detected at build time."""
+        code = """
+from opik.evaluation.metrics import BaseMetric as BM
+from opik.evaluation.metrics.score_result import ScoreResult
+
+class AliasedMetric(BM):
+    def __init__(self):
+        super().__init__(name="aliased_metric")
+
+    def score(self, output, **kwargs):
+        return ScoreResult(name=self.name, value=1.0, reason="Test")
+"""
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        assert metric_fn.__name__ == "aliased_metric"
+        result = metric_fn({}, "test output")
+        assert result.value == 1.0
+
     def test_code_metric_missing_code_raises_error(self):
         """Test that missing code parameter raises error."""
         with pytest.raises(InvalidMetricError) as exc_info:

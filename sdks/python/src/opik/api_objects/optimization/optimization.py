@@ -41,12 +41,39 @@ class Optimization:
         # explicit null and could clobber a previously-persisted reason on a
         # subsequent non-error update.
         extra = {"error_info": error_info} if error_info is not None else {}
-        self._rest_client.optimizations.update_optimizations_by_id(
-            id=self.id,
-            name=name,
-            status=status,
-            **extra,
-        )
+        try:
+            self._rest_client.optimizations.update_optimizations_by_id(
+                id=self.id,
+                name=name,
+                status=status,
+                **extra,
+            )
+        except TypeError:
+            # An older installed opik whose typed ``update_optimizations_by_id``
+            # predates the ``error_info`` field rejects that kwarg with a
+            # TypeError. Fall back to the SDK's pre-configured httpx client
+            # (accepts snake_case fields, ignores unknown ones) so the update —
+            # crucially the ``status`` transition on the error path — still
+            # lands instead of throwing while trying to record a failure and
+            # leaving the run stuck. Mirrors the python-backend worker's
+            # status_manager fallback. Once the SDK ships ``error_info`` this
+            # branch is never exercised.
+            if not extra:
+                raise
+            LOGGER.debug(
+                "Installed opik SDK lacks the 'error_info' update field; "
+                "sending the optimization update via the raw REST client."
+            )
+            body: dict = {"error_info": error_info}
+            if name is not None:
+                body["name"] = name
+            if status is not None:
+                body["status"] = status
+            self._rest_client.optimizations._raw_client._client_wrapper.httpx_client.request(
+                f"v1/private/optimizations/{self.id}",
+                method="PUT",
+                json=body,
+            ).raise_for_status()
 
     def fetch_content(self) -> rest_api_types.OptimizationPublic:
         LOGGER.debug(f"Fetching optimization data {self.id}")

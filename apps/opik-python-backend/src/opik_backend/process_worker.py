@@ -31,15 +31,33 @@ def get_metric_class(module: ModuleType) -> Type[BaseMetric]:
             return cls
 
 
+def _basemetric_aliases(tree: ast.AST) -> set:
+    """Local names that refer to ``BaseMetric``, resolved from import statements.
+
+    Always includes the literal ``"BaseMetric"``; additionally picks up the
+    ``from opik.evaluation.metrics import BaseMetric as BM`` alias case so a base
+    written as ``BM`` is still recognized.
+    """
+    aliases = {"BaseMetric"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name == "BaseMetric" and alias.asname:
+                    aliases.add(alias.asname)
+    return aliases
+
+
 def _find_basemetric_classdef(tree: ast.AST) -> Optional[ast.ClassDef]:
     """First ClassDef that directly subclasses ``BaseMetric`` (by name), or None.
 
     Static counterpart to :func:`get_metric_class` used at build time so no user
-    code is executed. Matches a base written as ``BaseMetric`` or
-    ``something.BaseMetric``. Indirect subclassing (via an intermediate user
-    base) is not resolvable statically and is treated as "no subclass" — a rare
-    case for these single-file metrics.
+    code is executed. Matches a base written as ``BaseMetric``,
+    ``something.BaseMetric``, or an ``import ... as`` alias of ``BaseMetric``.
+    Indirect subclassing (via an intermediate user base) is not resolvable
+    statically and is treated as "no subclass" — a rare case for these
+    single-file metrics.
     """
+    aliases = _basemetric_aliases(tree)
     for node in ast.walk(tree):
         if isinstance(node, ast.ClassDef):
             for base in node.bases:
@@ -50,7 +68,7 @@ def _find_basemetric_classdef(tree: ast.AST) -> Optional[ast.ClassDef]:
                     if isinstance(base, ast.Attribute)
                     else None
                 )
-                if name == "BaseMetric":
+                if name in aliases:
                     return node
     return None
 
@@ -98,8 +116,10 @@ def _score_params_ast(cls: ast.ClassDef) -> List[str]:
 
 
 def _metric_name_ast(cls: ast.ClassDef) -> Optional[str]:
-    """Best-effort static metric name: the string default of ``__init__``'s
-    ``name`` param, else a class-level ``name = "..."``, else None (caller falls
+    """Best-effort static metric name, tried in order: the string literal passed
+    to a ``super().__init__(name="...")`` (or ``BaseMetric.__init__(..., name=)``)
+    call — the most common idiom; else the string default of ``__init__``'s
+    ``name`` param; else a class-level ``name = "..."``; else None (caller falls
     back to "code"). Dynamic/computed names aren't resolvable statically."""
     init = next(
         (
@@ -110,6 +130,21 @@ def _metric_name_ast(cls: ast.ClassDef) -> Optional[str]:
         None,
     )
     if init is not None:
+        # Common idiom: no `name` param, name passed straight to the base
+        # constructor — ``super().__init__(name="my_metric")``.
+        for node in ast.walk(init):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "__init__"
+            ):
+                for kw in node.keywords:
+                    if (
+                        kw.arg == "name"
+                        and isinstance(kw.value, ast.Constant)
+                        and isinstance(kw.value.value, str)
+                    ):
+                        return kw.value.value
         args = init.args
         positional = list(args.posonlyargs) + list(args.args)
         defaults = list(args.defaults)
