@@ -1230,21 +1230,17 @@ public class SpanDAO {
      * Retention sweep for the applyToPast=true window: spans whose {@code trace_id} is in
      * {@code [lower_bound, cutoff_id)} and not linked to experiments.
      * <p>
-     * {@code toMonday(id_at)} is the future weekly partition expression ({@code id_at} is MATERIALIZED from the
-     * span's own UUIDv7 id as UTC, migration 000103). A span's id is generated at or after its trace's id, so its
-     * {@code id_at} is &gt;= the trace's time; bounding {@code toMonday(id_at)} by the trace-id range's week span
-     * therefore does not drop rows the {@code trace_id} range selects. It is a no-op pre-cutover and, once
-     * {@code spans} is partitioned by {@code toMonday(id_at)}, lets the sweep prune to the partitions in range. The
-     * bounds use UTC to match {@code id_at}, and the upper bound advances one week so spans sharing the cutoff's
-     * week stay in scope.
+     * Filters on {@code trace_id} only. Unlike {@code TraceDAO}, the spans retention range is keyed on
+     * {@code trace_id} while the future partition column {@code id_at} is MATERIALIZED from the span's own UUIDv7 id
+     * (migration 000103). A span's id can land in a later week than its {@code trace_id}, so a {@code toMonday(id_at)}
+     * bound derived from the trace-id range would wrongly exclude valid candidates. No partition-pruning predicate is
+     * applied here until {@code spans} can be pruned by a column aligned with {@code trace_id}.
      */
     private static final String DELETE_FOR_RETENTION = """
             DELETE FROM spans
             WHERE workspace_id IN :workspace_ids
             AND trace_id >= :lower_bound
             AND trace_id \\< :cutoff_id
-            AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:lower_bound), 'UTC'))
-            AND toMonday(id_at) \\< addWeeks(toMonday(UUIDv7ToDateTime(toUUID(:cutoff_id), 'UTC')), 1)
             AND trace_id NOT IN (
                 SELECT trace_id FROM experiment_items
                 WHERE workspace_id IN :workspace_ids
@@ -1255,19 +1251,14 @@ public class SpanDAO {
             ;
             """;
 
-    /**
-     * Lightweight pre-delete count for observability. Omits the {@code experiment_items} exclusion subquery to avoid
-     * the join cost; this makes it an upper-bound ceiling with &gt;99% precision in practice (very few traces are
-     * linked to experiments). Carries the same {@code toMonday(id_at)} week bounds as {@code DELETE_FOR_RETENTION} so
-     * the count prunes to the same partitions post-cutover rather than scanning every partition each cycle.
-     */
+    // Lightweight pre-delete count for observability. Omits the experiment_items exclusion subquery
+    // to avoid the join cost; this makes it an upper-bound ceiling with >99% precision in practice
+    // (very few traces are linked to experiments).
     private static final String COUNT_FOR_RETENTION = """
             SELECT count() FROM spans
             WHERE workspace_id IN :workspace_ids
             AND trace_id >= :lower_bound
             AND trace_id \\< :cutoff_id
-            AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:lower_bound), 'UTC'))
-            AND toMonday(id_at) \\< addWeeks(toMonday(UUIDv7ToDateTime(toUUID(:cutoff_id), 'UTC')), 1)
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -3232,12 +3223,7 @@ public class SpanDAO {
                     .append(" AND trace_id >= :lb_").append(i)
                     .append(" AND trace_id < :cutoff_id)");
         }
-        // toMonday(id_at) week bounds, the bounded counterpart of DELETE_FOR_RETENTION. The single floor uses the
-        // global :min_lower_bound, which is <= every per-workspace :lb_i, so it never excludes a span any
-        // per-workspace trace-id range would delete. UTC matches id_at (materialized from the span's own id).
-        sb.append(") AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:min_lower_bound), 'UTC'))")
-                .append(" AND toMonday(id_at) < addWeeks(toMonday(UUIDv7ToDateTime(toUUID(:cutoff_id), 'UTC')), 1)")
-                .append(" AND trace_id NOT IN (")
+        sb.append(") AND trace_id NOT IN (")
                 .append("SELECT trace_id FROM experiment_items")
                 .append(" WHERE workspace_id IN :workspace_ids_flat")
                 .append(" AND trace_id >= :min_lower_bound")
