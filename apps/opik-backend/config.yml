@@ -1027,16 +1027,16 @@ optimizationStalledReaper:
   # Default: 5m
   # Description: Interval between reaper job executions
   jobInterval: ${OPTIMIZATION_STALLED_REAPER_JOB_INTERVAL:-5m}
-  # Default: 15m
+  # Default: 5m
   # Description: A run stuck in INITIALIZED longer than this is marked ERROR (the worker should call
   #   mark_running within seconds; kept above normal queue latency to tolerate a backlog)
-  initializedTimeout: ${OPTIMIZATION_STALLED_REAPER_INITIALIZED_TIMEOUT:-15m}
-  # Default: 26h
+  initializedTimeout: ${OPTIMIZATION_STALLED_REAPER_INITIALIZED_TIMEOUT:-5m}
+  # Default: 8h
   # Description: A run stuck in RUNNING longer than this is marked ERROR. MUST exceed the worker's max
-  #   execution timeout (OPTSTUDIO_EXECUTION_TIMEOUT, default 24h = 86400s) plus a buffer, since the row
+  #   execution timeout (OPTSTUDIO_EXECUTION_TIMEOUT, default 6h = 21600s) plus a buffer, since the row
   #   has no per-progress heartbeat and last_updated_at only advances on a status change. If you raise
   #   the worker timeout, raise this too or healthy long runs will be reaped.
-  runningTimeout: ${OPTIMIZATION_STALLED_REAPER_RUNNING_TIMEOUT:-26h}
+  runningTimeout: ${OPTIMIZATION_STALLED_REAPER_RUNNING_TIMEOUT:-8h}
   # Default: 4m
   # Description: How long the reaper holds its distributed lock (until expiry) to prevent concurrent
   #   fleet-wide runs. MUST stay below jobInterval — the lock is held until expiry, so a value >=
