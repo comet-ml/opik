@@ -21,12 +21,12 @@ export const PLAYGROUND_SELECTED_DATASET_VERSION_KEY =
   "playground-selected-dataset-version";
 
 export const PLAYGROUND_PROMPT_COLORS = [
-  { bg: "#6bdf93", text: "#1a1a1a" },
-  { bg: "#a6ddfe", text: "#1a1a1a" },
-  { bg: "#6e3de8", text: "#ffffff" },
-  { bg: "#be48ea", text: "#ffffff" },
-  { bg: "#df5a40", text: "#ffffff" },
-  { bg: "#5356f1", text: "#ffffff" },
+  { bg: "var(--accent-green)", text: "#1a1a1a" },
+  { bg: "var(--accent-blue)", text: "#1a1a1a" },
+  { bg: "var(--accent-purple)", text: "#ffffff" },
+  { bg: "var(--accent-magenta)", text: "#ffffff" },
+  { bg: "var(--accent-red)", text: "#ffffff" },
+  { bg: "var(--accent-indigo)", text: "#ffffff" },
 ];
 
 export const LLM_MESSAGE_ROLE_NAME_MAP = {
