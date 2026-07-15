@@ -20,13 +20,21 @@ const BADGE_CONFIG: Record<
     Icon: React.FC<React.SVGProps<SVGSVGElement>>;
   }
 > = {
-  High: { bgClass: "bg-red-500", textClass: "text-white", Icon: GaugeHigh },
+  High: {
+    bgClass: "bg-red-500",
+    textClass: "text-white",
+    Icon: GaugeHigh,
+  },
   Medium: {
-    bgClass: "bg-yellow-400",
+    bgClass: "bg-amber-400",
     textClass: "text-slate-900",
     Icon: GaugeMed,
   },
-  Low: { bgClass: "bg-sky-300", textClass: "text-slate-900", Icon: GaugeLow },
+  Low: {
+    bgClass: "bg-sky-300",
+    textClass: "text-slate-900",
+    Icon: GaugeLow,
+  },
 };
 
 const ImpactCard: React.FC<ImpactCardProps> = ({ level, title, boldPart }) => {

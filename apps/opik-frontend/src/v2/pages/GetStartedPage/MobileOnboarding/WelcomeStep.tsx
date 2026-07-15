@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Plus, Mic, ArrowUp } from "lucide-react";
+import { Button } from "@/ui/button";
 import { WelcomeIllustration } from "./illustrations";
 
 const TYPING_TEXT = "What is a trace in Opik?";
@@ -41,10 +42,20 @@ const TypingText: React.FC = () => {
       }
     };
 
+    const handleVisibility = () => {
+      if (document.hidden) {
+        clearTimeout(timer);
+      } else {
+        tick();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
     const startTimer = setTimeout(tick, TYPING_START_DELAY);
     return () => {
       clearTimeout(startTimer);
       clearTimeout(timer);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, []);
 
@@ -56,7 +67,7 @@ const TypingText: React.FC = () => {
   );
 };
 
-const WelcomeStep: React.FC = () => {
+const WelcomeStep: React.FC<{ onNext?: () => void }> = ({ onNext }) => {
   return (
     <>
       <div className="slide-fade-left">
@@ -87,18 +98,23 @@ const WelcomeStep: React.FC = () => {
               <TypingText />
             </div>
             <div className="flex items-center justify-between">
-              <Plus className="size-3.5 text-slate-400" />
+              <Plus className="size-3.5 text-light-slate" />
               <div className="flex items-center gap-3">
-                <Mic className="size-3.5 text-slate-400" />
-                <div className="flex size-6 items-center justify-center rounded-full bg-foreground">
+                <Mic className="size-3.5 text-light-slate" />
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={onNext}
+                  className="size-6 rounded-full bg-foreground hover:bg-foreground"
+                >
                   <ArrowUp className="size-3 text-background" />
-                </div>
+                </Button>
               </div>
             </div>
           </div>
         </div>
 
-        <p className="text-center text-xs leading-[14px] text-slate-400">
+        <p className="text-center text-xs leading-[14px] text-light-slate">
           Here&apos;s an example user interaction. We&apos;ll use Opik to
           evaluate and improve the agent underneath.
         </p>

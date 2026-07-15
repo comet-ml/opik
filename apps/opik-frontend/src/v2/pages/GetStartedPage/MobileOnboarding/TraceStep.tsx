@@ -134,7 +134,16 @@ const SpanRow: React.FC<{
   isFirst: boolean;
   isLast: boolean;
   animationDelay: number;
-}> = ({ span, connectors, hasChildren, isFirst, isLast, animationDelay }) => {
+  onClick?: () => void;
+}> = ({
+  span,
+  connectors,
+  hasChildren,
+  isFirst,
+  isLast,
+  animationDelay,
+  onClick,
+}) => {
   const {
     name,
     icon: Icon,
@@ -149,7 +158,19 @@ const SpanRow: React.FC<{
   const iconCenterY = 4 + 8;
 
   return (
-    <div className="relative overflow-visible">
+    <div
+      className="relative overflow-visible"
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === "Enter") onClick();
+            }
+          : undefined
+      }
+    >
       {/* Connector lines */}
       {depth > 0 && (
         <div
@@ -289,7 +310,7 @@ const SpanRow: React.FC<{
   );
 };
 
-const TraceStep: React.FC = () => {
+const TraceStep: React.FC<{ onNext?: () => void }> = ({ onNext }) => {
   return (
     <>
       <div className="slide-fade-right">
@@ -330,6 +351,7 @@ const TraceStep: React.FC = () => {
                 isFirst={i === 0}
                 isLast={i === SPANS.length - 1}
                 animationDelay={SPAN_BASE_DELAY + i * SPAN_STAGGER}
+                onClick={span.slow ? onNext : undefined}
               />
             );
           })}

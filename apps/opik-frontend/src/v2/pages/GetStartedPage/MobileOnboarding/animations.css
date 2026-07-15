@@ -81,18 +81,19 @@
     box-shadow: none;
   }
   25% {
-    background-color: rgba(244, 180, 0, 0.08);
-    border-color: rgba(244, 180, 0, 0.8);
+    background-color: color-mix(in srgb, var(--chart-yellow) 8%, transparent);
+    border-color: color-mix(in srgb, var(--chart-yellow) 80%, transparent);
     box-shadow: none;
   }
   50% {
-    background-color: rgba(244, 180, 0, 0.15);
-    border-color: rgba(244, 180, 0, 1);
-    box-shadow: 0 0 0 5px rgba(244, 180, 0, 0.2);
+    background-color: color-mix(in srgb, var(--chart-yellow) 15%, transparent);
+    border-color: var(--chart-yellow);
+    box-shadow: 0 0 0 5px
+      color-mix(in srgb, var(--chart-yellow) 20%, transparent);
   }
   100% {
-    background-color: rgba(244, 180, 0, 0.08);
-    border-color: rgba(244, 180, 0, 0.8);
+    background-color: color-mix(in srgb, var(--chart-yellow) 8%, transparent);
+    border-color: color-mix(in srgb, var(--chart-yellow) 80%, transparent);
     box-shadow: none;
   }
 }

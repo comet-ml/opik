@@ -27,16 +27,10 @@ const URLS = {
   },
 };
 
-export const allIllustrationUrls = [
-  welcomeLightUrl,
-  traceLightUrl,
-  issuesLightUrl,
-  connectLightUrl,
-  welcomeDarkUrl,
-  traceDarkUrl,
-  issuesDarkUrl,
-  connectDarkUrl,
-];
+export const illustrationUrlsByTheme: Record<THEME_MODE, string[]> = {
+  [THEME_MODE.LIGHT]: Object.values(URLS[THEME_MODE.LIGHT]),
+  [THEME_MODE.DARK]: Object.values(URLS[THEME_MODE.DARK]),
+};
 
 const useIllustrationUrls = () => {
   const { themeMode } = useTheme();
