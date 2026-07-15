@@ -1,8 +1,10 @@
 package com.comet.opik.infrastructure;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.dropwizard.util.Duration;
 import io.dropwizard.validation.MaxDuration;
 import io.dropwizard.validation.MinDuration;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -33,7 +35,7 @@ import java.util.concurrent.TimeUnit;
  * @param runningTimeout a run stuck in {@code RUNNING} longer than this is transitioned to {@code ERROR}.
  *        There is no per-progress heartbeat on the optimization row (last_updated_at only advances on a
  *        status change), so this MUST be set above the worker's maximum execution timeout
- *        ({@code OPTSTUDIO_EXECUTION_TIMEOUT}, default 24h) plus a buffer, otherwise a legitimately long
+ *        ({@code OPTSTUDIO_EXECUTION_TIMEOUT}, default 6h) plus a buffer, otherwise a legitimately long
  *        run would be reaped mid-flight.
  * @param lockDuration lock TTL, held until expiry, that suppresses other instances from reconciling until
  *        it elapses. MUST be kept below {@link #jobInterval()} (the lock is held until expiry, so a
@@ -52,4 +54,15 @@ public record OptimizationStalledReaperConfig(
         @NotNull @MinDuration(value = 1, unit = TimeUnit.HOURS) @MaxDuration(value = 7, unit = TimeUnit.DAYS) Duration runningTimeout,
         @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES) @MaxDuration(value = 1, unit = TimeUnit.HOURS) Duration lockDuration,
         @Min(1) @Max(10_000) int batchSize) {
+
+    /**
+     * Enforce the {@link #lockDuration()} &lt; {@link #jobInterval()} invariant at boot instead of only
+     * documenting it: the lock is held until expiry, so a lockDuration &gt;= jobInterval would make every
+     * other scheduled tick a no-op and silently halve the effective cadence.
+     */
+    @JsonIgnore
+    @AssertTrue(message = "optimizationStalledReaper.lockDuration must be less than jobInterval") public boolean isLockDurationBelowJobInterval() {
+        return lockDuration == null || jobInterval == null
+                || lockDuration.toMilliseconds() < jobInterval.toMilliseconds();
+    }
 }

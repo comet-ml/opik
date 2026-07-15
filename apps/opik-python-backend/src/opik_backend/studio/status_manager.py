@@ -71,7 +71,7 @@ class OptimizationStatusManager:
             f"Updating optimization {self.optimization_id} status to '{status}'"
         )
 
-        if metadata:
+        if metadata is not None:
             # The typed SDK client's update_optimizations_by_id does not yet
             # expose a ``metadata`` parameter, so we reach the underlying HTTP
             # client directly — same pattern the generated raw client uses
@@ -98,9 +98,11 @@ class OptimizationStatusManager:
                 # Unlike the typed wrapper, the raw client does NOT raise on a
                 # non-2xx response — check explicitly so a rejected PUT is not
                 # silently swallowed (which would leave the run looking done
-                # while the backend never recorded the transition).
+                # while the backend never recorded the transition). A missing
+                # status_code (unexpected wrapper shape) is treated as failure too,
+                # so we always fall back rather than assume success.
                 status_code = getattr(response, "status_code", None)
-                if status_code is not None and status_code >= 400:
+                if status_code is None or status_code >= 400:
                     raise RuntimeError(
                         f"metadata status update returned HTTP {status_code}"
                     )

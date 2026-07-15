@@ -182,22 +182,26 @@ def build_final_result(
     }
 
     # Always populate scoring_health so downstream layers (worker, UI) can rely on
-    # the key being present.  The counts reflect the BEST/final candidate's evaluation
-    # (updated in BaseOptimizer.evaluate / evaluate_with_result whenever a new best is
-    # recorded). When all items scored successfully failed_count=0.
+    # the key being present.  The counts reflect the returned (best/baseline) prompt's
+    # evaluation — captured for the baseline and updated whenever a candidate genuinely
+    # beats it. When all items scored successfully failed_count=0.
     scoring_health = context.scoring_health or {"failed_count": 0, "total_count": 0}
     details["scoring_health"] = scoring_health
 
-    # Decide the scoring pass/fail ONCE, here at the end, against the best prompt the
-    # run actually returns — not on every candidate evaluation. A transient outage
-    # that fails a single attempt is tolerated (that attempt just loses to a later
-    # one); we only fail the run when the prompt it finishes with couldn't be scored
-    # at all, which is exactly the OPIK-7029 "COMPLETED but empty" case. total==0
-    # (custom evaluation / empty dataset never recorded a score) is skipped.
+    # Decide the scoring pass/fail ONCE, here at the end, against the prompt the run
+    # actually returns — not on every candidate evaluation. A transient outage that
+    # fails a single attempt is tolerated (that attempt just loses to a later one); we
+    # only fail the run when the prompt it finishes with couldn't be scored at all,
+    # which is exactly the OPIK-7029 "COMPLETED but empty" case.
+    #   - Skipped when the run already failed with a real exception (finish_reason ==
+    #     "error"): that error is the true root cause and must not be masked.
+    #   - Skipped when total == 0 (custom evaluation / empty dataset never recorded a
+    #     score), so it can never fire a false error.
     failed_count = scoring_health["failed_count"]
     total_count = scoring_health["total_count"]
     if (
-        total_count > 0
+        context.finish_reason != "error"
+        and total_count > 0
         and failed_count / total_count >= DEFAULT_SCORING_FAILURE_THRESHOLD
     ):
         raise ScoringFailedError(

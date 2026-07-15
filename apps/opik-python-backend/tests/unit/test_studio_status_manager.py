@@ -357,6 +357,19 @@ class TestScoringHealthForwarding:
             request_options={"max_retries": 3},
         )
 
+    def test_empty_dict_metadata_still_uses_raw_http_client(self):
+        """`{}` is metadata "present" (is not None) and must go through the raw PUT
+        path, not be silently dropped to the typed status-only call."""
+        sm = _make_real_status_manager()
+        raw_client = sm.client.rest_client.optimizations._raw_client
+        http_client = raw_client._client_wrapper.httpx_client
+        http_client.request.return_value.status_code = 200
+
+        sm.update_status("completed", metadata={})
+
+        sm.client.rest_client.optimizations.update_optimizations_by_id.assert_not_called()
+        http_client.request.assert_called_once()
+
     def test_set_completion_metadata_none_leaves_no_pending(self):
         """Explicitly passing None to set_completion_metadata results in no metadata sent."""
         sm = _make_real_status_manager()

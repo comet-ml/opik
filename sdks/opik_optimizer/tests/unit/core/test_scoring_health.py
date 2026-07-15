@@ -217,6 +217,19 @@ class TestBuildFinalResultFailsWhenUnscoreable:
         )
         assert isinstance(result, OptimizationResult)
 
+    def test_does_not_raise_when_run_already_errored(self) -> None:
+        # A genuine mid-run exception sets finish_reason="error"; the scoring guard
+        # must NOT fire there, so the true root-cause error isn't masked.
+        optimizer = _make_optimizer()
+        context = _make_context(scoring_health={"failed_count": 5, "total_count": 5})
+        context.finish_reason = "error"
+        result = build_final_result(
+            optimizer=optimizer,
+            algorithm_result=_make_algorithm_result(score=0.0),
+            context=context,
+        )
+        assert isinstance(result, OptimizationResult)
+
 
 # ---------------------------------------------------------------------------
 # context.scoring_health updated in BaseOptimizer.evaluate()

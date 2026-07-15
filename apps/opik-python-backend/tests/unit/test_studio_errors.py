@@ -107,6 +107,48 @@ def test_unrecognized_error_falls_back_to_generic_without_leaking():
     assert "0xdeadbeef" not in message
 
 
+# --- classification precision: narrowed over-broad patterns (review) ---
+
+
+def test_storage_quota_is_not_misclassified_as_rate_limit():
+    # Bare "quota" used to hit the model rate-limit category; a storage/other
+    # quota error must not surface the "model provider rate-limited" message.
+    message = to_user_facing_message(RuntimeError("storage quota exceeded for bucket"))
+    assert "rate-limit" not in message.lower()
+    assert message == GENERIC_USER_MESSAGE
+
+
+def test_insufficient_quota_still_maps_to_rate_limit():
+    # The provider's specific insufficient_quota code should still classify.
+    message = to_user_facing_message(RuntimeError("Error: insufficient_quota"))
+    assert "rate-limit" in message.lower()
+
+
+def test_neural_network_is_not_misclassified_as_connection():
+    # Bare "network" used to hit the connection category.
+    message = to_user_facing_message(RuntimeError("neural network layer misconfigured"))
+    assert "lost connection" not in message.lower()
+    assert message == GENERIC_USER_MESSAGE
+
+
+def test_zero_padded_exit_code_is_not_oom():
+    # "exit code 00"/"01" are not OOM signals.
+    assert (
+        to_user_facing_message(RuntimeError("exited with code 00"))
+        == GENERIC_USER_MESSAGE
+    )
+    assert (
+        to_user_facing_message(RuntimeError("exited with code 01"))
+        == GENERIC_USER_MESSAGE
+    )
+
+
+def test_nonzero_exit_code_is_classified_as_oom():
+    # A real non-zero / SIGKILL exit (137 = 128+9) maps to the OOM message.
+    message = to_user_facing_message(RuntimeError("process exited with code 137"))
+    assert "memory" in message.lower()
+
+
 # --- W6: Opik REST client errors must not be mislabeled as model-provider auth ---
 
 

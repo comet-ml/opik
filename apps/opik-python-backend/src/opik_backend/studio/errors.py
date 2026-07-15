@@ -46,7 +46,10 @@ OPIK_STATUS_UPDATE_MESSAGE = (
 # rather show a clean generic message than surface a low-level detail.
 _CATEGORIES = [
     (
-        re.compile(r"rate.?limit|\b429\b|too many requests|quota", re.I),
+        re.compile(
+            r"rate.?limit|\b429\b|too many requests|insufficient[\s_-]?quota",
+            re.I,
+        ),
         "The model provider rate-limited this run. Wait a little and try running it again.",
     ),
     (
@@ -76,7 +79,7 @@ _CATEGORIES = [
     ),
     (
         re.compile(
-            r"connection (error|refused|reset)|network|unreachable|failed to establish|econnrefused",
+            r"connection (error|refused|reset)|network (error|failure|unreachable|is unreachable)|unreachable|failed to establish|econnrefused",
             re.I,
         ),
         "The run lost connection to a required service. This is usually temporary — try running it again.",
@@ -103,7 +106,7 @@ _CATEGORIES = [
         # before it could report a failure of its own. optimizer.py surfaces this
         # as a synthesized message; classify it here so it never leaks a raw code.
         re.compile(
-            r"out of memory|\boom\b|oomkill|killed by signal|sigkill|signal 9|memory ?error|memoryerror|exceeded memory|non-?zero exit|exit ?code (?!0\b)-?\d|exited with code (?!0\b)-?\d|terminated unexpectedly|worker.*killed",
+            r"out of memory|\boom\b|oomkill|killed by signal|sigkill|signal 9|memory ?error|memoryerror|exceeded memory|non-?zero exit|exit ?code -?[1-9]\d*|exited with code -?[1-9]\d*|terminated unexpectedly|worker.*killed",
             re.I,
         ),
         "The run stopped unexpectedly and may have run out of memory. Try a smaller dataset or model.",
