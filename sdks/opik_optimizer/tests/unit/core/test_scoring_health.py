@@ -18,6 +18,7 @@ from opik.evaluation.evaluation_result import EvaluationResult
 from opik.evaluation.metrics.score_result import ScoreResult
 
 from opik_optimizer.core.evaluation import compute_scoring_health
+from opik_optimizer.core.exceptions import ScoringFailedError
 from opik_optimizer.core.results import OptimizationResult
 from opik_optimizer.core.runtime import build_final_result
 from opik_optimizer.core.state import AlgorithmResult, OptimizationContext
@@ -173,6 +174,48 @@ class TestBuildFinalResultScoringHealth:
         assert set(health.keys()) >= {"failed_count", "total_count"}
         assert isinstance(health["failed_count"], int)
         assert isinstance(health["total_count"], int)
+
+
+class TestBuildFinalResultFailsWhenUnscoreable:
+    """The pass/fail decision is made ONCE here, against the best prompt's health."""
+
+    def test_raises_when_best_prompt_scored_nothing(self) -> None:
+        # The prompt the run returns couldn't be scored at all (all items failed) —
+        # this is the OPIK-7029 "COMPLETED but empty" case, so fail loudly.
+        optimizer = _make_optimizer()
+        context = _make_context(scoring_health={"failed_count": 5, "total_count": 5})
+        alg_result = _make_algorithm_result(score=0.0)
+
+        with pytest.raises(ScoringFailedError) as exc_info:
+            build_final_result(
+                optimizer=optimizer,
+                algorithm_result=alg_result,
+                context=context,
+            )
+        assert exc_info.value.failed == 5
+        assert exc_info.value.total == 5
+
+    def test_does_not_raise_on_partial_failure(self) -> None:
+        # Some items failed but the prompt still has usable scores — complete normally.
+        optimizer = _make_optimizer()
+        context = _make_context(scoring_health={"failed_count": 4, "total_count": 10})
+        result = build_final_result(
+            optimizer=optimizer,
+            algorithm_result=_make_algorithm_result(score=0.6),
+            context=context,
+        )
+        assert isinstance(result, OptimizationResult)
+
+    def test_does_not_raise_when_total_is_zero(self) -> None:
+        # Custom evaluation / empty dataset never recorded a score — skip the check.
+        optimizer = _make_optimizer()
+        context = _make_context(scoring_health={"failed_count": 0, "total_count": 0})
+        result = build_final_result(
+            optimizer=optimizer,
+            algorithm_result=_make_algorithm_result(score=0.0),
+            context=context,
+        )
+        assert isinstance(result, OptimizationResult)
 
 
 # ---------------------------------------------------------------------------
@@ -354,3 +397,57 @@ class TestEvaluateSetsContextScoringHealth:
         # Call evaluate — score 0.8 < best 0.9, so health should NOT be set
         optimizer.evaluate(context, {"main": simple_chat_prompt})
         assert context.scoring_health is None
+
+
+class TestTransientFailureThenRecovery:
+    """End-to-end: a single all-failed attempt must NOT abort the whole run."""
+
+    def test_all_fail_then_recover_completes_without_error(
+        self, monkeypatch: pytest.MonkeyPatch, simple_chat_prompt: Any
+    ) -> None:
+        optimizer = _make_optimizer()
+        metric_name = "obj"
+
+        context = make_optimization_context(
+            simple_chat_prompt,
+            dataset=make_mock_dataset(),
+            metric=lambda di, lo: 1.0,
+            agent=MagicMock(),
+            max_trials=5,
+        )
+        context.metric.__name__ = metric_name
+
+        # Attempt 1: every item fails (e.g. a brief judge/rate-limit outage).
+        # Attempt 2: fully recovers.
+        evals = [
+            _make_evaluation_result(metric_name, failing_count=5, total_count=5),
+            _make_evaluation_result(metric_name, failing_count=0, total_count=5),
+        ]
+        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kw: evals.pop(0))
+        scores = [0.0, 0.9]
+        monkeypatch.setattr(
+            optimizer,
+            "_score_from_evaluation_result",
+            lambda er, *, metric_name, **kw: scores.pop(0),
+        )
+
+        # Attempt 1 — all failed, recorded as the first (only) best so far.
+        optimizer.evaluate(context, {"main": simple_chat_prompt})
+        assert context.scoring_health == {"failed_count": 5, "total_count": 5}
+        context.current_best_score = 0.0
+
+        # Attempt 2 — recovers, 0.9 > 0.0 becomes the new best, health follows it.
+        optimizer.evaluate(context, {"main": simple_chat_prompt})
+        assert context.scoring_health == {"failed_count": 0, "total_count": 5}
+
+        # The run finishes on the recovered prompt → NO ScoringFailedError, and
+        # the good candidate is not thrown away.
+        result = build_final_result(
+            optimizer=optimizer,
+            algorithm_result=_make_algorithm_result(score=0.9),
+            context=context,
+        )
+        assert result.details["scoring_health"] == {
+            "failed_count": 0,
+            "total_count": 5,
+        }

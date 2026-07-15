@@ -17,10 +17,12 @@ from opik import Dataset
 
 from ..api_objects import chat_prompt
 from ..api_objects.types import MetricFunction
+from ..constants import DEFAULT_SCORING_FAILURE_THRESHOLD
 from ..core.results import OptimizationResult, OptimizationRound
 from ..core.state import AlgorithmResult, OptimizationContext
 from ..utils.logging import debug_log
 from ..utils.scoring import improves_over
+from .exceptions import ScoringFailedError
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..base_optimizer import BaseOptimizer
@@ -183,10 +185,26 @@ def build_final_result(
     # the key being present.  The counts reflect the BEST/final candidate's evaluation
     # (updated in BaseOptimizer.evaluate / evaluate_with_result whenever a new best is
     # recorded). When all items scored successfully failed_count=0.
-    details["scoring_health"] = context.scoring_health or {
-        "failed_count": 0,
-        "total_count": 0,
-    }
+    scoring_health = context.scoring_health or {"failed_count": 0, "total_count": 0}
+    details["scoring_health"] = scoring_health
+
+    # Decide the scoring pass/fail ONCE, here at the end, against the best prompt the
+    # run actually returns — not on every candidate evaluation. A transient outage
+    # that fails a single attempt is tolerated (that attempt just loses to a later
+    # one); we only fail the run when the prompt it finishes with couldn't be scored
+    # at all, which is exactly the OPIK-7029 "COMPLETED but empty" case. total==0
+    # (custom evaluation / empty dataset never recorded a score) is skipped.
+    failed_count = scoring_health["failed_count"]
+    total_count = scoring_health["total_count"]
+    if (
+        total_count > 0
+        and failed_count / total_count >= DEFAULT_SCORING_FAILURE_THRESHOLD
+    ):
+        raise ScoringFailedError(
+            failed=failed_count,
+            total=total_count,
+            objective_metric_name=context.metric.__name__,
+        )
 
     details.update(optimizer_metadata)
     details.update(algorithm_result.metadata)

@@ -6,9 +6,7 @@ import logging
 import pytest
 from opik.evaluation.metrics.score_result import ScoreResult
 
-from opik_optimizer.constants import DEFAULT_SCORING_FAILURE_THRESHOLD
 from opik_optimizer.core import evaluation
-from opik_optimizer.core.exceptions import ScoringFailedError
 from opik_optimizer.metrics import MultiMetricObjective, SpanDuration
 
 
@@ -95,22 +93,19 @@ def _passing_score(value: float = 1.0) -> ScoreResult:
     return ScoreResult(name="objective", value=value, scoring_failed=False)
 
 
-def test_validate_objective_scores_raises_when_all_items_failed() -> None:
-    # The default threshold is "all items failed" (1.0); the guard fires only
-    # when every score is a scoring failure.
-    assert DEFAULT_SCORING_FAILURE_THRESHOLD == 1.0
-
+def test_validate_objective_scores_only_logs_when_all_items_failed(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # Per-evaluation, even a total (all-items) failure only logs — it must NOT
+    # raise. The pass/fail decision is made once at the end in build_final_result
+    # against the best prompt, so a single all-failed attempt no longer aborts
+    # the whole run (see test_scoring_health for that end-of-run check).
     scores = [_failed_score(), _failed_score(), _failed_score()]
 
-    with pytest.raises(ScoringFailedError) as exc_info:
+    with caplog.at_level(logging.WARNING):
         evaluation._validate_objective_scores(scores, objective_metric_name="objective")
 
-    err = exc_info.value
-    assert err.failed == 3
-    assert err.total == 3
-    assert err.objective_metric_name == "objective"
-    # Message carries the counts so downstream classification can surface them.
-    assert "3 of 3" in str(err)
+    assert "failed on 3/3" in caplog.text
 
 
 def test_validate_objective_scores_does_not_raise_below_threshold(

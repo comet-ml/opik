@@ -7,9 +7,7 @@ import inspect
 
 import opik
 from ..api_objects.types import MetricFunction
-from ..constants import DEFAULT_SCORING_FAILURE_THRESHOLD
 from ..utils.reporting import suppress_experiment_reporting
-from .exceptions import ScoringFailedError
 from opik.evaluation import evaluator as opik_evaluator
 from opik.evaluation import evaluation_result as opik_evaluation_result
 from opik.evaluation.metrics import base_metric, score_result
@@ -472,17 +470,15 @@ def compute_scoring_health(
 def _validate_objective_scores(
     scores: list[score_result.ScoreResult], *, objective_metric_name: str
 ) -> None:
-    """Validate objective score availability.
+    """Log objective-score health for a single evaluation (does not raise).
 
-    Partial scoring failures are logged and the caller falls back to the
-    available finite values. But when the fraction of failed scores reaches
-    ``DEFAULT_SCORING_FAILURE_THRESHOLD`` (default: all items failed), the run is
-    effectively unscoreable, so we raise ``ScoringFailedError`` instead of letting
-    the run silently COMPLETE with a misleading score (OPIK-7029).
-
-    Raises:
-        ScoringFailedError: when ``len(failed_scores) / len(scores)`` meets or
-            exceeds ``DEFAULT_SCORING_FAILURE_THRESHOLD``.
+    Partial or total scoring failures within one evaluation are only logged
+    here; the run continues with the available finite values. The pass/fail
+    decision (best prompt couldn't be scored at all) is made ONCE at the end in
+    ``build_final_result`` against ``context.scoring_health`` — so a brief
+    judge/rate-limit outage that fails every item in a single attempt no longer
+    aborts the whole optimization and discards the good candidates already
+    found (OPIK-7029).
     """
     if not scores:
         # Empty dataset / no objective scores at all — leave the existing soft
@@ -505,23 +501,6 @@ def _validate_objective_scores(
     summarized_reasons = "; ".join(unique_reasons[:3]) or "No reason provided."
     if len(unique_reasons) > 3:
         summarized_reasons += f"; +{len(unique_reasons) - 3} more"
-
-    failure_ratio = len(failed_scores) / len(scores)
-    if failure_ratio >= DEFAULT_SCORING_FAILURE_THRESHOLD:
-        logger.error(
-            "Objective metric '%s' failed on %s/%s evaluation item(s) "
-            "(>= %.0f%% failure threshold); aborting run. First reasons: %s",
-            objective_metric_name,
-            len(failed_scores),
-            len(scores),
-            DEFAULT_SCORING_FAILURE_THRESHOLD * 100,
-            summarized_reasons,
-        )
-        raise ScoringFailedError(
-            failed=len(failed_scores),
-            total=len(scores),
-            objective_metric_name=objective_metric_name,
-        )
 
     logger.warning(
         "Objective metric '%s' failed on %s/%s evaluation item(s). "
