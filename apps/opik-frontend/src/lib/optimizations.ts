@@ -14,6 +14,10 @@ import { getFeedbackScore } from "@/lib/feedback-scores";
 import { Experiment, EVALUATION_METHOD } from "@/types/datasets";
 import { extractMetricNameFromPythonCode } from "@/lib/rules";
 import {
+  createMethodRegex,
+  parsePythonMethodParameters,
+} from "@/lib/pythonArgumentsParser";
+import {
   DEFAULT_GEPA_OPTIMIZER_CONFIGS,
   DEFAULT_EVOLUTIONARY_OPTIMIZER_CONFIGS,
   DEFAULT_HIERARCHICAL_REFLECTIVE_OPTIMIZER_CONFIGS,
@@ -97,10 +101,13 @@ export const extractMetricNameFromCode = (code: string): string => {
 // static-scan approach).
 //
 // Only *required* accesses are returned (they gate submit):
-//   - `kwargs["x"]`               -> required (KeyError if absent)
-//   - `kwargs.get("x")`           -> required (no fallback -> None, likely a bug)
-//   - `kwargs.get("x", default)`  -> NOT required (a default is supplied), so it
-//                                    must never hard-block submit.
+//   - `kwargs["x"]`               -> required (KeyError if absent -> crash)
+//   - `kwargs.get("x")`           -> NOT required. `.get()` is missing-safe by
+//                                    definition (returns None), and the editor's
+//                                    own helper copy recommends it precisely as
+//                                    the safe accessor for maybe-absent fields —
+//                                    so it must never hard-block submit.
+//   - `kwargs.get("x", default)`  -> NOT required (a default is supplied).
 //
 // Comments and string/docstring literals are stripped (best-effort, via a small
 // state machine) before the scan, so a `kwargs.get("x")` mention buried inside a
@@ -190,31 +197,43 @@ export const extractKwargsKeysFromPython = (code: string): string[] => {
         }
       }
 
-      // kwargs.get("x") / kwargs.get("x", default)
-      if (code.startsWith(".get", j)) {
-        j += 4;
-        while (j < n && /\s/.test(code[j])) j += 1;
-        if (code[j] === "(") {
-          j += 1;
-          while (j < n && /\s/.test(code[j])) j += 1;
-          if (code[j] === '"' || code[j] === "'") {
-            const { value, end } = readQuoted(j, code[j]);
-            // A default arg (a `,` after the key) makes the column optional.
-            let k = end;
-            while (k < n && /\s/.test(code[k])) k += 1;
-            const hasDefault = code[k] === ",";
-            if (value && value !== "output" && !hasDefault) keys.add(value);
-            i = end;
-            continue;
-          }
-        }
-      }
+      // kwargs.get(...) is intentionally NOT collected: `.get()` is
+      // missing-safe (returns None / a default), so it must never block submit.
+      // The key literal inside `.get("x")` is skipped as a string literal by
+      // the main loop, so it is not mistaken for a subscript access.
     }
 
     i += 1;
   }
 
   return [...keys];
+};
+
+// Dataset columns a *strict* `score()` signature REQUIRES as positional params.
+// A metric whose `score(self, output, reference)` declares no `**kwargs`
+// receives ONLY its declared params from the backend, each resolved via the
+// `arguments` map or a same-named dataset column. A declared param with no
+// default that is neither `output` nor mapped therefore MUST have a same-named
+// column present, or `score()` raises a missing-argument TypeError at runtime —
+// swallowed to 0.0 for every item, i.e. a silent all-zero run. The `kwargs[...]`
+// scanner above can't catch these (there is no `kwargs` identifier), so the
+// param names are surfaced here for the submit gate.
+//
+// Returns [] for a `**kwargs` (VAR_KEYWORD) signature — the backend splats every
+// column, so no positional param is required — or when `score()` can't be found.
+export const extractRequiredScoreParams = (code: string): string[] => {
+  if (!code) return [];
+  const sigMatch = code.match(createMethodRegex("score"));
+  if (!sigMatch) return [];
+  // A `**kwargs` param absorbs any column; nothing is positionally required.
+  if (/\*\*/.test(sigMatch[1])) return [];
+  try {
+    return parsePythonMethodParameters(code, "score")
+      .filter((param) => !param.optional && param.name !== "output")
+      .map((param) => param.name);
+  } catch {
+    return [];
+  }
 };
 
 export const getObjectiveLabel = (

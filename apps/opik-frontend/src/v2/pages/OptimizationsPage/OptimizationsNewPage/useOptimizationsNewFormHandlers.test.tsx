@@ -107,7 +107,7 @@ describe("useOptimizationsNewFormHandlers — missingDatasetVariables (code metr
     mockDatasetVariables = ["text", "label"];
     const code = `
 def score(self, output, **kwargs):
-    return kwargs.get("nonexistent_column")
+    return kwargs["nonexistent_column"]
 `;
     const { result } = renderFormHandlers(buildDefaultValues(code));
 
@@ -130,6 +130,33 @@ def score(self, output, reference):
     );
 
     expect(result.current.missingDatasetVariables).toEqual(["unmapped_column"]);
+  });
+
+  it("flags a strict score() positional param with no mapping and no same-named column", () => {
+    // `def score(self, output, reference)` (no **kwargs) needs a `reference`
+    // column; blank mapping + absent column would raise a missing-argument
+    // TypeError at runtime (silent all-zero run), so submit must be blocked.
+    mockDatasetVariables = ["text", "label"];
+    const code = `
+def score(self, output, reference):
+    return output == reference
+`;
+    const { result } = renderFormHandlers(buildDefaultValues(code, {}));
+
+    expect(result.current.missingDatasetVariables).toEqual(["reference"]);
+  });
+
+  it("does not flag a default-less kwargs.get() column absent from the item source", () => {
+    // `.get()` is missing-safe (returns None), so an absent column must NOT
+    // block submit — mirrors the editor's own guidance (OPIK-7172 review fix).
+    mockDatasetVariables = ["text", "label"];
+    const code = `
+def score(self, output, **kwargs):
+    return kwargs.get("optional_column")
+`;
+    const { result } = renderFormHandlers(buildDefaultValues(code));
+
+    expect(result.current.missingDatasetVariables).toEqual([]);
   });
 
   it("does not flag a kwargs-referenced column that matches the item source", () => {

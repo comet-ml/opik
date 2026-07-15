@@ -357,6 +357,38 @@ class AliasedMetric(BM):
         result = metric_fn({}, "test output")
         assert result.value == 1.0
 
+    def test_code_metric_two_classes_uses_alphabetically_first(self):
+        """When a file declares multiple metric classes, the statically-detected
+        signature must match the class runtime `get_metric_class` instantiates —
+        the alphabetically-first by name (inspect.getmembers order). Here the
+        strict-signature `AlphaMetric` (declared second, alphabetically first)
+        must win over the `**kwargs` `ZetaMetric` (declared first)."""
+        code = """
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+class ZetaMetric(BaseMetric):
+    def __init__(self):
+        super().__init__(name="zeta")
+
+    def score(self, output, **kwargs):
+        return ScoreResult(name=self.name, value=0.1, reason="zeta")
+
+class AlphaMetric(BaseMetric):
+    def __init__(self):
+        super().__init__(name="alpha")
+
+    def score(self, output, reference):
+        return ScoreResult(name=self.name, value=1.0, reason="alpha")
+"""
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        # Name is read from AlphaMetric (alphabetically first), matching runtime.
+        assert metric_fn.__name__ == "alpha"
+        # AlphaMetric's strict signature needs `reference`; supply it and confirm
+        # it is what actually runs (value 1.0, not zeta's 0.1).
+        result = metric_fn({"reference": "x"}, "test output")
+        assert result.value == 1.0
+
     def test_code_metric_missing_code_raises_error(self):
         """Test that missing code parameter raises error."""
         with pytest.raises(InvalidMetricError) as exc_info:

@@ -48,7 +48,7 @@ def _basemetric_aliases(tree: ast.AST) -> set:
 
 
 def _find_basemetric_classdef(tree: ast.AST) -> Optional[ast.ClassDef]:
-    """First ClassDef that directly subclasses ``BaseMetric`` (by name), or None.
+    """The ClassDef that directly subclasses ``BaseMetric`` (by name), or None.
 
     Static counterpart to :func:`get_metric_class` used at build time so no user
     code is executed. Matches a base written as ``BaseMetric``,
@@ -56,8 +56,17 @@ def _find_basemetric_classdef(tree: ast.AST) -> Optional[ast.ClassDef]:
     Indirect subclassing (via an intermediate user base) is not resolvable
     statically and is treated as "no subclass" — a rare case for these
     single-file metrics.
+
+    When a file declares more than one metric class, the class is picked
+    **alphabetically by name** to match :func:`get_metric_class`, which iterates
+    ``inspect.getmembers`` (name-sorted) at scoring time. Selecting the same
+    class in both places keeps the statically-inferred ``score()`` signature
+    flags (``accepts_var_keyword`` / ``score_params``) consistent with the class
+    actually instantiated — otherwise the wrong signature could be applied and
+    every trial would silently score 0.0.
     """
     aliases = _basemetric_aliases(tree)
+    matches = []
     for node in ast.walk(tree):
         if isinstance(node, ast.ClassDef):
             for base in node.bases:
@@ -69,8 +78,11 @@ def _find_basemetric_classdef(tree: ast.AST) -> Optional[ast.ClassDef]:
                     else None
                 )
                 if name in aliases:
-                    return node
-    return None
+                    matches.append(node)
+                    break
+    if not matches:
+        return None
+    return min(matches, key=lambda node: node.name)
 
 
 def _score_funcdef(cls: ast.ClassDef):

@@ -4,6 +4,7 @@ import {
   checkIsTestSuite,
   getOptimizationDefaultConfigByProvider,
   extractKwargsKeysFromPython,
+  extractRequiredScoreParams,
 } from "./optimizations";
 import {
   Experiment,
@@ -373,13 +374,16 @@ describe("convertOptimizationVariableFormat", () => {
 });
 
 describe("extractKwargsKeysFromPython", () => {
-  it("extracts a default-less kwargs.get(...) key as required", () => {
+  it("does NOT treat a default-less kwargs.get(...) as a required column", () => {
+    // `.get()` is missing-safe (returns None) and the editor helper copy
+    // recommends it as the safe accessor, so it must never hard-block submit
+    // (OPIK-7172 self-review fix).
     const code = `
 def score(self, output, **kwargs):
     label = kwargs.get("label")
     return label
 `;
-    expect(extractKwargsKeysFromPython(code)).toEqual(["label"]);
+    expect(extractKwargsKeysFromPython(code)).toEqual([]);
   });
 
   it("does NOT treat kwargs.get(x, default) as a required column", () => {
@@ -412,16 +416,19 @@ def score(self, output, **kwargs):
     expect(extractKwargsKeysFromPython(code)).toEqual(["expected_value"]);
   });
 
-  it("extracts multiple distinct keys, de-duplicated", () => {
+  it("extracts multiple distinct subscript keys, de-duplicated", () => {
+    // Only subscript accesses are required; the default-less `.get()` on
+    // `category` is missing-safe and must not be collected.
     const code = `
 def score(self, output, **kwargs):
     a = kwargs.get("category")
-    b = kwargs.get('category')
+    b = kwargs["reference"]
     c = kwargs["reference"]
-    return a, b, c
+    d = kwargs['expected']
+    return a, b, c, d
 `;
     expect(extractKwargsKeysFromPython(code).sort()).toEqual([
-      "category",
+      "expected",
       "reference",
     ]);
   });
@@ -472,7 +479,7 @@ def score(self, output, **kwargs):
 
     kwargs["also_in_doc"] should not count either.
     """
-    return kwargs.get("real_col")
+    return kwargs["real_col"]
 `;
     expect(extractKwargsKeysFromPython(code)).toEqual(["real_col"]);
   });
@@ -487,6 +494,51 @@ def score(self, output, **kwargs):
   });
 });
 
+describe("extractRequiredScoreParams", () => {
+  it("returns strict score() positional params (excluding self/output)", () => {
+    const code = `
+def score(self, output, reference):
+    return output == reference
+`;
+    expect(extractRequiredScoreParams(code)).toEqual(["reference"]);
+  });
+
+  it("returns [] for a **kwargs signature (backend splats every column)", () => {
+    const code = `
+def score(self, output, reference, **kwargs):
+    return output == reference
+`;
+    expect(extractRequiredScoreParams(code)).toEqual([]);
+  });
+
+  it("excludes params that have a default value", () => {
+    const code = `
+def score(self, output, reference, threshold=0.5):
+    return output == reference
+`;
+    expect(extractRequiredScoreParams(code)).toEqual(["reference"]);
+  });
+
+  it("handles type-annotated params", () => {
+    const code = `
+def score(self, output: str, reference: str, category: str) -> ScoreResult:
+    return output == reference
+`;
+    expect(extractRequiredScoreParams(code).sort()).toEqual([
+      "category",
+      "reference",
+    ]);
+  });
+
+  it("returns [] when there is no score() method", () => {
+    expect(extractRequiredScoreParams("def other(self): pass")).toEqual([]);
+  });
+
+  it("returns [] for empty code", () => {
+    expect(extractRequiredScoreParams("")).toEqual([]);
+  });
+});
+
 // The unknown-column check that gates submission
 // (`useOptimizationsNewFormHandlers.missingDatasetVariables`) is exactly this
 // diff: dataset columns referenced by the code metric (via `extractKwargsKeysFromPython`
@@ -494,7 +546,7 @@ def score(self, output, **kwargs):
 // source's actual columns.
 describe("extractKwargsKeysFromPython — unknown-column detection", () => {
   it("flags a referenced key that is not among the dataset's columns", () => {
-    const code = `kwargs.get("nonexistent_column")`;
+    const code = `kwargs["nonexistent_column"]`;
     const datasetVariables = ["text", "label"];
     const referenced = extractKwargsKeysFromPython(code);
     const missing = referenced.filter((key) => !datasetVariables.includes(key));
