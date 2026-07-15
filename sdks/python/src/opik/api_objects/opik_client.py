@@ -1543,11 +1543,13 @@ class Opik:
             kind="test suite",
             name=name,
             project_name=project_name,
-            build_url=lambda workspace, project_id: url_helpers.get_test_suite_url_by_id(
-                base_url=self._config.url_override,
-                workspace=workspace,
-                project_id=project_id,
-                test_suite_id=suite_id,
+            build_url=lambda workspace, project_id: (
+                url_helpers.get_test_suite_url_by_id(
+                    base_url=self._config.url_override,
+                    workspace=workspace,
+                    project_id=project_id,
+                    test_suite_id=suite_id,
+                )
             ),
         )
 
