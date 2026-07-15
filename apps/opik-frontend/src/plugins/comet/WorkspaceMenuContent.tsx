@@ -87,7 +87,7 @@ const WorkspaceMenuContent: React.FC<WorkspaceMenuContentProps> = ({
   const isSearching = search.trim().length > 0;
 
   // When searching, show all matches flat (virtualized above the threshold).
-  // Otherwise cluster into Pinned + Recently visited (capped) sections.
+  // Otherwise cluster into Pinned + Recently updated (capped) sections.
   const workspacesById = new Map(
     sortedWorkspaces.map((workspace) => [workspace.workspaceId, workspace]),
   );
@@ -310,7 +310,7 @@ const WorkspaceMenuContent: React.FC<WorkspaceMenuContentProps> = ({
                 {pinnedWorkspaces.length > 0 && (
                   <DropdownMenuSeparator className="my-1" />
                 )}
-                <MenuSectionLabel>Recently visited</MenuSectionLabel>
+                <MenuSectionLabel>Recently updated</MenuSectionLabel>
                 {recentlyVisitedWorkspaces.map(renderWorkspaceItem)}
               </>
             )}
