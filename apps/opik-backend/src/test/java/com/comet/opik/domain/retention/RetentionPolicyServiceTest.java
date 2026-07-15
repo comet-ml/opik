@@ -16,7 +16,6 @@ import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.retention.RetentionPeriod;
 import com.comet.opik.domain.IdGenerator;
-import com.comet.opik.domain.SpanDAO;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -49,7 +48,6 @@ import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -118,12 +116,11 @@ class RetentionPolicyServiceTest {
     private RetentionEstimationService estimationService;
     private TransactionTemplateAsync templateAsync;
     private IdGenerator idGenerator;
-    private SpanDAO spanDAO;
 
     @BeforeAll
     void beforeAll(ClientSupport client, @Jit RetentionPolicyService retentionPolicyService,
             @Jit RetentionCatchUpService catchUpService, @Jit RetentionEstimationService estimationService,
-            TransactionTemplateAsync templateAsync, IdGenerator idGenerator, @Jit SpanDAO spanDAO) {
+            TransactionTemplateAsync templateAsync, IdGenerator idGenerator) {
         var baseURI = TestUtils.getBaseUrl(client);
         ClientSupportUtils.config(client);
 
@@ -132,7 +129,6 @@ class RetentionPolicyServiceTest {
         this.catchUpService = catchUpService;
         this.templateAsync = templateAsync;
         this.idGenerator = idGenerator;
-        this.spanDAO = spanDAO;
         this.retentionClient = new RetentionRuleResourceClient(client, baseURI);
         this.traceClient = new TraceResourceClient(client, baseURI);
         this.spanClient = new SpanResourceClient(client, baseURI);
@@ -360,89 +356,51 @@ class RetentionPolicyServiceTest {
         }
     }
 
-    /**
-     * The spans retention paths key off {@code trace_id} only. A span's {@code id} (and thus the future partition
-     * column {@code id_at}) is client-assigned and can land in a later week than its {@code trace_id}, so no
-     * {@code toMonday(id_at)} bound is applied — one derived from the trace-id range would wrongly exclude such spans.
-     * These tests lock that in by giving each span an {@code id} weeks after its {@code trace_id}: the span must still
-     * be deleted/counted purely on {@code trace_id}. They would fail if an {@code id_at} upper bound were reintroduced.
-     */
     @Nested
     @DisplayName("SpanDAO retention keys off trace_id, not the span id")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class SpanRetentionTraceIdOnly {
 
+        /**
+         * Drives a full retention cycle and asserts a span whose own {@code id} is a much later ISO week than its
+         * {@code trace_id} is still deleted — purely on {@code trace_id}. The span's {@code id} (and thus the future
+         * partition column {@code id_at}) is client-assigned and can lag its {@code trace_id}'s week, which is why the
+         * retention paths carry no {@code toMonday(id_at)} bound. This test would fail if such a bound were
+         * reintroduced, since it would exclude the late-id span from the sweep.
+         */
         @Test
-        void deleteForRetentionRemovesSpanWithLateId() {
-            var wsId = newWorkspace();
-            Instant now = Instant.now();
-
-            // trace_id in the retention window (61d old), but the span's own id is weeks later (5d old).
-            var spanId = idGenerator.generateId(now.minus(5, ChronoUnit.DAYS));
-            var traceId = idGenerator.generateId(now.minus(61, ChronoUnit.DAYS));
-            createTestSpan(spanId, traceId, API_KEY, wsName(wsId));
-            waitForRows("spans", wsId, 1);
-
-            var cutoffId = idGenerator.generateId(now.minus(60, ChronoUnit.DAYS));
-            var lowerBound = idGenerator.generateId(now.minus(65, ChronoUnit.DAYS));
-            spanDAO.deleteForRetention(List.of(wsId), cutoffId, lowerBound).block();
-
-            assertThat(countRows("spans", wsId)).isZero();
-            assertThat(countRowsById("spans", spanId)).isZero();
-        }
-
-        @Test
-        void deleteForRetentionBoundedRemovesSpanWithLateIdKeepsRecent() {
-            var wsId = newWorkspace();
-            Instant now = Instant.now();
-
-            // Deletable: trace_id 61d old, span id 5d old (later week). Survivor: trace_id after the cutoff.
-            var oldSpanId = idGenerator.generateId(now.minus(5, ChronoUnit.DAYS));
-            var oldTraceId = idGenerator.generateId(now.minus(61, ChronoUnit.DAYS));
-            var recentSpanId = idGenerator.generateId(now.minus(3, ChronoUnit.DAYS));
-            var recentTraceId = idGenerator.generateId(now.minus(3, ChronoUnit.DAYS));
-            createTestSpan(oldSpanId, oldTraceId, API_KEY, wsName(wsId));
-            createTestSpan(recentSpanId, recentTraceId, API_KEY, wsName(wsId));
-            waitForRows("spans", wsId, 2);
-
-            var cutoffId = idGenerator.generateId(now.minus(60, ChronoUnit.DAYS));
-            var lowerBound = idGenerator.generateId(now.minus(65, ChronoUnit.DAYS));
-            spanDAO.deleteForRetentionBounded(Map.of(wsId, lowerBound), cutoffId, lowerBound).block();
-
-            assertThat(countRows("spans", wsId)).isEqualTo(1);
-            assertThat(countRowsById("spans", oldSpanId)).isZero();
-            assertThat(countRowsById("spans", recentSpanId)).isEqualTo(1);
-        }
-
-        @Test
-        void countForRetentionCountsSpanWithLateId() {
-            var wsId = newWorkspace();
-            Instant now = Instant.now();
-
-            // In-window by trace_id (61d) with a late span id (5d), plus a recent span excluded by trace_id.
-            createTestSpan(idGenerator.generateId(now.minus(5, ChronoUnit.DAYS)),
-                    idGenerator.generateId(now.minus(61, ChronoUnit.DAYS)), API_KEY, wsName(wsId));
-            createTestSpan(idGenerator.generateId(now.minus(3, ChronoUnit.DAYS)),
-                    idGenerator.generateId(now.minus(3, ChronoUnit.DAYS)), API_KEY, wsName(wsId));
-            waitForRows("spans", wsId, 2);
-
-            var cutoffId = idGenerator.generateId(now.minus(60, ChronoUnit.DAYS));
-            var lowerBound = idGenerator.generateId(now.minus(65, ChronoUnit.DAYS));
-            var count = spanDAO.countForRetention(List.of(wsId), cutoffId, lowerBound).block();
-
-            // Only the 61d-old (by trace_id) span is inside [lowerBound, cutoff); the recent one is excluded.
-            assertThat(count).isEqualTo(1);
-        }
-
-        // Registers an isolated workspace whose name is derived from its id, so wsName(id) recovers it.
-        private String newWorkspace() {
+        @DisplayName("Retention cycle deletes a span whose id is a later week than its trace_id")
+        void retentionCycleDeletesSpanWithLateIdKeyedOnTraceId() {
+            var wsName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
             var wsId = UUID.randomUUID().toString();
-            AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, wsName(wsId), wsId, USER);
-            return wsId;
-        }
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, wsName, wsId, USER);
 
-        private String wsName(String wsId) {
-            return "workspace-" + wsId;
+            var rule = retentionClient.buildWorkspaceRule(RetentionPeriod.BASE_60D).build();
+            retentionClient.createAndGet(rule, API_KEY, wsName);
+
+            Instant now = Instant.now();
+
+            // Deletable: trace_id 61d old (past the 60d cutoff, inside the sliding window), but the span's own id is
+            // only 5d old — a much later ISO week, the case a toMonday(id_at) upper bound would have excluded.
+            var oldTraceId = idGenerator.generateId(now.minus(61, ChronoUnit.DAYS));
+            var lateSpanId = idGenerator.generateId(now.minus(5, ChronoUnit.DAYS));
+            createTestTrace(oldTraceId, API_KEY, wsName);
+            createTestSpan(lateSpanId, oldTraceId, API_KEY, wsName);
+
+            // Survivor: trace_id after the cutoff (3d old) must be kept.
+            var recentTraceId = idGenerator.generateId(now.minus(3, ChronoUnit.DAYS));
+            var recentSpanId = idGenerator.generateId(now.minus(3, ChronoUnit.DAYS));
+            createTestTrace(recentTraceId, API_KEY, wsName);
+            createTestSpan(recentSpanId, recentTraceId, API_KEY, wsName);
+
+            waitForRows("spans", wsId, 2);
+
+            // Derive the fraction this random workspace falls into (48 = retention.executionsPerDay), as WeekBoundary.
+            var fraction = Math.min((int) (Long.parseLong(wsId.substring(0, 8), 16) / ((0xFFFFFFFFL + 1) / 48)), 47);
+            retentionPolicyService.executeRetentionCycle(fraction, now).block();
+
+            assertThat(countRowsById("spans", lateSpanId)).isZero();
+            assertThat(countRowsById("spans", recentSpanId)).isEqualTo(1);
         }
     }
 
