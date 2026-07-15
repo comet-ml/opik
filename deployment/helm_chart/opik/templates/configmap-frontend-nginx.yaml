@@ -40,9 +40,9 @@ data:
       # ClusterIP pins each connection to one pod for its lifetime, so without frequent
       # recycling a few pods absorb ingestion while the rest idle (HPA scales on the average
       # and never reacts). Default keepalive_requests is 1000 -- too coarse to rebalance under
-      # sustained ingestion with few frontend replicas.
-      keepalive_requests 100;
-      keepalive_timeout 60s;
+      # sustained ingestion with few frontend replicas. Tunable via component.frontend.*.
+      keepalive_requests {{ .Values.component.frontend.keepaliveRequests | default 100 }};
+      keepalive_timeout {{ .Values.component.frontend.keepaliveTimeout | default "60s" }};
     }
     upstream swagger {
       server {{ include "opik.name" $ }}-backend:{{ (index .Values.component.backend.service.ports 1).port }};
