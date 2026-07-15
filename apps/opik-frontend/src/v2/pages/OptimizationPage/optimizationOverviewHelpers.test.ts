@@ -257,7 +257,7 @@ describe("getEmptyRunWarningMessage", () => {
     expect(getEmptyRunWarningMessage(health)).toBeNull();
   });
 
-  it("returns null when total_count is 0 (degenerate health object — fall through to heuristic? No — null)", () => {
+  it("falls back to the heuristic message when total_count is 0 (degenerate health object)", () => {
     // total_count === 0 → the exact-count branch is skipped and heuristic is used.
     const health: OptimizationScoringHealth = {
       failed_count: 0,
