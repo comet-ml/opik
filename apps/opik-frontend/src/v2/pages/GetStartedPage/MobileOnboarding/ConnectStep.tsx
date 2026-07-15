@@ -81,7 +81,7 @@ const ConnectStep: React.FC<ConnectStepProps> = ({ userEmail = "" }) => {
         className="slide-fade-right"
         style={flyRect ? { height: flyRect.height } : undefined}
       >
-        {!emailSent && (
+        {!flyRect && (
           <div ref={illustrationRef}>
             <ConnectIllustration />
           </div>
