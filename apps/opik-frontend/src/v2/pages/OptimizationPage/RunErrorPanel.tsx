@@ -28,7 +28,7 @@ const RunErrorPanel: React.FC<RunErrorPanelProps> = ({ optimization }) => {
   const logContent = data?.content ?? "";
   const logsFailedToLoad = isError && !logContent;
   const errorMessage = useMemo(
-    () => optimization.error_info?.message ?? extractErrorFromLogs(logContent),
+    () => optimization.error_info?.message?.trim() || extractErrorFromLogs(logContent),
     [optimization.error_info?.message, logContent],
   );
   const logHtml = useMemo(
