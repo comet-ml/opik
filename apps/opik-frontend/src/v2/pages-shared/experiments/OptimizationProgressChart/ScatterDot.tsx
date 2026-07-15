@@ -2,26 +2,26 @@ import React, { useCallback } from "react";
 import { Dot } from "recharts";
 
 import {
-  TRIAL_STATUS_COLORS,
+  TRIAL_BEST_RING_COLOR,
+  getTrialDotColor,
   CandidateDataPoint,
 } from "./optimizationChartUtils";
 import {
-  DOT_RADIUS_DEFAULT,
-  DOT_RADIUS_BEST,
+  getDotRadius,
   SELECTION_RING_EXTRA_RADIUS,
   SELECTION_RING_STROKE_WIDTH,
   SELECTION_RING_STROKE_OPACITY,
+  DOT_BEST_RING_WIDTH,
   DOT_STROKE_WIDTH,
   DOT_STROKE_COLOR,
   BEST_LABEL_WIDTH,
   BEST_LABEL_HEIGHT,
   BEST_LABEL_BORDER_RADIUS,
-  BEST_LABEL_Y_OFFSET,
-  BEST_LABEL_TEXT_Y_OFFSET,
   BEST_LABEL_FONT_SIZE,
-  BEST_LABEL_OPACITY,
+  BEST_LABEL_TAIL_WIDTH,
+  BEST_LABEL_TAIL_HEIGHT,
+  BEST_LABEL_GAP,
   BEST_PULSE_DUR,
-  createTrialClickHandler,
 } from "./chartConstants";
 
 type DotPosition = { cx: number; cy: number };
@@ -30,18 +30,10 @@ type UseScatterDotParams = {
   dotPositionsRef: React.MutableRefObject<Map<string, DotPosition>>;
   overlapOffsets: Map<string, number>;
   bestCandidateId?: string;
+  hoveredCandidateId?: string;
   pulsingCandidateId?: string;
   selectedTrialId?: string;
-  onTrialSelect?: (trialId: string) => void;
-  onTrialClick?: (candidateId: string) => void;
   isTestSuite?: boolean;
-  setHoveredTrial: React.Dispatch<
-    React.SetStateAction<{
-      candidateId: string;
-      cx: number;
-      cy: number;
-    } | null>
-  >;
 };
 
 type ScatterDotProps = {
@@ -51,47 +43,40 @@ type ScatterDotProps = {
   [key: string]: unknown;
 };
 
+// Dots are purely visual and never capture pointer events — hover and click are
+// resolved by a single nearest-dot handler on the chart container (see
+// OptimizationProgressChartContent). This avoids the overlapping per-dot hit
+// areas that made clustered dots impossible to target and flickered the hover.
 const useScatterDot = ({
   dotPositionsRef,
   overlapOffsets,
   bestCandidateId,
+  hoveredCandidateId,
   pulsingCandidateId,
   selectedTrialId,
-  onTrialSelect,
-  onTrialClick,
   isTestSuite,
-  setHoveredTrial,
 }: UseScatterDotParams) => {
   return useCallback(
     (props: ScatterDotProps) => {
       const { cx: rawCx, cy, payload } = props;
       const pxOffset = overlapOffsets.get(payload.candidateId) ?? 0;
       const cx = rawCx + pxOffset;
-      const color = !isTestSuite
-        ? TRIAL_STATUS_COLORS.passed
-        : TRIAL_STATUS_COLORS[payload.status];
       const isBest = payload.candidateId === bestCandidateId;
+      const color = getTrialDotColor({
+        status: payload.status,
+        isBest,
+        isTestSuite,
+      });
       const isSelected = payload.candidateId === selectedTrialId;
-      const radius = isBest ? DOT_RADIUS_BEST : DOT_RADIUS_DEFAULT;
-
-      const handleTrialSelectClick = createTrialClickHandler(
-        payload.candidateId,
-        onTrialClick,
-        onTrialSelect,
-      );
+      // The best dot's popover is shown by default, so it stays in its hovered
+      // (grown) state — no separate active styling needed.
+      const isHovered = isBest || payload.candidateId === hoveredCandidateId;
+      const radius = getDotRadius({ isBest, isHovered });
 
       dotPositionsRef.current.set(payload.candidateId, { cx, cy });
 
       return (
-        <g
-          key={payload.candidateId}
-          onClick={handleTrialSelectClick}
-          onMouseEnter={() =>
-            setHoveredTrial({ candidateId: payload.candidateId, cx, cy })
-          }
-          onMouseLeave={() => setHoveredTrial(null)}
-          style={{ cursor: "pointer" }}
-        >
+        <g key={payload.candidateId} pointerEvents="none">
           {isSelected && (
             <Dot
               cx={cx}
@@ -103,15 +88,18 @@ const useScatterDot = ({
               strokeOpacity={SELECTION_RING_STROKE_OPACITY}
             />
           )}
+          {/* Halo drawn behind the fill so the border sits outside the dot:
+              the best dot gets a fuchsia-300 ring, every other dot a 1.5px
+              white/background border so it reads crisply over the trend line
+              and grid. */}
+          <circle
+            cx={cx}
+            cy={cy}
+            r={radius + (isBest ? DOT_BEST_RING_WIDTH : DOT_STROKE_WIDTH)}
+            fill={isBest ? TRIAL_BEST_RING_COLOR : DOT_STROKE_COLOR}
+          />
           {pulsingCandidateId === payload.candidateId ? (
-            <circle
-              cx={cx}
-              cy={cy}
-              r={radius}
-              fill={color}
-              strokeWidth={DOT_STROKE_WIDTH}
-              stroke={DOT_STROKE_COLOR}
-            >
+            <circle cx={cx} cy={cy} r={radius} fill={color}>
               <animate
                 attributeName="opacity"
                 values="1;0.4;1"
@@ -120,51 +108,56 @@ const useScatterDot = ({
               />
             </circle>
           ) : (
-            <Dot
-              cx={cx}
-              cy={cy}
-              fill={color}
-              strokeWidth={DOT_STROKE_WIDTH}
-              stroke={DOT_STROKE_COLOR}
-              r={radius}
-            />
+            <Dot cx={cx} cy={cy} fill={color} r={radius} />
           )}
-          {isBest && (
-            <>
-              <rect
-                x={cx - BEST_LABEL_WIDTH / 2}
-                y={cy - radius - BEST_LABEL_Y_OFFSET}
-                width={BEST_LABEL_WIDTH}
-                height={BEST_LABEL_HEIGHT}
-                rx={BEST_LABEL_BORDER_RADIUS}
-                fill="hsl(var(--foreground))"
-                opacity={BEST_LABEL_OPACITY}
-              />
-              <text
-                x={cx}
-                y={cy - radius - BEST_LABEL_TEXT_Y_OFFSET}
-                textAnchor="middle"
-                fontSize={BEST_LABEL_FONT_SIZE}
-                fill="hsl(var(--background))"
-                fontWeight={600}
-              >
-                Best candidate
-              </text>
-            </>
-          )}
+          {isBest &&
+            (() => {
+              // Fuchsia-300 pill with dark text and a downward tail pointing
+              // at the dot.
+              const tailTipY = cy - radius - BEST_LABEL_GAP;
+              const tailBaseY = tailTipY - BEST_LABEL_TAIL_HEIGHT;
+              const pillTop = tailBaseY - BEST_LABEL_HEIGHT;
+              return (
+                <>
+                  <rect
+                    x={cx - BEST_LABEL_WIDTH / 2}
+                    y={pillTop}
+                    width={BEST_LABEL_WIDTH}
+                    height={BEST_LABEL_HEIGHT}
+                    rx={BEST_LABEL_BORDER_RADIUS}
+                    fill={TRIAL_BEST_RING_COLOR}
+                  />
+                  <path
+                    d={`M${cx - BEST_LABEL_TAIL_WIDTH / 2},${tailBaseY} L${
+                      cx + BEST_LABEL_TAIL_WIDTH / 2
+                    },${tailBaseY} L${cx},${tailTipY} Z`}
+                    fill={TRIAL_BEST_RING_COLOR}
+                  />
+                  <text
+                    x={cx}
+                    y={pillTop + BEST_LABEL_HEIGHT / 2}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fontSize={BEST_LABEL_FONT_SIZE}
+                    fontWeight={500}
+                    fill="hsl(var(--foreground))"
+                  >
+                    Best trial
+                  </text>
+                </>
+              );
+            })()}
         </g>
       );
     },
     [
       bestCandidateId,
+      hoveredCandidateId,
       pulsingCandidateId,
       selectedTrialId,
-      onTrialSelect,
-      onTrialClick,
       overlapOffsets,
       isTestSuite,
       dotPositionsRef,
-      setHoveredTrial,
     ],
   );
 };
