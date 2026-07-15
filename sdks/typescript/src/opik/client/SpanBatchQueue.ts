@@ -1,13 +1,15 @@
 import { SavedSpan } from "@/tracer/Span";
 import { BatchQueue } from "./BatchQueue";
 import { OpikApiClientTemp } from "@/client/OpikApiClientTemp";
+import { truncateSpanIfNeeded } from "./spanTruncation";
 
 type SpanUpdate = Partial<SavedSpan> & { traceId: string };
 
 export class SpanBatchQueue extends BatchQueue<SavedSpan> {
   constructor(
     private readonly api: OpikApiClientTemp,
-    delay?: number
+    delay?: number,
+    private readonly maxSpanPayloadSizeMb?: number
   ) {
     super({
       delay,
@@ -23,7 +25,10 @@ export class SpanBatchQueue extends BatchQueue<SavedSpan> {
   }
 
   protected async createEntities(spans: SavedSpan[]) {
-    await this.api.spans.createSpans({ spans }, this.api.requestOptions);
+    const payload = spans.map((span) =>
+      truncateSpanIfNeeded(span, this.maxSpanPayloadSizeMb ?? 0, span.id)
+    );
+    await this.api.spans.createSpans({ spans: payload }, this.api.requestOptions);
   }
 
   protected async getEntity(id: string) {
@@ -35,7 +40,8 @@ export class SpanBatchQueue extends BatchQueue<SavedSpan> {
   }
 
   protected async updateEntity(id: string, updates: SpanUpdate) {
-    await this.api.spans.updateSpan(id, { body: updates }, this.api.requestOptions);
+    const body = truncateSpanIfNeeded(updates, this.maxSpanPayloadSizeMb ?? 0, id);
+    await this.api.spans.updateSpan(id, { body }, this.api.requestOptions);
   }
 
   protected async deleteEntities(ids: string[]) {

@@ -1,0 +1,99 @@
+import { describe, it, expect } from "vitest";
+import {
+  truncateSpanFields,
+  truncateSpanIfNeeded,
+} from "@/client/spanTruncation";
+
+const MB = 1024 * 1024;
+const LIMIT_MB = 20;
+
+const bigValue = (mb: number) => ({ payload: "x".repeat(mb * MB) });
+
+// The marker replaces a field's value; read it back through a permissive shape.
+const asMarker = (value: unknown) =>
+  value as { opik_truncated?: boolean; reason?: string };
+
+describe("truncateSpanFields", () => {
+  it("leaves a within-limit span unchanged (same reference)", () => {
+    const span = {
+      id: "s1",
+      input: { prompt: "small" },
+      output: { result: "ok" },
+    };
+
+    const { result, truncated } = truncateSpanFields(span, LIMIT_MB);
+
+    expect(truncated).toEqual([]);
+    expect(result).toBe(span);
+  });
+
+  it("truncates an oversized field and keeps the small sibling", () => {
+    const span = { id: "s1", input: { prompt: "small" }, output: bigValue(21) };
+
+    const { result, truncated } = truncateSpanFields(span, LIMIT_MB);
+
+    expect(truncated).toEqual(["output"]);
+    expect(asMarker(result.output).opik_truncated).toBe(true);
+    expect(asMarker(result.output).reason).toMatch(
+      /^<omitted_due_to_size_\d+MB_error_code_413_400>$/,
+    );
+    expect(result.input).toEqual({ prompt: "small" }); // small sibling kept
+  });
+
+  it("truncates every field that individually exceeds the limit", () => {
+    const span = { id: "s1", input: bigValue(25), output: bigValue(25) };
+
+    const { truncated } = truncateSpanFields(span, LIMIT_MB);
+
+    expect([...truncated].sort()).toEqual(["input", "output"]);
+  });
+
+  it("hard per-span cap: total over but no single field over -> truncates all", () => {
+    const span = { id: "s1", input: bigValue(15), output: bigValue(15) };
+
+    const { result, truncated } = truncateSpanFields(span, LIMIT_MB);
+
+    expect([...truncated].sort()).toEqual(["input", "output"]);
+    expect(asMarker(result.input).opik_truncated).toBe(true);
+    expect(asMarker(result.output).opik_truncated).toBe(true);
+  });
+
+  it("does not mutate the original span", () => {
+    const bigOutput = bigValue(21);
+    const span = { id: "s1", output: bigOutput };
+
+    truncateSpanFields(span, LIMIT_MB);
+
+    expect(span.output).toBe(bigOutput); // original untouched (non-mutating)
+  });
+
+  it("is fail-safe: a non-serializable field does not throw and is left untouched", () => {
+    const circular: Record<string, unknown> = {};
+    circular.self = circular; // JSON.stringify would throw on this
+    const span = { id: "s1", output: circular };
+
+    expect(() => truncateSpanFields(span, LIMIT_MB)).not.toThrow();
+
+    const { result, truncated } = truncateSpanFields(span, LIMIT_MB);
+    expect(truncated).toEqual([]); // can't measure -> not truncated
+    expect(result).toBe(span);
+  });
+});
+
+describe("truncateSpanIfNeeded", () => {
+  it("is a no-op when the limit is disabled (<= 0)", () => {
+    const span = { id: "s1", output: bigValue(21) };
+
+    const result = truncateSpanIfNeeded(span, 0, "s1");
+
+    expect(result).toBe(span);
+  });
+
+  it("truncates when a field is over the limit", () => {
+    const span = { id: "s1", output: bigValue(21) };
+
+    const result = truncateSpanIfNeeded(span, LIMIT_MB, "s1");
+
+    expect(asMarker(result.output).opik_truncated).toBe(true);
+  });
+});

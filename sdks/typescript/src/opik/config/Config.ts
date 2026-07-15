@@ -17,6 +17,9 @@ export interface OpikConfig {
   holdUntilFlush?: boolean;
   promptCacheTtlSeconds?: number;
   trackDisable?: boolean;
+  // Per-span payload cap (MB): input/output/metadata larger than this are truncated
+  // before send (parity with the Python SDK). <= 0 disables. Default 20.
+  maxSpanPayloadSizeMb?: number;
 }
 
 export interface ConstructorOpikConfig extends Omit<OpikConfig, "environment"> {
@@ -33,6 +36,7 @@ export const DEFAULT_CONFIG: Required<Omit<OpikConfig, "requestOptions" | "envir
   batchDelayMs: 300,
   holdUntilFlush: false,
   trackDisable: false,
+  maxSpanPayloadSizeMb: 20,
 };
 
 function filterUndefined<T extends object>(obj: Partial<T>): Partial<T> {
@@ -60,6 +64,9 @@ function loadFromEnv(): Partial<OpikConfig> {
       : undefined,
     holdUntilFlush: parseBooleanFlag(process.env.OPIK_HOLD_UNTIL_FLUSH),
     trackDisable: parseBooleanFlag(process.env.OPIK_TRACK_DISABLE),
+    maxSpanPayloadSizeMb: process.env.OPIK_MAX_SPAN_PAYLOAD_SIZE_MB
+      ? Number(process.env.OPIK_MAX_SPAN_PAYLOAD_SIZE_MB)
+      : undefined,
     // parseInt returns NaN for non-numeric strings; `|| 1` converts NaN→1 before Math.max enforces the minimum
     promptCacheTtlSeconds: process.env.OPIK_PROMPT_CACHE_TTL_SECONDS
       ? Math.max(1, parseInt(process.env.OPIK_PROMPT_CACHE_TTL_SECONDS, 10) || 1)
