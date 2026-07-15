@@ -13,3 +13,4 @@ ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.cipx_spends ON CLUSTER '{cluster}'
     ADD COLUMN IF NOT EXISTS context_management  LowCardinality(String) DEFAULT '';
 
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.cipx_spends ON CLUSTER '{cluster}' DROP COLUMN IF EXISTS effort, DROP COLUMN IF EXISTS thinking_type, DROP COLUMN IF EXISTS max_tokens, DROP COLUMN IF EXISTS context_management;
+
