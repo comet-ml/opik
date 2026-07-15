@@ -200,6 +200,8 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     FROM spans FINAL
                     WHERE workspace_id = :workspace_id AND project_id = :project_id
                       AND id >= :uuid_from_time AND id \\<= :uuid_to_time
+                      AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))
+                      AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))
                       AND trace_id IN (SELECT id FROM traces_filtered)
                     GROUP BY trace_id
                 )
@@ -313,6 +315,8 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     AND workspace_id = :workspace_id
                     AND id >= :uuid_from_time
                     AND id \\<= :uuid_to_time
+                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))
+                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))
                     <if(span_filters)> AND <span_filters> <endif>
                     <if(span_feedback_scores_filters)>
                     AND id in (
@@ -504,6 +508,8 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     FROM spans FINAL
                     WHERE workspace_id = :workspace_id AND project_id = :project_id
                       AND id >= :uuid_from_time AND id \\<= :uuid_to_time
+                      AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))
+                      AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))
                 ) s
                 JOIN traces_final tr ON s.trace_id = tr.id
                 GROUP BY tr.thread_id
