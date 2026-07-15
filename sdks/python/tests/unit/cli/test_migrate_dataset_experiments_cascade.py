@@ -38,6 +38,7 @@ from opik.cli.migrate.datasets.experiments import (
     cascade_experiments,
 )
 from opik.cli.migrate.errors import ExperimentCascadeError
+from opik.rest_api.core.api_error import ApiError
 
 from ._migrate_helpers import (
     _DatasetRow,
@@ -2002,6 +2003,115 @@ class TestBulkFetchSpansGuard:
         assert kwargs["filter_string"] is not None
         assert "start_time" in kwargs["filter_string"]
         assert kwargs["max_results"] == sys.maxsize
+
+
+# ---------------------------------------------------------------------------
+# Tolerate referenced-but-deleted traces in the trace-fetch fallback
+# (OPIK-7344)
+# ---------------------------------------------------------------------------
+
+
+class TestDeletedTraceFallback:
+    """When ``search_traces(experiment_id=)`` misses a trace, the cascade
+    falls back to per-trace ``get_trace_content``. An experiment item can
+    reference a trace that has since been deleted -- the fallback then 404s.
+    That 404 must skip the trace and continue, not abort the migration.
+    """
+
+    def _setup(
+        self,
+        *,
+        deleted_status_code: int,
+    ) -> tuple:
+        # ``good`` is returned by the bulk search_traces; ``gone`` is
+        # referenced by an item but absent from search_traces, forcing the
+        # per-trace get_trace_content fallback -- which raises for it.
+        good = _ExperimentItem(
+            id="src-item-good",
+            experiment_id="src-exp-1",
+            trace_id="src-trace-good",
+            dataset_item_id="src-ds-good",
+        )
+        gone = _ExperimentItem(
+            id="src-item-gone",
+            experiment_id="src-exp-1",
+            trace_id="src-trace-gone",
+            dataset_item_id="src-ds-gone",
+        )
+        experiment = _Experiment(id="src-exp-1", dataset_version_id="src-v-1")
+        # Only the good trace exists in the source; the deleted trace is
+        # absent so search_traces never returns it, triggering the fallback.
+        rest_client = _cascade_rest_client(
+            experiments_by_dataset={"src-dataset-1": [experiment]},
+            items_by_experiment={"experiment": [good, gone]},
+            traces_by_id={"src-trace-good": _Trace(id="src-trace-good")},
+            spans_by_trace={"src-trace-good": []},
+        )
+        # ``stream_experiment_items`` derives project_id from traces_by_id;
+        # the deleted trace is absent there, so its bucket routes to the
+        # fallback project -- fine, it never gets fetched as a trace.
+        client = _client_with_recreate_capture(rest_client)
+
+        # The fallback delegates client.get_trace_content -> rest_client
+        # .traces.get_trace_by_id. Make the deleted id raise, others pass.
+        def _get_trace_by_id(id: str) -> Any:
+            if id == "src-trace-gone":
+                raise ApiError(status_code=deleted_status_code, body="not found")
+            return _Trace(id=id)
+
+        client.get_trace_content = MagicMock(
+            side_effect=lambda id: _get_trace_by_id(id)
+        )
+        return client, rest_client
+
+    def test_deleted_trace__skipped_and_migration_continues(self, capture_log) -> None:
+        client, rest_client = self._setup(deleted_status_code=404)
+
+        with capture_log.at_level("WARNING"):
+            result = cascade_experiments(
+                client,
+                rest_client,
+                source_dataset_id="src-dataset-1",
+                target_dataset_name="MyDataset",
+                target_project_name="DestProject",
+                version_remap={"src-v-1": "dest-v-1"},
+                item_id_remap={
+                    "src-ds-good": "dest-ds-good",
+                    "src-ds-gone": "dest-ds-gone",
+                },
+                audit=_audit(),
+            )
+
+        # The migration completed; only the surviving trace was copied.
+        assert result.experiments_migrated == 1
+        assert result.traces_migrated == 1
+        assert set(result.trace_id_remap.keys()) == {"src-trace-good"}
+        assert "src-trace-gone" not in result.trace_id_remap
+        assert any(
+            "src-trace-gone" in rec.message and "deleted" in rec.message
+            for rec in capture_log.records
+        ), "expected a warning naming the skipped deleted trace"
+
+    def test_non_404_error__propagates(self) -> None:
+        # A real failure (500) must not be swallowed -- only 404 (deleted)
+        # is tolerated.
+        client, rest_client = self._setup(deleted_status_code=500)
+
+        with pytest.raises(ApiError) as exc_info:
+            cascade_experiments(
+                client,
+                rest_client,
+                source_dataset_id="src-dataset-1",
+                target_dataset_name="MyDataset",
+                target_project_name="DestProject",
+                version_remap={"src-v-1": "dest-v-1"},
+                item_id_remap={
+                    "src-ds-good": "dest-ds-good",
+                    "src-ds-gone": "dest-ds-gone",
+                },
+                audit=_audit(),
+            )
+        assert exc_info.value.status_code == 500
 
 
 # ---------------------------------------------------------------------------

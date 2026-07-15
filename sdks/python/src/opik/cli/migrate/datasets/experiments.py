@@ -57,6 +57,7 @@ import opik.id_helpers as id_helpers_module
 from opik.api_objects import rest_helpers, rest_stream_parser
 from opik.api_objects.experiment import experiment_item, rest_operations
 from opik.rest_api import OpikApi
+from opik.rest_api.core.api_error import ApiError
 from opik.rest_api.types.experiment_item_public import ExperimentItemPublic
 from opik.rest_api.types.experiment_public import ExperimentPublic
 from opik.rest_api.types.span_public import SpanPublic
@@ -986,10 +987,28 @@ def _copy_traces_and_spans(
             len(missing_ids),
         )
         for tid in missing_ids:
-            fetched = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-                lambda sid=tid: client.get_trace_content(id=sid),
-                operation_name="get_trace_content (fallback)",
-            )
+            try:
+                fetched = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+                    lambda sid=tid: client.get_trace_content(id=sid),
+                    operation_name="get_trace_content (fallback)",
+                )
+            except ApiError as err:
+                if err.status_code == 404:
+                    # The experiment item references a trace that has since
+                    # been deleted. It's gone -- there is no data to copy --
+                    # so skip it and continue rather than aborting the whole
+                    # migration (OPIK-7344). Leaving it out of
+                    # ``source_traces_by_id`` means the emission loop below
+                    # skips it too.
+                    LOGGER.warning(
+                        "Experiment %s references trace %s which no longer "
+                        "exists (deleted); skipping it. The destination "
+                        "experiment omits this trace.",
+                        source_experiment_id,
+                        tid,
+                    )
+                    continue
+                raise
             source_traces_by_id[tid] = fetched
 
     # Phase 1b: emit destination traces. ``source="experiment"`` matches
@@ -998,7 +1017,13 @@ def _copy_traces_and_spans(
     # compare would flag).
     total_traces = len(new_source_ids)
     for index, source_trace_id in enumerate(new_source_ids, start=1):
-        source_trace = source_traces_by_id[source_trace_id]
+        source_trace = source_traces_by_id.get(source_trace_id)
+        if source_trace is None:
+            # The trace was referenced by an experiment item but couldn't be
+            # fetched (deleted -- see the 404-tolerant fallback above). Skip
+            # emission; downstream span/feedback/comment copy keys off
+            # ``source_to_new_trace`` so the skipped id never surfaces there.
+            continue
         new_trace_id = id_helpers_module.generate_id()
         source_to_new_trace[source_trace_id] = new_trace_id
 
@@ -1021,7 +1046,9 @@ def _copy_traces_and_spans(
             inner_progress.tick(label=f"trace {index}/{total_traces}")
 
     trace_id_remap.update(source_to_new_trace)
-    traces_copied = len(new_source_ids)
+    # Count traces actually emitted, not referenced -- deleted traces skipped
+    # above (404 fallback) never entered ``source_to_new_trace``.
+    traces_copied = len(source_to_new_trace)
 
     # Record the freshly-minted destination trace ids on the checkpoint and
     # flush it to disk BEFORE the BE flush below. Ordering is the whole point:
