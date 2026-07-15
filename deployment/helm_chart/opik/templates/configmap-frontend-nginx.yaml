@@ -36,6 +36,13 @@ data:
     upstream backend {
       server {{ include "opik.name" $ }}-backend:{{ (.Values.component.backend.service.ports | first).port }};
       keepalive 16;
+      # Recycle upstream keepalive connections so they re-spread across backend pods. An L4
+      # ClusterIP pins each connection to one pod for its lifetime, so without frequent
+      # recycling a few pods absorb ingestion while the rest idle (HPA scales on the average
+      # and never reacts). Default keepalive_requests is 1000 -- too coarse to rebalance under
+      # sustained ingestion with few frontend replicas.
+      keepalive_requests 100;
+      keepalive_timeout 60s;
     }
     upstream swagger {
       server {{ include "opik.name" $ }}-backend:{{ (index .Values.component.backend.service.ports 1).port }};
