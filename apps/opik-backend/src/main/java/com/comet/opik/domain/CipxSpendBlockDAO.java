@@ -231,6 +231,7 @@ public class CipxSpendBlockDAO {
                 case "memory" -> "memory";
                 case "file_attachments" -> "file_attachments";
                 case "system_prompt", "env_info", "system_tools", "system_tools_deferred" -> "static_overhead";
+                case "auto_classifier" -> "static_overhead";
                 case "thinking" -> "thinking";
                 case "assistant_text" -> "assistant_text";
                 case "built_in_tool_calls" -> "built_in_tool_calls";
@@ -252,6 +253,7 @@ public class CipxSpendBlockDAO {
                 case "memory" -> "memory";
                 case "file_attachments" -> "file_attachments";
                 case "system_prompt", "env_info", "system_tools", "system_tools_deferred" -> "static_overhead";
+                case "auto_classifier" -> "static_overhead";
                 case "thinking" -> "thinking";
                 case "assistant_text" -> "assistant_text";
                 case "built_in_tool_calls" -> "built_in_tool_calls";
@@ -273,7 +275,8 @@ public class CipxSpendBlockDAO {
                 case "tool_io" -> toolServer.isEmpty() ? toolName : toolServer;
                 case "prior_assistant" -> kind;
                 case "mcp_tools_active", "mcp_tool_calls" -> toolServer;
-                case "system_prompt", "env_info", "system_tools", "system_tools_deferred" -> category;
+                case "system_prompt", "env_info", "system_tools", "system_tools_deferred", "auto_classifier" ->
+                    category;
                 case "thinking" -> "thinking";
                 case "assistant_text" -> "assistant_text";
                 case "built_in_tool_calls" -> toolName;
