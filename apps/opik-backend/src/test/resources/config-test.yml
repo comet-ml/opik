@@ -296,7 +296,19 @@ jacksonConfig:
   # so the guard tests trip at modest payload sizes instead of generating >512MB bodies. These
   # values are calibrated to the LargePayloadTests payloads (253MB string, 280MB doc, 51MB request);
   # they exercise the 400/413 mechanism, while JacksonConfigTest verifies the real shipped defaults.
+  # Default: 536870912 (512MB) - the self-hosted default (higher, to avoid surprising customers);
+  #   the Comet cloud deployment overrides JACKSON_MAX_DOCUMENT_LENGTH to 268435456 (256MB).
+  # Description: Maximum size of an entire JSON document (the whole decompressed batch). Unlike
+  #   maxStringLength (a single string value), this caps the whole document, so it catches an
+  #   oversized batch built from many small values. Aborts mid-parse with a 4xx before a multi-GB
+  #   node tree is materialized. Must stay above maxStringLength so a single max-size string parses.
   maxDocumentLength: 268435456
+  # Default: 536870912 (512MB) - self-hosted default; cloud overrides JACKSON_MAX_REQUEST_SIZE_BYTES
+  #   to 268435456 (256MB). Kept equal to maxDocumentLength so the request filter never rejects a
+  #   request the document guard would otherwise accept.
+  # Description: Maximum incoming request body size, checked against the Content-Length header and
+  #   rejected with 413 before the body is read. Requests without a Content-Length (e.g. chunked)
+  #   fall through and are bounded by maxDocumentLength during parsing.
   maxRequestSizeBytes: 52428800
 
 # Configuration for batch operations
