@@ -154,7 +154,7 @@ const baseRoute = createRoute({
   ),
 });
 
-// ----------- home (redirects to active project traces)
+// ----------- home (redirects to the workspace Projects tab)
 const homeRoute = createRoute({
   path: "/$workspaceName/home",
   getParentRoute: () => workspaceGuardRoute,

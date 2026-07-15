@@ -662,6 +662,64 @@ class CostServiceTest {
     }
 
     /**
+     * Covers registering {@code perplexity} as a canonical provider so that the 16 non-zero-cost
+     * entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "perplexity"} (the {@code sonar} family and legacy
+     * {@code perplexity/llama-*} / {@code perplexity/codellama-*} models) are no longer silently
+     * dropped at load time. No Perplexity model publishes cache rates today, so all Perplexity
+     * requests route through {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("providePerplexityProviderCases")
+    void calculateCostHandlesPerplexityModels(String model, Map<String, Integer> usage, String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, "perplexity", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> providePerplexityProviderCases() {
+        // perplexity/sonar: input 1e-6, output 1e-6
+        // 1000 * 1e-6 + 200 * 1e-6 = 0.001 + 0.0002 = 0.0012
+        // perplexity/sonar-pro: input 3e-6, output 1.5e-5 (distinct rates for the two dimensions)
+        // 1000 * 3e-6 + 200 * 1.5e-5 = 0.003 + 0.003 = 0.006
+        return Stream.of(
+                Arguments.of("perplexity/sonar",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.0012"),
+                Arguments.of("perplexity/sonar-pro",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.006"));
+    }
+
+    /**
+     * Covers the provider-prefix fallback in {@link CostService#findModelPrice}. Callers that
+     * route a model through an aggregator ({@link com.comet.opik.api.resources.v1.events.BudgetGuard}
+     * calls {@code CostService.calculateCost} via {@code LlmProviderFactoryImpl.getResolvedModelInfo},
+     * which enumerates {@code perplexity/*} under OpenRouter and therefore returns
+     * {@code provider="openrouter"}) still get the correct pricing row that lives under the
+     * model's actual origin provider. Same rate math as the direct {@code perplexity} call —
+     * only the routing changes.
+     */
+    @ParameterizedTest(name = "{0} via provider={1}")
+    @MethodSource("provideAggregatorRoutedPerplexityCases")
+    void calculateCostFindsPerplexityViaAggregatorProviderPrefix(String model, String provider,
+            String expectedCost) {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 200);
+
+        BigDecimal cost = CostService.calculateCost(model, provider, usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideAggregatorRoutedPerplexityCases() {
+        return Stream.of(
+                // aggregator that we don't register as a canonical provider (openrouter): prefix
+                // fallback kicks in and the perplexity row is found.
+                Arguments.of("perplexity/sonar", "openrouter", "0.0012"),
+                Arguments.of("perplexity/sonar-pro", "openrouter", "0.006"),
+                // custom-llm and empty-adjacent providers hit the same fallback path.
+                Arguments.of("perplexity/sonar", "custom-llm", "0.0012"));
+    }
+
+    /**
      * Test for issue #5130: Bedrock model names carry a version-pin suffix like
      * "anthropic.claude-opus-4-6-v1:0" while the pricing database stores the base name
      * "anthropic.claude-opus-4-6-v1". Stripping the ":N" pin lets these price correctly.
