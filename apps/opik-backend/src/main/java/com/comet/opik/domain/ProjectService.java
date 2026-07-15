@@ -78,6 +78,8 @@ public interface ProjectService {
 
     List<Project> findByIds(String workspaceId, Set<UUID> ids);
 
+    Mono<Set<UUID>> findProjectIdsByWorkspace();
+
     List<Project> findByNames(String workspaceId, List<String> names);
 
     Optional<UUID> findProjectIdByName(String workspaceId, String projectName);
@@ -399,6 +401,15 @@ class ProjectServiceImpl implements ProjectService {
         }
 
         return template.inTransaction(READ_ONLY, handle -> handle.attach(ProjectDAO.class).findByIds(ids, workspaceId));
+    }
+
+    @Override
+    public Mono<Set<UUID>> findProjectIdsByWorkspace() {
+        return Mono.deferContextual(ctx -> Mono
+                .fromCallable(() -> template.inTransaction(READ_ONLY,
+                        handle -> handle.attach(ProjectDAO.class)
+                                .findIdsByWorkspaceId(ctx.get(RequestContext.WORKSPACE_ID))))
+                .subscribeOn(Schedulers.boundedElastic()));
     }
 
     @Override

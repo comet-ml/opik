@@ -140,6 +140,9 @@ public class OpikConfiguration extends JobConfiguration {
     private RetentionConfig retention = new RetentionConfig();
 
     @Valid @NotNull @JsonProperty
+    private PartitionMetricsConfig partitionMetrics = new PartitionMetricsConfig();
+
+    @Valid @NotNull @JsonProperty
     private DatasetVersioningMigrationConfig datasetVersioningMigration = new DatasetVersioningMigrationConfig();
 
     @Valid @NotNull @JsonProperty

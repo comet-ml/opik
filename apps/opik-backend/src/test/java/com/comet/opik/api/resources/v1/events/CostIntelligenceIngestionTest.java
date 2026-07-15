@@ -262,7 +262,8 @@ class CostIntelligenceIngestionTest {
 
             var cipxTrace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(projectName)
-                    .metadata(traceCipxMetadata(userUuid, email, "Dev User", "git@github.com:acme/repo.git", 3))
+                    .metadata(traceCipxMetadata(userUuid, email, "Dev User", "git@github.com:acme/repo.git", "codex",
+                            3))
                     .build();
             var plainTrace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(projectName)
@@ -279,6 +280,7 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().userDisplayName()).isEqualTo("Dev User");
                 assertThat(row.get().repository()).isEqualTo("git@github.com:acme/repo.git");
                 assertThat(row.get().sessionId()).isEqualTo("cc-session-abc");
+                assertThat(row.get().harness()).isEqualTo("codex");
                 assertThat(row.get().schemaVersion()).isEqualTo(3);
                 assertThat(row.get().projectId()).isNotBlank();
                 assertThat(row.get().startMs()).isEqualTo(cipxTrace.startTime().toEpochMilli());
@@ -309,7 +311,7 @@ class CostIntelligenceIngestionTest {
 
             var update = TraceUpdate.builder()
                     .projectName(projectName)
-                    .metadata(traceCipxMetadata(userUuid, email, "Dev User", "repo-a", 2))
+                    .metadata(traceCipxMetadata(userUuid, email, "Dev User", "repo-a", "claude_code", 2))
                     .build();
             traceResourceClient.updateTrace(traceId, update, ws.apiKey(), ws.workspaceName());
 
@@ -337,7 +339,7 @@ class CostIntelligenceIngestionTest {
 
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(projectName)
-                    .metadata(traceCipxMetadata(userUuid, oldEmail, "Old", "repo-a", 1))
+                    .metadata(traceCipxMetadata(userUuid, oldEmail, "Old", "repo-a", "claude_code", 1))
                     .build();
             var traceId = traceResourceClient.createTrace(trace, ws.apiKey(), ws.workspaceName());
 
@@ -347,7 +349,7 @@ class CostIntelligenceIngestionTest {
             // user_uuid is part of the sorting key, so only a same-user update collapses to one row.
             var update = TraceUpdate.builder()
                     .projectName(projectName)
-                    .metadata(traceCipxMetadata(userUuid, newEmail, "New", "repo-b", 2))
+                    .metadata(traceCipxMetadata(userUuid, newEmail, "New", "repo-b", "claude_code", 2))
                     .build();
             traceResourceClient.updateTrace(traceId, update, ws.apiKey(), ws.workspaceName());
 
@@ -408,13 +410,14 @@ class CostIntelligenceIngestionTest {
     }
 
     private static JsonNode traceCipxMetadata(String userUuid, String email, String displayName, String repository,
-            int schemaVersion) {
+            String harness, int schemaVersion) {
         return JsonUtils.getJsonNodeFromString("""
                 {
                   "cipx": {
                     "session": {
                       "schema_version": %d,
                       "session_id": "cc-session-abc",
+                      "harness": "%s",
                       "repository": {"remote": "%s"},
                       "identity": {
                         "user_uuid": "%s",
@@ -427,7 +430,7 @@ class CostIntelligenceIngestionTest {
                     }
                   }
                 }
-                """.formatted(schemaVersion, repository, userUuid, email, displayName));
+                """.formatted(schemaVersion, harness, repository, userUuid, email, displayName));
     }
 
     private Optional<CipxSpendRow> getCipxSpend(UUID spanId, String workspaceId) {
@@ -511,7 +514,7 @@ class CostIntelligenceIngestionTest {
                 SELECT
                     project_id AS project_id,
                     toUnixTimestamp64Milli(start_time) AS start_ms,
-                    user_uuid, user_email, user_display_name, repository, session_id, schema_version,
+                    user_uuid, user_email, user_display_name, repository, session_id, harness, schema_version,
                     billing_mode, plan, plan_usage_status
                 FROM cipx_trace_identities FINAL
                 WHERE workspace_id = :workspace_id AND trace_id = :trace_id
@@ -529,6 +532,7 @@ class CostIntelligenceIngestionTest {
                             row.get("user_display_name", String.class),
                             row.get("repository", String.class),
                             row.get("session_id", String.class),
+                            row.get("harness", String.class),
                             row.get("schema_version", Integer.class),
                             row.get("billing_mode", String.class),
                             row.get("plan", String.class),
@@ -571,7 +575,7 @@ class CostIntelligenceIngestionTest {
     }
 
     private record CipxIdentityRow(String projectId, Long startMs, String userUuid, String userEmail,
-            String userDisplayName, String repository, String sessionId, Integer schemaVersion,
+            String userDisplayName, String repository, String sessionId, String harness, Integer schemaVersion,
             String billingMode, String plan, String planUsageStatus) {
     }
 }

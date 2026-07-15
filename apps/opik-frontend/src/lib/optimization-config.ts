@@ -4,8 +4,7 @@ import get from "lodash/get";
 import { OptimizationStudioConfig } from "@/types/optimizations";
 import { ConfigurationType } from "@/types/shared";
 import { isMessagesArray } from "@/lib/configuration-renderer";
-import { getOptimizerLabel } from "@/lib/optimizations";
-import { OPTIMIZATION_METRIC_OPTIONS } from "@/constants/optimizations";
+import { getMetricLabel, getOptimizerLabel } from "@/lib/optimizations";
 
 export const isRecord = (value: unknown): value is ConfigurationType =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -44,9 +43,6 @@ export const extractMessages = (value: unknown): MessageEntry[] | null => {
   }
   return null;
 };
-
-export const getMetricLabel = (type: string): string =>
-  OPTIMIZATION_METRIC_OPTIONS.find((opt) => opt.value === type)?.label || type;
 
 export const getMetricParamLabels = (
   studioConfig: OptimizationStudioConfig,

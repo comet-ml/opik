@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from opik_optimizer.api_objects import chat_prompt
+from opik_optimizer.core import runtime
 from opik_optimizer.core.state import OptimizationContext
 from tests.unit.fixtures.base_optimizer_test_helpers import ConcreteOptimizer
 from tests.unit.test_helpers import make_mock_dataset, make_optimization_context
@@ -130,3 +131,33 @@ def test_post_trial_not_called_by_evaluate(
 
     optimizer.evaluate(context, {"main": simple_chat_prompt})
     assert optimizer.post_trial_called is False
+
+
+def test_handle_trial_end_keeps_incumbent_on_tie(
+    monkeypatch: pytest.MonkeyPatch, simple_chat_prompt
+) -> None:
+    """OPIK-7038: a tie must NOT replace the running-best (seeded from baseline);
+    only a strict improvement does."""
+    optimizer = ConcreteOptimizer(model="gpt-4")
+    context = make_optimization_context(
+        simple_chat_prompt,
+        dataset=make_mock_dataset(),
+        metric=MagicMock(),
+        max_trials=5,
+    )
+    monkeypatch.setattr(runtime, "evaluation_progress", lambda **kwargs: None)
+
+    incumbent = {"main": simple_chat_prompt}
+    context.current_best_score = 0.70
+    context.current_best_prompt = incumbent
+    challenger = {"main": simple_chat_prompt}
+
+    # Tie -> incumbent kept.
+    optimizer._handle_trial_end(context, challenger, 0.70, prev_best_score=0.70)
+    assert context.current_best_prompt is incumbent
+    assert context.current_best_score == 0.70
+
+    # Strict improvement -> challenger wins.
+    optimizer._handle_trial_end(context, challenger, 0.85, prev_best_score=0.70)
+    assert context.current_best_prompt is challenger
+    assert context.current_best_score == 0.85

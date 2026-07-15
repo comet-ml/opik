@@ -267,6 +267,18 @@ export const OPENAI_MODEL_CAPABILITIES: Partial<
     reasoning: true,
     reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
   },
+  [PROVIDER_MODEL_TYPE.GPT_5_6_LUNA]: {
+    reasoning: true,
+    reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh", "max"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_5_6_SOL]: {
+    reasoning: true,
+    reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh", "max"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_5_6_TERRA]: {
+    reasoning: true,
+    reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh", "max"],
+  },
 };
 
 // Reasoning models that require temperature = 1.0

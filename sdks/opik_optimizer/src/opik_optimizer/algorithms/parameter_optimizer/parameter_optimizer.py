@@ -21,6 +21,7 @@ from ...api_objects.types import MetricFunction
 from ...utils import display as display_utils
 from ...utils.optuna_runtime import configure_optuna_logging
 from ...utils.logging import debug_log
+from ...utils.scoring import improves_over
 from .types import ParameterType
 from .ops.optuna_ops import (
     build_optuna_objective,
@@ -757,6 +758,10 @@ class ParameterOptimizer(BaseOptimizer):
             "trials_completed": len(completed_trials),
             "stopped_early": len(completed_trials) < total_trials,
             "stop_reason": None,
+            # OPIK-7038: this optimizer builds its result directly (it bypasses
+            # runtime.build_final_result), so set the flag here too for parity.
+            "reused_baseline": baseline_score is not None
+            and not improves_over(best_score, baseline_score),
             "selection_meta": {
                 "sampler": sampler.__class__.__name__ if sampler else None,
                 "pruner": type(study.pruner).__name__ if study.pruner else None,
