@@ -464,6 +464,13 @@ component:
     maps: []
     # use internal aws resolvr on vpc
     awsResolver: false
+    # nginx -> opik-backend upstream keepalive connection recycling (OPIK-7327).
+    # Recycling re-spreads long-lived keepalive connections across backend pods; without it a
+    # few pods absorb ingestion while the rest idle and HPA (average CPU) never scales out.
+    # Tune low enough to rebalance under sustained load, but not so low that connection reuse
+    # races on non-idempotent POSTs (keep >= ~50; nginx's own default is 1000).
+    keepaliveRequests: 100    # max requests per upstream keepalive connection before recycle (count)
+    keepaliveTimeout: 60s     # idle timeout for upstream keepalive connections (duration, e.g. 30s/60s)
     # Enable HSTS header (only enable when running behind HTTPS termination)
     # DEPRECATED: Use extraServerHeaders instead for more flexibility
     hstsEnabled: false

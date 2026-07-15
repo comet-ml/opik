@@ -371,6 +371,8 @@ Call opik api on http://localhost:5173/api
 | component.frontend.ingress.tls.enabled | bool | `false` |  |
 | component.frontend.ingress.tls.hosts | list | `[]` |  |
 | component.frontend.ingress.tls.secretName | string | `""` |  |
+| component.frontend.keepaliveRequests | int | `100` |  |
+| component.frontend.keepaliveTimeout | string | `"60s"` |  |
 | component.frontend.maps | list | `[]` |  |
 | component.frontend.metrics.enabled | bool | `false` |  |
 | component.frontend.podDisruptionBudget.enabled | bool | `false` |  |
