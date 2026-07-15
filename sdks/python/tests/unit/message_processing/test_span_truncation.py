@@ -48,7 +48,7 @@ def test_truncate_span_write__oversized_output__truncated(caplog):
 
     # the oversized field is replaced with a marker, the small one is untouched
     assert result.output["opik_truncated"] is True
-    assert result.output["original_size_bytes"] > 20 * ONE_MEGABYTE
+    assert result.output["reason"].startswith("<omitted_due_to_size_")
     assert result.input == {"prompt": "small"}
     # a warning naming the span + field was logged
     assert "span-id" in caplog.text and "output" in caplog.text

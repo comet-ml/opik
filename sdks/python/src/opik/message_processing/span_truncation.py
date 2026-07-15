@@ -28,20 +28,14 @@ LOGGER = logging.getLogger(__name__)
 # Fields on a span that can carry large user-provided payloads.
 _TRUNCATABLE_FIELDS = ("input", "output", "metadata")
 
-_DOCS_URL = "https://www.comet.com/docs/opik/tracing/advanced/log_multimodal_traces"
 
-
-def _truncation_marker(
-    field_name: str, original_size_bytes: int, max_size_mb: float
-) -> Dict[str, Any]:
+def _truncation_marker(size_mb: float) -> Dict[str, Any]:
+    # Compact marker left in place of an oversized field. `opik_truncated` is the
+    # machine-detectable flag; `reason` is a short tag with the original size and the
+    # server error codes (413/400) the field would otherwise trigger.
     return {
         "opik_truncated": True,
-        "reason": (
-            f"'{field_name}' was truncated by the Opik SDK because the span exceeded "
-            f"the configured per-span size limit of {max_size_mb} MB. Log large "
-            f"payloads as attachments instead ({_DOCS_URL})."
-        ),
-        "original_size_bytes": original_size_bytes,
+        "reason": f"<omitted_due_to_size_{round(size_mb)}MB_error_code_413_400>",
     }
 
 
@@ -50,11 +44,10 @@ def _log_truncation(
 ) -> None:
     LOGGER.warning(
         "Span '%s' exceeded the per-span size limit of %s MB; truncated field(s): %s. "
-        "Log large payloads as attachments to avoid truncation: %s",
+        "Log large payloads as attachments to avoid truncation.",
         span_id,
         max_size_mb,
         ", ".join(truncated_fields),
-        _DOCS_URL,
     )
 
 
@@ -83,18 +76,14 @@ def _plan_truncation(
     # Pass 1 - fields individually over the limit (the common "one giant field").
     for name, size_mb in field_sizes_mb.items():
         if size_mb > max_size_mb:
-            updates[name] = _truncation_marker(
-                name, int(size_mb * 1024 * 1024), max_size_mb
-            )
+            updates[name] = _truncation_marker(size_mb)
 
     # Pass 2 - hard per-span cap: if the span is still over as a whole, truncate
     # the remaining truncatable fields too. One measurement, no loop.
     if measure_whole(updates) > max_size_mb:
         for name, size_mb in field_sizes_mb.items():
             if name not in updates:
-                updates[name] = _truncation_marker(
-                    name, int(size_mb * 1024 * 1024), max_size_mb
-                )
+                updates[name] = _truncation_marker(size_mb)
 
     return updates
 
