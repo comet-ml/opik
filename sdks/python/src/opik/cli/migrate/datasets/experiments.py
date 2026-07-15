@@ -1493,21 +1493,54 @@ def _bulk_fetch_spans_for_experiment(
             for tid in trace_ids_in_project
             if tid in source_traces_by_id
         }
-        window = _compute_span_time_window(per_project_traces)
-        filter_string: Optional[str] = None
-        if window is not None:
-            from_time, to_time = window
-            # ISO 8601 with explicit ``Z`` UTC suffix matches the BE
-            # filter grammar's date-time literal format (see the
-            # search_spans docstring on ``client.search_spans``:
-            # "use ISO 8601 format, e.g., '2024-01-01T00:00:00Z'").
-            # ``SpanField.END_TIME`` is filterable too but using
-            # ``start_time`` for both bounds keeps the filter AST simple
-            # and lets the BE's primary-key range scan stay tight.
-            filter_string = (
-                f'start_time >= "{_to_iso_z(from_time)}" '
-                f'AND start_time <= "{_to_iso_z(to_time)}"'
+        # Both branches below would otherwise fall through to an
+        # UNBOUNDED, UNFILTERED
+        # ``search_spans(filter_string=None, max_results=sys.maxsize)`` --
+        # a whole-project read that OOMs the client on large projects
+        # (OPIK-7344). Skip + warn + continue instead: destination traces
+        # in this bucket are still copied, just without spans. A bounded
+        # per-trace fallback for the no-timestamp case is deferred to
+        # OPIK-7343 (once span reads are scoped by ``trace_id IN (...)``
+        # the unbounded read is gone structurally).
+        if not per_project_traces:
+            # Every trace this bucket references is absent from the
+            # experiment's fetched traces -- stale/deleted references that
+            # experiment items still carry. There is nothing to fetch.
+            LOGGER.warning(
+                "Skipping span read for project %s: all %d referenced "
+                "trace_id(s) are stale/deleted (absent from the experiment's "
+                "fetched traces). Avoids an unbounded full-project span read.",
+                project_id,
+                len(trace_ids_in_project),
             )
+            continue
+
+        window = _compute_span_time_window(per_project_traces)
+        if window is None:
+            # The bucket's traces exist but none carry a
+            # start/end/last_updated timestamp, so we can't bound the read.
+            LOGGER.warning(
+                "Skipping span read for project %s: %d trace(s) have no "
+                "usable timestamps to bound the read. Destination traces are "
+                "copied without spans. Avoids an unbounded full-project span "
+                "read.",
+                project_id,
+                len(per_project_traces),
+            )
+            continue
+
+        from_time, to_time = window
+        # ISO 8601 with explicit ``Z`` UTC suffix matches the BE
+        # filter grammar's date-time literal format (see the
+        # search_spans docstring on ``client.search_spans``:
+        # "use ISO 8601 format, e.g., '2024-01-01T00:00:00Z'").
+        # ``SpanField.END_TIME`` is filterable too but using
+        # ``start_time`` for both bounds keeps the filter AST simple
+        # and lets the BE's primary-key range scan stay tight.
+        filter_string = (
+            f'start_time >= "{_to_iso_z(from_time)}" '
+            f'AND start_time <= "{_to_iso_z(to_time)}"'
+        )
 
         all_spans = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
             operation_name="search_spans (experiment bulk read)",

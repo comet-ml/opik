@@ -1876,6 +1876,135 @@ class TestCascadeExperiments:
 
 
 # ---------------------------------------------------------------------------
+# Guard against unbounded full-project span reads (OPIK-7344)
+# ---------------------------------------------------------------------------
+
+
+class TestBulkFetchSpansGuard:
+    """``_bulk_fetch_spans_for_experiment`` must never issue an unbounded,
+    unfiltered ``search_spans`` from the cascade.
+
+    A project bucket whose traces can't be time-bounded used to fall through
+    to ``search_spans(filter_string=None, max_results=sys.maxsize)`` -- a
+    whole-project read that OOMed the client on large projects. Two ways a
+    bucket becomes unbounded:
+      * empty ``per_project_traces`` -- every referenced trace is stale/
+        deleted (absent from the experiment's fetched traces);
+      * non-empty bucket whose traces carry no start/end/last_updated
+        timestamps -- no window to bound the read.
+    Both must be skipped with a warning; the invariant is that
+    ``search_spans`` is never called with ``filter_string=None``.
+    """
+
+    def _call(
+        self,
+        *,
+        source_traces_by_id: Dict[str, Any],
+        traces_by_project: Dict[str, set],
+    ) -> Any:
+        client = MagicMock()
+
+        def _get_project(id: str) -> Any:
+            # ``name`` is a reserved MagicMock ctor kwarg (sets the repr),
+            # so set the ``.name`` attribute after construction.
+            project = MagicMock()
+            project.name = f"name-for-{id}"
+            return project
+
+        client.get_project = MagicMock(side_effect=_get_project)
+        client.search_spans = MagicMock(return_value=[])
+        expected = {tid for tids in traces_by_project.values() for tid in tids}
+        cascade_module._bulk_fetch_spans_for_experiment(
+            client,
+            source_traces_by_id=source_traces_by_id,
+            traces_by_project=traces_by_project,
+            project_id_to_name_cache={},
+            expected_trace_ids=expected,
+        )
+        return client
+
+    def test_stale_bucket__skipped_without_unbounded_read(self, capture_log) -> None:
+        # A project bucket whose every trace is absent from
+        # ``source_traces_by_id`` (stale/deleted) must be skipped -- NOT
+        # read as an unbounded full-project search.
+        healthy_trace = _Trace(
+            id="live-1",
+            start_time=dt.datetime(2026, 1, 1, 12, 0, 0),
+            end_time=dt.datetime(2026, 1, 1, 12, 5, 0),
+        )
+        source_traces_by_id = {"live-1": healthy_trace}
+        traces_by_project = {
+            "project-live": {"live-1"},
+            "project-stale": {"gone-1", "gone-2"},  # none in source_traces_by_id
+        }
+
+        with capture_log.at_level("WARNING"):
+            client = self._call(
+                source_traces_by_id=source_traces_by_id,
+                traces_by_project=traces_by_project,
+            )
+
+        # Exactly one search_spans call -- the healthy bucket. The stale
+        # bucket was skipped.
+        assert client.search_spans.call_count == 1
+        for call in client.search_spans.call_args_list:
+            # The invariant: never an unbounded, unfiltered read.
+            assert call.kwargs.get("filter_string") is not None, (
+                "cascade must never call search_spans with filter_string=None"
+            )
+            assert "start_time" in call.kwargs["filter_string"]
+
+        assert any(
+            "project-stale" in rec.message and "stale/deleted" in rec.message
+            for rec in capture_log.records
+        ), "expected a warning naming the skipped stale project"
+
+    def test_no_timestamp_bucket__skipped_without_unbounded_read(
+        self, capture_log
+    ) -> None:
+        # A bucket whose traces exist but carry no usable timestamps can't
+        # be time-bounded; it must be skipped rather than read unbounded.
+        no_ts_trace = _Trace(id="notime-1")
+        # ``_Trace`` defaults ``start_time`` to a real datetime; null all
+        # three timestamp fields so ``_compute_span_time_window`` returns
+        # None (the no-window case the guard must catch).
+        no_ts_trace.start_time = None
+        no_ts_trace.end_time = None
+        no_ts_trace.last_updated_at = None
+        source_traces_by_id = {"notime-1": no_ts_trace}
+        traces_by_project = {"project-notime": {"notime-1"}}
+
+        with capture_log.at_level("WARNING"):
+            client = self._call(
+                source_traces_by_id=source_traces_by_id,
+                traces_by_project=traces_by_project,
+            )
+
+        client.search_spans.assert_not_called()
+        assert any(
+            "project-notime" in rec.message and "no usable timestamps" in rec.message
+            for rec in capture_log.records
+        ), "expected a warning naming the skipped no-timestamp project"
+
+    def test_healthy_bucket__reads_with_bounded_filter(self) -> None:
+        # Sanity: a normal bucket still issues one bounded search_spans.
+        trace = _Trace(
+            id="ok-1",
+            start_time=dt.datetime(2026, 1, 1, 12, 0, 0),
+            end_time=dt.datetime(2026, 1, 1, 12, 5, 0),
+        )
+        client = self._call(
+            source_traces_by_id={"ok-1": trace},
+            traces_by_project={"project-ok": {"ok-1"}},
+        )
+        client.search_spans.assert_called_once()
+        kwargs = client.search_spans.call_args.kwargs
+        assert kwargs["filter_string"] is not None
+        assert "start_time" in kwargs["filter_string"]
+        assert kwargs["max_results"] == sys.maxsize
+
+
+# ---------------------------------------------------------------------------
 # Planner-level test for cascade action placement in the plan
 # ---------------------------------------------------------------------------
 
