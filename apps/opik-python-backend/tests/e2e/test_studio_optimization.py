@@ -316,7 +316,11 @@ def test_studio_optimization_code_metric_syntax_error_surfaces_as_error(
     optimization = _wait_for_optimization_status(opik_client, optimization_id, "error")
     assert optimization.status == "error"
     assert optimization.error_info, "error_info was not persisted on the failed run"
-    assert "invalid Python code" in optimization.error_info, (
+    # error_info is now the structured ErrorInfo object (exception_type/message/
+    # traceback), matching the type spans/traces use (OPIK-7172). The build
+    # failure reason is carried in the message.
+    error_text = f"{optimization.error_info.message} {optimization.error_info.traceback}"
+    assert "invalid Python code" in error_text, (
         f"error_info did not surface the build failure: {optimization.error_info!r}"
     )
 

@@ -13,9 +13,10 @@ type RunErrorPanelProps = {
 };
 
 /**
- * Shown when a run ends in error: surfaces the failure reason (pulled from the
- * studio logs, since there is no structured error field) plus a link to the
- * full logs — instead of the bare red status badge.
+ * Shown when a run ends in error: surfaces the failure reason (preferring the
+ * structured `error_info.message` persisted on the optimization, falling back
+ * to scraping the studio logs) plus a link to the full logs — instead of the
+ * bare red status badge.
  */
 const RunErrorPanel: React.FC<RunErrorPanelProps> = ({ optimization }) => {
   const [open, setOpen] = useState(false);
@@ -27,8 +28,8 @@ const RunErrorPanel: React.FC<RunErrorPanelProps> = ({ optimization }) => {
   const logContent = data?.content ?? "";
   const logsFailedToLoad = isError && !logContent;
   const errorMessage = useMemo(
-    () => extractErrorFromLogs(logContent),
-    [logContent],
+    () => optimization.error_info?.message ?? extractErrorFromLogs(logContent),
+    [optimization.error_info?.message, logContent],
   );
   const logHtml = useMemo(
     () => convertTerminalOutputToHtml(logContent),

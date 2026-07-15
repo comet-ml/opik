@@ -37,6 +37,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import static com.comet.opik.api.ErrorInfo.ERROR_INFO_TYPE;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.ExperimentDAO.getFeedbackScores;
@@ -889,7 +890,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 .bind("objective_name", optimization.objectiveName())
                 .bind("status", optimization.status().getValue())
                 .bind("metadata", getStringOrDefault(optimization.metadata()))
-                .bind("error_info", StringUtils.defaultString(optimization.errorInfo()));
+                .bind("error_info",
+                        optimization.errorInfo() != null ? JsonUtils.writeValueAsString(optimization.errorInfo()) : "");
 
         if (optimization.studioConfig() != null) {
             try {
@@ -950,7 +952,10 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     .status(OptimizationStatus.fromString(row.get("status", String.class)))
                     .metadata(getJsonNodeOrDefault(row.get("metadata", String.class)))
                     .studioConfig(studioConfig)
-                    .errorInfo(StringUtils.defaultString(row.get("error_info", String.class)))
+                    .errorInfo(Optional.ofNullable(row.get("error_info", String.class))
+                            .filter(StringUtils::isNotBlank)
+                            .map(value -> JsonUtils.readValue(value, ERROR_INFO_TYPE))
+                            .orElse(null))
                     .createdAt(row.get("created_at", Instant.class))
                     .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                     .createdBy(row.get("created_by", String.class))
@@ -1021,7 +1026,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 .ifPresent(status -> statement.bind("status", status.getValue()));
 
         Optional.ofNullable(update.errorInfo())
-                .ifPresent(errorInfo -> statement.bind("error_info", errorInfo));
+                .ifPresent(errorInfo -> statement.bind("error_info", JsonUtils.writeValueAsString(errorInfo)));
 
         statement.bind("id", id);
 

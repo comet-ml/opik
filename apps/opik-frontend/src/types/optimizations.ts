@@ -1,4 +1,5 @@
 import { AggregatedFeedbackScore } from "@/types/shared";
+import { BaseTraceDataErrorInfo } from "@/types/traces";
 
 export enum OPTIMIZATION_STATUS {
   RUNNING = "running",
@@ -156,7 +157,7 @@ export interface Optimization {
   dataset_name: string;
   metadata?: object;
   studio_config?: OptimizationStudioConfig;
-  error_info?: string;
+  error_info?: BaseTraceDataErrorInfo;
   feedback_scores?: AggregatedFeedbackScore[];
   experiment_scores?: AggregatedFeedbackScore[];
   num_trials: number;

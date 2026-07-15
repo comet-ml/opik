@@ -12,6 +12,7 @@ from ..core.pydantic_utilities import parse_obj_as
 from ..core.request_options import RequestOptions
 from ..core.serialization import convert_and_respect_annotation_metadata
 from ..errors.bad_request_error import BadRequestError
+from ..types.error_info import ErrorInfo
 from ..errors.not_found_error import NotFoundError
 from ..errors.not_implemented_error import NotImplementedError
 from ..types.json_list_string_write import JsonListStringWrite
@@ -410,7 +411,7 @@ class RawOptimizationsClient:
         *,
         name: typing.Optional[str] = OMIT,
         status: typing.Optional[OptimizationUpdateStatus] = OMIT,
-        error_info: typing.Optional[str] = OMIT,
+        error_info: typing.Optional[ErrorInfo] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -424,7 +425,7 @@ class RawOptimizationsClient:
 
         status : typing.Optional[OptimizationUpdateStatus]
 
-        error_info : typing.Optional[str]
+        error_info : typing.Optional[ErrorInfo]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -889,7 +890,7 @@ class AsyncRawOptimizationsClient:
         *,
         name: typing.Optional[str] = OMIT,
         status: typing.Optional[OptimizationUpdateStatus] = OMIT,
-        error_info: typing.Optional[str] = OMIT,
+        error_info: typing.Optional[ErrorInfo] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -903,7 +904,7 @@ class AsyncRawOptimizationsClient:
 
         status : typing.Optional[OptimizationUpdateStatus]
 
-        error_info : typing.Optional[str]
+        error_info : typing.Optional[ErrorInfo]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.

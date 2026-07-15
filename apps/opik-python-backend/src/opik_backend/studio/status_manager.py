@@ -1,6 +1,7 @@
 """Status manager for tracking optimization lifecycle."""
 
 import logging
+import traceback
 from contextlib import contextmanager
 from typing import Optional
 
@@ -29,25 +30,37 @@ class OptimizationStatusManager:
         self.client = client
         self.optimization_id = optimization_id
 
-    def update_status(self, status: str, error_info: Optional[str] = None) -> None:
+    def update_status(self, status: str, error_info: Optional[dict] = None) -> None:
         """Update optimization status in backend.
 
         Args:
             status: New status ("running", "completed", "error", etc.)
-            error_info: Optional failure reason to persist alongside an "error"
-                status. A blank/empty message is treated as "no reason" and is
-                NOT sent, so it can't clobber a reason persisted by an earlier
-                update (e.g. an exception whose ``str(e)`` is "").
+            error_info: Optional structured failure reason to persist alongside
+                an "error" status. A dict shaped like
+                ``{"exception_type", "message", "traceback"}`` (matching the
+                backend ``ErrorInfo`` type used by spans/traces). An empty/None
+                dict is treated as "no reason" and is NOT sent, so it can't
+                clobber a reason persisted by an earlier update.
         """
-        logger.debug(f"Updating optimization {self.optimization_id} status to '{status}'")
+        logger.debug(
+            f"Updating optimization {self.optimization_id} status to '{status}'"
+        )
         body = {"status": status}
-        # Only persist a non-blank reason: an empty string would overwrite a
-        # previously-stored error_info with "" (the REST update gates on
-        # `is not None`, not on emptiness).
-        if error_info is not None and error_info.strip():
-            body["error_info"] = error_info[:MAX_ERROR_INFO_LENGTH]
+        # Only persist a non-empty reason: sending nothing avoids overwriting a
+        # previously-stored error_info (the REST update gates on `is not None`,
+        # not on emptiness). Truncate the free-text fields so we don't push
+        # oversized tracebacks into ClickHouse.
+        if error_info:
+            truncated = dict(error_info)
+            for key in ("message", "traceback"):
+                value = truncated.get(key)
+                if isinstance(value, str):
+                    truncated[key] = value[:MAX_ERROR_INFO_LENGTH]
+            body["error_info"] = truncated
         self._send_update(body)
-        logger.debug(f"Optimization {self.optimization_id} status updated to '{status}'")
+        logger.debug(
+            f"Optimization {self.optimization_id} status updated to '{status}'"
+        )
 
     def _send_update(self, body: dict) -> None:
         """Persist an optimization update, tolerating an older opik SDK.
@@ -86,13 +99,15 @@ class OptimizationStatusManager:
         """Mark optimization as completed."""
         self.update_status("completed")
 
-    def mark_error(self, message: Optional[str] = None) -> None:
+    def mark_error(self, error_info: Optional[dict] = None) -> None:
         """Mark optimization as failed.
 
         Args:
-            message: Optional failure reason to persist as the optimization's error_info.
+            error_info: Optional structured failure reason (dict shaped like
+                ``{"exception_type", "message", "traceback"}``) to persist as
+                the optimization's error_info.
         """
-        self.update_status("error", error_info=message)
+        self.update_status("error", error_info=error_info)
 
     def close(self) -> None:
         """Close the Opik client and release resources."""
@@ -106,23 +121,23 @@ class OptimizationStatusManager:
 @contextmanager
 def optimization_lifecycle(status_manager: OptimizationStatusManager):
     """Context manager for optimization lifecycle with automatic status management.
-    
+
     Ensures that optimization status is always updated correctly:
     - Sets status to 'running' when entering
     - Sets status to 'completed' on success
     - Sets status to 'error' on any exception
-    
+
     Usage:
         with optimization_lifecycle(status_manager):
             # Do optimization work
             # Status automatically updated on success or failure
-    
+
     Args:
         status_manager: Status manager instance
-        
+
     Yields:
         The status manager (for additional status operations if needed)
-        
+
     Raises:
         Any exception that occurs during optimization (after setting status to 'error')
     """
@@ -133,13 +148,17 @@ def optimization_lifecycle(status_manager: OptimizationStatusManager):
     except Exception as e:
         logger.error(f"Optimization failed, marking as error: {e}")
         try:
-            status_manager.mark_error(str(e))
+            status_manager.mark_error(
+                {
+                    "exception_type": type(e).__name__,
+                    "message": str(e),
+                    "traceback": traceback.format_exc(),
+                }
+            )
         except Exception as status_error:
             logger.error(
-                f"Failed to update status to 'error': {status_error}",
-                exc_info=True
+                f"Failed to update status to 'error': {status_error}", exc_info=True
             )
         raise  # Re-raise the original exception
     finally:
         status_manager.close()
-

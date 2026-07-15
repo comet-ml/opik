@@ -5,6 +5,7 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .error_info import ErrorInfo
 from .feedback_score_average import FeedbackScoreAverage
 from .json_list_string import JsonListString
 from .optimization_status import OptimizationStatus
@@ -29,7 +30,7 @@ class Optimization(UniversalBaseModel):
     status: OptimizationStatus
     metadata: typing.Optional[JsonListString] = None
     studio_config: typing.Optional[OptimizationStudioConfig] = None
-    error_info: typing.Optional[str] = pydantic.Field(default=None)
+    error_info: typing.Optional[ErrorInfo] = pydantic.Field(default=None)
     """
     Failure reason persisted when the optimization ends in error
     """

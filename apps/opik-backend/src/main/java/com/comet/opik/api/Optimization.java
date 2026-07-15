@@ -40,7 +40,7 @@ public record Optimization(
         @JsonView({Optimization.View.Public.class,
                 Optimization.View.Write.class}) @Valid OptimizationStudioConfig studioConfig,
         @JsonView({Optimization.View.Public.class,
-                Optimization.View.Write.class}) @Schema(description = "Failure reason persisted when the optimization ends in error") String errorInfo,
+                Optimization.View.Write.class}) @Schema(description = "Failure reason persisted when the optimization ends in error") ErrorInfo errorInfo,
         @JsonView({Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID datasetId,
         @JsonView({Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Long numTrials,
         @JsonView({

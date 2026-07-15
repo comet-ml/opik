@@ -5,6 +5,7 @@ import typing
 
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
+from ..types.error_info import ErrorInfo
 from ..types.json_list_string_write import JsonListStringWrite
 from ..types.optimization_page_public import OptimizationPagePublic
 from ..types.optimization_public import OptimizationPublic
@@ -317,7 +318,7 @@ class OptimizationsClient:
         *,
         name: typing.Optional[str] = OMIT,
         status: typing.Optional[OptimizationUpdateStatus] = OMIT,
-        error_info: typing.Optional[str] = OMIT,
+        error_info: typing.Optional[ErrorInfo] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -331,7 +332,7 @@ class OptimizationsClient:
 
         status : typing.Optional[OptimizationUpdateStatus]
 
-        error_info : typing.Optional[str]
+        error_info : typing.Optional[ErrorInfo]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -698,7 +699,7 @@ class AsyncOptimizationsClient:
         *,
         name: typing.Optional[str] = OMIT,
         status: typing.Optional[OptimizationUpdateStatus] = OMIT,
-        error_info: typing.Optional[str] = OMIT,
+        error_info: typing.Optional[ErrorInfo] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -712,7 +713,7 @@ class AsyncOptimizationsClient:
 
         status : typing.Optional[OptimizationUpdateStatus]
 
-        error_info : typing.Optional[str]
+        error_info : typing.Optional[ErrorInfo]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.

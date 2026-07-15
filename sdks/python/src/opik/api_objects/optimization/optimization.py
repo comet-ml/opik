@@ -32,7 +32,7 @@ class Optimization:
         status: Optional[
             Literal["running", "completed", "cancelled", "initialized", "error"]
         ] = None,
-        error_info: Optional[str] = None,
+        error_info: Optional[dict] = None,
     ) -> None:
         LOGGER.debug(
             f"Updating optimization {self.id} with name {name} and status {status}"

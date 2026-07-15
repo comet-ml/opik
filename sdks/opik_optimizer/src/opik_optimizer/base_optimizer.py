@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, cast, overload, Literal
 from collections.abc import Iterator
 import logging
+import traceback
 import warnings
 import time
 from abc import ABC
@@ -1452,14 +1453,22 @@ class BaseOptimizer(ABC):
                 # status_manager to turn into a reason. Persist an explicit
                 # error_info anyway (consistent with P3's mark_error threading)
                 # so the run doesn't surface as "error" with a blank reason.
+                graceful_reason = (
+                    "Optimization stopped early with an error "
+                    "(finish_reason='error'); the failing step's traceback is "
+                    "in the run logs."
+                )
                 self._finalize_optimization(
                     context,
                     status="error",
-                    error_info=(
-                        "Optimization stopped early with an error "
-                        "(finish_reason='error'); the failing step's traceback is "
-                        "in the run logs."
-                    ),
+                    error_info={
+                        "exception_type": "OptimizationError",
+                        "message": graceful_reason,
+                        # ErrorInfo.traceback is @NotBlank on write; there is no
+                        # exception here (run_optimization caught it), so reuse
+                        # the reason to keep the field non-blank.
+                        "traceback": graceful_reason,
+                    },
                 )
                 debug_log(
                     "optimize_end",
@@ -1503,7 +1512,15 @@ class BaseOptimizer(ABC):
                 f"Optimization object exists: {context.optimization is not None}"
             )
             try:
-                self._finalize_optimization(context, status="error", error_info=str(e))
+                self._finalize_optimization(
+                    context,
+                    status="error",
+                    error_info={
+                        "exception_type": type(e).__name__,
+                        "message": str(e),
+                        "traceback": traceback.format_exc(),
+                    },
+                )
             except Exception as finalize_error:
                 logger.error(
                     f"Failed to finalize optimization status: {finalize_error}",
@@ -1780,7 +1797,7 @@ class BaseOptimizer(ABC):
         self,
         optimization: optimization.Optimization,
         status: str,
-        error_info: str | None = None,
+        error_info: dict | None = None,
     ) -> bool:
         # FIXME: remove when a solution is added to opik's optimization.update method
         count = 0
@@ -1820,7 +1837,7 @@ class BaseOptimizer(ABC):
         self,
         context: OptimizationContext,
         status: str = "completed",
-        error_info: str | None = None,
+        error_info: dict | None = None,
     ) -> None:
         if context.optimization is not None:
             updated = self._update_optimization(
