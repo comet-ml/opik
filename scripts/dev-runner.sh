@@ -782,8 +782,8 @@ start_cost_api_local() {
         AUTH_ENABLED="$cost_api_auth" \
         CLICKHOUSE_HOST=localhost CLICKHOUSE_PORT="$CLICKHOUSE_HTTP_PORT" \
         CLICKHOUSE_DATABASE=opik CLICKHOUSE_USER=opik CLICKHOUSE_PASSWORD=opik \
-        MYSQL_HOST=localhost MYSQL_PORT="$MYSQL_PORT" \
-        MYSQL_DATABASE=opik MYSQL_USER=opik MYSQL_PASSWORD=opik \
+        OPIK_DB_HOST=localhost OPIK_DB_PORT="$MYSQL_PORT" \
+        OPIK_DB_NAME=opik OPIK_DB_USERNAME=opik OPIK_DB_PASSWORD=opik \
         PORT="$AI_COST_BACKEND_PORT" \
         nohup uv run uvicorn cost_api.main:app --host 0.0.0.0 --port "$AI_COST_BACKEND_PORT" \
             > "$COST_API_LOG_FILE" 2>&1 &
