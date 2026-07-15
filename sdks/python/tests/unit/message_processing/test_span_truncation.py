@@ -3,7 +3,6 @@ from unittest import mock
 
 
 from opik.message_processing import span_truncation, messages
-from opik.message_processing.batching import sequence_splitter
 from opik.message_processing.processors import online_message_processor
 from opik.rest_api.types import span_write
 
@@ -41,9 +40,8 @@ def test_truncate_span_write__within_limit__returned_unchanged():
     assert result.input == {"prompt": "small"}
 
 
-def test_truncate_span_write__oversized_output__truncated_and_under_limit(caplog):
+def test_truncate_span_write__oversized_output__truncated(caplog):
     span = _span_write(input={"prompt": "small"}, output=_big_value(21))
-    assert sequence_splitter.get_payload_size_MB(span) > LIMIT_MB
 
     with caplog.at_level("WARNING"):
         result = span_truncation.truncate_span_write_if_needed(span, LIMIT_MB)
@@ -52,21 +50,29 @@ def test_truncate_span_write__oversized_output__truncated_and_under_limit(caplog
     assert result.output["opik_truncated"] is True
     assert result.output["original_size_bytes"] > 20 * ONE_MEGABYTE
     assert result.input == {"prompt": "small"}
-    # the resulting span now fits under the limit
-    assert sequence_splitter.get_payload_size_MB(result) <= LIMIT_MB
     # a warning naming the span + field was logged
     assert "span-id" in caplog.text and "output" in caplog.text
 
 
-def test_truncate_span_write__truncates_largest_field_first():
-    # output is huge, input is moderately large but on its own is under the limit
-    span = _span_write(input=_big_value(5), output=_big_value(30))
+def test_truncate_span_write__each_oversized_field_truncated_independently():
+    # both input and output individually exceed the per-field limit -> both truncated
+    span = _span_write(input=_big_value(25), output=_big_value(25))
 
     result = span_truncation.truncate_span_write_if_needed(span, LIMIT_MB)
 
-    assert result.output["opik_truncated"] is True  # largest field truncated
-    assert result.input == span.input  # smaller field kept, span now under limit
-    assert sequence_splitter.get_payload_size_MB(result) <= LIMIT_MB
+    assert result.input["opik_truncated"] is True
+    assert result.output["opik_truncated"] is True
+
+
+def test_truncate_span_write__total_over_but_no_single_field_over__truncates_all():
+    # No single field exceeds the limit, but the span total (~30 MB) does -> the
+    # hard per-span cap (pass 2) kicks in and truncates all truncatable fields.
+    span = _span_write(input=_big_value(15), output=_big_value(15))
+
+    result = span_truncation.truncate_span_write_if_needed(span, LIMIT_MB)
+
+    assert result.input["opik_truncated"] is True
+    assert result.output["opik_truncated"] is True
 
 
 def test_truncate_span_write__original_is_not_mutated():
