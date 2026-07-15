@@ -95,9 +95,9 @@ class TracesLocalV2BenchmarkTest {
     /**
      * The intended codec for every {@code traces_local_v2} column, keyed by column name. This is the canonical record
      * of the per-field decisions the benchmarks below justify; {@link #everyTracesLocalV2ColumnUsesItsIntendedCodec()}
-     * asserts the live DDL matches it, column for column. It tracks the codecs currently shipped in migration
-     * {@code 000101}; the six benchmark-driven refinements land as a later {@code ALTER} migration, at which point the
-     * affected entries here move in lockstep — the pin test fails loudly until they do.
+     * asserts the live DDL matches it, column for column. It reflects the codecs the live table ships after migrations
+     * {@code 000101} (create) and {@code 000105} (which applies the six benchmark-driven refinements), so it moves in
+     * lockstep with those migrations — the pin test fails loudly if the DDL and this map ever drift apart.
      */
     private static final Map<String, ExpectedCodec> TRACES_LOCAL_V2_CODECS = Map.ofEntries(
             Map.entry("id", ExpectedCodec.ZSTD1),
@@ -105,31 +105,31 @@ class TracesLocalV2BenchmarkTest {
             Map.entry("project_id", ExpectedCodec.ZSTD1),
             Map.entry("name", ExpectedCodec.ZSTD1),
             Map.entry("start_time", ExpectedCodec.DELTA_ZSTD1),
-            Map.entry("end_time", ExpectedCodec.DELTA_ZSTD1),
+            Map.entry("end_time", ExpectedCodec.ZSTD1),
             Map.entry("input", ExpectedCodec.ZSTD3),
             Map.entry("output", ExpectedCodec.ZSTD3),
             Map.entry("metadata", ExpectedCodec.ZSTD3),
             Map.entry("tags", ExpectedCodec.ZSTD1),
             Map.entry("created_at", ExpectedCodec.DELTA_ZSTD1),
-            Map.entry("last_updated_at", ExpectedCodec.DELTA_ZSTD1),
+            Map.entry("last_updated_at", ExpectedCodec.ZSTD1),
             Map.entry("created_by", ExpectedCodec.ZSTD1),
             Map.entry("last_updated_by", ExpectedCodec.ZSTD1),
             Map.entry("error_info", ExpectedCodec.ZSTD1),
             Map.entry("thread_id", ExpectedCodec.ZSTD1),
-            Map.entry("visibility_mode", ExpectedCodec.SERVER_DEFAULT),
+            Map.entry("visibility_mode", ExpectedCodec.ZSTD1),
             Map.entry("truncation_threshold", ExpectedCodec.ZSTD1),
             Map.entry("input_slim", ExpectedCodec.ZSTD3),
             Map.entry("output_slim", ExpectedCodec.ZSTD3),
             Map.entry("ttft", ExpectedCodec.ZSTD1),
-            Map.entry("source", ExpectedCodec.SERVER_DEFAULT),
-            Map.entry("environment", ExpectedCodec.SERVER_DEFAULT),
+            Map.entry("source", ExpectedCodec.ZSTD1),
+            Map.entry("environment", ExpectedCodec.ZSTD1),
             Map.entry("is_deleted", ExpectedCodec.SERVER_DEFAULT),
             Map.entry("input_length", ExpectedCodec.T64_ZSTD1),
             Map.entry("output_length", ExpectedCodec.T64_ZSTD1),
             Map.entry("metadata_length", ExpectedCodec.T64_ZSTD1),
             Map.entry("truncated_input", ExpectedCodec.ZSTD3),
             Map.entry("truncated_output", ExpectedCodec.ZSTD3),
-            Map.entry("output_keys", ExpectedCodec.ZSTD1),
+            Map.entry("output_keys", ExpectedCodec.ZSTD3),
             Map.entry("duration", ExpectedCodec.ZSTD1),
             Map.entry("id_at", ExpectedCodec.DELTA_ZSTD1));
 
@@ -707,6 +707,9 @@ class TracesLocalV2BenchmarkTest {
         // float-specialized Gorilla codec, because ttft/duration are independent across adjacent rows (each a different
         // trace), not the correlated time series Gorilla's XOR model targets. So the DDL's ZSTD(1) is right and the
         // choice does not hinge on any NaN-fraction assumption. Exact deltas are logged.
+        // Note: 000101 attributes ttft's ZSTD(1) to the column being "dominated by the repeated NaN sentinel"; that is
+        // only a partial reason — the load-bearing one is the non-correlation above. 000101 is immutable (editing a
+        // merged changeset breaks its Liquibase checksum), so the correction is recorded here rather than fixed in place.
         assertThat(durZstd1).isLessThan(durUncompressed);
         assertThat(durZstd1).isLessThanOrEqualTo(durGorilla);
         assertThat(ttftZstd1).isLessThanOrEqualTo(ttftGorilla);
@@ -1059,11 +1062,10 @@ class TracesLocalV2BenchmarkTest {
                     duration Float64 MATERIALIZED if(end_time = toDateTime64('1970-01-01 00:00:00', 6) OR start_time = toDateTime64('1970-01-01 00:00:00', 6), toFloat64('nan'), dateDiff('microsecond', start_time, end_time) / 1000.0) CODEC(ZSTD(1)),
                     id_at DateTime('UTC') MATERIALIZED UUIDv7ToDateTime(toUUID(id)) CODEC(Delta, ZSTD(1))
                 """;
-        // NEW traces_local_v2 format = the adopted end-state we intend to ship: the shipped 000101 codecs PLUS all six
-        // benchmark-driven best-guess refinements (end_time / last_updated_at -> ZSTD(1); visibility_mode / source /
-        // environment -> ZSTD(1); output_keys -> ZSTD(3)). This deliberately differs from 000101 and from the pin map,
-        // which the drift guard keeps matching the live table until the refinements' ALTER migration lands. So this
-        // headline is the format we're steering to (best guess, pending staging re-validation), not the interim deploy.
+        // NEW traces_local_v2 format = the live table's codecs after migrations 000101 (create) + 000105 (the six
+        // benchmark-driven refinements: end_time / last_updated_at -> ZSTD(1); visibility_mode / source / environment ->
+        // ZSTD(1); output_keys -> ZSTD(3)), matching the pin map above. The refinements are best guesses to re-validate
+        // at the staging cutover; the headline is the deployed format, DateTime64(6), epoch/NaN sentinels, is_deleted.
         execute(("""
                 CREATE TABLE {db}.full_after
                 (
