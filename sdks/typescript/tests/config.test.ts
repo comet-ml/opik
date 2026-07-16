@@ -47,6 +47,35 @@ describe("Opik client config", () => {
     expect(opik.config.trackDisable).toBe(false);
   });
 
+  it("should load maxSpanPayloadSizeMb from the OPIK_MAX_SPAN_PAYLOAD_SIZE_MB env var", async () => {
+    process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/api";
+    process.env.OPIK_API_KEY = "test";
+    process.env.OPIK_WORKSPACE = "test";
+    process.env.OPIK_MAX_SPAN_PAYLOAD_SIZE_MB = "50";
+
+    const opik = new Opik();
+    expect(opik.config.maxSpanPayloadSizeMb).toBe(50);
+  });
+
+  it("should default maxSpanPayloadSizeMb to 20 when the env var is unset", async () => {
+    process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/api";
+    process.env.OPIK_API_KEY = "test";
+    process.env.OPIK_WORKSPACE = "test";
+
+    const opik = new Opik();
+    expect(opik.config.maxSpanPayloadSizeMb).toBe(20);
+  });
+
+  it("should fall back to the default (not NaN) when OPIK_MAX_SPAN_PAYLOAD_SIZE_MB is non-numeric", async () => {
+    process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/api";
+    process.env.OPIK_API_KEY = "test";
+    process.env.OPIK_WORKSPACE = "test";
+    process.env.OPIK_MAX_SPAN_PAYLOAD_SIZE_MB = "20MB"; // units typo -> Number() is NaN
+
+    const opik = new Opik();
+    expect(opik.config.maxSpanPayloadSizeMb).toBe(20);
+  });
+
   it("should not require an API key on cloud when tracking is disabled", async () => {
     process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/api";
     process.env.OPIK_API_KEY = "";
@@ -78,7 +107,7 @@ describe("Opik client config", () => {
   it("should load the config from the file", async () => {
     process.env.OPIK_CONFIG_PATH = path.resolve(
       __dirname,
-      "./examples/valid-opik-config.ini"
+      "./examples/valid-opik-config.ini",
     );
     process.env.OPIK_API_KEY = undefined;
 
@@ -93,7 +122,7 @@ describe("Opik client config", () => {
   it("should being able to override config values from the environment variables + explicit config", async () => {
     process.env.OPIK_CONFIG_PATH = path.resolve(
       __dirname,
-      "./examples/partial-opik-config.ini"
+      "./examples/partial-opik-config.ini",
     );
     process.env.OPIK_API_KEY = "api-key-override";
 
@@ -114,7 +143,7 @@ describe("Opik client config", () => {
   it("should throw an error if the config is not valid from the file (only API url, missing API key)", async () => {
     process.env.OPIK_CONFIG_PATH = path.resolve(
       __dirname,
-      "./examples/invalid-opik-config.ini"
+      "./examples/invalid-opik-config.ini",
     );
     process.env.OPIK_API_KEY = undefined;
 
@@ -329,7 +358,6 @@ describe("Opik client environment config", () => {
     expect(traceData?.environment).toBe("staging");
     createTracesSpy.mockRestore();
   });
-
 });
 
 describe("Opik client apiKey propagation", () => {
@@ -339,20 +367,24 @@ describe("Opik client apiKey propagation", () => {
 
   beforeEach(() => {
     // Mock fetch to capture request headers
-    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (init?.headers) {
-        // Convert headers to Headers object if needed
-        if (init.headers instanceof Headers) {
-          capturedHeaders = init.headers;
-        } else if (typeof init.headers === "object") {
-          capturedHeaders = new Headers(init.headers as Record<string, string>);
+    global.fetch = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.headers) {
+          // Convert headers to Headers object if needed
+          if (init.headers instanceof Headers) {
+            capturedHeaders = init.headers;
+          } else if (typeof init.headers === "object") {
+            capturedHeaders = new Headers(
+              init.headers as Record<string, string>,
+            );
+          }
         }
-      }
-      return new Response(JSON.stringify({}), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
-    }) as typeof fetch;
+        return new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    ) as typeof fetch;
   });
 
   afterEach(() => {

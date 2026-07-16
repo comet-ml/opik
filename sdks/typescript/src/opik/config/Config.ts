@@ -28,7 +28,9 @@ export interface ConstructorOpikConfig extends Omit<OpikConfig, "environment"> {
 
 const CONFIG_FILE_PATH_DEFAULT = path.join(os.homedir(), ".opik.config");
 
-export const DEFAULT_CONFIG: Required<Omit<OpikConfig, "requestOptions" | "environment" | "promptCacheTtlSeconds">> = {
+export const DEFAULT_CONFIG: Required<
+  Omit<OpikConfig, "requestOptions" | "environment" | "promptCacheTtlSeconds">
+> = {
   apiKey: "",
   apiUrl: "https://www.comet.com/opik/api",
   projectName: "Default Project",
@@ -41,7 +43,7 @@ export const DEFAULT_CONFIG: Required<Omit<OpikConfig, "requestOptions" | "envir
 
 function filterUndefined<T extends object>(obj: Partial<T>): Partial<T> {
   return Object.fromEntries(
-    Object.entries(obj).filter(([, value]) => value !== undefined)
+    Object.entries(obj).filter(([, value]) => value !== undefined),
   ) as Partial<T>;
 }
 
@@ -64,12 +66,20 @@ function loadFromEnv(): Partial<OpikConfig> {
       : undefined,
     holdUntilFlush: parseBooleanFlag(process.env.OPIK_HOLD_UNTIL_FLUSH),
     trackDisable: parseBooleanFlag(process.env.OPIK_TRACK_DISABLE),
-    maxSpanPayloadSizeMb: process.env.OPIK_MAX_SPAN_PAYLOAD_SIZE_MB
-      ? Number(process.env.OPIK_MAX_SPAN_PAYLOAD_SIZE_MB)
-      : undefined,
+    // A non-numeric value (e.g. the units typo "20MB") must fall back to the default, not NaN:
+    // NaN would survive filterUndefined and the `??` guards downstream and silently disable the
+    // size guard entirely - strictly worse than leaving the var unset.
+    maxSpanPayloadSizeMb:
+      process.env.OPIK_MAX_SPAN_PAYLOAD_SIZE_MB &&
+      Number.isFinite(Number(process.env.OPIK_MAX_SPAN_PAYLOAD_SIZE_MB))
+        ? Number(process.env.OPIK_MAX_SPAN_PAYLOAD_SIZE_MB)
+        : undefined,
     // parseInt returns NaN for non-numeric strings; `|| 1` converts NaN→1 before Math.max enforces the minimum
     promptCacheTtlSeconds: process.env.OPIK_PROMPT_CACHE_TTL_SECONDS
-      ? Math.max(1, parseInt(process.env.OPIK_PROMPT_CACHE_TTL_SECONDS, 10) || 1)
+      ? Math.max(
+          1,
+          parseInt(process.env.OPIK_PROMPT_CACHE_TTL_SECONDS, 10) || 1,
+        )
       : undefined,
   });
 }
@@ -106,14 +116,16 @@ function loadFromConfigFile(): Partial<OpikConfig> {
       trackDisable: parseBooleanFlag(config.opik.track_disable),
     });
   } catch (error) {
-    logger.error(`Error loading config file ${expandedConfigFilePath}: ${error}`);
+    logger.error(
+      `Error loading config file ${expandedConfigFilePath}: ${error}`,
+    );
 
     return {};
   }
 }
 
 export function loadConfig(
-  explicit?: Partial<ConstructorOpikConfig>
+  explicit?: Partial<ConstructorOpikConfig>,
 ): OpikConfig {
   const envConfig = loadFromEnv();
   const fileConfig = loadFromConfigFile();

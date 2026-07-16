@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { logger } from "@/utils/logger";
 import {
   truncateSpanFields,
   truncateSpanIfNeeded,
@@ -107,6 +108,32 @@ describe("truncateSpanFields", () => {
     expect(truncated).toEqual([]); // can't measure -> not truncated
     expect(result).toBe(span);
   });
+
+  it("treats a field too large to serialize (RangeError) as oversized and truncates it", () => {
+    // Reproduce V8's "Invalid string length" deterministically without allocating >512 MiB:
+    // a value whose serialization throws RangeError is the multi-GB payload this guard must
+    // still truncate (not silently skip as if it were size 0).
+    const tooLarge = {
+      toJSON() {
+        throw new RangeError("Invalid string length");
+      },
+    };
+    const span = { id: "s1", output: tooLarge };
+
+    const { result, truncated } = truncateSpanFields(span, LIMIT_MB);
+
+    expect(truncated).toEqual(["output"]);
+    expect(asMarker(result.output).opik_truncated).toBe(true);
+  });
+
+  it("returns the same span when there are no truncatable fields (metadata only)", () => {
+    const span = { id: "s1", metadata: { note: "kept" } };
+
+    const { result, truncated } = truncateSpanFields(span, LIMIT_MB);
+
+    expect(truncated).toEqual([]);
+    expect(result).toBe(span);
+  });
 });
 
 describe("truncateSpanIfNeeded", () => {
@@ -124,5 +151,51 @@ describe("truncateSpanIfNeeded", () => {
     const result = truncateSpanIfNeeded(span, LIMIT_MB, "s1");
 
     expect(asMarker(result.output).opik_truncated).toBe(true);
+  });
+
+  it("is a no-op when the limit is negative", () => {
+    const span = { id: "s1", output: bigValue(21) };
+
+    const result = truncateSpanIfNeeded(span, -1, "s1");
+
+    expect(result).toBe(span);
+  });
+});
+
+describe("truncateSpanIfNeeded logging", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("warns once with the span id and truncated field(s) on truncation", () => {
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+
+    truncateSpanIfNeeded(
+      { id: "s1", output: bigValue(21) },
+      LIMIT_MB,
+      "span-42",
+    );
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain("span-42");
+    expect(warn.mock.calls[0][0]).toContain("output");
+  });
+
+  it("falls back to 'unknown' when no span id is given", () => {
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+
+    truncateSpanIfNeeded({ output: bigValue(21) }, LIMIT_MB);
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain("unknown");
+  });
+
+  it("does not warn on the under-limit or disabled paths", () => {
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+
+    truncateSpanIfNeeded({ id: "s1", output: { ok: true } }, LIMIT_MB, "s1");
+    truncateSpanIfNeeded({ id: "s1", output: bigValue(21) }, 0, "s1");
+
+    expect(warn).not.toHaveBeenCalled();
   });
 });

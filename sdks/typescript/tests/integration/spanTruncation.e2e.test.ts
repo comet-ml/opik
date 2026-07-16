@@ -59,21 +59,25 @@ describe.skipIf(!run)("Span truncation E2E (OPIK-7349)", () => {
   // applied" — callers touching the update path wait for the field to appear.
   const fetchSpan = async (
     id: string,
-    until: (span: Record<string, unknown>) => boolean = () => true
+    until: (span: Record<string, unknown>) => boolean = () => true,
   ) => {
     const start = Date.now();
+    let lastError: unknown;
     while (Date.now() - start < 30_000) {
       try {
         const span = (await client.api.spans.getSpanById(
-          id
+          id,
         )) as unknown as Record<string, unknown>;
         if (span && until(span)) return span;
-      } catch {
-        // not indexed yet
+      } catch (error) {
+        lastError = error; // keep the most recent failure for diagnostics
       }
       await new Promise((r) => setTimeout(r, 500));
     }
-    throw new Error(`span ${id} not found (or predicate unmet) within timeout`);
+    throw new Error(
+      `span ${id} not found (or predicate unmet) within timeout` +
+        (lastError ? `; last error: ${lastError}` : ""),
+    );
   };
 
   const logSpan = async (fields: {
@@ -82,7 +86,11 @@ describe.skipIf(!run)("Span truncation E2E (OPIK-7349)", () => {
     metadata?: Record<string, unknown>;
   }) => {
     const trace = client.trace({ name: "trunc-e2e-trace", input: { t: 1 } });
-    const span = trace.span({ name: "trunc-e2e-span", type: "general", ...fields });
+    const span = trace.span({
+      name: "trunc-e2e-span",
+      type: "general",
+      ...fields,
+    });
     span.end();
     trace.end();
     await client.flush();
@@ -92,7 +100,7 @@ describe.skipIf(!run)("Span truncation E2E (OPIK-7349)", () => {
   it(
     "default 20 MB: truncates the oversized field, keeps the small sibling",
     async () => {
-      client = makeClient(20);
+      client = makeClient(); // no explicit limit -> exercises the real 20 MB default
       const id = await logSpan({ input: { prompt: "small" }, output: big(24) });
 
       const stored = fetchSpanOutput(await fetchSpan(id));
@@ -100,7 +108,7 @@ describe.skipIf(!run)("Span truncation E2E (OPIK-7349)", () => {
       expect(asMarker(stored.output).reason).toMatch(MARKER_RE);
       expect(stored.input).toEqual({ prompt: "small" }); // sibling preserved
     },
-    TIMEOUT
+    TIMEOUT,
   );
 
   it(
@@ -113,7 +121,7 @@ describe.skipIf(!run)("Span truncation E2E (OPIK-7349)", () => {
       expect(asMarker(stored.input).opik_truncated).toBe(true);
       expect(asMarker(stored.output).opik_truncated).toBe(true);
     },
-    TIMEOUT
+    TIMEOUT,
   );
 
   it(
@@ -126,7 +134,7 @@ describe.skipIf(!run)("Span truncation E2E (OPIK-7349)", () => {
       expect(asMarker(stored.output).opik_truncated).toBeUndefined();
       expect(Array.isArray(asMarker(stored.output).items)).toBe(true); // stored whole
     },
-    TIMEOUT
+    TIMEOUT,
   );
 
   it(
@@ -139,15 +147,22 @@ describe.skipIf(!run)("Span truncation E2E (OPIK-7349)", () => {
       expect(asMarker(stored.output).opik_truncated).toBe(true);
       expect(asMarker(stored.output).reason).toMatch(MARKER_RE);
     },
-    TIMEOUT
+    TIMEOUT,
   );
 
   it(
     "update path: truncation applies on span.update()",
     async () => {
       client = makeClient(20);
-      const trace = client.trace({ name: "trunc-e2e-trace-upd", input: { t: 1 } });
+      const trace = client.trace({
+        name: "trunc-e2e-trace-upd",
+        input: { t: 1 },
+      });
       const span = trace.span({ name: "trunc-e2e-span-upd", type: "general" });
+      // Flush the create first: otherwise span.update() coalesces into the still-pending
+      // create and truncation runs via createSpans, not the updateSpan path under test.
+      await client.flush();
+
       span.update({ output: big(24) }); // oversized via the update path
       span.end();
       trace.end();
@@ -155,12 +170,12 @@ describe.skipIf(!run)("Span truncation E2E (OPIK-7349)", () => {
 
       // Wait for the update to be applied, not merely for the row to exist.
       const stored = fetchSpanOutput(
-        await fetchSpan(span.data.id, (s) => s.output != null)
+        await fetchSpan(span.data.id, (s) => s.output != null),
       );
       expect(asMarker(stored.output).opik_truncated).toBe(true);
       expect(asMarker(stored.output).reason).toMatch(MARKER_RE);
     },
-    TIMEOUT
+    TIMEOUT,
   );
 
   it(
@@ -179,7 +194,7 @@ describe.skipIf(!run)("Span truncation E2E (OPIK-7349)", () => {
       expect(asMarker(stored.input).opik_truncated).toBeUndefined();
       expect(asMarker(stored.output).opik_truncated).toBeUndefined();
     },
-    TIMEOUT
+    TIMEOUT,
   );
 
   it(
@@ -196,7 +211,7 @@ describe.skipIf(!run)("Span truncation E2E (OPIK-7349)", () => {
       expect(stored.output).toEqual({ result: "world" });
       expect(stored.input).toEqual({ prompt: "hello" });
     },
-    TIMEOUT
+    TIMEOUT,
   );
 });
 
