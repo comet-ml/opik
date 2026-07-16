@@ -76,8 +76,7 @@ public final class GenAIMappingRules {
                     .spanType(SpanType.tool).build(),
             OpenTelemetryMappingRule.builder()
                     .rule("gen_ai.tool.").isPrefix(true).source(SOURCE)
-                    .outcome(OpenTelemetryMappingRule.Outcome.METADATA)
-                    .spanType(SpanType.tool).build(),
+                    .outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
             OpenTelemetryMappingRule.builder()
                     .rule("gen_ai.agent.").isPrefix(true).source(SOURCE)
                     .outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),

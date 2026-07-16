@@ -354,7 +354,7 @@ class OpenTelemetryMapperTest {
 
         assertThat(span.metadata().has("gen_ai.tool.name")).isTrue();
         assertThat(span.metadata().has("gen_ai.tool.call.id")).isTrue();
-        assertThat(span.type()).isEqualTo(SpanType.tool);
+        assertThat(span.type()).isNull();
     }
 
     @Test
@@ -473,8 +473,56 @@ class OpenTelemetryMapperTest {
         // a non-I/O tool attribute still lands in metadata, not input/output
         assertThat(span.metadata().has("gen_ai.tool.call.id")).isTrue();
         assertThat(span.input().has("gen_ai.tool.call.id")).isFalse();
-        // all three gen_ai.tool.* rules tag the span as a tool
+        // gen_ai.tool.call.arguments and .result set the span type to tool
         assertThat(span.type()).isEqualTo(SpanType.tool);
+    }
+
+    @Test
+    void testGenAiToolDefinitionsOnLlmSpanStaysLlm() {
+        // gen_ai.tool.definitions can appear on a span with gen_ai.request.model.
+        // The gen_ai.tool. prefix should not set the span type to tool. Only gen_ai.tool.call.arguments/result should set tool type.
+        var llmAttrs = List.of(
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.request.model")
+                        .setValue(AnyValue.newBuilder().setStringValue("gpt-4o"))
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.tool.definitions")
+                        .setValue(AnyValue.newBuilder().setStringValue("[{\"name\":\"get_weather\"}]"))
+                        .build());
+
+        var spanBuilderA = Span.builder()
+                .id(UUID.randomUUID())
+                .traceId(UUID.randomUUID())
+                .projectId(UUID.randomUUID())
+                .startTime(Instant.now());
+        OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilderA, llmAttrs, null, null);
+        var spanA = spanBuilderA.build();
+
+        var reversedAttrs = List.of(
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.tool.definitions")
+                        .setValue(AnyValue.newBuilder().setStringValue("[{\"name\":\"get_weather\"}]"))
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.request.model")
+                        .setValue(AnyValue.newBuilder().setStringValue("gpt-4o"))
+                        .build());
+        var spanBuilderB = Span.builder()
+                .id(UUID.randomUUID())
+                .traceId(UUID.randomUUID())
+                .projectId(UUID.randomUUID())
+                .startTime(Instant.now());
+        OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilderB, reversedAttrs, null, null);
+        var spanB = spanBuilderB.build();
+
+        // Both orders must result in llm.
+        assertThat(spanA.type()).isEqualTo(SpanType.llm);
+        assertThat(spanB.type()).isEqualTo(SpanType.llm);
+        assertThat(spanA.metadata().has("gen_ai.tool.definitions")).isTrue();
+        assertThat(spanB.metadata().has("gen_ai.tool.definitions")).isTrue();
+        assertThat(spanA.model()).isEqualTo("gpt-4o");
+        assertThat(spanB.model()).isEqualTo("gpt-4o");
     }
 
     @Test
