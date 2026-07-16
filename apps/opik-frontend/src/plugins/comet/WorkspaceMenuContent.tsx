@@ -1,6 +1,6 @@
-import React, { useRef } from "react";
+import React, { useMemo, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Settings2 } from "lucide-react";
+import { ArrowUpRight, Pin, PinOff, Settings2 } from "lucide-react";
 
 import { Button } from "@/ui/button";
 import {
@@ -21,17 +21,32 @@ import {
   ORGANIZATION_ROLE_TYPE,
   Workspace,
 } from "@/plugins/comet/types";
+import usePinnedWorkspaces from "@/plugins/comet/usePinnedWorkspaces";
 import { buildUrl } from "@/plugins/comet/utils";
 
 const WORKSPACE_ITEM_HEIGHT = 32;
 const WORKSPACE_VIRTUALIZATION_THRESHOLD = 50;
 const WORKSPACE_VIRTUAL_OVERSCAN = 8;
+const RECENTLY_VISITED_SIZE = 10;
 
 const canManageOrg = (org: Organization) =>
   org.role === ORGANIZATION_ROLE_TYPE.admin;
 
 const orgSettingsUrl = (orgId: string, workspaceName: string) =>
   buildUrl(`organizations/${orgId}`, workspaceName);
+
+const MenuSectionLabel: React.FC<
+  React.PropsWithChildren<{ className?: string }>
+> = ({ className, children }) => (
+  <div
+    className={cn(
+      "comet-body-s-accented flex h-8 items-center px-3 text-light-slate",
+      className,
+    )}
+  >
+    {children}
+  </div>
+);
 
 interface WorkspaceMenuContentProps {
   workspaceName: string;
@@ -63,8 +78,44 @@ const WorkspaceMenuContent: React.FC<WorkspaceMenuContentProps> = ({
   setSearch,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const {
+    pinnedWorkspaces: pinnedConfig,
+    isPinned,
+    pinWorkspace,
+    unpinWorkspace,
+  } = usePinnedWorkspaces(currentOrganization.id);
+
+  const isSearching = search.trim().length > 0;
+
+  // When searching, show all matches flat (virtualized above the threshold).
+  // Otherwise cluster into Pinned + Recently visited (capped) sections.
+  const workspacesById = useMemo(
+    () =>
+      new Map(
+        sortedWorkspaces.map((workspace) => [workspace.workspaceId, workspace]),
+      ),
+    [sortedWorkspaces],
+  );
+  // Pinned rows keep the hook's insertion order (stable, like the projects menu),
+  // limited to workspaces present in the current (search-filtered) list.
+  const pinnedWorkspaces = useMemo(
+    () =>
+      pinnedConfig
+        .map((pinned) => workspacesById.get(pinned.workspaceId))
+        .filter((workspace): workspace is Workspace => Boolean(workspace)),
+    [pinnedConfig, workspacesById],
+  );
+  const recentlyVisitedWorkspaces = useMemo(
+    () =>
+      sortedWorkspaces
+        .filter((workspace) => !isPinned(workspace.workspaceId))
+        .slice(0, RECENTLY_VISITED_SIZE),
+    [sortedWorkspaces, isPinned],
+  );
+
   const shouldVirtualize =
-    sortedWorkspaces.length > WORKSPACE_VIRTUALIZATION_THRESHOLD;
+    isSearching && sortedWorkspaces.length > WORKSPACE_VIRTUALIZATION_THRESHOLD;
 
   const virtualizer = useVirtualizer({
     count: shouldVirtualize ? sortedWorkspaces.length : 0,
@@ -73,15 +124,25 @@ const WorkspaceMenuContent: React.FC<WorkspaceMenuContentProps> = ({
     overscan: WORKSPACE_VIRTUAL_OVERSCAN,
   });
 
+  const handleTogglePin = (workspace: Workspace, pinned: boolean) => {
+    if (pinned) {
+      pinWorkspace(workspace);
+    } else {
+      unpinWorkspace(workspace.workspaceId);
+    }
+  };
+
   const renderWorkspaceItem = (workspace: Workspace) => {
     const wsDisplayName = calculateWorkspaceName(workspace.workspaceName);
     const isSelected = workspace.workspaceName === workspaceName;
+    const pinned = isPinned(workspace.workspaceId);
 
     return (
       <DropdownMenuItem
         key={workspace.workspaceName}
         size="sm"
         selected={isSelected}
+        className="group rounded-md pr-1.5"
         onSelect={(e) => {
           e.preventDefault();
           handleChangeWorkspace(workspace);
@@ -93,6 +154,30 @@ const WorkspaceMenuContent: React.FC<WorkspaceMenuContentProps> = ({
           <span className="comet-body-s min-w-0 flex-1 truncate text-left">
             {wsDisplayName}
           </span>
+        </TooltipWrapper>
+        <TooltipWrapper content={pinned ? "Unpin workspace" : "Pin workspace"}>
+          <Button
+            variant="minimal"
+            size="icon-2xs"
+            aria-label={pinned ? "Unpin workspace" : "Pin workspace"}
+            className={cn(
+              "group/pin shrink-0 rounded text-light-slate hover:text-foreground",
+              pinned ? "inline-flex" : "hidden group-hover:inline-flex",
+            )}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleTogglePin(workspace, !pinned);
+            }}
+          >
+            {pinned ? (
+              <>
+                <Pin className="group-hover/pin:hidden" />
+                <PinOff className="hidden group-hover/pin:block" />
+              </>
+            ) : (
+              <Pin />
+            )}
+          </Button>
         </TooltipWrapper>
       </DropdownMenuItem>
     );
@@ -207,7 +292,7 @@ const WorkspaceMenuContent: React.FC<WorkspaceMenuContentProps> = ({
         <SearchInput
           searchText={search}
           setSearchText={setSearch}
-          placeholder="Search"
+          placeholder="Search workspace"
           variant="ghost"
           dimension="sm"
         />
@@ -215,38 +300,61 @@ const WorkspaceMenuContent: React.FC<WorkspaceMenuContentProps> = ({
 
       <DropdownMenuSeparator className="my-1" />
 
-      <div ref={scrollRef} className="max-h-[50vh] overflow-auto">
+      <div
+        ref={scrollRef}
+        className="max-h-[50vh] overflow-y-auto overflow-x-hidden"
+      >
         {sortedWorkspaces.length === 0 ? (
           <div className="flex min-h-[120px] flex-col items-center justify-center px-4 py-2 text-center">
             <span className="comet-body-s text-muted-slate">
               No workspaces found
             </span>
           </div>
-        ) : shouldVirtualize ? (
-          <div
-            style={{
-              height: `${virtualizer.getTotalSize()}px`,
-              position: "relative",
-            }}
-          >
-            {virtualizer.getVirtualItems().map((virtualRow) => (
-              <div
-                key={virtualRow.key}
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  width: "100%",
-                  height: `${virtualRow.size}px`,
-                  transform: `translateY(${virtualRow.start}px)`,
-                }}
-              >
-                {renderWorkspaceItem(sortedWorkspaces[virtualRow.index])}
-              </div>
-            ))}
-          </div>
+        ) : isSearching ? (
+          shouldVirtualize ? (
+            <div
+              style={{
+                height: `${virtualizer.getTotalSize()}px`,
+                position: "relative",
+              }}
+            >
+              {virtualizer.getVirtualItems().map((virtualRow) => (
+                <div
+                  key={virtualRow.key}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    height: `${virtualRow.size}px`,
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  {renderWorkspaceItem(sortedWorkspaces[virtualRow.index])}
+                </div>
+              ))}
+            </div>
+          ) : (
+            sortedWorkspaces.map(renderWorkspaceItem)
+          )
         ) : (
-          sortedWorkspaces.map(renderWorkspaceItem)
+          <>
+            {pinnedWorkspaces.length > 0 && (
+              <>
+                <MenuSectionLabel>Pinned</MenuSectionLabel>
+                {pinnedWorkspaces.map(renderWorkspaceItem)}
+              </>
+            )}
+            {recentlyVisitedWorkspaces.length > 0 && (
+              <>
+                {pinnedWorkspaces.length > 0 && (
+                  <DropdownMenuSeparator className="my-1" />
+                )}
+                <MenuSectionLabel>Recently visited</MenuSectionLabel>
+                {recentlyVisitedWorkspaces.map(renderWorkspaceItem)}
+              </>
+            )}
+          </>
         )}
       </div>
 
@@ -254,8 +362,8 @@ const WorkspaceMenuContent: React.FC<WorkspaceMenuContentProps> = ({
 
       <ListAction variant="default" size="sm" asChild>
         <a href={buildUrl("account-settings/workspaces", workspaceName)}>
-          <Settings2 className="size-3.5 text-light-slate" />
-          <span>Manage workspaces</span>
+          <span>View all workspaces</span>
+          <ArrowUpRight className="size-3.5 shrink-0 text-light-slate" />
         </a>
       </ListAction>
     </>
