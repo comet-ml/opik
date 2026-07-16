@@ -14,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
+import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
@@ -70,7 +71,19 @@ public class PythonEvaluatorService {
         Response.StatusType statusInfo = response.getStatusInfo();
 
         if (statusInfo.getFamily() == Response.Status.Family.SUCCESSFUL) {
-            return response.readEntity(PythonEvaluatorResponse.class).scores();
+            // Buffer before reading: the response is consumed further down the reactive chain on a
+            // boundedElastic thread, after which the underlying connection can already be recycled and
+            // readEntity would yield null. A null body (or null scores) must surface as a clean error
+            // rather than a NullPointerException.
+            var body = response.hasEntity() && response.bufferEntity()
+                    ? response.readEntity(PythonEvaluatorResponse.class)
+                    : null;
+            if (body == null || body.scores() == null) {
+                throw new InternalServerErrorException(
+                        "Python evaluation returned HTTP %d with an empty or unparseable response body"
+                                .formatted(statusCode));
+            }
+            return body.scores();
         }
 
         String errorMessage = extractErrorMessage(response);
@@ -84,22 +97,29 @@ public class PythonEvaluatorService {
     }
 
     private String extractErrorMessage(Response response) {
-        String errorMessage = "Unknown error during Python evaluation";
-
         if (response.hasEntity() && response.bufferEntity()) {
             try {
-                errorMessage = response.readEntity(PythonEvaluatorErrorResponse.class).error();
+                var errorResponse = response.readEntity(PythonEvaluatorErrorResponse.class);
+                if (errorResponse != null && StringUtils.isNotBlank(errorResponse.error())) {
+                    return errorResponse.error();
+                }
             } catch (RuntimeException parseErrorResponse) {
                 log.warn("Failed to parse error response, falling back to parsing string", parseErrorResponse);
-                try {
-                    errorMessage = response.readEntity(String.class);
-                } catch (RuntimeException parseStringResponse) {
-                    log.warn("Failed to parse error string response", parseStringResponse);
+            }
+
+            // Fall back to the raw body when the structured error is absent/blank so the backend
+            // detail is not lost (e.g. python-backend "can't be evaluated:" with an empty message).
+            try {
+                var body = response.readEntity(String.class);
+                if (StringUtils.isNotBlank(body)) {
+                    return body;
                 }
+            } catch (RuntimeException parseStringResponse) {
+                log.warn("Failed to parse error string response", parseStringResponse);
             }
         }
 
-        return errorMessage;
+        return "Unknown error during Python evaluation";
     }
 
 }
