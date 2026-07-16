@@ -58,6 +58,35 @@ describe("truncateSpanFields", () => {
     expect(asMarker(result.output).opik_truncated).toBe(true);
   });
 
+  it("never truncates metadata, and a huge metadata does not trigger others", () => {
+    // metadata is exempt: a huge metadata must not be truncated, nor drag the
+    // span over the cap and cause small input/output to be cut.
+    const metadata = bigValue(25);
+    const span = {
+      id: "s1",
+      input: { prompt: "small" },
+      output: { result: "small" },
+      metadata,
+    };
+
+    const { result, truncated } = truncateSpanFields(span, LIMIT_MB);
+
+    expect(truncated).toEqual([]); // nothing truncated
+    expect(result).toBe(span);
+    expect(result.metadata).toBe(metadata); // metadata left intact
+  });
+
+  it("truncates an oversized input but keeps metadata", () => {
+    const metadata = bigValue(25);
+    const span = { id: "s1", input: bigValue(25), metadata };
+
+    const { result, truncated } = truncateSpanFields(span, LIMIT_MB);
+
+    expect(truncated).toEqual(["input"]);
+    expect(asMarker(result.input).opik_truncated).toBe(true);
+    expect(result.metadata).toBe(metadata); // metadata untouched
+  });
+
   it("does not mutate the original span", () => {
     const bigOutput = bigValue(21);
     const span = { id: "s1", output: bigOutput };

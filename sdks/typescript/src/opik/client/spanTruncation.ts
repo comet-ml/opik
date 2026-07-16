@@ -3,20 +3,24 @@ import { logger } from "@/utils/logger";
 /**
  * Per-span payload-size enforcement (parity with the Python SDK, OPIK-7335).
  *
- * A span whose fields (`input`/`output`/`metadata`) are very large - e.g. an
- * entire retrieval result set logged inline - inflates into a multi-GB structure
- * on the backend and can destabilise ingestion. This enforces a per-span size
- * limit with a simple, predictable two-pass rule:
+ * A span whose `input`/`output` fields are very large - e.g. an entire retrieval
+ * result set logged inline - inflates into a multi-GB structure on the backend
+ * and can destabilise ingestion. This enforces a per-span size limit with a
+ * simple, predictable two-pass rule:
  *   1. truncate any field that on its own exceeds the limit (common case: one
  *      giant field; small siblings kept);
- *   2. if the span is still over the limit as a whole, truncate the remaining
- *      fields too - so the span is guaranteed to end up under the limit.
+ *   2. if input+output together are still over the limit, truncate the remaining
+ *      truncatable field too.
  *
- * The oversized field is replaced with a compact marker; a warning is logged.
- * Non-mutating: returns a shallow copy with the markers applied.
+ * `metadata` is deliberately never truncated (it holds small structured fields
+ * consumers rely on) and is excluded from the whole-span measurement, so a large
+ * metadata can't trigger truncation of input/output. The oversized field is
+ * replaced with a compact marker; a warning is logged. Non-mutating: returns a
+ * shallow copy with the markers applied.
  */
 
-const TRUNCATABLE_FIELDS = ["input", "output", "metadata"] as const;
+// Only input/output are truncatable; metadata is exempt (see the note above).
+const TRUNCATABLE_FIELDS = ["input", "output"] as const;
 type TruncatableField = (typeof TRUNCATABLE_FIELDS)[number];
 
 // Minimal shape the truncation works on - satisfied by both SavedSpan (create) and the
@@ -76,9 +80,10 @@ export const truncateSpanFields = <T extends SpanLike>(
     }
   }
 
-  // Pass 2 - hard per-span cap: if the span is still over as a whole, truncate
-  // the remaining truncatable fields too. One measurement, no loop.
-  if (fieldSizeMb({ ...span, ...overrides }) > maxSizeMb) {
+  // Pass 2 - hard per-span cap: if input+output are still over as a whole,
+  // truncate the remaining truncatable field too. One measurement, no loop.
+  // metadata is excluded so it can't drag the span over and cut small siblings.
+  if (fieldSizeMb({ ...span, ...overrides, metadata: undefined }) > maxSizeMb) {
     for (const field of TRUNCATABLE_FIELDS) {
       if (sizes[field] !== undefined && overrides[field] === undefined) {
         overrides[field] = truncationMarker(sizes[field]);
