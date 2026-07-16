@@ -514,7 +514,7 @@ class PythonEvaluatorServiceTest {
             assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data).block())
                     .isInstanceOf(InternalServerErrorException.class)
                     .hasMessageContaining(
-                            "Python evaluation failed (HTTP 500): Unknown error during Python evaluation");
+                            "Python evaluation failed (HTTP '500'): Unknown error during Python evaluation");
         }
     }
 

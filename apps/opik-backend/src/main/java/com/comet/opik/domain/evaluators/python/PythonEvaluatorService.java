@@ -81,7 +81,7 @@ public class PythonEvaluatorService {
                     : null;
             if (body == null || body.scores() == null) {
                 throw new InternalServerErrorException(
-                        "Python evaluation returned HTTP %d with an empty or unparseable response body"
+                        "Python evaluation returned HTTP '%s' with an empty or unparseable response body"
                                 .formatted(statusCode));
             }
             return body.scores();
@@ -94,7 +94,7 @@ public class PythonEvaluatorService {
         }
 
         throw new InternalServerErrorException(
-                "Python evaluation failed (HTTP " + statusCode + "): " + errorMessage);
+                "Python evaluation failed (HTTP '%s'): %s".formatted(statusCode, errorMessage));
     }
 
     private String extractErrorMessage(Response response) {
