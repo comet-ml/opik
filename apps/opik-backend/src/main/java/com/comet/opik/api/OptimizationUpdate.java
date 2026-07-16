@@ -13,5 +13,5 @@ import lombok.Builder;
 public record OptimizationUpdate(
         String name,
         OptimizationStatus status,
-        @Schema(description = "Optional metadata to merge into the optimization's existing metadata. Provided keys are added or overwritten; existing keys not present here are preserved.") JsonNode metadata) {
+        @Schema(implementation = JsonListString.class, description = "Optional metadata to merge into the optimization's existing metadata. Provided keys are added or overwritten; existing keys not present here are preserved.") JsonNode metadata) {
 }
