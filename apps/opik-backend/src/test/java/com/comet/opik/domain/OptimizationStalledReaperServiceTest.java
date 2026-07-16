@@ -13,10 +13,12 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.OptimizationResourceClient;
+import com.comet.opik.api.resources.v1.jobs.OptimizationStalledReaperJob;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.google.common.eventbus.EventBus;
+import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.BeforeAll;
@@ -120,16 +122,27 @@ class OptimizationStalledReaperServiceTest {
 
     private OptimizationResourceClient optimizationResourceClient;
     private OptimizationService optimizationService;
+    private Injector injector;
 
     @BeforeAll
-    void beforeAll(ClientSupport client, OptimizationService optimizationService) {
+    void beforeAll(ClientSupport client, OptimizationService optimizationService, Injector injector) {
         var baseURI = TestUtils.getBaseUrl(client);
         ClientSupportUtils.config(client);
 
         this.optimizationResourceClient = new OptimizationResourceClient(client, baseURI, podamFactory);
         this.optimizationService = optimizationService;
+        this.injector = injector;
 
         mockTargetWorkspace(wireMock.server(), API_KEY, TEST_WORKSPACE_NAME, WORKSPACE_ID, USER);
+    }
+
+    @Test
+    @DisplayName("reaper job is constructible via Guice (@Config qualifier wiring)")
+    void reaperJobIsInjectableFromGuice() {
+        // The reaper is disabled/unscheduled in config-test.yml, but the bean is still bound — so this
+        // proves the explicit @Inject constructor + @Config("optimizationStalledReaper") qualifier wire
+        // correctly at boot (the Quartz/Guice fragility the explicit-ctor change guards against).
+        assertThat(injector.getInstance(OptimizationStalledReaperJob.class)).isNotNull();
     }
 
     static Stream<Arguments> stalledRuns() {
