@@ -41,7 +41,6 @@ const SidebarWorkspaceSelector: React.FC<SidebarWorkspaceSelectorProps> = ({
     sortedOrganizations,
 
     shouldShowDropdown,
-    hasMultipleOrganizations,
   } = useWorkspaceSelectorData();
 
   const displayName = calculateWorkspaceName(workspaceName);
@@ -160,7 +159,6 @@ const SidebarWorkspaceSelector: React.FC<SidebarWorkspaceSelectorProps> = ({
           currentOrganization={currentOrganization}
           sortedWorkspaces={sortedWorkspaces}
           sortedOrganizations={sortedOrganizations}
-          hasMultipleOrganizations={hasMultipleOrganizations}
           isOrgSubmenuOpen={isOrgSubmenuOpen}
           setIsOrgSubmenuOpen={setIsOrgSubmenuOpen}
           setIsDropdownOpen={setIsDropdownOpen}
