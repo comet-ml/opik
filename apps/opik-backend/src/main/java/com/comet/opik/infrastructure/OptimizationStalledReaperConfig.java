@@ -36,7 +36,9 @@ import java.util.concurrent.TimeUnit;
  *        There is no per-progress heartbeat on the optimization row (last_updated_at only advances on a
  *        status change), so this MUST be set above the worker's maximum execution timeout
  *        ({@code OPTSTUDIO_EXECUTION_TIMEOUT}, default 6h) plus a buffer, otherwise a legitimately long
- *        run would be reaped mid-flight.
+ *        run would be reaped mid-flight. The {@code @MinDuration} floor is pinned to that 6h worker
+ *        default so a below-worker-timeout override fails fast at boot instead of silently reaping
+ *        in-flight runs (same fail-fast intent as {@link #isLockDurationBelowJobInterval()}).
  * @param lockDuration lock TTL, held until expiry, that suppresses other instances from reconciling until
  *        it elapses. MUST be kept below {@link #jobInterval()} (the lock is held until expiry, so a
  *        lockDuration &gt;= jobInterval would make every other scheduled tick a no-op and silently halve
@@ -51,7 +53,7 @@ public record OptimizationStalledReaperConfig(
         @NotNull @MinDuration(value = 0, unit = TimeUnit.SECONDS) @MaxDuration(value = 30, unit = TimeUnit.MINUTES) Duration startupDelay,
         @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES) @MaxDuration(value = 6, unit = TimeUnit.HOURS) Duration jobInterval,
         @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES) @MaxDuration(value = 24, unit = TimeUnit.HOURS) Duration initializedTimeout,
-        @NotNull @MinDuration(value = 1, unit = TimeUnit.HOURS) @MaxDuration(value = 7, unit = TimeUnit.DAYS) Duration runningTimeout,
+        @NotNull @MinDuration(value = 6, unit = TimeUnit.HOURS) @MaxDuration(value = 7, unit = TimeUnit.DAYS) Duration runningTimeout,
         @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES) @MaxDuration(value = 1, unit = TimeUnit.HOURS) Duration lockDuration,
         @Min(1) @Max(10_000) int batchSize) {
 
