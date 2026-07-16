@@ -887,7 +887,11 @@ class OptimizationsResourceTest {
         return Stream.of(
                 arguments(podamFactory.manufacturePojo(OptimizationUpdate.class)),
                 arguments(podamFactory.manufacturePojo(OptimizationUpdate.class).toBuilder().name(null).build()),
-                arguments(podamFactory.manufacturePojo(OptimizationUpdate.class).toBuilder().status(null).build()));
+                arguments(podamFactory.manufacturePojo(OptimizationUpdate.class).toBuilder().status(null).build()),
+                // errorInfo-only update: exercises the branch that persists a failure reason without
+                // name/status (previously short-circuited to Mono.empty() before this behavior was added)
+                arguments(podamFactory.manufacturePojo(OptimizationUpdate.class).toBuilder()
+                        .name(null).status(null).build()));
     }
 
     @Nested

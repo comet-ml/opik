@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.DatasetLastOptimizationCreated;
+import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.Optimization;
 import com.comet.opik.api.OptimizationStatus;
 import com.comet.opik.api.OptimizationStudioConfig;
@@ -940,6 +941,17 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 }
             }
 
+            ErrorInfo errorInfo = null;
+            String errorInfoJson = row.get("error_info", String.class);
+            if (StringUtils.isNotBlank(errorInfoJson)) {
+                try {
+                    errorInfo = JsonUtils.readValue(errorInfoJson, ERROR_INFO_TYPE);
+                } catch (Exception e) {
+                    log.error("Failed to deserialize error_info for optimization: '{}'",
+                            row.get("id", UUID.class), e);
+                }
+            }
+
             String projectIdStr = row.get("project_id", String.class);
             UUID projectId = StringUtils.isNotBlank(projectIdStr) ? UUID.fromString(projectIdStr) : null;
 
@@ -952,10 +964,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     .status(OptimizationStatus.fromString(row.get("status", String.class)))
                     .metadata(getJsonNodeOrDefault(row.get("metadata", String.class)))
                     .studioConfig(studioConfig)
-                    .errorInfo(Optional.ofNullable(row.get("error_info", String.class))
-                            .filter(StringUtils::isNotBlank)
-                            .map(value -> JsonUtils.readValue(value, ERROR_INFO_TYPE))
-                            .orElse(null))
+                    .errorInfo(errorInfo)
                     .createdAt(row.get("created_at", Instant.class))
                     .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                     .createdBy(row.get("created_by", String.class))

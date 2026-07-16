@@ -7,6 +7,7 @@ import {
   extractRequiredScoreParams,
   extractMetricNameFromCode,
 } from "./optimizations";
+import { extractMetricNameFromPythonCode } from "@/lib/rules";
 import {
   Experiment,
   EXPERIMENT_TYPE,
@@ -612,6 +613,53 @@ class MyMetric(BaseMetric):
         return 1.0
 `;
     expect(extractMetricNameFromCode(code)).toEqual("code");
+  });
+
+  it("ignores a method-local `name = ...` assignment (not the metric name)", () => {
+    const code = `
+class MyMetric(BaseMetric):
+    def score(self, output, **kwargs):
+        name = "tmp"
+        return 1.0
+`;
+    // The method-local assignment is more deeply indented than the class body,
+    // so it is not read as the metric name.
+    expect(extractMetricNameFromCode(code)).toEqual("code");
+    expect(extractMetricNameFromPythonCode(code)).toBeNull();
+  });
+});
+
+describe("extractMetricNameFromPythonCode — comments & docstrings", () => {
+  it("ignores super().__init__(name=...) inside a docstring", () => {
+    const code = `
+class MyMetric(BaseMetric):
+    """Example:
+        super().__init__(name="accuracy")
+    """
+    def score(self, output, **kwargs):
+        return 1.0
+`;
+    expect(extractMetricNameFromPythonCode(code)).toBeNull();
+  });
+
+  it("ignores a commented-out name assignment", () => {
+    const code = `
+class MyMetric(BaseMetric):
+    # name = "custom_attr"
+    def score(self, output, **kwargs):
+        return 1.0
+`;
+    expect(extractMetricNameFromPythonCode(code)).toBeNull();
+  });
+
+  it("still resolves the real name when a docstring holds a decoy", () => {
+    const code = `
+class MyMetric(BaseMetric):
+    """Docstring decoy: super().__init__(name="fake")"""
+    def __init__(self):
+        super().__init__(name="real")
+`;
+    expect(extractMetricNameFromPythonCode(code)).toEqual("real");
   });
 });
 
