@@ -1232,7 +1232,7 @@ public class SpanDAO {
      * <p>
      * Filters on {@code trace_id} only. Unlike {@code TraceDAO}, the spans retention range is keyed on
      * {@code trace_id} while the future partition column {@code id_at} is MATERIALIZED from the span's own UUIDv7 id
-     * (migration 000103). A span's id can land in a later week than its {@code trace_id}, so a {@code toMonday(id_at)}
+     * (migration 000105). A span's id can land in a later week than its {@code trace_id}, so a {@code toMonday(id_at)}
      * bound derived from the trace-id range would wrongly exclude valid candidates. No partition-pruning predicate is
      * applied here until {@code spans} can be pruned by a column aligned with {@code trace_id}.
      */
