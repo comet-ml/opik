@@ -1034,6 +1034,62 @@ class OpenTelemetryResourceTest {
             assertThat(existingTraceSpans.content().getFirst().traceId()).isEqualTo(existingTraceId);
         }
 
+        @Test
+        @DisplayName("two top-level spans with parent_span_id==trace_id share one trace")
+        void testTwoTopLevelSpansWithParentSpanIdEqualsTraceId() {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+
+            var otelTraceId = UUID.randomUUID().toString().getBytes();
+            var mcpSpanId = UUID.randomUUID().toString().getBytes();
+            var llmSpanId = UUID.randomUUID().toString().getBytes();
+
+            // MCP registration span: top-level, parent_span_id set to the trace id
+            var mcpSpan = Span.newBuilder()
+                    .setName("mcp_registration")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setSpanId(ByteString.copyFrom(mcpSpanId))
+                    .setParentSpanId(ByteString.copyFrom(otelTraceId))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 1_000) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .build();
+
+            // LLM call span: top-level, parent_span_id set to the trace id
+            var llmSpan = Span.newBuilder()
+                    .setName("llm_request")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setSpanId(ByteString.copyFrom(llmSpanId))
+                    .setParentSpanId(ByteString.copyFrom(otelTraceId))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 500) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .build();
+
+            var otelSpans = List.of(mcpSpan, llmSpan);
+
+            var minTimestamp = otelSpans.stream().map(Span::getStartTimeUnixNano).min(Long::compareTo).orElseThrow();
+            var minTimestampMs = Duration.ofNanos(minTimestamp).toMillis();
+            var expectedOpikTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId, minTimestampMs);
+
+            sendProtobufTraces(otelSpans, "Test Project", workspaceName, okApikey, true, null);
+
+            // Exactly one trace must be created for both top-level spans
+            Trace trace = traceResourceClient.getById(expectedOpikTraceId, workspaceName, okApikey);
+            assertThat(trace.id()).isEqualTo(expectedOpikTraceId);
+
+            // Both spans must persist under the same trace as top-level (parentSpanId == null)
+            var generatedSpanPage = spanResourceClient.getByTraceIdAndProject(expectedOpikTraceId,
+                    "Test Project", workspaceName, okApikey);
+            assertThat(generatedSpanPage.size()).isEqualTo(2);
+
+            var topSpans = generatedSpanPage.content().stream()
+                    .filter(span -> span.parentSpanId() == null)
+                    .toList();
+            assertThat(topSpans).hasSize(2);
+            assertThat(topSpans.stream().map(com.comet.opik.api.Span::name))
+                    .containsExactlyInAnyOrder("mcp_registration", "llm_request");
+            topSpans.forEach(span -> assertThat(span.traceId()).isEqualTo(expectedOpikTraceId));
+        }
+
         Stream<Arguments> sendProtobufTracesOutOfWindowTimestampThrowsException() {
             var now = Instant.now();
             return Stream.of(
