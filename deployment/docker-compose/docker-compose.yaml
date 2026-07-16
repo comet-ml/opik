@@ -274,6 +274,9 @@ services:
     tmpfs:
       - /var/lib/docker
 
+  # GPU variant (default). Requires an NVIDIA GPU with a driver and the NVIDIA
+  # Container Toolkit; `docker compose up` fails on hosts without an NVIDIA
+  # runtime. Use the guardrails-backend-cpu service for CPU-only hosts.
   guardrails-backend:
     image: ghcr.io/comet-ml/opik/opik-guardrails-backend:${OPIK_VERSION:-latest}
     pull_policy: ${OPIK_GUARDRAILS_BACKEND_PULL_POLICY:-always}
@@ -282,6 +285,34 @@ services:
     build:
       context: ../../apps/opik-guardrails-backend
       dockerfile: Dockerfile
+    hostname: guardrails
+    environment:
+      OPIK_VERSION: ${OPIK_VERSION:-latest}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu ]
+    healthcheck:
+      test: [ "CMD", "sh", "-c", "wget --spider --quiet http://127.0.0.1:5000/healthcheck" ]
+      interval: 2s
+      timeout: 60s
+      retries: 30
+      start_period: 10s
+
+  # CPU-only variant (slim multi-arch image, no GPU or NVIDIA toolkit required).
+  # There is no published CPU image, so it is always built from source. Shares the
+  # `guardrails` hostname with the GPU service; only one of the two runs at a time
+  # (mutually exclusive profiles).
+  guardrails-backend-cpu:
+    pull_policy: build
+    profiles:
+      - guardrails-cpu
+    build:
+      context: ../../apps/opik-guardrails-backend
+      dockerfile: Dockerfile.cpu
     hostname: guardrails
     environment:
       OPIK_VERSION: ${OPIK_VERSION:-latest}

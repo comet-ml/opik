@@ -11,6 +11,7 @@ INFRA_CONTAINERS=("${COMPOSE_PROJECT_NAME}-clickhouse-1" "${COMPOSE_PROJECT_NAME
 BACKEND_CONTAINERS=("${COMPOSE_PROJECT_NAME}-python-backend-1" "${COMPOSE_PROJECT_NAME}-backend-1")
 OPIK_CONTAINERS=("${COMPOSE_PROJECT_NAME}-frontend-1")
 GUARDRAILS_CONTAINERS=("${COMPOSE_PROJECT_NAME}-guardrails-backend-1")
+GUARDRAILS_CPU_CONTAINERS=("${COMPOSE_PROJECT_NAME}-guardrails-backend-cpu-1")
 LOCAL_BE_CONTAINERS=("${COMPOSE_PROJECT_NAME}-python-backend-1" "${COMPOSE_PROJECT_NAME}-frontend-1")
 LOCAL_BE_FE_CONTAINERS=("${COMPOSE_PROJECT_NAME}-python-backend-1")
 
@@ -33,9 +34,13 @@ set_containers_for_profile() {
   
   # Add guardrails containers if enabled
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
-    CONTAINERS+=("${GUARDRAILS_CONTAINERS[@]}")
+    if [[ "$GUARDRAILS_MODE" == "cpu" ]]; then
+      CONTAINERS+=("${GUARDRAILS_CPU_CONTAINERS[@]}")
+    else
+      CONTAINERS+=("${GUARDRAILS_CONTAINERS[@]}")
+    fi
   fi
-  
+
 }
 
 get_verify_cmd() {
@@ -50,7 +55,11 @@ get_verify_cmd() {
     cmd="$cmd --local-be-fe"
   fi
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
-    cmd="$cmd --guardrails"
+    if [[ "$GUARDRAILS_MODE" == "cpu" ]]; then
+      cmd="$cmd --guardrails-cpu"
+    else
+      cmd="$cmd --guardrails"
+    fi
   fi
   echo "$cmd --verify"
 }
@@ -76,7 +85,11 @@ get_start_cmd() {
     cmd="$cmd --local-be-fe"
   fi
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
-    cmd="$cmd --guardrails"
+    if [[ "$GUARDRAILS_MODE" == "cpu" ]]; then
+      cmd="$cmd --guardrails-cpu"
+    else
+      cmd="$cmd --guardrails"
+    fi
   fi
   echo "$cmd"
 }
@@ -199,7 +212,11 @@ get_docker_compose_cmd() {
 
   # Always add guardrails profile if enabled
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
-    cmd="$cmd --profile guardrails"
+    if [[ "$GUARDRAILS_MODE" == "cpu" ]]; then
+      cmd="$cmd --profile guardrails-cpu"
+    else
+      cmd="$cmd --profile guardrails"
+    fi
   fi
   
   echo "$cmd"
@@ -246,7 +263,8 @@ print_usage() {
   echo "  --backend       Start only infrastructure + backend services (Backend, Python Backend etc.)"
   echo "  --local-be      Start all services EXCEPT backend (for local backend development)"
   echo "  --local-be-fe   Start only infrastructure + Python backend (for local backend + frontend development)"
-  echo "  --guardrails    Enable guardrails profile (can be combined with other flags)"
+  echo "  --guardrails    Enable guardrails on GPU (requires an NVIDIA GPU + Container Toolkit; can be combined with other flags)"
+  echo "  --guardrails-cpu  Enable guardrails on CPU (builds a CPU-only image from source; no GPU required)"
   echo "  --help          Show this help message"
   echo ""
   echo "If no option is passed, the script will start missing containers and then show the system status."
@@ -619,6 +637,8 @@ DEBUG_MODE=false
 PORT_MAPPING=false
 # Default: no guardrails
 GUARDRAILS_ENABLED=false
+# Guardrails device mode when enabled: gpu (default) or cpu
+GUARDRAILS_MODE=gpu
 export TOGGLE_GUARDRAILS_ENABLED=false
 export OPIK_FRONTEND_FLAVOR=default
 # Default: full opik (all profiles)
@@ -679,9 +699,21 @@ if [[ "$*" == *"--local-be"* ]]; then
   set -- ${@/--local-be/}
 fi
 
-# Check for guardrails flag
-if [[ "$*" == *"--guardrails"* ]]; then
+# Check for guardrails flags. --guardrails-cpu must be handled before --guardrails
+# because it contains that substring.
+if [[ "$*" == *"--guardrails-cpu"* ]]; then
   GUARDRAILS_ENABLED=true
+  GUARDRAILS_MODE=cpu
+  # Only override flavor if not already set by local-be
+  if [[ "$OPIK_FRONTEND_FLAVOR" == "default" ]]; then
+    export OPIK_FRONTEND_FLAVOR=guardrails
+  fi
+  export TOGGLE_GUARDRAILS_ENABLED=true
+  # Remove the flag from arguments
+  set -- ${@/--guardrails-cpu/}
+elif [[ "$*" == *"--guardrails"* ]]; then
+  GUARDRAILS_ENABLED=true
+  GUARDRAILS_MODE=gpu
   # Only override flavor if not already set by local-be
   if [[ "$OPIK_FRONTEND_FLAVOR" == "default" ]]; then
     export OPIK_FRONTEND_FLAVOR=guardrails

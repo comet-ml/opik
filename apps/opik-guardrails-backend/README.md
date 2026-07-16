@@ -2,55 +2,67 @@
 
 This is the backend service for Opik Guardrails.
 
-## Running with Docker
+There are two Dockerfiles:
+
+- `Dockerfile` (default) — GPU image built on the NVIDIA CUDA runtime. Uses the GPU
+  when one is available and falls back to CPU automatically otherwise.
+- `Dockerfile.cpu` — CPU-only image on a slim, multi-arch (amd64 + arm64) Python
+  base. No GPU or NVIDIA Container Toolkit required, and it builds on machines
+  without CUDA (e.g. Apple Silicon). Intended for local development and CPU-only
+  self-hosting.
+
+## Running as part of the Opik stack
+
+From the repository root:
+
+```bash
+# GPU (default) — requires an NVIDIA GPU with a driver and the NVIDIA Container Toolkit
+./opik.sh --guardrails
+
+# CPU — builds Dockerfile.cpu from source, no GPU required
+./opik.sh --guardrails-cpu
+```
+
+The guardrails service is then reachable through the frontend proxy at
+`http://localhost:5173/guardrails`. Point the guardrails client at it with
+`OPIK_GUARDRAILS_URL_OVERRIDE=http://localhost:5173/guardrails` (or leave it unset
+when `url_override` already targets the local stack — the client derives the
+guardrails URL from it). Add `--port-mapping` to also expose the service directly
+on `http://localhost:5000`.
+
+## Running standalone with Docker
 
 ### Prerequisites
 
-To run the Opik Guardrails Backend with Docker, you need to have Docker installed on your system.
-In addition, to use GPU acceleration, you need to have the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) installed.
+- Docker.
+- For the GPU image only: an NVIDIA GPU with a driver and the
+  [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
 
-### Running the Backend
-
-#### Option 1: Build locally (only needed once)
+### GPU mode
 
 ```bash
 cd apps/opik-guardrails-backend
 docker build -t opik-guardrails-backend:latest .
-```
-
-#### Option 2: Run the image
-
-With GPU support
-```bash
 docker run -p 5000:5000 --gpus all opik-guardrails-backend:latest
 ```
-Without GPU (CPU only)
+
+### CPU mode
+
 ```bash
-docker run -p 5000:5000 opik-guardrails-backend:latest
+cd apps/opik-guardrails-backend
+docker build -f Dockerfile.cpu -t opik-guardrails-backend:cpu .
+docker run -p 5000:5000 opik-guardrails-backend:cpu
 ```
 
 The server will be available at http://localhost:5000
 
-### GPU Support
+### Device selection
 
-The Opik Guardrails Backend is configured to automatically detect and use NVIDIA GPUs if available. The container uses NVIDIA CUDA 12.1.1 with cuDNN 8 on Ubuntu 22.04 as its base image.
-
-#### Environment Variables
-
-You can configure GPU usage with the following environment variables:
-
-- `OPIK_GUARDRAILS_DEVICE`: Specifies the device to use for model inference. Default is `cuda:0` if GPU is available, otherwise falls back to `cpu`.
-- `CUDA_VISIBLE_DEVICES`: Controls which GPUs are visible to the container (https://docs.nvidia.com/deploy/topics/topic_5_2_1.html).
-
-Example with custom device configuration:
-
-```bash
-docker run -p 5000:5000 --gpus all -e OPIK_GUARDRAILS_DEVICE=cuda:1 opik-guardrails-backend:latest
-```
-
-#### Automatic Fallback
-
-The service will automatically detect if CUDA is available at startup. If no GPU is available or the NVIDIA Container Toolkit is not properly configured, it will fall back to CPU mode without requiring any configuration changes.
+`OPIK_GUARDRAILS_DEVICE` selects the inference device (defaults to `cuda:0` on the
+GPU image, `cpu` on the CPU image). The GPU image detects at startup whether a CUDA
+GPU is available and falls back to CPU when it is not, so it also runs on CPU-only
+hosts. On a multi-GPU host, `CUDA_VISIBLE_DEVICES` controls which GPUs are visible
+to the container.
 
 ## API Endpoints
 
