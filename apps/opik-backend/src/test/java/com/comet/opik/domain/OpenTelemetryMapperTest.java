@@ -1934,5 +1934,14 @@ class OpenTelemetryMapperTest {
             assertThat(span.output().get("model").asText()).isEqualTo("gpt-4");
             assertThat(span.output().has("choices")).isTrue();
         }
+
+        @Test
+        void opikMetadataMergeFiltersReservedKeys() {
+            var span = enrich(List.of(str("opik.metadata",
+                    "{\"thread_id\":\"spoofed\",\"custom\":\"ok\"}")));
+
+            assertThat(span.metadata().has("thread_id")).isFalse();
+            assertThat(span.metadata().get("custom").asText()).isEqualTo("ok");
+        }
     }
 }

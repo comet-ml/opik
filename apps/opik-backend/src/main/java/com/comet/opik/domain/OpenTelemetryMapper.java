@@ -130,6 +130,9 @@ public class OpenTelemetryMapper {
     private static final String CLAUDE_CODE_LLM_SPAN = "claude_code.llm_request";
     private static final String NEW_CONTEXT_ATTR = "new_context";
 
+    // Reserved metadata keys that must not be overwritten by user-supplied JSON merged from opik.metadata.
+    private static final Set<String> RESERVED_METADATA_KEYS = Set.of("thread_id", "integration", "server.address");
+
     /**
      * Same as {@link #enrichSpanWithAttributes(SpanBuilder, List, String, List)} but with the OTEL
      * span name, used for span-name-aware routing (e.g. Claude Code's {@code new_context} maps to
@@ -221,7 +224,11 @@ public class OpenTelemetryMapper {
                             var jsonNode = JsonUtils.getJsonNodeFromString(value.getStringValue());
                             if (jsonNode.isObject()) {
                                 jsonNode.fields()
-                                        .forEachRemaining(entry -> node.set(entry.getKey(), entry.getValue()));
+                                        .forEachRemaining(entry -> {
+                                            if (!RESERVED_METADATA_KEYS.contains(entry.getKey())) {
+                                                node.set(entry.getKey(), entry.getValue());
+                                            }
+                                        });
                             } else {
                                 extractToJsonColumn(node, rule.getRule(), value);
                             }
