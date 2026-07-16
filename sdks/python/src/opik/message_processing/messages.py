@@ -71,6 +71,16 @@ class BaseMessage:
     def as_db_message_dict(self) -> Dict[str, Any]:
         return {**self.__dict__}
 
+    @property
+    def item_count(self) -> int:
+        """Number of data items (traces/spans/...) this message carries.
+
+        Batch messages hold many; a plain message counts as one. Used to report
+        how much data is lost when a message is dropped.
+        """
+        batch = getattr(self, "batch", None)
+        return len(batch) if batch is not None else 1
+
 
 @dataclasses.dataclass
 class CreateTraceMessage(BaseMessage):

@@ -70,6 +70,7 @@ from .. import (
     url_helpers,
 )
 from ..message_processing import (
+    data_loss,
     messages,
 )
 from ..message_processing.batching import sequence_splitter
@@ -216,6 +217,8 @@ class Opik:
         self._rest_client = self._resources.rest_client
         self.__internal_api__message_processor__ = self._resources.message_processor
         self._streamer = self._resources.streamer
+        self._flush_reporter = self._resources.flush_reporter
+        self._last_flush_result: Optional[data_loss.FlushResult] = None
 
     def _display_trace_url(self, trace_id: str, project_name: str) -> None:
         project_url = url_helpers.get_project_url_by_trace_id(
@@ -1878,7 +1881,9 @@ class Opik:
             project_name=experiment_public.project_name,
         )
 
-    def end(self, timeout: Optional[int] = None, *, flush: bool = True) -> None:
+    def end(
+        self, timeout: Optional[int] = None, *, flush: bool = True
+    ) -> Optional[data_loss.FlushResult]:
         """
         End the Opik session and submit all pending messages.
 
@@ -1908,28 +1913,66 @@ class Opik:
         is shared — it may still succeed by riding another live client's
         resources. Do not rely on either outcome; create a new client instead.
 
+        The outcome is also available afterwards via :attr:`last_flush_result`.
+
         Returns:
-            None
+            The flush outcome (including any data-loss detail) when ``flush`` is
+            True; ``None`` when ``flush`` is False (nothing was flushed).
         """
         timeout = timeout if timeout is not None else self._flush_timeout
+        marker = self._flush_reporter.marker()
         # Explicit teardown on a user thread, so close on the last reference
         # (close_on_zero=True). Releasing is idempotent, so the detached GC
-        # finalizer cannot double-decrement.
-        self._lease.release(timeout, flush=flush, close_on_zero=True)
+        # finalizer cannot double-decrement. release() returns the authoritative
+        # flush outcome computed inside the drain (streamer.flush) — the same
+        # source flush() uses — rather than the weaker queue_size()==0 proxy,
+        # which can read empty on the pop-vs-processed race and while file
+        # uploads are still in flight.
+        flushed = self._lease.release(timeout, flush=flush, close_on_zero=True)
         self._finalizer.detach()
+        if not flush:
+            return None
+        self._last_flush_result = self._flush_reporter.build_result(
+            marker, flushed=bool(flushed)
+        )
+        return self._last_flush_result
 
     def flush(self, timeout: Optional[int] = None) -> bool:
         """
         Flush the streamer to ensure all messages are sent.
 
+        Never raises and never blocks beyond ``timeout``: an observability SDK
+        must not disrupt the app it instruments. Detailed outcome — including any
+        data that was dropped — is available via :attr:`last_flush_result`.
+
         Args:
             timeout (Optional[int]): The timeout for flushing the streamer. Once the timeout is reached, the flush method will return regardless of whether all messages have been sent.
 
         Returns:
-            True if all messages have been sent within specified timeout, False otherwise.
+            True if all messages were delivered within the timeout with no data
+            loss; False if the timeout was hit or any message was dropped.
         """
         timeout = timeout if timeout is not None else self._flush_timeout
-        return self._streamer.flush(timeout)
+        try:
+            marker = self._flush_reporter.marker()
+            flushed = self._streamer.flush(timeout)
+            self._last_flush_result = self._flush_reporter.build_result(
+                marker, flushed=flushed
+            )
+            return self._last_flush_result.success
+        except Exception:
+            # An observability SDK must not disrupt the app it instruments: a
+            # failure inside flush is reported as "not flushed", never raised.
+            LOGGER.error("Opik flush failed unexpectedly", exc_info=True)
+            return False
+
+    @property
+    def last_flush_result(self) -> Optional[data_loss.FlushResult]:
+        """Outcome of the most recent ``flush()``/``end()`` on this client.
+
+        ``None`` until the first flush.
+        """
+        return self._last_flush_result
 
     def __internal_api__drain_to_processors__(
         self, timeout: Optional[float] = None

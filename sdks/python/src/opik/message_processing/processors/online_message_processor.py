@@ -1,5 +1,5 @@
 import logging
-from typing import Callable, Dict, Type, Any
+from typing import Callable, Dict, Optional, Type, Any
 
 import httpx
 import pydantic
@@ -18,7 +18,7 @@ from opik.rest_api.types import (
 )
 
 from . import assertion_results_processor, message_processors
-from .. import encoder_helpers, messages, permissions
+from .. import data_loss, encoder_helpers, messages, permissions
 from ..replay import replay_manager, db_manager
 
 
@@ -35,6 +35,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         file_upload_manager: base_upload_manager.BaseFileUploadManager,
         fallback_replay_manager: replay_manager.ReplayManager,
         unauthorized_message_types_registry: permissions.UnauthorizedMessageTypeRegistry,
+        data_loss_tracker: data_loss.DataLossTracker,
         batch_memory_limit_mb: int = 50,
         active: bool = True,
     ):
@@ -44,6 +45,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         self._is_active = active
         self._replay_manager = fallback_replay_manager
         self._unauthorized_message_types_registry = unauthorized_message_types_registry
+        self._data_loss_tracker = data_loss_tracker
 
         self._assertion_results_processor = (
             assertion_results_processor.AssertionResultsMessageProcessor(
@@ -92,6 +94,9 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             LOGGER.debug(
                 "Unauthorized message type: '%s' - ignored from processing.",
                 message.message_type,
+            )
+            self._record_data_loss(
+                message, data_loss.FailureReason.UNAUTHORIZED, status_code=401
             )
             return
 
@@ -143,6 +148,16 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
                             headers=exception.headers,
                             retry_after=rate_limiter.retry_after(),
                         )
+                # 429 without headers we can parse into a retry directive: we
+                # cannot re-enqueue it, so the message falls through and is
+                # unregistered below — a terminal drop. Record it like every
+                # other terminal-error branch does.
+                self._record_data_loss(
+                    message,
+                    data_loss.FailureReason.from_status_code(429),
+                    status_code=429,
+                    detail=str(exception.body),
+                )
             elif exception.status_code == 401:
                 LOGGER.error(
                     "Unauthorized message type '%s' processing request: %s",
@@ -151,6 +166,12 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
                 )
                 # register a message type as unauthorized to avoid re-sending it to the backend
                 self._unauthorized_message_types_registry.add(message.message_type)
+                self._record_data_loss(
+                    message,
+                    data_loss.FailureReason.UNAUTHORIZED,
+                    status_code=401,
+                    detail=str(exception.body),
+                )
             else:
                 error_tracking_extra = _generate_error_tracking_extra(
                     exception, message
@@ -160,6 +181,12 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
                     message_type.__name__,
                     str(exception),
                     extra={"error_tracking_extra": error_tracking_extra},
+                )
+                self._record_data_loss(
+                    message,
+                    data_loss.FailureReason.from_status_code(exception.status_code),
+                    status_code=exception.status_code,
+                    detail=str(exception),
                 )
         except tenacity.RetryError as retry_error:
             cause = retry_error.last_attempt.exception()
@@ -171,6 +198,14 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
                 extra={"error_tracking_extra": error_tracking_extra},
             )
             LOGGER.warning(logging_messages.MAKE_SURE_OPIK_IS_CONFIGURED_CORRECTLY)
+            self._record_data_loss(
+                message,
+                data_loss.FailureReason.from_status_code(
+                    error_tracking_extra.get("status_code")
+                ),
+                status_code=error_tracking_extra.get("status_code"),
+                detail=f"{cause.__class__.__name__} - {cause}",
+            )
         except pydantic.ValidationError as validation_error:
             error_tracking_extra = _generate_error_tracking_extra(
                 validation_error, message
@@ -181,6 +216,11 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
                 validation_error,
                 exc_info=True,
                 extra={"error_tracking_extra": error_tracking_extra},
+            )
+            self._record_data_loss(
+                message,
+                data_loss.FailureReason.SERIALIZATION,
+                detail=str(validation_error),
             )
         except (httpx.ConnectError, httpx.TimeoutException) as ex:
             should_unregister_message = False
@@ -203,10 +243,30 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
                 extra={"error_tracking_extra": error_tracking_extra},
             )
             LOGGER.warning(logging_messages.MAKE_SURE_OPIK_IS_CONFIGURED_CORRECTLY)
+            self._record_data_loss(
+                message, data_loss.FailureReason.UNKNOWN, detail=str(exception)
+            )
 
         # unregister a message from the reply manager because it is delivered or other error occurred
         if should_unregister_message:
             self._replay_manager.unregister_message(message.message_id)  # type: ignore
+
+    def _record_data_loss(
+        self,
+        message: messages.BaseMessage,
+        reason: data_loss.FailureReason,
+        status_code: Optional[int] = None,
+        detail: Optional[str] = None,
+    ) -> None:
+        self._data_loss_tracker.record(
+            data_loss.FailedMessageInfo(
+                message_type=type(message).__name__,
+                reason=reason,
+                item_count=message.item_count,
+                status_code=status_code,
+                detail=detail,
+            )
+        )
 
     def _process_create_span_message(
         self,

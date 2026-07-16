@@ -9,7 +9,7 @@ from opik.api_objects.dataset import Dataset
 from opik.api_objects.dataset.test_suite import TestSuite
 from opik.api_objects import prompt as prompt_module
 from opik.api_objects.prompt import client as prompt_client_module
-from opik.message_processing import messages
+from opik.message_processing import data_loss, messages
 from opik.types import BatchFeedbackScoreDict
 from opik import context_storage
 from opik.api_objects.trace import trace_data as trace_data_mod
@@ -1270,6 +1270,81 @@ class TestOpikClientSearchPrompts:
         assert results[0].project_name == "default-project"
         assert isinstance(results[1], prompt_module.ChatPrompt)
         assert results[1].project_name == "default-project"
+
+
+def _flush_result(*, flushed: bool, dropped_messages: int = 0) -> data_loss.FlushResult:
+    return data_loss.FlushResult(
+        flushed=flushed,
+        remaining_queue_size=0,
+        dropped_messages=dropped_messages,
+        dropped_items=0,
+        failures=[],
+    )
+
+
+class TestOpikClientFlushResult:
+    """flush()/end()/last_flush_result behaviors."""
+
+    @pytest.fixture
+    def client(self):
+        client_ = opik_client.Opik(project_name="test-project")
+        client_._streamer = MagicMock()
+        client_._flush_reporter = MagicMock()
+        client_._lease = MagicMock()
+        client_._finalizer = MagicMock()
+        return client_
+
+    def test_flush__no_data_loss__returns_true_and_stores_result(self, client):
+        result = _flush_result(flushed=True)
+        client._flush_reporter.build_result.return_value = result
+
+        assert client.flush() is True
+        assert client.last_flush_result is result
+
+    def test_flush__dropped_messages__returns_false(self, client):
+        client._flush_reporter.build_result.return_value = _flush_result(
+            flushed=True, dropped_messages=2
+        )
+
+        assert client.flush() is False
+
+    def test_flush__build_result_raises__never_raises_returns_false(self, client):
+        client._flush_reporter.build_result.side_effect = RuntimeError("boom")
+
+        assert client.flush() is False
+
+    def test_end__flush_true__reports_authoritative_flushed_not_queue_size(
+        self, client
+    ):
+        # release() returns the authoritative drain outcome. end() must use it,
+        # not the weaker queue_size()==0 proxy — so even with a non-empty queue,
+        # a True from release yields flushed=True.
+        client._lease.release.return_value = True
+        client._streamer.queue_size.return_value = 5
+        client._flush_reporter.marker.return_value = 11
+        result = _flush_result(flushed=True)
+        client._flush_reporter.build_result.return_value = result
+
+        returned = client.end()
+
+        client._flush_reporter.build_result.assert_called_once_with(11, flushed=True)
+        assert returned is result
+        assert client.last_flush_result is result
+
+    def test_end__release_reports_not_flushed__flushed_false(self, client):
+        client._lease.release.return_value = False
+        client._streamer.queue_size.return_value = 0  # queue looks empty...
+        client._flush_reporter.build_result.return_value = _flush_result(flushed=False)
+
+        client.end()
+
+        # ...but release said not flushed, so flushed=False is reported.
+        _, kwargs = client._flush_reporter.build_result.call_args
+        assert kwargs["flushed"] is False
+
+    def test_end__flush_false__returns_none_and_skips_build_result(self, client):
+        assert client.end(flush=False) is None
+        client._flush_reporter.build_result.assert_not_called()
 
 
 @pytest.mark.parametrize(
