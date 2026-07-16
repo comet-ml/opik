@@ -1,11 +1,23 @@
 import { SavedTrace } from "@/tracer/Trace";
 import { BatchQueue } from "./BatchQueue";
 import { OpikApiClientTemp } from "@/client/OpikApiClientTemp";
+import {
+  extractAndUploadAttachments,
+  type AttachmentUploadConfig,
+} from "./attachment";
+
+type AttachmentPayload = {
+  input?: unknown;
+  output?: unknown;
+  metadata?: unknown;
+  projectName?: string;
+};
 
 export class TraceBatchQueue extends BatchQueue<SavedTrace> {
   constructor(
     private readonly api: OpikApiClientTemp,
-    delay?: number
+    delay?: number,
+    private readonly attachmentUpload?: AttachmentUploadConfig,
   ) {
     super({
       delay,
@@ -20,20 +32,43 @@ export class TraceBatchQueue extends BatchQueue<SavedTrace> {
     return entity.id;
   }
 
+  private async extractAttachments<T extends AttachmentPayload>(
+    payload: T,
+    entityId: string,
+  ): Promise<T> {
+    if (!this.attachmentUpload) {
+      return payload;
+    }
+    return extractAndUploadAttachments(
+      this.api,
+      this.attachmentUpload,
+      { entityType: "trace", entityId, projectName: payload.projectName },
+      payload,
+    );
+  }
+
   protected async createEntities(traces: SavedTrace[]) {
-    await this.api.traces.createTraces({ traces }, this.api.requestOptions);
+    const payload: SavedTrace[] = [];
+    for (const trace of traces) {
+      payload.push(await this.extractAttachments(trace, trace.id));
+    }
+    await this.api.traces.createTraces(
+      { traces: payload },
+      this.api.requestOptions,
+    );
   }
 
   protected async getEntity(id: string) {
     return (await this.api.traces.getTraceById(
       id,
       {},
-      this.api.requestOptions
+      this.api.requestOptions,
     )) as SavedTrace;
   }
 
   protected async updateEntity(id: string, updates: Partial<SavedTrace>) {
-    await this.api.traces.updateTrace(id, { body: updates }, this.api.requestOptions);
+    const body = await this.extractAttachments(updates, id);
+    await this.api.traces.updateTrace(id, { body }, this.api.requestOptions);
   }
 
   protected async deleteEntities(ids: string[]) {

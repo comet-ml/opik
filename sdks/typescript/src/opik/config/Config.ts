@@ -20,6 +20,13 @@ export interface OpikConfig {
   // Per-span payload cap (MB): input/output/metadata larger than this are truncated
   // before send (parity with the Python SDK). <= 0 disables. Default 20.
   maxSpanPayloadSizeMb?: number;
+  // Extract inline base64 blobs (e.g. images) from span/trace input/output/metadata and
+  // upload them as attachments before send, so they don't count toward the size cap
+  // (parity with the Python SDK). Default true.
+  isAttachmentExtractionActive?: boolean;
+  // Minimum size (bytes) of an inline base64 blob before it is extracted as an attachment.
+  // Smaller blobs are left inline. Default 256000 (~250 KB).
+  minBase64EmbeddedAttachmentSize?: number;
 }
 
 export interface ConstructorOpikConfig extends Omit<OpikConfig, "environment"> {
@@ -39,6 +46,8 @@ export const DEFAULT_CONFIG: Required<
   holdUntilFlush: false,
   trackDisable: false,
   maxSpanPayloadSizeMb: 20,
+  isAttachmentExtractionActive: true,
+  minBase64EmbeddedAttachmentSize: 256_000,
 };
 
 function filterUndefined<T extends object>(obj: Partial<T>): Partial<T> {
@@ -73,6 +82,17 @@ function loadFromEnv(): Partial<OpikConfig> {
       process.env.OPIK_MAX_SPAN_PAYLOAD_SIZE_MB &&
       Number.isFinite(Number(process.env.OPIK_MAX_SPAN_PAYLOAD_SIZE_MB))
         ? Number(process.env.OPIK_MAX_SPAN_PAYLOAD_SIZE_MB)
+        : undefined,
+    isAttachmentExtractionActive: parseBooleanFlag(
+      process.env.OPIK_IS_ATTACHMENT_EXTRACTION_ACTIVE,
+    ),
+    // Non-numeric values fall back to the default (see maxSpanPayloadSizeMb above).
+    minBase64EmbeddedAttachmentSize:
+      process.env.OPIK_MIN_BASE64_EMBEDDED_ATTACHMENT_SIZE &&
+      Number.isFinite(
+        Number(process.env.OPIK_MIN_BASE64_EMBEDDED_ATTACHMENT_SIZE),
+      )
+        ? Number(process.env.OPIK_MIN_BASE64_EMBEDDED_ATTACHMENT_SIZE)
         : undefined,
     // parseInt returns NaN for non-numeric strings; `|| 1` converts NaN→1 before Math.max enforces the minimum
     promptCacheTtlSeconds: process.env.OPIK_PROMPT_CACHE_TTL_SECONDS
