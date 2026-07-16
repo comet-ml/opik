@@ -214,10 +214,9 @@ public class OpenTelemetryMapper {
                     };
 
                     String jsonKey = storageKey(rule, key);
-                    // If the suffix is empty and the value is a  JSON object then merge into the node,
-                    // else nest under the stripped key, or the rule key if empty.
-                    if (jsonKey.isEmpty() && value.getValueCase() == AnyValue.ValueCase.STRING_VALUE
-                            && value.getStringValue().startsWith("{")) {
+                    // If the suffix is empty then try merging as a JSON object,
+                    // otherwise nest under the stripped key or the rule key.
+                    if (jsonKey.isEmpty() && value.getValueCase() == AnyValue.ValueCase.STRING_VALUE) {
                         try {
                             var jsonNode = JsonUtils.getJsonNodeFromString(value.getStringValue());
                             if (jsonNode.isObject()) {
