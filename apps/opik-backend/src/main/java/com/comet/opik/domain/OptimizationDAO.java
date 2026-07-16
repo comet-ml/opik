@@ -240,37 +240,44 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
     /**
      * Studio runs whose latest row version is stuck in a non-terminal status past the reaper threshold
-     * (OPIK-7159). Dedups {@code ReplacingMergeTree} versions via {@code ORDER BY last_updated_at DESC
-     * LIMIT 1 BY id} and then filters the latest version's studio-flag/status/age in the OUTER query —
-     * so a run that has since reached a terminal status (or had its studio_config change) is never
-     * selected off a stale version. {@code INITIALIZED} (worker never started) and {@code RUNNING}
-     * (worker died mid-run) use separate thresholds because there is no per-progress heartbeat on the
-     * row. {@code studio_config} is a plain String column (no PK/skip-index), so this dedups over all
-     * optimizations; acceptable because the reaper runs infrequently and the post-dedup set is tiny.
+     * (OPIK-7159). Deduplicates {@code ReplacingMergeTree} versions with {@code GROUP BY id} +
+     * {@code argMax(status, last_updated_at)} / {@code max(last_updated_at)} — a single aggregation pass,
+     * not the old {@code ORDER BY ... LIMIT 1 BY id} full sort. The status + timeout predicates run in
+     * {@code HAVING} (post-aggregation, i.e. above the dedup), so a run that has since reached a terminal
+     * status is never selected off a stale version — and keeping them out of the WHERE avoids ClickHouse
+     * pushing an aggregate-referencing predicate down into the scan (ILLEGAL_AGGREGATION). Only the two
+     * pushdown-safe predicates run in the {@code WHERE} / INNER scan, where
+     * a {@code minmax} skip index on {@code last_updated_at} (migration 000106) can prune granules:
+     * {@code studio_config != ''} (immutable per id) and a {@code last_updated_at >= now - lookback}
+     * FLOOR. The floor is safe because the newest version carries the maximum {@code last_updated_at}, so
+     * a {@code >=} lower bound can never drop it — it just bounds the scan to recent data instead of the
+     * whole (unbounded-growth) table, which the old query re-read + re-sorted every cycle. {@code
+     * INITIALIZED} (worker never started) and {@code RUNNING} (worker died mid-run) use separate
+     * upper-bound thresholds because there is no per-progress heartbeat on the row. See
+     * {@code stalledLookbackSeconds} for the floor width and its reaper-downtime tradeoff.
      */
     private static final String FIND_STALLED_STUDIO_OPTIMIZATIONS = """
             SELECT
                 id,
                 workspace_id,
-                status
+                latest_status AS status
             FROM (
                 SELECT
                     id,
-                    workspace_id,
-                    status,
-                    studio_config,
-                    last_updated_at
+                    any(workspace_id) AS workspace_id,
+                    argMax(status, last_updated_at) AS latest_status,
+                    max(last_updated_at) AS latest_updated_at
                 FROM optimizations
-                ORDER BY id DESC, last_updated_at DESC
-                LIMIT 1 BY id
+                WHERE studio_config != ''
+                  AND greaterOrEquals(last_updated_at, subtractSeconds(now64(6), :lookback_seconds))
+                GROUP BY id
+                HAVING (latest_status = 'initialized'
+                        AND less(latest_updated_at, subtractSeconds(now64(6), :initialized_timeout_seconds)))
+                    OR (latest_status = 'running'
+                        AND less(latest_updated_at, subtractSeconds(now64(6), :running_timeout_seconds)))
+                ORDER BY latest_updated_at ASC
+                LIMIT :limit
             )
-            WHERE studio_config != ''
-              AND ((status = 'initialized'
-                    AND less(last_updated_at, subtractSeconds(now64(6), :initialized_timeout_seconds)))
-               OR (status = 'running'
-                    AND less(last_updated_at, subtractSeconds(now64(6), :running_timeout_seconds))))
-            ORDER BY last_updated_at ASC
-            LIMIT :limit
             SETTINGS log_comment = '<log_comment>'
             """;
 
@@ -1194,11 +1201,20 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 .reduce(0L, Long::sum);
     }
 
+    // How far back the stalled-run query scans (the last_updated_at FLOOR that lets the minmax skip index
+    // prune granules). Set to the largest timeout plus a generous reaper-downtime margin, so in normal
+    // operation (reaper running every few minutes) the floor is purely a scan bound and never a coverage
+    // gap: a run's last status change is only older than this if the reaper was down longer than the
+    // margin, in which case that run is not reaped (documented tradeoff, review: thiagohora).
+    private static final Duration STALLED_LOOKBACK_MARGIN = Duration.ofDays(7);
+
     @Override
     public Flux<StalledOptimization> findStalledStudioOptimizations(@NonNull Duration initializedTimeout,
             @NonNull Duration runningTimeout, int limit) {
-        var details = "initializedTimeoutSeconds=%d, runningTimeoutSeconds=%d, limit=%d"
-                .formatted(initializedTimeout.toSeconds(), runningTimeout.toSeconds(), limit);
+        long lookbackSeconds = Math.max(initializedTimeout.toSeconds(), runningTimeout.toSeconds())
+                + STALLED_LOOKBACK_MARGIN.toSeconds();
+        var details = "initializedTimeoutSeconds=%d, runningTimeoutSeconds=%d, lookbackSeconds=%d, limit=%d"
+                .formatted(initializedTimeout.toSeconds(), runningTimeout.toSeconds(), lookbackSeconds, limit);
         var template = FilterUtils.getSTWithLogComment(FIND_STALLED_STUDIO_OPTIMIZATIONS,
                 "find_stalled_studio_optimizations", "", "", details);
         return Mono.from(connectionFactory.create())
@@ -1206,6 +1222,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     var statement = connection.createStatement(template.render())
                             .bind("initialized_timeout_seconds", initializedTimeout.toSeconds())
                             .bind("running_timeout_seconds", runningTimeout.toSeconds())
+                            .bind("lookback_seconds", lookbackSeconds)
                             .bind("limit", limit);
                     return Flux.from(statement.execute());
                 })
