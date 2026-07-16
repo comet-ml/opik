@@ -42,6 +42,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -700,6 +701,38 @@ class ProjectMetricsWithBreakdownResourceTest {
                 var error = response.readEntity(ValidationErrorMessage.class);
                 assertThat(error.getErrors().getFirst()).contains("not compatible with metric type");
             }
+        }
+
+        @Test
+        @DisplayName("happyPath: grouping by guardrail name returns one series per guardrail name")
+        void happyPathGroupByGuardrailName() {
+            mockTargetWorkspace();
+            TimeInterval interval = TimeInterval.HOURLY;
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            // createTracesWithGuardrails forces FAILED on even indices and generates both
+            // guardrail types (TOPIC, PII), so grouping by name yields a series per type.
+            createTracesWithGuardrails(projectName, subtract(marker, 2, interval), BreakdownField.NAME, "group-a", 2);
+            createTracesWithGuardrails(projectName, subtract(marker, 1, interval), BreakdownField.NAME, "group-a", 2);
+
+            var request = ProjectMetricRequest.builder()
+                    .metricType(MetricType.GUARDRAILS_FAILED_COUNT)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, 3, interval))
+                    .intervalEnd(Instant.now())
+                    .breakdown(BreakdownConfig.builder().field(BreakdownField.GUARDRAIL_NAME).build())
+                    .build();
+
+            var response = projectMetricsResourceClient.getProjectMetrics(projectId, request,
+                    Integer.class, API_KEY, WORKSPACE_NAME);
+
+            assertThat(response.metricType()).isEqualTo(MetricType.GUARDRAILS_FAILED_COUNT);
+            // Grouped by guardrail name: each series is named after a guardrail type, not "failed".
+            assertThat(response.results()).isNotEmpty();
+            assertThat(response.results()).allSatisfy(
+                    result -> assertThat(result.name()).isIn("TOPIC", "PII"));
         }
     }
 
