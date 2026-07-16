@@ -173,6 +173,15 @@ services:
       TOGGLE_AGENT_INSIGHTS_ENABLED: ${TOGGLE_AGENT_INSIGHTS_ENABLED:-"false"}
       ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_USER: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_USER:-comet_readonly_freeform_sql_user}
       ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_PASS: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_PASS:-opik}
+      # Traces cutover knobs (data-migrations/traces-local-v2-cutover). Default off / unset; the operator sets these
+      # for the backfill-to-cutover window.
+      ANALYTICS_DB_DATA_MODEL_TRACE_DELETION_EVENTS_CAPTURE_ENABLED: ${ANALYTICS_DB_DATA_MODEL_TRACE_DELETION_EVENTS_CAPTURE_ENABLED:-false}
+      ANALYTICS_DB_DATA_MODEL_SPAN_DELETION_EVENTS_CAPTURE_ENABLED: ${ANALYTICS_DB_DATA_MODEL_SPAN_DELETION_EVENTS_CAPTURE_ENABLED:-false}
+      ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS: ${ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS:-}
+      # Flip TRACE_COLUMNS_NON_NULLABLE to true in lockstep with the EXCHANGE (the successor's end_time/ttft are
+      # non-nullable sentinel columns; a null bind would be rejected). The SPAN sibling is for the later spans cutover.
+      ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE: ${ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE:-false}
+      ANALYTICS_DB_DATA_MODEL_SPAN_COLUMNS_NON_NULLABLE: ${ANALYTICS_DB_DATA_MODEL_SPAN_COLUMNS_NON_NULLABLE:-false}
       JAVA_OPTS: "-Dliquibase.propertySubstitutionEnabled=true -XX:+UseG1GC -XX:MaxRAMPercentage=80.0"
       REDIS_URL: redis://:opik@redis:6379/
       OPIK_OTEL_SDK_ENABLED: ${OPIK_OTEL_SDK_ENABLED:-false}
