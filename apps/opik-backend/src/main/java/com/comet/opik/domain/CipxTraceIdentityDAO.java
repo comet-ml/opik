@@ -49,7 +49,10 @@ public class CipxTraceIdentityDAO {
             @NonNull String repository,
             @NonNull String sessionId,
             @NonNull String harness,
-            int schemaVersion) {
+            int schemaVersion,
+            @NonNull String billingMode,
+            @NonNull String plan,
+            @NonNull String planUsageStatus) {
 
         public static TraceIdentityRow from(UUID traceId, UUID projectId, JsonNode metadata, Instant startTime) {
             JsonNode session = metadata.path("cipx").path("session");
@@ -69,6 +72,9 @@ public class CipxTraceIdentityDAO {
                     .sessionId(session.path("session_id").asText(""))
                     .harness(session.path("harness").asText(""))
                     .schemaVersion(session.path("schema_version").asInt(0))
+                    .billingMode(identity.path("billing_mode").asText(""))
+                    .plan(identity.path("plan").asText(""))
+                    .planUsageStatus(identity.path("plan_usage_status").asText(""))
                     .build();
         }
     }
@@ -78,7 +84,8 @@ public class CipxTraceIdentityDAO {
     private static final String INSERT = """
             INSERT INTO cipx_trace_identities
                 (workspace_id, project_id, trace_id, start_time, user_uuid,
-                 user_email, user_display_name, repository, session_id, harness, schema_version)
+                 user_email, user_display_name, repository, session_id, harness, schema_version,
+                 billing_mode, plan, plan_usage_status)
             SETTINGS log_comment = '<log_comment>'
             FORMAT Values
                 <items:{item |
@@ -93,7 +100,10 @@ public class CipxTraceIdentityDAO {
                         :repository<item.index>,
                         :session_id<item.index>,
                         :harness<item.index>,
-                        :schema_version<item.index>
+                        :schema_version<item.index>,
+                        :billing_mode<item.index>,
+                        :plan<item.index>,
+                        :plan_usage_status<item.index>
                     )
                     <if(item.hasNext)>,<endif>
                 }>
@@ -123,7 +133,7 @@ public class CipxTraceIdentityDAO {
         // Positional binds: the driver resolves named binds with a linear indexOf over the statement's
         // parameter list (quadratic per statement), while bind(int) is a direct array write. Indices
         // follow the placeholders' first-appearance order in the rendered SQL: workspace_id once at 0
-        // (repeats dedup), then 10 parameters per row tuple in template order.
+        // (repeats dedup), then 13 parameters per row tuple in template order.
         statement.bind(0, workspaceId);
         int index = 1;
         for (TraceIdentityRow row : rows) {
@@ -136,7 +146,10 @@ public class CipxTraceIdentityDAO {
                     .bind(index++, row.repository())
                     .bind(index++, row.sessionId())
                     .bind(index++, row.harness())
-                    .bind(index++, row.schemaVersion());
+                    .bind(index++, row.schemaVersion())
+                    .bind(index++, row.billingMode())
+                    .bind(index++, row.plan())
+                    .bind(index++, row.planUsageStatus());
         }
 
         return statement.execute();
