@@ -164,6 +164,25 @@ describe.skipIf(!run)("Span truncation E2E (OPIK-7349)", () => {
   );
 
   it(
+    "large metadata is left intact and does not truncate input/output",
+    async () => {
+      client = makeClient(20);
+      const id = await logSpan({
+        input: { prompt: "small" },
+        output: { result: "small" },
+        metadata: big(24), // exempt: sent whole, must be accepted + stored intact
+      });
+
+      const stored = fetchSpanOutput(await fetchSpan(id));
+      expect(asMarker(stored.metadata).opik_truncated).toBeUndefined();
+      expect(Array.isArray(asMarker(stored.metadata).items)).toBe(true); // stored whole
+      expect(asMarker(stored.input).opik_truncated).toBeUndefined();
+      expect(asMarker(stored.output).opik_truncated).toBeUndefined();
+    },
+    TIMEOUT
+  );
+
+  it(
     "under limit: a small span is stored intact (no marker)",
     async () => {
       client = makeClient(20);
