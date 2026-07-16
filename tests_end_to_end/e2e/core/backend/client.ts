@@ -1,9 +1,15 @@
+import { gunzipSync } from 'node:zlib';
 import { Opik } from 'opik';
 import { loadEnvConfig } from '../../config/env.config';
 import {
   pollTraceForFeedbackScore,
   type PollFeedbackScoreOpts,
 } from './poll-feedback-score';
+import {
+  pollOptimizationStatus,
+  type OptimizationStatus,
+  type PollOptimizationStatusOpts,
+} from './poll-optimization-status';
 
 export type BackendClient = ReturnType<typeof makeBackendClient>;
 
@@ -60,6 +66,22 @@ export interface AutomationRuleRef {
   projectIds: string[];
 }
 
+export interface OptimizationRef {
+  id: string;
+  name: string;
+  status: OptimizationStatus;
+  objectiveName: string | null;
+  datasetName: string | null;
+  numTrials: number;
+  /**
+   * Baseline/best objective scores. NOTE: a healthy run can legitimately score
+   * 0 (a weak model won't emit exact-match labels), so tests assert these are
+   * present and in [0,1] — never that the run "improved".
+   */
+  baselineObjectiveScore: number | null;
+  bestObjectiveScore: number | null;
+}
+
 /** Backend discriminator for Dataset vs Test Suite (shared DB table). */
 const TEST_SUITE_TYPE = 'evaluation_suite';
 
@@ -70,6 +92,27 @@ export function makeBackendClient(apiKey: string | null = null) {
     workspaceName: env.workspace,
     apiUrl: env.apiBaseUrl,
   });
+
+  // Hoisted so the poll helpers (free functions) can call it without depending
+  // on the not-yet-constructed return object.
+  const localGetOptimization = async (id: string): Promise<OptimizationRef | null> => {
+    try {
+      const o = await opik.api.optimizations.getOptimizationById(id);
+      return {
+        id: String(o.id),
+        name: o.name ?? '',
+        status: String(o.status) as OptimizationStatus,
+        objectiveName: o.objectiveName ?? null,
+        datasetName: o.datasetName ?? null,
+        numTrials: Number(o.numTrials ?? 0),
+        baselineObjectiveScore: o.baselineObjectiveScore ?? null,
+        bestObjectiveScore: o.bestObjectiveScore ?? null,
+      };
+    } catch (err) {
+      if (isNotFoundError(err)) return null;
+      throw err;
+    }
+  };
 
   // Hoisted so pollTraceForFeedbackScore (a free function) can call it without
   // depending on the not-yet-constructed return object.
@@ -289,6 +332,56 @@ export function makeBackendClient(apiKey: string | null = null) {
       } catch (err) {
         if (isNotFoundError(err)) return;
         throw err;
+      }
+    },
+
+    getOptimization: localGetOptimization,
+
+    async pollOptimizationStatus(
+      optimizationId: string,
+      target: OptimizationStatus,
+      opts: PollOptimizationStatusOpts = {},
+    ): Promise<OptimizationRef> {
+      return pollOptimizationStatus(localGetOptimization, optimizationId, target, opts);
+    },
+
+    async deleteOptimization(id: string): Promise<void> {
+      try {
+        await opik.api.optimizations.deleteOptimizationsById({ ids: [id] });
+      } catch (err) {
+        if (isNotFoundError(err)) return;
+        throw err;
+      }
+    },
+
+    /**
+     * Fetch the studio run's logs. The backend returns a presigned URL to a
+     * gzipped log object (the optimizer subprocess stdout); this resolves it and
+     * gunzips the content.
+     *
+     * `urlReachable` distinguishes two very different outcomes so tests can
+     * assert precisely:
+     *  - the backend must always return a `url` (it produced logs) — absence is
+     *    a real failure the caller should assert on;
+     *  - the object-store host may be unreachable *from the test runner* — on a
+     *    local MinIO install the presigned URL uses the internal `minio:9000`
+     *    hostname, resolvable only inside the compose network. That's an
+     *    environment artifact, not a Studio defect, so the fetch failing is
+     *    reported (urlReachable=false) rather than thrown.
+     */
+    async getOptimizationLogs(
+      id: string,
+    ): Promise<{ url: string | null; urlReachable: boolean; content: string | null }> {
+      const meta = await opik.api.optimizations.getStudioOptimizationLogs(id);
+      const url = meta.url ?? null;
+      if (!url) return { url: null, urlReachable: false, content: null };
+      try {
+        const res = await fetch(url);
+        if (!res.ok) return { url, urlReachable: false, content: null };
+        const content = gunzipSync(Buffer.from(await res.arrayBuffer())).toString('utf8');
+        return { url, urlReachable: true, content };
+      } catch {
+        return { url, urlReachable: false, content: null };
       }
     },
   };
