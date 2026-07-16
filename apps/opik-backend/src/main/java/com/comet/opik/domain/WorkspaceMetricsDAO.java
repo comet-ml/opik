@@ -106,6 +106,8 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             WHERE workspace_id = :workspace_id
                 <if(project_ids)> AND project_id IN :project_ids <endif>
                 AND id BETWEEN :id_prior_start AND :id_end
+                AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:id_prior_start), 'UTC'))
+                AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))
                 AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_prior_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9);
             """;
 
@@ -190,6 +192,8 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 WHERE workspace_id = :workspace_id
                   AND project_id IN :project_ids
                   AND id BETWEEN :id_start AND :id_end
+                  AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:id_start), 'UTC'))
+                  AND toMonday(id_at) <= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))
                   AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
                 GROUP BY project_id, bucket
                 ORDER BY project_id, bucket
@@ -214,6 +218,8 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                   AND id BETWEEN :id_start AND :id_end
+                  AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:id_start), 'UTC'))
+                  AND toMonday(id_at) <= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))
                   AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
                 GROUP BY bucket
                 ORDER BY bucket
