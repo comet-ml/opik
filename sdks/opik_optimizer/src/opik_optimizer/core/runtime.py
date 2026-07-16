@@ -197,12 +197,22 @@ def build_final_result(
     #     "error"): that error is the true root cause and must not be masked.
     #   - Skipped when total == 0 (custom evaluation / empty dataset never recorded a
     #     score), so it can never fire a false error.
+    #   - Skipped when the returned prompt scored strictly above zero. For optimizers
+    #     that score candidates outside evaluate() (evolutionary, GEPA's search phase),
+    #     scoring_health is only ever the baseline's — so a baseline that failed on a
+    #     brief outage but a run that then found a genuinely-scoring prompt would else
+    #     false-raise. A positive best_score proves at least one item scored, so the
+    #     all-failed health must be stale; don't abort. When every item truly fails to
+    #     score, all values are 0.0 and best_score is 0.0, so the guard still fires.
     failed_count = scoring_health["failed_count"]
     total_count = scoring_health["total_count"]
+    best_score = algorithm_result.best_score
+    returned_prompt_scored_nothing = best_score is None or best_score <= 0.0
     if (
         context.finish_reason != "error"
         and total_count > 0
         and failed_count / total_count >= DEFAULT_SCORING_FAILURE_THRESHOLD
+        and returned_prompt_scored_nothing
     ):
         raise ScoringFailedError(
             failed=failed_count,

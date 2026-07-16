@@ -22,7 +22,10 @@ from opik_optimizer.core.exceptions import ScoringFailedError
 from opik_optimizer.core.results import OptimizationResult
 from opik_optimizer.core.runtime import build_final_result
 from opik_optimizer.core.state import AlgorithmResult, OptimizationContext
-from tests.unit.fixtures.base_optimizer_test_helpers import ConcreteOptimizer
+from tests.unit.fixtures.base_optimizer_test_helpers import (
+    ConcreteOptimizer,
+    _DisplaySpy,
+)
 from tests.unit.test_helpers import make_mock_dataset, make_optimization_context
 
 
@@ -229,6 +232,97 @@ class TestBuildFinalResultFailsWhenUnscoreable:
             context=context,
         )
         assert isinstance(result, OptimizationResult)
+
+    def test_does_not_raise_when_returned_score_is_positive(self) -> None:
+        # Cross-check for optimizers that score candidates outside evaluate()
+        # (evolutionary, GEPA's search phase): context.scoring_health is only ever
+        # the baseline's. A baseline that failed on a brief outage, followed by a
+        # run that then found a genuinely-scoring prompt, must NOT be aborted — the
+        # positive best_score proves the all-failed health is stale.
+        optimizer = _make_optimizer()
+        context = _make_context(scoring_health={"failed_count": 5, "total_count": 5})
+        result = build_final_result(
+            optimizer=optimizer,
+            algorithm_result=_make_algorithm_result(score=0.7),
+            context=context,
+        )
+        assert isinstance(result, OptimizationResult)
+        # The stale count is still surfaced in details (best-effort), but the run
+        # completes rather than raising.
+        assert result.details["scoring_health"] == {"failed_count": 5, "total_count": 5}
+
+
+class TestCalculateBaselineSeedsScoringHealth:
+    """Fix 1: `_calculate_baseline` seeds `context.scoring_health` for EVERY optimizer.
+
+    This is what arms the OPIK-7029 empty-run guard for optimizers (evolutionary,
+    GEPA's search phase) whose candidate evaluations never flow through
+    `evaluate()`/`evaluate_with_result()`.
+    """
+
+    def _make_baseline_context(self, simple_chat_prompt: Any) -> OptimizationContext:
+        context = make_optimization_context(
+            simple_chat_prompt,
+            dataset=make_mock_dataset(),
+            metric=lambda di, lo: 1.0,
+            agent=MagicMock(),
+            max_trials=5,
+        )
+        context.metric.__name__ = "obj"
+        return context
+
+    def test_baseline_all_failed_is_captured(
+        self, monkeypatch: pytest.MonkeyPatch, simple_chat_prompt: Any
+    ) -> None:
+        optimizer = _make_optimizer()
+        optimizer._display = _DisplaySpy()  # type: ignore[assignment]
+        monkeypatch.setattr(
+            "opik_optimizer.base_optimizer.prepare_experiment_config",
+            lambda **kwargs: {},
+        )
+        eval_result = _make_evaluation_result("obj", failing_count=5, total_count=5)
+        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: eval_result)
+
+        context = self._make_baseline_context(simple_chat_prompt)
+        optimizer._calculate_baseline(context)
+
+        assert context.scoring_health == {"failed_count": 5, "total_count": 5}
+
+    def test_baseline_partial_failure_is_captured(
+        self, monkeypatch: pytest.MonkeyPatch, simple_chat_prompt: Any
+    ) -> None:
+        optimizer = _make_optimizer()
+        optimizer._display = _DisplaySpy()  # type: ignore[assignment]
+        monkeypatch.setattr(
+            "opik_optimizer.base_optimizer.prepare_experiment_config",
+            lambda **kwargs: {},
+        )
+        eval_result = _make_evaluation_result("obj", failing_count=2, total_count=5)
+        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: eval_result)
+
+        context = self._make_baseline_context(simple_chat_prompt)
+        optimizer._calculate_baseline(context)
+
+        assert context.scoring_health == {"failed_count": 2, "total_count": 5}
+
+    def test_baseline_tolerates_plain_float(
+        self, monkeypatch: pytest.MonkeyPatch, simple_chat_prompt: Any
+    ) -> None:
+        # A mocked/legacy evaluate_prompt that returns a bare float must not crash
+        # baseline computation; scoring_health is simply left unset.
+        optimizer = _make_optimizer()
+        optimizer._display = _DisplaySpy()  # type: ignore[assignment]
+        monkeypatch.setattr(
+            "opik_optimizer.base_optimizer.prepare_experiment_config",
+            lambda **kwargs: {},
+        )
+        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.42)
+
+        context = self._make_baseline_context(simple_chat_prompt)
+        score = optimizer._calculate_baseline(context)
+
+        assert score == 0.42
+        assert context.scoring_health is None
 
 
 # ---------------------------------------------------------------------------

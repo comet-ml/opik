@@ -622,7 +622,7 @@ class BaseOptimizer(ABC):
         self.pre_baseline(context)
 
         def _evaluate_baseline() -> float:
-            baseline_score = self.evaluate_prompt(
+            baseline_eval = self.evaluate_prompt(
                 prompt=context.prompts,
                 dataset=context.evaluation_dataset,
                 metric=context.metric,
@@ -631,6 +631,7 @@ class BaseOptimizer(ABC):
                 n_threads=getattr(self, "n_threads", None),
                 verbose=self.verbose,
                 allow_tool_use=context.allow_tool_use,
+                return_evaluation_result=True,
                 experiment_config=prepare_experiment_config(
                     optimizer=self,
                     prompt=context.prompts,
@@ -645,6 +646,27 @@ class BaseOptimizer(ABC):
                     build_optimizer_version=_OPTIMIZER_VERSION,
                 ),
             )
+            # Seed scoring health from the baseline evaluation so the OPIK-7029
+            # "all items failed to score" guard is armed for EVERY optimizer.
+            # Evolutionary and GEPA's search phase score candidates outside
+            # evaluate()/evaluate_with_result(), so they never set
+            # context.scoring_health on their own — without this, a run where
+            # every item fails to score would slip through as a silent COMPLETED.
+            # A systematic judge/model failure fails the baseline too, so capturing
+            # it here catches the empty-run case universally. Optimizers that DO
+            # improve via evaluate() overwrite this with the winning candidate's
+            # health. Tolerate a plain float (mocked/legacy evaluate_prompt).
+            if isinstance(
+                baseline_eval, (EvaluationResult, EvaluationResultOnDictItems)
+            ):
+                context.scoring_health = _compute_scoring_health_from_result(
+                    baseline_eval, metric_name=context.metric.__name__
+                )
+                baseline_score = self._score_from_evaluation_result(
+                    baseline_eval, metric_name=context.metric.__name__
+                )
+            else:
+                baseline_score = baseline_eval
             coerced_score = self._coerce_score(baseline_score)
             self.post_baseline(context, coerced_score)
             return coerced_score
