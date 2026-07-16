@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
+import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentScore;
@@ -1469,6 +1470,35 @@ class OptimizationsResourceTest {
             assertThat(completedOptimization.status()).isEqualTo(OptimizationStatus.COMPLETED);
             assertThat(completedOptimization.studioConfig()).isNotNull();
             assertThat(completedOptimization.studioConfig()).isEqualTo(studioConfig);
+        }
+
+        @Test
+        @DisplayName("error_info is preserved when SDK re-upserts with a null errorInfo")
+        void errorInfoPreservedOnReUpsertWithNullErrorInfo() {
+            // Create a Studio optimization (upsert full-row replace path)
+            var studioConfig = createStudioConfig();
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .errorInfo(null)
+                    .build();
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Record a failure reason through the PATCH/update path (as the worker does)
+            var errorInfo = podamFactory.manufacturePojo(ErrorInfo.class);
+            optimizationResourceClient.update(id,
+                    OptimizationUpdate.builder().status(OptimizationStatus.CANCELLED).errorInfo(errorInfo).build(),
+                    API_KEY, TEST_WORKSPACE_NAME, 204);
+
+            var afterFailure = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            assertThat(afterFailure.errorInfo()).isEqualTo(errorInfo);
+
+            // Re-upsert the same optimization with a null errorInfo (SDK behavior): the persisted
+            // failure reason must survive the full-row replace instead of being clobbered to blank.
+            optimizationResourceClient.upsert(optimization.toBuilder().id(id).errorInfo(null).build(),
+                    API_KEY, TEST_WORKSPACE_NAME);
+
+            var afterReUpsert = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            assertThat(afterReUpsert.errorInfo()).isEqualTo(errorInfo);
         }
 
         @Test
