@@ -35,10 +35,12 @@ const EmptyRunWarningPanel: React.FC<EmptyRunWarningPanelProps> = ({
   optimization,
   scoringHealth,
 }) => {
-  // Resolve the body message: exact count when available, heuristic otherwise.
-  const warningMessage =
-    getEmptyRunWarningMessage(scoringHealth) ??
-    "This run finished but produced no usable scores — the metric may have failed on every item. Open the logs, check the metric and model, then run it again.";
+  // Body message: exact count when scoring_health is present, else the heuristic
+  // copy. Returns null ONLY when the backend explicitly says nothing failed
+  // (failed_count === 0) — in that case we must NOT contradict it with a warning,
+  // so the panel renders nothing (the client heuristic and the item-level count
+  // can legitimately diverge).
+  const warningMessage = getEmptyRunWarningMessage(scoringHealth);
   const [open, setOpen] = useState(false);
   const { data, dataUpdatedAt } = useOptimizationStudioLogs(
     { optimizationId: optimization.id },
@@ -50,6 +52,10 @@ const EmptyRunWarningPanel: React.FC<EmptyRunWarningPanelProps> = ({
     () => convertTerminalOutputToHtml(logContent),
     [logContent],
   );
+
+  if (warningMessage === null) {
+    return null;
+  }
 
   return (
     <>

@@ -21,7 +21,6 @@ type OptimizationProgressChartContainerProps = {
   bestCandidateId?: string;
   objectiveName?: string;
   status?: OPTIMIZATION_STATUS;
-  optimizationCreatedAt?: string;
   selectedTrialId?: string;
   onTrialSelect?: (trialId: string) => void;
   onTrialClick?: (candidateId: string) => void;
