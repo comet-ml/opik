@@ -247,6 +247,9 @@ class TestBuildFinalResultFailsWhenUnscoreable:
             context=context,
         )
         assert isinstance(result, OptimizationResult)
+        # The winning score must survive untouched — a regression that dropped or
+        # zeroed it would otherwise still pass the "does not raise" assertion.
+        assert result.score == 0.7
         # The stale count is still surfaced in details (best-effort), but the run
         # completes rather than raising.
         assert result.details["scoring_health"] == {"failed_count": 5, "total_count": 5}
@@ -320,6 +323,55 @@ class TestCalculateBaselineSeedsScoringHealth:
 
         context = self._make_baseline_context(simple_chat_prompt)
         score = optimizer._calculate_baseline(context)
+
+        assert score == 0.42
+        assert context.scoring_health is None
+
+
+class TestResolveBaselineScoreAndHealth:
+    """The shared helper optimizers with a custom baseline path use (ParameterOptimizer).
+
+    ParameterOptimizer scores baseline + candidates via evaluate_prompt directly (never
+    evaluate()), so this helper is the only thing that arms its empty-run guard.
+    """
+
+    def _make_context(self, simple_chat_prompt: Any) -> OptimizationContext:
+        context = make_optimization_context(
+            simple_chat_prompt,
+            dataset=make_mock_dataset(),
+            metric=lambda di, lo: 1.0,
+            agent=MagicMock(),
+            max_trials=5,
+        )
+        context.metric.__name__ = "obj"
+        return context
+
+    def test_all_failed_result_seeds_health_and_returns_score(
+        self, simple_chat_prompt: Any
+    ) -> None:
+        optimizer = _make_optimizer()
+        context = self._make_context(simple_chat_prompt)
+        eval_result = _make_evaluation_result("obj", failing_count=5, total_count=5)
+
+        score = optimizer._resolve_baseline_score_and_health(context, eval_result)
+
+        assert context.scoring_health == {"failed_count": 5, "total_count": 5}
+        assert score == 0.0  # every item scored 0.0
+
+    def test_partial_failure_result_seeds_health(self, simple_chat_prompt: Any) -> None:
+        optimizer = _make_optimizer()
+        context = self._make_context(simple_chat_prompt)
+        eval_result = _make_evaluation_result("obj", failing_count=2, total_count=5)
+
+        optimizer._resolve_baseline_score_and_health(context, eval_result)
+
+        assert context.scoring_health == {"failed_count": 2, "total_count": 5}
+
+    def test_plain_float_leaves_health_unset(self, simple_chat_prompt: Any) -> None:
+        optimizer = _make_optimizer()
+        context = self._make_context(simple_chat_prompt)
+
+        score = optimizer._resolve_baseline_score_and_health(context, 0.42)
 
         assert score == 0.42
         assert context.scoring_health is None

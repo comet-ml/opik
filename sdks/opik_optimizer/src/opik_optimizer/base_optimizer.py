@@ -605,6 +605,29 @@ class BaseOptimizer(ABC):
 
         return resolve_prompt_tools(prompt_or_prompts, optimize_tools=optimize_tools)
 
+    def _resolve_baseline_score_and_health(
+        self,
+        context: OptimizationContext,
+        baseline_eval: float | EvaluationResult | EvaluationResultOnDictItems,
+    ) -> float:
+        """Derive the baseline score and seed context.scoring_health from it (OPIK-7029).
+
+        Shared by the base _calculate_baseline and by optimizers with a custom baseline
+        path (e.g. ParameterOptimizer) that score via evaluate_prompt directly rather than
+        evaluate()/evaluate_with_result(). Seeding here arms the empty-run guard for those
+        optimizers too: a systematic judge/model failure fails the baseline, so the
+        all-items-failed case becomes detectable. Tolerates a plain float
+        (mocked/legacy evaluate_prompt) by returning it as-is and leaving health unset.
+        """
+        if isinstance(baseline_eval, (EvaluationResult, EvaluationResultOnDictItems)):
+            context.scoring_health = _compute_scoring_health_from_result(
+                baseline_eval, metric_name=context.metric.__name__
+            )
+            return self._score_from_evaluation_result(
+                baseline_eval, metric_name=context.metric.__name__
+            )
+        return baseline_eval
+
     def _calculate_baseline(self, context: OptimizationContext) -> float:
         """
         Calculate and display the baseline score for the initial prompt.
@@ -656,17 +679,9 @@ class BaseOptimizer(ABC):
             # it here catches the empty-run case universally. Optimizers that DO
             # improve via evaluate() overwrite this with the winning candidate's
             # health. Tolerate a plain float (mocked/legacy evaluate_prompt).
-            if isinstance(
-                baseline_eval, (EvaluationResult, EvaluationResultOnDictItems)
-            ):
-                context.scoring_health = _compute_scoring_health_from_result(
-                    baseline_eval, metric_name=context.metric.__name__
-                )
-                baseline_score = self._score_from_evaluation_result(
-                    baseline_eval, metric_name=context.metric.__name__
-                )
-            else:
-                baseline_score = baseline_eval
+            baseline_score = self._resolve_baseline_score_and_health(
+                context, baseline_eval
+            )
             coerced_score = self._coerce_score(baseline_score)
             self.post_baseline(context, coerced_score)
             return coerced_score

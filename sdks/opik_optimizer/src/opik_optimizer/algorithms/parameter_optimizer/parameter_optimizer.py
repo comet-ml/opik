@@ -287,7 +287,11 @@ class ParameterOptimizer(BaseOptimizer):
             selection_summary=display_utils.summarize_selection_policy(base_prompts),
         ) as baseline_reporter:
             self.pre_trial(context, base_prompts)
-            baseline_score = self.evaluate_prompt(
+            # return_evaluation_result=True so the baseline's scoring health is
+            # captured into context.scoring_health — ParameterOptimizer scores both
+            # baseline and candidates via evaluate_prompt directly (never evaluate()),
+            # so this is the only place the OPIK-7029 empty-run guard gets armed for it.
+            baseline_eval = self.evaluate_prompt(
                 prompt=base_prompts,
                 agent=agent,
                 dataset=evaluation_dataset,
@@ -297,6 +301,10 @@ class ParameterOptimizer(BaseOptimizer):
                 experiment_config=experiment_config,
                 n_samples=n_samples,
                 n_samples_strategy=n_samples_strategy or context.n_samples_strategy,
+                return_evaluation_result=True,
+            )
+            baseline_score = self._resolve_baseline_score_and_health(
+                context, baseline_eval
             )
             baseline_reporter.set_score(baseline_score)
         return baseline_score
