@@ -254,7 +254,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * whole (unbounded-growth) table, which the old query re-read + re-sorted every cycle. {@code
      * INITIALIZED} (worker never started) and {@code RUNNING} (worker died mid-run) use separate
      * upper-bound thresholds because there is no per-progress heartbeat on the row. See
-     * {@code stalledLookbackSeconds} for the floor width and its reaper-downtime tradeoff.
+     * {@link #STALLED_LOOKBACK_MARGIN} for the floor width and its reaper-downtime tradeoff.
      */
     private static final String FIND_STALLED_STUDIO_OPTIMIZATIONS = """
             SELECT
