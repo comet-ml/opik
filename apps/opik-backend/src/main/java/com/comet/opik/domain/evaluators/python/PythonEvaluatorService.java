@@ -27,6 +27,7 @@ import static com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluator
 public class PythonEvaluatorService {
 
     private static final String URL_TEMPLATE = "%s/v1/private/evaluators/python";
+    private static final int MAX_ERROR_MESSAGE_LENGTH = 500;
 
     private final @NonNull RetriableHttpClient client;
     private final @NonNull OpikConfiguration config;
@@ -101,21 +102,25 @@ public class PythonEvaluatorService {
             try {
                 var errorResponse = response.readEntity(PythonEvaluatorErrorResponse.class);
                 if (errorResponse != null && StringUtils.isNotBlank(errorResponse.error())) {
-                    return errorResponse.error();
+                    return StringUtils.truncate(errorResponse.error(), MAX_ERROR_MESSAGE_LENGTH);
                 }
             } catch (RuntimeException parseErrorResponse) {
-                log.warn("Failed to parse error response, falling back to parsing string", parseErrorResponse);
+                // Expected when the body is not the structured error shape; fall back to the raw body.
+                log.debug("Failed to parse structured error response, falling back to parsing string",
+                        parseErrorResponse);
             }
 
             // Fall back to the raw body when the structured error is absent/blank so the backend
             // detail is not lost (e.g. python-backend "can't be evaluated:" with an empty message).
+            // The body is the evaluated user metric's own error, which we want to surface; bound its
+            // length so an oversized payload can't bloat the thrown exception message.
             try {
                 var body = response.readEntity(String.class);
                 if (StringUtils.isNotBlank(body)) {
-                    return body;
+                    return StringUtils.truncate(body, MAX_ERROR_MESSAGE_LENGTH);
                 }
             } catch (RuntimeException parseStringResponse) {
-                log.warn("Failed to parse error string response", parseStringResponse);
+                log.warn("Failed to read error response body", parseStringResponse);
             }
         }
 

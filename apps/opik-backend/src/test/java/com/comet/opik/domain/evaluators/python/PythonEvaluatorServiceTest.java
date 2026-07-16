@@ -20,7 +20,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -28,6 +32,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.net.SocketTimeoutException;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest.ChatMessage;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -515,11 +520,22 @@ class PythonEvaluatorServiceTest {
 
     @Nested
     @DisplayName("Null / Empty Response Handling Tests")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class NullResponseHandlingTests {
 
-        @Test
-        void evaluate__whenSuccessfulButNullBody__shouldThrowInternalServerErrorInsteadOfNpe() {
-            // Given: a 2xx whose entity deserializes to null (connection recycled before the read).
+        Stream<Arguments> emptySuccessBodies() {
+            return Stream.of(
+                    // A 2xx whose entity deserializes to null (connection recycled before the read).
+                    Arguments.of("null body", null),
+                    // A 2xx whose body carries null scores.
+                    Arguments.of("null scores", PythonEvaluatorResponse.builder().scores(null).build()));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("emptySuccessBodies")
+        void evaluate__whenSuccessfulButEmptyBody__shouldThrowInternalServerErrorInsteadOfNpe(
+                String caseName, PythonEvaluatorResponse body) {
+            // Given
             var code = "def evaluate(input, output): return 1.0";
             var data = Map.<String, Object>of("input", "test input", "output", "test output");
 
@@ -530,7 +546,7 @@ class PythonEvaluatorServiceTest {
             when(okResponse.getStatus()).thenReturn(200);
             when(okResponse.hasEntity()).thenReturn(true);
             when(okResponse.bufferEntity()).thenReturn(true);
-            when(okResponse.readEntity(PythonEvaluatorResponse.class)).thenReturn(null);
+            when(okResponse.readEntity(PythonEvaluatorResponse.class)).thenReturn(body);
 
             doAnswer(invocation -> {
                 InvocationCallback<Response> callback = invocation.getArgument(1);
@@ -544,37 +560,20 @@ class PythonEvaluatorServiceTest {
                     .hasMessageContaining("empty or unparseable response body");
         }
 
-        @Test
-        void evaluate__whenSuccessfulButNullScores__shouldThrowInternalServerError() {
-            // Given: a 2xx whose body has null scores.
-            var code = "def evaluate(input, output): return 1.0";
-            var data = Map.<String, Object>of("input", "test input", "output", "test output");
-            var nullScoresBody = PythonEvaluatorResponse.builder().scores(null).build();
-
-            setupHttpCallChain();
-
-            Response okResponse = mock(Response.class);
-            when(okResponse.getStatusInfo()).thenReturn(Status.OK);
-            when(okResponse.getStatus()).thenReturn(200);
-            when(okResponse.hasEntity()).thenReturn(true);
-            when(okResponse.bufferEntity()).thenReturn(true);
-            when(okResponse.readEntity(PythonEvaluatorResponse.class)).thenReturn(nullScoresBody);
-
-            doAnswer(invocation -> {
-                InvocationCallback<Response> callback = invocation.getArgument(1);
-                callback.completed(okResponse);
-                return null;
-            }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
-
-            // When & Then
-            assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data).block())
-                    .isInstanceOf(InternalServerErrorException.class)
-                    .hasMessageContaining("empty or unparseable response body");
+        Stream<Arguments> missingErrorDetailResponses() {
+            return Stream.of(
+                    // Structured error object deserializes to null -> fall back to the raw body.
+                    Arguments.of("null error object", null, "raw backend error body", "raw backend error body"),
+                    // Structured error field is blank (python-backend "can't be evaluated:").
+                    Arguments.of("blank error field", PythonEvaluatorErrorResponse.builder().error("").build(),
+                            "The provided 'code' and 'data' fields can't be evaluated: NameError", "NameError"));
         }
 
-        @Test
-        void evaluate__when400AndErrorObjectIsNull__shouldNotNpeAndFallBackToStringBody() {
-            // Given: a 400 whose structured error object deserializes to null.
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("missingErrorDetailResponses")
+        void evaluate__when400AndMissingErrorDetail__shouldFallBackToStringBody(
+                String caseName, PythonEvaluatorErrorResponse errorObject, String rawBody, String expectedSubstring) {
+            // Given
             var code = "def evaluate(input, output): return 1.0";
             var data = Map.<String, Object>of("input", "test input", "output", "test output");
 
@@ -585,8 +584,8 @@ class PythonEvaluatorServiceTest {
             when(badRequestResponse.getStatus()).thenReturn(400);
             when(badRequestResponse.hasEntity()).thenReturn(true);
             when(badRequestResponse.bufferEntity()).thenReturn(true);
-            when(badRequestResponse.readEntity(PythonEvaluatorErrorResponse.class)).thenReturn(null);
-            when(badRequestResponse.readEntity(String.class)).thenReturn("raw backend error body");
+            when(badRequestResponse.readEntity(PythonEvaluatorErrorResponse.class)).thenReturn(errorObject);
+            when(badRequestResponse.readEntity(String.class)).thenReturn(rawBody);
 
             doAnswer(invocation -> {
                 InvocationCallback<Response> callback = invocation.getArgument(1);
@@ -597,37 +596,7 @@ class PythonEvaluatorServiceTest {
             // When & Then
             assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data).block())
                     .isInstanceOf(BadRequestException.class)
-                    .hasMessageContaining("raw backend error body");
-        }
-
-        @Test
-        void evaluate__when400AndErrorFieldIsBlank__shouldFallBackToStringBody() {
-            // Given: a 400 whose structured error field is blank (python-backend "can't be evaluated:").
-            var code = "def evaluate(input, output): return 1.0";
-            var data = Map.<String, Object>of("input", "test input", "output", "test output");
-            var blankError = PythonEvaluatorErrorResponse.builder().error("").build();
-
-            setupHttpCallChain();
-
-            Response badRequestResponse = mock(Response.class);
-            when(badRequestResponse.getStatusInfo()).thenReturn(Status.BAD_REQUEST);
-            when(badRequestResponse.getStatus()).thenReturn(400);
-            when(badRequestResponse.hasEntity()).thenReturn(true);
-            when(badRequestResponse.bufferEntity()).thenReturn(true);
-            when(badRequestResponse.readEntity(PythonEvaluatorErrorResponse.class)).thenReturn(blankError);
-            when(badRequestResponse.readEntity(String.class))
-                    .thenReturn("The provided 'code' and 'data' fields can't be evaluated: NameError");
-
-            doAnswer(invocation -> {
-                InvocationCallback<Response> callback = invocation.getArgument(1);
-                callback.completed(badRequestResponse);
-                return null;
-            }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
-
-            // When & Then
-            assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data).block())
-                    .isInstanceOf(BadRequestException.class)
-                    .hasMessageContaining("NameError");
+                    .hasMessageContaining(expectedSubstring);
         }
     }
 
