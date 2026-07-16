@@ -398,12 +398,15 @@ public class OpenTelemetryMappingUtilsTest {
         return Stream.of(
                 Arguments.of("output prefix, key==prefix", prefixOutput, "output", ""),
                 Arguments.of("output prefix, dotted suffix", prefixOutput, "output.choices", "choices"),
+                Arguments.of("output prefix, bare overlap kept", prefixOutput, "output_tokens", "output_tokens"),
                 Arguments.of("gen_ai.input. prefix, suffix", prefixGenAiInput,
                         "gen_ai.input.messages", "messages"),
                 Arguments.of("opik.metadata prefix, dotted suffix", prefixOpikMetadata,
                         "opik.metadata.finish_reason", "finish_reason"),
                 Arguments.of("opik.metadata prefix, deep suffix", prefixOpikMetadata,
                         "opik.metadata.a.b.c", "a.b.c"),
+                Arguments.of("opik.metadata prefix, bare overlap kept", prefixOpikMetadata,
+                        "opik.metadata.integration", "integration"),
                 Arguments.of("exact rule, full key kept", exactPrompt, "gen_ai.prompt", "gen_ai.prompt"));
     }
 

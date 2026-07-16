@@ -90,13 +90,19 @@ public class OpenTelemetryMappingUtils {
             return key;
         }
 
-        String jsonKey = key.substring(rule.getRule().length());
+        String prefix = rule.getRule();
+        String suffix = key.substring(prefix.length());
 
-        if (jsonKey.startsWith(".")) {
-            jsonKey = jsonKey.substring(1);
+        // Strip when suffix is empty, suffix starts with '.', or the rule itself ends with '.' (e.g. "gen_ai.input.").
+        // A prefix match like "input" on "input_tokens" must not strip.
+        if (suffix.isEmpty() || suffix.startsWith(".") || prefix.endsWith(".")) {
+            if (suffix.startsWith(".")) {
+                suffix = suffix.substring(1);
+            }
+            return suffix;
         }
 
-        return jsonKey;
+        return key;
     }
 
     // Prefix rules (e.g. `gen_ai.usage.`) carry the usage name in the suffix; exact-match rules
