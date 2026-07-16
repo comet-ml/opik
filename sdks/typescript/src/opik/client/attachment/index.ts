@@ -34,7 +34,8 @@ export const extractAndUploadAttachments = async <T extends AttachmentSource>(
     extraction = extractInlineAttachments(payload, config.minSizeBytes);
   } catch (error) {
     logger.warn(
-      `Attachment extraction skipped for ${target.entityType} '${target.entityId}': ${error}`,
+      `Attachment extraction skipped for ${target.entityType} '${target.entityId}'`,
+      { error },
     );
     return payload;
   }
@@ -48,7 +49,8 @@ export const extractAndUploadAttachments = async <T extends AttachmentSource>(
       uploadInlineAttachment(api, config, target, attachment).catch((error) => {
         logger.warn(
           `Failed to upload extracted attachment '${attachment.fileName}' ` +
-            `for ${target.entityType} '${target.entityId}': ${error}`,
+            `for ${target.entityType} '${target.entityId}'`,
+          { error },
         );
       }),
     ),

@@ -17,8 +17,9 @@ export interface OpikConfig {
   holdUntilFlush?: boolean;
   promptCacheTtlSeconds?: number;
   trackDisable?: boolean;
-  // Per-span payload cap (MB): input/output/metadata larger than this are truncated
-  // before send (parity with the Python SDK). <= 0 disables. Default 20.
+  // Per-span payload cap (MB): input/output larger than this are truncated before send;
+  // metadata is exempt and excluded from the measurement (parity with the Python SDK).
+  // <= 0 disables. Default 20.
   maxSpanPayloadSizeMb?: number;
   // Extract inline base64 blobs (e.g. images) from span/trace input/output/metadata and
   // upload them as attachments before send, so they don't count toward the size cap
@@ -128,6 +129,9 @@ function loadFromConfigFile(): Partial<OpikConfig> {
       return {};
     }
 
+    // Only identity/string settings are read from the config file. Numeric and flag
+    // settings (batchDelayMs, maxSpanPayloadSizeMb, isAttachmentExtractionActive,
+    // minBase64EmbeddedAttachmentSize, ...) are configured via OPIK_* env vars only.
     return filterUndefined({
       apiKey: config.opik.api_key,
       apiUrl: config.opik.url_override,

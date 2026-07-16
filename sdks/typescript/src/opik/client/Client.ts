@@ -146,7 +146,9 @@ export class OpikClient {
 
     const attachmentUploadConfig = this.config.isAttachmentExtractionActive
       ? {
-          minSizeBytes: this.config.minBase64EmbeddedAttachmentSize!,
+          minSizeBytes:
+            this.config.minBase64EmbeddedAttachmentSize ??
+            DEFAULT_CONFIG.minBase64EmbeddedAttachmentSize,
           apiUrl: this.config.apiUrl!,
           workspaceName: this.config.workspaceName,
           apiKey: this.config.apiKey || undefined,

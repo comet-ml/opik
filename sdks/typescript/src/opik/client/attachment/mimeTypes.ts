@@ -1,7 +1,7 @@
 /**
- * Magic-byte MIME sniffing for decoded base64 blobs (parity with the Python SDK's
- * decoder_helpers). Only recognized types become attachments; anything unrecognized
- * returns null and is left inline — matching Python's skip of octet-stream / text.
+ * Magic-byte MIME sniffing for decoded base64 blobs. Recognizes binary media types
+ * (PNG/JPEG/GIF/WebP/PDF/SVG/MP4); anything else returns null and is left inline.
+ * Unlike the Python SDK, base64-encoded JSON is not extracted — it stays inline.
  */
 
 const startsWith = (
@@ -39,11 +39,10 @@ export const detectMimeType = (bytes: Buffer): string | null => {
   if (startsWith(bytes, PDF)) return "application/pdf";
   if (startsWith(bytes, FTYP, 4)) return "video/mp4";
 
-  const head = bytes.subarray(0, 1024).toString("utf8").trimStart();
-  if (
-    head.startsWith("<svg") ||
-    (head.startsWith("<?xml") && head.includes("<svg"))
-  ) {
+  // Case-insensitive, anywhere in the first 1 KB (matches the Python SDK) — catches SVGs
+  // that open with a DOCTYPE, an XML comment, or a stylesheet PI before the <svg> tag.
+  const head = bytes.subarray(0, 1024).toString("utf8").toLowerCase();
+  if (head.includes("<svg")) {
     return "image/svg+xml";
   }
   return null;

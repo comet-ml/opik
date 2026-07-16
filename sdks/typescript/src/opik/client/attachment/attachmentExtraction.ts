@@ -118,6 +118,21 @@ const walk = (
   return value;
 };
 
+// The regex depends only on minGroups (fixed per client), so compile it once and reuse.
+// lastIndex is reset before each use in extractFromString, so a shared instance is safe.
+const patternCache = new Map<number, RegExp>();
+const patternForGroups = (minGroups: number): RegExp => {
+  let pattern = patternCache.get(minGroups);
+  if (!pattern) {
+    pattern = new RegExp(
+      `(?<prefix>data:[^,]*;base64,)?(?<base64>(?:[A-Za-z0-9+/]{4}){${minGroups},}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?)`,
+      "g",
+    );
+    patternCache.set(minGroups, pattern);
+  }
+  return pattern;
+};
+
 /**
  * Walk `input`/`output`/`metadata`, replacing base64 blobs at least `minSizeBytes` long
  * with placeholders. Returns a shallow copy with the replacements applied (or the original
@@ -132,10 +147,7 @@ export const extractInlineAttachments = <T extends AttachmentSource>(
   // here is what enforces the min-size threshold and avoids matching short incidental strings.
   const minGroups = Math.max(1, Math.floor(minSizeBytes / 4));
   const minChars = minGroups * 4;
-  const pattern = new RegExp(
-    `(?<prefix>data:[^,]*;base64,)?(?<base64>(?:[A-Za-z0-9+/]{4}){${minGroups},}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?)`,
-    "g",
-  );
+  const pattern = patternForGroups(minGroups);
 
   const attachments: ExtractedAttachment[] = [];
   const overrides: Partial<Record<Field, unknown>> = {};

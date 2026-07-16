@@ -89,7 +89,12 @@ export const uploadInlineAttachment = async (
     const start = i * PART_SIZE_BYTES;
     const chunk = data.subarray(start, start + PART_SIZE_BYTES);
     const eTag = await putBytes(response.preSignUrls[i], chunk);
-    uploadedFileParts.push({ eTag: eTag ?? "", partNumber: i + 1 });
+    if (!eTag) {
+      throw new Error(
+        `attachment upload part ${i + 1} returned no ETag; cannot complete multipart upload`,
+      );
+    }
+    uploadedFileParts.push({ eTag, partNumber: i + 1 });
   }
   await api.attachments.completeMultiPartUpload(
     {
