@@ -564,8 +564,8 @@ class PythonEvaluatorServiceTest {
             return Stream.of(
                     // Structured error object deserializes to null -> fall back to the raw body.
                     Arguments.of("null error object", null, "raw backend error body", "raw backend error body"),
-                    // Structured error field is blank (python-backend "can't be evaluated:").
-                    Arguments.of("blank error field", PythonEvaluatorErrorResponse.builder().error("").build(),
+                    // Structured error field is whitespace-only (exercises isNotBlank, not just isEmpty).
+                    Arguments.of("whitespace error field", PythonEvaluatorErrorResponse.builder().error("   ").build(),
                             "The provided 'code' and 'data' fields can't be evaluated: NameError", "NameError"));
         }
 
@@ -597,6 +597,35 @@ class PythonEvaluatorServiceTest {
             assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data).block())
                     .isInstanceOf(BadRequestException.class)
                     .hasMessageContaining(expectedSubstring);
+        }
+
+        @Test
+        void evaluate__when400AndErrorBodyExceedsMaxLength__shouldTruncateSurfacedText() {
+            // Given: a raw error body longer than the surfaced-text cap (MAX_ERROR_MESSAGE_LENGTH = 500).
+            var code = "def evaluate(input, output): return 1.0";
+            var data = Map.<String, Object>of("input", "test input", "output", "test output");
+            var overlongBody = "HEAD" + "x".repeat(600);
+
+            setupHttpCallChain();
+
+            Response badRequestResponse = mock(Response.class);
+            when(badRequestResponse.getStatusInfo()).thenReturn(Status.BAD_REQUEST);
+            when(badRequestResponse.getStatus()).thenReturn(400);
+            when(badRequestResponse.hasEntity()).thenReturn(true);
+            when(badRequestResponse.bufferEntity()).thenReturn(true);
+            when(badRequestResponse.readEntity(PythonEvaluatorErrorResponse.class)).thenReturn(null);
+            when(badRequestResponse.readEntity(String.class)).thenReturn(overlongBody);
+
+            doAnswer(invocation -> {
+                InvocationCallback<Response> callback = invocation.getArgument(1);
+                callback.completed(badRequestResponse);
+                return null;
+            }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
+
+            // When & Then: message keeps the prefix but is capped at 500 characters.
+            assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data).block())
+                    .isInstanceOf(BadRequestException.class)
+                    .satisfies(ex -> assertThat(ex.getMessage()).hasSize(500).startsWith("HEADxxx"));
         }
     }
 
