@@ -129,7 +129,9 @@ def test_truncate_span_kwargs__within_limit__untouched():
 
 
 # --------------------------------------------------------------------------- #
-# processor integration (truncation happens right before the BE send)
+# processor integration — driven through the public `process()` dispatch (not the
+# private per-message handlers); asserts on the payload the processor forwards to
+# the REST client, which is where truncation must happen (right before the BE send).
 # --------------------------------------------------------------------------- #
 
 
@@ -149,7 +151,7 @@ def test_process_create_spans_batch__oversized_span_truncated_before_send():
     small_span = _span_write(output={"result": "small"})
     message = messages.CreateSpansBatchMessage(batch=[big_span, small_span])
 
-    processor._process_create_spans_batch_message(message)
+    processor.process(message)
 
     sent = processor._rest_client.spans.create_spans.call_args.kwargs["spans"]
     assert sent[0].output["opik_truncated"] is True  # oversized span truncated
@@ -161,7 +163,7 @@ def test_process_create_spans_batch__limit_disabled__no_truncation():
     big_span = _span_write(output=_big_value(21))
     message = messages.CreateSpansBatchMessage(batch=[big_span])
 
-    processor._process_create_spans_batch_message(message)
+    processor.process(message)
 
     sent = processor._rest_client.spans.create_spans.call_args.kwargs["spans"]
     assert sent[0].output == big_span.output  # unchanged when disabled
@@ -173,7 +175,7 @@ def test_process_create_span__oversized_field_truncated_before_send():
         count=1, approximate_span_size=21 * ONE_MEGABYTE
     )[0]
 
-    processor._process_create_span_message(span_message)
+    processor.process(span_message)
 
     sent_kwargs = processor._rest_client.spans.create_span.call_args.kwargs
     # the oversized field was replaced with a truncation marker
@@ -213,7 +215,7 @@ def test_process_update_span__oversized_field_truncated_before_send():
     processor = _processor(max_span_payload_size_mb=LIMIT_MB)
     message = _update_span_message(output=_big_value(21), input={"prompt": "small"})
 
-    processor._process_update_span_message(message)
+    processor.process(message)
 
     sent_kwargs = processor._rest_client.spans.update_span.call_args.kwargs
     assert sent_kwargs["output"]["opik_truncated"] is True
@@ -224,7 +226,7 @@ def test_process_update_span__limit_disabled__no_truncation():
     processor = _processor(max_span_payload_size_mb=None)
     message = _update_span_message(output=_big_value(21))
 
-    processor._process_update_span_message(message)
+    processor.process(message)
 
     sent_kwargs = processor._rest_client.spans.update_span.call_args.kwargs
     assert sent_kwargs["output"] == _big_value(21)  # unchanged when disabled
