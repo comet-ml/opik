@@ -249,11 +249,13 @@ class OpikConfig(pydantic_settings.BaseSettings):
 
     max_span_payload_size_mb: int = 20
     """
-    Maximum size (in MB) of a single span (input/output/metadata combined), measured right before
-    it is sent to the backend (after attachments have been extracted). Any field over this limit is
-    replaced with a truncation marker; if the span is still over as a whole, the remaining fields
-    are replaced too, so the span is guaranteed under the limit. A warning is logged. Log large
-    payloads as attachments instead to avoid truncation.
+    Per-span size limit (in MB) for the truncatable fields (``input``/``output``), applied right
+    before a span is sent to the backend (after attachments have been extracted). An ``input`` or
+    ``output`` over this limit - or the two together over it - is replaced with a truncation marker
+    and a warning is logged. ``metadata`` is never truncated (it holds small routing/cost fields the
+    backend relies on, e.g. ``thread_id`` and ``model``) and is not counted toward this limit; an
+    oversized ``metadata`` is left to the server-side request/document guards (413/400) rather than
+    trimmed. Log large payloads as attachments instead to avoid truncation.
     """
 
     connection_monitor_ping_interval: float = 10
