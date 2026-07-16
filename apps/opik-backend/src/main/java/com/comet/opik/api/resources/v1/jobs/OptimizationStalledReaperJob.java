@@ -7,7 +7,6 @@ import io.dropwizard.jobs.Job;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.quartz.DisallowConcurrentExecution;
 import org.quartz.InterruptableJob;
@@ -38,19 +37,31 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
 @Slf4j
 @Singleton
 @DisallowConcurrentExecution
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 public class OptimizationStalledReaperJob extends Job implements InterruptableJob {
 
     private static final Lock JOB_LOCK = new Lock("optimization_stalled_reaper:lock");
 
-    private final @NonNull OptimizationService optimizationService;
-    private final @NonNull LockService lockService;
-    private final @NonNull @Config("optimizationStalledReaper") OptimizationStalledReaperConfig config;
+    private final OptimizationService optimizationService;
+    private final LockService lockService;
+    private final OptimizationStalledReaperConfig config;
 
     private final AtomicBoolean interrupted = new AtomicBoolean(false);
 
     /** Tracks the in-flight reactive pass so {@link #interrupt()} can dispose it. */
     private final AtomicReference<Disposable> currentExecution = new AtomicReference<>();
+
+    // Explicit @Inject constructor (not Lombok's onConstructor_): the sibling reaper jobs
+    // (StreamConsumerReaperJob, LocalRunnerReaperJob) declare the @Config qualifier on an
+    // explicit constructor parameter, because Quartz/Guice instantiation of a Lombok-propagated
+    // @Config qualifier has been fragile here. Keep this consistent with them (review: thiagohora).
+    @Inject
+    public OptimizationStalledReaperJob(@NonNull OptimizationService optimizationService,
+            @NonNull LockService lockService,
+            @NonNull @Config("optimizationStalledReaper") OptimizationStalledReaperConfig config) {
+        this.optimizationService = optimizationService;
+        this.lockService = lockService;
+        this.config = config;
+    }
 
     @Override
     public void doJob(JobExecutionContext context) {
