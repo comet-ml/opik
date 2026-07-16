@@ -202,8 +202,9 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * {@code optimizations} is automatically copied without a schema-drift fix to this query —
      * mirrors D1's {@code ExperimentDAO.BATCH_SET_PROJECT_ID}.
      *
-     * <p>The outer {@code WHERE project_id = ''} guards idempotency: an optimization that already
-     * has a non-empty {@code project_id} is skipped, so re-running the migration is safe.
+     * <p>The idempotency guard {@code project_id = ''} sits inside the subquery, not on the outer
+     * statement: CH 26.3's analyzer would resolve an outer {@code project_id} to the REPLACE alias
+     * (the new value) instead of the source column, matching nothing and writing zero rows.
      */
     private static final String BATCH_SET_PROJECT_ID = """
             INSERT INTO optimizations
@@ -217,10 +218,10 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 FROM optimizations
                 WHERE workspace_id = :workspace_id
                 AND id IN :optimization_ids
+                AND project_id = ''
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             )
-            WHERE project_id = ''
             SETTINGS log_comment = '<log_comment>'
             """;
 
