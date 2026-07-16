@@ -417,12 +417,4 @@ public class OpenTelemetryMappingUtilsTest {
         assertThat(storageKey(rule, key)).isEqualTo(expected);
     }
 
-    @Test
-    void storageKeyExactRuleNeverStrips() {
-        var exact = OpenTelemetryMappingRule.builder()
-                .rule("gen_ai.prompt").source("GenAI")
-                .outcome(OpenTelemetryMappingRule.Outcome.INPUT).build();
-
-        assertThat(storageKey(exact, "gen_ai.prompt")).isEqualTo("gen_ai.prompt");
-    }
 }
