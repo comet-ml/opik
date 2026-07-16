@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useMemo, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowUpRight, Pin, PinOff, Settings2 } from "lucide-react";
 
@@ -90,17 +90,29 @@ const WorkspaceMenuContent: React.FC<WorkspaceMenuContentProps> = ({
 
   // When searching, show all matches flat (virtualized above the threshold).
   // Otherwise cluster into Pinned + Recently visited (capped) sections.
-  const workspacesById = new Map(
-    sortedWorkspaces.map((workspace) => [workspace.workspaceId, workspace]),
+  const workspacesById = useMemo(
+    () =>
+      new Map(
+        sortedWorkspaces.map((workspace) => [workspace.workspaceId, workspace]),
+      ),
+    [sortedWorkspaces],
   );
   // Pinned rows keep the hook's insertion order (stable, like the projects menu),
   // limited to workspaces present in the current (search-filtered) list.
-  const pinnedWorkspaces = pinnedConfig
-    .map((pinned) => workspacesById.get(pinned.workspaceId))
-    .filter((workspace): workspace is Workspace => Boolean(workspace));
-  const recentlyVisitedWorkspaces = sortedWorkspaces
-    .filter((workspace) => !isPinned(workspace.workspaceId))
-    .slice(0, RECENTLY_VISITED_SIZE);
+  const pinnedWorkspaces = useMemo(
+    () =>
+      pinnedConfig
+        .map((pinned) => workspacesById.get(pinned.workspaceId))
+        .filter((workspace): workspace is Workspace => Boolean(workspace)),
+    [pinnedConfig, workspacesById],
+  );
+  const recentlyVisitedWorkspaces = useMemo(
+    () =>
+      sortedWorkspaces
+        .filter((workspace) => !isPinned(workspace.workspaceId))
+        .slice(0, RECENTLY_VISITED_SIZE),
+    [sortedWorkspaces, isPinned],
+  );
 
   const shouldVirtualize =
     isSearching && sortedWorkspaces.length > WORKSPACE_VIRTUALIZATION_THRESHOLD;
