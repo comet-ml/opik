@@ -142,14 +142,42 @@ def _metric_name_ast(cls: ast.ClassDef) -> Optional[str]:
         None,
     )
     if init is not None:
+        # Names this class's declared bases so we only trust a name passed to the
+        # *base* constructor, not an unrelated helper's __init__.
+        base_names = set()
+        for base in cls.bases:
+            if isinstance(base, ast.Name):
+                base_names.add(base.id)
+            elif isinstance(base, ast.Attribute):
+                base_names.add(base.attr)
+
+        def _is_base_constructor_call(call: ast.Call) -> bool:
+            """True only for ``super().__init__(...)`` or ``<Base>.__init__(...)``
+            where ``<Base>`` is one of this class's declared bases — NOT any
+            incidental ``Helper.__init__(...)`` in the metric's ``__init__`` body
+            (which would otherwise misname the objective)."""
+            func = call.func
+            if not (isinstance(func, ast.Attribute) and func.attr == "__init__"):
+                return False
+            value = func.value
+            # super().__init__(...)
+            if (
+                isinstance(value, ast.Call)
+                and isinstance(value.func, ast.Name)
+                and value.func.id == "super"
+            ):
+                return True
+            # <Base>.__init__(...) with <Base> a declared base of this class
+            if isinstance(value, ast.Name) and value.id in base_names:
+                return True
+            if isinstance(value, ast.Attribute) and value.attr in base_names:
+                return True
+            return False
+
         # Common idiom: no `name` param, name passed straight to the base
         # constructor — ``super().__init__(name="my_metric")``.
         for node in ast.walk(init):
-            if (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Attribute)
-                and node.func.attr == "__init__"
-            ):
+            if isinstance(node, ast.Call) and _is_base_constructor_call(node):
                 for kw in node.keywords:
                     if (
                         kw.arg == "name"

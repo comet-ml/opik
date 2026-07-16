@@ -13,10 +13,7 @@ import { aggregateExperimentMetrics } from "@/lib/experiment-metrics";
 import { getFeedbackScore } from "@/lib/feedback-scores";
 import { Experiment, EVALUATION_METHOD } from "@/types/datasets";
 import { extractMetricNameFromPythonCode } from "@/lib/rules";
-import {
-  createMethodRegex,
-  parsePythonMethodParameters,
-} from "@/lib/pythonArgumentsParser";
+import { parsePythonMethodParameters } from "@/lib/pythonArgumentsParser";
 import {
   DEFAULT_GEPA_OPTIMIZER_CONFIGS,
   DEFAULT_EVOLUTIONARY_OPTIMIZER_CONFIGS,
@@ -219,15 +216,27 @@ export const extractKwargsKeysFromPython = (code: string): string[] => {
 // scanner above can't catch these (there is no `kwargs` identifier), so the
 // param names are surfaced here for the submit gate.
 //
-// Returns [] for a `**kwargs` (VAR_KEYWORD) signature — the backend splats every
-// column, so no positional param is required — or when `score()` can't be found.
+// A trailing `**kwargs` does NOT relax this: `**kwargs` only absorbs *undeclared*
+// extra columns, so a declared positional param with no default (e.g. `reference`
+// in `score(self, output, reference, **kwargs)`) is still required and its
+// absence raises a missing-argument TypeError.
+//
+// Returns [] when it can't confidently determine the requirement:
+//   - `score()` can't be located;
+//   - more than one `score()` is declared — the backend instantiates the
+//     alphabetically-first BaseMetric subclass (get_metric_class), which a
+//     source-order scan can't reliably mirror, so we defer to the backend rather
+//     than guess the wrong signature and block on the wrong column;
+//   - the signature can't be parsed — best-effort only; a false block is worse
+//     UX than a missed warning, and the backend AST validation is authoritative.
 export const extractRequiredScoreParams = (code: string): string[] => {
   if (!code) return [];
-  const sigMatch = code.match(createMethodRegex("score"));
-  if (!sigMatch) return [];
-  // A `**kwargs` param absorbs any column; nothing is positionally required.
-  if (/\*\*/.test(sigMatch[1])) return [];
+  // Ambiguous class/signature selection -> defer to the backend.
+  const scoreDefs = code.match(/def\s+score\s*\(/g);
+  if (!scoreDefs || scoreDefs.length !== 1) return [];
   try {
+    // parsePythonMethodParameters already drops `self` and `*`/`**` params, so
+    // only concrete declared params remain; keep the required (no-default) ones.
     return parsePythonMethodParameters(code, "score")
       .filter((param) => !param.optional && param.name !== "output")
       .map((param) => param.name);

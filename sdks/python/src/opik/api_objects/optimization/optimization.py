@@ -1,8 +1,9 @@
 import logging
-from typing import Optional, Literal
+from typing import Any, Optional, Literal
 
 from opik.rest_api import client as rest_api_client
 from opik.rest_api import types as rest_api_types
+from opik.rest_api.core.api_error import ApiError
 
 LOGGER = logging.getLogger(__name__)
 
@@ -69,11 +70,26 @@ class Optimization:
                 body["name"] = name
             if status is not None:
                 body["status"] = status
-            self._rest_client.optimizations._raw_client._client_wrapper.httpx_client.request(
+            response = self._rest_client.optimizations._raw_client._client_wrapper.httpx_client.request(
                 f"v1/private/optimizations/{self.id}",
                 method="PUT",
                 json=body,
-            ).raise_for_status()
+            )
+            if response.status_code >= 300:
+                # Preserve the generated client's error contract: callers that
+                # `except ApiError` / inspect status_code must see the same
+                # exception type as the typed path, not a leaked
+                # httpx.HTTPStatusError from raise_for_status().
+                error_body: Any
+                try:
+                    error_body = response.json()
+                except Exception:
+                    error_body = response.text
+                raise ApiError(
+                    status_code=response.status_code,
+                    headers=dict(response.headers),
+                    body=error_body,
+                )
 
     def fetch_content(self) -> rest_api_types.OptimizationPublic:
         LOGGER.debug(f"Fetching optimization data {self.id}")

@@ -357,6 +357,30 @@ class AliasedMetric(BM):
         result = metric_fn({}, "test output")
         assert result.value == 1.0
 
+    def test_code_metric_name_ignores_helper_init_call(self):
+        """A `Helper.__init__(name=...)` inside the metric's __init__ must NOT be
+        mistaken for the metric name — only the base constructor's name counts."""
+        code = """
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+class Helper:
+    def __init__(self, name="helper_name"):
+        self.tag = name
+
+class RealMetric(BaseMetric):
+    def __init__(self):
+        # Explicit non-base __init__ call declared BEFORE super() — the old
+        # `ast.walk` scan would have returned "helper_name" from here.
+        Helper.__init__(self, name="helper_name")
+        super().__init__(name="real_metric")
+
+    def score(self, output, **kwargs):
+        return ScoreResult(name=self.name, value=1.0, reason="Test")
+"""
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        assert metric_fn.__name__ == "real_metric"
+
     def test_code_metric_two_classes_uses_alphabetically_first(self):
         """When a file declares multiple metric classes, the statically-detected
         signature must match the class runtime `get_metric_class` instantiates —

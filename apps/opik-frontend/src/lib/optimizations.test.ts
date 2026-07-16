@@ -503,10 +503,24 @@ def score(self, output, reference):
     expect(extractRequiredScoreParams(code)).toEqual(["reference"]);
   });
 
-  it("returns [] for a **kwargs signature (backend splats every column)", () => {
+  it("keeps required positional params even with a trailing **kwargs", () => {
+    // **kwargs only absorbs undeclared extras; `reference` is still required.
     const code = `
 def score(self, output, reference, **kwargs):
     return output == reference
+`;
+    expect(extractRequiredScoreParams(code)).toEqual(["reference"]);
+  });
+
+  it("returns [] (defers to backend) when multiple score() defs are ambiguous", () => {
+    const code = `
+class ZMetric(BaseMetric):
+    def score(self, output, reference):
+        return output == reference
+
+class AMetric(BaseMetric):
+    def score(self, output, **kwargs):
+        return 1.0
 `;
     expect(extractRequiredScoreParams(code)).toEqual([]);
   });
