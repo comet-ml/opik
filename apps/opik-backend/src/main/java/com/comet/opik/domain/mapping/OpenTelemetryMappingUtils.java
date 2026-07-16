@@ -82,6 +82,23 @@ public class OpenTelemetryMappingUtils {
         }
     }
 
+    // Prefix rules strip the prefix and return the suffix (without leading dot).
+    // May return an empty suffix, in which case the value should be merged into the object.
+    // Exact rules keep the full key.
+    public static String storageKey(OpenTelemetryMappingRule rule, String key) {
+        if (!rule.isPrefix()) {
+            return key;
+        }
+
+        String jsonKey = key.substring(rule.getRule().length());
+
+        if (jsonKey.startsWith(".")) {
+            jsonKey = jsonKey.substring(1);
+        }
+
+        return jsonKey;
+    }
+
     // Prefix rules (e.g. `gen_ai.usage.`) carry the usage name in the suffix; exact-match rules
     // (e.g. Claude Code's `input_tokens`) use the full key.
     private static String usageKey(OpenTelemetryMappingRule rule, String key) {

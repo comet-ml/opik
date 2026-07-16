@@ -10,6 +10,7 @@ import com.comet.opik.domain.mapping.otel.GoogleProviderResolver;
 import com.comet.opik.domain.retention.RetentionUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.opentelemetry.proto.common.v1.AnyValue;
 import io.opentelemetry.proto.common.v1.KeyValue;
 import io.opentelemetry.proto.trace.v1.Span;
 import io.opentelemetry.proto.trace.v1.Status;
@@ -35,6 +36,7 @@ import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractCos
 import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractTags;
 import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractToJsonColumn;
 import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractUsageField;
+import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.storageKey;
 
 @UtilityClass
 @Slf4j
@@ -211,7 +213,27 @@ public class OpenTelemetryMapper {
                         default -> metadata;
                     };
 
-                    extractToJsonColumn(node, key, value);
+                    String jsonKey = storageKey(rule, key);
+                    // If the suffix is empty and the value is a  JSON object then merge into the node,
+                    // else nest under the stripped key, or the rule key if empty.
+                    if (jsonKey.isEmpty() && value.getValueCase() == AnyValue.ValueCase.STRING_VALUE
+                            && value.getStringValue().startsWith("{")) {
+                        try {
+                            var jsonNode = JsonUtils.getJsonNodeFromString(value.getStringValue());
+                            if (jsonNode.isObject()) {
+                                jsonNode.fields()
+                                        .forEachRemaining(entry -> node.set(entry.getKey(), entry.getValue()));
+                            } else {
+                                extractToJsonColumn(node, rule.getRule(), value);
+                            }
+                        } catch (RuntimeException e) {
+                            extractToJsonColumn(node, rule.getRule(), value);
+                        }
+                    } else if (jsonKey.isEmpty()) {
+                        extractToJsonColumn(node, rule.getRule(), value);
+                    } else {
+                        extractToJsonColumn(node, jsonKey, value);
+                    }
                     break;
 
                 case TAGS :
