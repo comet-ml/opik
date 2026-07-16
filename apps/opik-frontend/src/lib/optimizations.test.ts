@@ -5,6 +5,7 @@ import {
   getOptimizationDefaultConfigByProvider,
   extractKwargsKeysFromPython,
   extractRequiredScoreParams,
+  extractMetricNameFromCode,
 } from "./optimizations";
 import {
   Experiment,
@@ -550,6 +551,67 @@ def score(self, output: str, reference: str, category: str) -> ScoreResult:
 
   it("returns [] for empty code", () => {
     expect(extractRequiredScoreParams("")).toEqual([]);
+  });
+});
+
+describe("extractMetricNameFromCode", () => {
+  // Must stay aligned with the backend AST extractor
+  // (process_worker._metric_name_ast) so create-time objective_name matches the
+  // name the metric scores under — otherwise the UI shows "-".
+  it("extracts the name from super().__init__(name=...)", () => {
+    const code = `
+class MyMetric(BaseMetric):
+    def __init__(self):
+        super().__init__(name="accuracy")
+`;
+    expect(extractMetricNameFromCode(code)).toEqual("accuracy");
+  });
+
+  it("extracts the name from an __init__ param default", () => {
+    const code = `
+class MyMetric(BaseMetric):
+    def __init__(self, name: str = "levenshtein"):
+        super().__init__(name=name)
+`;
+    expect(extractMetricNameFromCode(code)).toEqual("levenshtein");
+  });
+
+  it("extracts the name from a class-level attribute", () => {
+    const code = `
+class MyMetric(BaseMetric):
+    name = "custom_attr"
+    def score(self, output, **kwargs):
+        return 1.0
+`;
+    expect(extractMetricNameFromCode(code)).toEqual("custom_attr");
+  });
+
+  it("prefers the base-constructor name over the param default (backend order)", () => {
+    const code = `
+class MyMetric(BaseMetric):
+    def __init__(self, name: str = "from_default"):
+        super().__init__(name="from_super")
+`;
+    expect(extractMetricNameFromCode(code)).toEqual("from_super");
+  });
+
+  it("does not treat self.name assignment as the metric name", () => {
+    const code = `
+class MyMetric(BaseMetric):
+    def __init__(self):
+        self.name = "not_this"
+        super().__init__(name="real")
+`;
+    expect(extractMetricNameFromCode(code)).toEqual("real");
+  });
+
+  it("falls back to 'code' when no name can be resolved", () => {
+    const code = `
+class MyMetric(BaseMetric):
+    def score(self, output, **kwargs):
+        return 1.0
+`;
+    expect(extractMetricNameFromCode(code)).toEqual("code");
   });
 });
 

@@ -22,11 +22,32 @@ export const isPythonCodeRule = (rule: EvaluatorsRule): boolean => {
 export const extractMetricNameFromPythonCode = (
   code: string,
 ): string | null => {
-  // Match: def __init__(self, name: str = "metric_name") or name = 'metric_name'
-  const pattern =
-    /def\s+__init__\s*\([^)]*name(?:\s*:\s*str)?\s*=\s*["']([^"']+)["']/;
-  const match = code.match(pattern);
-  return match?.[1] || null;
+  if (!code) return null;
+  // Mirror the backend's static name extraction
+  // (opik-python-backend process_worker._metric_name_ast) so a name derived here
+  // — e.g. for the Optimization Studio create-time `objective_name` — matches the
+  // name the metric actually scores under. Otherwise the UI keys feedback scores
+  // by the wrong name and shows "-". Tried in the same precedence order:
+
+  // 1. Name passed to the base constructor: super().__init__(name="metric_name").
+  //    The dominant idiom, and the one the backend AST prefers first.
+  const superCtor = code.match(
+    /super\(\)\s*\.\s*__init__\s*\([^)]*\bname\s*=\s*["']([^"']+)["']/,
+  );
+  if (superCtor) return superCtor[1];
+
+  // 2. Default of __init__'s `name` param: def __init__(self, name="metric_name").
+  const initDefault = code.match(
+    /def\s+__init__\s*\([^)]*\bname(?:\s*:\s*[^=,)]+)?\s*=\s*["']([^"']+)["']/,
+  );
+  if (initDefault) return initDefault[1];
+
+  // 3. Class-level attribute: a line-leading `name = "metric_name"` (guarded so
+  //    it does not match `self.name = ...` or other attribute assignments).
+  const classAttr = code.match(/(?:^|\n)[ \t]*name\s*=\s*["']([^"']+)["']/);
+  if (classAttr) return classAttr[1];
+
+  return null;
 };
 
 export const isLLMJudgeRule = (rule: EvaluatorsRule): boolean => {
