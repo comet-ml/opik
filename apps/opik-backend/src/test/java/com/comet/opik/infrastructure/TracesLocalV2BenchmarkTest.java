@@ -60,6 +60,25 @@ class TracesLocalV2BenchmarkTest {
     private static final int ROW_COUNT = 20_000;
 
     /**
+     * Upper bound for the codec-competitiveness assertions: the shipped codec's compressed size may exceed the codec it
+     * is compared against by at most this factor before the gap counts as material. The magnitude is a per-column
+     * judgment call; the four levels are named so repeated thresholds move together and the intent is explicit. See each
+     * test's comment for which codecs it compares and why.
+     */
+    private static final double WITHIN_2_PCT = 1.02;
+    /** As {@link #WITHIN_2_PCT}, at 5%. */
+    private static final double WITHIN_5_PCT = 1.05;
+    /** As {@link #WITHIN_2_PCT}, at 10%. */
+    private static final double WITHIN_10_PCT = 1.10;
+    /** As {@link #WITHIN_2_PCT}, at 15%. */
+    private static final double WITHIN_15_PCT = 1.15;
+
+    /** Compression-invariance tolerance for the {@code index_granularity_bytes} check: totals must be within 2% (expected near-identical). */
+    private static final double GRANULARITY_INVARIANCE_TOLERANCE = 0.02;
+    /** Compression-invariance tolerance for the weekly-partitioning check: totals must be within 5% (looser, for per-part overhead). */
+    private static final double PARTITION_INVARIANCE_TOLERANCE = 0.05;
+
+    /**
      * A 23-word vocabulary joined into 60-word sentences: repetitive natural-language-shaped text, the profile that
      * separates ZSTD(3) from ZSTD(1) and LZ4 the way real chat input/output does. Inline so the harness needs no
      * fixture files. Injected verbatim via {@code replace()}, so it carries a single {@code %} modulo operator like the
@@ -555,7 +574,7 @@ class TracesLocalV2BenchmarkTest {
         // id is unique per row: the entropy is in the random tail. ZSTD(1) compresses far better than LZ4, and ZSTD(3)
         // does not improve on the tail — so ZSTD(1) is the right level. The LZ4 margin is data-dependent and only logged.
         assertThat(zstd1).isLessThan(uncompressed);
-        assertThat(zstd1).isLessThanOrEqualTo(Math.round(zstd3 * 1.05));
+        assertThat(zstd1).isLessThanOrEqualTo(Math.round(zstd3 * WITHIN_5_PCT));
         log.info("[OPIK-6899] unique id (UUIDv7) compressed bytes | LZ4: {} | ZSTD(1): {} | ZSTD(3): {}",
                 lz4, zstd1, zstd3);
     }
@@ -587,7 +606,7 @@ class TracesLocalV2BenchmarkTest {
         // compresses to a small fraction of its raw size; ZSTD(1) is at least as good as LZ4. It cannot be
         // LowCardinality (it is the ORDER BY prefix), so ZSTD(1) String is the right choice.
         assertThat(zstd1).isLessThan(uncompressed);
-        assertThat(zstd1).isLessThanOrEqualTo(Math.round(lz4 * 1.05));
+        assertThat(zstd1).isLessThanOrEqualTo(Math.round(lz4 * WITHIN_5_PCT));
         log.info("[OPIK-6899] clustered workspace_id (UUIDv4) compressed bytes | LZ4: {} | ZSTD(1): {}", lz4, zstd1);
     }
 
@@ -599,7 +618,7 @@ class TracesLocalV2BenchmarkTest {
 
         // The trace name is short medium-cardinality text; ZSTD(1) beats LZ4 and ZSTD(3) adds little.
         assertThat(zstd1).isLessThan(lz4);
-        assertThat(zstd1).isLessThanOrEqualTo(Math.round(zstd3 * 1.15));
+        assertThat(zstd1).isLessThanOrEqualTo(Math.round(zstd3 * WITHIN_15_PCT));
     }
 
     @Test
@@ -623,7 +642,7 @@ class TracesLocalV2BenchmarkTest {
         // Delta + ZSTD(1) is the smallest microsecond variant, and beats DoubleDelta: with irregularly-spaced ingestion
         // timestamps DoubleDelta's constant-second-derivative bet fails.
         assertThat(deltaZstd1).isLessThan(lz4);
-        assertThat(deltaZstd1).isLessThanOrEqualTo(Math.round(zstd1 * 1.02));
+        assertThat(deltaZstd1).isLessThanOrEqualTo(Math.round(zstd1 * WITHIN_2_PCT));
         assertThat(deltaZstd1).isLessThanOrEqualTo(doubleDelta);
     }
 
@@ -637,7 +656,7 @@ class TracesLocalV2BenchmarkTest {
         // id_at is a second-precision DateTime derived from the id, so it is monotonic within a part; Delta + ZSTD(1)
         // exploits that and beats plain ZSTD(1) and LZ4. Logged alongside DoubleDelta for the record.
         assertThat(deltaZstd1).isLessThan(lz4);
-        assertThat(deltaZstd1).isLessThanOrEqualTo(Math.round(zstd1 * 1.02));
+        assertThat(deltaZstd1).isLessThanOrEqualTo(Math.round(zstd1 * WITHIN_2_PCT));
         log.info("[OPIK-6899] id_at (DateTime) compressed bytes | LZ4: {} | ZSTD(1): {} | Delta+ZSTD(1): {} | "
                 + "DoubleDelta+ZSTD(1): {}", lz4, zstd1, deltaZstd1, doubleDelta);
     }
@@ -659,7 +678,7 @@ class TracesLocalV2BenchmarkTest {
         long doubleDelta = compressed("cnt_dd_zstd1");
 
         // T64 + ZSTD(1) beats plain ZSTD(1) on the narrow *_length counters; DoubleDelta is worse (no monotonic trend).
-        assertThat(t64Zstd1).isLessThanOrEqualTo(Math.round(zstd1 * 1.02));
+        assertThat(t64Zstd1).isLessThanOrEqualTo(Math.round(zstd1 * WITHIN_2_PCT));
         assertThat(t64Zstd1).isLessThan(doubleDelta);
     }
 
@@ -673,7 +692,7 @@ class TracesLocalV2BenchmarkTest {
         // under ZSTD(1) — comparable to LZ4. No dedicated codec is warranted; ZSTD(1) is fine.
         assertThat(zstd1).isLessThan(uncompressed);
         assertThat(zstd1).isLessThan(ROW_COUNT / 10);
-        assertThat(zstd1).isLessThanOrEqualTo(Math.round(lz4 * 1.10));
+        assertThat(zstd1).isLessThanOrEqualTo(Math.round(lz4 * WITHIN_10_PCT));
     }
 
     @Test
@@ -703,7 +722,7 @@ class TracesLocalV2BenchmarkTest {
 
         // tags is an Array(String) of low-cardinality values; ZSTD(1) beats LZ4 and ZSTD(3) adds little.
         assertThat(zstd1).isLessThan(lz4);
-        assertThat(zstd1).isLessThanOrEqualTo(Math.round(zstd3 * 1.15));
+        assertThat(zstd1).isLessThanOrEqualTo(Math.round(zstd3 * WITHIN_15_PCT));
     }
 
     @Test
@@ -762,8 +781,8 @@ class TracesLocalV2BenchmarkTest {
 
         // is_deleted is 98% zeros and one byte wide, so it compresses to a few hundred bytes under either codec and the
         // two are within ~1% of each other — no meaningful benefit from ZSTD, so the default is kept.
-        assertThat(defaultCodec).isLessThanOrEqualTo(Math.round(zstd1 * 1.05));
-        assertThat(zstd1).isLessThanOrEqualTo(Math.round(defaultCodec * 1.05));
+        assertThat(defaultCodec).isLessThanOrEqualTo(Math.round(zstd1 * WITHIN_5_PCT));
+        assertThat(zstd1).isLessThanOrEqualTo(Math.round(defaultCodec * WITHIN_5_PCT));
     }
 
     @Test
@@ -810,7 +829,7 @@ class TracesLocalV2BenchmarkTest {
         // ZSTD(1) beats LZ4, and ZSTD(3) does NOT improve on it (the column is mostly empty and ZSTD(1) already captures
         // the repetitive frames), so the shipped ZSTD(1) is right — no ZSTD(3) upgrade, unlike output_keys.
         assertThat(zstd1).isLessThan(lz4);
-        assertThat(zstd1).isLessThanOrEqualTo(Math.round(zstd3 * 1.05));
+        assertThat(zstd1).isLessThanOrEqualTo(Math.round(zstd3 * WITHIN_5_PCT));
         log.info("[OPIK-6899] error_info (~10% stack traces) compressed bytes | LZ4: {} | ZSTD(1): {} | ZSTD(3): {}",
                 lz4, zstd1, zstd3);
     }
@@ -838,7 +857,7 @@ class TracesLocalV2BenchmarkTest {
         // thread_id is a free-form identifier — mostly empty, else a UUIDv4 or a short random string — and scattered
         // (not in the sort key). ZSTD(1) beats LZ4 whatever the exact format; ZSTD(3) adds little. Shipped ZSTD(1) holds.
         assertThat(zstd1).isLessThan(lz4);
-        assertThat(zstd1).isLessThanOrEqualTo(Math.round(zstd3 * 1.15));
+        assertThat(zstd1).isLessThanOrEqualTo(Math.round(zstd3 * WITHIN_15_PCT));
     }
 
     @Test
@@ -911,7 +930,8 @@ class TracesLocalV2BenchmarkTest {
         // The 40 MiB cap yields bigger granules (fewer marks), proving the setting took effect...
         assertThat(wideMarks).isLessThan(defaultMarks);
         // ...yet the compressed size is unchanged (within 2%) — compression is block-based, not granule-based.
-        assertThat(Math.abs(defaultBytes - wideBytes)).isLessThanOrEqualTo(Math.round(defaultBytes * 0.02));
+        assertThat(Math.abs(defaultBytes - wideBytes))
+                .isLessThanOrEqualTo(Math.round(defaultBytes * GRANULARITY_INVARIANCE_TOLERANCE));
         log.info("[OPIK-6899] index_granularity_bytes default vs 40 MiB | compressed: {} vs {} bytes | marks: {} vs {}",
                 defaultBytes, wideBytes, defaultMarks, wideMarks);
 
@@ -1136,7 +1156,8 @@ class TracesLocalV2BenchmarkTest {
         // Partitioning took effect (several weekly parts)...
         assertThat(partitions).isGreaterThan(1);
         // ...yet the total compressed size is within a few percent — partitioning is not a compression lever.
-        assertThat(Math.abs(flatBytes - weeklyBytes)).isLessThanOrEqualTo(Math.round(flatBytes * 0.05));
+        assertThat(Math.abs(flatBytes - weeklyBytes))
+                .isLessThanOrEqualTo(Math.round(flatBytes * PARTITION_INVARIANCE_TOLERANCE));
         log.info("[OPIK-6899] weekly partitioning vs flat | compressed: {} vs {} bytes | partitions: {}",
                 flatBytes, weeklyBytes, partitions);
 
