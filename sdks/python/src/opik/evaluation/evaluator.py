@@ -1723,7 +1723,7 @@ def _wrap_scoring_functions(
             scoring_functions, project_name=project_name
         )
         if scoring_metrics:
-            scoring_metrics.extend(function_metrics)
+            scoring_metrics = [*scoring_metrics, *function_metrics]
         else:
             scoring_metrics = function_metrics
 
