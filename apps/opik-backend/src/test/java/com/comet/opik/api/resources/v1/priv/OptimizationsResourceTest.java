@@ -1498,7 +1498,12 @@ class OptimizationsResourceTest {
                     API_KEY, TEST_WORKSPACE_NAME);
 
             var afterReUpsert = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            // The re-upsert with a null errorInfo must not drop the persisted failure reason
+            // nor the sibling studioConfig (both preserved through the upsert path). Status
+            // ordering across the update/upsert rows is governed by last_updated_at, so it is
+            // not asserted here.
             assertThat(afterReUpsert.errorInfo()).isEqualTo(errorInfo);
+            assertThat(afterReUpsert.studioConfig()).isEqualTo(studioConfig);
         }
 
         @Test

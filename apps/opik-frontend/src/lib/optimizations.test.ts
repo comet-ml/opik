@@ -661,6 +661,31 @@ class MyMetric(BaseMetric):
 `;
     expect(extractMetricNameFromPythonCode(code)).toEqual("real");
   });
+
+  it("returns a safe result for malformed Python (unclosed docstring)", () => {
+    // An unterminated triple-quoted string: the stripper drops everything from
+    // the opening quotes onward, so the decoy name never leaks out.
+    const code = `
+class MyMetric(BaseMetric):
+    """unterminated docstring
+    super().__init__(name="fake")
+`;
+    expect(extractMetricNameFromPythonCode(code)).toBeNull();
+  });
+
+  it("finds the class-level name when a helper class is declared first", () => {
+    const code = `
+class Helper:
+    def util(self):
+        return 1
+
+class MyMetric(BaseMetric):
+    name = "custom_attr"
+    def score(self, output, **kwargs):
+        return 1.0
+`;
+    expect(extractMetricNameFromPythonCode(code)).toEqual("custom_attr");
+  });
 });
 
 // The unknown-column check that gates submission

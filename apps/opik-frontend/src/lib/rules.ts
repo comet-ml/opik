@@ -111,33 +111,40 @@ const leadingWhitespace = (line: string): string =>
   line.match(/^[ \t]*/)?.[0] ?? "";
 
 /**
- * Finds a `name = "..."` assignment that sits at the first class's body
- * indentation level (not inside any nested block such as a method body).
+ * Finds a class-body-level `name = "..."` assignment (not inside a nested block
+ * such as a method body). Scans every class declaration in source — so a helper
+ * class declared before the metric class does not cause a miss — and returns the
+ * first class-body assignment found.
  */
 const extractClassBodyName = (source: string): string | null => {
-  const classMatch = source.match(/^([ \t]*)class\s+\w+[^\n]*:/m);
-  if (!classMatch || classMatch.index === undefined) return null;
+  const classRegex = /^([ \t]*)class\s+\w+[^\n]*:/gm;
+  let classMatch: RegExpExecArray | null;
+  while ((classMatch = classRegex.exec(source)) !== null) {
+    const classIndent = classMatch[1];
+    const bodyLines = source
+      .slice(classMatch.index + classMatch[0].length)
+      .split("\n");
 
-  const classIndent = classMatch[1];
-  const bodyLines = source
-    .slice(classMatch.index + classMatch[0].length)
-    .split("\n");
+    // The class-body indentation is the indent of the first non-blank line that
+    // is more indented than the `class` line itself.
+    let bodyIndent: string | null = null;
+    for (const line of bodyLines) {
+      if (!line.trim()) continue;
+      const indent = leadingWhitespace(line);
+      if (indent.length > classIndent.length) bodyIndent = indent;
+      break;
+    }
+    if (bodyIndent === null) continue;
 
-  // The class-body indentation is the indent of the first non-blank line that is
-  // more indented than the `class` line itself.
-  let bodyIndent: string | null = null;
-  for (const line of bodyLines) {
-    if (!line.trim()) continue;
-    const indent = leadingWhitespace(line);
-    if (indent.length > classIndent.length) bodyIndent = indent;
-    break;
-  }
-  if (bodyIndent === null) return null;
-
-  for (const line of bodyLines) {
-    if (leadingWhitespace(line) !== bodyIndent) continue;
-    const match = line.match(/^[ \t]*name\s*=\s*["']([^"']+)["']/);
-    if (match) return match[1];
+    for (const line of bodyLines) {
+      // Stop at the end of this class body (dedent to/below the class header).
+      if (line.trim() && leadingWhitespace(line).length <= classIndent.length) {
+        break;
+      }
+      if (leadingWhitespace(line) !== bodyIndent) continue;
+      const match = line.match(/^[ \t]*name\s*=\s*["']([^"']+)["']/);
+      if (match) return match[1];
+    }
   }
   return null;
 };
