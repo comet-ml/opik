@@ -1,6 +1,6 @@
 """Per-span payload-size enforcement.
 
-A span whose fields (``input``/``output``/``metadata``) are very large - e.g. an
+A span whose ``input``/``output`` fields are very large - e.g. an
 entire retrieval result set logged inline - inflates into a multi-GB structure on
 the backend and can destabilise ingestion. This module enforces a **per-span**
 size limit with a simple, predictable two-pass rule:
@@ -25,8 +25,12 @@ from ..rest_api.types import span_write
 
 LOGGER = logging.getLogger(__name__)
 
-# Fields on a span that can carry large user-provided payloads.
-_TRUNCATABLE_FIELDS = ("input", "output", "metadata")
+# Fields on a span that can carry large user-provided payloads. Deliberately only
+# `input`/`output` — `metadata` is left untouched: it typically holds small
+# structured operational fields (model params, tags, provider info) that downstream
+# consumers key off, and truncating it to a marker would break them. A pathologically
+# large `metadata` is instead caught by the server-side size guards (413/400).
+_TRUNCATABLE_FIELDS = ("input", "output")
 
 
 def _truncation_marker(size_mb: float) -> Dict[str, Any]:
@@ -97,7 +101,9 @@ def truncate_span_write_if_needed(
         return span
 
     def measure_whole(overrides: Dict[str, Any]) -> float:
-        candidate = span.model_copy(update=overrides) if overrides else span
+        # Exclude metadata: it is never truncated, so it must not drag the span
+        # "over" the cap and trigger pointless truncation of small input/output.
+        candidate = span.model_copy(update={"metadata": None, **overrides})
         return sequence_splitter.get_payload_size_MB(candidate)
 
     updates = _plan_truncation(field_sizes, max_size_mb, measure_whole)
@@ -124,7 +130,7 @@ def truncate_span_kwargs_if_needed(
     """Truncate oversized fields on a single-span create/update payload, in place.
 
     Used on the non-batched create path (``use_batching=False``) and on the
-    span-update path, so an oversized ``output``/``input``/``metadata`` sent via
+    span-update path, so an oversized ``output``/``input`` sent via
     ``update_span`` (e.g. ``span.end(output=...)`` after the create was already
     flushed) is capped the same way as on create.
     """
@@ -133,7 +139,10 @@ def truncate_span_kwargs_if_needed(
         return
 
     def measure_whole(overrides: Dict[str, Any]) -> float:
-        return sequence_splitter.get_payload_size_MB({**span_kwargs, **overrides})
+        # Exclude metadata (never truncated) from the whole-span measurement.
+        return sequence_splitter.get_payload_size_MB(
+            {**span_kwargs, **overrides, "metadata": None}
+        )
 
     updates = _plan_truncation(field_sizes, max_size_mb, measure_whole)
     if not updates:

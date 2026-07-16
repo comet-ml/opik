@@ -75,6 +75,33 @@ def test_truncate_span_write__total_over_but_no_single_field_over__truncates_all
     assert result.output["opik_truncated"] is True
 
 
+def test_truncate_span_write__metadata_never_truncated_and_does_not_trigger_others():
+    # metadata is deliberately exempt: a huge metadata must NOT be truncated, and
+    # must NOT drag the span "over" the cap and cause small input/output to be cut.
+    span = _span_write(
+        input={"prompt": "small"},
+        output={"result": "small"},
+        metadata=_big_value(25),
+    )
+
+    result = span_truncation.truncate_span_write_if_needed(span, LIMIT_MB)
+
+    assert result is span  # nothing truncated at all
+    assert result.metadata == _big_value(25)  # metadata left fully intact
+    assert result.input == {"prompt": "small"}
+    assert result.output == {"result": "small"}
+
+
+def test_truncate_span_write__oversized_input_truncated_but_metadata_kept():
+    # input (truncatable) is capped; metadata (exempt) is preserved even when huge.
+    span = _span_write(input=_big_value(25), metadata=_big_value(25))
+
+    result = span_truncation.truncate_span_write_if_needed(span, LIMIT_MB)
+
+    assert result.input["opik_truncated"] is True
+    assert result.metadata == _big_value(25)
+
+
 def test_truncate_span_write__original_is_not_mutated():
     span = _span_write(output=_big_value(21))
     original_output = span.output
