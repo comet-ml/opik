@@ -30,5 +30,7 @@ ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 ON CLUSTER '{cluster}'
     MODIFY COLUMN IF EXISTS output_keys       Array(Tuple(key String, type String)) MATERIALIZED
         arrayMap(key -> tuple(key, toString(JSONType(JSONExtractRaw(output, key)))), JSONExtractKeys(output)) CODEC(ZSTD(3));
 
---rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 ON CLUSTER '{cluster}' MODIFY COLUMN IF EXISTS end_time DateTime64(6, 'UTC') DEFAULT toDateTime64('1970-01-01 00:00:00', 6) CODEC(Delta, ZSTD(1)), MODIFY COLUMN IF EXISTS last_updated_at DateTime64(6, 'UTC') DEFAULT now64(6) CODEC(Delta, ZSTD(1)), MODIFY COLUMN IF EXISTS visibility_mode Enum8('unknown' = 0, 'default' = 1, 'hidden' = 2) DEFAULT 'default', MODIFY COLUMN IF EXISTS source Enum8('unknown' = 0, 'sdk' = 1, 'experiment' = 2, 'playground' = 3, 'optimization' = 4, 'evaluator' = 5) DEFAULT 'unknown', MODIFY COLUMN IF EXISTS environment LowCardinality(String) DEFAULT '', MODIFY COLUMN IF EXISTS output_keys Array(Tuple(key String, type String)) MATERIALIZED arrayMap(key -> tuple(key, toString(JSONType(JSONExtractRaw(output, key)))), JSONExtractKeys(output)) CODEC(ZSTD(1));
+-- Empty rollback per the migrations guideline: in-place codec changes are effectively irreversible (reverting a codec
+-- is not a clean inverse once data exists, and restoring the provisional 000101 codecs is never a wanted recovery step).
+--rollback empty
 
