@@ -14,6 +14,7 @@ import com.comet.opik.domain.optimization.OptimizationLogSyncService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.bi.AnalyticsService;
+import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.infrastructure.queues.Queue;
 import com.comet.opik.infrastructure.queues.QueueProducer;
 import com.comet.opik.utils.JsonUtils;
@@ -101,6 +102,7 @@ class OptimizationServiceImpl implements OptimizationService {
     private final @NonNull OptimizationLogSyncService logSyncService;
     private final @NonNull RedissonReactiveClient redisClient;
     private final @NonNull AnalyticsService analyticsService;
+    private final @NonNull LockService lockService;
 
     // Redis key pattern for cancellation signals (Python worker checks this)
     private static final String CANCEL_KEY_PATTERN = "opik:cancel:%s";
@@ -331,6 +333,18 @@ class OptimizationServiceImpl implements OptimizationService {
             return Mono.empty();
         }
 
+        // Serialize the read-modify-write per optimization: update() reads the current row (getById),
+        // merges metadata in app memory, then inserts a full new ReplacingMergeTree version. Without this
+        // lock, two concurrent partial updates both read the same base and the later write silently drops
+        // the earlier one's keys (lost update); the lock also keeps the terminal-overwrite / cancellation
+        // guards consistent within a single writer. NOTE: prod ClickHouse has no read-your-own-writes
+        // (async insert, 2 replicas), so a lock alone cannot fully close the window — studio metadata must
+        // stay effectively single-writer (the worker) — but this hardens the in-process race (review: thiagohora).
+        var lock = new LockService.Lock(id, "optimization-update");
+        return lockService.executeWithLock(lock, Mono.defer(() -> applyUpdate(id, update)));
+    }
+
+    private Mono<Long> applyUpdate(@NonNull UUID id, @NonNull OptimizationUpdate update) {
         return optimizationDAO.getById(id)
                 .switchIfEmpty(Mono.error(failWithNotFound("Optimization", id)))
                 .flatMap(optimization -> Mono.deferContextual(ctx -> {
@@ -557,8 +571,10 @@ class OptimizationServiceImpl implements OptimizationService {
                 .contextWrite(headlessSystemContext(workspaceId))
                 .subscribeOn(Schedulers.boundedElastic())
                 .subscribe(
-                        unused -> log.info("Marked optimization '{}' as ERROR (failed to start)", optimizationId),
-                        error -> log.error("Failed to mark optimization '{}' as ERROR", optimizationId, error));
+                        unused -> log.info("Marked optimization '{}' in workspace '{}' as ERROR (failed to start)",
+                                optimizationId, workspaceId),
+                        error -> log.error("Failed to mark optimization '{}' in workspace '{}' as ERROR",
+                                optimizationId, workspaceId, error));
     }
 
     /**
@@ -650,24 +666,39 @@ class OptimizationServiceImpl implements OptimizationService {
             Duration initializedTimeout, Duration runningTimeout) {
         UUID id = stalled.id();
         String workspaceId = stalled.workspaceId();
-        String reason = buildStalledReason(stalled.status(), initializedTimeout, runningTimeout);
-
-        log.warn("Reconciling stalled studio optimization '{}' (status '{}') to ERROR: {}",
-                id, stalled.status(), reason);
 
         // Re-read under the workspace context and only flip if the run is still non-terminal: this
         // closes the (tiny) race where the worker reports a terminal status between the reaper's query
         // and this update, which would otherwise overwrite a genuine completion/cancellation with ERROR.
         return optimizationDAO.getById(id)
                 .filter(current -> CANCELLABLE_STATUSES.contains(current.status()))
-                .flatMap(current -> appendSystemReasonAndMarkError(workspaceId, id, reason).thenReturn(1L))
+                .flatMap(current -> {
+                    // Build the reason from the RE-READ current status, not the reaper's stale query
+                    // status: a run that moved INITIALIZED -> RUNNING between the query and here must get
+                    // the "no activity" message, not the "failed to start" one (review: thiagohora).
+                    String reason = buildStalledReason(current.status(), initializedTimeout, runningTimeout);
+                    log.warn(
+                            "Reconciling stalled studio optimization '{}' in workspace '{}' (status '{}') to ERROR: {}",
+                            id, workspaceId, current.status(), reason);
+                    // Count this row only if update() actually transitioned it. update() returns
+                    // Mono.just(0L) when its own terminal-overwrite guard fires (the worker reported a
+                    // terminal status in the sliver between the re-read above and update()'s own re-read),
+                    // so a bare thenReturn(1L) would over-count that no-op (review: thiagohora). An empty
+                    // completion means the row was written but ClickHouse reported no count -> still 1.
+                    return appendSystemReasonAndMarkError(workspaceId, id, reason)
+                            .map(rowsUpdated -> rowsUpdated > 0 ? 1L : 0L)
+                            .defaultIfEmpty(1L);
+                })
                 .switchIfEmpty(Mono.fromSupplier(() -> {
-                    log.info("Skipping stalled reconciliation for optimization '{}': no longer stalled", id);
+                    log.info(
+                            "Skipping stalled reconciliation for optimization '{}' in workspace '{}': no longer stalled",
+                            id, workspaceId);
                     return 0L;
                 }))
                 .contextWrite(headlessSystemContext(workspaceId))
                 .onErrorResume(error -> {
-                    log.error("Failed to reconcile stalled studio optimization '{}'", id, error);
+                    log.error("Failed to reconcile stalled studio optimization '{}' in workspace '{}'",
+                            id, workspaceId, error);
                     return Mono.just(0L);
                 });
     }
