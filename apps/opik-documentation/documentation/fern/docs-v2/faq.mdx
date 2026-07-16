@@ -159,21 +159,15 @@ For questions about rate limits, reach out to us on [Slack](https://chat.comet.c
 
 ### Is there a limit on how large a trace or span can be?
 
-Yes. To keep ingestion fast and reliable, Opik enforces size limits on logged data:
+Yes. Opik caps both the per-field size of `input`/`output` (recent SDKs truncate a larger
+`input`/`output` client-side, replacing it with a truncation marker and logging a warning) and the
+per-request payload size (oversized requests are rejected with `413`/`400`). `metadata` is not
+truncated and embedded base64 media is handled separately as an attachment.
 
-- **Per field (~20 MB):** keep each span/trace `input` and `output` under ~20 MB. Recent Opik SDK
-  versions truncate a larger `input`/`output` client-side before sending - the span is still
-  recorded (with the oversized field replaced by a truncation marker) and a warning is logged.
-  `metadata` is **not** truncated, so keep it small too: it still counts toward the per-request
-  limit below, and an oversized `metadata` causes the whole request to be rejected rather than trimmed.
-- **Per request:** a single ingestion batch is capped at roughly **~50 MB compressed** (on the wire)
-  and **~256 MB uncompressed**. Larger requests are rejected before they're fully processed
-  (`413`, or `400` for an oversized single document).
-
-If you need to keep large content - documents, full retrieval results, images, or audio - log it as
-an [attachment](/tracing/advanced/log_multimodal_traces#size-limits) instead of inline in `input`/`output`.
-Attachments store the full payload and keep your traces lightweight. As a rule of thumb, log the
-top-K results, IDs, or a summary rather than an entire result set or corpus.
+See [**Size limits**](/tracing/advanced/log_multimodal_traces#size-limits) for the exact numbers and
+the full behavior. If you need to keep large content - documents, full retrieval results, images, or
+audio - log it as an [attachment](/tracing/advanced/log_multimodal_traces) instead of inline. As a
+rule of thumb, log the top-K results, IDs, or a summary rather than an entire result set or corpus.
 
 ## Integrations
 
@@ -252,7 +246,8 @@ checking your environment variables (`OPIK_API_KEY`, `OPIK_WORKSPACE`, `OPIK_URL
 
 ### Why am I getting a 413 ("payload too large") error?
 
-Your request exceeded Opik's ingestion size limit - roughly ~50 MB per batch (compressed) or an
+Your request exceeded Opik's ingestion
+[size limit](/tracing/advanced/log_multimodal_traces#size-limits) - the per-request payload cap, or an
 oversized single document. This usually means a span is logging a very large `input`/`output`, such
 as an entire retrieval result set or document inline. To fix it:
 
