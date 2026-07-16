@@ -5,6 +5,8 @@ export const OpikEvent = {
   ONBOARDING_AGENT_NAME_SUBMITTED: "opik_onboarding_agent_name_submitted",
   ONBOARDING_FIRST_TRACE_RECEIVED: "opik_onboarding_first_trace_received",
   ONBOARDING_SKIPPED: "opik_onboarding_skipped",
+  MOBILE_ONBOARDING_ABANDONED: "opik_mobile_onboarding_abandoned",
+  MOBILE_ONBOARDING_EMAIL_SENT: "opik_mobile_onboarding_email_sent",
   EVAL_SUITE_UI_CONFIGURED: "opik_eval_suite_ui_configured",
   AGENT_CONFIG_UI_DEPLOYED: "opik_agent_config_ui_deployed",
   OPTIMIZATION_WIZARD_STARTED: "opik_optimization_wizard_started",
