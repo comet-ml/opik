@@ -354,6 +354,7 @@ class OpenTelemetryMapperTest {
 
         assertThat(span.metadata().has("gen_ai.tool.name")).isTrue();
         assertThat(span.metadata().has("gen_ai.tool.call.id")).isTrue();
+        assertThat(span.type()).isEqualTo(SpanType.tool);
     }
 
     @Test
@@ -472,6 +473,8 @@ class OpenTelemetryMapperTest {
         // a non-I/O tool attribute still lands in metadata, not input/output
         assertThat(span.metadata().has("gen_ai.tool.call.id")).isTrue();
         assertThat(span.input().has("gen_ai.tool.call.id")).isFalse();
+        // all three gen_ai.tool.* rules tag the span as a tool
+        assertThat(span.type()).isEqualTo(SpanType.tool);
     }
 
     @Test

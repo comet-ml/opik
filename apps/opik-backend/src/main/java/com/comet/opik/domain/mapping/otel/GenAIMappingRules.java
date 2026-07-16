@@ -68,13 +68,16 @@ public final class GenAIMappingRules {
             // would bucket them into METADATA and the tool span would lose input/output.
             OpenTelemetryMappingRule.builder()
                     .rule("gen_ai.tool.call.arguments").source(SOURCE)
-                    .outcome(OpenTelemetryMappingRule.Outcome.INPUT).build(),
+                    .outcome(OpenTelemetryMappingRule.Outcome.INPUT)
+                    .spanType(SpanType.tool).build(),
             OpenTelemetryMappingRule.builder()
                     .rule("gen_ai.tool.call.result").source(SOURCE)
-                    .outcome(OpenTelemetryMappingRule.Outcome.OUTPUT).build(),
+                    .outcome(OpenTelemetryMappingRule.Outcome.OUTPUT)
+                    .spanType(SpanType.tool).build(),
             OpenTelemetryMappingRule.builder()
                     .rule("gen_ai.tool.").isPrefix(true).source(SOURCE)
-                    .outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
+                    .outcome(OpenTelemetryMappingRule.Outcome.METADATA)
+                    .spanType(SpanType.tool).build(),
             OpenTelemetryMappingRule.builder()
                     .rule("gen_ai.agent.").isPrefix(true).source(SOURCE)
                     .outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
