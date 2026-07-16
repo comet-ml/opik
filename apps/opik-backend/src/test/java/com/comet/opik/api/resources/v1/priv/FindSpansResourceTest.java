@@ -4312,6 +4312,8 @@ class FindSpansResourceTest {
                     .toList();
 
             int pages = (total + pageSize - 1) / pageSize;
+            // Guard against a silent pass: the loop must actually iterate over multiple pages.
+            assertThat(pages).isGreaterThan(1);
             for (int p = 1; p <= pages; p++) {
                 var slice = reference.subList((p - 1) * pageSize, Math.min(p * pageSize, total));
                 var actualPage = spanResourceClient.findSpans(workspaceName, apiKey, projectName, null,
