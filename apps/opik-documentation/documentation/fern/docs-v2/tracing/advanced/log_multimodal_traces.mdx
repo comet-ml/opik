@@ -19,9 +19,10 @@ and output of your LLM, but also images, videos and audio and any other media.
 To keep ingestion fast and reliable, Opik enforces size limits on **inline** content - what you put
 directly in a span/trace `input`, `output`, or `metadata`:
 
-- **Per field (~20 MB):** inline, non-media field content should stay under ~20 MB. Recent Opik SDK
-  versions truncate a larger field client-side before sending (replacing it with a truncation marker
-  and logging a warning), so individual spans stay within the limit.
+- **Per field (~20 MB):** keep inline, non-media `input`/`output` content under ~20 MB. Recent Opik
+  SDK versions truncate a larger `input`/`output` client-side before sending (replacing it with a
+  truncation marker and logging a warning), so individual spans stay within the limit. `metadata` is
+  **not** truncated - keep it small too, since it still counts toward the per-request limit below.
 - **Per request:** a single ingestion batch is capped at roughly **~50 MB compressed** and
   **~256 MB uncompressed**; larger requests are rejected (`413`, or `400` for an oversized single
   document).

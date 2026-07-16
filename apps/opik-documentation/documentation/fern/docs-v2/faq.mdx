@@ -161,9 +161,11 @@ For questions about rate limits, reach out to us on [Slack](https://chat.comet.c
 
 Yes. To keep ingestion fast and reliable, Opik enforces size limits on logged data:
 
-- **Per field (~20 MB):** each span/trace `input`, `output`, and `metadata` should stay under ~20 MB.
-  Recent Opik SDK versions truncate a larger field client-side before sending - the span is still
+- **Per field (~20 MB):** keep each span/trace `input` and `output` under ~20 MB. Recent Opik SDK
+  versions truncate a larger `input`/`output` client-side before sending - the span is still
   recorded (with the oversized field replaced by a truncation marker) and a warning is logged.
+  `metadata` is **not** truncated, so keep it small too: it still counts toward the per-request
+  limit below, and an oversized `metadata` causes the whole request to be rejected rather than trimmed.
 - **Per request:** a single ingestion batch is capped at roughly **~50 MB compressed** (on the wire)
   and **~256 MB uncompressed**. Larger requests are rejected before they're fully processed
   (`413`, or `400` for an oversized single document).
