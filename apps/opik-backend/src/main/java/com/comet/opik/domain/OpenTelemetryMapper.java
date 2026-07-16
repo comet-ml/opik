@@ -20,6 +20,7 @@ import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
+import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.time.Instant;
@@ -232,7 +233,9 @@ public class OpenTelemetryMapper {
                             } else {
                                 extractToJsonColumn(node, rule.getRule(), value);
                             }
-                        } catch (RuntimeException e) {
+                        } catch (UncheckedIOException e) {
+                            log.debug("Failed to parse JSON for key '{}' (value: '{}'), falling back to text",
+                                    key, value.getStringValue(), e);
                             extractToJsonColumn(node, rule.getRule(), value);
                         }
                     } else if (jsonKey.isEmpty()) {
