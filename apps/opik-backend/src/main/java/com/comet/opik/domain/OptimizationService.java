@@ -34,6 +34,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RedissonReactiveClient;
+import org.redisson.client.RedisException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -335,22 +336,26 @@ class OptimizationServiceImpl implements OptimizationService {
 
         Mono<Long> action = Mono.defer(() -> applyUpdate(id, update));
 
-        // Only a metadata update does a read-modify-write (getById -> merge in app memory -> insert a full
-        // new ReplacingMergeTree version) that must be serialized: without the lock two concurrent partial
-        // updates read the same base and the later write silently drops the earlier one's keys (lost update).
-        // Status-only / name-only updates just insert a new version, so they must NOT be made to depend on
-        // Redis — otherwise a lock blip would 500 the worker's mark_completed / mark_error callback (and the
-        // reaper's own ERROR write), leaving the run non-terminal for the reaper to later mislabel ERROR,
-        // the exact failure this feature exists to prevent. The worker already retries a metadata-carrying
-        // status write as a metadata-less one on failure, and that fallback now persists lock-free (review:
-        // thiagohora). NOTE: prod ClickHouse has no read-your-own-writes (async insert, 2 replicas), so the
-        // lock alone cannot fully close the window — studio metadata must stay effectively single-writer.
-        if (update.metadata() == null) {
-            return action;
-        }
-
+        // Serialize the per-id read-modify-write so concurrent partial writes don't lose each other's
+        // columns: the DAO's UPDATE_BY_ID is an INSERT...SELECT that copies every non-updated column forward
+        // from the base version it reads, so an unlocked rename racing a status write (or the worker racing
+        // the reaper) would drop one side — and a dropped terminal status leaves a finished run non-terminal
+        // for the reaper to later mislabel ERROR, the exact failure this feature exists to prevent. But the
+        // write must NOT hard-depend on Redis: on a lock-ACQUISITION failure (a Redis blip) fall back to a
+        // lock-free apply so the worker's mark_completed / mark_error callback and the reaper's own ERROR
+        // write still persist. Only the lock acquisition surfaces RedisException here — applyUpdate's own
+        // Redis touch (the cancellation signal) already swallows its errors — so the fallback never masks the
+        // action's 404/409, and the action runs exactly once (executeWithLock never subscribes it when
+        // acquisition fails). NOTE: prod ClickHouse has no read-your-own-writes (async insert, 2 replicas),
+        // so the lock cannot fully close the window either — studio metadata must stay effectively
+        // single-writer (review: thiagohora + adversarial review of the metadata-only-lock variant).
         var lock = new LockService.Lock(id, "optimization-update");
-        return lockService.executeWithLock(lock, action);
+        return lockService.executeWithLock(lock, action)
+                .onErrorResume(RedisException.class, error -> {
+                    log.warn("Redis unavailable acquiring the optimization-update lock for '{}'; persisting "
+                            + "the update without it (a concurrent lost update is possible but rare)", id, error);
+                    return action;
+                });
     }
 
     private Mono<Long> applyUpdate(@NonNull UUID id, @NonNull OptimizationUpdate update) {
