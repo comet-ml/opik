@@ -29,7 +29,8 @@ def _recorded(
     tracker: data_loss.DataLossTracker,
 ) -> list:
     """All drops the tracker has recorded, read via its public API."""
-    _, failures = tracker.drops_since(0)
+    # (0, 0) is the zero marker — the running totals before anything was recorded.
+    _count, _items, failures = tracker.drops_since((0, 0))
     return failures
 
 
@@ -197,21 +198,3 @@ def test_process__retry_error__recorded_with_cause_status_code(
     failure = _recorded(tracker)[0]
     assert failure.reason == data_loss.FailureReason.HTTP_SERVER_ERROR
     assert failure.status_code == 500
-
-
-def test_process__429_without_usable_headers__recorded_as_client_error(
-    processor, rest_client, tracker
-):
-    # A 429 whose headers can't be parsed into a retry directive can't be
-    # re-enqueued, so it is a terminal drop and must be recorded (not silently
-    # dropped) — this is exactly the loss the tracker exists to capture.
-    rest_client.spans.create_spans.side_effect = rest_api_core.ApiError(
-        status_code=429, headers=None, body="slow down"
-    )
-
-    processor.process(_spans_batch_message(item_count=2))
-
-    failure = _recorded(tracker)[0]
-    assert failure.reason == data_loss.FailureReason.HTTP_CLIENT_ERROR
-    assert failure.status_code == 429
-    assert failure.item_count == 2

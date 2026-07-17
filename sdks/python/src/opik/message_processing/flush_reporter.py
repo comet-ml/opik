@@ -27,7 +27,7 @@ class FlushReporter:
         self._streamer = streamer
         self._data_loss_tracker = data_loss_tracker
 
-    def marker(self) -> int:
+    def marker(self) -> "data_loss.DropMarker":
         """Opaque token identifying the current point in the drop history.
 
         Take one before a flush; pass it to :meth:`build_result` afterwards to
@@ -35,13 +35,17 @@ class FlushReporter:
         """
         return self._data_loss_tracker.marker()
 
-    def build_result(self, marker: int, *, flushed: bool) -> "data_loss.FlushResult":
-        dropped_messages, failures = self._data_loss_tracker.drops_since(marker)
+    def build_result(
+        self, marker: "data_loss.DropMarker", *, flushed: bool
+    ) -> "data_loss.FlushResult":
+        dropped_messages, dropped_items, failures = self._data_loss_tracker.drops_since(
+            marker
+        )
         result = data_loss.FlushResult(
             flushed=flushed,
             remaining_queue_size=self._streamer.queue_size(),
             dropped_messages=dropped_messages,
-            dropped_items=sum(failure.item_count for failure in failures),
+            dropped_items=dropped_items,
             failures=failures,
         )
         if not result.success:

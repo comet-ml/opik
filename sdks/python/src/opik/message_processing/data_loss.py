@@ -18,6 +18,10 @@ import threading
 import time
 from typing import Deque, List, Optional, Tuple
 
+# Opaque token returned by ``DataLossTracker.marker`` and passed back to
+# ``drops_since``: the running (message, item) totals at a point in time.
+DropMarker = Tuple[int, int]
+
 
 class FailureReason(str, enum.Enum):
     HTTP_CLIENT_ERROR = "http_client_error"
@@ -84,28 +88,42 @@ class DataLossTracker:
     def __init__(self, max_entries: int = 1000):
         self._lock = threading.Lock()
         self._entries: Deque[FailedMessageInfo] = collections.deque(maxlen=max_entries)
+        # Running totals kept independently of the bounded ``_entries`` window,
+        # so both message and item counts stay exact even after eviction.
         self._recorded_count = 0
+        self._recorded_items = 0
 
     def record(self, failure: FailedMessageInfo) -> None:
         with self._lock:
             self._entries.append(failure)
             self._recorded_count += 1
+            self._recorded_items += failure.item_count
 
-    def marker(self) -> int:
-        with self._lock:
-            return self._recorded_count
+    def marker(self) -> DropMarker:
+        """Opaque token marking the current point in the drop history.
 
-    def drops_since(self, marker: int) -> Tuple[int, List[FailedMessageInfo]]:
-        """Drops recorded since ``marker``, as one consistent snapshot.
-
-        Returns the exact count and the retained details. The count is always
-        exact; the details are best-effort — under extreme drop volume the
-        oldest entries are evicted, so fewer than ``count`` may be returned.
-        A single lock keeps count and details consistent even while other
-        clients on the shared sender keep recording.
+        Carries the running (message, item) totals; pass it to
+        :meth:`drops_since` to get the exact deltas observed since.
         """
         with self._lock:
-            count = self._recorded_count - marker
+            return self._recorded_count, self._recorded_items
+
+    def drops_since(
+        self, marker: DropMarker
+    ) -> Tuple[int, int, List[FailedMessageInfo]]:
+        """Drops recorded since ``marker``, as one consistent snapshot.
+
+        Returns ``(message_count, item_count, failures)``. Both counts are
+        exact — derived from running totals, not the window — even under extreme
+        drop volume; only ``failures`` (the details) is best-effort, since the
+        oldest entries are evicted once capacity is exceeded. A single lock keeps
+        the counts and details consistent even while other clients on the shared
+        sender keep recording.
+        """
+        marker_count, marker_items = marker
+        with self._lock:
+            count = self._recorded_count - marker_count
+            items = self._recorded_items - marker_items
             window_size = min(count, len(self._entries))
             failures = list(self._entries)[-window_size:] if window_size > 0 else []
-            return count, failures
+            return count, items, failures

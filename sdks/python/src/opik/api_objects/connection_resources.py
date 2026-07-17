@@ -398,7 +398,10 @@ class ConnectionResourceManager:
             del self._entries[key]
             bundle = entry.resources
 
-        return bundle.close(timeout, flush=flush)
+        closed_flushed = bundle.close(timeout, flush=flush)
+        # A non-draining teardown has no flush outcome to report — return None
+        # (not close()'s bool) so the result stays "no drain happened here".
+        return closed_flushed if flush else None
 
     def close_all(self, *, flush: bool = True) -> None:
         """Close and evict every cached bundle. Registered as the process

@@ -71,11 +71,12 @@ class TestDataLossTracker:
         tracker = data_loss.DataLossTracker()
         tracker.record(_failure())
         marker = tracker.marker()
-        tracker.record(_failure())
-        tracker.record(_failure())
+        tracker.record(_failure(item_count=2))
+        tracker.record(_failure(item_count=3))
 
-        count, failures = tracker.drops_since(marker)
+        count, items, failures = tracker.drops_since(marker)
         assert count == 2
+        assert items == 5
         assert len(failures) == 2
 
     def test_drops_since__no_new_records__empty(self):
@@ -83,19 +84,22 @@ class TestDataLossTracker:
         tracker.record(_failure())
         marker = tracker.marker()
 
-        count, failures = tracker.drops_since(marker)
+        count, items, failures = tracker.drops_since(marker)
         assert count == 0
+        assert items == 0
         assert failures == []
 
-    def test_drops_since__details_evicted__count_still_exact(self):
+    def test_drops_since__details_evicted__counts_still_exact(self):
         tracker = data_loss.DataLossTracker(max_entries=2)
         marker = tracker.marker()
         for _ in range(5):
-            tracker.record(_failure())
+            tracker.record(_failure(item_count=4))
 
-        count, failures = tracker.drops_since(marker)
-        # count is exact; retained details are bounded to capacity
+        count, items, failures = tracker.drops_since(marker)
+        # Both counts are exact (running totals); only the retained details are
+        # bounded to capacity.
         assert count == 5
+        assert items == 20
         assert len(failures) == 2
 
 

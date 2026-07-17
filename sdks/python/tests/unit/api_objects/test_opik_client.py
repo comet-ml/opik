@@ -1287,11 +1287,16 @@ class TestOpikClientFlushResult:
 
     @pytest.fixture
     def client(self):
-        client_ = opik_client.Opik(project_name="test-project")
+        # Bypass __init__ so the test doesn't acquire real connection resources
+        # or spin up background threads just to mock them out; set only what
+        # flush()/end()/last_flush_result touch.
+        client_ = opik_client.Opik.__new__(opik_client.Opik)
         client_._streamer = MagicMock()
         client_._flush_reporter = MagicMock()
         client_._lease = MagicMock()
         client_._finalizer = MagicMock()
+        client_._flush_timeout = 5
+        client_._last_flush_result = None
         return client_
 
     def test_flush__no_data_loss__returns_true_and_stores_result(self, client):
@@ -1312,6 +1317,18 @@ class TestOpikClientFlushResult:
         client._flush_reporter.build_result.side_effect = RuntimeError("boom")
 
         assert client.flush() is False
+
+    def test_flush__failure_after_prior_success__result_not_stale(self, client):
+        client._flush_reporter.build_result.return_value = _flush_result(flushed=True)
+        assert client.flush() is True
+        assert client.last_flush_result.success is True
+
+        # A later flush that fails inside build_result must not leave the stale
+        # success in last_flush_result.
+        client._flush_reporter.build_result.side_effect = RuntimeError("boom")
+        assert client.flush() is False
+        assert client.last_flush_result.flushed is False
+        assert client.last_flush_result.success is False
 
     def test_end__flush_true__reports_authoritative_flushed_not_queue_size(
         self, client
@@ -1345,6 +1362,22 @@ class TestOpikClientFlushResult:
     def test_end__flush_false__returns_none_and_skips_build_result(self, client):
         assert client.end(flush=False) is None
         client._flush_reporter.build_result.assert_not_called()
+
+    def test_end__called_again_after_release__keeps_prior_result(self, client):
+        # First end() drains and stores the real outcome.
+        client._lease.release.return_value = True
+        first = _flush_result(flushed=True)
+        client._flush_reporter.build_result.return_value = first
+        assert client.end() is first
+
+        # Second end(): the client is already released, so release() returns
+        # None (no drain ran). end() must stay idempotent — keep the prior
+        # result rather than overwriting it with a spurious not-flushed one.
+        client._lease.release.return_value = None
+        client._flush_reporter.build_result.reset_mock()
+        assert client.end() is first
+        client._flush_reporter.build_result.assert_not_called()
+        assert client.last_flush_result is first
 
 
 @pytest.mark.parametrize(

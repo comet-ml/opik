@@ -1885,7 +1885,9 @@ class Opik:
         self, timeout: Optional[int] = None, *, flush: bool = True
     ) -> Optional[data_loss.FlushResult]:
         """
-        End the Opik session and submit all pending messages.
+        End the Opik session, releasing this client's connection reference. When
+        ``flush`` is True (the default), all pending messages are submitted
+        first; when ``flush`` is False, anything still queued is dropped.
 
         Connection resources are shared and ref-counted across clients with a
         matching configuration: this releases the current client's reference.
@@ -1932,8 +1934,14 @@ class Opik:
         self._finalizer.detach()
         if not flush:
             return None
+        if flushed is None:
+            # No drain ran on this call — e.g. a repeated end() after the client
+            # was already released. Keep the outcome from the release that did
+            # the work rather than overwriting it with a spurious not-flushed
+            # result, so end() is idempotent.
+            return self._last_flush_result
         self._last_flush_result = self._flush_reporter.build_result(
-            marker, flushed=bool(flushed)
+            marker, flushed=flushed
         )
         return self._last_flush_result
 
@@ -1941,9 +1949,11 @@ class Opik:
         """
         Flush the streamer to ensure all messages are sent.
 
-        Never raises and never blocks beyond ``timeout``: an observability SDK
-        must not disrupt the app it instruments. Detailed outcome — including any
-        data that was dropped — is available via :attr:`last_flush_result`.
+        Covers delivery of trace/span/feedback messages; attachment/file uploads
+        are not reflected in the outcome. Never raises and never blocks beyond
+        ``timeout``: an observability SDK must not disrupt the app it instruments.
+        Detailed outcome — including any data that was dropped — is available via
+        :attr:`last_flush_result`.
 
         Args:
             timeout (Optional[int]): The timeout for flushing the streamer. Once the timeout is reached, the flush method will return regardless of whether all messages have been sent.
@@ -1963,7 +1973,17 @@ class Opik:
         except Exception:
             # An observability SDK must not disrupt the app it instruments: a
             # failure inside flush is reported as "not flushed", never raised.
+            # Record a failed outcome so last_flush_result reflects this attempt
+            # rather than keeping a stale prior success. Built directly (not via
+            # build_result, which may itself be what raised) so it cannot re-raise.
             LOGGER.error("Opik flush failed unexpectedly", exc_info=True)
+            self._last_flush_result = data_loss.FlushResult(
+                flushed=False,
+                remaining_queue_size=0,
+                dropped_messages=0,
+                dropped_items=0,
+                failures=[],
+            )
             return False
 
     @property

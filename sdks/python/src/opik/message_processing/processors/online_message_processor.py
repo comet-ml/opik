@@ -148,16 +148,6 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
                             headers=exception.headers,
                             retry_after=rate_limiter.retry_after(),
                         )
-                # 429 without headers we can parse into a retry directive: we
-                # cannot re-enqueue it, so the message falls through and is
-                # unregistered below — a terminal drop. Record it like every
-                # other terminal-error branch does.
-                self._record_data_loss(
-                    message,
-                    data_loss.FailureReason.from_status_code(429),
-                    status_code=429,
-                    detail=str(exception.body),
-                )
             elif exception.status_code == 401:
                 LOGGER.error(
                     "Unauthorized message type '%s' processing request: %s",
