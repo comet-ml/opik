@@ -25,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -161,6 +162,29 @@ class SpanServiceImplTest {
                     .hasMessageContaining("Error deleting spans");
 
             verify(spanDAO).deleteByIds(spanIds, projectId);
+            verifyNoInteractions(deletionEventDAO, eventBus);
+        }
+
+        @Test
+        @DisplayName("when the trace has no spans, then nothing is deleted or captured and the delete succeeds")
+        void delete__whenTraceHasNoSpans__thenNoDeleteAndNoCapture() {
+            var traceIds = Set.of(idGenerator.generateId());
+            var projectId = idGenerator.generateId();
+            var workspaceId = UUID.randomUUID().toString();
+            when(spanDAO.getSpanIdsForTraces(traceIds, projectId)).thenReturn(Mono.just(Set.of()));
+
+            spanService = newSpanService(DatabaseAnalyticsDataModelConfig.builder()
+                    .spanDeletionEventsCaptureEnabled(true)
+                    .build());
+            // A spanless trace short-circuits before the delete/capture; it must still complete cleanly.
+            assertDoesNotThrow(() -> spanService
+                    .deleteByTraceIds(traceIds, projectId)
+                    .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block());
+
+            verify(spanDAO).getSpanIdsForTraces(traceIds, projectId);
+            verify(spanDAO, never()).deleteByIds(any(), any());
             verifyNoInteractions(deletionEventDAO, eventBus);
         }
 
