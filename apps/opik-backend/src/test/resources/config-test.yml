@@ -94,6 +94,11 @@ databaseAnalyticsDataModel:
   #   record the deleted ids in the deletion_events_local bridge; without it those deletes are lost from the table
   #   copy. Scope capture to the backfill-to-cutover window.
   traceDeletionEventsCaptureEnabled: false
+  #  Default: false
+  #  Description: Spans sibling of traceDeletionEventsCaptureEnabled. Captures span ids removed by the trace-delete
+  #   cascade into the deletion_events_local bridge (source_table=spans). Leave false at deploy time; turn true once the
+  #   span backfill starts, independently of the trace flag.
+  spanDeletionEventsCaptureEnabled: false
   #  Default: 1000
   #  Description: Rows per INSERT into the deletion_events_local bridge. A single delete batch can carry more ids
   #   than the ClickHouse driver binds reliably in one statement (5 columns per row), so the insert is split into

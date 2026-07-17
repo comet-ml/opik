@@ -20,6 +20,7 @@ import com.comet.opik.domain.attachment.AttachmentReinjectorService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
 import com.comet.opik.domain.attachment.AttachmentUtils;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.BinaryOperatorUtils;
@@ -35,6 +36,7 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -72,6 +74,8 @@ public class SpanService {
     private final @NonNull AttachmentStripperService attachmentStripperService;
     private final @NonNull AttachmentReinjectorService attachmentReinjectorService;
     private final @NonNull EventBus eventBus;
+    private final @NonNull DeletionEventDAO deletionEventDAO;
+    private final @NonNull @Config OpikConfiguration config;
 
     @WithSpan
     public Mono<Span.SpanPage> find(int page, int size, @NonNull SpanSearchCriteria searchCriteria) {
@@ -500,6 +504,7 @@ public class SpanService {
                                         .doOnSuccess(__ -> log.info(
                                                 "Deleted '{}' spans for workspace '{}', project '{}'",
                                                 spanIds.size(), workspaceId, projectId)))
+                                .then(captureDeletions(spanIds, projectId, workspaceId, userName))
                                 .thenReturn(spanIds);
                     })
                     .doOnSuccess(spanIds -> {
@@ -508,6 +513,40 @@ public class SpanService {
                         }
                     })
                     .then();
+        });
+    }
+
+    /**
+     * Records the span ids removed by the trace-delete cascade in the {@code deletion_events_local} bridge so they
+     * survive the {@code spans} table copy during the Slice 3 migration window. Best-effort and deferred: gated by
+     * {@code spanDeletionEventsCaptureEnabled} and run only after the delete succeeds, and any capture failure is
+     * logged and swallowed so it can never disrupt the delete. Spans have no standalone delete, so this cascade is the
+     * only capture path. Mirrors {@code TraceService.captureDeletions}.
+     */
+    private Mono<Void> captureDeletions(Set<UUID> ids, UUID projectId, String workspaceId, String userName) {
+        return Mono.defer(() -> {
+            if (!config.getDatabaseAnalyticsDataModel().spanDeletionEventsCaptureEnabled()) {
+                return Mono.empty();
+            }
+            var events = ids.stream()
+                    .map(id -> DeletionEvent.builder()
+                            .sourceTable(SourceTable.SPANS)
+                            .workspaceId(workspaceId)
+                            .projectId(projectId)
+                            .deletedId(id.toString())
+                            .deletionReason(DeletionReason.USER_REQUEST)
+                            .build())
+                    .collect(Collectors.toUnmodifiableSet());
+            return deletionEventDAO.insert(events, userName)
+                    .doOnSuccess(_ -> log.info(
+                            "Captured span deletion events, count '{}' for projectId '{}' on workspaceId '{}'",
+                            ids.size(), projectId, workspaceId))
+                    .onErrorResume(throwable -> {
+                        log.warn(
+                                "Failed to capture span deletion events, count '{}' for projectId '{}' on workspaceId '{}'",
+                                ids.size(), projectId, workspaceId, throwable);
+                        return Mono.empty();
+                    });
         });
     }
 
