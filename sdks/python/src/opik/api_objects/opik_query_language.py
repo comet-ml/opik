@@ -600,6 +600,9 @@ class OpikQueryLanguage:
         if parsed_field not in supported_operators:
             parsed_field = "default"
 
+        if self._cursor >= len(self.query_string):
+            raise ValueError("Incomplete filter string: unexpected end of input")
+
         # Parse the operator
         if self.query_string[self._cursor] == "=":
             operator = "="
@@ -611,7 +614,10 @@ class OpikQueryLanguage:
             return {"operator": operator}
 
         elif self.query_string[self._cursor] in ["<", ">"]:
-            if self.query_string[self._cursor + 1] == "=":
+            if (
+                self._cursor + 1 < len(self.query_string)
+                and self.query_string[self._cursor + 1] == "="
+            ):
                 operator = f"{self.query_string[self._cursor]}="
                 self._cursor += 2
             else:
@@ -650,6 +656,9 @@ class OpikQueryLanguage:
     def _parse_value(self) -> Dict[str, Any]:
         self._skip_whitespace()
 
+        if self._cursor >= len(self.query_string):
+            raise ValueError("Incomplete filter string: unexpected end of input")
+
         start = self._cursor
         if self.query_string[self._cursor] == '"':
             self._cursor += 1
@@ -662,6 +671,14 @@ class OpikQueryLanguage:
             ):
                 self._cursor += 1
 
+            if (
+                self._cursor >= len(self.query_string)
+                or self.query_string[self._cursor] != '"'
+            ):
+                raise ValueError(
+                    f'Missing closing quote for value: "{self.query_string[start:]}"'
+                )
+
             value = self.query_string[start : self._cursor]
 
             # Add 1 to skip the closing quote and return the value
@@ -671,13 +688,26 @@ class OpikQueryLanguage:
             self.query_string[self._cursor].isdigit()
             or self.query_string[self._cursor] == "-"
         ):
-            value = self._get_number()
+            sign = ""
+            if self.query_string[self._cursor] == "-":
+                sign = "-"
+                self._cursor += 1
+            value = sign + self._get_number()
+            if value in ("", "-"):
+                raise ValueError(
+                    "Expected a number after '-' in filter value"
+                    if sign
+                    else "Expected a number in filter value"
+                )
             if (
                 self._cursor < len(self.query_string)
                 and self.query_string[self._cursor] == "."
             ):
                 self._cursor += 1
-                value += "." + self._get_number()
+                frac = self._get_number()
+                if not frac:
+                    raise ValueError("Expected digits after decimal point in filter value")
+                value += "." + frac
 
             return {"value": value}
         else:

@@ -373,11 +373,47 @@ def test_trace_oql__valid_filters(filter_string, expected):
             'error_info = "something"',
             r"Operator = is not supported for field error_info.*",
         ),
+        # Incomplete filters must raise ValueError (not IndexError)
+        ("duration >", r"Incomplete filter string.*"),
+        ("duration >=", r"Incomplete filter string.*"),
+        ("name =", r"Incomplete filter string.*"),
+        ("duration > 5 and", r"Incomplete filter string.*"),
+        # Unterminated quoted values (keys already covered above)
+        (
+            'name = "hello',
+            r'Missing closing quote for value: "hello',
+        ),
     ],
 )
 def test_trace_oql__invalid_filters(filter_string, error_pattern):
     with pytest.raises(ValueError, match=error_pattern):
         OpikQueryLanguage.for_traces(filter_string)
+
+
+@pytest.mark.parametrize(
+    "filter_string, expected",
+    [
+        (
+            "duration > -5",
+            [{"field": "duration", "operator": ">", "value": "-5"}],
+        ),
+        (
+            "total_estimated_cost < -0.1",
+            [{"field": "total_estimated_cost", "operator": "<", "value": "-0.1"}],
+        ),
+        (
+            "duration = -1",
+            [{"field": "duration", "operator": "=", "value": "-1"}],
+        ),
+    ],
+)
+def test_trace_oql__negative_numeric_values(filter_string, expected):
+    oql = OpikQueryLanguage.for_traces(filter_string)
+    parsed = json.loads(oql.parsed_filters)
+    assert len(parsed) == len(expected)
+    for i, line in enumerate(expected):
+        for key, value in line.items():
+            assert parsed[i][key] == value
 
 
 @pytest.mark.parametrize("filter_string", [None, ""])
