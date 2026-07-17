@@ -1,6 +1,7 @@
 package com.comet.opik.domain.alerts;
 
 import com.comet.opik.api.Alert;
+import com.comet.opik.api.AlertTrigger;
 import com.comet.opik.api.AlertTriggerConfig;
 import com.comet.opik.api.AlertTriggerConfigType;
 import com.comet.opik.api.Guardrail;
@@ -18,6 +19,7 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -61,13 +63,49 @@ public class AlertEventEvaluationService {
     }
 
     /**
-     * Restricts a guardrails alert to the guardrail types configured on its trigger. Types are OR-ed;
-     * an empty/absent {@code filter:guardrail_type} config means the alert fires for any guardrail type.
+     * Restricts a guardrails alert to the guardrail types configured on its triggers. The alert fires
+     * if ANY matching-event-type trigger accepts the event: a trigger without a {@code filter:guardrail_type}
+     * config accepts any guardrail type; a filtered trigger accepts only its configured types (OR-ed).
+     * Evaluated per trigger so an unfiltered trigger is not narrowed by a sibling filtered trigger.
      */
     private boolean matchesGuardrailTypeFilter(AlertEvent alertEvent, Alert alert) {
-        Set<String> configuredTypes = CollectionUtils.emptyIfNull(alert.triggers()).stream()
+        List<AlertTrigger> guardrailTriggers = CollectionUtils.emptyIfNull(alert.triggers()).stream()
                 .filter(trigger -> trigger.eventType() == alertEvent.eventType())
-                .flatMap(trigger -> CollectionUtils.emptyIfNull(trigger.triggerConfigs()).stream())
+                .toList();
+
+        Set<String> failedTypes = failedGuardrailTypes(alertEvent.payload());
+        if (failedTypes == null) {
+            // Unexpected payload shape — do not silently drop the event.
+            return true;
+        }
+
+        return guardrailTriggers.stream().anyMatch(trigger -> {
+            Set<String> configuredTypes = configuredGuardrailTypes(trigger);
+            // No filter on this trigger → fire on any guardrail type.
+            return configuredTypes.isEmpty()
+                    || failedTypes.stream().anyMatch(configuredTypes::contains);
+        });
+    }
+
+    /**
+     * The set of guardrail type names present in the alert event payload, or {@code null} when the
+     * payload cannot be inspected (so callers can fail open rather than drop the event).
+     */
+    private Set<String> failedGuardrailTypes(Object payload) {
+        if (!(payload instanceof List<?> guardrails)) {
+            return null;
+        }
+        return guardrails.stream()
+                .filter(Guardrail.class::isInstance)
+                .map(guardrail -> ((Guardrail) guardrail).name())
+                .filter(Objects::nonNull)
+                .map(guardrailType -> guardrailType.name())
+                .collect(Collectors.toSet());
+    }
+
+    /** The guardrail type names configured on a single trigger's {@code filter:guardrail_type} configs. */
+    private Set<String> configuredGuardrailTypes(AlertTrigger trigger) {
+        return CollectionUtils.emptyIfNull(trigger.triggerConfigs()).stream()
                 .filter(config -> config.type() == AlertTriggerConfigType.FILTER_GUARDRAIL_TYPE)
                 .map(config -> config.configValue() != null
                         ? config.configValue().get(AlertTriggerConfig.GUARDRAIL_TYPES_CONFIG_KEY)
@@ -76,23 +114,8 @@ public class AlertEventEvaluationService {
                 .flatMap(value -> Arrays.stream(value.split(",")))
                 .map(String::trim)
                 .filter(StringUtils::isNotBlank)
-                .map(type -> type.toUpperCase(java.util.Locale.ROOT))
+                .map(type -> type.toUpperCase(Locale.ROOT))
                 .collect(Collectors.toSet());
-
-        if (configuredTypes.isEmpty()) {
-            return true;
-        }
-
-        if (!(alertEvent.payload() instanceof List<?> guardrails)) {
-            // Unexpected payload shape — do not silently drop the event.
-            return true;
-        }
-
-        return guardrails.stream()
-                .filter(Guardrail.class::isInstance)
-                .map(guardrail -> ((Guardrail) guardrail).name())
-                .filter(Objects::nonNull)
-                .anyMatch(name -> configuredTypes.contains(name.name()));
     }
 
     private boolean isWithinProjectScope(AlertEvent alertEvent, Alert alert) {

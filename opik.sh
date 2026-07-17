@@ -10,13 +10,27 @@ init_worktree_ports
 INFRA_CONTAINERS=("${COMPOSE_PROJECT_NAME}-clickhouse-1" "${COMPOSE_PROJECT_NAME}-mysql-1" "${COMPOSE_PROJECT_NAME}-redis-1" "${COMPOSE_PROJECT_NAME}-minio-1" "${COMPOSE_PROJECT_NAME}-zookeeper-1")
 BACKEND_CONTAINERS=("${COMPOSE_PROJECT_NAME}-python-backend-1" "${COMPOSE_PROJECT_NAME}-backend-1")
 OPIK_CONTAINERS=("${COMPOSE_PROJECT_NAME}-frontend-1")
-GUARDRAILS_CONTAINERS=("${COMPOSE_PROJECT_NAME}-guardrails-backend-1")
-GUARDRAILS_CPU_CONTAINERS=("${COMPOSE_PROJECT_NAME}-guardrails-backend-cpu-1")
 LOCAL_BE_CONTAINERS=("${COMPOSE_PROJECT_NAME}-python-backend-1" "${COMPOSE_PROJECT_NAME}-frontend-1")
 LOCAL_BE_FE_CONTAINERS=("${COMPOSE_PROJECT_NAME}-python-backend-1")
 
 # Bash doesn't have straight forward support for returning arrays, so using a global var instead
 CONTAINERS=()
+
+# Single source of truth for the guardrails mode (gpu vs cpu) -> compose profile,
+# opik.sh flag, and container name. Used by the command/container builders below.
+guardrails_profile() {
+  if [[ "$GUARDRAILS_MODE" == "cpu" ]]; then echo "guardrails-cpu"; else echo "guardrails"; fi
+}
+guardrails_flag() {
+  if [[ "$GUARDRAILS_MODE" == "cpu" ]]; then echo "--guardrails-cpu"; else echo "--guardrails"; fi
+}
+guardrails_container() {
+  if [[ "$GUARDRAILS_MODE" == "cpu" ]]; then
+    echo "${COMPOSE_PROJECT_NAME}-guardrails-backend-cpu-1"
+  else
+    echo "${COMPOSE_PROJECT_NAME}-guardrails-backend-1"
+  fi
+}
 
 set_containers_for_profile() {
   if [[ "$INFRA" == "true" ]]; then
@@ -34,11 +48,7 @@ set_containers_for_profile() {
   
   # Add guardrails containers if enabled
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
-    if [[ "$GUARDRAILS_MODE" == "cpu" ]]; then
-      CONTAINERS+=("${GUARDRAILS_CPU_CONTAINERS[@]}")
-    else
-      CONTAINERS+=("${GUARDRAILS_CONTAINERS[@]}")
-    fi
+    CONTAINERS+=("$(guardrails_container)")
   fi
 
 }
@@ -55,11 +65,7 @@ get_verify_cmd() {
     cmd="$cmd --local-be-fe"
   fi
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
-    if [[ "$GUARDRAILS_MODE" == "cpu" ]]; then
-      cmd="$cmd --guardrails-cpu"
-    else
-      cmd="$cmd --guardrails"
-    fi
+    cmd="$cmd $(guardrails_flag)"
   fi
   echo "$cmd --verify"
 }
@@ -85,11 +91,7 @@ get_start_cmd() {
     cmd="$cmd --local-be-fe"
   fi
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
-    if [[ "$GUARDRAILS_MODE" == "cpu" ]]; then
-      cmd="$cmd --guardrails-cpu"
-    else
-      cmd="$cmd --guardrails"
-    fi
+    cmd="$cmd $(guardrails_flag)"
   fi
   echo "$cmd"
 }
@@ -212,11 +214,7 @@ get_docker_compose_cmd() {
 
   # Always add guardrails profile if enabled
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
-    if [[ "$GUARDRAILS_MODE" == "cpu" ]]; then
-      cmd="$cmd --profile guardrails-cpu"
-    else
-      cmd="$cmd --profile guardrails"
-    fi
+    cmd="$cmd --profile $(guardrails_profile)"
   fi
   
   echo "$cmd"

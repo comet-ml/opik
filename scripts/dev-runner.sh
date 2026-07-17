@@ -72,6 +72,11 @@ OLLIE_CONSOLE_PORT="${OLLIE_CONSOLE_PORT:-3333}"
 # unique across worktrees. cost-api's own standalone default is still 8000.
 AI_COST_BACKEND_PORT="${AI_COST_BACKEND_PORT:-$((8400 + PORT_OFFSET))}"
 
+# Guardrails backend host port. Offset per worktree so guardrails-enabled worktrees don't
+# collide on 5000; exported so the docker-compose override (${OPIK_GUARDRAILS_PORT:-5000})
+# and the SDK guidance printed below use the same value.
+export OPIK_GUARDRAILS_PORT="${OPIK_GUARDRAILS_PORT:-$((5000 + PORT_OFFSET))}"
+
 # Comet EM stack (comet-backend + comet-react + single-origin proxy).
 # All EM logic lives in dev-runner-platform.sh to keep this script focused; it is inert
 # unless PLATFORM_ENABLED=true. Sourced here so its EM_* vars and em_* functions
@@ -183,7 +188,7 @@ find_jar_files() {
 
 # Invoke opik.sh, appending the guardrails flag when guardrails are enabled.
 # The dev modes (--local-be / --local-be-fe) already force port mapping, so the
-# guardrails backend is published on http://localhost:5000.
+# guardrails backend is published on http://localhost:${OPIK_GUARDRAILS_PORT:-5000}.
 run_opik_sh() {
     if [ -n "$GUARDRAILS_OPIK_FLAG" ]; then
         ./opik.sh "$@" "$GUARDRAILS_OPIK_FLAG"
@@ -1252,8 +1257,8 @@ show_access_information() {
     if [ -n "$GUARDRAILS_OPIK_FLAG" ]; then
         echo ""
         echo -e "${BLUE}Guardrails enabled:${NC}"
-        echo "  # The guardrails backend is published directly on port 5000."
-        echo "  export OPIK_GUARDRAILS_URL_OVERRIDE='http://localhost:5000'"
+        echo "  # The guardrails backend is published directly on port ${OPIK_GUARDRAILS_PORT:-5000}."
+        echo "  export OPIK_GUARDRAILS_URL_OVERRIDE='http://localhost:${OPIK_GUARDRAILS_PORT:-5000}'"
     fi
 
     echo ""

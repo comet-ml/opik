@@ -215,17 +215,24 @@ const GUARDRAIL_TYPES_CONFIG_KEY = "guardrail_types";
 const getGuardrailTypesFromTriggerConfigs = (
   triggerConfigs?: AlertTriggerConfig[],
 ): GuardrailTypes[] => {
-  const config = triggerConfigs?.find(
-    (c) => c.type === ALERT_TRIGGER_CONFIG_TYPE["filter:guardrail_type"],
-  );
-  const raw = config?.config_value?.[GUARDRAIL_TYPES_CONFIG_KEY];
-  if (!raw) return [];
+  if (!triggerConfigs) return [];
 
   const validTypes = new Set<string>(Object.values(GuardrailTypes));
-  return raw
-    .split(",")
+  // Collect every filter:guardrail_type config (not just the first) and de-duplicate,
+  // so reopening then saving an alert never drops types from additional configs.
+  const seen = new Set<GuardrailTypes>();
+  triggerConfigs
+    .filter(
+      (c) => c.type === ALERT_TRIGGER_CONFIG_TYPE["filter:guardrail_type"],
+    )
+    .flatMap((c) =>
+      (c.config_value?.[GUARDRAIL_TYPES_CONFIG_KEY] ?? "").split(","),
+    )
     .map((value) => value.trim().toUpperCase())
-    .filter((value): value is GuardrailTypes => validTypes.has(value));
+    .filter((value): value is GuardrailTypes => validTypes.has(value))
+    .forEach((value) => seen.add(value));
+
+  return [...seen];
 };
 
 const createGuardrailTypesTriggerConfig = (

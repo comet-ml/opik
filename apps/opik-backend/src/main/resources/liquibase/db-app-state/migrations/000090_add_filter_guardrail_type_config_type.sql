@@ -12,4 +12,7 @@ ALTER TABLE alert_trigger_configs
     'filter:guardrail_type'
     ) NOT NULL;
 
+-- Forward-only (matches 000033/000035): reverting is unsafe once any alert_trigger_configs row
+-- uses 'filter:guardrail_type', since MODIFY-ing the enum back would truncate those values. Recovery
+-- means restoring the previous enum only after deleting/migrating such rows.
 --rollback empty

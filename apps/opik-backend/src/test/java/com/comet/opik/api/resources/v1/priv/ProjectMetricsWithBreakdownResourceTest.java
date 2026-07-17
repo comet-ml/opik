@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.ErrorInfo;
+import com.comet.opik.api.GuardrailType;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.TimeInterval;
@@ -712,10 +713,10 @@ class ProjectMetricsWithBreakdownResourceTest {
             String projectName = RandomStringUtils.secure().nextAlphabetic(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
-            // createTracesWithGuardrails forces FAILED on even indices and generates both
-            // guardrail types (TOPIC, PII), so grouping by name yields a series per type.
-            createTracesWithGuardrails(projectName, subtract(marker, 2, interval), BreakdownField.NAME, "group-a", 2);
-            createTracesWithGuardrails(projectName, subtract(marker, 1, interval), BreakdownField.NAME, "group-a", 2);
+            // Deterministically create one failed TOPIC and one failed PII guardrail per trace
+            // across two buckets, so grouping by name must yield exactly a TOPIC and a PII series.
+            createTracesWithFailedGuardrailTypes(projectName, subtract(marker, 2, interval), 2);
+            createTracesWithFailedGuardrailTypes(projectName, subtract(marker, 1, interval), 2);
 
             var request = ProjectMetricRequest.builder()
                     .metricType(MetricType.GUARDRAILS_FAILED_COUNT)
@@ -729,10 +730,33 @@ class ProjectMetricsWithBreakdownResourceTest {
                     Integer.class, API_KEY, WORKSPACE_NAME);
 
             assertThat(response.metricType()).isEqualTo(MetricType.GUARDRAILS_FAILED_COUNT);
-            // Grouped by guardrail name: each series is named after a guardrail type, not "failed".
-            assertThat(response.results()).isNotEmpty();
-            assertThat(response.results()).allSatisfy(
-                    result -> assertThat(result.name()).isIn("TOPIC", "PII"));
+            // Grouping by guardrail name must produce exactly one series per guardrail type.
+            assertThat(response.results())
+                    .extracting(result -> result.name())
+                    .containsExactlyInAnyOrder(GuardrailType.TOPIC.name(), GuardrailType.PII.name());
+        }
+
+        private void createTracesWithFailedGuardrailTypes(String projectName, Instant marker, int count) {
+            List<Trace> traces = IntStream.range(0, count)
+                    .mapToObj(i -> {
+                        Instant traceStartTime = marker.plus(i, ChronoUnit.SECONDS);
+                        return factory.manufacturePojo(Trace.class).toBuilder()
+                                .id(idGenerator.generateId(traceStartTime))
+                                .projectName(projectName)
+                                .startTime(traceStartTime)
+                                .build();
+                    })
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+
+            traces.forEach(trace -> {
+                var template = guardrailsGenerator
+                        .generateGuardrailsForTrace(trace.id(), UUID.randomUUID(), projectName).getFirst();
+                var guardrails = List.of(
+                        template.toBuilder().name(GuardrailType.TOPIC).result(GuardrailResult.FAILED).build(),
+                        template.toBuilder().name(GuardrailType.PII).result(GuardrailResult.FAILED).build());
+                guardrailsResourceClient.addBatch(guardrails, API_KEY, WORKSPACE_NAME);
+            });
         }
     }
 
