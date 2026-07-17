@@ -285,6 +285,14 @@ services:
     hostname: guardrails
     environment:
       OPIK_VERSION: ${OPIK_VERSION:-latest}
+      HF_TOKEN: ${HF_TOKEN:-}
+      OPIK_GUARDRAILS_PROMPT_INJECTION_BASE_MODEL: ${OPIK_GUARDRAILS_PROMPT_INJECTION_BASE_MODEL:-}
+      OPIK_GUARDRAILS_PROMPT_INJECTION_MODEL: ${OPIK_GUARDRAILS_PROMPT_INJECTION_MODEL:-}
+      OPIK_GUARDRAILS_ADAPTERS_DIR: /adapters
+    volumes:
+      # Directory of trained custom guardrail models, shared with wherever you run
+      # training. Point OPIK_GUARDRAILS_ADAPTERS_HOST_DIR at your trained models.
+      - ${OPIK_GUARDRAILS_ADAPTERS_HOST_DIR:-./guardrails-adapters}:/adapters
     healthcheck:
       test: [ "CMD", "sh", "-c", "wget --spider --quiet http://127.0.0.1:5000/healthcheck" ]
       interval: 2s

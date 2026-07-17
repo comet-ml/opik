@@ -564,6 +564,10 @@ redirects:
   - source: "/docs/opik/configuration/ai_providers"
     destination: "/docs/opik/administration/workspace-settings/ai_providers"
     permanent: true
+  # Guardrails moved to a dedicated top-level section (out of Gateway & Guardrails)
+  - source: "/docs/opik/production/gateway-guardrails/guardrails"
+    destination: "/docs/opik/guardrails/guardrails"
+    permanent: true
   # Administration restructure redirects (pages moved to admin-dashboard subsection)
   - source: "/docs/opik/administration/admin_dashboard"
     destination: "/docs/opik/administration/admin-dashboard/overview"

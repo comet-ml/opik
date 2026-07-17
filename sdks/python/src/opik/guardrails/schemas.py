@@ -8,6 +8,9 @@ from opik.rest_api.types.check_public_result import CheckPublicResult
 class ValidationType(str, enum.Enum):
     PII = "PII"
     TOPIC = "TOPIC"
+    LLM_JUDGE = "LLM_JUDGE"
+    PROMPT_INJECTION = "PROMPT_INJECTION"
+    CUSTOM_CLASSIFIER = "CUSTOM_CLASSIFIER"
 
 
 class ValidationResult(pydantic.BaseModel):

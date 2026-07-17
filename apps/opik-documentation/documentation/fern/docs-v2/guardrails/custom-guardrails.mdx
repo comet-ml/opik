@@ -1,0 +1,100 @@
+---
+title: Custom guardrails
+subtitle: Train a binary guardrail on your own labeled examples and serve it like a built-in one
+headline: Custom Guardrails | Opik Documentation
+og:title: Custom Guardrails - Opik
+og:description: Train a custom binary guardrail classifier from your own labeled examples and run it on the Opik guardrails server.
+og:site_name: Opik Documentation
+---
+
+When the built-in guardrails do not cover a check you need, you can train your own. You provide labeled examples and a short description of what you want to catch, and Opik fine-tunes a small classifier (the same architecture as the built-in [prompt injection](/guardrails/guardrails#prompt-injection-guardrail) guardrail) that runs on the [guardrails server](/guardrails/server).
+
+This is the trained counterpart to the [LLM judge](/guardrails/guardrails#llm-judge-guardrail): use the LLM judge to prototype a check with a natural-language policy, and once it matters, train a custom guardrail so it runs fast and cheap inline at high volume.
+
+## How it works
+
+1. You call `create_custom_guardrail` with labeled examples and a description of the metric.
+2. The guardrails server trains a small LoRA adapter on its GPU and stores it under the name you chose.
+3. You reference that name from the `CustomGuardrail` guard, and the same server runs it.
+
+## Train the guardrail
+
+Pass your labeled examples and a description to `create_custom_guardrail`. Each example is `text` plus a binary `label`, where `1` means the metric holds (the guardrail should fail) and `0` means it does not. The `description` completes the sentence "Determine whether it ...".
+
+```python
+from opik.guardrails import create_custom_guardrail
+
+result = create_custom_guardrail(
+    name="toxicity-v1",
+    description="contains toxic or abusive language",
+    examples=[
+        {"text": "Get lost, nobody wants you around here.", "label": 1},
+        {"text": "Thanks so much for your help today!", "label": 0},
+        # ... more labeled examples
+    ],
+)
+
+print(result["eval_metrics"])
+```
+
+Training runs on the guardrails server and can take a few minutes. By default the call blocks until it finishes and returns evaluation metrics (accuracy, precision, recall, F1, AUROC) on held-out validation and test splits, so you can judge quality before using it. Pass `wait=False` to return immediately instead.
+
+Retraining under a name that already exists is rejected unless you pass `overwrite=True`, so you don't clobber an existing guardrail by accident.
+
+### Track progress
+
+Pass a `callback` to follow the run as it trains. It is called on each poll with the current status, which carries a `progress` dict (percent complete, epoch, latest training loss, and the latest validation metrics):
+
+```python
+def on_progress(status):
+    p = status.get("progress", {})
+    print(
+        f"{status['status']} {p.get('percent', 0)}% "
+        f"epoch={p.get('epoch')} "
+        f"val_f1={p.get('latest_eval', {}).get('eval_validation_f1')}"
+    )
+
+create_custom_guardrail(
+    name="toxicity-v1",
+    description="contains toxic or abusive language",
+    examples=[...],
+    callback=on_progress,
+)
+```
+
+<Tip>
+  Aim for a balanced set with enough examples of each class to represent your production traffic.
+</Tip>
+
+## Use it in a guardrail
+
+Reference the model name in a `CustomGuardrail` guard:
+
+```python
+from opik.guardrails import Guardrail, CustomGuardrail
+from opik import exceptions
+
+guardrail = Guardrail(
+    guards=[
+        CustomGuardrail(model_name="toxicity-v1", threshold=0.5),
+    ]
+)
+
+try:
+    guardrail.validate("Get lost, nobody wants you around here.")
+except exceptions.GuardrailValidationFailed as e:
+    print(e)
+```
+
+The guard fails when the model's score is at or above `threshold`. Lower it to be stricter, raise it to be more permissive. If the named model is not found in the server's adapters directory, validation fails closed with a clear error.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Guardrails" href="/guardrails/guardrails" icon="fa-regular fa-shield-check">
+    The built-in PII, Topic, prompt injection, and LLM judge guardrails.
+  </Card>
+  <Card title="Guardrails server" href="/guardrails/server" icon="fa-regular fa-server">
+    Configure the adapters directory and run the server.
+  </Card>
+</CardGroup>

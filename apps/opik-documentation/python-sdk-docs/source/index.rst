@@ -217,6 +217,9 @@ You can learn more about the `opik` python SDK in the following sections:
    guardrails/guardrail
    guardrails/topic
    guardrails/pii
+   guardrails/prompt_injection
+   guardrails/llm_judge
+   guardrails/custom_guardrail
    guardrails/validation_response
 
 .. toctree::

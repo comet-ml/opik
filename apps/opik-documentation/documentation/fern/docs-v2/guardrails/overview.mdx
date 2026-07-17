@@ -1,0 +1,58 @@
+---
+title: Guardrails overview
+subtitle: Protect your LLM application in real time by blocking unsafe inputs and outputs
+headline: Guardrails Overview | Opik Documentation
+og:title: Guardrails Overview - Opik
+og:description: Learn what guardrails are, why they matter, and when to use guardrails versus online evaluation to protect your LLM application.
+og:site_name: Opik Documentation
+layout: overview
+---
+
+Guardrails are real-time checks that run inline with your LLM calls to catch unsafe inputs and outputs before they reach a user. Unlike offline testing, guardrails operate in production on live traffic, acting as a safety layer around your application.
+
+## Why guardrails matter
+
+LLMs are non-deterministic. The same prompt can produce different responses, and no amount of pre-production testing can guarantee that every response in production will be safe. Guardrails close that gap by enforcing your requirements on every request, as it happens.
+
+Common risks guardrails help you contain:
+
+- **Sensitive data leakage** — personally identifiable information (PII) such as names, addresses, or credit card numbers appearing in inputs or outputs.
+- **Off-topic responses** — the model answering questions outside the scope of your application.
+- **Harmful or non-compliant content** — outputs that violate your policies or regulatory requirements.
+- **Business-specific risks** — competitor mentions, disallowed claims, or any rule unique to your domain.
+
+Because a guardrail runs before the response is returned, it lets you stop a bad response, retry, or fall back to a safe default rather than exposing the problem to your users.
+
+## Guardrails vs. online evaluation
+
+Opik gives you two complementary ways to check production traffic. They solve different problems, and most teams use both.
+
+The key difference is **blocking versus non-blocking**: guardrails run inline and can prevent a response from being returned, while online evaluation runs asynchronously on traces that have already been logged.
+
+| | Guardrails | Online evaluation |
+| --- | --- | --- |
+| **Execution** | Inline, synchronous | Asynchronous, after the trace is logged |
+| **Effect on the response** | Blocking — can stop or alter the response | Non-blocking — never affects the response |
+| **Primary goal** | Prevent unsafe inputs and outputs in real time | Monitor quality and detect issues at scale |
+| **Coverage** | Every request | Configurable sampling rate |
+| **Latency impact** | Adds latency to each call | None |
+| **Typical checks** | PII, restricted topics, custom business rules | Hallucination, answer relevance, moderation, custom LLM-as-a-Judge metrics |
+
+Use **guardrails** when a failing check must change what the user sees — for example, blocking a response that leaks PII or drifts off topic. The check is worth the added latency because the cost of letting the response through is high.
+
+Use **[online evaluation](/production/online-evaluation/rules)** when you want to understand how your application is behaving across production traffic without adding latency. It runs LLM-as-a-Judge metrics on logged traces, samples at whatever rate you choose, and surfaces trends so you can identify issues over time.
+
+<Tip>
+  The two work well together: use online evaluation to discover which failure modes matter for your application, then add guardrails to block the ones that must never reach a user.
+</Tip>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Guardrails" href="/guardrails/guardrails" icon="fa-regular fa-shield-check">
+    Set up PII, topic, and custom guardrails with the Python SDK.
+  </Card>
+  <Card title="Online evaluation" href="/production/online-evaluation/rules" icon="fa-regular fa-gauge-high">
+    Score production traces with automated LLM-as-a-Judge metrics.
+  </Card>
+</CardGroup>
