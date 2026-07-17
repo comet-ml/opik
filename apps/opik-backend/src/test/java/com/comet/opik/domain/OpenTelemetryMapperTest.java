@@ -1935,12 +1935,20 @@ class OpenTelemetryMapperTest {
             assertThat(span.output().has("choices")).isTrue();
         }
 
-        @Test
-        void opikMetadataMergeFiltersReservedKeys() {
-            var span = enrich(List.of(str("opik.metadata",
-                    "{\"thread_id\":\"spoofed\",\"custom\":\"ok\"}")));
+        private static Stream<Arguments> reservedMetadataKeys() {
+            return Stream.of(
+                    Arguments.of("thread_id"),
+                    Arguments.of("integration"),
+                    Arguments.of("server.address"));
+        }
 
-            assertThat(span.metadata().has("thread_id")).isFalse();
+        @ParameterizedTest(name = "filters reserved key: {0}")
+        @MethodSource("reservedMetadataKeys")
+        void opikMetadataMergeFiltersReservedKeys(String reservedKey) {
+            var span = enrich(List.of(str("opik.metadata",
+                    "{\"" + reservedKey + "\":\"spoofed\",\"custom\":\"ok\"}")));
+
+            assertThat(span.metadata().has(reservedKey)).isFalse();
             assertThat(span.metadata().get("custom").asText()).isEqualTo("ok");
         }
     }

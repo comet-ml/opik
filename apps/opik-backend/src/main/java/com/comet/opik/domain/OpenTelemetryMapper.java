@@ -234,8 +234,7 @@ public class OpenTelemetryMapper {
                                 extractToJsonColumn(node, rule.getRule(), value);
                             }
                         } catch (UncheckedIOException e) {
-                            log.debug("Failed to parse JSON for key '{}' (value: '{}'), falling back to text",
-                                    key, value.getStringValue(), e);
+                            log.debug("Failed to parse JSON, falling back to text for key '{}'", key, e);
                             extractToJsonColumn(node, rule.getRule(), value);
                         }
                     } else if (jsonKey.isEmpty()) {
