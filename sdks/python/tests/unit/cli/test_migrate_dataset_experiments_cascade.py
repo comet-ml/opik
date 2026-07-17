@@ -2062,8 +2062,15 @@ class TestBulkFetchSpansGuard:
 
         client.search_spans.assert_called_once()
         kwargs = client.search_spans.call_args.kwargs
-        assert kwargs["filter_string"] is not None
-        assert "start_time" in kwargs["filter_string"]
+        # Assert the EXACT bounded filter, not just that one exists -- a
+        # regression that corrupts the derived window would still leave a
+        # non-null filter_string containing "start_time". The trace spans
+        # [12:00, 12:05]; _compute_span_time_window pads by the 5-minute
+        # _SPAN_BULK_WINDOW_BUFFER on each side -> [11:55, 12:10].
+        assert kwargs["filter_string"] == (
+            'start_time >= "2026-01-01T11:55:00Z" '
+            'AND start_time <= "2026-01-01T12:10:00Z"'
+        )
         assert kwargs["max_results"] == sys.maxsize
 
 
