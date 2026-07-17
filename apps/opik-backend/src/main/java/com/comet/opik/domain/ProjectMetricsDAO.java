@@ -1096,7 +1096,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private static final String GET_SPAN_AVERAGE_DURATION = """
             %s
             SELECT <bucket> AS bucket,
-                   avg(if(isNaN(duration), NULL, duration)) AS avg_duration
+                   avgIf(duration, NOT isNaN(duration)) AS avg_duration
             FROM spans_filtered
             GROUP BY bucket
             ORDER BY bucket

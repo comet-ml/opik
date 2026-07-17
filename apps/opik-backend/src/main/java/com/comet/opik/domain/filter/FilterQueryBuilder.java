@@ -70,6 +70,13 @@ public class FilterQueryBuilder {
      * legitimate value that must keep matching.
      */
     private static final String END_TIME_NON_NULLABLE_ANALYTICS_DB = "nullIf(end_time, toDateTime64('1970-01-01 00:00:00.000', 9))";
+    /**
+     * The {@code end_time} fields whose filter resolves to {@link #END_TIME_NON_NULLABLE_ANALYTICS_DB} under the
+     * caller's cutover flag — one per entity that migrated ({@code traceColumnsNonNullable} for traces/threads,
+     * {@code spanColumnsNonNullable} for spans).
+     */
+    private static final Set<Field> END_TIME_SENTINEL_FIELDS = Set.of(
+            TraceField.END_TIME, TraceThreadField.END_TIME, SpanField.END_TIME);
     private static final String INPUT_ANALYTICS_DB = "input";
     private static final String OUTPUT_ANALYTICS_DB = "output";
     private static final String METADATA_ANALYTICS_DB = "metadata";
@@ -1038,9 +1045,7 @@ public class FilterQueryBuilder {
         // Resolve end_time to the sentinel-aware expression so an absent (epoch) value is excluded like a
         // NULL. Flag-gated (epoch is legitimate while the column is Nullable); the caller passes its entity's
         // cutover flag (traceColumnsNonNullable for traces/threads, spanColumnsNonNullable for spans).
-        if (columnsNonNullable
-                && (field == TraceField.END_TIME || field == TraceThreadField.END_TIME
-                        || field == SpanField.END_TIME)) {
+        if (columnsNonNullable && END_TIME_SENTINEL_FIELDS.contains(field)) {
             return END_TIME_NON_NULLABLE_ANALYTICS_DB;
         }
 
