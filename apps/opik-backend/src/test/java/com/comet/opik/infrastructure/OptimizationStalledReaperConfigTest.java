@@ -30,6 +30,7 @@ class OptimizationStalledReaperConfigTest {
                 .jobInterval(Duration.minutes(5))
                 .initializedTimeout(Duration.minutes(5))
                 .runningTimeout(Duration.hours(8))
+                .lookbackMargin(Duration.days(7))
                 .lockDuration(Duration.minutes(4))
                 .batchSize(100);
     }
