@@ -6,6 +6,9 @@ set -euo pipefail
 
 # Variables
 DEBUG_MODE=${DEBUG_MODE:-false}
+# opik.sh guardrails flag to append (empty = guardrails off). Set by --guardrails
+# (GPU-capable image, runs on CPU when no GPU) or --guardrails-cpu (slim CPU image).
+GUARDRAILS_OPIK_FLAG=""
 ORIGINAL_COMMAND="$0 $@"
 
 # Local dev defaults to version_2 (matches the bundled config.yml and
@@ -68,6 +71,11 @@ OLLIE_CONSOLE_PORT="${OLLIE_CONSOLE_PORT:-3333}"
 # Opik dev stack (the python-backend already publishes host 8000) and stays
 # unique across worktrees. cost-api's own standalone default is still 8000.
 AI_COST_BACKEND_PORT="${AI_COST_BACKEND_PORT:-$((8400 + PORT_OFFSET))}"
+
+# Guardrails backend host port. Offset per worktree so guardrails-enabled worktrees don't
+# collide on 5000; exported so the docker-compose override (${OPIK_GUARDRAILS_PORT:-5000})
+# and the SDK guidance printed below use the same value.
+export OPIK_GUARDRAILS_PORT="${OPIK_GUARDRAILS_PORT:-$((5000 + PORT_OFFSET))}"
 
 # Comet EM stack (comet-backend + comet-react + single-origin proxy).
 # All EM logic lives in dev-runner-platform.sh to keep this script focused; it is inert
@@ -178,6 +186,17 @@ find_jar_files() {
     return 0  # JAR file found and selected
 }
 
+# Invoke opik.sh, appending the guardrails flag when guardrails are enabled.
+# The dev modes (--local-be / --local-be-fe) already force port mapping, so the
+# guardrails backend is published on http://localhost:${OPIK_GUARDRAILS_PORT:-5000}.
+run_opik_sh() {
+    if [ -n "$GUARDRAILS_OPIK_FLAG" ]; then
+        ./opik.sh "$@" "$GUARDRAILS_OPIK_FLAG"
+    else
+        ./opik.sh "$@"
+    fi
+}
+
 # Function to start Docker services (infrastructure or infrastructure + frontend or etc.)
 # Args: $1 = mode (--infra or --local-be or etc.)
 start_docker_services() {
@@ -186,7 +205,7 @@ start_docker_services() {
     log_info "Starting Docker services..."
     cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; exit 1; }
 
-    if ./opik.sh "$mode"; then
+    if run_opik_sh "$mode"; then
         log_success "Docker services started successfully"
     else
         log_error "Failed to start Docker services"
@@ -202,7 +221,7 @@ stop_docker_services() {
     log_info "Stopping Docker services..."
     cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; exit 1; }
 
-    if ./opik.sh "$mode" --stop; then
+    if run_opik_sh "$mode" --stop; then
         log_success "Docker services stopped"
     else
         log_warning "Failed to stop some Docker services"
@@ -215,7 +234,7 @@ verify_docker_services() {
     local mode="$1"
 
     cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; exit 1; }
-    ./opik.sh "$mode" --verify >/dev/null 2>&1
+    run_opik_sh "$mode" --verify >/dev/null 2>&1
     return $?
 }
 
@@ -1234,6 +1253,14 @@ show_access_information() {
         echo "  export OPIK_URL_OVERRIDE='${ui_url}/api'"
     fi
     echo "  export OPIK_WORKSPACE='default'"
+
+    if [ -n "$GUARDRAILS_OPIK_FLAG" ]; then
+        echo ""
+        echo -e "${BLUE}Guardrails enabled:${NC}"
+        echo "  # The guardrails backend is published directly on port ${OPIK_GUARDRAILS_PORT:-5000}."
+        echo "  export OPIK_GUARDRAILS_URL_OVERRIDE='http://localhost:${OPIK_GUARDRAILS_PORT:-5000}'"
+    fi
+
     echo ""
     echo -e "${YELLOW}Important Notes:${NC}"
 
@@ -1256,7 +1283,7 @@ create_demo_data() {
     log_info "Creating demo data..."
     cd "$PROJECT_ROOT" || { log_error "Project root directory not found"; return 1; }
 
-    if ./opik.sh "$mode" --demo-data; then
+    if run_opik_sh "$mode" --demo-data; then
         log_success "Demo data created"
         return 0
     else
@@ -1599,6 +1626,10 @@ show_usage() {
     echo "  --lint-be        - Lint backend code"
     echo "  --lint-fe        - Lint frontend code"
     echo "  --debug          - Enable debug mode (meant to be combined with other flags)"
+    echo "  --guardrails     - Also run guardrails (default GPU-capable image; runs on CPU"
+    echo "                     when no GPU is present). Combine with an action, e.g."
+    echo "                     '--guardrails --restart'"
+    echo "  --guardrails-cpu - Also run guardrails using the slim CPU-only image (no GPU required)"
     echo "  --platform-enabled - Opik-team only: also run the Comet Platform stack (combine"
     echo "                     with an action, e.g. '--platform-enabled --restart'; alone it"
     echo "                     implies the default restart). Same as PLATFORM_ENABLED=true."
@@ -1747,6 +1778,17 @@ while [[ $# -gt 0 ]]; do
       # fall through to whatever action follows (default: restart). Equivalent to
       # the PLATFORM_ENABLED=true env var; platform_stack_enabled reads this at runtime.
       PLATFORM_ENABLED=true
+      shift
+      ;;
+    --guardrails)
+      # Modifier flag (like --debug): also run guardrails using the default
+      # GPU-capable image (runs on CPU when no GPU is present).
+      GUARDRAILS_OPIK_FLAG="--guardrails"
+      shift
+      ;;
+    --guardrails-cpu)
+      # Modifier flag: also run guardrails using the slim CPU-only image.
+      GUARDRAILS_OPIK_FLAG="--guardrails-cpu"
       shift
       ;;
     *)
