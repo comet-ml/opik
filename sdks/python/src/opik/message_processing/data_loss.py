@@ -115,7 +115,7 @@ class DataLossTracker:
 
         Returns ``(message_count, item_count, failures)``. Both counts are
         exact — derived from running totals, not the window — even under extreme
-        drop volume; only ``failures`` (the details) is best-effort, since the
+        drop volume; only ``failures`` (the details) are best-effort, since the
         oldest entries are evicted once capacity is exceeded. A single lock keeps
         the counts and details consistent even while other clients on the shared
         sender keep recording.
