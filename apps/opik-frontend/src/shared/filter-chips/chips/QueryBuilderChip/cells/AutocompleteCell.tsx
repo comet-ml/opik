@@ -164,7 +164,7 @@ export const AutocompleteCell: React.FC<AutocompleteCellProps> = ({
                     onSelect={() => pick(item)}
                     className={cn(itemClass, "text-foreground")}
                   >
-                    <span className="line-clamp-3 break-all">
+                    <span className="block break-all">
                       {highlightMatch(item, draft)}
                     </span>
                   </CommandItem>
