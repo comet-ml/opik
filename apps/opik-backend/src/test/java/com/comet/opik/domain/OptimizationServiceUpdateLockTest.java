@@ -10,6 +10,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.infrastructure.queues.QueueProducer;
+import com.comet.opik.podam.PodamFactoryUtils;
 import com.google.common.eventbus.EventBus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -23,28 +24,29 @@ import org.redisson.client.RedisException;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 import uk.co.jemos.podam.api.PodamFactory;
-import uk.co.jemos.podam.api.PodamFactoryImpl;
 
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
  * Guards the OPIK-7159/OPIK-7029 review fixes for {@code update()}: the per-id write is serialized under the
- * distributed lock (so a rename can't race a status write, or the worker the reaper, into a lost update that
- * strands a finished run non-terminal), yet a Redis blip on lock acquisition must NOT fail the write — it
- * falls back to a lock-free apply so the worker's mark_completed / mark_error callback and the reaper's own
- * ERROR write still persist.
+ * distributed lock (so a rename can't race a status write, or the worker race the reaper, into a lost update
+ * that strands a finished run non-terminal), yet a Redis blip on lock acquisition must NOT fail the write —
+ * it falls back to a lock-free apply so the worker's mark_completed / mark_error callback and the reaper's
+ * own ERROR write still persist. Cancellation is the exception: its effect needs the Redis signal the worker
+ * polls, so it stays on the hard-fail path rather than reporting a false success during a Redis outage.
  */
 @ExtendWith(MockitoExtension.class)
 class OptimizationServiceUpdateLockTest {
 
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
 
-    private final PodamFactory factory = new PodamFactoryImpl();
+    private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
     @Mock
     private OptimizationDAO optimizationDAO;
@@ -95,17 +97,35 @@ class OptimizationServiceUpdateLockTest {
                 .build();
     }
 
-    @Test
-    @DisplayName("a status update is serialized under the distributed lock")
-    void statusUpdate__serializesUnderLock() {
-        var id = UUID.randomUUID();
+    private void stubHappyPath(UUID id) {
         when(optimizationDAO.getById(id)).thenReturn(Mono.just(existing(id)));
         when(optimizationDAO.update(eq(id), any())).thenReturn(Mono.just(1L));
         // Pass the guarded action through so the update completes under the (mocked) lock.
         when(lockService.executeWithLock(any(LockService.Lock.class), ArgumentMatchers.<Mono<Long>>any()))
                 .thenAnswer(invocation -> invocation.getArgument(1));
+    }
+
+    @Test
+    @DisplayName("a status update is serialized under the distributed lock")
+    void statusUpdate__serializesUnderLock() {
+        var id = UUID.randomUUID();
+        stubHappyPath(id);
 
         var update = OptimizationUpdate.builder().status(OptimizationStatus.RUNNING).build();
+
+        StepVerifier.create(update(id, update)).expectNext(1L).verifyComplete();
+
+        verify(lockService).executeWithLock(any(LockService.Lock.class), ArgumentMatchers.<Mono<Long>>any());
+        verify(optimizationDAO).update(eq(id), any());
+    }
+
+    @Test
+    @DisplayName("a name-only update is serialized under the distributed lock")
+    void nameUpdate__serializesUnderLock() {
+        var id = UUID.randomUUID();
+        stubHappyPath(id);
+
+        var update = OptimizationUpdate.builder().name("renamed-optimization").build();
 
         StepVerifier.create(update(id, update)).expectNext(1L).verifyComplete();
 
@@ -129,5 +149,21 @@ class OptimizationServiceUpdateLockTest {
         StepVerifier.create(update(id, update)).expectNext(1L).verifyComplete();
 
         verify(optimizationDAO).update(eq(id), any());
+    }
+
+    @Test
+    @DisplayName("a cancellation stays on the hard-fail path when Redis is unavailable (no false success)")
+    void cancellation__hardFailsWhenRedisUnavailable() {
+        var id = UUID.randomUUID();
+        // Lock acquisition fails as it would during a Redis outage.
+        when(lockService.executeWithLock(any(LockService.Lock.class), ArgumentMatchers.<Mono<Long>>any()))
+                .thenReturn(Mono.error(new RedisException("redis unavailable")));
+
+        var update = OptimizationUpdate.builder().status(OptimizationStatus.CANCELLED).build();
+
+        // Must surface the error, not silently persist CANCELLED while the worker never gets the signal.
+        StepVerifier.create(update(id, update)).expectError(RedisException.class).verify();
+
+        verify(optimizationDAO, never()).update(any(), any());
     }
 }
