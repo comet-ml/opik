@@ -1,6 +1,7 @@
 import React, { useCallback, useRef, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
-import { Download, MoreHorizontal, Pencil, Trash } from "lucide-react";
+import copy from "clipboard-copy";
+import { Copy, Download, MoreHorizontal, Pencil, Trash } from "lucide-react";
 
 import { Button } from "@/ui/button";
 import {
@@ -126,6 +127,15 @@ export const createDatasetRowActionsCell = ({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuItem
+              onClick={() => {
+                toast({ description: `Copied ${entityName} ID to clipboard` });
+                copy(dataset.id);
+              }}
+            >
+              <Copy className="mr-2 size-4" />
+              Copy {entityName} ID
+            </DropdownMenuItem>
             {canEditDatasets && (
               <DropdownMenuItem
                 onClick={() => {
@@ -146,10 +156,7 @@ export const createDatasetRowActionsCell = ({
                 Download
               </DropdownMenuItem>
             )}
-            {canDeleteDatasets &&
-              (canEditDatasets || isDatasetExportEnabled) && (
-                <DropdownMenuSeparator />
-              )}
+            {canDeleteDatasets && <DropdownMenuSeparator />}
             {canDeleteDatasets && (
               <DropdownMenuItem
                 onClick={() => {
