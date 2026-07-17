@@ -1882,81 +1882,112 @@ class TestCascadeExperiments:
 
 
 class TestBulkFetchSpansGuard:
-    """``_bulk_fetch_spans_for_experiment`` must never issue an unbounded,
-    unfiltered ``search_spans`` from the cascade.
+    """The cascade must never issue an unbounded, unfiltered ``search_spans``
+    -- ``search_spans(filter_string=None, max_results=sys.maxsize)`` -- which
+    reads a whole project and OOMs the client on large projects.
 
-    A project bucket whose traces can't be time-bounded used to fall through
-    to ``search_spans(filter_string=None, max_results=sys.maxsize)`` -- a
-    whole-project read that OOMed the client on large projects. Two ways a
-    bucket becomes unbounded:
-      * empty ``per_project_traces`` -- every referenced trace is stale/
-        deleted (absent from the experiment's fetched traces);
+    A per-project span-fetch bucket becomes unbounded two ways, both driven
+    here through the public ``cascade_experiments`` entrypoint:
+      * empty bucket -- every trace it references is stale/deleted (absent
+        from the experiment's fetched traces);
       * non-empty bucket whose traces carry no start/end/last_updated
         timestamps -- no window to bound the read.
     Both must be skipped with a warning; the invariant is that
     ``search_spans`` is never called with ``filter_string=None``.
     """
 
-    def _call(
+    def _run(
         self,
         *,
-        source_traces_by_id: Dict[str, Any],
-        traces_by_project: Dict[str, set],
+        rest_client: Any,
+        client: Any,
+        item_id_remap: Dict[str, str],
+        capture_log: Any,
     ) -> Any:
-        client = MagicMock()
-
-        def _get_project(id: str) -> Any:
-            # ``name`` is a reserved MagicMock ctor kwarg (sets the repr),
-            # so set the ``.name`` attribute after construction.
-            project = MagicMock()
-            project.name = f"name-for-{id}"
-            return project
-
-        client.get_project = MagicMock(side_effect=_get_project)
-        client.search_spans = MagicMock(return_value=[])
-        expected = {tid for tids in traces_by_project.values() for tid in tids}
-        cascade_module._bulk_fetch_spans_for_experiment(
-            client,
-            source_traces_by_id=source_traces_by_id,
-            traces_by_project=traces_by_project,
-            project_id_to_name_cache={},
-            expected_trace_ids=expected,
-        )
-        return client
-
-    def test_stale_bucket__skipped_without_unbounded_read(self, capture_log) -> None:
-        # A project bucket whose every trace is absent from
-        # ``source_traces_by_id`` (stale/deleted) must be skipped -- NOT
-        # read as an unbounded full-project search.
-        healthy_trace = _Trace(
-            id="live-1",
-            start_time=dt.datetime(2026, 1, 1, 12, 0, 0),
-            end_time=dt.datetime(2026, 1, 1, 12, 5, 0),
-        )
-        source_traces_by_id = {"live-1": healthy_trace}
-        traces_by_project = {
-            "project-live": {"live-1"},
-            "project-stale": {"gone-1", "gone-2"},  # none in source_traces_by_id
-        }
-
         with capture_log.at_level("WARNING"):
-            client = self._call(
-                source_traces_by_id=source_traces_by_id,
-                traces_by_project=traces_by_project,
+            return cascade_experiments(
+                client,
+                rest_client,
+                source_dataset_id="src-dataset-1",
+                target_dataset_name="MyDataset",
+                target_project_name="DestProject",
+                version_remap={"src-v-1": "dest-v-1"},
+                item_id_remap=item_id_remap,
+                audit=_audit(),
             )
 
-        # Exactly one search_spans call -- the healthy bucket. The stale
-        # bucket was skipped.
-        assert client.search_spans.call_count == 1
+    def _assert_no_unbounded_read(self, client: Any) -> None:
         for call in client.search_spans.call_args_list:
-            # The invariant: never an unbounded, unfiltered read.
             assert call.kwargs.get("filter_string") is not None, (
                 "cascade must never call search_spans with filter_string=None"
             )
             assert "start_time" in call.kwargs["filter_string"]
 
+    def test_stale_bucket__skipped_without_unbounded_read(self, capture_log) -> None:
+        # A project bucket whose every trace is stale/deleted (absent from
+        # the fetched traces) must be skipped -- NOT read as an unbounded
+        # full-project search. ``live`` and ``gone`` live in different
+        # projects so ``gone``'s bucket is degenerate on its own.
+        live = _ExperimentItem(
+            id="src-item-live",
+            experiment_id="src-exp-1",
+            trace_id="src-trace-live",
+            dataset_item_id="src-ds-live",
+        )
+        gone = _ExperimentItem(
+            id="src-item-gone",
+            experiment_id="src-exp-1",
+            trace_id="src-trace-gone",
+            dataset_item_id="src-ds-gone",
+        )
+        experiment = _Experiment(id="src-exp-1", dataset_version_id="src-v-1")
+        rest_client = _cascade_rest_client(
+            experiments_by_dataset={"src-dataset-1": [experiment]},
+            items_by_experiment={"experiment": [live, gone]},
+            # Both traces exist so the item stream buckets each into its own
+            # project; ``gone`` is in a distinct project.
+            traces_by_id={
+                "src-trace-live": _Trace(
+                    id="src-trace-live",
+                    project_id="project-live",
+                    start_time=dt.datetime(2026, 1, 1, 12, 0, 0),
+                    end_time=dt.datetime(2026, 1, 1, 12, 5, 0),
+                ),
+                "src-trace-gone": _Trace(
+                    id="src-trace-gone", project_id="project-gone"
+                ),
+            },
+            spans_by_trace={"src-trace-live": [], "src-trace-gone": []},
+        )
+        client = _client_with_recreate_capture(rest_client)
+
+        # Make ``gone`` unfetchable everywhere: absent from the bulk
+        # search_traces AND 404 on the per-trace fallback. Its project
+        # bucket then has an empty per_project_traces at span-fetch time.
+        client.search_traces = MagicMock(
+            return_value=[
+                rest_client._traces_by_id_for_cascade_search["src-trace-live"]
+            ]
+        )
+        client.get_trace_content = MagicMock(
+            side_effect=ApiError(status_code=404, body="not found")
+        )
+
+        self._run(
+            rest_client=rest_client,
+            client=client,
+            item_id_remap={
+                "src-ds-live": "dest-ds-live",
+                "src-ds-gone": "dest-ds-gone",
+            },
+            capture_log=capture_log,
+        )
+
+        # search_spans ran only for the live bucket, always time-bounded.
+        self._assert_no_unbounded_read(client)
+        assert client.search_spans.call_count == 1
         assert any(
-            "project-stale" in rec.message and "stale/deleted" in rec.message
+            "project-gone" in rec.message and "stale/deleted" in rec.message
             for rec in capture_log.records
         ), "expected a warning naming the skipped stale project"
 
@@ -1965,21 +1996,33 @@ class TestBulkFetchSpansGuard:
     ) -> None:
         # A bucket whose traces exist but carry no usable timestamps can't
         # be time-bounded; it must be skipped rather than read unbounded.
-        no_ts_trace = _Trace(id="notime-1")
+        no_ts = _Trace(id="notime-1", project_id="project-notime")
         # ``_Trace`` defaults ``start_time`` to a real datetime; null all
-        # three timestamp fields so ``_compute_span_time_window`` returns
-        # None (the no-window case the guard must catch).
-        no_ts_trace.start_time = None
-        no_ts_trace.end_time = None
-        no_ts_trace.last_updated_at = None
-        source_traces_by_id = {"notime-1": no_ts_trace}
-        traces_by_project = {"project-notime": {"notime-1"}}
+        # three timestamp fields so the span window can't be derived.
+        no_ts.start_time = None
+        no_ts.end_time = None
+        no_ts.last_updated_at = None
+        item = _ExperimentItem(
+            id="src-item-1",
+            experiment_id="src-exp-1",
+            trace_id="notime-1",
+            dataset_item_id="src-ds-1",
+        )
+        experiment = _Experiment(id="src-exp-1", dataset_version_id="src-v-1")
+        rest_client = _cascade_rest_client(
+            experiments_by_dataset={"src-dataset-1": [experiment]},
+            items_by_experiment={"experiment": [item]},
+            traces_by_id={"notime-1": no_ts},
+            spans_by_trace={"notime-1": []},
+        )
+        client = _client_with_recreate_capture(rest_client)
 
-        with capture_log.at_level("WARNING"):
-            client = self._call(
-                source_traces_by_id=source_traces_by_id,
-                traces_by_project=traces_by_project,
-            )
+        self._run(
+            rest_client=rest_client,
+            client=client,
+            item_id_remap={"src-ds-1": "dest-ds-1"},
+            capture_log=capture_log,
+        )
 
         client.search_spans.assert_not_called()
         assert any(
@@ -1987,17 +2030,36 @@ class TestBulkFetchSpansGuard:
             for rec in capture_log.records
         ), "expected a warning naming the skipped no-timestamp project"
 
-    def test_healthy_bucket__reads_with_bounded_filter(self) -> None:
+    def test_healthy_bucket__reads_with_bounded_filter(self, capture_log) -> None:
         # Sanity: a normal bucket still issues one bounded search_spans.
         trace = _Trace(
             id="ok-1",
+            project_id="project-ok",
             start_time=dt.datetime(2026, 1, 1, 12, 0, 0),
             end_time=dt.datetime(2026, 1, 1, 12, 5, 0),
         )
-        client = self._call(
-            source_traces_by_id={"ok-1": trace},
-            traces_by_project={"project-ok": {"ok-1"}},
+        item = _ExperimentItem(
+            id="src-item-1",
+            experiment_id="src-exp-1",
+            trace_id="ok-1",
+            dataset_item_id="src-ds-1",
         )
+        experiment = _Experiment(id="src-exp-1", dataset_version_id="src-v-1")
+        rest_client = _cascade_rest_client(
+            experiments_by_dataset={"src-dataset-1": [experiment]},
+            items_by_experiment={"experiment": [item]},
+            traces_by_id={"ok-1": trace},
+            spans_by_trace={"ok-1": []},
+        )
+        client = _client_with_recreate_capture(rest_client)
+
+        self._run(
+            rest_client=rest_client,
+            client=client,
+            item_id_remap={"src-ds-1": "dest-ds-1"},
+            capture_log=capture_log,
+        )
+
         client.search_spans.assert_called_once()
         kwargs = client.search_spans.call_args.kwargs
         assert kwargs["filter_string"] is not None
