@@ -2,9 +2,9 @@ import datetime as dt
 from unittest import mock
 
 
-from opik.message_processing import span_truncation, messages
+from opik.message_processing import payload_truncation, messages
 from opik.message_processing.processors import online_message_processor
-from opik.rest_api.types import span_write
+from opik.rest_api.types import span_write, trace_write
 
 from ...testlib import fake_message_factory
 
@@ -27,14 +27,14 @@ def _big_value(megabytes: int):
 
 
 # --------------------------------------------------------------------------- #
-# span_truncation module
+# payload_truncation module
 # --------------------------------------------------------------------------- #
 
 
 def test_truncate_span_write__within_limit__returned_unchanged():
     span = _span_write(input={"prompt": "small"}, output={"result": "small"})
 
-    result = span_truncation.truncate_span_write_if_needed(span, LIMIT_MB)
+    result = payload_truncation.truncate_write_if_needed(span, LIMIT_MB)
 
     assert result is span  # identity preserved, nothing copied
     assert result.input == {"prompt": "small"}
@@ -44,7 +44,7 @@ def test_truncate_span_write__oversized_output__truncated(caplog):
     span = _span_write(input={"prompt": "small"}, output=_big_value(21))
 
     with caplog.at_level("WARNING"):
-        result = span_truncation.truncate_span_write_if_needed(span, LIMIT_MB)
+        result = payload_truncation.truncate_write_if_needed(span, LIMIT_MB)
 
     # the oversized field is replaced with a marker, the small one is untouched
     assert result.output["opik_truncated"] is True
@@ -58,7 +58,7 @@ def test_truncate_span_write__each_oversized_field_truncated_independently():
     # both input and output individually exceed the per-field limit -> both truncated
     span = _span_write(input=_big_value(25), output=_big_value(25))
 
-    result = span_truncation.truncate_span_write_if_needed(span, LIMIT_MB)
+    result = payload_truncation.truncate_write_if_needed(span, LIMIT_MB)
 
     assert result.input["opik_truncated"] is True
     assert result.output["opik_truncated"] is True
@@ -69,7 +69,7 @@ def test_truncate_span_write__total_over_but_no_single_field_over__truncates_all
     # hard per-span cap (pass 2) kicks in and truncates all truncatable fields.
     span = _span_write(input=_big_value(15), output=_big_value(15))
 
-    result = span_truncation.truncate_span_write_if_needed(span, LIMIT_MB)
+    result = payload_truncation.truncate_write_if_needed(span, LIMIT_MB)
 
     assert result.input["opik_truncated"] is True
     assert result.output["opik_truncated"] is True
@@ -84,7 +84,7 @@ def test_truncate_span_write__metadata_never_truncated_and_does_not_trigger_othe
         metadata=_big_value(25),
     )
 
-    result = span_truncation.truncate_span_write_if_needed(span, LIMIT_MB)
+    result = payload_truncation.truncate_write_if_needed(span, LIMIT_MB)
 
     assert result is span  # nothing truncated at all
     assert result.metadata == _big_value(25)  # metadata left fully intact
@@ -96,7 +96,7 @@ def test_truncate_span_write__oversized_input_truncated_but_metadata_kept():
     # input (truncatable) is capped; metadata (exempt) is preserved even when huge.
     span = _span_write(input=_big_value(25), metadata=_big_value(25))
 
-    result = span_truncation.truncate_span_write_if_needed(span, LIMIT_MB)
+    result = payload_truncation.truncate_write_if_needed(span, LIMIT_MB)
 
     assert result.input["opik_truncated"] is True
     assert result.metadata == _big_value(25)
@@ -106,7 +106,7 @@ def test_truncate_span_write__original_is_not_mutated():
     span = _span_write(output=_big_value(21))
     original_output = span.output
 
-    span_truncation.truncate_span_write_if_needed(span, LIMIT_MB)
+    payload_truncation.truncate_write_if_needed(span, LIMIT_MB)
 
     assert span.output is original_output  # frozen model untouched
 
@@ -115,7 +115,7 @@ def test_truncate_span_kwargs__oversized__truncated_in_place(caplog):
     kwargs = {"id": "span-id", "output": _big_value(21), "input": {"prompt": "small"}}
 
     with caplog.at_level("WARNING"):
-        span_truncation.truncate_span_kwargs_if_needed(kwargs, LIMIT_MB)
+        payload_truncation.truncate_kwargs_if_needed(kwargs, LIMIT_MB)
 
     assert kwargs["output"]["opik_truncated"] is True
     assert kwargs["input"] == {"prompt": "small"}
@@ -124,7 +124,7 @@ def test_truncate_span_kwargs__oversized__truncated_in_place(caplog):
 
 def test_truncate_span_kwargs__within_limit__untouched():
     kwargs = {"id": "span-id", "output": {"result": "small"}}
-    span_truncation.truncate_span_kwargs_if_needed(kwargs, LIMIT_MB)
+    payload_truncation.truncate_kwargs_if_needed(kwargs, LIMIT_MB)
     assert kwargs["output"] == {"result": "small"}
 
 
@@ -135,18 +135,18 @@ def test_truncate_span_kwargs__within_limit__untouched():
 # --------------------------------------------------------------------------- #
 
 
-def _processor(max_span_payload_size_mb):
+def _processor(max_payload_size_mb):
     return online_message_processor.OpikMessageProcessor(
         rest_client=mock.MagicMock(),
         file_upload_manager=mock.MagicMock(),
         fallback_replay_manager=mock.MagicMock(),
         unauthorized_message_types_registry=mock.MagicMock(),
-        max_span_payload_size_mb=max_span_payload_size_mb,
+        max_payload_size_mb=max_payload_size_mb,
     )
 
 
 def test_process_create_spans_batch__oversized_span_truncated_before_send():
-    processor = _processor(max_span_payload_size_mb=LIMIT_MB)
+    processor = _processor(max_payload_size_mb=LIMIT_MB)
     big_span = _span_write(output=_big_value(21))
     small_span = _span_write(output={"result": "small"})
     message = messages.CreateSpansBatchMessage(batch=[big_span, small_span])
@@ -159,7 +159,7 @@ def test_process_create_spans_batch__oversized_span_truncated_before_send():
 
 
 def test_process_create_spans_batch__limit_disabled__no_truncation():
-    processor = _processor(max_span_payload_size_mb=None)
+    processor = _processor(max_payload_size_mb=None)
     big_span = _span_write(output=_big_value(21))
     message = messages.CreateSpansBatchMessage(batch=[big_span])
 
@@ -170,7 +170,7 @@ def test_process_create_spans_batch__limit_disabled__no_truncation():
 
 
 def test_process_create_span__oversized_field_truncated_before_send():
-    processor = _processor(max_span_payload_size_mb=LIMIT_MB)
+    processor = _processor(max_payload_size_mb=LIMIT_MB)
     span_message = fake_message_factory.fake_span_create_message_batch(
         count=1, approximate_span_size=21 * ONE_MEGABYTE
     )[0]
@@ -212,7 +212,7 @@ def _update_span_message(**fields) -> messages.UpdateSpanMessage:
 def test_process_update_span__oversized_field_truncated_before_send():
     # An oversized output attached via update_span (e.g. span.end(output=...)
     # after the create was flushed) must be capped, not bypass the limit.
-    processor = _processor(max_span_payload_size_mb=LIMIT_MB)
+    processor = _processor(max_payload_size_mb=LIMIT_MB)
     message = _update_span_message(output=_big_value(21), input={"prompt": "small"})
 
     processor.process(message)
@@ -223,10 +223,120 @@ def test_process_update_span__oversized_field_truncated_before_send():
 
 
 def test_process_update_span__limit_disabled__no_truncation():
-    processor = _processor(max_span_payload_size_mb=None)
+    processor = _processor(max_payload_size_mb=None)
     message = _update_span_message(output=_big_value(21))
 
     processor.process(message)
 
     sent_kwargs = processor._rest_client.spans.update_span.call_args.kwargs
     assert sent_kwargs["output"] == _big_value(21)  # unchanged when disabled
+
+
+# --------------------------------------------------------------------------- #
+# TRACE paths — @track mirrors the payload onto the trace (a root span duplicating
+# the trace data), so traces must be capped by the same per-object limit too.
+# --------------------------------------------------------------------------- #
+
+
+def _trace_write(**fields) -> trace_write.TraceWrite:
+    return trace_write.TraceWrite(
+        id="trace-id",
+        name="my-trace",
+        start_time=dt.datetime.now(tz=dt.timezone.utc),
+        **fields,
+    )
+
+
+def _create_trace_message(**fields) -> messages.CreateTraceMessage:
+    defaults = dict(
+        trace_id="trace-id",
+        project_name="my-project",
+        name="my-trace",
+        start_time=dt.datetime.now(tz=dt.timezone.utc),
+        end_time=None,
+        input=None,
+        output=None,
+        metadata=None,
+        tags=None,
+        error_info=None,
+        thread_id=None,
+        last_updated_at=None,
+        source="sdk",
+    )
+    defaults.update(fields)
+    return messages.CreateTraceMessage(**defaults)
+
+
+def _update_trace_message(**fields) -> messages.UpdateTraceMessage:
+    defaults = dict(
+        trace_id="trace-id",
+        project_name="my-project",
+        end_time=None,
+        input=None,
+        output=None,
+        metadata=None,
+        tags=None,
+        error_info=None,
+        thread_id=None,
+        source="sdk",
+    )
+    defaults.update(fields)
+    return messages.UpdateTraceMessage(**defaults)
+
+
+def test_process_create_trace__oversized_output_truncated_before_send():
+    processor = _processor(max_payload_size_mb=LIMIT_MB)
+    message = _create_trace_message(output=_big_value(21), input={"prompt": "small"})
+
+    processor.process(message)
+
+    sent = processor._rest_client.traces.create_trace.call_args.kwargs
+    assert sent["output"]["opik_truncated"] is True  # trace output truncated too
+    assert sent["input"] == {"prompt": "small"}
+
+
+def test_process_create_trace__metadata_not_truncated():
+    processor = _processor(max_payload_size_mb=LIMIT_MB)
+    message = _create_trace_message(
+        output=_big_value(21), metadata={"thread_id": "t-1", "model": "gpt-4"}
+    )
+
+    processor.process(message)
+
+    sent = processor._rest_client.traces.create_trace.call_args.kwargs
+    assert sent["output"]["opik_truncated"] is True
+    assert sent["metadata"] == {"thread_id": "t-1", "model": "gpt-4"}  # metadata kept
+
+
+def test_process_update_trace__oversized_output_truncated_before_send():
+    processor = _processor(max_payload_size_mb=LIMIT_MB)
+    message = _update_trace_message(output=_big_value(21), input={"prompt": "small"})
+
+    processor.process(message)
+
+    sent = processor._rest_client.traces.update_trace.call_args.kwargs
+    assert sent["output"]["opik_truncated"] is True
+    assert sent["input"] == {"prompt": "small"}
+
+
+def test_process_create_traces_batch__oversized_trace_truncated():
+    processor = _processor(max_payload_size_mb=LIMIT_MB)
+    big_trace = _trace_write(output=_big_value(21))
+    small_trace = _trace_write(output={"result": "small"})
+    message = messages.CreateTraceBatchMessage(batch=[big_trace, small_trace])
+
+    processor.process(message)
+
+    sent = processor._rest_client.traces.create_traces.call_args.kwargs["traces"]
+    assert sent[0].output["opik_truncated"] is True
+    assert sent[1].output == {"result": "small"}
+
+
+def test_process_create_trace__limit_disabled__no_truncation():
+    processor = _processor(max_payload_size_mb=None)
+    message = _create_trace_message(output=_big_value(21))
+
+    processor.process(message)
+
+    sent = processor._rest_client.traces.create_trace.call_args.kwargs
+    assert sent["output"] == _big_value(21)  # unchanged when disabled

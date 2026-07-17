@@ -16,10 +16,11 @@ from opik.rest_api.types import (
     guardrail,
     experiment_item,
     span_write,
+    trace_write,
 )
 
 from . import assertion_results_processor, message_processors
-from .. import encoder_helpers, messages, permissions, span_truncation
+from .. import encoder_helpers, messages, permissions, payload_truncation
 from ..replay import replay_manager, db_manager
 
 
@@ -37,7 +38,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         fallback_replay_manager: replay_manager.ReplayManager,
         unauthorized_message_types_registry: permissions.UnauthorizedMessageTypeRegistry,
         batch_memory_limit_mb: int = 50,
-        max_span_payload_size_mb: Optional[float] = None,
+        max_payload_size_mb: Optional[float] = None,
         active: bool = True,
     ):
         self._rest_client = rest_client
@@ -45,7 +46,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         self._batch_memory_limit_mb = batch_memory_limit_mb
         # Per-span size limit (MB). Oversized spans are truncated right before
         # sending. None disables the check.
-        self._max_span_payload_size_mb = max_span_payload_size_mb
+        self._max_payload_size_mb = max_payload_size_mb
         self._is_active = active
         self._replay_manager = fallback_replay_manager
         self._unauthorized_message_types_registry = unauthorized_message_types_registry
@@ -227,11 +228,11 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             object_type="span",
         )
 
-        # Enforce the per-span size limit right before sending, after attachment
+        # Enforce the per-object size limit right before sending, after attachment
         # extraction has already stripped/uploaded large attachments.
-        if self._max_span_payload_size_mb is not None:
-            span_truncation.truncate_span_kwargs_if_needed(
-                cleaned_create_span_kwargs, self._max_span_payload_size_mb
+        if self._max_payload_size_mb is not None:
+            payload_truncation.truncate_kwargs_if_needed(
+                cleaned_create_span_kwargs, self._max_payload_size_mb, kind="span"
             )
 
         LOGGER.debug("Create span request: %s", cleaned_create_span_kwargs)
@@ -251,6 +252,13 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             object_type="trace",
         )
 
+        # Same per-object size cap as spans: @track / manual trace logging mirror the
+        # payload onto the trace, so an oversized trace input/output must be capped too.
+        if self._max_payload_size_mb is not None:
+            payload_truncation.truncate_kwargs_if_needed(
+                cleaned_create_trace_kwargs, self._max_payload_size_mb, kind="trace"
+            )
+
         LOGGER.debug("Create trace request: %s", cleaned_create_trace_kwargs)
         self._rest_client.traces.create_trace(**cleaned_create_trace_kwargs)
 
@@ -269,12 +277,12 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             object_type="span",
         )
 
-        # Enforce the per-span size limit on updates too: an oversized
-        # output/input/metadata attached via update_span (e.g. span.end(output=...)
+        # Enforce the per-object size limit on updates too: an oversized
+        # output/input attached via update_span (e.g. span.end(output=...)
         # once the create was already flushed) would otherwise bypass the cap.
-        if self._max_span_payload_size_mb is not None:
-            span_truncation.truncate_span_kwargs_if_needed(
-                cleaned_update_span_kwargs, self._max_span_payload_size_mb
+        if self._max_payload_size_mb is not None:
+            payload_truncation.truncate_kwargs_if_needed(
+                cleaned_update_span_kwargs, self._max_payload_size_mb, kind="span"
             )
 
         LOGGER.debug("Update span request: %s", cleaned_update_span_kwargs)
@@ -294,6 +302,13 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             fields_to_anonymize=message.fields_to_anonymize(),
             object_type="trace",
         )
+
+        # Cap oversized trace output/input attached via update (e.g. the @track
+        # decorator setting the trace output when the root function returns).
+        if self._max_payload_size_mb is not None:
+            payload_truncation.truncate_kwargs_if_needed(
+                cleaned_update_trace_kwargs, self._max_payload_size_mb, kind="trace"
+            )
 
         LOGGER.debug("Update trace request: %s", cleaned_update_trace_kwargs)
         self._rest_client.traces.update_trace(**cleaned_update_trace_kwargs)
@@ -366,12 +381,12 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         self, message: messages.CreateSpansBatchMessage
     ) -> None:
         LOGGER.debug("Create spans batch request of size %d", len(message.batch))
-        # Enforce the per-span size limit right before sending, after attachment
+        # Enforce the per-object size limit right before sending, after attachment
         # extraction has already stripped/uploaded large attachments.
         batch: List[span_write.SpanWrite] = message.batch
-        if self._max_span_payload_size_mb is not None:
-            batch = span_truncation.truncate_span_writes(
-                batch, self._max_span_payload_size_mb
+        if self._max_payload_size_mb is not None:
+            batch = payload_truncation.truncate_writes(
+                batch, self._max_payload_size_mb, kind="span"
             )
         self._rest_client.spans.create_spans(spans=batch)
         LOGGER.debug("Sent spans batch of size %d", len(batch))
@@ -380,8 +395,13 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         self, message: messages.CreateTraceBatchMessage
     ) -> None:
         LOGGER.debug("Create trace batch request of size %d", len(message.batch))
-        self._rest_client.traces.create_traces(traces=message.batch)
-        LOGGER.debug("Sent trace batch of size %d", len(message.batch))
+        batch: List[trace_write.TraceWrite] = message.batch
+        if self._max_payload_size_mb is not None:
+            batch = payload_truncation.truncate_writes(
+                batch, self._max_payload_size_mb, kind="trace"
+            )
+        self._rest_client.traces.create_traces(traces=batch)
+        LOGGER.debug("Sent trace batch of size %d", len(batch))
 
     def _process_guardrail_batch_message(
         self,

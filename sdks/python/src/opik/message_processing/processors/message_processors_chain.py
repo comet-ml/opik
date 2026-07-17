@@ -21,7 +21,7 @@ def create_message_processors_chain(
     file_upload_manager: base_upload_manager.BaseFileUploadManager,
     fallback_replay_manager: replay_manager.ReplayManager,
     unauthorized_message_types_registry: permissions.UnauthorizedMessageTypeRegistry,
-    max_span_payload_size_mb: Optional[float] = None,
+    max_payload_size_mb: Optional[float] = None,
 ) -> message_processors.ChainedMessageProcessor:
     """
     Creates a chain of message processors by combining an online processor and a
@@ -42,7 +42,7 @@ def create_message_processors_chain(
             processor.
         unauthorized_message_types_registry: Unauthorized message types registry instance used
             to configure the online message processor.
-        max_span_payload_size_mb: Per-span size limit in MB, applied by the online processor right
+        max_payload_size_mb: Per-span size limit in MB, applied by the online processor right
             before sending. Any ``input``/``output``/``metadata`` field over the limit is replaced
             with a truncation marker; if the span is still over, the remaining fields are replaced
             too (a warning logged). ``None`` disables the check (no truncation).
@@ -55,7 +55,7 @@ def create_message_processors_chain(
         file_upload_manager=file_upload_manager,
         fallback_replay_manager=fallback_replay_manager,
         unauthorized_message_types_registry=unauthorized_message_types_registry,
-        max_span_payload_size_mb=max_span_payload_size_mb,
+        max_payload_size_mb=max_payload_size_mb,
     )
     # is not active by default - will be activated during evaluation
     local = local_emulator_message_processor.LocalEmulatorMessageProcessor(active=False)
