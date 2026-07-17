@@ -686,6 +686,72 @@ class MyMetric(BaseMetric):
 `;
     expect(extractMetricNameFromPythonCode(code)).toEqual("custom_attr");
   });
+
+  it("ignores a helper class's own class-level name (only the BaseMetric subclass counts)", () => {
+    // A non-metric helper with its own `name = ...` declared first must NOT win —
+    // otherwise objective_name mismatches the scored name and polling stalls.
+    const code = `
+class Helper:
+    name = "helper_name"
+    def util(self):
+        return 1
+
+class RealMetric(BaseMetric):
+    name = "real_metric"
+    def score(self, output, **kwargs):
+        return 1.0
+`;
+    expect(extractMetricNameFromPythonCode(code)).toEqual("real_metric");
+  });
+
+  it("picks the alphabetically-first BaseMetric subclass (mirrors backend)", () => {
+    const code = `
+class ZMetric(BaseMetric):
+    name = "z_name"
+    def score(self, output, **kwargs):
+        return 1.0
+
+class AMetric(BaseMetric):
+    name = "a_name"
+    def score(self, output, **kwargs):
+        return 1.0
+`;
+    expect(extractMetricNameFromPythonCode(code)).toEqual("a_name");
+  });
+
+  it("recognizes a BaseMetric import alias as the metric base", () => {
+    const code = `
+from opik.evaluation.metrics import BaseMetric as BM
+
+class MyMetric(BM):
+    def __init__(self):
+        super().__init__(name="aliased")
+`;
+    expect(extractMetricNameFromPythonCode(code)).toEqual("aliased");
+  });
+
+  it("recognizes a dotted BaseMetric reference as the metric base", () => {
+    const code = `
+import opik.evaluation.metrics as metrics
+
+class MyMetric(metrics.BaseMetric):
+    def __init__(self):
+        super().__init__(name="dotted")
+`;
+    expect(extractMetricNameFromPythonCode(code)).toEqual("dotted");
+  });
+
+  it("returns null when no BaseMetric subclass can be identified", () => {
+    // Indirect subclassing isn't statically resolvable; the backend rejects it
+    // too, so we defer rather than guess a wrong name.
+    const code = `
+class MyMetric(SomeUserBase):
+    name = "unresolved"
+    def score(self, output, **kwargs):
+        return 1.0
+`;
+    expect(extractMetricNameFromPythonCode(code)).toBeNull();
+  });
 });
 
 // The unknown-column check that gates submission
