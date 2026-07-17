@@ -1836,6 +1836,10 @@ public class ExperimentDAO {
      * <p>Assumption: {@code experiments} has no {@code MATERIALIZED} or {@code ALIAS} columns.
      * Adding one would require updating this query (the INSERT would fail loudly at execution
      * time, surfacing the issue rather than corrupting data silently).
+     *
+     * <p>The idempotency guard {@code project_id = ''} sits inside the subquery, not on the outer
+     * statement: CH 26.3's analyzer would resolve an outer {@code project_id} to the REPLACE alias
+     * (the new value) instead of the source column, matching nothing and writing zero rows.
      */
     private static final String BATCH_SET_PROJECT_ID = """
             INSERT INTO experiments
@@ -1849,10 +1853,10 @@ public class ExperimentDAO {
                 FROM experiments
                 WHERE workspace_id = :workspace_id
                 AND id IN :experiment_ids
+                AND project_id = ''
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             )
-            WHERE project_id = ''
             SETTINGS log_comment = '<log_comment>'
             """;
 
