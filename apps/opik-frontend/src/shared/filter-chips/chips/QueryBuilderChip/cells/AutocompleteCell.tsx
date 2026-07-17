@@ -105,7 +105,7 @@ export const AutocompleteCell: React.FC<AutocompleteCellProps> = ({
   };
 
   const itemClass = cn(
-    "comet-body-s-accented flex h-8 items-center rounded-[4px] px-4",
+    "comet-body-s-accented flex min-h-8 items-center rounded-[4px] px-4 py-1.5",
     "data-[selected=true]:bg-primary-foreground",
   );
 
@@ -164,7 +164,7 @@ export const AutocompleteCell: React.FC<AutocompleteCellProps> = ({
                     onSelect={() => pick(item)}
                     className={cn(itemClass, "text-foreground")}
                   >
-                    <span className="block break-all">
+                    <span className="line-clamp-3 break-all">
                       {highlightMatch(item, draft)}
                     </span>
                   </CommandItem>
