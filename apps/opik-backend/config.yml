@@ -116,6 +116,12 @@ databaseAnalyticsDataModel:
   #   Flip in lockstep with the cutover EXCHANGE.
   traceColumnsNonNullable: ${ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE:-false}
   #  Default: false
+  #  Description: Spans sibling of traceColumnsNonNullable. Leave false while the spans table still has Nullable
+  #   end_time/duration/ttft columns; span writes bind null for absent end_time/ttft. Set true once replaced with
+  #   sentinel-defaulted non-nullable columns so writes bind the sentinels (end_time->epoch, ttft->NaN) instead. Gates
+  #   reads too. Flip in lockstep with the Slice 3 cutover EXCHANGE, independently of the trace flag.
+  spanColumnsNonNullable: ${ANALYTICS_DB_DATA_MODEL_SPAN_COLUMNS_NON_NULLABLE:-false}
+  #  Default: false
   #  Description: Leave false at deploy time. Turn true once the trace backfill starts so trace deletes also
   #   record the deleted ids in the deletion_events_local bridge; without it those deletes are lost from the table
   #   copy. Scope capture to the backfill-to-cutover window.
