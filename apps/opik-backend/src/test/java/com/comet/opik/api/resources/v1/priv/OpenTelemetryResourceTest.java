@@ -1036,7 +1036,7 @@ class OpenTelemetryResourceTest {
 
         @Test
         @DisplayName("two top-level spans with parent_span_id==trace_id share one trace")
-        void testTwoTopLevelSpansWithParentSpanIdEqualsTraceId() {
+        void twoTopLevelSpansWithParentSpanIdEqualsTraceId() {
             String workspaceName = UUID.randomUUID().toString();
             mockTargetWorkspace(okApikey, workspaceName);
 
