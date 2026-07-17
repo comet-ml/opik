@@ -53,6 +53,12 @@ public class BreakdownQueryBuilder {
             return "''";
         }
 
+        // Guardrail name lives in the joined guardrails table ('g.'), independent of the
+        // span/trace/thread alias used by the other breakdown fields.
+        if (breakdown.field() == BreakdownField.GUARDRAIL_NAME) {
+            return "ifNull(g.name, 'Unknown')";
+        }
+
         // Span metrics use 's.' prefix, trace/thread metrics use 't.' prefix
         if (SPAN_METRICS.contains(metricType)) {
             return getSpanBreakdownExpression(breakdown);
