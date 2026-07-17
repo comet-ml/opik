@@ -752,6 +752,71 @@ class MyMetric(SomeUserBase):
 `;
     expect(extractMetricNameFromPythonCode(code)).toBeNull();
   });
+
+  it("resolves an alias from a parenthesized multiline import", () => {
+    const code = `
+from opik.evaluation.metrics import (
+    BaseMetric as BM,
+)
+
+class MyMetric(BM):
+    def __init__(self):
+        super().__init__(name="multiline_alias")
+`;
+    expect(extractMetricNameFromPythonCode(code)).toEqual("multiline_alias");
+  });
+
+  it("matches a PEP 695 class header with type parameters", () => {
+    const code = `
+class MyMetric[T](BaseMetric):
+    def __init__(self):
+        super().__init__(name="generic_metric")
+`;
+    expect(extractMetricNameFromPythonCode(code)).toEqual("generic_metric");
+  });
+
+  it("ignores super().__init__ calls outside the metric's own __init__", () => {
+    const code = `
+class MyMetric(BaseMetric):
+    def helper(self):
+        super().__init__(name="from_helper")
+
+    def __init__(self):
+        super().__init__(name="real_metric")
+`;
+    expect(extractMetricNameFromPythonCode(code)).toEqual("real_metric");
+  });
+
+  it("reads name from an explicit base-class __init__ call", () => {
+    const code = `
+class MyMetric(BaseMetric):
+    def __init__(self):
+        BaseMetric.__init__(self, name="explicit_base")
+`;
+    expect(extractMetricNameFromPythonCode(code)).toEqual("explicit_base");
+  });
+
+  it("ignores a non-base helper __init__ call inside __init__", () => {
+    const code = `
+class MyMetric(BaseMetric):
+    def __init__(self):
+        Tokenizer.__init__(self, name="helper_name")
+        super().__init__(name="real_metric")
+`;
+    expect(extractMetricNameFromPythonCode(code)).toEqual("real_metric");
+  });
+
+  it("handles a multiline __init__ signature", () => {
+    const code = `
+class MyMetric(BaseMetric):
+    def __init__(
+        self,
+        name: str = "multiline_default",
+    ):
+        super().__init__(name=name)
+`;
+    expect(extractMetricNameFromPythonCode(code)).toEqual("multiline_default");
+  });
 });
 
 // The unknown-column check that gates submission

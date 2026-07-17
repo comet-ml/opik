@@ -101,12 +101,14 @@ const leadingWhitespace = (line: string): string =>
  */
 const collectBaseMetricAliases = (source: string): Set<string> => {
   const aliases = new Set<string>(["BaseMetric"]);
-  const importRegex = /from\s+[\w.]+\s+import\s+([^\n]+)/g;
+  // Parenthesized import lists span lines: `from ... import (\n  BaseMetric as BM,\n)`.
+  const importRegex = /from\s+[\w.]+\s+import\s+(?:\(([^)]*)\)|([^\n]+))/g;
   let match: RegExpExecArray | null;
   while ((match = importRegex.exec(source)) !== null) {
+    const imported = match[1] ?? match[2];
     const aliasRegex = /\bBaseMetric\s+as\s+(\w+)/g;
     let alias: RegExpExecArray | null;
-    while ((alias = aliasRegex.exec(match[1])) !== null) aliases.add(alias[1]);
+    while ((alias = aliasRegex.exec(imported)) !== null) aliases.add(alias[1]);
   }
   return aliases;
 };
@@ -114,6 +116,8 @@ const collectBaseMetricAliases = (source: string): Set<string> => {
 interface MetricClassBody {
   indent: string;
   body: string;
+  bases: string[];
+  aliases: Set<string>;
 }
 
 /**
@@ -125,8 +129,16 @@ interface MetricClassBody {
  */
 const findMetricClassBody = (source: string): MetricClassBody | null => {
   const aliases = collectBaseMetricAliases(source);
-  const classRegex = /^([ \t]*)class\s+(\w+)\s*(?:\(([^)]*)\))?\s*:/gm;
-  const candidates: { name: string; indent: string; bodyStart: number }[] = [];
+  // PEP 695 type parameters may sit between the class name and the base list:
+  // `class MyMetric[T](BaseMetric):`.
+  const classRegex =
+    /^([ \t]*)class\s+(\w+)\s*(?:\[[^\]]*\])?\s*(?:\(([^)]*)\))?\s*:/gm;
+  const candidates: {
+    name: string;
+    indent: string;
+    bodyStart: number;
+    bases: string[];
+  }[] = [];
   let match: RegExpExecArray | null;
   while ((match = classRegex.exec(source)) !== null) {
     const bases = (match[3] ?? "")
@@ -138,6 +150,7 @@ const findMetricClassBody = (source: string): MetricClassBody | null => {
         name: match[2],
         indent: match[1],
         bodyStart: match.index + match[0].length,
+        bases,
       });
     }
   }
@@ -156,7 +169,12 @@ const findMetricClassBody = (source: string): MetricClassBody | null => {
     }
     bodyLines.push(line);
   }
-  return { indent: chosen.indent, body: bodyLines.join("\n") };
+  return {
+    indent: chosen.indent,
+    body: bodyLines.join("\n"),
+    bases: chosen.bases,
+    aliases,
+  };
 };
 
 /**
@@ -166,16 +184,98 @@ const findMetricClassBody = (source: string): MetricClassBody | null => {
  * `name = "..."` assignment (scoped to the body indentation so method-local
  * `name = ...` and `self.name = ...` are excluded).
  */
-const extractNameFromClassBody = (cls: MetricClassBody): string | null => {
-  const superCtor = cls.body.match(
-    /super\(\)\s*\.\s*__init__\s*\([^)]*\bname\s*=\s*["']([^"']+)["']/,
-  );
-  if (superCtor) return superCtor[1];
+/** Net `(`/`)` balance of a line, ignoring parens inside string literals. */
+const parenDelta = (line: string): number => {
+  let delta = 0;
+  let quote: string | null = null;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (quote !== null) {
+      if (ch === "\\") i += 1;
+      else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") quote = ch;
+    else if (ch === "(") delta += 1;
+    else if (ch === ")") delta -= 1;
+  }
+  return delta;
+};
 
-  const initDefault = cls.body.match(
-    /def\s+__init__\s*\([^)]*\bname(?:\s*:\s*[^=,)]+)?\s*=\s*["']([^"']+)["']/,
-  );
-  if (initDefault) return initDefault[1];
+/**
+ * The class's own top-level `def __init__` block (header + body), or null.
+ * Scoping name extraction to it keeps `super().__init__(name=...)` matches in
+ * helper methods or nested classes from being mistaken for the metric identity.
+ */
+const findTopLevelInitBlock = (cls: MetricClassBody): string | null => {
+  const lines = cls.body.split("\n");
+  let bodyIndent: string | null = null;
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    bodyIndent = leadingWhitespace(line);
+    break;
+  }
+  if (bodyIndent === null) return null;
+
+  const block: string[] = [];
+  let depth = 0;
+  for (const line of lines) {
+    if (block.length === 0) {
+      if (
+        leadingWhitespace(line) === bodyIndent &&
+        /^[ \t]*(?:async\s+)?def\s+__init__\s*\(/.test(line)
+      ) {
+        block.push(line);
+        depth = parenDelta(line);
+      }
+      continue;
+    }
+    // Keep consuming while inside the (possibly multiline) signature, then
+    // while the body stays indented deeper than the class body level.
+    if (
+      depth > 0 ||
+      !line.trim() ||
+      leadingWhitespace(line).length > bodyIndent.length
+    ) {
+      block.push(line);
+      depth += parenDelta(line);
+      continue;
+    }
+    break;
+  }
+  return block.length > 0 ? block.join("\n") : null;
+};
+
+/**
+ * Reads the metric name from a single class body, in the backend's precedence
+ * order (`_metric_name_ast`): a base-constructor call inside the class's own
+ * `__init__` — `super().__init__(name=...)` or `<Base>.__init__(name=...)`
+ * where `<Base>` is a declared base or a `BaseMetric` alias — then the
+ * `__init__` `name` param default, then a class-body-level `name = "..."`
+ * assignment (scoped to the body indentation so method-local `name = ...` and
+ * `self.name = ...` are excluded).
+ */
+const extractNameFromClassBody = (cls: MetricClassBody): string | null => {
+  const init = findTopLevelInitBlock(cls);
+  if (init !== null) {
+    const ctorRegex =
+      /(?:\bsuper\s*\(\s*\)|\b([\w.]+))\s*\.\s*__init__\s*\(([^)]*)/g;
+    let ctor: RegExpExecArray | null;
+    while ((ctor = ctorRegex.exec(init)) !== null) {
+      const target = ctor[1]?.split(".").pop();
+      // `super().__init__` (no target) or an explicit base-class constructor.
+      if (target && !cls.bases.includes(target) && !cls.aliases.has(target)) {
+        continue;
+      }
+      const name = ctor[2].match(/\bname\s*=\s*["']([^"']+)["']/);
+      if (name) return name[1];
+    }
+
+    const initDefault = init.match(
+      /def\s+__init__\s*\([^)]*\bname(?:\s*:\s*[^=,)]+)?\s*=\s*["']([^"']+)["']/,
+    );
+    if (initDefault) return initDefault[1];
+  }
 
   // Class-body indentation: the indent of the first non-blank body line.
   const bodyLines = cls.body.split("\n");
