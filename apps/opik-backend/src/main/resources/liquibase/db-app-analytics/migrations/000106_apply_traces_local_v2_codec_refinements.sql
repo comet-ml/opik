@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset andrescrz:000105_apply_traces_local_v2_codec_refinements
+--changeset andrescrz:000106_apply_traces_local_v2_codec_refinements
 --comment: Apply the OPIK-6899 benchmark-driven codec refinements to traces_local_v2 (metadata-only on the empty table)
 
 -- Six per-column codec refinements the OPIK-6899 benchmark found to improve on the provisional codecs shipped in 000101.

@@ -96,7 +96,7 @@ class TracesLocalV2BenchmarkTest {
      * The intended codec for every {@code traces_local_v2} column, keyed by column name. This is the canonical record
      * of the per-field decisions the benchmarks below justify; {@link #everyTracesLocalV2ColumnUsesItsIntendedCodec()}
      * asserts the live DDL matches it, column for column. It reflects the codecs the live table ships after migrations
-     * {@code 000101} (create) and {@code 000105} (which applies the six benchmark-driven refinements), so it moves in
+     * {@code 000101} (create) and {@code 000106} (which applies the six benchmark-driven refinements), so it moves in
      * lockstep with those migrations — the pin test fails loudly if the DDL and this map ever drift apart.
      */
     private static final Map<String, ExpectedCodec> TRACES_LOCAL_V2_CODECS = Map.ofEntries(
@@ -1062,7 +1062,7 @@ class TracesLocalV2BenchmarkTest {
                     duration Float64 MATERIALIZED if(end_time = toDateTime64('1970-01-01 00:00:00', 6) OR start_time = toDateTime64('1970-01-01 00:00:00', 6), toFloat64('nan'), dateDiff('microsecond', start_time, end_time) / 1000.0) CODEC(ZSTD(1)),
                     id_at DateTime('UTC') MATERIALIZED UUIDv7ToDateTime(toUUID(id)) CODEC(Delta, ZSTD(1))
                 """;
-        // NEW traces_local_v2 format = the live table's codecs after migrations 000101 (create) + 000105 (the six
+        // NEW traces_local_v2 format = the live table's codecs after migrations 000101 (create) + 000106 (the six
         // benchmark-driven refinements: end_time / last_updated_at -> ZSTD(1); visibility_mode / source / environment ->
         // ZSTD(1); output_keys -> ZSTD(3)), matching the pin map above. The refinements are best guesses to re-validate
         // at the staging cutover; the headline is the deployed format, DateTime64(6), epoch/NaN sentinels, is_deleted.
