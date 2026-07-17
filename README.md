@@ -124,20 +124,19 @@ Opik competes in the **LLM observability / AI agent evaluation** category alongs
 | LLM-as-a-judge evaluation | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | Prompt management | Yes | Yes | Partly | Partly | Partly | Yes | Yes |
 | Framework-agnostic | Yes | Partly, built around LangChain** | Yes | Yes | Yes | Yes | Yes |
-| Created by | Comet | LangChain | Arize AI | Arize AI | Weights & Biases (acquired by CoreWeave, 2025) | Langfuse (joined ClickHouse, 2026) | Braintrust |
 
-_Split into two rows after review feedback: "self-hosted deployment" and "free tier available"
-are different questions, and every tool in this table answers "yes" to the second one, so
-folding them into a single cell was genuinely confusing. Every competitor here has some
-accessible free way to start, cloud or self-hosted, but only Opik, Phoenix, and Langfuse's core
-let you run the whole thing yourself for free; the rest gate that specifically to an Enterprise
-plan, confirmed directly on each vendor's own current pricing page. *W&B does have a free,
-self-hosted "Personal" tier, but per its own pricing page it covers classic experiment tracking
-only (runs, registry, lineage). Weave's LLM tracing and evaluation features aren't included, and
-per W&B's own Weave self-hosting docs, running Weave itself outside the cloud still requires a
-separate commercial license. **LangSmith's own docs describe it as framework-agnostic and it does
-work outside LangChain, but its tooling, docs, and integration depth are built around the
-LangChain ecosystem first; expect more setup outside it._
+_Created by: Opik (Comet), LangSmith (LangChain), Phoenix and Arize AX (Arize AI), Weave (Weights
+& Biases, acquired by CoreWeave in 2025), Langfuse (joined ClickHouse in 2026), Braintrust
+(independent). Every competitor here has some accessible free way to start, cloud or
+self-hosted, but only Opik, Phoenix, and Langfuse's core let you run the whole thing yourself for
+free; the rest gate that specifically to an Enterprise plan, confirmed directly on each vendor's
+own current pricing page. *W&B does have a free, self-hosted "Personal" tier, but per its own
+pricing page it covers classic experiment tracking only (runs, registry, lineage). Weave's LLM
+tracing and evaluation features aren't included, and per W&B's own Weave self-hosting docs,
+running Weave itself outside the cloud still requires a separate commercial license.
+**LangSmith's own docs describe it as framework-agnostic and it does work outside LangChain, but
+its tooling, docs, and integration depth are built around the LangChain ecosystem first; expect
+more setup outside it._
 
 **When teams choose Opik:** Opik's full observability, evaluation, and optimization platform is Apache-2.0 licensed and free to self-host. Unlike closed platforms whose self-hosted deployment requires an Enterprise plan, Opik can be deployed without a commercial license, and it's framework-agnostic so it won't lock you into a single agent ecosystem. See the table above for where self-hosting and licensing differ across alternatives.
 
