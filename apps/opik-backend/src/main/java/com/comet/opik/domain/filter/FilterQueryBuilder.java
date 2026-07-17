@@ -64,9 +64,9 @@ public class FilterQueryBuilder {
     private static final String START_TIME_ANALYTICS_DB = "start_time";
     private static final String END_TIME_ANALYTICS_DB = "end_time";
     /**
-     * Sentinel-aware {@code end_time} for trace/thread filtering once the column is non-nullable: {@code nullIf}
+     * Sentinel-aware {@code end_time} for trace/thread/span filtering once the column is non-nullable: {@code nullIf}
      * collapses the epoch sentinel to {@code NULL} so range/inequality comparisons exclude an absent value. Applied
-     * only under {@code traceColumnsNonNullable} — while the column is Nullable a client-supplied epoch is a
+     * only under {@code columnsNonNullable} — while the column is Nullable a client-supplied epoch is a
      * legitimate value that must keep matching.
      */
     private static final String END_TIME_NON_NULLABLE_ANALYTICS_DB = "nullIf(end_time, toDateTime64('1970-01-01 00:00:00.000', 9))";
@@ -890,21 +890,22 @@ public class FilterQueryBuilder {
     }
 
     /**
-     * @param traceColumnsNonNullable when {@code true}, filters use the sentinel-aware
+     * @param columnsNonNullable when {@code true}, filters use the sentinel-aware
      *                                expression so an absent (epoch) value is excluded like a {@code NULL}; pass the
-     *                                cutover flag from callers, {@code false} elsewhere.
+     *                                target entity's cutover flag from callers (traceColumnsNonNullable for
+     *                                traces/threads, spanColumnsNonNullable for spans), {@code false} elsewhere.
      */
     public static Optional<String> toAnalyticsDbFilters(
             @NonNull List<? extends Filter> filters,
             @NonNull FilterStrategy filterStrategy,
-            boolean traceColumnsNonNullable) {
+            boolean columnsNonNullable) {
         var stringJoiner = new StringJoiner(" %s ".formatted(ANALYTICS_DB_AND_OPERATOR));
         stringJoiner.setEmptyValue("");
         for (var i = 0; i < filters.size(); i++) {
             var filter = filters.get(i);
             if (getFieldsByStrategy(filterStrategy, filter).orElse(Set.of()).contains(filter.field())
                     || filter.field().isDynamic(filterStrategy)) {
-                stringJoiner.add(toAnalyticsDbFilter(filter, i, filterStrategy, traceColumnsNonNullable));
+                stringJoiner.add(toAnalyticsDbFilter(filter, i, filterStrategy, columnsNonNullable));
             }
         }
         var analyticsDbFilters = stringJoiner.toString();
@@ -924,13 +925,13 @@ public class FilterQueryBuilder {
     }
 
     /**
-     * @param traceColumnsNonNullable threaded through so a v2-client caller can opt into sentinel-aware {@code end_time}
+     * @param columnsNonNullable threaded through so a v2-client caller can opt into sentinel-aware {@code end_time}
      *                                just like the r2dbc path; without it this entry point could never enable the flag.
      */
     public static Optional<String> toAnalyticsDbFiltersV2Client(
             @NonNull List<? extends Filter> filters, @NonNull FilterStrategy filterStrategy,
-            boolean traceColumnsNonNullable) {
-        return toAnalyticsDbFilters(filters, filterStrategy, traceColumnsNonNullable)
+            boolean columnsNonNullable) {
+        return toAnalyticsDbFilters(filters, filterStrategy, columnsNonNullable)
                 .map(sql -> rewritePlaceholdersForV2Client(sql, filters));
     }
 
@@ -1025,18 +1026,21 @@ public class FilterQueryBuilder {
     }
 
     private static String toAnalyticsDbFilter(
-            Filter filter, int i, FilterStrategy filterStrategy, boolean traceColumnsNonNullable) {
+            Filter filter, int i, FilterStrategy filterStrategy, boolean columnsNonNullable) {
         var template = toAnalyticsDbOperator(filter, filterStrategy);
-        var dbField = getAnalyticsDbField(filter.field(), filterStrategy, i, traceColumnsNonNullable);
+        var dbField = getAnalyticsDbField(filter.field(), filterStrategy, i, columnsNonNullable);
         var enumFallbackTemplate = ANALYTICS_DB_OPERATOR_MAP.get(filter.operator()).get(FieldType.ENUM);
         return filter.field().getType().buildFilter(template, dbField, i, filter.value(), enumFallbackTemplate);
     }
 
     private static String getAnalyticsDbField(
-            Field field, FilterStrategy filterStrategy, int i, boolean traceColumnsNonNullable) {
+            Field field, FilterStrategy filterStrategy, int i, boolean columnsNonNullable) {
         // Resolve end_time to the sentinel-aware expression so an absent (epoch) value is excluded like a
-        // NULL. Flag-gated (epoch is legitimate while the column is Nullable).
-        if (traceColumnsNonNullable && (field == TraceField.END_TIME || field == TraceThreadField.END_TIME)) {
+        // NULL. Flag-gated (epoch is legitimate while the column is Nullable); the caller passes its entity's
+        // cutover flag (traceColumnsNonNullable for traces/threads, spanColumnsNonNullable for spans).
+        if (columnsNonNullable
+                && (field == TraceField.END_TIME || field == TraceThreadField.END_TIME
+                        || field == SpanField.END_TIME)) {
             return END_TIME_NON_NULLABLE_ANALYTICS_DB;
         }
 
