@@ -263,8 +263,8 @@ print_usage() {
   echo "  --backend       Start only infrastructure + backend services (Backend, Python Backend etc.)"
   echo "  --local-be      Start all services EXCEPT backend (for local backend development)"
   echo "  --local-be-fe   Start only infrastructure + Python backend (for local backend + frontend development)"
-  echo "  --guardrails    Enable guardrails; auto-detects an NVIDIA GPU (nvidia-smi) and uses the GPU image if present, otherwise the CPU image"
-  echo "  --guardrails-cpu  Enable guardrails, forcing the CPU image from source (no GPU required)"
+  echo "  --guardrails    Enable guardrails (GPU image; runs on CPU when no GPU is present)"
+  echo "  --guardrails-cpu  Enable guardrails using the CPU-only image built from source (no GPU required)"
   echo "  --help          Show this help message"
   echo ""
   echo "If no option is passed, the script will start missing containers and then show the system status."
@@ -637,8 +637,7 @@ DEBUG_MODE=false
 PORT_MAPPING=false
 # Default: no guardrails
 GUARDRAILS_ENABLED=false
-# Guardrails device mode when enabled: resolved at flag-parse time — --guardrails
-# auto-detects (gpu if nvidia-smi succeeds, else cpu); --guardrails-cpu forces cpu.
+# Guardrails device mode when enabled: gpu (default, via --guardrails) or cpu (--guardrails-cpu)
 GUARDRAILS_MODE=gpu
 export TOGGLE_GUARDRAILS_ENABLED=false
 export OPIK_FRONTEND_FLAVOR=default
@@ -700,12 +699,6 @@ if [[ "$*" == *"--local-be"* ]]; then
   set -- ${@/--local-be/}
 fi
 
-# Detect a usable NVIDIA GPU so --guardrails can pick the GPU vs CPU image.
-# True only if nvidia-smi exists AND runs successfully (driver + GPU present).
-guardrails_gpu_available() {
-  command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1
-}
-
 # Check for guardrails flags. --guardrails-cpu must be handled before --guardrails
 # because it contains that substring.
 if [[ "$*" == *"--guardrails-cpu"* ]]; then
@@ -720,14 +713,7 @@ if [[ "$*" == *"--guardrails-cpu"* ]]; then
   set -- ${@/--guardrails-cpu/}
 elif [[ "$*" == *"--guardrails"* ]]; then
   GUARDRAILS_ENABLED=true
-  # Auto-select the image: GPU when an NVIDIA GPU is available, CPU otherwise.
-  if guardrails_gpu_available; then
-    GUARDRAILS_MODE=gpu
-    echo "🖥️  NVIDIA GPU detected — using the GPU guardrails image"
-  else
-    GUARDRAILS_MODE=cpu
-    echo "💻 No NVIDIA GPU detected — using the CPU guardrails image"
-  fi
+  GUARDRAILS_MODE=gpu
   # Only override flavor if not already set by local-be
   if [[ "$OPIK_FRONTEND_FLAVOR" == "default" ]]; then
     export OPIK_FRONTEND_FLAVOR=guardrails

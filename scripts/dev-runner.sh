@@ -7,7 +7,7 @@ set -euo pipefail
 # Variables
 DEBUG_MODE=${DEBUG_MODE:-false}
 # opik.sh guardrails flag to append (empty = guardrails off). Set by --guardrails
-# (auto-detects GPU via nvidia-smi) or --guardrails-cpu (force the CPU image).
+# (GPU-capable image, runs on CPU when no GPU) or --guardrails-cpu (slim CPU image).
 GUARDRAILS_OPIK_FLAG=""
 ORIGINAL_COMMAND="$0 $@"
 
@@ -182,9 +182,8 @@ find_jar_files() {
 }
 
 # Invoke opik.sh, appending the guardrails flag when guardrails are enabled.
-# opik.sh resolves --guardrails to the GPU or CPU image via nvidia-smi. The dev
-# modes (--local-be / --local-be-fe) already force port mapping, so the guardrails
-# backend is published on http://localhost:5000.
+# The dev modes (--local-be / --local-be-fe) already force port mapping, so the
+# guardrails backend is published on http://localhost:5000.
 run_opik_sh() {
     if [ -n "$GUARDRAILS_OPIK_FLAG" ]; then
         ./opik.sh "$@" "$GUARDRAILS_OPIK_FLAG"
@@ -1622,10 +1621,10 @@ show_usage() {
     echo "  --lint-be        - Lint backend code"
     echo "  --lint-fe        - Lint frontend code"
     echo "  --debug          - Enable debug mode (meant to be combined with other flags)"
-    echo "  --guardrails     - Also run guardrails; auto-detects an NVIDIA GPU (nvidia-smi)"
-    echo "                     and uses the GPU image if present, otherwise the CPU image"
-    echo "                     (combine with an action, e.g. '--guardrails --restart')"
-    echo "  --guardrails-cpu - Also run guardrails, forcing the CPU image (no GPU required)"
+    echo "  --guardrails     - Also run guardrails (default GPU-capable image; runs on CPU"
+    echo "                     when no GPU is present). Combine with an action, e.g."
+    echo "                     '--guardrails --restart'"
+    echo "  --guardrails-cpu - Also run guardrails using the slim CPU-only image (no GPU required)"
     echo "  --platform-enabled - Opik-team only: also run the Comet Platform stack (combine"
     echo "                     with an action, e.g. '--platform-enabled --restart'; alone it"
     echo "                     implies the default restart). Same as PLATFORM_ENABLED=true."
@@ -1777,13 +1776,13 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --guardrails)
-      # Modifier flag (like --debug): also run guardrails. opik.sh auto-detects an
-      # NVIDIA GPU (nvidia-smi) and uses the GPU image if present, else the CPU image.
+      # Modifier flag (like --debug): also run guardrails using the default
+      # GPU-capable image (runs on CPU when no GPU is present).
       GUARDRAILS_OPIK_FLAG="--guardrails"
       shift
       ;;
     --guardrails-cpu)
-      # Modifier flag: also run guardrails, forcing the CPU image.
+      # Modifier flag: also run guardrails using the slim CPU-only image.
       GUARDRAILS_OPIK_FLAG="--guardrails-cpu"
       shift
       ;;
