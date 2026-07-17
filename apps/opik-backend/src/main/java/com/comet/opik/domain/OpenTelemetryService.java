@@ -152,10 +152,14 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
 
         // Use spans without parentId as Trace roots. Skip opik.trace_id overrides (they attach to
         // existing traces). Multiple roots can share one traceId (e.g. when parent_span_id==trace_id
-        // is nulled in the mapper), so dedup by traceId to create only one trace per id.
+        // is nulled in the mapper), so dedup by traceId to create only one trace per id. Sort by
+        // startTime (then id) before deduping so the root is deterministic.
         var rootSpansByTraceId = dedupedSpans.stream()
                 .filter(span -> span.parentSpanId() == null)
                 .filter(span -> !overriddenTraceIds.contains(span.traceId()))
+                .sorted(java.util.Comparator
+                        .comparing(com.comet.opik.api.Span::startTime)
+                        .thenComparing(com.comet.opik.api.Span::id))
                 .collect(Collectors.toMap(
                         com.comet.opik.api.Span::traceId,
                         java.util.function.Function.identity(),
