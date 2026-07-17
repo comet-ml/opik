@@ -16,9 +16,8 @@ OPIK_GATEWAY_BASE_URL = f"{OPIK_URL.rstrip('/')}/v1/private" if OPIK_URL else No
 DEFAULT_REFERENCE_KEY = "answer"
 DEFAULT_CASE_SENSITIVE = False
 
-# Execution timeout for optimization jobs (default: 6 hours). The backend
-# stalled-run reaper's runningTimeout MUST stay above this (config.yml, default 8h).
-OPTIMIZATION_TIMEOUT_SECS = int(os.getenv("OPTSTUDIO_EXECUTION_TIMEOUT", "21600"))
+# Execution timeout for optimization jobs (default: 24 hours)
+OPTIMIZATION_TIMEOUT_SECS = int(os.getenv("OPTSTUDIO_EXECUTION_TIMEOUT", "86400"))
 
 # Dataset sampling (limits items used during optimization to prevent OOM)
 DATASET_SAMPLES = int(os.getenv("OPTSTUDIO_DATASET_SAMPLES", "1000"))

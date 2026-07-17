@@ -44,11 +44,6 @@ type MetricKPICardProps = {
   current?: number;
   formatter: (value: number) => string;
   trend?: PercentageTrendType;
-  /**
-   * Explanatory caption shown below the value (e.g. warning that a heuristic-empty
-   * run's score is not trustworthy). Rendered instead of the delta.
-   */
-  caption?: React.ReactNode;
 };
 
 export const MetricKPICard: React.FunctionComponent<MetricKPICardProps> = ({
@@ -58,7 +53,6 @@ export const MetricKPICard: React.FunctionComponent<MetricKPICardProps> = ({
   current,
   formatter,
   trend = "direct",
-  caption,
 }) => {
   const percentage = calcFormatterAwarePercentage(current, baseline, formatter);
   const hasComparison = !isUndefined(baseline) && !isUndefined(current);
@@ -68,7 +62,7 @@ export const MetricKPICard: React.FunctionComponent<MetricKPICardProps> = ({
       icon={icon}
       label={label}
       headerRight={
-        !caption && !isUndefined(percentage) ? (
+        !isUndefined(percentage) ? (
           <PercentageTrend percentage={percentage} trend={trend} size="sm" />
         ) : undefined
       }
@@ -80,15 +74,11 @@ export const MetricKPICard: React.FunctionComponent<MetricKPICardProps> = ({
           <StatCard.Value>{formatter(current)}</StatCard.Value>
         </TooltipWrapper>
       )}
-      {caption ? (
-        <StatCard.Caption>{caption}</StatCard.Caption>
-      ) : (
-        hasComparison && (
-          <StatCard.Delta
-            from={formatter(baseline as number)}
-            to={formatter(current as number)}
-          />
-        )
+      {hasComparison && (
+        <StatCard.Delta
+          from={formatter(baseline as number)}
+          to={formatter(current as number)}
+        />
       )}
     </KPICard>
   );

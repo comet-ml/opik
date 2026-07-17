@@ -14,15 +14,11 @@ const FORM_ID = "new-optimization-run-form";
 type OptimizationsNewPageContentProps = {
   onCancel: () => void;
   isPreparingDataset: boolean;
-  /** Flat list of model values whose providers have a configured API key. */
-  availableModels: string[];
-  /** True once the provider-keys query has settled (so we don't flash the warning while loading). */
-  providerKeysReady: boolean;
 };
 
 const OptimizationsNewPageContent: React.FC<
   OptimizationsNewPageContentProps
-> = ({ onCancel, isPreparingDataset, availableModels, providerKeysReady }) => {
+> = ({ onCancel, isPreparingDataset }) => {
   const {
     form,
     activeProjectId,
@@ -48,19 +44,6 @@ const OptimizationsNewPageContent: React.FC<
   } = useOptimizationsNewFormHandlers();
 
   const hasMissingVariables = missingDatasetVariables.length > 0;
-
-  // A model is selected but its provider has no configured API key: the run
-  // will fail server-side with an auth error. We can only detect *missing*
-  // keys client-side (invalid keys need a backend check — follow-up).
-  // Only flag this once the keys query has settled to avoid a transient flash.
-  //
-  // Compare the selected model against the current provider-backed set directly
-  // (no `availableModels.length` guard): a stale/dirty `model` that survives a
-  // provider-key refetch — including when the set becomes empty — must still be
-  // caught, otherwise the warning hides and submit stays enabled for a run that
-  // will fail server-side.
-  const isMissingProviderKey =
-    providerKeysReady && Boolean(model) && !availableModels.includes(model);
 
   const { isSubmitting } = form.formState;
 
@@ -129,12 +112,6 @@ const OptimizationsNewPageContent: React.FC<
             . Update the prompt/metric or pick a matching item source.
           </span>
         )}
-        {isMissingProviderKey && (
-          <span className="comet-body-s text-destructive">
-            Add or check the API key for this provider before starting — the run
-            will fail without it.
-          </span>
-        )}
         <div className="flex items-center gap-2">
           <Button
             type="submit"
@@ -147,8 +124,7 @@ const OptimizationsNewPageContent: React.FC<
               isDatasetError ||
               !model ||
               !datasetId ||
-              hasMissingVariables ||
-              isMissingProviderKey
+              hasMissingVariables
             }
           >
             {isSubmitting && (

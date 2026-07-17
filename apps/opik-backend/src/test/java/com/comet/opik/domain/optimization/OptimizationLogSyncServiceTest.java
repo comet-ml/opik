@@ -275,52 +275,6 @@ class OptimizationLogSyncServiceTest {
         }
     }
 
-    @Nested
-    @DisplayName("appendSystemLogLine Tests")
-    class AppendSystemLogLineTests {
-
-        private static final String MESSAGE = "[System] Optimization failed: the run could not be queued.";
-
-        @Test
-        @DisplayName("Should skip and touch no Redis state when disabled")
-        void shouldSkipWhenDisabled() {
-            when(config.isEnabled()).thenReturn(false);
-
-            StepVerifier.create(service.appendSystemLogLine(WORKSPACE_ID, OPTIMIZATION_ID, MESSAGE))
-                    .verifyComplete();
-
-            verify(redisClient, never()).getList(anyString(), any(StringCodec.class));
-            verify(redisClient, never()).getMap(anyString(), any(StringCodec.class));
-        }
-
-        @Test
-        @DisplayName("Should append the line and bump last_append_ts so the flusher/finalizer pick it up")
-        void shouldAppendLineAndBumpTimestamp() {
-            when(logList.add(MESSAGE)).thenReturn(Mono.just(true));
-            doReturn(Mono.just("")).when(metaMap).put(eq("last_append_ts"), anyString());
-
-            StepVerifier.create(service.appendSystemLogLine(WORKSPACE_ID, OPTIMIZATION_ID, MESSAGE))
-                    .verifyComplete();
-
-            verify(logList).add(MESSAGE);
-            verify(metaMap).put(eq("last_append_ts"), anyString());
-        }
-
-        @Test
-        @DisplayName("Should swallow a Redis failure so the caller's ERROR transition still proceeds")
-        void shouldSwallowRedisError() {
-            // Best-effort contract: appendSystemReasonAndMarkError relies on this completing (not erroring)
-            // so its .then(update(ERROR)) still runs even when the log append fails.
-            when(logList.add(MESSAGE)).thenReturn(Mono.error(new RuntimeException("redis down")));
-            // .then(metaMap.put(...)) is assembled (arg evaluated) before the error short-circuits, so the
-            // put Mono must be non-null even though it is never subscribed on the error path.
-            doReturn(Mono.just("")).when(metaMap).put(eq("last_append_ts"), anyString());
-
-            StepVerifier.create(service.appendSystemLogLine(WORKSPACE_ID, OPTIMIZATION_ID, MESSAGE))
-                    .verifyComplete();
-        }
-    }
-
     /**
      * Helper method to decompress gzipped content for verification.
      */

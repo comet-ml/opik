@@ -9,5 +9,4 @@ import type * as OpikApi from "../../../../index.js";
 export interface OptimizationUpdate {
     name?: string;
     status?: OpikApi.OptimizationUpdateStatus;
-    metadata?: OpikApi.JsonListString;
 }

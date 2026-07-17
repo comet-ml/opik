@@ -21,17 +21,6 @@ describe("TrialStatusPill", () => {
     expect(screen.getByText("Baseline")).toBeInTheDocument();
   });
 
-  it("labels a failed trial with a red dot", () => {
-    const { container } = render(<TrialStatusPill status="failed" />);
-
-    expect(screen.getByText("Failed")).toBeInTheDocument();
-    const dot = container.querySelector("span.rounded-full");
-    expect(dot).toHaveAttribute(
-      "style",
-      expect.stringContaining("var(--color-red)"),
-    );
-  });
-
   it("overrides the status with the two-tone Best treatment", () => {
     const { container } = render(<TrialStatusPill status="passed" isBest />);
 

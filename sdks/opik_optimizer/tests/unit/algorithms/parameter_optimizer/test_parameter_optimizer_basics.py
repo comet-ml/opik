@@ -88,10 +88,6 @@ class TestParameterOptimizerEarlyStop:
 
         assert_baseline_early_stop(result, perfect_score=0.95)
         assert result.details["n_trials"] == 0
-        # ParameterOptimizer bypasses runtime.build_final_result, so it must surface
-        # scoring_health in its own result details (present, not dropped) — here the
-        # float-mode baseline leaves it unset, so it falls back to the all-clear shape.
-        assert result.details["scoring_health"] == {"failed_count": 0, "total_count": 0}
 
 
 class TestNormalizePromptInput:

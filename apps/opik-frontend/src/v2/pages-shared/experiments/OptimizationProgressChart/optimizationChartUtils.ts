@@ -22,11 +22,7 @@ export type TrialStatus =
   | "passed"
   | "evaluating"
   | "pruned"
-  | "running"
-  // A trial that ran but produced no score — the metric/judge failed on it.
-  // Distinct from "running" (which means "not scored *yet*"): a "failed" trial
-  // is terminal. See computeCandidateStatuses for how this is derived.
-  | "failed";
+  | "running";
 
 export const STATUS_VARIANT_MAP: Record<TrialStatus, TagProps["variant"]> = {
   baseline: "gray",
@@ -34,7 +30,6 @@ export const STATUS_VARIANT_MAP: Record<TrialStatus, TagProps["variant"]> = {
   evaluating: "orange",
   pruned: "pink",
   running: "yellow",
-  failed: "red",
 };
 
 // A fuchsia scale encodes trial status on the progress chart: baseline and
@@ -47,7 +42,6 @@ export const TRIAL_STATUS_COLORS: Record<TrialStatus, string> = {
   evaluating: "var(--color-orange)",
   pruned: "var(--trial-pruned)",
   running: "var(--color-yellow)",
-  failed: "var(--color-red)",
 };
 
 /** Best-trial dot colour — darkest in the fuchsia scale (theme-aware, see main.scss). */
@@ -74,11 +68,9 @@ export const getTrialDotColor = ({
 }): string => {
   if (isBest) return TRIAL_BEST_COLOR;
   if (isTestSuite) return TRIAL_STATUS_COLORS[status];
-  // Dataset runs collapse most statuses to passed, but a failed trial must stay
-  // red (it scored nothing — it is not a passing trial) and pruned stays faded.
-  if (status === "pruned") return TRIAL_STATUS_COLORS.pruned;
-  if (status === "failed") return TRIAL_STATUS_COLORS.failed;
-  return TRIAL_STATUS_COLORS.passed;
+  return status === "pruned"
+    ? TRIAL_STATUS_COLORS.pruned
+    : TRIAL_STATUS_COLORS.passed;
 };
 
 export const TRIAL_STATUS_LABELS: Record<TrialStatus, string> = {
@@ -88,7 +80,6 @@ export const TRIAL_STATUS_LABELS: Record<TrialStatus, string> = {
   // Internal status key stays "pruned"; user-facing label is "Discarded".
   pruned: "Discarded",
   running: "Running",
-  failed: "Failed",
 };
 
 /**
@@ -111,8 +102,6 @@ export const getTrialStatusLabel = (
       return `Evaluating step ${stepIndex}`;
     case "running":
       return `Running step ${stepIndex}`;
-    case "failed":
-      return `Failed step ${stepIndex}`;
     default:
       return TRIAL_STATUS_LABELS[status];
   }
@@ -198,7 +187,6 @@ export const TRIAL_STATUS_ORDER: readonly TrialStatus[] = [
   "evaluating",
   "pruned",
   "running",
-  "failed",
 ] as const;
 
 export type CandidateDataPoint = {
@@ -352,10 +340,7 @@ export const computeCandidateStatuses = (
     if (c.stepIndex === 0) {
       statusMap.set(c.candidateId, "baseline");
     } else if (c.score == null) {
-      // An unscored trial is "running" only while the run is still active. Once
-      // the run is terminal an unscored trial never will be scored — the metric
-      // failed on it — so it is "failed", not perpetually "running" (OPIK-7029).
-      statusMap.set(c.candidateId, isInProgress ? "running" : "failed");
+      statusMap.set(c.candidateId, "running");
     } else if (isInProgress) {
       statusMap.set(c.candidateId, computeInProgressStatus(c, lookups));
     } else {

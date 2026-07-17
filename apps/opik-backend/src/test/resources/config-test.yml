@@ -1140,19 +1140,6 @@ agentConfig:
   # Description: Duration of the distributed lock held during blueprint create/update operations
   blueprintLockDuration: 5000ms
 
-# Stalled Optimization Studio run reaper configuration
-optimizationStalledReaper:
-  # Disabled in tests: no suite exercises the reaper, and leaving the scheduled job off avoids it
-  # acquiring the distributed lock and mutating optimization rows mid-test. The Duration/size fields
-  # below are still required (non-null / >= 1) so config validation passes on boot.
-  enabled: false
-  startupDelay: 5m
-  jobInterval: 5m
-  initializedTimeout: 15m
-  runningTimeout: 26h
-  lockDuration: 4m
-  batchSize: 100
-
 # Environment CRUD configuration
 environment:
   # Low ceiling for tests so cap-related scenarios don't need to insert many environments.

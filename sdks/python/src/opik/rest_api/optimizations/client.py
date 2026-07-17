@@ -5,7 +5,6 @@ import typing
 
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
-from ..types.json_list_string import JsonListString
 from ..types.json_list_string_write import JsonListStringWrite
 from ..types.optimization_page_public import OptimizationPagePublic
 from ..types.optimization_public import OptimizationPublic
@@ -33,6 +32,30 @@ class OptimizationsClient:
         RawOptimizationsClient
         """
         return self._raw_client
+
+    def cancel_studio_optimizations(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> None:
+        """
+        Cancel Studio optimizations by id
+
+        Parameters
+        ----------
+        id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.optimizations.cancel_studio_optimizations(id='id', )
+        """
+        _response = self._raw_client.cancel_studio_optimizations(id, request_options=request_options)
+        return _response.data
 
     def find_optimizations(
         self,
@@ -294,7 +317,6 @@ class OptimizationsClient:
         *,
         name: typing.Optional[str] = OMIT,
         status: typing.Optional[OptimizationUpdateStatus] = OMIT,
-        metadata: typing.Optional[JsonListString] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -307,8 +329,6 @@ class OptimizationsClient:
         name : typing.Optional[str]
 
         status : typing.Optional[OptimizationUpdateStatus]
-
-        metadata : typing.Optional[JsonListString]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -324,7 +344,7 @@ class OptimizationsClient:
         client.optimizations.update_optimizations_by_id(id='id', )
         """
         _response = self._raw_client.update_optimizations_by_id(
-            id, name=name, status=status, metadata=metadata, request_options=request_options
+            id, name=name, status=status, request_options=request_options
         )
         return _response.data
 
@@ -370,6 +390,35 @@ class AsyncOptimizationsClient:
         AsyncRawOptimizationsClient
         """
         return self._raw_client
+
+    async def cancel_studio_optimizations(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Cancel Studio optimizations by id
+
+        Parameters
+        ----------
+        id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.optimizations.cancel_studio_optimizations(id='id', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.cancel_studio_optimizations(id, request_options=request_options)
+        return _response.data
 
     async def find_optimizations(
         self,
@@ -646,7 +695,6 @@ class AsyncOptimizationsClient:
         *,
         name: typing.Optional[str] = OMIT,
         status: typing.Optional[OptimizationUpdateStatus] = OMIT,
-        metadata: typing.Optional[JsonListString] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -659,8 +707,6 @@ class AsyncOptimizationsClient:
         name : typing.Optional[str]
 
         status : typing.Optional[OptimizationUpdateStatus]
-
-        metadata : typing.Optional[JsonListString]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -679,7 +725,7 @@ class AsyncOptimizationsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.update_optimizations_by_id(
-            id, name=name, status=status, metadata=metadata, request_options=request_options
+            id, name=name, status=status, request_options=request_options
         )
         return _response.data
 

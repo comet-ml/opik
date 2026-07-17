@@ -199,8 +199,6 @@ const NewRunSidebarForm: React.FC<NewRunSidebarFormProps> = ({
       <OptimizationsNewPageContent
         onCancel={onClose}
         isPreparingDataset={isPreparingDataset}
-        availableModels={availableModels}
-        providerKeysReady={Boolean(providerKeysData)}
       />
     </FormProvider>
   );

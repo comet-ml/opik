@@ -79,10 +79,6 @@ class OptimizationContext:
         None  # Best prompt seen so far
     )
     dataset_split: str | None = None  # train/validation when applicable
-    # Scoring health for the best/final candidate's evaluation (OPIK-7043).
-    # Set whenever a new best score is recorded; populated even when failed_count=0
-    # so downstream layers can rely on the key always being present.
-    scoring_health: dict[str, int] | None = None
 
 
 @dataclass

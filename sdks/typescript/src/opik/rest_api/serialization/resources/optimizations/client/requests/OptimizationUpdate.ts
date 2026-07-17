@@ -3,7 +3,6 @@
 import type * as OpikApi from "../../../../../api/index.js";
 import * as core from "../../../../../core/index.js";
 import type * as serializers from "../../../../index.js";
-import { JsonListString } from "../../../../types/JsonListString.js";
 import { OptimizationUpdateStatus } from "../../types/OptimizationUpdateStatus.js";
 
 export const OptimizationUpdate: core.serialization.Schema<
@@ -12,13 +11,11 @@ export const OptimizationUpdate: core.serialization.Schema<
 > = core.serialization.object({
     name: core.serialization.string().optional(),
     status: OptimizationUpdateStatus.optional(),
-    metadata: JsonListString.optional(),
 });
 
 export declare namespace OptimizationUpdate {
     export interface Raw {
         name?: string | null;
         status?: OptimizationUpdateStatus.Raw | null;
-        metadata?: JsonListString.Raw | null;
     }
 }

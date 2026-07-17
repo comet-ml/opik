@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 from opik.evaluation.metrics.score_result import ScoreResult
 from opik_backend.studio.metrics import MetricFactory
-from opik_backend.studio.exceptions import InvalidMetricError, InvalidConfigError
+from opik_backend.studio.exceptions import InvalidMetricError
 from opik_backend.studio.types import _convert_template_syntax, OptimizationConfig
 
 
@@ -1083,154 +1083,10 @@ class TestTemplateSyntaxConversion:
         }
         
         opt_config = OptimizationConfig.from_dict(config)
-
+        
         # System message should be unchanged (no variables)
         assert opt_config.prompt_messages[0]["content"] == "Be helpful"
         # User message should have converted variables
         assert opt_config.prompt_messages[1]["content"] == "What is {question}? Answer: {answer}"
 
 
-# ---------------------------------------------------------------------------
-# W3a — OptimizationConfig.from_dict raises InvalidConfigError, not raw errors
-# ---------------------------------------------------------------------------
-
-def _valid_config(**overrides):
-    """Return a minimal valid config dict, with optional field overrides."""
-    base = {
-        "dataset_name": "my_dataset",
-        "prompt": {
-            "messages": [{"role": "user", "content": "hello"}]
-        },
-        "llm_model": {"model": "openai/gpt-4o", "parameters": {}},
-        "evaluation": {
-            "metrics": [{"type": "equals", "parameters": {}}]
-        },
-        "optimizer": {"type": "gepa", "parameters": {}},
-    }
-    base.update(overrides)
-    return base
-
-
-class TestOptimizationConfigFromDictTypedErrors:
-    """W3a: from_dict must raise InvalidConfigError (not raw KeyError/ValueError)."""
-
-    def test_missing_dataset_name_raises_invalid_config_error(self):
-        config = _valid_config()
-        del config["dataset_name"]
-        with pytest.raises(InvalidConfigError) as exc_info:
-            OptimizationConfig.from_dict(config)
-        assert "dataset_name" in str(exc_info.value)
-
-    def test_missing_evaluation_raises_invalid_config_error(self):
-        config = _valid_config()
-        del config["evaluation"]
-        with pytest.raises(InvalidConfigError) as exc_info:
-            OptimizationConfig.from_dict(config)
-        # The field name 'evaluation' should appear in the error message
-        assert "evaluation" in str(exc_info.value)
-
-    def test_empty_metrics_list_raises_invalid_config_error(self):
-        config = _valid_config()
-        config["evaluation"]["metrics"] = []
-        with pytest.raises(InvalidConfigError) as exc_info:
-            OptimizationConfig.from_dict(config)
-        # Should mention metrics and the reason
-        assert "metric" in str(exc_info.value).lower()
-
-    def test_missing_llm_model_key_raises_invalid_config_error(self):
-        config = _valid_config()
-        del config["llm_model"]
-        with pytest.raises(InvalidConfigError) as exc_info:
-            OptimizationConfig.from_dict(config)
-        assert "llm_model" in str(exc_info.value)
-
-    def test_missing_optimizer_type_raises_invalid_config_error(self):
-        config = _valid_config()
-        del config["optimizer"]["type"]
-        with pytest.raises(InvalidConfigError) as exc_info:
-            OptimizationConfig.from_dict(config)
-        assert "type" in str(exc_info.value)
-
-    def test_no_raw_key_error_leaks(self):
-        """from_dict must never propagate a bare KeyError."""
-        config = _valid_config()
-        del config["prompt"]
-        with pytest.raises(InvalidConfigError):
-            OptimizationConfig.from_dict(config)
-
-    def test_no_raw_value_error_leaks(self):
-        """from_dict must never propagate a bare ValueError."""
-        config = _valid_config()
-        config["evaluation"]["metrics"] = []
-        with pytest.raises(InvalidConfigError):
-            OptimizationConfig.from_dict(config)
-
-    def test_valid_config_parses_without_error(self):
-        """Sanity-check: a fully valid config must still succeed."""
-        opt_config = OptimizationConfig.from_dict(_valid_config())
-        assert opt_config.dataset_name == "my_dataset"
-        assert opt_config.metric_type == "equals"
-        assert opt_config.optimizer_type == "gepa"
-
-
-# ---------------------------------------------------------------------------
-# W13 — MetricFactory.build raises InvalidMetricError for bad params, not
-#         just for unknown types.
-# ---------------------------------------------------------------------------
-
-class TestMetricFactoryBadParamsRaisesTypedError:
-    """W13: constructor/builder param errors must surface as InvalidMetricError."""
-
-    def test_bad_equals_param_type_raises_invalid_metric_error(self):
-        """Passing an unsupported kwarg that the builder itself rejects must
-        raise InvalidMetricError, not a raw TypeError."""
-        # The _build_equals_metric (and therefore Equals) builder accepts only
-        # known params; registering a broken builder is the cleanest injection.
-        # Instead we test via a custom registered builder that raises TypeError.
-        original_builders = dict(MetricFactory._BUILDERS)
-        try:
-            @MetricFactory.register("_test_bad_params")
-            def _bad_builder(params, model, **kwargs):
-                raise TypeError("unexpected keyword argument 'foo'")
-
-            with pytest.raises(InvalidMetricError) as exc_info:
-                MetricFactory.build("_test_bad_params", {"foo": "bar"}, "model")
-            assert "_test_bad_params" in str(exc_info.value)
-            assert "Constructor" in str(exc_info.value) or "Builder" in str(exc_info.value) or "keyword" in str(exc_info.value).lower()
-        finally:
-            MetricFactory._BUILDERS.clear()
-            MetricFactory._BUILDERS.update(original_builders)
-
-    def test_bad_value_in_params_raises_invalid_metric_error(self):
-        """A builder that raises ValueError for a bad param value must re-raise
-        as InvalidMetricError."""
-        original_builders = dict(MetricFactory._BUILDERS)
-        try:
-            @MetricFactory.register("_test_bad_value")
-            def _bad_value_builder(params, model, **kwargs):
-                raise ValueError("negative count is not allowed")
-
-            with pytest.raises(InvalidMetricError) as exc_info:
-                MetricFactory.build("_test_bad_value", {"count": -1}, "model")
-            assert "_test_bad_value" in str(exc_info.value)
-        finally:
-            MetricFactory._BUILDERS.clear()
-            MetricFactory._BUILDERS.update(original_builders)
-
-    def test_invalid_metric_error_from_builder_passes_through(self):
-        """An InvalidMetricError raised directly by the builder must not be
-        double-wrapped — it passes through as-is."""
-        original_builders = dict(MetricFactory._BUILDERS)
-        try:
-            @MetricFactory.register("_test_passthrough")
-            def _passthrough_builder(params, model, **kwargs):
-                from opik_backend.studio.exceptions import InvalidMetricError as IME
-                raise IME("_test_passthrough", "intentional typed error")
-
-            with pytest.raises(InvalidMetricError) as exc_info:
-                MetricFactory.build("_test_passthrough", {}, "model")
-            # Should contain the original message, not a re-wrap
-            assert "intentional typed error" in str(exc_info.value)
-        finally:
-            MetricFactory._BUILDERS.clear()
-            MetricFactory._BUILDERS.update(original_builders)

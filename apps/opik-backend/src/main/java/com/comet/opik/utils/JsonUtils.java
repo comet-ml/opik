@@ -115,27 +115,6 @@ public class JsonUtils {
     }
 
     /**
-     * Shallow-merges object {@code overrides} on top of {@code base}, returning a new object node.
-     * Keys present in {@code overrides} are added/replaced; keys only in {@code base} are preserved.
-     * <p>
-     * Only object overrides are mergeable: a {@code null}, scalar, or array {@code overrides} is ignored
-     * and {@code base} is returned unchanged, so a non-object value can never be propagated into storage
-     * (which would violate the object-shaped metadata contract the callers/UI rely on). Likewise a
-     * non-object {@code base} is discarded rather than merged onto.
-     */
-    public static JsonNode merge(JsonNode base, JsonNode overrides) {
-        if (overrides == null || !overrides.isObject()) {
-            return base;
-        }
-        ObjectNode result = MAPPER.createObjectNode();
-        if (base != null && base.isObject()) {
-            result.setAll((ObjectNode) base);
-        }
-        result.setAll((ObjectNode) overrides);
-        return result;
-    }
-
-    /**
      * Creates a new empty ArrayNode.
      *
      * @return A new ArrayNode instance

@@ -218,6 +218,20 @@ public class OptimizationResourceClient {
         }
     }
 
+    public void cancelStudio(UUID id, String apiKey, String workspaceName, int expectedStatus) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("studio")
+                .path(id.toString())
+                .path("cancel")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+        }
+    }
+
     public Response callCreate(Optimization optimization, String apiKey, String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .request()
@@ -267,6 +281,17 @@ public class OptimizationResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                 .put(Entity.json(update));
+    }
+
+    public Response callCancelStudio(UUID id, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("studio")
+                .path(id.toString())
+                .path("cancel")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get();
     }
 
     public Response callGetStudioLogs(UUID id, String apiKey, String workspaceName) {

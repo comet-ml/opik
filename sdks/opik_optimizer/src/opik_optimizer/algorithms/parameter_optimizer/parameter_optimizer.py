@@ -287,11 +287,7 @@ class ParameterOptimizer(BaseOptimizer):
             selection_summary=display_utils.summarize_selection_policy(base_prompts),
         ) as baseline_reporter:
             self.pre_trial(context, base_prompts)
-            # return_evaluation_result=True so the baseline's scoring health is
-            # captured into context.scoring_health — ParameterOptimizer scores both
-            # baseline and candidates via evaluate_prompt directly (never evaluate()),
-            # so this is the only place the OPIK-7029 empty-run guard gets armed for it.
-            baseline_eval = self.evaluate_prompt(
+            baseline_score = self.evaluate_prompt(
                 prompt=base_prompts,
                 agent=agent,
                 dataset=evaluation_dataset,
@@ -301,10 +297,6 @@ class ParameterOptimizer(BaseOptimizer):
                 experiment_config=experiment_config,
                 n_samples=n_samples,
                 n_samples_strategy=n_samples_strategy or context.n_samples_strategy,
-                return_evaluation_result=True,
-            )
-            baseline_score = self._resolve_baseline_score_and_health(
-                context, baseline_eval
             )
             baseline_reporter.set_score(baseline_score)
         return baseline_score
@@ -395,13 +387,6 @@ class ParameterOptimizer(BaseOptimizer):
             metric_name=metric.__name__,
             details={
                 "initial_score": baseline_score,
-                # ParameterOptimizer builds its result directly (bypasses
-                # runtime.build_final_result), so surface the baseline's scoring health
-                # here too — otherwise the failed/total counts seeded on the context in
-                # _evaluate_baseline_score never reach OptimizationResult.details for
-                # worker/UI consumers (review: baz-reviewer).
-                "scoring_health": context.scoring_health
-                or {"failed_count": 0, "total_count": 0},
                 "optimized_parameters": {},
                 "optimized_model_kwargs": base_model_kwargs,
                 "optimized_model": list(base_prompts.values())[0].model,
@@ -777,10 +762,6 @@ class ParameterOptimizer(BaseOptimizer):
             # runtime.build_final_result), so set the flag here too for parity.
             "reused_baseline": baseline_score is not None
             and not improves_over(best_score, baseline_score),
-            # Same bypass reason (OPIK-7029): carry the baseline scoring health seeded on
-            # the context into details so failed/total counts reach worker/UI consumers.
-            "scoring_health": context.scoring_health
-            or {"failed_count": 0, "total_count": 0},
             "selection_meta": {
                 "sampler": sampler.__class__.__name__ if sampler else None,
                 "pruner": type(study.pruner).__name__ if study.pruner else None,

@@ -5515,6 +5515,23 @@ paths:
           description: default response
           content:
             '*/*': {}
+  /v1/private/optimizations/studio/{id}/cancel:
+    get:
+      tags:
+      - Optimizations
+      summary: Cancel Studio optimizations
+      description: Cancel Studio optimizations by id
+      operationId: cancelStudioOptimizations
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "501":
+          description: Not Implemented
   /v1/private/optimizations:
     get:
       tags:
@@ -19196,8 +19213,6 @@ components:
           - cancelled
           - initialized
           - error
-        metadata:
-          $ref: "#/components/schemas/JsonListString"
     ActivateRequest:
       required:
       - hmac

@@ -453,36 +453,15 @@ def _average_finite_scores(
     return sum(finite_values) / len(finite_values)
 
 
-def compute_scoring_health(
-    scores: list[score_result.ScoreResult],
-) -> dict[str, int]:
-    """Return ``{"failed_count": N, "total_count": M}`` for a list of objective scores.
-
-    This is the authoritative source for scoring-health counts that downstream
-    layers (worker, UI) can use to display "N of M items failed to score".
-    A score is counted as failed when ``score.scoring_failed`` is True.
-    """
-    total_count = len(scores)
-    failed_count = sum(1 for s in scores if s.scoring_failed)
-    return {"failed_count": failed_count, "total_count": total_count}
-
-
 def _validate_objective_scores(
     scores: list[score_result.ScoreResult], *, objective_metric_name: str
 ) -> None:
-    """Log objective-score health for a single evaluation (does not raise).
+    """Validate objective score availability and log soft-failure warnings.
 
-    Partial or total scoring failures within one evaluation are only logged
-    here; the run continues with the available finite values. The pass/fail
-    decision (best prompt couldn't be scored at all) is made ONCE at the end in
-    ``build_final_result`` against ``context.scoring_health`` — so a brief
-    judge/rate-limit outage that fails every item in a single attempt no longer
-    aborts the whole optimization and discards the good candidates already
-    found (OPIK-7029).
+    The optimizer keeps backward-compatible behavior: missing/failed objective
+    scores are logged and the caller can fall back to default score handling.
     """
     if not scores:
-        # Empty dataset / no objective scores at all — leave the existing soft
-        # fallback intact so an empty dataset does NOT trip the failure guard.
         logger.warning(
             "Objective metric '%s' produced no scores; falling back to 0.0.",
             objective_metric_name,

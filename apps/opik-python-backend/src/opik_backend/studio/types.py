@@ -1,55 +1,14 @@
 """Data types and context objects for Optimization Studio."""
 
-import logging
 import re
 from dataclasses import dataclass
 from typing import Dict, Any, NotRequired, Optional, List, TypedDict, Union
-
-from .exceptions import InvalidConfigError
-
-logger = logging.getLogger(__name__)
-
-
-class ScoringHealth(TypedDict):
-    """Scoring-health counters attached to the optimization completion payload.
-
-    Set by the SDK on ``OptimizationResult.details["scoring_health"]`` and
-    forwarded to the Java backend as ``metadata.scoring_health`` so the UI
-    can surface an exact count of failed vs total scoring calls.
-    """
-
-    failed_count: int
-    total_count: int
-
-
-def extract_scoring_health(result: Any) -> Optional[ScoringHealth]:
-    """Pull ``{failed_count, total_count}`` off an SDK ``OptimizationResult``.
-
-    Reads ``result.details["scoring_health"]``. Returns ``None`` when the field
-    is absent or malformed (older SDK versions), and never raises — the
-    completion path must not fail over a missing or bad count.
-    """
-    try:
-        details = getattr(result, "details", None) or {}
-        raw = details.get("scoring_health") if isinstance(details, dict) else None
-        if (
-            isinstance(raw, dict)
-            and isinstance(raw.get("failed_count"), int)
-            and isinstance(raw.get("total_count"), int)
-        ):
-            return ScoringHealth(
-                failed_count=raw["failed_count"],
-                total_count=raw["total_count"],
-            )
-    except Exception as exc:  # pragma: no cover - defensive; never break completion
-        logger.warning("Failed to extract scoring_health from result: %s", exc)
-    return None
+from uuid import UUID
 
 
 class OptimizationRunResult(TypedDict):
     """Successful result emitted by ``optimizer_runner`` and returned by
     ``process_optimizer_job``."""
-
     success: bool
     optimization_id: str
     score: float
@@ -57,27 +16,18 @@ class OptimizationRunResult(TypedDict):
     # The optimized prompt's messages (or a string fallback when the optimizer
     # returns a non-structured prompt); absent if the optimizer produced none.
     optimized_prompt: NotRequired[Union[List[Dict[str, str]], str]]
-    # Scoring-health counters from the SDK result; absent when the SDK did not
-    # attach them (older SDK versions).
-    scoring_health: NotRequired[ScoringHealth]
 
 
 class OptimizationErrorResult(TypedDict):
     """Failure result emitted by ``optimizer_runner``. ``process_optimizer_job``
     raises on it rather than returning it."""
-
     success: bool
     error: str
     traceback: str
-    # High-level, user-facing message classified at the source (the subprocess has
-    # the real exception type). Surfaced in the UI; ``error``/``traceback`` are the
-    # low-level detail kept for the logs. NotRequired for back-compat with older payloads.
-    user_message: NotRequired[str]
 
 
 class OptimizationCancelledResult(TypedDict):
     """Returned by ``process_optimizer_job`` when the run was cancelled."""
-
     status: str
     optimization_id: str
 
@@ -88,28 +38,27 @@ OptimizationJobResult = Union[OptimizationRunResult, OptimizationCancelledResult
 
 def _convert_template_syntax(text: str) -> str:
     """Convert double curly braces to single curly braces for template variables.
-
+    
     The frontend uses Mustache-style {{variable}} syntax, but the optimizer
     expects Python-style {variable} syntax.
-
+    
     Args:
         text: String that may contain {{variable}} patterns
-
+        
     Returns:
         String with {{variable}} or {{ name }} converted to {variable} or {name}
     """
     # Convert {{variable}} to {variable}, handling spaces, dots, and hyphens
-    return re.sub(r"\{\{\s*([^}]+?)\s*\}\}", r"{\1}", text)
+    return re.sub(r'\{\{\s*([^}]+?)\s*\}\}', r'{\1}', text)
 
 
 @dataclass
 class OptimizationJobContext:
     """Context for an optimization job.
-
+    
     Contains the core identifiers and configuration needed to process
     an optimization job from the Java backend.
     """
-
     optimization_id: str
     workspace_id: str
     workspace_name: str
@@ -143,25 +92,24 @@ class OptimizationJobContext:
 @dataclass
 class OptimizationConfig:
     """Parsed optimization configuration.
-
+    
     Extracts and structures the nested configuration from the job message
     for easier access.
     """
-
     # Dataset
     dataset_name: str
-
+    
     # Prompt
     prompt_messages: List[Dict[str, str]]
-
+    
     # Model
     model: str
     model_params: Dict[str, Any]
-
+    
     # Metric
     metric_type: str
     metric_params: Dict[str, Any]
-
+    
     # Optimizer
     optimizer_type: str
     optimizer_params: Dict[str, Any]
@@ -175,78 +123,66 @@ class OptimizationConfig:
     @classmethod
     def from_dict(cls, config: Dict[str, Any]) -> "OptimizationConfig":
         """Parse config dict into typed object.
-
+        
         Args:
             config: Configuration dictionary from job message
-
+            
         Returns:
             OptimizationConfig instance
-
+            
         Raises:
-            InvalidConfigError: If required fields are missing or values are invalid
+            KeyError: If required fields are missing
+            ValueError: If metrics list is empty
         """
-        try:
-            # Extract metric config (use first metric for now)
-            metric_config_list = config["evaluation"]["metrics"]
-            if not metric_config_list:
-                raise ValueError("At least one metric must be defined")
+        # Extract metric config (use first metric for now)
+        metric_config_list = config["evaluation"]["metrics"]
+        if not metric_config_list:
+            raise ValueError("At least one metric must be defined")
+        
+        metric_config = metric_config_list[0]
+        
+        # Convert prompt messages template syntax from {{var}} (FE-style) to {var} (optimizer-style)
+        prompt_messages = []
+        for msg in config["prompt"]["messages"]:
+            converted_msg = {
+                "role": msg["role"],
+                "content": _convert_template_syntax(msg["content"]) if isinstance(msg["content"], str) else msg["content"]
+            }
+            prompt_messages.append(converted_msg)
+        
+        # The optimizer's own model (optional) is carried inside the optimizer
+        # parameters. Pull it out so the remaining params can be passed as
+        # kwargs to the optimizer constructor without colliding with `model`.
+        optimizer_params = dict(config["optimizer"].get("parameters", {}))
+        optimizer_model = optimizer_params.pop("model", None)
+        optimizer_model_params = optimizer_params.pop("model_parameters", None)
 
-            metric_config = metric_config_list[0]
-
-            # Convert prompt messages template syntax from {{var}} (FE-style) to {var} (optimizer-style)
-            prompt_messages = []
-            for msg in config["prompt"]["messages"]:
-                converted_msg = {
-                    "role": msg["role"],
-                    "content": _convert_template_syntax(msg["content"])
-                    if isinstance(msg["content"], str)
-                    else msg["content"],
-                }
-                prompt_messages.append(converted_msg)
-
-            # The optimizer's own model (optional) is carried inside the optimizer
-            # parameters. Pull it out so the remaining params can be passed as
-            # kwargs to the optimizer constructor without colliding with `model`.
-            optimizer_params = dict(config["optimizer"].get("parameters", {}))
-            optimizer_model = optimizer_params.pop("model", None)
-            optimizer_model_params = optimizer_params.pop("model_parameters", None)
-
-            return cls(
-                dataset_name=config["dataset_name"],
-                prompt_messages=prompt_messages,
-                model=config["llm_model"]["model"],
-                model_params=config["llm_model"].get("parameters", {}),
-                metric_type=metric_config["type"],
-                metric_params=metric_config.get("parameters", {}),
-                optimizer_type=config["optimizer"]["type"],
-                optimizer_params=optimizer_params,
-                optimizer_model=optimizer_model,
-                optimizer_model_params=optimizer_model_params,
-            )
-        except InvalidConfigError:
-            raise
-        except KeyError as exc:
-            field = str(exc).strip("'\"")
-            raise InvalidConfigError(
-                field, f"Required configuration field '{field}' is missing"
-            ) from exc
-        except ValueError as exc:
-            raise InvalidConfigError("metrics", str(exc)) from exc
+        return cls(
+            dataset_name=config["dataset_name"],
+            prompt_messages=prompt_messages,
+            model=config["llm_model"]["model"],
+            model_params=config["llm_model"].get("parameters", {}),
+            metric_type=metric_config["type"],
+            metric_params=metric_config.get("parameters", {}),
+            optimizer_type=config["optimizer"]["type"],
+            optimizer_params=optimizer_params,
+            optimizer_model=optimizer_model,
+            optimizer_model_params=optimizer_model_params,
+        )
 
 
 @dataclass
 class OptimizationResult:
     """Result of an optimization run."""
-
     optimization_id: str
     final_score: float
     initial_score: Optional[float]
     metric_name: str
     timestamp: str
-
+    
     def to_dict(self) -> Dict[str, Any]:
         """Convert result to dictionary for API response.
-
+        
         Returns:
             Dictionary representation of the result
         """
@@ -258,3 +194,4 @@ class OptimizationResult:
             "metric_name": self.metric_name,
             "timestamp": self.timestamp,
         }
+

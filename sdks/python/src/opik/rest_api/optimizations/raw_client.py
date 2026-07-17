@@ -13,7 +13,7 @@ from ..core.request_options import RequestOptions
 from ..core.serialization import convert_and_respect_annotation_metadata
 from ..errors.bad_request_error import BadRequestError
 from ..errors.not_found_error import NotFoundError
-from ..types.json_list_string import JsonListString
+from ..errors.not_implemented_error import NotImplementedError
 from ..types.json_list_string_write import JsonListStringWrite
 from ..types.optimization_page_public import OptimizationPagePublic
 from ..types.optimization_public import OptimizationPublic
@@ -29,6 +29,47 @@ OMIT = typing.cast(typing.Any, ...)
 class RawOptimizationsClient:
     def __init__(self, *, client_wrapper: SyncClientWrapper):
         self._client_wrapper = client_wrapper
+
+    def cancel_studio_optimizations(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[None]:
+        """
+        Cancel Studio optimizations by id
+
+        Parameters
+        ----------
+        id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/optimizations/studio/{jsonable_encoder(id)}/cancel",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            if _response.status_code == 501:
+                raise NotImplementedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def find_optimizations(
         self,
@@ -369,7 +410,6 @@ class RawOptimizationsClient:
         *,
         name: typing.Optional[str] = OMIT,
         status: typing.Optional[OptimizationUpdateStatus] = OMIT,
-        metadata: typing.Optional[JsonListString] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -382,8 +422,6 @@ class RawOptimizationsClient:
         name : typing.Optional[str]
 
         status : typing.Optional[OptimizationUpdateStatus]
-
-        metadata : typing.Optional[JsonListString]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -398,9 +436,6 @@ class RawOptimizationsClient:
             json={
                 "name": name,
                 "status": status,
-                "metadata": convert_and_respect_annotation_metadata(
-                    object_=metadata, annotation=JsonListString, direction="write"
-                ),
             },
             headers={
                 "content-type": "application/json",
@@ -469,6 +504,47 @@ class RawOptimizationsClient:
 class AsyncRawOptimizationsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
         self._client_wrapper = client_wrapper
+
+    async def cancel_studio_optimizations(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[None]:
+        """
+        Cancel Studio optimizations by id
+
+        Parameters
+        ----------
+        id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/optimizations/studio/{jsonable_encoder(id)}/cancel",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            if _response.status_code == 501:
+                raise NotImplementedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def find_optimizations(
         self,
@@ -809,7 +885,6 @@ class AsyncRawOptimizationsClient:
         *,
         name: typing.Optional[str] = OMIT,
         status: typing.Optional[OptimizationUpdateStatus] = OMIT,
-        metadata: typing.Optional[JsonListString] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -822,8 +897,6 @@ class AsyncRawOptimizationsClient:
         name : typing.Optional[str]
 
         status : typing.Optional[OptimizationUpdateStatus]
-
-        metadata : typing.Optional[JsonListString]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -838,9 +911,6 @@ class AsyncRawOptimizationsClient:
             json={
                 "name": name,
                 "status": status,
-                "metadata": convert_and_respect_annotation_metadata(
-                    object_=metadata, annotation=JsonListString, direction="write"
-                ),
             },
             headers={
                 "content-type": "application/json",

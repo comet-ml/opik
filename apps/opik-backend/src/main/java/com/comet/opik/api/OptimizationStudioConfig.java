@@ -1,7 +1,6 @@
 package com.comet.opik.api;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
@@ -21,7 +20,6 @@ import java.util.List;
  * Required for cloud deployments, as it'll be used to automate SDK in behalf of the user.
  */
 @Builder(toBuilder = true)
-@JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record OptimizationStudioConfig(
         @NotBlank String datasetName,
@@ -32,14 +30,12 @@ public record OptimizationStudioConfig(
         @JsonIgnore String opikApiKey) {
 
     @Builder(toBuilder = true)
-    @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record StudioPrompt(
             @NotEmpty @Valid List<StudioMessage> messages) {
     }
 
     @Builder(toBuilder = true)
-    @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record StudioMessage(
             @NotBlank String role,
@@ -47,7 +43,6 @@ public record OptimizationStudioConfig(
     }
 
     @Builder(toBuilder = true)
-    @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record StudioLlmModel(
             @NotBlank String model,
@@ -55,14 +50,12 @@ public record OptimizationStudioConfig(
     }
 
     @Builder(toBuilder = true)
-    @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record StudioEvaluation(
             @NotEmpty @Valid List<StudioMetric> metrics) {
     }
 
     @Builder(toBuilder = true)
-    @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record StudioMetric(
             @NotBlank String type,
@@ -70,7 +63,6 @@ public record OptimizationStudioConfig(
     }
 
     @Builder(toBuilder = true)
-    @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record StudioOptimizer(
             @NotBlank String type,
