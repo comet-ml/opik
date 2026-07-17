@@ -1644,7 +1644,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             } else if (SPAN_TIME_METRICS.contains(metricType)) {
                 Optional.ofNullable(request.spanFilters())
                         .ifPresent(filters -> {
-                            filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN)
+                            filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN,
+                                    spanColumnsNonNullable())
                                     .ifPresent(spanFilters -> template.add("span_filters", spanFilters));
                             filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN_FEEDBACK_SCORES)
                                     .ifPresent(
@@ -1730,6 +1731,10 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     private boolean traceColumnsNonNullable() {
         return configuration.getDatabaseAnalyticsDataModel().traceColumnsNonNullable();
+    }
+
+    private boolean spanColumnsNonNullable() {
+        return configuration.getDatabaseAnalyticsDataModel().spanColumnsNonNullable();
     }
 
     private static final Set<MetricType> SPAN_TIME_METRICS = EnumSet.of(
