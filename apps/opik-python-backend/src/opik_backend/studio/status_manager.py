@@ -3,7 +3,7 @@
 import logging
 import traceback
 from contextlib import contextmanager
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import opik
 
@@ -11,6 +11,13 @@ logger = logging.getLogger(__name__)
 
 # Cap the persisted error message so we don't push oversized tracebacks into ClickHouse.
 MAX_ERROR_INFO_LENGTH = 4000
+
+# A status update is the only thing that moves a run off INITIALIZED, so a transient server-side
+# failure must not leave the run stuck. The SDK only retries on an HTTP *response* of 5xx/429/408/409,
+# and only when max_retries is supplied — so we opt in explicitly here. Note this does NOT cover
+# connection-level failures (dropped connection mid-deploy); those still rely on the backend
+# stalled-run reaper as the ultimate backstop (OPIK-7159).
+STATUS_UPDATE_MAX_RETRIES = 3
 
 
 class OptimizationStatusManager:
@@ -29,8 +36,31 @@ class OptimizationStatusManager:
         """
         self.client = client
         self.optimization_id = optimization_id
+        # Metadata queued by the optimization body to be sent with mark_completed.
+        # Set via set_completion_metadata(); consumed (and cleared) by mark_completed().
+        self._pending_metadata: Optional[Dict[str, Any]] = None
 
-    def update_status(self, status: str, error_info: Optional[dict] = None) -> None:
+    def set_completion_metadata(self, metadata: Optional[Dict[str, Any]]) -> None:
+        """Queue metadata to be forwarded to the backend on mark_completed.
+
+        Call this inside the ``optimization_lifecycle`` body once the SDK result
+        is available.  The metadata is picked up automatically by
+        ``mark_completed()`` so callers do not have to thread it through
+        manually.  Passing ``None`` (or never calling this) leaves existing
+        behaviour unchanged — no metadata key is sent.
+
+        Args:
+            metadata: Dict to merge into the optimization record, e.g.
+                ``{"scoring_health": {"failed_count": 2, "total_count": 10}}``.
+        """
+        self._pending_metadata = metadata
+
+    def update_status(
+        self,
+        status: str,
+        error_info: Optional[dict] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
         """Update optimization status in backend.
 
         Args:
@@ -41,11 +71,17 @@ class OptimizationStatusManager:
                 backend ``ErrorInfo`` type used by spans/traces). An empty/None
                 dict is treated as "no reason" and is NOT sent, so it can't
                 clobber a reason persisted by an earlier update.
+            metadata: Optional extra metadata to merge into the optimization record.
+                When provided (e.g. ``{"scoring_health": {"failed_count": 2,
+                "total_count": 10}}``), it reaches the backend's ``metadata``
+                column. When absent, the existing metadata is preserved.
         """
         logger.debug(
             f"Updating optimization {self.optimization_id} status to '{status}'"
         )
-        body = {"status": status}
+
+        body: Dict[str, Any] = {"status": status}
+
         # Only persist a non-empty reason: sending nothing avoids overwriting a
         # previously-stored error_info (the REST update gates on `is not None`,
         # not on emptiness). Truncate the free-text fields so we don't push
@@ -57,7 +93,12 @@ class OptimizationStatusManager:
                 if isinstance(value, str):
                     truncated[key] = value[:MAX_ERROR_INFO_LENGTH]
             body["error_info"] = truncated
+
+        if metadata is not None:
+            body["metadata"] = metadata
+
         self._send_update(body)
+
         logger.debug(
             f"Optimization {self.optimization_id} status updated to '{status}'"
         )
@@ -66,38 +107,78 @@ class OptimizationStatusManager:
         """Persist an optimization update, tolerating an older opik SDK.
 
         The python-backend pins a released ``opik`` whose typed
-        ``update_optimizations_by_id`` may predate the ``error_info`` field
-        (added in the monorepo SDK, not yet in the pinned release). When the
-        typed call rejects the ``error_info`` kwarg, fall back to the SDK's
-        pre-configured httpx client so the reason still reaches the backend
-        (it accepts snake_case fields and ignores unknown ones). Without this,
-        a build-time failure marks ``error`` via a call that raises
-        ``TypeError`` — swallowed by ``optimization_lifecycle`` — leaving the
-        run stuck at ``running``. Once the SDK ships ``error_info``, the typed
-        call handles it and this fallback is never exercised.
+        ``update_optimizations_by_id`` may predate the ``error_info`` /
+        ``metadata`` fields (added in the monorepo SDK, not yet in the pinned
+        release). So when the body carries anything beyond ``status`` we reach
+        the SDK's pre-configured httpx client directly — it accepts snake_case
+        fields and ignores unknown ones — with explicit retries.
+
+        scoring metadata and the failure reason are best-effort: the status
+        transition is what moves the run off RUNNING/INITIALIZED (and out of the
+        stalled-run reaper's range), so if the enriched PUT fails for ANY reason
+        we fall back to a typed status-only update rather than leave the run
+        stuck (OPIK-7159 backstop).
         """
-        optimizations = self.client.rest_client.optimizations
-        try:
-            optimizations.update_optimizations_by_id(self.optimization_id, **body)
-            return
-        except TypeError:
-            logger.debug(
-                "Installed opik SDK lacks the 'error_info' update field; "
-                "sending the optimization update via the raw REST client."
-            )
-        optimizations._raw_client._client_wrapper.httpx_client.request(
-            f"v1/private/optimizations/{self.optimization_id}",
-            method="PUT",
-            json=body,
-        ).raise_for_status()
+        status = body["status"]
+        # More than just "status" means we're carrying error_info and/or metadata.
+        enriched = len(body) > 1
+
+        if enriched:
+            try:
+                raw_client = self.client.rest_client.optimizations._raw_client
+                client_wrapper = raw_client._client_wrapper
+                response = client_wrapper.httpx_client.request(
+                    f"v1/private/optimizations/{self.optimization_id}",
+                    method="PUT",
+                    json=body,
+                    headers={"content-type": "application/json"},
+                    request_options={"max_retries": STATUS_UPDATE_MAX_RETRIES},
+                )
+                # Unlike the typed wrapper, the raw client does NOT raise on a
+                # non-2xx response — check explicitly so a rejected PUT is not
+                # silently swallowed (which would leave the run looking done
+                # while the backend never recorded the transition). A missing
+                # status_code (unexpected wrapper shape) is treated as failure
+                # too, so we always fall back rather than assume success.
+                status_code = getattr(response, "status_code", None)
+                if status_code is None or status_code >= 400:
+                    raise RuntimeError(
+                        f"enriched status update returned HTTP {status_code}"
+                    )
+                return
+            except Exception as update_error:
+                logger.warning(
+                    f"Failed to send status '{status}' with error_info/metadata for "
+                    f"optimization {self.optimization_id} ({update_error}); "
+                    "retrying status-only so the run still transitions.",
+                )
+
+        self.client.rest_client.optimizations.update_optimizations_by_id(
+            self.optimization_id,
+            status=status,
+            request_options={"max_retries": STATUS_UPDATE_MAX_RETRIES},
+        )
 
     def mark_running(self) -> None:
         """Mark optimization as running."""
         self.update_status("running")
 
-    def mark_completed(self) -> None:
-        """Mark optimization as completed."""
-        self.update_status("completed")
+    def mark_completed(self, metadata: Optional[Dict[str, Any]] = None) -> None:
+        """Mark optimization as completed.
+
+        Args:
+            metadata: Optional metadata to persist alongside the status change
+                (e.g. ``{"scoring_health": {"failed_count": 2, "total_count": 10}}``).
+                Omit entirely (or pass ``None``) to leave existing metadata
+                untouched — this keeps the call backwards-compatible with older
+                SDK versions that do not attach scoring_health.  When
+                ``set_completion_metadata`` was called earlier on this manager,
+                its value is merged here (explicit ``metadata`` arg takes
+                precedence when both are provided).
+        """
+        effective_metadata = metadata or self._pending_metadata
+        self._pending_metadata = None  # consumed — reset for safety
+        self.update_status("completed", metadata=effective_metadata)
 
     def mark_error(self, error_info: Optional[dict] = None) -> None:
         """Mark optimization as failed.
@@ -144,7 +225,6 @@ def optimization_lifecycle(status_manager: OptimizationStatusManager):
     try:
         status_manager.mark_running()
         yield status_manager
-        status_manager.mark_completed()
     except Exception as e:
         logger.error(f"Optimization failed, marking as error: {e}")
         try:
@@ -160,5 +240,17 @@ def optimization_lifecycle(status_manager: OptimizationStatusManager):
                 f"Failed to update status to 'error': {status_error}", exc_info=True
             )
         raise  # Re-raise the original exception
+    else:
+        # mark_completed is outside the try/except so a transient completion-callback
+        # failure (network blip, Opik-key expiry) does NOT flip a successfully-finished
+        # run to ERROR. If mark_completed raises, the run stays RUNNING and the backend
+        # stalled-run reaper will eventually move it to ERROR (OPIK-7159 backstop).
+        try:
+            status_manager.mark_completed()
+        except Exception as completed_error:
+            logger.error(
+                f"Failed to update status to 'completed': {completed_error}",
+                exc_info=True,
+            )
     finally:
         status_manager.close()

@@ -5,6 +5,10 @@ package com.comet.opik.domain;
  * filters) is identical for per-project ({@link ProjectMetricsDAO}) and workspace-level ({@link WorkspaceMetricsDAO})
  * aggregation; the only difference is the project predicate, which is injected via {@link #spanFilteredPrefix(String)}
  * so both DAOs stay in sync when the CTE changes.
+ * <p>
+ * Each {@code id}-range bound on the {@code spans} scan carries a parallel {@code toMonday(id_at)} bound: a strict
+ * consequence of the id-range that scans the same rows but engages weekly-partition pruning once {@code spans} is
+ * partitioned, which the planner can't infer through {@code UUIDv7ToDateTime}.
  */
 final class SpanMetricsQueries {
 
@@ -118,8 +122,10 @@ final class SpanMetricsQueries {
                     <endif>
                     WHERE workspace_id = :workspace_id
                     AND %s
-                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
-                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                    <if(uuid_from_time)> AND id >= :uuid_from_time
+                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'))<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time
+                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'))<endif>
                     <if(span_filters)> AND <span_filters> <endif>
                     <if(span_feedback_scores_filters)>
                     AND id in (

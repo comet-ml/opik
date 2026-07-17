@@ -214,16 +214,6 @@ public class OptimizationsResource {
     // ==================== Studio Endpoints ====================
 
     @GET
-    @Path("/studio/{id}/cancel")
-    @Operation(operationId = "cancelStudioOptimizations", summary = "Cancel Studio optimizations", description = "Cancel Studio optimizations by id", responses = {
-            @ApiResponse(responseCode = "501", description = "Not Implemented")})
-    @RequiredPermissions(WorkspaceUserPermission.OPTIMIZATION_STUDIO_USE)
-    public Response cancelStudioOptimization(@PathParam("id") UUID id) {
-        log.info("Cancel Studio optimization endpoint called for id '{}' - not yet implemented", id);
-        return Response.status(Response.Status.NOT_IMPLEMENTED).build();
-    }
-
-    @GET
     @Path("/studio/{id}/logs")
     @Operation(operationId = "getStudioOptimizationLogs", summary = "Get Studio optimization logs", description = "Get presigned S3 URL for downloading optimization logs", responses = {
             @ApiResponse(responseCode = "200", description = "Logs response", content = @Content(schema = @Schema(implementation = OptimizationStudioLog.class))),

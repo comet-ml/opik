@@ -149,13 +149,39 @@ export interface OptimizationStudioConfig {
   optimizer: StudioOptimizer;
 }
 
+/**
+ * Exact scoring-health counts persisted by the backend into the `metadata`
+ * JSON column (OPIK-7159 Wave 2). Both fields are always present together; if
+ * the backend hasn't written this yet (older runs / older SDK) the whole key
+ * is absent.
+ */
+export interface OptimizationScoringHealth {
+  failed_count: number;
+  total_count: number;
+}
+
+/**
+ * Typed shape of the `metadata` JSON column on an Optimization row. All fields
+ * are optional because:
+ *  - `optimizer` / `model` are only written for SDK runs (Studio runs use
+ *    `studio_config`).
+ *  - `scoring_health` is written by the worker on run completion (it forwards
+ *    the count the SDK reports); older rows and older SDK versions omit it.
+ */
+export interface OptimizationMetadata {
+  optimizer?: string;
+  model?: string;
+  scoring_health?: OptimizationScoringHealth;
+  [key: string]: unknown;
+}
+
 export interface Optimization {
   id: string;
   name: string;
   project_id?: string;
   dataset_id: string;
   dataset_name: string;
-  metadata?: object;
+  metadata?: OptimizationMetadata;
   studio_config?: OptimizationStudioConfig;
   error_info?: BaseTraceDataErrorInfo;
   feedback_scores?: AggregatedFeedbackScore[];

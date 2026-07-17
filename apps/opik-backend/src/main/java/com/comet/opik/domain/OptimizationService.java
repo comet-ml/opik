@@ -14,14 +14,17 @@ import com.comet.opik.domain.optimization.OptimizationLogSyncService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.bi.AnalyticsService;
+import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.infrastructure.queues.Queue;
 import com.comet.opik.infrastructure.queues.QueueProducer;
+import com.comet.opik.utils.JsonUtils;
 import com.google.common.base.Preconditions;
 import com.google.common.eventbus.EventBus;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
@@ -34,6 +37,7 @@ import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import reactor.util.context.Context;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -69,6 +73,15 @@ public interface OptimizationService {
 
     // Studio methods
     Mono<OptimizationStudioLog> generateStudioLogsResponse(UUID optimizationId);
+
+    /**
+     * Transition studio runs stuck in a non-terminal status past the given thresholds to {@code ERROR},
+     * recording a human-readable reason in their logs (OPIK-7159). Called by the stalled-run reaper.
+     *
+     * @return the number of runs transitioned to ERROR in this pass.
+     */
+    Mono<Long> reconcileStalledStudioOptimizations(Duration initializedTimeout, Duration runningTimeout,
+            int batchSize);
 }
 
 @Singleton
@@ -89,6 +102,7 @@ class OptimizationServiceImpl implements OptimizationService {
     private final @NonNull OptimizationLogSyncService logSyncService;
     private final @NonNull RedissonReactiveClient redisClient;
     private final @NonNull AnalyticsService analyticsService;
+    private final @NonNull LockService lockService;
 
     // Redis key pattern for cancellation signals (Python worker checks this)
     private static final String CANCEL_KEY_PATTERN = "opik:cancel:%s";
@@ -167,6 +181,11 @@ class OptimizationServiceImpl implements OptimizationService {
         boolean isStudioOptimization = optimization.studioConfig() != null;
 
         return resolveProjectId(optimization)
+                // A bad project_id supplied on create is a client mistake, not a missing resource on this
+                // endpoint — map the shared ProjectService NotFoundException (404) to a 400 here only, so
+                // we don't change ProjectService.validateProjectIdExists (used elsewhere) (OPIK-7029, C5).
+                .onErrorMap(NotFoundException.class,
+                        e -> new BadRequestException(e.getMessage(), e))
                 .flatMap(resolvedProjectId -> datasetService.getOrCreateDataset(optimization.datasetName(),
                         resolvedProjectId.orElse(null))
                         .map(datasetId -> new AbstractMap.SimpleEntry<>(resolvedProjectId.orElse(null), datasetId)))
@@ -319,16 +338,29 @@ class OptimizationServiceImpl implements OptimizationService {
 
     @Override
     public Mono<Long> update(@NonNull UUID id, @NonNull OptimizationUpdate update) {
-        if (update.name() == null && update.status() == null && update.errorInfo() == null) {
+        if (update.name() == null && update.status() == null && update.errorInfo() == null
+                && update.metadata() == null) {
             return Mono.empty();
         }
 
+        // Serialize the read-modify-write per optimization: update() reads the current row (getById),
+        // merges metadata in app memory, then inserts a full new ReplacingMergeTree version. Without this
+        // lock, two concurrent partial updates both read the same base and the later write silently drops
+        // the earlier one's keys (lost update); the lock also keeps the terminal-overwrite / cancellation
+        // guards consistent within a single writer. NOTE: prod ClickHouse has no read-your-own-writes
+        // (async insert, 2 replicas), so a lock alone cannot fully close the window — studio metadata must
+        // stay effectively single-writer (the worker) — but this hardens the in-process race (review: thiagohora).
+        var lock = new LockService.Lock(id, "optimization-update");
+        return lockService.executeWithLock(lock, Mono.defer(() -> applyUpdate(id, update)));
+    }
+
+    private Mono<Long> applyUpdate(@NonNull UUID id, @NonNull OptimizationUpdate update) {
         return optimizationDAO.getById(id)
                 .switchIfEmpty(Mono.error(failWithNotFound("Optimization", id)))
                 .flatMap(optimization -> Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-                    // USER_NAME is absent on the internal cancelOptimization() path, where only
-                    // WORKSPACE_ID is seeded — fall back and let AnalyticsService resolve identity.
+                    // Internal paths (markOptimizationFailedToStart, the stalled-run reaper) seed USER_NAME
+                    // with SYSTEM_USER; getOrDefault keeps the analytics identity resolution tolerant.
                     String userName = ctx.getOrDefault(RequestContext.USER_NAME, null);
 
                     // Validate cancellation request for Studio optimizations
@@ -343,8 +375,35 @@ class OptimizationServiceImpl implements OptimizationService {
                                 Response.Status.CONFLICT));
                     }
 
+                    // Never let a late status write overwrite an already-terminal Studio run with a
+                    // different terminal status — e.g. the worker's delayed ERROR after a user CANCELLED,
+                    // or the reaper racing a COMPLETED that landed just after its stale read (OPIK-7159).
+                    // Same-status writes and name-only updates still pass through; explicit cancellation
+                    // keeps its 409 above.
+                    boolean isTerminalOverwrite = optimization.studioConfig() != null
+                            && update.status() != null
+                            && optimization.status().isTerminal()
+                            && update.status() != optimization.status();
+                    if (isTerminalOverwrite) {
+                        log.info(
+                                "Skipping status update for optimization '{}': already terminal '{}', ignoring requested '{}'",
+                                id, optimization.status(), update.status());
+                        return Mono.just(0L);
+                    }
+
+                    // Merge any incoming metadata onto the existing metadata BEFORE handing it to the DAO,
+                    // so the new ReplacingMergeTree row carries the full object (provided keys overwrite,
+                    // existing keys like optimizer/model are preserved). When update.metadata() is null the
+                    // effective update stays null and the DAO carries the existing column forward untouched
+                    // — this keeps Wave-0 status-only updates from wiping metadata (OPIK-7159 regression risk).
+                    OptimizationUpdate effectiveUpdate = update.metadata() == null
+                            ? update
+                            : update.toBuilder()
+                                    .metadata(JsonUtils.merge(optimization.metadata(), update.metadata()))
+                                    .build();
+
                     return signalCancellationIfNeeded(id, optimization, update)
-                            .then(optimizationDAO.update(id, update))
+                            .then(optimizationDAO.update(id, effectiveUpdate))
                             .doOnSuccess(__ -> {
                                 // Sync logs when optimization reaches terminal status
                                 // Safe to call multiple times - just syncs and reduces TTL
@@ -397,6 +456,15 @@ class OptimizationServiceImpl implements OptimizationService {
         return redisClient.getBucket(cancelKey)
                 .set("1", ttlSeconds, TimeUnit.SECONDS)
                 .doOnSuccess(__ -> log.debug("Set cancellation signal in Redis for optimization '{}'", id))
+                // Best-effort: a Redis blip must not 500 the cancel request nor block the CANCELLED status
+                // write. The worker also polls the DB status, so the missed signal is not the only stop
+                // path; swallowing it (like OptimizationLogSyncService.appendSystemLogLine) keeps cancel
+                // idempotent and lets the .then(update) still persist CANCELLED (OPIK-7029, U1).
+                .onErrorResume(error -> {
+                    log.warn("Failed to set cancellation signal in Redis for optimization '{}'; "
+                            + "persisting CANCELLED status anyway", id, error);
+                    return Mono.empty();
+                })
                 .then();
     }
 
@@ -444,9 +512,9 @@ class OptimizationServiceImpl implements OptimizationService {
             String opikApiKey) {
         if (workspaceName == null) {
             log.error(
-                    "Cannot enqueue Studio optimization job for id: '{}' - workspaceName is null, marking as CANCELLED",
+                    "Cannot enqueue Studio optimization job for id: '{}' - workspaceName is null, marking as ERROR",
                     optimization.id());
-            cancelOptimization(optimization.id(), workspaceId);
+            markOptimizationFailedToStart(optimization.id(), workspaceId);
             return;
         }
 
@@ -471,9 +539,9 @@ class OptimizationServiceImpl implements OptimizationService {
                         jobId -> log.info("Studio optimization job enqueued successfully for id: '{}', jobId: '{}'",
                                 optimization.id(), jobId))
                 .doOnError(error -> {
-                    log.error("Failed to enqueue Studio optimization job for id: '{}', marking as CANCELLED",
+                    log.error("Failed to enqueue Studio optimization job for id: '{}', marking as ERROR",
                             optimization.id(), error);
-                    cancelOptimization(optimization.id(), workspaceId);
+                    markOptimizationFailedToStart(optimization.id(), workspaceId);
                 })
                 .subscribe();
     }
@@ -498,17 +566,50 @@ class OptimizationServiceImpl implements OptimizationService {
         }
     }
 
-    private void cancelOptimization(UUID optimizationId, String workspaceId) {
-        var optimizationUpdate = OptimizationUpdate.builder()
-                .status(OptimizationStatus.CANCELLED)
-                .build();
+    /**
+     * The job could not be queued (Redis unreachable, or the workspace name never resolved), so the
+     * worker will never run and the run would otherwise sit INITIALIZED until the reaper collects it.
+     * Mark it ERROR now with a human-readable reason — modeled on {@link #markStalledOptimizationAsError}:
+     * record the reason in the run's logs first (so the UI surfaces it even though the worker produced
+     * no logs), then reuse the standard {@link #update} path. Enqueue failure is not user-initiated, so
+     * ERROR (not CANCELLED) is the honest status (OPIK-7029, Q1).
+     */
+    private void markOptimizationFailedToStart(UUID optimizationId, String workspaceId) {
+        String reason = "[System] Optimization failed to start: the run could not be queued.";
 
-        update(optimizationId, optimizationUpdate)
-                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId))
+        appendSystemReasonAndMarkError(workspaceId, optimizationId, reason)
+                .contextWrite(headlessSystemContext(workspaceId))
                 .subscribeOn(Schedulers.boundedElastic())
                 .subscribe(
-                        unused -> log.info("Cancelled optimization '{}'", optimizationId),
-                        error -> log.error("Failed to cancel optimization '{}'", optimizationId, error));
+                        unused -> log.info("Marked optimization '{}' in workspace '{}' as ERROR (failed to start)",
+                                optimizationId, workspaceId),
+                        error -> log.error("Failed to mark optimization '{}' in workspace '{}' as ERROR",
+                                optimizationId, workspaceId, error));
+    }
+
+    /**
+     * Shared "record a system reason, then flip to ERROR" workflow used by both the enqueue-failure path
+     * ({@link #markOptimizationFailedToStart}) and the stalled-run reaper ({@link #markStalledOptimizationAsError}):
+     * append the {@code [System]} line to the run's logs first (so the UI can surface it even when the worker
+     * produced no logs), then reuse the standard {@link #update} path (which finalizes logs + emits the
+     * completion event). Callers apply {@link #headlessSystemContext} and their own subscribe/guard semantics.
+     */
+    private Mono<Long> appendSystemReasonAndMarkError(String workspaceId, UUID optimizationId, String reason) {
+        var errorUpdate = OptimizationUpdate.builder().status(OptimizationStatus.ERROR).build();
+        return logSyncService.appendSystemLogLine(workspaceId, optimizationId, reason)
+                .then(Mono.defer(() -> update(optimizationId, errorUpdate)));
+    }
+
+    /**
+     * Headless reactive context both system-driven transitions need. Seed BOTH keys: getById/update resolve
+     * through makeFluxContextAware / bindUserNameAndWorkspaceContextToStream, which call ctx.get(USER_NAME)
+     * and throw NoSuchElementException if it is absent — so WORKSPACE_ID alone silently fails the whole
+     * update (this is why enqueue-failure / stalled runs otherwise stayed non-terminal, OPIK-7159/7029).
+     */
+    private static Function<Context, Context> headlessSystemContext(String workspaceId) {
+        return ctx -> ctx
+                .put(RequestContext.WORKSPACE_ID, workspaceId)
+                .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER);
     }
 
     private List<Optimization> enrichOptimizations(List<Optimization> optimizations, String workspaceId) {
@@ -553,5 +654,74 @@ class OptimizationServiceImpl implements OptimizationService {
                     .expiresAt(expiresAt)
                     .build());
         });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> reconcileStalledStudioOptimizations(@NonNull Duration initializedTimeout,
+            @NonNull Duration runningTimeout, int batchSize) {
+        return optimizationDAO.findStalledStudioOptimizations(initializedTimeout, runningTimeout, batchSize)
+                // Sequential: stalled runs are rare and this keeps the reaper's DB/Redis footprint small.
+                .concatMap(stalled -> markStalledOptimizationAsError(stalled, initializedTimeout, runningTimeout))
+                .reduce(0L, Long::sum);
+    }
+
+    /**
+     * Best-effort transition of a single stalled run to ERROR. Records the reason in the run's logs first
+     * (so the UI can surface it even when the worker never produced any logs), then reuses the standard
+     * {@link #update} path — which finalizes logs and emits the completion analytics event. Never fails
+     * the overall pass: a single row's failure is logged and counted as 0.
+     */
+    private Mono<Long> markStalledOptimizationAsError(OptimizationDAO.StalledOptimization stalled,
+            Duration initializedTimeout, Duration runningTimeout) {
+        UUID id = stalled.id();
+        String workspaceId = stalled.workspaceId();
+
+        // Re-read under the workspace context and only flip if the run is still non-terminal: this
+        // closes the (tiny) race where the worker reports a terminal status between the reaper's query
+        // and this update, which would otherwise overwrite a genuine completion/cancellation with ERROR.
+        return optimizationDAO.getById(id)
+                .filter(current -> CANCELLABLE_STATUSES.contains(current.status()))
+                .flatMap(current -> {
+                    // Build the reason from the RE-READ current status, not the reaper's stale query
+                    // status: a run that moved INITIALIZED -> RUNNING between the query and here must get
+                    // the "no activity" message, not the "failed to start" one (review: thiagohora).
+                    String reason = buildStalledReason(current.status(), initializedTimeout, runningTimeout);
+                    log.warn(
+                            "Reconciling stalled studio optimization '{}' in workspace '{}' (status '{}') to ERROR: {}",
+                            id, workspaceId, current.status(), reason);
+                    // Count this row only if update() actually transitioned it. update() returns
+                    // Mono.just(0L) when its own terminal-overwrite guard fires (the worker reported a
+                    // terminal status in the sliver between the re-read above and update()'s own re-read),
+                    // so a bare thenReturn(1L) would over-count that no-op (review: thiagohora). An empty
+                    // completion means the row was written but ClickHouse reported no count -> still 1.
+                    return appendSystemReasonAndMarkError(workspaceId, id, reason)
+                            .map(rowsUpdated -> rowsUpdated > 0 ? 1L : 0L)
+                            .defaultIfEmpty(1L);
+                })
+                .switchIfEmpty(Mono.fromSupplier(() -> {
+                    log.info(
+                            "Skipping stalled reconciliation for optimization '{}' in workspace '{}': no longer stalled",
+                            id, workspaceId);
+                    return 0L;
+                }))
+                .contextWrite(headlessSystemContext(workspaceId))
+                .onErrorResume(error -> {
+                    log.error("Failed to reconcile stalled studio optimization '{}' in workspace '{}'",
+                            id, workspaceId, error);
+                    return Mono.just(0L);
+                });
+    }
+
+    private String buildStalledReason(OptimizationStatus status, Duration initializedTimeout,
+            Duration runningTimeout) {
+        if (status == OptimizationStatus.RUNNING) {
+            return ("[System] Optimization failed: the run showed no activity for over %d hours without "
+                    + "completing and was marked as failed. The optimizer worker may have crashed or been terminated.")
+                    .formatted(runningTimeout.toHours());
+        }
+        return ("[System] Optimization failed to start: the optimizer worker did not begin processing within %d "
+                + "minutes and may be unavailable. The run was marked as failed.")
+                .formatted(initializedTimeout.toMinutes());
     }
 }

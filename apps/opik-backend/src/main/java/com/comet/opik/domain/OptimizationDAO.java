@@ -20,6 +20,7 @@ import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +33,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -53,6 +55,15 @@ public interface OptimizationDAO {
         public static OptimizationSummary empty(UUID datasetId) {
             return new OptimizationSummary(datasetId, 0, null);
         }
+    }
+
+    /**
+     * A studio optimization whose latest status is non-terminal and older than the reaper threshold,
+     * i.e. stuck because the worker never advanced it. Carries {@code workspaceId} so the reconciler
+     * can seed the workspace context required to update the row and finalize its logs (OPIK-7159).
+     */
+    @Builder(toBuilder = true)
+    record StalledOptimization(@NonNull UUID id, @NonNull String workspaceId, @NonNull OptimizationStatus status) {
     }
 
     Mono<Void> upsert(Optimization optimization);
@@ -83,6 +94,9 @@ public interface OptimizationDAO {
     Flux<OptimizationProjectMapping> computeOptimizationProjectMappingViaExperiments(Set<UUID> optimizationIds);
 
     Mono<Long> batchSetProjectId(Set<UUID> optimizationIds, UUID projectId);
+
+    Flux<StalledOptimization> findStalledStudioOptimizations(Duration initializedTimeout, Duration runningTimeout,
+            int limit);
 }
 
 @Singleton
@@ -223,6 +237,49 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 LIMIT 1 BY id
             )
             WHERE project_id = ''
+            SETTINGS log_comment = '<log_comment>'
+            """;
+
+    /**
+     * Studio runs whose latest row version is stuck in a non-terminal status past the reaper threshold
+     * (OPIK-7159). Deduplicates {@code ReplacingMergeTree} versions with {@code GROUP BY id} +
+     * {@code argMax(status, last_updated_at)} / {@code max(last_updated_at)} — a single aggregation pass,
+     * not the old {@code ORDER BY ... LIMIT 1 BY id} full sort. The status + timeout predicates run in
+     * {@code HAVING} (post-aggregation, i.e. above the dedup), so a run that has since reached a terminal
+     * status is never selected off a stale version — and keeping them out of the WHERE avoids ClickHouse
+     * pushing an aggregate-referencing predicate down into the scan (ILLEGAL_AGGREGATION). Only the two
+     * pushdown-safe predicates run in the {@code WHERE} / INNER scan, where
+     * a {@code minmax} skip index on {@code last_updated_at} (migration 000106) can prune granules:
+     * {@code studio_config != ''} (immutable per id) and a {@code last_updated_at >= now - lookback}
+     * FLOOR. The floor is safe because the newest version carries the maximum {@code last_updated_at}, so
+     * a {@code >=} lower bound can never drop it — it just bounds the scan to recent data instead of the
+     * whole (unbounded-growth) table, which the old query re-read + re-sorted every cycle. {@code
+     * INITIALIZED} (worker never started) and {@code RUNNING} (worker died mid-run) use separate
+     * upper-bound thresholds because there is no per-progress heartbeat on the row. See
+     * {@link #STALLED_LOOKBACK_MARGIN} for the floor width and its reaper-downtime tradeoff.
+     */
+    private static final String FIND_STALLED_STUDIO_OPTIMIZATIONS = """
+            SELECT
+                id,
+                workspace_id,
+                latest_status AS status
+            FROM (
+                SELECT
+                    id,
+                    any(workspace_id) AS workspace_id,
+                    argMax(status, last_updated_at) AS latest_status,
+                    max(last_updated_at) AS latest_updated_at
+                FROM optimizations
+                WHERE studio_config != ''
+                  AND greaterOrEquals(last_updated_at, subtractSeconds(now64(6), :lookback_seconds))
+                GROUP BY id
+                HAVING (latest_status = 'initialized'
+                        AND less(latest_updated_at, subtractSeconds(now64(6), :initialized_timeout_seconds)))
+                    OR (latest_status = 'running'
+                        AND less(latest_updated_at, subtractSeconds(now64(6), :running_timeout_seconds)))
+                ORDER BY latest_updated_at ASC
+                LIMIT :limit
+            )
             SETTINGS log_comment = '<log_comment>'
             """;
 
@@ -571,7 +628,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 project_id,
                 objective_name,
                 <if(status)> :status <else> status <endif> as status,
-                metadata,
+                <if(metadata)> :metadata <else> metadata <endif> as metadata,
                 created_at,
                 created_by,
                 :user_name as last_updated_by,
@@ -1022,6 +1079,12 @@ class OptimizationDAOImpl implements OptimizationDAO {
         Optional.ofNullable(update.errorInfo())
                 .ifPresent(errorInfo -> template.add("error_info", errorInfo));
 
+        // When absent, the SELECT carries the existing metadata column forward untouched. When present,
+        // the update.metadata() is already the FULL merged object (see OptimizationService.update) — a
+        // new ReplacingMergeTree version must carry the complete metadata, never a delta.
+        Optional.ofNullable(update.metadata())
+                .ifPresent(metadata -> template.add("metadata", true));
+
         return template;
     }
 
@@ -1036,6 +1099,9 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
         Optional.ofNullable(update.errorInfo())
                 .ifPresent(errorInfo -> statement.bind("error_info", JsonUtils.writeValueAsString(errorInfo)));
+
+        Optional.ofNullable(update.metadata())
+                .ifPresent(metadata -> statement.bind("metadata", getStringOrDefault(metadata)));
 
         statement.bind("id", id);
 
@@ -1159,5 +1225,37 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 })
                 .flatMap(Result::getRowsUpdated)
                 .reduce(0L, Long::sum);
+    }
+
+    // How far back the stalled-run query scans (the last_updated_at FLOOR that lets the minmax skip index
+    // prune granules). Set to the largest timeout plus a generous reaper-downtime margin, so in normal
+    // operation (reaper running every few minutes) the floor is purely a scan bound and never a coverage
+    // gap: a run's last status change is only older than this if the reaper was down longer than the
+    // margin, in which case that run is not reaped (documented tradeoff, review: thiagohora).
+    private static final Duration STALLED_LOOKBACK_MARGIN = Duration.ofDays(7);
+
+    @Override
+    public Flux<StalledOptimization> findStalledStudioOptimizations(@NonNull Duration initializedTimeout,
+            @NonNull Duration runningTimeout, int limit) {
+        long lookbackSeconds = Math.max(initializedTimeout.toSeconds(), runningTimeout.toSeconds())
+                + STALLED_LOOKBACK_MARGIN.toSeconds();
+        var details = "initializedTimeoutSeconds=%d, runningTimeoutSeconds=%d, lookbackSeconds=%d, limit=%d"
+                .formatted(initializedTimeout.toSeconds(), runningTimeout.toSeconds(), lookbackSeconds, limit);
+        var template = FilterUtils.getSTWithLogComment(FIND_STALLED_STUDIO_OPTIMIZATIONS,
+                "find_stalled_studio_optimizations", "", "", details);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("initialized_timeout_seconds", initializedTimeout.toSeconds())
+                            .bind("running_timeout_seconds", runningTimeout.toSeconds())
+                            .bind("lookback_seconds", lookbackSeconds)
+                            .bind("limit", limit);
+                    return Flux.from(statement.execute());
+                })
+                .flatMap(result -> result.map((row, metadata) -> StalledOptimization.builder()
+                        .id(row.get("id", UUID.class))
+                        .workspaceId(row.get("workspace_id", String.class))
+                        .status(OptimizationStatus.fromString(row.get("status", String.class)))
+                        .build()));
     }
 }
