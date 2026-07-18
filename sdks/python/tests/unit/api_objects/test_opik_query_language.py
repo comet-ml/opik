@@ -378,10 +378,11 @@ def test_trace_oql__valid_filters(filter_string, expected):
         ("duration >=", r"Incomplete filter string.*"),
         ("name =", r"Incomplete filter string.*"),
         ("duration > 5 and", r"Incomplete filter string.*"),
-        # Unterminated quoted values (keys already covered above)
+        # Unterminated quoted values (keys already covered above).
+        # Raised from _is_valid_escaped_key_char while scanning the value.
         (
             'name = "hello',
-            r'Missing closing quote for value: "hello',
+            r'Missing closing quote for: "hello',
         ),
     ],
 )
@@ -1228,3 +1229,40 @@ def test_span_oql__in_not_in_operators__happyflow(filter_string, expected):
 def test_oql__in_operator__invalid_array_syntax(filter_string, error_pattern):
     with pytest.raises(ValueError, match=error_pattern):
         OpikQueryLanguage.for_traces(filter_string)
+
+
+# ============================================================
+# Cross-factory malformed-input coverage (shared parser path)
+# ============================================================
+# Baz review: incomplete-filter EOF guard lives in _parse_operator /
+# _parse_value, shared by all public factories — not only for_traces.
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [
+        OpikQueryLanguage.for_traces,
+        OpikQueryLanguage.for_spans,
+        OpikQueryLanguage.for_threads,
+        OpikQueryLanguage.for_dataset_items,
+        OpikQueryLanguage.for_prompt_versions,
+    ],
+)
+@pytest.mark.parametrize(
+    "filter_string, error_pattern",
+    [
+        # Ends after a valid field with no operator / value
+        ("id", r"Incomplete filter string.*"),
+        ("id =", r"Incomplete filter string.*"),
+        # Unterminated double-quoted value (shared quote scanner)
+        (
+            'id = "hello',
+            r'Missing closing quote for: "hello',
+        ),
+    ],
+)
+def test_oql_factories__incomplete_and_unterminated_inputs(
+    factory, filter_string, error_pattern
+):
+    with pytest.raises(ValueError, match=error_pattern):
+        factory(filter_string)
