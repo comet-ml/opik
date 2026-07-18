@@ -3,12 +3,15 @@ from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 import pytest
+from langchain_core.language_models import fake
+from langchain_core.prompts import PromptTemplate
+from langchain_core.runnables import RunnableLambda
 from langchain_core.tools import tool
 from langchain_core.tracers import BaseTracer
 from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
 
-from opik import exceptions
+from opik import context_storage, exceptions
 from opik.api_objects import span as span_module, trace as trace_module
 from opik.integrations import langchain
 from opik.integrations.langchain.opik_tracer import OpikTracer
@@ -563,3 +566,108 @@ def test_get_run_metadata__non_dict_opik_value__coerced_then_tagged(
 )
 def test_is_internal_langgraph_run__markers_and_malformed_inputs(run_dict, expected):
     assert run_parse_helpers.is_internal_langgraph_run(run_dict) is expected
+
+
+# created_traces() is documented to accumulate lightweight Trace handles,
+# so _created_traces is intentionally absent here: only the payload-heavy
+# per-run state must be released once a trace completes.
+_EMPTY_BOOKKEEPING = {
+    "span_data_map": 0,
+    "created_traces_data_map": 0,
+    "externally_created_traces_ids": 0,
+    "skipped_langgraph_root_run_ids": 0,
+    "langgraph_parent_span_ids": 0,
+}
+
+
+def _bookkeeping_sizes(tracer: OpikTracer) -> Dict[str, int]:
+    return {
+        "span_data_map": len(tracer._span_data_map),
+        "created_traces_data_map": len(tracer._created_traces_data_map),
+        "externally_created_traces_ids": len(tracer._externally_created_traces_ids),
+        "skipped_langgraph_root_run_ids": len(tracer._skipped_langgraph_root_run_ids),
+        "langgraph_parent_span_ids": len(tracer._langgraph_parent_span_ids),
+    }
+
+
+def test_opik_tracer__trace_completes__all_bookkeeping_state_evicted(fake_backend):
+    llm = fake.FakeListLLM(responses=["ok"])
+    tracer = OpikTracer()
+
+    for i in range(10):
+        llm.invoke(f"message {i}", config={"callbacks": [tracer]})
+    tracer.flush()
+
+    assert _bookkeeping_sizes(tracer) == _EMPTY_BOOKKEEPING
+    # tracing is unaffected: every trace still reached the backend WITH its
+    # root span (evicting before the root run's last callback would silently
+    # drop span emission), and created_traces() still accumulates
+    assert len(fake_backend.trace_trees) == 10
+    assert all(tree.spans for tree in fake_backend.trace_trees)
+    assert len(tracer.created_traces()) == 10
+
+
+def test_opik_tracer__chained_run_completes__child_span_state_evicted(fake_backend):
+    prompt = PromptTemplate(input_variables=["title"], template="Title: {title}.")
+    chain = prompt | fake.FakeListLLM(responses=["ok"])
+    tracer = OpikTracer()
+
+    chain.invoke({"title": "hello"}, config={"callbacks": [tracer]})
+    tracer.flush()
+
+    assert _bookkeeping_sizes(tracer) == _EMPTY_BOOKKEEPING
+
+
+def test_opik_tracer__chain_raises__state_evicted_on_error_path(fake_backend):
+    def boom(_input):
+        raise ValueError("boom")
+
+    chain = RunnableLambda(boom)
+    tracer = OpikTracer()
+
+    with pytest.raises(ValueError, match="boom"):
+        chain.invoke("hello", config={"callbacks": [tracer]})
+    tracer.flush()
+
+    assert _bookkeeping_sizes(tracer) == _EMPTY_BOOKKEEPING
+
+
+def test_opik_tracer__concurrent_in_flight_trace__untouched_by_other_trace_finishing(
+    fake_backend,
+):
+    tracer = OpikTracer()
+    in_flight_run_id = uuid4()
+    # start a root run via the public callback API and never finish it
+    tracer.on_chain_start(
+        {"name": "in-flight-chain"}, {"input": "x"}, run_id=in_flight_run_id
+    )
+    in_flight_entries = {
+        name: size for name, size in _bookkeeping_sizes(tracer).items() if size > 0
+    }
+    assert in_flight_entries, "in-flight run must register bookkeeping state"
+
+    fake.FakeListLLM(responses=["ok"]).invoke(
+        "other trace", config={"callbacks": [tracer]}
+    )
+    tracer.flush()
+
+    # the finished trace is fully evicted; the in-flight one is untouched
+    assert {
+        name: size for name, size in _bookkeeping_sizes(tracer).items() if size > 0
+    } == in_flight_entries
+
+
+def test_opik_tracer__externally_created_trace__id_discarded_after_completion(
+    fake_backend,
+):
+    external_trace_data = trace_module.TraceData(name="external-trace")
+    context_storage.set_trace_data(external_trace_data)
+    tracer = OpikTracer()
+    try:
+        fake.FakeListLLM(responses=["ok"]).invoke("hi", config={"callbacks": [tracer]})
+        tracer.flush()
+    finally:
+        context_storage.pop_trace_data()
+
+    assert external_trace_data.id not in tracer._externally_created_traces_ids
+    assert _bookkeeping_sizes(tracer) == _EMPTY_BOOKKEEPING

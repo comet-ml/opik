@@ -322,6 +322,74 @@ class OpikTracer(BaseTracer):
         if not self._opik_context_read_only_mode:
             self._opik_context_storage.pop_trace_data(ensure_id=trace_data.id)
 
+    def _resolve_trace_id(self, run_id: UUID) -> Optional[str]:
+        """Return the trace id a finished root run is allowed to evict, if any.
+
+        A run that created its trace (it has an entry in
+        _created_traces_data_map) owns it, so its trace id is returned.
+        Otherwise the run only has spans. If they point at an externally
+        created trace (distributed tracing), the span's trace_id is returned
+        so the local leftovers of that trace can be released. If they point
+        at a trace created by this tracer but owned by another root run that
+        is still in flight, None is returned: only the owning root run may
+        evict that trace's state, when it finishes.
+        """
+        trace_data = self._created_traces_data_map.get(run_id)
+        if trace_data is not None:
+            return trace_data.id
+
+        span_data = self._span_data_map.get(run_id)
+        if (
+            span_data is not None
+            and span_data.trace_id in self._externally_created_traces_ids
+        ):
+            return span_data.trace_id
+
+        return None
+
+    def _evict_finished_trace_state(self, root_run_id: UUID) -> None:
+        """Release a trace's bookkeeping state once its root run finished.
+
+        Called at the end of the root run's final end/error callback. That
+        is the earliest safe point: _persist_run fires before that callback,
+        and the end-span processing in between still reads the root run's
+        entries to emit the final span. Eviction is keyed by trace id, so
+        concurrent in-flight traces sharing this tracer are never touched.
+        Without it every trace's state (including full prompt/completion
+        payloads) stays in the maps for the tracer's lifetime.
+        """
+        trace_id = self._resolve_trace_id(root_run_id)
+        if trace_id is None:
+            # A parentless run that attached to another in-flight local
+            # trace: the owning root run evicts the shared state when it
+            # finishes, only this run's own entries are released here.
+            self._span_data_map.pop(root_run_id, None)
+            self._skipped_langgraph_root_run_ids.discard(root_run_id)
+            self._langgraph_parent_span_ids.pop(root_run_id, None)
+            return
+
+        run_ids = {
+            run_id
+            for run_id, span_data in self._span_data_map.items()
+            if span_data.trace_id == trace_id
+        }
+        # Child runs map to the same TraceData object as the root run.
+        run_ids.update(
+            run_id
+            for run_id, trace_data in self._created_traces_data_map.items()
+            if trace_data.id == trace_id
+        )
+        for run_id in run_ids:
+            self._span_data_map.pop(run_id, None)
+            self._created_traces_data_map.pop(run_id, None)
+            self._skipped_langgraph_root_run_ids.discard(run_id)
+            self._langgraph_parent_span_ids.pop(run_id, None)
+
+        # _created_traces is deliberately not evicted: created_traces() is
+        # documented to accumulate the traces created by this tracer, and
+        # Trace objects are lightweight handles without payloads.
+        self._externally_created_traces_ids.discard(trace_id)
+
     def _ensure_no_hanging_opik_tracer_spans(self) -> None:
         root_run_external_parent_span_id = self._root_run_external_parent_span_id.get()
         there_were_no_external_spans_before_chain_invocation = (
@@ -707,6 +775,8 @@ class OpikTracer(BaseTracer):
                     span_id=span_data.id
                 )
                 self._opik_context_storage.pop_span_data(ensure_id=span_data.id)
+            if run.parent_run_id is None:
+                self._evict_finished_trace_state(run.id)
 
     def _resolve_provider(
         self, run_dict: Dict[str, Any], model: Optional[str]
@@ -744,6 +814,14 @@ class OpikTracer(BaseTracer):
         return self._skip_error_callback(error_str)
 
     def _process_end_span_with_error(self, run: Run) -> None:
+        # finally runs on early returns and exceptions too, so eviction always happens
+        try:
+            self._process_end_span_with_error_impl(run)
+        finally:
+            if run.parent_run_id is None:
+                self._evict_finished_trace_state(run.id)
+
+    def _process_end_span_with_error_impl(self, run: Run) -> None:
         # Skip processing if this is a skipped LangGraph root run
         if run.id in self._skipped_langgraph_root_run_ids:
             return
