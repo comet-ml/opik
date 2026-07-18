@@ -1,5 +1,6 @@
 import logging
 import datetime
+import threading
 from typing import (
     Any,
     Dict,
@@ -171,6 +172,12 @@ class OpikTracer(BaseTracer):
 
         self._externally_created_traces_ids: Set[str] = set()
 
+        self._external_trace_registration_lock = threading.Lock()
+        """Keeps registering an external trace id (and the span referencing it)
+        atomic with respect to _evict_finished_trace_state's check-then-discard,
+        so a finishing root run cannot discard an id another root run is
+        registering concurrently."""
+
         self._skipped_langgraph_root_run_ids: Set[UUID] = set()
         """Set of run IDs for LangGraph root runs where we skip creating the span."""
 
@@ -322,73 +329,51 @@ class OpikTracer(BaseTracer):
         if not self._opik_context_read_only_mode:
             self._opik_context_storage.pop_trace_data(ensure_id=trace_data.id)
 
-    def _resolve_trace_id(self, run_id: UUID) -> Optional[str]:
-        """Return the trace id a finished root run is allowed to evict, if any.
-
-        A run that created its trace (it has an entry in
-        _created_traces_data_map) owns it, so its trace id is returned.
-        Otherwise the run only has spans. If they point at an externally
-        created trace (distributed tracing), the span's trace_id is returned
-        so the local leftovers of that trace can be released. If they point
-        at a trace created by this tracer but owned by another root run that
-        is still in flight, None is returned: only the owning root run may
-        evict that trace's state, when it finishes.
-        """
-        trace_data = self._created_traces_data_map.get(run_id)
-        if trace_data is not None:
-            return trace_data.id
-
-        span_data = self._span_data_map.get(run_id)
-        if (
-            span_data is not None
-            and span_data.trace_id in self._externally_created_traces_ids
-        ):
-            return span_data.trace_id
-
-        return None
-
-    def _evict_finished_trace_state(self, root_run_id: UUID) -> None:
-        """Release a trace's bookkeeping state once its root run finished.
+    def _evict_finished_trace_state(self, run: Run) -> None:
+        """Release a finished root run's bookkeeping state.
 
         Called at the end of the root run's final end/error callback. That
         is the earliest safe point: _persist_run fires before that callback,
         and the end-span processing in between still reads the root run's
-        entries to emit the final span. Eviction is keyed by trace id, so
-        concurrent in-flight traces sharing this tracer are never touched.
-        Without it every trace's state (including full prompt/completion
-        payloads) stays in the maps for the tracer's lifetime.
+        entries to emit the final span. Eviction walks the finished run's
+        own tree (BaseTracer attaches every child run to its parent's
+        child_runs), so other in-flight root runs sharing this tracer, even
+        ones attached to the same externally created trace, are never
+        touched. Without it every trace's state (including full
+        prompt/completion payloads) stays in the maps for the tracer's
+        lifetime.
         """
-        trace_id = self._resolve_trace_id(root_run_id)
-        if trace_id is None:
-            # A parentless run that attached to another in-flight local
-            # trace: the owning root run evicts the shared state when it
-            # finishes, only this run's own entries are released here.
-            self._span_data_map.pop(root_run_id, None)
-            self._skipped_langgraph_root_run_ids.discard(root_run_id)
-            self._langgraph_parent_span_ids.pop(root_run_id, None)
-            return
+        root_span_data = self._span_data_map.get(run.id)
+        external_trace_id: Optional[str] = None
+        if (
+            root_span_data is not None
+            and root_span_data.trace_id in self._externally_created_traces_ids
+        ):
+            external_trace_id = root_span_data.trace_id
 
-        run_ids = {
-            run_id
-            for run_id, span_data in self._span_data_map.items()
-            if span_data.trace_id == trace_id
-        }
-        # Child runs map to the same TraceData object as the root run.
-        run_ids.update(
-            run_id
-            for run_id, trace_data in self._created_traces_data_map.items()
-            if trace_data.id == trace_id
-        )
-        for run_id in run_ids:
-            self._span_data_map.pop(run_id, None)
-            self._created_traces_data_map.pop(run_id, None)
-            self._skipped_langgraph_root_run_ids.discard(run_id)
-            self._langgraph_parent_span_ids.pop(run_id, None)
+        stack = [run]
+        while stack:
+            current = stack.pop()
+            stack.extend(current.child_runs)
+            self._span_data_map.pop(current.id, None)
+            self._created_traces_data_map.pop(current.id, None)
+            self._skipped_langgraph_root_run_ids.discard(current.id)
+            self._langgraph_parent_span_ids.pop(current.id, None)
 
         # _created_traces is deliberately not evicted: created_traces() is
         # documented to accumulate the traces created by this tracer, and
         # Trace objects are lightweight handles without payloads.
-        self._externally_created_traces_ids.discard(trace_id)
+        if external_trace_id is not None:
+            # The lock keeps the check-then-discard atomic with respect to the
+            # registration sites, so an id being registered by another root
+            # run right now cannot be discarded from under it.
+            with self._external_trace_registration_lock:
+                if not any(
+                    span_data.trace_id == external_trace_id
+                    for span_data in list(self._span_data_map.values())
+                ):
+                    # No other in-flight run references the external trace anymore.
+                    self._externally_created_traces_ids.discard(external_trace_id)
 
     def _ensure_no_hanging_opik_tracer_spans(self) -> None:
         root_run_external_parent_span_id = self._root_run_external_parent_span_id.get()
@@ -510,6 +495,18 @@ class OpikTracer(BaseTracer):
         or distributed headers. If a new trace is created, the span is skipped and only the
         trace data is stored in local storage for future reference.
         """
+        # May register an externally created trace id, which must become
+        # observable together with the span data referencing it.
+        with self._external_trace_registration_lock:
+            self._create_root_trace_and_span_impl(
+                run_id=run_id,
+                run_dict=run_dict,
+                allow_duplicating_root_span=allow_duplicating_root_span,
+            )
+
+    def _create_root_trace_and_span_impl(
+        self, run_id: UUID, run_dict: Dict[str, Any], allow_duplicating_root_span: bool
+    ) -> None:
         # This is the first run for the chain.
         root_run_result = self._track_root_run(run_dict, allow_duplicating_root_span)
         if root_run_result.new_trace_data is not None:
@@ -626,6 +623,18 @@ class OpikTracer(BaseTracer):
         Attaches child span directly to a trace by checking trace data or distributed
         headers and creates new span data based on the provided run information.
         """
+        # May register an externally created trace id, which must become
+        # observable together with the span data referencing it.
+        with self._external_trace_registration_lock:
+            self._attach_span_to_local_or_distributed_trace_impl(
+                run_id=run_id,
+                parent_run_id=parent_run_id,
+                run_dict=run_dict,
+            )
+
+    def _attach_span_to_local_or_distributed_trace_impl(
+        self, run_id: UUID, parent_run_id: UUID, run_dict: Dict[str, Any]
+    ) -> None:
         # Check if we have trace data (new trace) or distributed headers
         if parent_run_id in self._created_traces_data_map:
             # LangGraph created a new trace - attach children directly to trace
@@ -776,7 +785,7 @@ class OpikTracer(BaseTracer):
                 )
                 self._opik_context_storage.pop_span_data(ensure_id=span_data.id)
             if run.parent_run_id is None:
-                self._evict_finished_trace_state(run.id)
+                self._evict_finished_trace_state(run)
 
     def _resolve_provider(
         self, run_dict: Dict[str, Any], model: Optional[str]
@@ -819,7 +828,7 @@ class OpikTracer(BaseTracer):
             self._process_end_span_with_error_impl(run)
         finally:
             if run.parent_run_id is None:
-                self._evict_finished_trace_state(run.id)
+                self._evict_finished_trace_state(run)
 
     def _process_end_span_with_error_impl(self, run: Run) -> None:
         # Skip processing if this is a skipped LangGraph root run
