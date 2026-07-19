@@ -855,6 +855,9 @@ navigation:
           - page: Flowise
             path: ../docs-v2/integrations/flowise.mdx
             slug: flowise
+          - page: Hermes
+            path: ../docs-v2/integrations/hermes.mdx
+            slug: hermes
           - page: Langflow
             path: ../docs-v2/integrations/langflow.mdx
             slug: langflow
