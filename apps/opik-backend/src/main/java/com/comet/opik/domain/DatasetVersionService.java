@@ -50,6 +50,7 @@ public interface DatasetVersionService {
     String ERROR_CANNOT_DELETE_LATEST_TAG = "Cannot delete '%s' tag - it is automatically managed";
     String ERROR_VERSION_HASH_NOT_FOUND = "Version with hash not found hash='%s' datasetId='%s'";
     String ERROR_VERSION_NOT_FOUND = "Version not found for dataset hash='%s' datasetId='%s'";
+    String ERROR_LATEST_MOVED = "Concurrent modification detected for dataset '%s'; the latest version changed during this operation. Please retry.";
 
     /**
      * Retrieves a paginated list of versions for the specified dataset, ordered by creation time (newest first).
@@ -216,7 +217,7 @@ public interface DatasetVersionService {
             UUID baseVersionId, List<String> tags, String changeDescription,
             List<EvaluatorItem> evaluators, ExecutionPolicy executionPolicy,
             boolean clearExecutionPolicy,
-            UUID batchGroupId, String workspaceId, String userName);
+            UUID batchGroupId, boolean enforceLatestCas, String workspaceId, String userName);
 
     /**
      * Restores a dataset to a previous version state by creating a new version.
@@ -361,7 +362,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             int itemsTotal, UUID baseVersionId, List<String> tags, String changeDescription,
             List<EvaluatorItem> evaluators, ExecutionPolicy executionPolicy,
             boolean clearExecutionPolicy,
-            UUID batchGroupId, @NonNull String workspaceId, @NonNull String userName) {
+            UUID batchGroupId, boolean enforceLatestCas, @NonNull String workspaceId, @NonNull String userName) {
 
         log.info(
                 "Creating version from delta for dataset '{}', newVersionId '{}', itemsTotal '{}', baseVersionId '{}', batchGroupId '{}'",
@@ -420,8 +421,24 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                         batchGroupId, versionHash, datasetId);
             }
 
-            // Remove 'latest' tag from previous version (if exists)
-            datasetVersionDAO.deleteTag(datasetId, LATEST_TAG, workspaceId);
+            // Flip the 'latest' tag to the new version. For the lock-protected write paths that branch
+            // off the current latest, only move 'latest' if it still points at that base
+            // (compare-and-swap): if a concurrent writer already moved it, the delete affects 0 rows and
+            // we abort with a retryable 409 rather than silently clobbering their version. This is the
+            // backstop for a lock-lease failure (OPIK-7264). Callers that intentionally branch off a
+            // non-latest base (applyDeltaChanges with override, which has its own conflict handling)
+            // pass enforceLatestCas=false to opt out.
+            if (enforceLatestCas && baseVersionId != null) {
+                int swapped = datasetVersionDAO.deleteTagIfVersion(datasetId, LATEST_TAG, baseVersionId, workspaceId);
+                if (swapped != 1) {
+                    throw new ClientErrorException(Response.status(Response.Status.CONFLICT)
+                            .entity(new ErrorMessage(List.of(ERROR_LATEST_MOVED.formatted(datasetId))))
+                            .build());
+                }
+            } else {
+                // First version, or a caller managing its own concurrency: no compare-and-swap.
+                datasetVersionDAO.deleteTag(datasetId, LATEST_TAG, workspaceId);
+            }
 
             // Always add 'latest' tag to the new version
             datasetVersionDAO.insertTag(datasetId, LATEST_TAG, newVersionId, userName, workspaceId);
@@ -797,7 +814,18 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         }).withError(() -> new EntityAlreadyExistsException(
                 new ErrorMessage(List.of(ERROR_VERSION_HASH_EXISTS.formatted(datasetId)))));
 
-        dao.deleteTag(datasetId, LATEST_TAG, context.workspaceId);
+        // Compare-and-swap the 'latest' flip against the base we diffed from (OPIK-7264 backstop).
+        if (context.previousLatestVersion != null) {
+            int swapped = dao.deleteTagIfVersion(datasetId, LATEST_TAG,
+                    context.previousLatestVersion.id(), context.workspaceId);
+            if (swapped != 1) {
+                throw new ClientErrorException(Response.status(Response.Status.CONFLICT)
+                        .entity(new ErrorMessage(List.of(ERROR_LATEST_MOVED.formatted(datasetId))))
+                        .build());
+            }
+        } else {
+            dao.deleteTag(datasetId, LATEST_TAG, context.workspaceId);
+        }
         dao.insertTag(datasetId, LATEST_TAG, newVersionId, context.userName, context.workspaceId);
     }
 
