@@ -50,6 +50,7 @@ public interface DatasetVersionService {
     String ERROR_CANNOT_DELETE_LATEST_TAG = "Cannot delete '%s' tag - it is automatically managed";
     String ERROR_VERSION_HASH_NOT_FOUND = "Version with hash not found hash='%s' datasetId='%s'";
     String ERROR_VERSION_NOT_FOUND = "Version not found for dataset hash='%s' datasetId='%s'";
+    String ERROR_LATEST_MOVED = "Concurrent modification detected for dataset '%s'; the latest version changed during this operation. Please retry.";
 
     /**
      * Retrieves a paginated list of versions for the specified dataset, ordered by creation time (newest first).
@@ -216,7 +217,7 @@ public interface DatasetVersionService {
             UUID baseVersionId, List<String> tags, String changeDescription,
             List<EvaluatorItem> evaluators, ExecutionPolicy executionPolicy,
             boolean clearExecutionPolicy,
-            UUID batchGroupId, String workspaceId, String userName);
+            UUID batchGroupId, boolean enforceLatestCas, String workspaceId, String userName);
 
     /**
      * Restores a dataset to a previous version state by creating a new version.
@@ -296,7 +297,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetVersionDAO.class);
-            return dao.findByBatchGroupId(batchGroupId, datasetId, workspaceId);
+            return dao.findLatestByBatchGroupId(batchGroupId, datasetId, workspaceId);
         });
     }
 
@@ -361,7 +362,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             int itemsTotal, UUID baseVersionId, List<String> tags, String changeDescription,
             List<EvaluatorItem> evaluators, ExecutionPolicy executionPolicy,
             boolean clearExecutionPolicy,
-            UUID batchGroupId, @NonNull String workspaceId, @NonNull String userName) {
+            UUID batchGroupId, boolean enforceLatestCas, @NonNull String workspaceId, @NonNull String userName) {
 
         log.info(
                 "Creating version from delta for dataset '{}', newVersionId '{}', itemsTotal '{}', baseVersionId '{}', batchGroupId '{}'",
@@ -420,11 +421,12 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                         batchGroupId, versionHash, datasetId);
             }
 
-            // Remove 'latest' tag from previous version (if exists)
-            datasetVersionDAO.deleteTag(datasetId, LATEST_TAG, workspaceId);
-
-            // Always add 'latest' tag to the new version
-            datasetVersionDAO.insertTag(datasetId, LATEST_TAG, newVersionId, userName, workspaceId);
+            // Flip the 'latest' tag to the new version. Callers that branch off the current latest under
+            // a lock pass enforceLatestCas=true so the flip is compare-and-swapped against that base;
+            // callers intentionally branching off a non-latest base (applyDeltaChanges with override)
+            // pass false to opt out.
+            UUID casBase = enforceLatestCas ? baseVersionId : null;
+            flipLatestTag(datasetVersionDAO, datasetId, newVersionId, casBase, userName, workspaceId);
             log.info("Added '{}' tag to version '{}' for dataset '{}'", LATEST_TAG, versionHash, datasetId);
 
             // Add custom tags from the request
@@ -797,8 +799,30 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         }).withError(() -> new EntityAlreadyExistsException(
                 new ErrorMessage(List.of(ERROR_VERSION_HASH_EXISTS.formatted(datasetId)))));
 
-        dao.deleteTag(datasetId, LATEST_TAG, context.workspaceId);
-        dao.insertTag(datasetId, LATEST_TAG, newVersionId, context.userName, context.workspaceId);
+        UUID casBase = context.previousLatestVersion != null ? context.previousLatestVersion.id() : null;
+        flipLatestTag(dao, datasetId, newVersionId, casBase, context.userName, context.workspaceId);
+    }
+
+    /**
+     * Moves the 'latest' tag to {@code newVersionId}. When {@code casBase} is non-null, the flip is
+     * compare-and-swapped against it: the old tag is removed only if it still points at {@code casBase},
+     * otherwise a concurrent writer already moved 'latest' and we abort with a retryable 409 rather than
+     * silently clobbering their version (OPIK-7264 backstop). A null {@code casBase} flips unconditionally
+     * (first version, or a caller managing its own concurrency).
+     */
+    private void flipLatestTag(DatasetVersionDAO dao, UUID datasetId, UUID newVersionId, UUID casBase,
+            String userName, String workspaceId) {
+        if (casBase != null) {
+            int swapped = dao.deleteTagIfVersion(datasetId, LATEST_TAG, casBase, workspaceId);
+            if (swapped != 1) {
+                throw new ClientErrorException(Response.status(Response.Status.CONFLICT)
+                        .entity(new ErrorMessage(List.of(ERROR_LATEST_MOVED.formatted(datasetId))))
+                        .build());
+            }
+        } else {
+            dao.deleteTag(datasetId, LATEST_TAG, workspaceId);
+        }
+        dao.insertTag(datasetId, LATEST_TAG, newVersionId, userName, workspaceId);
     }
 
     private record RestoreContext(UUID sourceVersionId, DatasetVersion sourceVersion,

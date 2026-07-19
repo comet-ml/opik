@@ -26,6 +26,7 @@ import com.comet.opik.api.validation.DatasetItemBatchValidator;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -49,6 +50,7 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -149,6 +151,9 @@ public interface DatasetItemService {
 @Slf4j
 class DatasetItemServiceImpl implements DatasetItemService {
 
+    private static final String DATASET_VERSION_LOCK = "DatasetVersion";
+    private static final Duration LOCK_DURATION = Duration.ofSeconds(60);
+
     private final @NonNull DatasetItemDAO dao;
     private final @NonNull DatasetItemVersionDAO versionDao;
     private final @NonNull DatasetService datasetService;
@@ -164,6 +169,14 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private final @NonNull DatasetVersioningMigrationService migrationService;
     private final @NonNull ProjectService projectService;
     private final @NonNull @Config OpikConfiguration config;
+    private final @NonNull LockService lockService;
+
+    // Serialize the read-latest -> create-version -> flip-latest sequence per dataset so parallel
+    // uploads can't race on the dataset's mutable 'latest' pointer (OPIK-7264).
+    private <T> Mono<T> withDatasetVersionLock(UUID datasetId, Mono<T> action) {
+        return lockService.executeWithLockCustomExpire(
+                new LockService.Lock(datasetId, DATASET_VERSION_LOCK), action, LOCK_DURATION);
+    }
 
     @WithSpan
     private Mono<Void> verifyDatasetExistsAndSave(@NonNull DatasetItemBatch batch) {
@@ -215,10 +228,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         // Save dataset items - route to versioned or legacy based on toggle
                         if (featureFlags.isDatasetVersioningEnabled()) {
                             log.info("Creating dataset items from traces with versioning for dataset '{}'", datasetId);
-                            return saveItemsWithVersion(
+                            return withDatasetVersionLock(datasetId, saveItemsWithVersion(
                                     DatasetItemBatch.builder().datasetId(datasetId).items(datasetItems).build(),
                                     datasetId, null)
-                                    .then(Mono.just(0L));
+                                    .then(Mono.just(0L)));
                         }
 
                         // Legacy: save to legacy table
@@ -268,10 +281,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         // Save dataset items - route to versioned or legacy based on toggle
                         if (featureFlags.isDatasetVersioningEnabled()) {
                             log.info("Creating dataset items from spans with versioning for dataset '{}'", datasetId);
-                            return saveItemsWithVersion(
+                            return withDatasetVersionLock(datasetId, saveItemsWithVersion(
                                     DatasetItemBatch.builder().datasetId(datasetId).items(datasetItems).build(),
                                     datasetId, null)
-                                    .then(Mono.just(0L));
+                                    .then(Mono.just(0L)));
                         }
 
                         // Legacy: save to legacy table
@@ -471,6 +484,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                                     null, // Inherit execution policy from base version
                                                     false, // Don't clear execution policy
                                                     null, // No batch group ID
+                                                    true, // enforceLatestCas: diffs against current latest under lock
                                                     workspaceId,
                                                     userName)
                                                     .thenReturn(itemsTotal);
@@ -543,14 +557,15 @@ class DatasetItemServiceImpl implements DatasetItemService {
             datasetId = batchUpdate.datasetId();
             log.info("Using provided dataset ID '{}' for batch update by filters with versioning", datasetId);
 
-            return batchUpdateByFiltersWithVersioning(datasetId, batchUpdate, workspaceId, userName);
+            return withDatasetVersionLock(datasetId,
+                    batchUpdateByFiltersWithVersioning(datasetId, batchUpdate, workspaceId, userName));
         }
 
         if (CollectionUtils.isNotEmpty(batchUpdate.ids())) {
             return resolveDatasetIdFromItemIds(batchUpdate.ids())
                     .switchIfEmpty(Mono.error(failWithNotFound("Dataset items not found")))
-                    .flatMap(resolvedDatasetId -> batchUpdateByIdsWithVersioning(resolvedDatasetId, batchUpdate,
-                            workspaceId, userName));
+                    .flatMap(resolvedDatasetId -> withDatasetVersionLock(resolvedDatasetId,
+                            batchUpdateByIdsWithVersioning(resolvedDatasetId, batchUpdate, workspaceId, userName)));
         }
 
         // This should not happen due to validation, but handle it gracefully
@@ -735,6 +750,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 null, // Inherit execution policy from base version
                 false, // Don't clear execution policy
                 null, // No batch group ID
+                true, // enforceLatestCas: diffs against current latest under lock
                 workspaceId,
                 userName)
                 .then();
@@ -840,9 +856,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
         // Route to versioned or legacy based on toggle
         if (featureFlags.isDatasetVersioningEnabled()) {
             log.info("Saving batch with versioning for dataset '{}', itemCount '{}'", datasetId, items.size());
-            return saveItemsWithVersion(batch, datasetId, null)
+            return withDatasetVersionLock(datasetId, saveItemsWithVersion(batch, datasetId, null)
                     .map(version -> (long) items.size())
-                    .defaultIfEmpty((long) items.size());
+                    .defaultIfEmpty((long) items.size()));
         }
 
         // Legacy: save to legacy table
@@ -938,7 +954,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 log.info(
                         "Mutating latest version with delete (no batch_group_id). datasetId='{}', itemIdsSize='{}', filtersSize='{}'",
                         datasetId, ids != null ? ids.size() : 0, filters != null ? filters.size() : 0);
-                return deleteItemsWithVersion(ids, datasetId, filters, workspaceId, userName, null);
+                return getDatasetIdOrResolveItemDatasetId(datasetId, ids)
+                        .flatMap(resolvedDatasetId -> withDatasetVersionLock(resolvedDatasetId,
+                                deleteItemsWithVersion(ids, resolvedDatasetId, filters, workspaceId, userName, null)));
             }
 
             // batch_group_id provided: create new version with batch grouping
@@ -946,8 +964,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     "Creating version with batch grouping for delete. batchGroupId='{}', datasetId='{}', itemIdsSize='{}', filtersSize='{}'",
                     batchGroupId, datasetId, ids != null ? ids.size() : 0, filters != null ? filters.size() : 0);
             return getDatasetIdOrResolveItemDatasetId(datasetId, ids)
-                    .flatMap(resolvedDatasetId -> handleGroupedDeletion(
-                            batchGroupId, ids, resolvedDatasetId, filters, workspaceId, userName));
+                    .flatMap(resolvedDatasetId -> withDatasetVersionLock(resolvedDatasetId, handleGroupedDeletion(
+                            batchGroupId, ids, resolvedDatasetId, filters, workspaceId, userName)));
         });
     }
 
@@ -1070,6 +1088,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                                     null, // Inherit execution policy from base version
                                                     false, // Don't clear execution policy
                                                     batchGroupId,
+                                                    true, // enforceLatestCas: diffs against current latest under lock
                                                     workspaceId,
                                                     userName);
                                         });
@@ -1168,6 +1187,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             null, // Inherit execution policy from base version
                             false, // Don't clear execution policy
                             batchGroupId,
+                            true, // enforceLatestCas: diffs against current latest under lock
                             workspaceId,
                             userName);
                 })
@@ -1408,7 +1428,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             changes.tags(), changes.changeDescription(),
                             changes.evaluators(), changes.executionPolicy(),
                             Boolean.TRUE.equals(changes.clearExecutionPolicy()),
-                            null, workspaceId, userName);
+                            null, false, workspaceId, userName);
                     log.info("Created first version '{}' for dataset '{}' with hash '{}'",
                             version.id(), datasetId, version.versionHash());
                     return version;
@@ -1521,6 +1541,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                             changes.executionPolicy(),
                                             Boolean.TRUE.equals(changes.clearExecutionPolicy()),
                                             null, // No batch group ID
+                                            false, // applyDeltaChanges manages its own conflict/override check
                                             workspaceId,
                                             userName);
                                 });
@@ -1562,7 +1583,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
         }
 
         return getDatasetId(batch)
-                .flatMap(datasetId -> Mono.deferContextual(ctx -> {
+                .flatMap(datasetId -> withDatasetVersionLock(datasetId, Mono.deferContextual(ctx -> {
 
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
                     String userName = ctx.get(RequestContext.USER_NAME);
@@ -1579,7 +1600,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     log.info("Creating version with batch grouping for dataset '{}', batch_group_id: '{}'", datasetId,
                             batchGroupId);
                     return handleGroupedInsertion(batchGroupId, batch, datasetId, workspaceId, userName);
-                }));
+                })));
     }
 
     /**
@@ -1834,6 +1855,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             null, // No execution policy for first version
                             false, // Don't clear execution policy
                             batchGroupId,
+                            true, // enforceLatestCas (no-op for first version, base is null)
                             workspaceId,
                             userName);
                 });
@@ -1955,6 +1977,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         null, // Inherit execution policy from base version
                                         false, // Don't clear execution policy
                                         batchGroupId,
+                                        true, // enforceLatestCas: diffs against current latest under lock
                                         workspaceId,
                                         userName);
                             });
@@ -1987,6 +2010,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
             ExecutionPolicy executionPolicy,
             boolean clearExecutionPolicy,
             UUID batchGroupId,
+            boolean enforceLatestCas,
             String workspaceId,
             String userName) {
 
@@ -2001,6 +2025,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 executionPolicy,
                 clearExecutionPolicy,
                 batchGroupId,
+                enforceLatestCas,
                 workspaceId,
                 userName))
                 .subscribeOn(Schedulers.boundedElastic())

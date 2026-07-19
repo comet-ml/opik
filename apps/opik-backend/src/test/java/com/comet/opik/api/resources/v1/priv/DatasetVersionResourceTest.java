@@ -81,6 +81,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -5304,6 +5308,137 @@ class DatasetVersionResourceTest {
 
             assertThat(findVersionIdByHash(datasetId, version.versionHash(), UUID.randomUUID().toString()))
                     .isEmpty();
+        }
+    }
+
+    @Nested
+    @DisplayName("Concurrent Uploads (OPIK-7264):")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class ConcurrentUploads {
+
+        private DatasetItemBatch buildBatch(UUID datasetId, UUID batchGroupId, int count, String tag) {
+            List<DatasetItem> items = IntStream.range(0, count)
+                    .mapToObj(i -> DatasetItem.builder()
+                            .id(null)
+                            .source(DatasetItemSource.MANUAL)
+                            .traceId(null)
+                            .spanId(null)
+                            .data(Map.of(
+                                    "input", JsonUtils.getJsonNodeFromString("\"" + tag + "-input-" + i + "\""),
+                                    "output", JsonUtils.getJsonNodeFromString("\"" + tag + "-output-" + i + "\"")))
+                            .build())
+                    .toList();
+            return DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .batchGroupId(batchGroupId)
+                    .build();
+        }
+
+        private List<Integer> runParallel(List<DatasetItemBatch> batches) {
+            ExecutorService executor = Executors.newFixedThreadPool(batches.size());
+            try {
+                List<CompletableFuture<Integer>> futures = batches.stream()
+                        .map(batch -> CompletableFuture.supplyAsync(() -> {
+                            try (var response = datasetResourceClient.callCreateDatasetItems(batch, TEST_WORKSPACE,
+                                    API_KEY)) {
+                                return response.getStatus();
+                            }
+                        }, executor))
+                        .toList();
+
+                return futures.stream().map(CompletableFuture::join).toList();
+            } finally {
+                executor.shutdown();
+                try {
+                    executor.awaitTermination(30, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+
+        private long latestItemCount(UUID datasetId) {
+            return datasetResourceClient.getDatasetItems(datasetId, 1, 1, null, API_KEY, TEST_WORKSPACE).total();
+        }
+
+        @Test
+        @DisplayName("Bug B: parallel uploads with distinct batch_group_ids don't lose rows")
+        void parallelDistinctBatchGroups__thenNoRowsLost() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            // Seed an initial version so writers branch off a shared base.
+            createDatasetItems(datasetId, 1);
+
+            int writers = 8;
+            int perWriter = 5;
+            List<DatasetItemBatch> batches = IntStream.range(0, writers)
+                    .mapToObj(i -> buildBatch(datasetId, UUID.randomUUID(), perWriter, "w" + i))
+                    .toList();
+
+            List<Integer> statuses = runParallel(batches);
+
+            assertThat(statuses).allMatch(status -> status == 204);
+            // Each writer branched off the same base (1 item) and added its own items; serialized
+            // application means the latest reflects the seed + every writer's rows.
+            assertThat(latestItemCount(datasetId)).isEqualTo(1L + (long) writers * perWriter);
+        }
+
+        @Test
+        @DisplayName("Bug A: parallel uploads sharing a batch_group_id don't 500 or duplicate the version")
+        void parallelSharedBatchGroup__thenNoErrorAndSingleVersion() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+
+            UUID sharedBatchGroupId = UUID.randomUUID();
+            int writers = 8;
+            int perWriter = 5;
+            List<DatasetItemBatch> batches = IntStream.range(0, writers)
+                    .mapToObj(i -> buildBatch(datasetId, sharedBatchGroupId, perWriter, "s" + i))
+                    .toList();
+
+            List<Integer> statuses = runParallel(batches);
+
+            assertThat(statuses).noneMatch(status -> status >= 500);
+            assertThat(statuses).allMatch(status -> status == 204);
+
+            // All writers share one batch_group_id -> they must collapse into exactly ONE new version
+            // (not one per writer), and the subsequent findLatestByBatchGroupId lookup must not throw.
+            // The seed created 1 version; the shared group adds exactly 1 more.
+            List<DatasetVersion> versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE)
+                    .content();
+            assertThat(versions).hasSize(2);
+
+            // Exercise the deterministic ORDER BY id DESC LIMIT 1 in findLatestByBatchGroupId: the shared
+            // group must resolve to a single 'latest' version holding every writer's rows. Asserting the
+            // resolved latest version's itemsTotal (not just the dataset row count) fails if the lookup
+            // ever returns a stale/losing branch instead of the newest one for the batch group.
+            List<DatasetVersion> latest = versions.stream().filter(DatasetVersion::isLatest).toList();
+            assertThat(latest).hasSize(1);
+            assertThat(latest.getFirst().itemsTotal()).isEqualTo(1 + writers * perWriter);
+            assertThat(latestItemCount(datasetId)).isEqualTo(1L + (long) writers * perWriter);
+        }
+
+        @Test
+        @DisplayName("Parallel uploads to different datasets stay independent (lock is per-dataset)")
+        void parallelDifferentDatasets__thenAllSucceed() {
+            int datasets = 4;
+            int perDataset = 5;
+            List<UUID> datasetIds = IntStream.range(0, datasets)
+                    .mapToObj(i -> {
+                        var id = createDataset(UUID.randomUUID().toString());
+                        createDatasetItems(id, 1);
+                        return id;
+                    })
+                    .toList();
+
+            List<DatasetItemBatch> batches = datasetIds.stream()
+                    .map(id -> buildBatch(id, UUID.randomUUID(), perDataset, "d"))
+                    .toList();
+
+            List<Integer> statuses = runParallel(batches);
+
+            assertThat(statuses).allMatch(status -> status == 204);
+            datasetIds.forEach(id -> assertThat(latestItemCount(id)).isEqualTo(1L + perDataset));
         }
     }
 }
