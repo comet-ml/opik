@@ -137,6 +137,10 @@ public class OpikConfiguration extends JobConfiguration {
     private OptimizationLogsConfig optimizationLogs = new OptimizationLogsConfig();
 
     @Valid @NotNull @JsonProperty
+    private OptimizationStalledReaperConfig optimizationStalledReaper = OptimizationStalledReaperConfig.builder()
+            .build();
+
+    @Valid @NotNull @JsonProperty
     private RetentionConfig retention = new RetentionConfig();
 
     @Valid @NotNull @JsonProperty

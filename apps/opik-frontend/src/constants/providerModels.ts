@@ -940,6 +940,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "meta-llama/llama-guard-4-12b:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.META_MUSE_SPARK_1_1,
+      label: "meta/muse-spark-1.1",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.MICROSOFT_MAI_DS_R1,
       label: "microsoft/mai-ds-r1",
     },
@@ -1230,6 +1234,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2_FREE,
       label: "moonshotai/kimi-k2:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K3,
+      label: "moonshotai/kimi-k3",
     },
     {
       value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_LINEAR_48B_A3B_INSTRUCT,

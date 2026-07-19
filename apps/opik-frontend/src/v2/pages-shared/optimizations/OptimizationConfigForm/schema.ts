@@ -81,7 +81,7 @@ const isMessageEmpty = (message: LLMMessage): boolean => {
 
 const BaseOptimizationConfigSchema = z.object({
   name: z.string().optional(),
-  datasetId: z.string().min(1, "Test suite is required"),
+  datasetId: z.string().min(1, "Item source is required"),
   optimizerType: z.nativeEnum(OPTIMIZER_TYPE),
   optimizerParams: z.union([
     GepaOptimizerParamsSchema,
