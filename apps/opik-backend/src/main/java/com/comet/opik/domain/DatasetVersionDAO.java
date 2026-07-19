@@ -154,7 +154,7 @@ public interface DatasetVersionDAO {
             ORDER BY dv.id DESC
             LIMIT 1
             """)
-    Optional<DatasetVersion> findByBatchGroupId(@Bind("batch_group_id") UUID batchGroupId,
+    Optional<DatasetVersion> findLatestByBatchGroupId(@Bind("batch_group_id") UUID batchGroupId,
             @Bind("dataset_id") UUID datasetId,
             @Bind("workspace_id") String workspaceId);
 
@@ -276,8 +276,13 @@ public interface DatasetVersionDAO {
     int deleteTag(@Bind("dataset_id") UUID datasetId, @Bind("tag") String tag,
             @Bind("workspace_id") String workspaceId);
 
-    @SqlUpdate("DELETE FROM dataset_version_tags WHERE dataset_id = :dataset_id AND tag = :tag "
-            + "AND version_id = :version_id AND workspace_id = :workspace_id")
+    @SqlUpdate("""
+            DELETE FROM dataset_version_tags
+            WHERE dataset_id = :dataset_id
+                AND tag = :tag
+                AND version_id = :version_id
+                AND workspace_id = :workspace_id
+            """)
     int deleteTagIfVersion(@Bind("dataset_id") UUID datasetId, @Bind("tag") String tag,
             @Bind("version_id") UUID versionId, @Bind("workspace_id") String workspaceId);
 

@@ -5402,10 +5402,19 @@ class DatasetVersionResourceTest {
             assertThat(statuses).allMatch(status -> status == 204);
 
             // All writers share one batch_group_id -> they must collapse into exactly ONE new version
-            // (not one per writer), and the subsequent findByBatchGroupId lookup must not throw.
+            // (not one per writer), and the subsequent findLatestByBatchGroupId lookup must not throw.
             // The seed created 1 version; the shared group adds exactly 1 more.
-            long totalVersions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE).total();
-            assertThat(totalVersions).isEqualTo(2L);
+            List<DatasetVersion> versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE)
+                    .content();
+            assertThat(versions).hasSize(2);
+
+            // Exercise the deterministic ORDER BY id DESC LIMIT 1 in findLatestByBatchGroupId: the shared
+            // group must resolve to a single 'latest' version holding every writer's rows. Asserting the
+            // resolved latest version's itemsTotal (not just the dataset row count) fails if the lookup
+            // ever returns a stale/losing branch instead of the newest one for the batch group.
+            List<DatasetVersion> latest = versions.stream().filter(DatasetVersion::isLatest).toList();
+            assertThat(latest).hasSize(1);
+            assertThat(latest.getFirst().itemsTotal()).isEqualTo(1 + writers * perWriter);
             assertThat(latestItemCount(datasetId)).isEqualTo(1L + (long) writers * perWriter);
         }
 

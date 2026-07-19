@@ -297,7 +297,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetVersionDAO.class);
-            return dao.findByBatchGroupId(batchGroupId, datasetId, workspaceId);
+            return dao.findLatestByBatchGroupId(batchGroupId, datasetId, workspaceId);
         });
     }
 
@@ -421,27 +421,12 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                         batchGroupId, versionHash, datasetId);
             }
 
-            // Flip the 'latest' tag to the new version. For the lock-protected write paths that branch
-            // off the current latest, only move 'latest' if it still points at that base
-            // (compare-and-swap): if a concurrent writer already moved it, the delete affects 0 rows and
-            // we abort with a retryable 409 rather than silently clobbering their version. This is the
-            // backstop for a lock-lease failure (OPIK-7264). Callers that intentionally branch off a
-            // non-latest base (applyDeltaChanges with override, which has its own conflict handling)
-            // pass enforceLatestCas=false to opt out.
-            if (enforceLatestCas && baseVersionId != null) {
-                int swapped = datasetVersionDAO.deleteTagIfVersion(datasetId, LATEST_TAG, baseVersionId, workspaceId);
-                if (swapped != 1) {
-                    throw new ClientErrorException(Response.status(Response.Status.CONFLICT)
-                            .entity(new ErrorMessage(List.of(ERROR_LATEST_MOVED.formatted(datasetId))))
-                            .build());
-                }
-            } else {
-                // First version, or a caller managing its own concurrency: no compare-and-swap.
-                datasetVersionDAO.deleteTag(datasetId, LATEST_TAG, workspaceId);
-            }
-
-            // Always add 'latest' tag to the new version
-            datasetVersionDAO.insertTag(datasetId, LATEST_TAG, newVersionId, userName, workspaceId);
+            // Flip the 'latest' tag to the new version. Callers that branch off the current latest under
+            // a lock pass enforceLatestCas=true so the flip is compare-and-swapped against that base;
+            // callers intentionally branching off a non-latest base (applyDeltaChanges with override)
+            // pass false to opt out.
+            UUID casBase = enforceLatestCas ? baseVersionId : null;
+            flipLatestTag(datasetVersionDAO, datasetId, newVersionId, casBase, userName, workspaceId);
             log.info("Added '{}' tag to version '{}' for dataset '{}'", LATEST_TAG, versionHash, datasetId);
 
             // Add custom tags from the request
@@ -814,19 +799,30 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         }).withError(() -> new EntityAlreadyExistsException(
                 new ErrorMessage(List.of(ERROR_VERSION_HASH_EXISTS.formatted(datasetId)))));
 
-        // Compare-and-swap the 'latest' flip against the base we diffed from (OPIK-7264 backstop).
-        if (context.previousLatestVersion != null) {
-            int swapped = dao.deleteTagIfVersion(datasetId, LATEST_TAG,
-                    context.previousLatestVersion.id(), context.workspaceId);
+        UUID casBase = context.previousLatestVersion != null ? context.previousLatestVersion.id() : null;
+        flipLatestTag(dao, datasetId, newVersionId, casBase, context.userName, context.workspaceId);
+    }
+
+    /**
+     * Moves the 'latest' tag to {@code newVersionId}. When {@code casBase} is non-null, the flip is
+     * compare-and-swapped against it: the old tag is removed only if it still points at {@code casBase},
+     * otherwise a concurrent writer already moved 'latest' and we abort with a retryable 409 rather than
+     * silently clobbering their version (OPIK-7264 backstop). A null {@code casBase} flips unconditionally
+     * (first version, or a caller managing its own concurrency).
+     */
+    private void flipLatestTag(DatasetVersionDAO dao, UUID datasetId, UUID newVersionId, UUID casBase,
+            String userName, String workspaceId) {
+        if (casBase != null) {
+            int swapped = dao.deleteTagIfVersion(datasetId, LATEST_TAG, casBase, workspaceId);
             if (swapped != 1) {
                 throw new ClientErrorException(Response.status(Response.Status.CONFLICT)
                         .entity(new ErrorMessage(List.of(ERROR_LATEST_MOVED.formatted(datasetId))))
                         .build());
             }
         } else {
-            dao.deleteTag(datasetId, LATEST_TAG, context.workspaceId);
+            dao.deleteTag(datasetId, LATEST_TAG, workspaceId);
         }
-        dao.insertTag(datasetId, LATEST_TAG, newVersionId, context.userName, context.workspaceId);
+        dao.insertTag(datasetId, LATEST_TAG, newVersionId, userName, workspaceId);
     }
 
     private record RestoreContext(UUID sourceVersionId, DatasetVersion sourceVersion,
