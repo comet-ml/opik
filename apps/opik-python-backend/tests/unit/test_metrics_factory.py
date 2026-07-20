@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 from opik.evaluation.metrics.score_result import ScoreResult
 from opik_backend.studio.metrics import MetricFactory
 from opik_backend.studio.exceptions import InvalidMetricError, InvalidConfigError
+from opik_backend.process_worker import validate_user_code
 from opik_backend.studio.types import _convert_template_syntax, OptimizationConfig
 
 
@@ -412,6 +413,89 @@ class AlphaMetric(BaseMetric):
         # it is what actually runs (value 1.0, not zeta's 0.1).
         result = metric_fn({"reference": "x"}, "test output")
         assert result.value == 1.0
+
+    def test_code_metric_indirect_subclass_selection_matches_runtime(self):
+        """An INDIRECT (transitive) BaseMetric subclass defined in the file must
+        be selected consistently at build and run time.
+
+        `AMetric(ZBase)` subclasses BaseMetric only via `ZBase`; it is
+        alphabetically first, so runtime get_metric_class instantiates it. The
+        build-time selector must resolve the same class transitively (not fall
+        back to the direct-subclass ZBase), otherwise the wrong signature/name is
+        applied and every item silently scores 0.0 / the name never matches.
+        """
+        code = """
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+class ZBase(BaseMetric):
+    def __init__(self, name="zbase"):
+        super().__init__(name=name)
+
+    def score(self, output, **kwargs):
+        return ScoreResult(name=self.name, value=0.1, reason="z")
+
+class AMetric(ZBase):
+    def __init__(self):
+        super().__init__(name="ametric")
+
+    def score(self, output, reference):
+        return ScoreResult(name=self.name, value=1.0, reason="a")
+"""
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        # AMetric (indirect, alphabetically first) — not the direct base ZBase.
+        assert metric_fn.__name__ == "ametric"
+        # AMetric's strict signature runs (1.0), not ZBase's **kwargs 0.1.
+        result = metric_fn({"reference": "x"}, "out")
+        assert result.value == 1.0
+
+    def test_code_metric_ignores_imported_basemetric_subclass(self):
+        """An IMPORTED concrete BaseMetric subclass (e.g. Equals) must not be
+        instantiated instead of the user's defined metric, even when its name
+        sorts first. Runtime selection is restricted to classes defined in the
+        file, matching the build-time AST selector.
+        """
+        code = """
+from opik.evaluation.metrics import BaseMetric, Equals
+from opik.evaluation.metrics.score_result import ScoreResult
+
+class MyMetric(BaseMetric):
+    def __init__(self):
+        super().__init__(name="mymetric")
+
+    def score(self, output, **kwargs):
+        return ScoreResult(name=self.name, value=0.42, reason="mine")
+"""
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        # "Equals" sorts before "MyMetric" but is imported, so MyMetric wins.
+        assert metric_fn.__name__ == "mymetric"
+        result = metric_fn({}, "out")
+        assert result.value == 0.42
+        assert result.name == "mymetric"
+
+    def test_validate_user_code_imported_base_defers_instead_of_rejecting(self):
+        """A class whose only BaseMetric link is an IMPORTED base can't be
+        resolved statically, but runtime instantiates it fine — so build defers
+        with permissive defaults rather than hard-rejecting (OPIK-7172 regression
+        guard)."""
+        code = """
+from some_external_pkg import CustomBase
+
+class MyMetric(CustomBase):
+    def score(self, output, **kwargs):
+        return None
+"""
+        result = validate_user_code(code)
+        assert "code" not in result  # not a 400
+        assert result["name"] is None
+        assert result["accepts_var_keyword"] is True
+        assert result["score_params"] == []
+
+    def test_validate_user_code_no_class_is_rejected_at_build(self):
+        """A file with no class at all is a definite non-metric -> 400 at build."""
+        result = validate_user_code("x = 1\n")
+        assert result.get("code") == 400
+        assert "BaseMetric" in result["error"]
 
     def test_code_metric_missing_code_raises_error(self):
         """Test that missing code parameter raises error."""

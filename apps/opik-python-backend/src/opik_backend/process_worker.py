@@ -24,11 +24,20 @@ if not logger.hasHandlers():
 logger.setLevel(logging.INFO)
 
 
-def get_metric_class(module: ModuleType) -> Type[BaseMetric]:
+def get_metric_class(module: ModuleType) -> Optional[Type[BaseMetric]]:
     for _, cls in inspect.getmembers(module, inspect.isclass):
-        # Find user-defined subclasses of BaseMetric (not BaseMetric itself)
-        if issubclass(cls, BaseMetric) and cls is not BaseMetric:
+        # A BaseMetric subclass DEFINED in this module — not one merely imported
+        # into it (e.g. `from opik.evaluation.metrics import Equals`), which would
+        # otherwise be instantiated instead of the user's class. inspect.getmembers
+        # is name-sorted, so the first match is the alphabetically-first defined
+        # subclass, matching the build-time _find_basemetric_classdef selection.
+        if (
+            issubclass(cls, BaseMetric)
+            and cls is not BaseMetric
+            and cls.__module__ == module.__name__
+        ):
             return cls
+    return None
 
 
 def _basemetric_aliases(tree: ast.AST) -> set:
@@ -47,42 +56,67 @@ def _basemetric_aliases(tree: ast.AST) -> set:
     return aliases
 
 
+def _class_base_names(node: ast.ClassDef) -> set:
+    """The (last-segment) names of a ClassDef's declared bases, e.g. ``BaseMetric``
+    for both ``class X(BaseMetric)`` and ``class X(pkg.BaseMetric)``."""
+    names = set()
+    for base in node.bases:
+        name = (
+            base.id
+            if isinstance(base, ast.Name)
+            else base.attr
+            if isinstance(base, ast.Attribute)
+            else None
+        )
+        if name:
+            names.add(name)
+    return names
+
+
 def _find_basemetric_classdef(tree: ast.AST) -> Optional[ast.ClassDef]:
-    """The ClassDef that directly subclasses ``BaseMetric`` (by name), or None.
+    """The ClassDef that subclasses ``BaseMetric`` (directly or transitively via
+    another class defined in the same file), or None.
 
     Static counterpart to :func:`get_metric_class` used at build time so no user
     code is executed. Matches a base written as ``BaseMetric``,
     ``something.BaseMetric``, or an ``import ... as`` alias of ``BaseMetric``.
-    Indirect subclassing (via an intermediate user base) is not resolvable
-    statically and is treated as "no subclass" — a rare case for these
-    single-file metrics.
+    Indirect subclassing through an intermediate class DEFINED in the file is
+    resolved transitively so the selection matches runtime ``issubclass`` (a base
+    that is IMPORTED, not defined here, still can't be resolved statically — the
+    caller then falls back rather than reject; see :func:`validate_user_code`).
 
     When a file declares more than one metric class, the class is picked
     **alphabetically by name** to match :func:`get_metric_class`, which iterates
     ``inspect.getmembers`` (name-sorted) at scoring time. Selecting the same
     class in both places keeps the statically-inferred ``score()`` signature
-    flags (``accepts_var_keyword`` / ``score_params``) consistent with the class
-    actually instantiated — otherwise the wrong signature could be applied and
-    every trial would silently score 0.0.
+    flags (``accepts_var_keyword`` / ``score_params``) and metric name consistent
+    with the class actually instantiated — otherwise the wrong signature/name
+    could be applied and every trial would silently score 0.0 / miss its name.
     """
     aliases = _basemetric_aliases(tree)
-    matches = []
+
+    class_defs: dict = {}  # name -> ClassDef (last definition wins, as at runtime)
+    base_names: dict = {}  # name -> set of declared base names
     for node in ast.walk(tree):
         if isinstance(node, ast.ClassDef):
-            for base in node.bases:
-                name = (
-                    base.id
-                    if isinstance(base, ast.Name)
-                    else base.attr
-                    if isinstance(base, ast.Attribute)
-                    else None
-                )
-                if name in aliases:
-                    matches.append(node)
-                    break
-    if not matches:
+            class_defs[node.name] = node
+            base_names[node.name] = _class_base_names(node)
+
+    # Seed with classes that DIRECTLY subclass a BaseMetric alias, then
+    # transitively add any class that subclasses an already-known metric class
+    # defined in the file — mirroring runtime issubclass following the chain.
+    metric_names = {n for n, bases in base_names.items() if bases & aliases}
+    changed = True
+    while changed:
+        changed = False
+        for name, bases in base_names.items():
+            if name not in metric_names and (bases & metric_names):
+                metric_names.add(name)
+                changed = True
+
+    if not metric_names:
         return None
-    return min(matches, key=lambda node: node.name)
+    return class_defs[min(metric_names)]
 
 
 def _score_funcdef(cls: ast.ClassDef):
@@ -309,10 +343,23 @@ def validate_user_code(code: str) -> dict:
 
     metric_class = _find_basemetric_classdef(tree)
     if metric_class is None:
-        return {
-            "code": 400,
-            "error": "Field 'code' in the request doesn't contain a subclass implementation of 'opik.evaluation.metrics.BaseMetric'",
-        }
+        # No class statically resolves to a BaseMetric subclass. A metric whose
+        # only link to BaseMetric is through an IMPORTED base (e.g.
+        # `from x import MyBase; class My(MyBase)`, possibly inheriting score())
+        # is not statically resolvable, yet runtime get_metric_class (issubclass)
+        # instantiates it fine — so hard-rejecting here would regress a
+        # previously-working metric. When the file defines at least one class,
+        # defer to runtime with permissive defaults (name resolved at score time,
+        # full-splat) rather than reject; a non-metric class is still rejected at
+        # score time by get_metric_class. Only a file with NO class at all is a
+        # definite build-time reject.
+        has_class = any(isinstance(node, ast.ClassDef) for node in ast.walk(tree))
+        if not has_class:
+            return {
+                "code": 400,
+                "error": "Field 'code' in the request doesn't contain a subclass implementation of 'opik.evaluation.metrics.BaseMetric'",
+            }
+        return {"name": None, "accepts_var_keyword": True, "score_params": []}
 
     return {
         "name": _metric_name_ast(metric_class),
