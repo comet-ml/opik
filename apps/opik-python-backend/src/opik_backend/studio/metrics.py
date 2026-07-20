@@ -890,8 +890,13 @@ def _build_code_metric(params: Dict[str, Any], model: str, **kwargs) -> Callable
                 column = arguments.get(param, param)
                 if column in dataset_item:
                     data[param] = dataset_item[column]
-        # output is always the LLM response, regardless of the map/signature.
-        data["output"] = llm_output
+        # output is the LLM response. Inject it only when score() can actually
+        # accept it: a **kwargs signature absorbs it, and a strict signature must
+        # declare an `output` param. Injecting `output=` into a strict signature
+        # that does not declare it (e.g. `def score(self, reference)`) would
+        # arrive as an unexpected keyword -> TypeError -> masked 0.0 (OPIK-7172).
+        if accepts_var_keyword or "output" in score_params:
+            data["output"] = llm_output
 
         logger.debug(f"Executing code metric with data keys: {list(data.keys())}")
 

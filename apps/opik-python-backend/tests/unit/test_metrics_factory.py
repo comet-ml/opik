@@ -582,6 +582,44 @@ class RenameMetric(BaseMetric):
         assert no_match.value == 0.0
         assert "Paris" in no_match.reason
 
+    def test_code_metric_strict_signature_without_output_param(self):
+        """A STRICT metric whose score() does NOT declare `output` must score.
+
+        Regression guard for OPIK-7172: `output` was unconditionally injected
+        into the score() kwargs, so a strict signature that doesn't declare it
+        (here `def score(self, reference)`) received an unexpected `output=`
+        keyword -> TypeError -> swallowed to a masked ScoreResult(0.0). Injection
+        is now gated on the signature actually accepting `output`, so the metric
+        scores its real result from `reference` alone.
+        """
+        code = """
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+class NoOutputMetric(BaseMetric):
+    def __init__(self, name: str = "no_output"):
+        super().__init__(name=name)
+
+    def score(self, reference):
+        return ScoreResult(
+            name=self.name,
+            value=1.0 if reference == "Paris" else 0.0,
+            reason=f"reference={reference}",
+        )
+"""
+        metric_fn = MetricFactory.build(
+            "code",
+            {"code": code, "arguments": {"reference": "expected_answer"}},
+            "model",
+        )
+        item = {"expected_answer": "Paris"}
+
+        # Must score a real 1.0 (not a masked 0.0 from an unexpected `output=`).
+        result = metric_fn(item, "any llm output")
+        assert result.value == 1.0
+        assert result.name == "no_output"
+        assert "Paris" in result.reason
+
     def test_code_metric_arguments_map_keeps_kwargs_backcompat(self):
         """Unmapped columns are still splatted for **kwargs metrics.
 
