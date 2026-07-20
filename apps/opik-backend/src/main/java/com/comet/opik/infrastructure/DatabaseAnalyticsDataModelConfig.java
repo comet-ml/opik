@@ -13,7 +13,13 @@ import lombok.Builder;
  * sentinels ({@code end_time}→epoch, {@code ttft}→{@code NaN}) instead — a {@code null} bind would be rejected by a
  * non-nullable column. The flag gates reads too (sentinel→{@code null}), so while it is {@code false} a legitimate
  * epoch end time round-trips unchanged rather than being read as {@code null}. Flip this in lockstep with the EXCHANGE
- * step of the cutover. A sibling {@code spanColumnsNonNullable} follows later.</p>
+ * step of the cutover.</p>
+ *
+ * <p>{@code spanColumnsNonNullable}: the {@code spans} sibling of {@code traceColumnsNonNullable}, gating the same
+ * sentinel wiring for {@code spans.end_time}→epoch and {@code spans.duration}/{@code spans.ttft}→{@code NaN}. Default
+ * {@code false} while the {@code spans} table still has {@code Nullable(...)} columns; set {@code true} in lockstep with
+ * the Slice 3 EXCHANGE once those columns are replaced with sentinel-defaulted non-nullable columns. Independent of the
+ * trace flag so the two cutovers can flip separately.</p>
  *
  * <p>{@code traceDeletionEventsCaptureEnabled}: when {@code true}, trace deletes also record the deleted ids in the
  * {@code deletion_events_local} bridge so they survive the table copy. Left {@code false} at deploy time and turned on
@@ -33,6 +39,7 @@ import lombok.Builder;
 @Builder(toBuilder = true)
 public record DatabaseAnalyticsDataModelConfig(
         boolean traceColumnsNonNullable,
+        boolean spanColumnsNonNullable,
         boolean traceDeletionEventsCaptureEnabled,
         boolean spanDeletionEventsCaptureEnabled,
         @Min(1) @Max(2_000) int deletionEventsInsertBatchSize) {

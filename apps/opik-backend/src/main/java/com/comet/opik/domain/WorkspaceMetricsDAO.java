@@ -12,6 +12,7 @@ import com.comet.opik.api.metrics.WorkspaceMetricsSummaryResponse;
 import com.comet.opik.api.metrics.WorkspaceSpanMetricRequest;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
 import com.comet.opik.utils.SentinelTranslation;
@@ -319,6 +320,11 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
     private final @NonNull TransactionTemplateAsync template;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
+    private final @NonNull OpikConfiguration configuration;
+
+    private boolean spanColumnsNonNullable() {
+        return configuration.getDatabaseAnalyticsDataModel().spanColumnsNonNullable();
+    }
 
     @Override
     public Mono<List<WorkspaceMetricsSummaryResponse.Result>> getFeedbackScoresSummary(
@@ -396,7 +402,8 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             Optional.ofNullable(request.filters())
                     .ifPresent(filters -> SPAN_FILTER_TEMPLATE_PLACEHOLDERS
                             .forEach((strategy, placeholder) -> FilterQueryBuilder
-                                    .toAnalyticsDbFilters(filters, strategy)
+                                    .toAnalyticsDbFilters(filters, strategy,
+                                            strategy == FilterStrategy.SPAN && spanColumnsNonNullable())
                                     .ifPresent(rendered -> stTemplate.add(placeholder, rendered))));
 
             stTemplate.add("uuid_from_time", true);

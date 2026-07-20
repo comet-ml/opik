@@ -597,16 +597,18 @@ class TracesLocalV2BenchmarkTest {
     }
 
     @Test
-    void clusteredUuidV4WorkspaceIdColumnCompressesBestWithZstd1() {
+    void clusteredUuidV4WorkspaceIdColumnCompressesBestWithLz4() {
         long uncompressed = uncompressed("ws_zstd1");
         long lz4 = compressed("ws_lz4");
         long zstd1 = compressed("ws_zstd1");
 
         // workspace_id is a UUIDv4 (no timestamp prefix) but clustered in long runs (first sort key), so it also
-        // compresses to a small fraction of its raw size; ZSTD(1) is at least as good as LZ4. It cannot be
-        // LowCardinality (it is the ORDER BY prefix), so ZSTD(1) String is the right choice.
-        assertThat(zstd1).isLessThan(uncompressed);
-        assertThat(zstd1).isLessThanOrEqualTo(Math.round(lz4 * WITHIN_5_PCT));
+        // compresses to a small fraction of its raw size. On CH 26.3 LZ4 wins here: ZSTD(1) on this clustered-UUIDv4
+        // String is ~2x larger than LZ4 (measured ws_lz4 ~4.5k vs ws_zstd1 ~8.7k), a reversal from 25.8 where ZSTD(1)
+        // was far smaller. Require LZ4 to be at least WITHIN_5_PCT smaller than ZSTD(1) — the margin is on the ZSTD(1)
+        // side so the check fails if LZ4 ever stops being the clear winner. It cannot be LowCardinality (ORDER BY prefix).
+        assertThat(lz4).isLessThan(uncompressed);
+        assertThat(lz4).isLessThanOrEqualTo(Math.round(zstd1 / WITHIN_5_PCT));
         log.info("[OPIK-6899] clustered workspace_id (UUIDv4) compressed bytes | LZ4: {} | ZSTD(1): {}", lz4, zstd1);
     }
 
