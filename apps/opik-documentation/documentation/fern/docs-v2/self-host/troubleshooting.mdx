@@ -104,9 +104,17 @@ Opik's earliest analytics migrations predate cluster-aware DDL — they do not u
 
 Install High-Availability deployments in two phases so the schema exists before the extra replicas join:
 
-1. Install (or reset to) `clickhouse.replicasCount: 1`.
-2. Wait until `opik-backend` is `Ready` — all migrations are applied on the single replica.
-3. Raise `clickhouse.replicasCount` (e.g. to `2`) and upgrade. The operator provisions the new replica and copies the fully-migrated schema to it.
+<Steps>
+  <Step>
+    Install (or reset to) `clickhouse.replicasCount: 1`.
+  </Step>
+  <Step>
+    Wait until `opik-backend` is `Ready` — all migrations are applied on the single replica.
+  </Step>
+  <Step>
+    Raise `clickhouse.replicasCount` (e.g. to `2`) and upgrade. The operator provisions the new replica and copies the fully-migrated schema to it.
+  </Step>
+</Steps>
 
 <Callout intent="info">
 Single-replica installs and upgrades of already-migrated multi-replica clusters are unaffected. Cluster-aware migrations use `ON CLUSTER '{cluster}'`, so once the base schema is present on all replicas, later migrations stay consistent automatically.
