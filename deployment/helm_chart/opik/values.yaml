@@ -806,6 +806,38 @@ clickhouse:
   # via `clickhouse.extraVolumeClaimTemplates` and referencing it by name in
   # `extraVolumeMounts` above.
   extraVolumes: []
+  # -- Tiered storage (hot local disk -> cold S3 with a read-through cache).
+  # Renders conf.d/storage.xml (the `tiered_replicated` policy + hot/cold_s3/cold
+  # disks) and provisions a per-node EBS cache volume for the S3 cache. This is
+  # pure server-side infrastructure: it stays inert until a migration attaches
+  # the `tiered_replicated` policy to a table, so `enabled: false` (default) is
+  # a no-op. The S3 <endpoint> is rendered by Helm — ClickHouse macros
+  # ({shard}/{replica}) cannot be used because the S3 disk is read at server
+  # start, before macros bind.
+  tieredStorage:
+    enabled: false
+    hot:
+      # keep_free_space_bytes on the hot disk (headroom before TTL MOVE to cold).
+      keepFreeSpaceBytes: "10737418240" # 10 GiB
+    cold:
+      s3:
+        # Base S3 URL for the cold disk, e.g. https://<bucket>.s3.<region>.amazonaws.com
+        endpoint: ""
+        # Per-replica bucket prefix. Rendered concretely by Helm (no CH macros).
+        prefix: "clickhouse-cold/"
+        region: ""
+        # Use the pod's IAM role (IRSA) instead of static keys.
+        useEnvironmentCredentials: true
+        maxGetRps: 1000
+        maxPutRps: 500
+      cache:
+        # Read-through LRU cache wrapping cold_s3, on a local EBS volume.
+        volumeName: s3-cache-vc-template
+        path: /var/cache/clickhouse_s3
+        storage: 200Gi
+        maxSize: "214748364800" # 200 GiB
+        # Falls back to clickhouse.storageClassName when empty.
+        storageClassName: ""
   adminUser:
     useSecret:
       enabled: false
