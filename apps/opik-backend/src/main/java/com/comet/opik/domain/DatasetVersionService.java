@@ -186,13 +186,14 @@ public interface DatasetVersionService {
     boolean hasVersions(String workspaceId, UUID datasetId);
 
     /**
-     * Finds a version by its batch ID.
+     * Finds the most recent version for a batch group. When more than one version shares a
+     * batch_group_id (possible under concurrent writes), the newest one is returned.
      * Used to support SDK batch operations where multiple API calls share the same batch_group_id.
      *
      * @param batchGroupId the batch group ID to search for
      * @param datasetId the dataset ID
      * @param workspaceId the workspace ID
-     * @return Optional containing the version if found, empty otherwise
+     * @return Optional containing the latest version for the batch group if found, empty otherwise
      */
     Optional<DatasetVersion> findByBatchGroupId(UUID batchGroupId, UUID datasetId, String workspaceId);
 
@@ -209,6 +210,11 @@ public interface DatasetVersionService {
      * @param evaluators optional default evaluators for the version
      * @param executionPolicy optional default execution policy for the version
      * @param batchGroupId optional batch group ID for SDK batch operations
+     * @param enforceLatestCas when {@code true} and {@code baseVersionId} is non-null, the 'latest'
+     *        tag is compare-and-swapped against {@code baseVersionId}: if a concurrent writer already
+     *        moved 'latest', this throws a retryable 409 instead of clobbering it. Pass {@code false}
+     *        to flip unconditionally — for the first version, or a caller that deliberately branches
+     *        off a non-latest base (e.g. applyDeltaChanges with override=true).
      * @param workspaceId the workspace ID (required when called from reactive context)
      * @param userName the user name (required when called from reactive context)
      * @return the created version
@@ -815,6 +821,9 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         if (casBase != null) {
             int swapped = dao.deleteTagIfVersion(datasetId, LATEST_TAG, casBase, workspaceId);
             if (swapped != 1) {
+                log.warn(
+                        "Concurrent 'latest' move detected: CAS failed. workspaceId='{}', datasetId='{}', casBase='{}', newVersionId='{}'",
+                        workspaceId, datasetId, casBase, newVersionId);
                 throw new ClientErrorException(Response.status(Response.Status.CONFLICT)
                         .entity(new ErrorMessage(List.of(ERROR_LATEST_MOVED.formatted(datasetId))))
                         .build());

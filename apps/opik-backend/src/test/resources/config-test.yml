@@ -897,6 +897,7 @@ datasetVersioning:
     maxAttempts: 3
     minBackoff: 100ms
     maxBackoff: 500ms
+  lockLease: 60s
 
 # Experiment Project Migration configuration
 # Assigns project_id to orphan experiments (V1 → V2 workspace migration).

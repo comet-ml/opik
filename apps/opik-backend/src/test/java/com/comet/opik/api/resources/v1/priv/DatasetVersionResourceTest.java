@@ -5316,8 +5316,8 @@ class DatasetVersionResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class ConcurrentUploads {
 
-        private DatasetItemBatch buildBatch(UUID datasetId, UUID batchGroupId, int count, String tag) {
-            List<DatasetItem> items = IntStream.range(0, count)
+        private List<DatasetItem> buildManualItems(int count, String tag) {
+            return IntStream.range(0, count)
                     .mapToObj(i -> DatasetItem.builder()
                             .id(null)
                             .source(DatasetItemSource.MANUAL)
@@ -5328,11 +5328,23 @@ class DatasetVersionResourceTest {
                                     "output", JsonUtils.getJsonNodeFromString("\"" + tag + "-output-" + i + "\"")))
                             .build())
                     .toList();
+        }
+
+        private DatasetItemBatch buildBatch(UUID datasetId, UUID batchGroupId, int count, String tag) {
             return DatasetItemBatch.builder()
                     .datasetId(datasetId)
-                    .items(items)
+                    .items(buildManualItems(count, tag))
                     .batchGroupId(batchGroupId)
                     .build();
+        }
+
+        // Reads back every 'input' value in the latest version so tests can assert on row identity,
+        // not just the aggregate count (a loss-plus-duplication regression keeps the count intact).
+        private Set<String> latestInputValues(UUID datasetId, int pageSize) {
+            return datasetResourceClient.getDatasetItems(datasetId, 1, pageSize, null, API_KEY, TEST_WORKSPACE)
+                    .content().stream()
+                    .map(item -> item.data().get("input").asText())
+                    .collect(Collectors.toSet());
         }
 
         private List<Integer> runParallel(List<DatasetItemBatch> batches) {
@@ -5381,6 +5393,15 @@ class DatasetVersionResourceTest {
             // Each writer branched off the same base (1 item) and added its own items; serialized
             // application means the latest reflects the seed + every writer's rows.
             assertThat(latestItemCount(datasetId)).isEqualTo(1L + (long) writers * perWriter);
+
+            // Assert on row identity, not just the count: a bug that drops one writer's rows while
+            // duplicating another's would keep the total but lose a distinct tag. Every writer's inputs
+            // (w0-input-0..w7-input-4) must survive in the latest version.
+            Set<String> expectedInputs = IntStream.range(0, writers)
+                    .boxed()
+                    .flatMap(w -> IntStream.range(0, perWriter).mapToObj(i -> "w" + w + "-input-" + i))
+                    .collect(Collectors.toSet());
+            assertThat(latestInputValues(datasetId, 1 + writers * perWriter)).containsAll(expectedInputs);
         }
 
         @Test
@@ -5398,7 +5419,6 @@ class DatasetVersionResourceTest {
 
             List<Integer> statuses = runParallel(batches);
 
-            assertThat(statuses).noneMatch(status -> status >= 500);
             assertThat(statuses).allMatch(status -> status == 204);
 
             // All writers share one batch_group_id -> they must collapse into exactly ONE new version
@@ -5416,6 +5436,13 @@ class DatasetVersionResourceTest {
             assertThat(latest).hasSize(1);
             assertThat(latest.getFirst().itemsTotal()).isEqualTo(1 + writers * perWriter);
             assertThat(latestItemCount(datasetId)).isEqualTo(1L + (long) writers * perWriter);
+
+            // Row identity: every writer's distinct inputs must survive the collapse.
+            Set<String> expectedInputs = IntStream.range(0, writers)
+                    .boxed()
+                    .flatMap(w -> IntStream.range(0, perWriter).mapToObj(i -> "s" + w + "-input-" + i))
+                    .collect(Collectors.toSet());
+            assertThat(latestInputValues(datasetId, 1 + writers * perWriter)).containsAll(expectedInputs);
         }
 
         @Test
@@ -5439,6 +5466,60 @@ class DatasetVersionResourceTest {
 
             assertThat(statuses).allMatch(status -> status == 204);
             datasetIds.forEach(id -> assertThat(latestItemCount(id)).isEqualTo(1L + perDataset));
+        }
+
+        @Test
+        @DisplayName("applyDeltaChanges: concurrent override=false writers don't clobber each other (OPIK-7264)")
+        void parallelApplyDeltaChanges__thenNoClobber() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+            UUID baseVersionId = getLatestVersion(datasetId).id();
+
+            // All writers branch off the same current latest with override=false. Now that
+            // applyDeltaChanges runs under the per-dataset lock, they serialize: exactly one wins and
+            // moves 'latest'; the rest see a stale base and get a 409 instead of silently clobbering the
+            // winner (the pre-lock behavior). The CAS-specific ERROR_LATEST_MOVED path is a lock-lease
+            // backstop that can't be reached deterministically through the HTTP API and is covered by a
+            // service-level test in OPIK-7383.
+            int writers = 6;
+            List<DatasetItemChanges> changes = IntStream.range(0, writers)
+                    .mapToObj(i -> DatasetItemChanges.builder()
+                            .baseVersion(baseVersionId)
+                            .addedItems(buildManualItems(3, "a" + i))
+                            .changeDescription("concurrent apply " + i)
+                            .build())
+                    .toList();
+
+            ExecutorService executor = Executors.newFixedThreadPool(writers);
+            List<Integer> statuses;
+            try {
+                statuses = changes.stream()
+                        .map(c -> CompletableFuture.supplyAsync(() -> {
+                            try (var response = datasetResourceClient.callApplyDatasetItemChanges(
+                                    datasetId, c, false, API_KEY, TEST_WORKSPACE)) {
+                                return response.getStatus();
+                            }
+                        }, executor))
+                        .toList()
+                        .stream().map(CompletableFuture::join).toList();
+            } finally {
+                executor.shutdown();
+                try {
+                    executor.awaitTermination(30, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+
+            // Exactly one writer wins (2xx); every other loses on the stale-base check with a 409.
+            // No 5xx, and no silent success that would indicate a clobber.
+            assertThat(statuses).filteredOn(status -> status == 200 || status == 201).hasSize(1);
+            assertThat(statuses).filteredOn(status -> status == HttpStatus.SC_CONFLICT).hasSize(writers - 1);
+            assertThat(statuses).noneMatch(status -> status >= 500);
+
+            // The winner created exactly one new version on top of the seed; its 3 rows landed in latest.
+            assertThat(datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE).total()).isEqualTo(2L);
+            assertThat(latestItemCount(datasetId)).isEqualTo(1L + 3L);
         }
     }
 }
