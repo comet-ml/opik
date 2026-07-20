@@ -26,7 +26,6 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -152,21 +151,13 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
 
         // Use spans without parentId as Trace roots. Skip opik.trace_id overrides (they attach to
         // existing traces). Multiple roots can share one traceId (e.g. when parent_span_id==trace_id
-        // is nulled in the mapper), so dedup by traceId to create only one trace per id. Sort by
-        // startTime (then id) before deduping so the root is deterministic.
+        // is nulled in the mapper), so dedup by traceId to create only one trace per id. First
+        // root in encounter order wins.
+        var seenTraceIds = new HashSet<UUID>();
         var rootSpansByTraceId = dedupedSpans.stream()
                 .filter(span -> span.parentSpanId() == null)
                 .filter(span -> !overriddenTraceIds.contains(span.traceId()))
-                .sorted(java.util.Comparator
-                        .comparing(com.comet.opik.api.Span::startTime)
-                        .thenComparing(com.comet.opik.api.Span::id))
-                .collect(Collectors.toMap(
-                        com.comet.opik.api.Span::traceId,
-                        java.util.function.Function.identity(),
-                        (first, second) -> first,
-                        LinkedHashMap::new))
-                .values()
-                .stream()
+                .filter(span -> seenTraceIds.add(span.traceId()))
                 .toList();
         return Flux.fromStream(rootSpansByTraceId.stream())
                 .flatMap(rootSpan -> {
