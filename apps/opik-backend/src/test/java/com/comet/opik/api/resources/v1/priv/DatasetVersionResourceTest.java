@@ -81,7 +81,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -5347,11 +5349,26 @@ class DatasetVersionResourceTest {
                     .collect(Collectors.toSet());
         }
 
+        // Blocks until every worker thread has reached the barrier, then releases them together, so the
+        // HTTP calls genuinely overlap instead of drifting apart when the CI node is loaded.
+        private void awaitBarrier(CyclicBarrier barrier) {
+            try {
+                barrier.await(30, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(e);
+            } catch (BrokenBarrierException | java.util.concurrent.TimeoutException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+
         private List<Integer> runParallel(List<DatasetItemBatch> batches) {
             ExecutorService executor = Executors.newFixedThreadPool(batches.size());
+            CyclicBarrier barrier = new CyclicBarrier(batches.size());
             try {
                 List<CompletableFuture<Integer>> futures = batches.stream()
                         .map(batch -> CompletableFuture.supplyAsync(() -> {
+                            awaitBarrier(barrier);
                             try (var response = datasetResourceClient.callCreateDatasetItems(batch, TEST_WORKSPACE,
                                     API_KEY)) {
                                 return response.getStatus();
@@ -5491,10 +5508,12 @@ class DatasetVersionResourceTest {
                     .toList();
 
             ExecutorService executor = Executors.newFixedThreadPool(writers);
+            CyclicBarrier barrier = new CyclicBarrier(writers);
             List<Integer> statuses;
             try {
                 statuses = changes.stream()
                         .map(c -> CompletableFuture.supplyAsync(() -> {
+                            awaitBarrier(barrier);
                             try (var response = datasetResourceClient.callApplyDatasetItemChanges(
                                     datasetId, c, false, API_KEY, TEST_WORKSPACE)) {
                                 return response.getStatus();

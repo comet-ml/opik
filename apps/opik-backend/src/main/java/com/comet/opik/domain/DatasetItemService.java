@@ -39,6 +39,7 @@ import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -170,12 +171,15 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private final @NonNull @Config OpikConfiguration config;
     private final @NonNull LockService lockService;
 
+    // Computed once from the (immutable at runtime) config instead of per lock acquisition.
+    @Getter(lazy = true)
+    private final Duration datasetVersionLockLease = config.getDatasetVersioning().lockLease().toJavaDuration();
+
     // Serialize the read-latest -> create-version -> flip-latest sequence per dataset so parallel
     // uploads can't race on the dataset's mutable 'latest' pointer (OPIK-7264).
     private <T> Mono<T> withDatasetVersionLock(UUID datasetId, Mono<T> action) {
-        Duration lockLease = config.getDatasetVersioning().lockLease().toJavaDuration();
         return lockService.executeWithLockCustomExpire(
-                new LockService.Lock(datasetId, DATASET_VERSION_LOCK), action, lockLease);
+                new LockService.Lock(datasetId, DATASET_VERSION_LOCK), action, getDatasetVersionLockLease());
     }
 
     @WithSpan
@@ -1798,19 +1802,20 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
                 String userName = ctx.get(RequestContext.USER_NAME);
 
-                log.info("Saving items with version for dataset '{}', itemCount '{}', batchGroupId '{}'",
+                log.debug("Saving items with version for dataset '{}', itemCount '{}', batchGroupId '{}'",
                         datasetId, batch.items().size(), batchGroupId);
 
-                // Validate span and trace workspaces before proceeding
-                return validateSpans(workspaceId, validatedItems)
-                        .then(Mono.defer(() -> validateTraces(workspaceId, validatedItems)))
-                        .then(Mono.defer(() -> {
-                            // Verify dataset exists
-                            datasetService.findById(datasetId, workspaceId, null);
+                // Fail fast on a missing/deleted dataset before burning per-item span/trace validation.
+                return Mono.defer(() -> {
+                    // Verify dataset exists
+                    datasetService.findById(datasetId, workspaceId, null);
 
-                            // Ensure dataset is migrated if lazy migration is enabled
-                            return ensureLazyMigration(datasetId, workspaceId);
-                        }))
+                    // Ensure dataset is migrated if lazy migration is enabled
+                    return ensureLazyMigration(datasetId, workspaceId);
+                })
+                        // Validate span and trace workspaces before proceeding
+                        .then(Mono.defer(() -> validateSpans(workspaceId, validatedItems)))
+                        .then(Mono.defer(() -> validateTraces(workspaceId, validatedItems)))
                         .then(Mono.defer(() -> {
 
                             // Get the latest version (if exists) - using overload that takes workspaceId
