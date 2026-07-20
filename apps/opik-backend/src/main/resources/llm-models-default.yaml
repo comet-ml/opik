@@ -1121,6 +1121,8 @@ openrouter:
   - id: "openrouter/auto"
     label: "openrouter/auto"
     structuredOutput: true
+  - id: "openrouter/auto-beta"
+    label: "openrouter/auto-beta"
   - id: "openrouter/bodybuilder"
     label: "openrouter/bodybuilder"
   - id: "openrouter/elephant-alpha"
@@ -1364,6 +1366,8 @@ openrouter:
     label: "thedrummer/skyfall-36b-v2"
   - id: "thedrummer/unslopnemo-12b"
     label: "thedrummer/unslopnemo-12b"
+  - id: "thinkingmachines/inkling"
+    label: "thinkingmachines/inkling"
   - id: "thudm/glm-4.1v-9b-thinking"
     label: "thudm/glm-4.1v-9b-thinking"
     reasoning: true
