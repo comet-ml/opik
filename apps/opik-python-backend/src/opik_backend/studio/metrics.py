@@ -787,18 +787,22 @@ def _build_code_metric(params: Dict[str, Any], model: str, **kwargs) -> Callable
         ``params["arguments"]`` is an optional ``{score_param: dataset_column}``
         dict. At scoring time ``isolated_metric`` assembles the ``score()``
         kwargs as follows:
-          - ``output`` is ALWAYS injected from the LLM response and never
-            overridden by the map.
+          - ``output`` is injected from the LLM response whenever ``score()`` can
+            accept it (a ``**kwargs`` signature, or a strict signature that
+            declares an ``output`` param) and is never overridden by the map. A
+            strict signature that does not declare ``output`` does not receive it
+            (injecting it would raise ``TypeError`` -> masked 0.0, OPIK-7172).
           - Each mapped param exposes its dataset column's value under the
             param name (so ``score(self, reference)`` can read column
             ``expected_answer`` via ``{"reference": "expected_answer"}``).
           - Whether the remaining (unmapped) dataset columns are also splatted
             depends on the metric's ``score()`` signature, detected at build
             time (``accepts_var_keyword``):
-              * ``score(self, output, **kwargs)`` (VAR_KEYWORD present) -> the
-                remaining columns (minus those consumed as a rename source) ARE
-                splatted, so unmapped params resolve by same name and
-                ``**kwargs`` keeps receiving the rest (back-compat).
+              * ``score(self, output, **kwargs)`` (VAR_KEYWORD present) -> ALL
+                remaining columns ARE splatted (rename sources are NOT removed —
+                a mapped column is still present under its original name in
+                addition to the renamed param), so unmapped params resolve by
+                same name and ``**kwargs`` keeps receiving the rest (back-compat).
               * ``score(self, output, reference)`` (strict, no ``**kwargs``) ->
                 the remaining columns are NOT splatted. Passing them would land
                 as unexpected keyword arguments -> ``TypeError`` -> swallowed to
