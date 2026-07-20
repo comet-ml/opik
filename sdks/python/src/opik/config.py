@@ -255,8 +255,8 @@ class OpikConfig(pydantic_settings.BaseSettings):
     replaced with a truncation marker and a warning is logged. ``metadata`` is never truncated (it
     holds small routing/cost fields the backend relies on, e.g. ``thread_id`` and ``model``) and is
     not counted toward this limit; an oversized ``metadata`` is left to the server-side
-    request/document guards (413/400) rather than trimmed. Log large payloads as attachments instead
-    to avoid truncation.
+    request/document guards (413/400) rather than trimmed. Set to ``0`` (or any value ``<= 0``) to
+    disable truncation entirely. Log large payloads as attachments instead to avoid truncation.
     """
 
     connection_monitor_ping_interval: float = 10

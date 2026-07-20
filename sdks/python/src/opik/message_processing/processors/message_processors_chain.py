@@ -42,10 +42,11 @@ def create_message_processors_chain(
             processor.
         unauthorized_message_types_registry: Unauthorized message types registry instance used
             to configure the online message processor.
-        max_payload_size_mb: Per-span size limit in MB, applied by the online processor right
-            before sending. Any ``input``/``output``/``metadata`` field over the limit is replaced
-            with a truncation marker; if the span is still over, the remaining fields are replaced
-            too (a warning logged). ``None`` disables the check (no truncation).
+        max_payload_size_mb: Per-object size limit in MB for spans **and** traces, applied by the
+            online processor right before sending. An ``input``/``output`` field over the limit -
+            or the two together over it - is replaced with a truncation marker (a warning logged).
+            ``metadata`` is never truncated and is excluded from the measurement. ``None`` or a
+            value ``<= 0`` disables the check (no truncation).
 
     Returns:
         A chained message processor containing the online and local emulator processors.

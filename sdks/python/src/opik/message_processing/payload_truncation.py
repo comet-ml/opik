@@ -103,6 +103,10 @@ def truncate_write_if_needed(
     obj: WriteT, max_size_mb: float, kind: str = "span"
 ) -> WriteT:
     """Return a copy of ``obj`` (a span or trace write) with oversized fields truncated."""
+    # A non-positive limit disables the check (parity with the TS SDK). Guarding here also
+    # avoids the degenerate case where a 0/negative limit would mark every field oversized.
+    if max_size_mb <= 0:
+        return obj
     field_sizes = _field_sizes_mb(lambda n: getattr(obj, n, None))
     if not field_sizes:
         return obj
@@ -141,6 +145,9 @@ def truncate_kwargs_if_needed(
     (e.g. ``span.end(output=...)`` after the create was already flushed) is capped
     the same way as on create. Applies to both spans and traces (``kind``).
     """
+    # A non-positive limit disables the check (parity with the TS SDK).
+    if max_size_mb <= 0:
+        return
     field_sizes = _field_sizes_mb(kwargs.get)
     if not field_sizes:
         return
