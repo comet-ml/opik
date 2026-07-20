@@ -67,30 +67,48 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
         }
 
         var customParameters = modelParameters.customParameters();
+        var thinking = parseThinking(customParameters);
 
         // Anthropic rejects temperature with a 400 in two cases: (1) adaptive-thinking models
         // (claude-sonnet-5, claude-opus-4-7/4-8) that report no sampling-param support, and (2) any model
         // once extended thinking is enabled per-rule via custom_parameters. Gate on both server-side so
         // API-created rules (which bypass the FE sanitizer) don't fail.
-        if (AnthropicModelName.supportsSamplingParams(modelParameters.name()) && !isThinkingEnabled(customParameters)) {
+        if (AnthropicModelName.supportsSamplingParams(modelParameters.name()) && !thinking.enabled()) {
             Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
         }
 
-        applyCustomParameters(builder, customParameters);
+        applyCustomParameters(builder, customParameters, thinking);
 
         return builder.build();
     }
 
-    private boolean isThinkingEnabled(JsonNode customParameters) {
+    /**
+     * Single decode of the {@code thinking} block from a rule's {@code custom_parameters}. Thinking counts as
+     * enabled unless the type is explicitly {@code "disabled"}, so {@code "enabled"}, {@code "adaptive"}, and
+     * any future type all gate temperature off. An absent/blank block is not enabled.
+     */
+    private ThinkingParams parseThinking(JsonNode customParameters) {
         if (customParameters == null || customParameters.isNull()) {
-            return false;
+            return ThinkingParams.ABSENT;
         }
         var thinkingNode = customParameters.get("thinking");
         if (thinkingNode == null || !thinkingNode.isObject()) {
-            return false;
+            return ThinkingParams.ABSENT;
         }
+
+        String type = null;
         var typeNode = thinkingNode.get("type");
-        return typeNode != null && typeNode.isTextual() && "enabled".equals(typeNode.asText());
+        if (typeNode != null && typeNode.isTextual()) {
+            type = typeNode.asText();
+        }
+
+        Integer budgetTokens = null;
+        var budgetNode = thinkingNode.get("budget_tokens");
+        if (budgetNode != null && budgetNode.canConvertToInt() && budgetNode.asInt() > 0) {
+            budgetTokens = budgetNode.asInt();
+        }
+
+        return new ThinkingParams(!"disabled".equals(type), type, budgetTokens);
     }
 
     /**
@@ -99,47 +117,39 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
      * cap adaptive thinking can consume the whole budget, yielding an empty response (finishReason=LENGTH).
      */
     private void applyCustomParameters(AnthropicChatModel.AnthropicChatModelBuilder builder,
-            JsonNode customParameters) {
-        Integer maxTokens = null;
-        Integer thinkingBudgetTokens = null;
+            JsonNode customParameters, ThinkingParams thinking) {
+        Optional.ofNullable(thinking.type()).ifPresent(builder::thinkingType);
+        Optional.ofNullable(thinking.budgetTokens()).ifPresent(builder::thinkingBudgetTokens);
 
-        if (customParameters != null && !customParameters.isNull()) {
-            var maxTokensNode = customParameters.get("max_tokens");
-            if (maxTokensNode != null && maxTokensNode.canConvertToInt() && maxTokensNode.asInt() > 0) {
-                maxTokens = maxTokensNode.asInt();
-            }
+        builder.maxTokens(resolveMaxTokens(parseMaxTokens(customParameters), thinking.budgetTokens()));
+    }
 
-            var thinkingNode = customParameters.get("thinking");
-            if (thinkingNode != null && thinkingNode.isObject()) {
-                var typeNode = thinkingNode.get("type");
-                if (typeNode != null && typeNode.isTextual()) {
-                    builder.thinkingType(typeNode.asText());
-                }
-                var budgetNode = thinkingNode.get("budget_tokens");
-                if (budgetNode != null && budgetNode.canConvertToInt() && budgetNode.asInt() > 0) {
-                    thinkingBudgetTokens = budgetNode.asInt();
-                    builder.thinkingBudgetTokens(thinkingBudgetTokens);
-                }
-            }
+    private Integer parseMaxTokens(JsonNode customParameters) {
+        if (customParameters == null || customParameters.isNull()) {
+            return null;
         }
-
-        builder.maxTokens(resolveMaxTokens(maxTokens, thinkingBudgetTokens));
+        var maxTokensNode = customParameters.get("max_tokens");
+        if (maxTokensNode != null && maxTokensNode.canConvertToInt() && maxTokensNode.asInt() > 0) {
+            return maxTokensNode.asInt();
+        }
+        return null;
     }
 
     /**
-     * Resolves the {@code max_tokens} sent to Anthropic. An explicit rule value is honored as-is (the caller
-     * owns the constraint). Otherwise the default applies, but when a thinking budget is set the default must
-     * clear it: Anthropic requires {@code max_tokens > thinking.budget_tokens} (max_tokens covers thinking +
-     * output), so a bare 4096 default would 400 for any budget >= 4096. Leave headroom for the output on top.
+     * Resolves the {@code max_tokens} sent to Anthropic, guaranteeing {@code max_tokens > thinking.budget_tokens}
+     * (Anthropic rejects otherwise, since max_tokens covers thinking + output). An explicit rule value is honored
+     * when it already clears the budget; otherwise it is raised to leave output headroom above the budget.
      */
     private int resolveMaxTokens(Integer maxTokens, Integer thinkingBudgetTokens) {
-        if (maxTokens != null) {
-            return maxTokens;
-        }
-        if (thinkingBudgetTokens != null) {
+        int resolved = maxTokens != null ? maxTokens : LlmProviderAnthropicMapper.DEFAULT_MAX_COMPLETION_TOKENS;
+        if (thinkingBudgetTokens != null && resolved <= thinkingBudgetTokens) {
             return thinkingBudgetTokens + LlmProviderAnthropicMapper.DEFAULT_MAX_COMPLETION_TOKENS;
         }
-        return LlmProviderAnthropicMapper.DEFAULT_MAX_COMPLETION_TOKENS;
+        return resolved;
+    }
+
+    private record ThinkingParams(boolean enabled, String type, Integer budgetTokens) {
+        private static final ThinkingParams ABSENT = new ThinkingParams(false, null, null);
     }
 
     @Override

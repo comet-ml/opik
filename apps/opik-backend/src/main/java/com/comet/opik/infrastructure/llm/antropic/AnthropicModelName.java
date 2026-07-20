@@ -4,6 +4,8 @@ import com.comet.opik.infrastructure.llm.StructuredOutputSupported;
 import lombok.RequiredArgsConstructor;
 
 import java.util.Arrays;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * This information is taken from <a href="https://docs.anthropic.com/en/docs/about-claude/models">Anthropic docs</a>
@@ -29,20 +31,20 @@ public enum AnthropicModelName implements StructuredOutputSupported {
     private final String value;
     private final boolean supportsSamplingParams;
 
+    private static final Map<String, Boolean> SAMPLING_PARAMS_SUPPORT = Arrays.stream(values())
+            .collect(Collectors.toUnmodifiableMap(model -> model.value, model -> model.supportsSamplingParams));
+
     AnthropicModelName(String value) {
         this(value, true);
     }
 
     /**
      * Whether the model accepts sampling params (temperature/top_p/top_k). Adaptive-thinking models
-     * reject them with a 400. Unknown model names default to {@code true} to preserve prior behavior.
+     * reject them with a 400. Unknown model names fail closed ({@code false}): newer Anthropic models
+     * trend adaptive-thinking, so we skip temperature until the model is added here rather than risk a 400.
      */
     public static boolean supportsSamplingParams(String modelName) {
-        return Arrays.stream(values())
-                .filter(model -> model.value.equals(modelName))
-                .findFirst()
-                .map(model -> model.supportsSamplingParams)
-                .orElse(true);
+        return SAMPLING_PARAMS_SUPPORT.getOrDefault(modelName, false);
     }
 
     @Override
