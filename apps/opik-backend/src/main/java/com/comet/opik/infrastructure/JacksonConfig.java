@@ -73,4 +73,18 @@ public class JacksonConfig {
     public boolean isMaxDocumentLengthValid() {
         return maxDocumentLength <= 0 || maxDocumentLength >= maxStringLength;
     }
+
+    /**
+     * Cross-field invariant: the request-size cap (checked against {@code Content-Length}) must not be
+     * smaller than the whole-document cap, otherwise {@link
+     * com.comet.opik.infrastructure.RequestSizeLimitFilter} would reject a request with {@code 413}
+     * that the document guard would have accepted. When {@code maxDocumentLength <= 0} (unlimited)
+     * there is nothing to shadow, so any request cap is valid. Validated at startup alongside {@link
+     * #isMaxDocumentLengthValid()}.
+     */
+    @JsonIgnore
+    @AssertTrue(message = "maxRequestSizeBytes must be >= maxDocumentLength (unless maxDocumentLength <= 0 for unlimited)")
+    public boolean isMaxRequestSizeValid() {
+        return maxDocumentLength <= 0 || maxRequestSizeBytes >= maxDocumentLength;
+    }
 }

@@ -6,6 +6,7 @@ import jakarta.inject.Provider;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.UriInfo;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -25,6 +26,7 @@ class RequestSizeLimitFilterTest {
 
     @SuppressWarnings("unchecked")
     private final Provider<RequestContext> requestContext = mock(Provider.class);
+    private final UriInfo uriInfo = mock(UriInfo.class);
     private IngestionSizeGuardMetrics sizeGuardMetrics;
 
     private RequestSizeLimitFilter newFilter() {
@@ -37,6 +39,7 @@ class RequestSizeLimitFilterTest {
     private ContainerRequestContext contextWithContentLength(String value) {
         ContainerRequestContext ctx = mock(ContainerRequestContext.class);
         when(ctx.getHeaderString(HttpHeaders.CONTENT_LENGTH)).thenReturn(value);
+        when(ctx.getUriInfo()).thenReturn(uriInfo);
         return ctx;
     }
 
@@ -54,7 +57,7 @@ class RequestSizeLimitFilterTest {
         newFilter().filter(ctx);
 
         assertThat(abortedStatus(ctx)).isEqualTo(Response.Status.REQUEST_ENTITY_TOO_LARGE.getStatusCode());
-        verify(sizeGuardMetrics).recordRequestSizeRejection(any(), eq(requestContext));
+        verify(sizeGuardMetrics).recordRequestSizeRejection(eq(uriInfo), eq(requestContext));
     }
 
     @Test
@@ -87,7 +90,7 @@ class RequestSizeLimitFilterTest {
         newFilter().filter(ctx);
 
         assertThat(abortedStatus(ctx)).isEqualTo(Response.Status.REQUEST_ENTITY_TOO_LARGE.getStatusCode());
-        verify(sizeGuardMetrics).recordRequestSizeRejection(any(), eq(requestContext));
+        verify(sizeGuardMetrics).recordRequestSizeRejection(eq(uriInfo), eq(requestContext));
     }
 
     @Test

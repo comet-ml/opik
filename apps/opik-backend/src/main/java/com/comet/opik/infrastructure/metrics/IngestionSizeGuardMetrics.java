@@ -19,8 +19,9 @@ import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.WORKSPA
 
 /**
  * Emits the {@code ingestion_size_guard_rejections_total} counter for requests rejected by the
- * server-side ingestion size guards (OPIK-7333 / OPIK-7334), broken down by which {@code guard}
- * tripped, the matched route ({@code endpoint}) and the {@code workspace_id} / {@code workspace_name}.
+ * server-side ingestion size guards (OPIK-7333 / OPIK-7334), broken down by the emitting {@code
+ * component} (request filter vs JSON parser), which {@code guard} tripped, the matched route
+ * ({@code endpoint}) and the {@code workspace_id} / {@code workspace_name}.
  * <p>
  * These rejections are otherwise invisible to {@link HttpErrorMetrics} ({@code opik.errors.count}):
  * the request-size 413 aborts the filter chain with a Response (no throwable), and the
@@ -40,6 +41,9 @@ public class IngestionSizeGuardMetrics {
     private static final String METRIC_NAMESPACE = "ingestion_size_guard";
 
     public static final AttributeKey<String> GUARD_KEY = AttributeKey.stringKey("guard");
+    // A stable origin label: one counter serves two call sites, so distinguish them by component
+    // rather than by inferring from the guard subtype (metrics-instrumentation skill §1.4).
+    public static final AttributeKey<String> COMPONENT_KEY = AttributeKey.stringKey("component");
 
     /** The {@link com.comet.opik.infrastructure.RequestSizeLimitFilter} 413 (Content-Length over cap). */
     public static final String GUARD_REQUEST_SIZE = "request_size";
@@ -50,14 +54,20 @@ public class IngestionSizeGuardMetrics {
     /** A stream-read constraint we couldn't classify from its message. */
     public static final String GUARD_STREAM_CONSTRAINT = "stream_constraint";
 
+    /** Rejection emitted from {@link com.comet.opik.infrastructure.RequestSizeLimitFilter} (413 path). */
+    public static final String COMPONENT_REQUEST_FILTER = "request_filter";
+    /** Rejection emitted from {@link com.comet.opik.api.error.JsonProcessingExceptionMapper} (4xx parse path). */
+    public static final String COMPONENT_JSON_PARSER = "json_parser";
+
     private final LongCounter rejectionCounter;
 
     public IngestionSizeGuardMetrics() {
         Meter meter = GlobalOpenTelemetry.get().getMeter(METRIC_NAMESPACE);
         this.rejectionCounter = meter
                 .counterBuilder("%s_rejections_total".formatted(METRIC_NAMESPACE))
-                .setDescription("Ingestion requests rejected by a server-side size guard, by guard "
-                        + "(request_size|document_length|string_length), endpoint and workspace.")
+                .setDescription("Ingestion requests rejected by a server-side size guard, by component "
+                        + "(request_filter|json_parser), guard (request_size|document_length|string_length), "
+                        + "endpoint and workspace.")
                 .build();
     }
 
@@ -66,7 +76,7 @@ public class IngestionSizeGuardMetrics {
      * not be resolved yet and resolves to {@code unknown}.
      */
     public void recordRequestSizeRejection(UriInfo uriInfo, Provider<RequestContext> requestContext) {
-        record(GUARD_REQUEST_SIZE, ErrorMetricsResolver.endpoint(uriInfo),
+        record(COMPONENT_REQUEST_FILTER, GUARD_REQUEST_SIZE, ErrorMetricsResolver.endpoint(uriInfo),
                 ErrorMetricsResolver.workspaceId(requestContext),
                 ErrorMetricsResolver.workspaceName(requestContext));
     }
@@ -76,16 +86,17 @@ public class IngestionSizeGuardMetrics {
      */
     public void recordStreamConstraintRejection(StreamConstraintsException exception, UriInfo uriInfo,
             Provider<RequestContext> requestContext) {
-        record(classifyStreamConstraint(exception), ErrorMetricsResolver.endpoint(uriInfo),
+        record(COMPONENT_JSON_PARSER, classifyStreamConstraint(exception), ErrorMetricsResolver.endpoint(uriInfo),
                 ErrorMetricsResolver.workspaceId(requestContext),
                 ErrorMetricsResolver.workspaceName(requestContext));
     }
 
-    public void record(String guard, String endpoint, String workspaceId, String workspaceName) {
+    public void record(String component, String guard, String endpoint, String workspaceId, String workspaceName) {
         // workspace_name falls back to workspace_id when the name is absent (metrics-instrumentation
         // skill §2.3), so the name label is never emptier than the id.
         var resolvedWorkspaceId = StringUtils.defaultIfBlank(workspaceId, UNKNOWN);
         rejectionCounter.add(1, Attributes.builder()
+                .put(COMPONENT_KEY, StringUtils.defaultIfBlank(component, UNKNOWN))
                 .put(GUARD_KEY, StringUtils.defaultIfBlank(guard, GUARD_STREAM_CONSTRAINT))
                 .put(ENDPOINT_KEY, StringUtils.defaultIfBlank(endpoint, UNKNOWN))
                 .put(WORKSPACE_ID_KEY, resolvedWorkspaceId)

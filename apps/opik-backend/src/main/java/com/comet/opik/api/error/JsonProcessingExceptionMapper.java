@@ -29,12 +29,16 @@ public class JsonProcessingExceptionMapper implements ExceptionMapper<JsonProces
 
     @Override
     public Response toResponse(JsonProcessingException exception) {
-        log.info("Deserialization exception: {}", exception.getMessage());
-
-        // A StreamConstraintsException here is the document- or string-length size guard tripping
-        // mid-parse (OPIK-7334), not ordinary malformed JSON — count it so the guard is observable.
+        // A StreamConstraintsException is the document-/string-length size guard tripping mid-parse
+        // (OPIK-7334) — an EXPECTED client rejection, already surfaced via the ingestion size-guard
+        // metric. Keep it at DEBUG so normal oversized-payload traffic doesn't flood INFO logs.
         if (exception instanceof StreamConstraintsException streamConstraintsException) {
+            log.debug("Ingestion size guard rejected a request", streamConstraintsException);
             sizeGuardMetrics.recordStreamConstraintRejection(streamConstraintsException, uriInfo.get(), requestContext);
+        } else {
+            // Genuine malformed JSON: log the exception itself (not just its message) so the type and
+            // stack trace are available to diagnose the rare, unexpected parse failure.
+            log.info("Deserialization exception", exception);
         }
 
         return Response.status(Response.Status.BAD_REQUEST)
