@@ -1,7 +1,7 @@
 import { SavedSpan } from "@/tracer/Span";
 import { BatchQueue } from "./BatchQueue";
 import { OpikApiClientTemp } from "@/client/OpikApiClientTemp";
-import { truncateSpanIfNeeded } from "./spanTruncation";
+import { truncatePayloadIfNeeded } from "./payloadTruncation";
 import { DEFAULT_CONFIG } from "@/config/Config";
 import {
   extractAndUploadAttachments,
@@ -20,7 +20,7 @@ export class SpanBatchQueue extends BatchQueue<SavedSpan> {
   constructor(
     private readonly api: OpikApiClientTemp,
     delay?: number,
-    private readonly maxSpanPayloadSizeMb?: number,
+    private readonly maxPayloadSizeMb?: number,
     private readonly attachmentUpload?: AttachmentUploadConfig,
   ) {
     super({
@@ -58,9 +58,10 @@ export class SpanBatchQueue extends BatchQueue<SavedSpan> {
     for (const span of spans) {
       const extracted = await this.extractAttachments(span, span.id);
       payload.push(
-        truncateSpanIfNeeded(
+        truncatePayloadIfNeeded(
           extracted,
-          this.maxSpanPayloadSizeMb ?? DEFAULT_CONFIG.maxSpanPayloadSizeMb,
+          this.maxPayloadSizeMb ?? DEFAULT_CONFIG.maxPayloadSizeMb,
+          "span",
           span.id,
         ),
       );
@@ -81,9 +82,10 @@ export class SpanBatchQueue extends BatchQueue<SavedSpan> {
 
   protected async updateEntity(id: string, updates: SpanUpdate) {
     const extracted = await this.extractAttachments(updates, id);
-    const body = truncateSpanIfNeeded(
+    const body = truncatePayloadIfNeeded(
       extracted,
-      this.maxSpanPayloadSizeMb ?? DEFAULT_CONFIG.maxSpanPayloadSizeMb,
+      this.maxPayloadSizeMb ?? DEFAULT_CONFIG.maxPayloadSizeMb,
+      "span",
       id,
     );
     await this.api.spans.updateSpan(id, { body }, this.api.requestOptions);

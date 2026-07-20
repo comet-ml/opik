@@ -17,10 +17,10 @@ export interface OpikConfig {
   holdUntilFlush?: boolean;
   promptCacheTtlSeconds?: number;
   trackDisable?: boolean;
-  // Per-span payload cap (MB): input/output larger than this are truncated before send;
-  // metadata is exempt and excluded from the measurement (parity with the Python SDK).
-  // <= 0 disables. Default 20.
-  maxSpanPayloadSizeMb?: number;
+  // Per-object payload cap (MB): span/trace input/output larger than this are truncated
+  // before send; metadata is exempt and excluded from the measurement (parity with the
+  // Python SDK). <= 0 disables. Default 20.
+  maxPayloadSizeMb?: number;
   // Extract inline base64 blobs (e.g. images) from span/trace input/output/metadata and
   // upload them as attachments before send, so they don't count toward the size cap
   // (parity with the Python SDK). Default true.
@@ -46,7 +46,7 @@ export const DEFAULT_CONFIG: Required<
   batchDelayMs: 300,
   holdUntilFlush: false,
   trackDisable: false,
-  maxSpanPayloadSizeMb: 20,
+  maxPayloadSizeMb: 20,
   isAttachmentExtractionActive: true,
   minBase64EmbeddedAttachmentSize: 256_000,
 };
@@ -79,15 +79,15 @@ function loadFromEnv(): Partial<OpikConfig> {
     // A non-numeric value (e.g. the units typo "20MB") must fall back to the default, not NaN:
     // NaN would survive filterUndefined and the `??` guards downstream and silently disable the
     // size guard entirely - strictly worse than leaving the var unset.
-    maxSpanPayloadSizeMb:
-      process.env.OPIK_MAX_SPAN_PAYLOAD_SIZE_MB &&
-      Number.isFinite(Number(process.env.OPIK_MAX_SPAN_PAYLOAD_SIZE_MB))
-        ? Number(process.env.OPIK_MAX_SPAN_PAYLOAD_SIZE_MB)
+    maxPayloadSizeMb:
+      process.env.OPIK_MAX_PAYLOAD_SIZE_MB &&
+      Number.isFinite(Number(process.env.OPIK_MAX_PAYLOAD_SIZE_MB))
+        ? Number(process.env.OPIK_MAX_PAYLOAD_SIZE_MB)
         : undefined,
     isAttachmentExtractionActive: parseBooleanFlag(
       process.env.OPIK_IS_ATTACHMENT_EXTRACTION_ACTIVE,
     ),
-    // Non-numeric values fall back to the default (see maxSpanPayloadSizeMb above).
+    // Non-numeric values fall back to the default (see maxPayloadSizeMb above).
     minBase64EmbeddedAttachmentSize:
       process.env.OPIK_MIN_BASE64_EMBEDDED_ATTACHMENT_SIZE &&
       Number.isFinite(
@@ -130,7 +130,7 @@ function loadFromConfigFile(): Partial<OpikConfig> {
     }
 
     // Only identity/string settings are read from the config file. Numeric and flag
-    // settings (batchDelayMs, maxSpanPayloadSizeMb, isAttachmentExtractionActive,
+    // settings (batchDelayMs, maxPayloadSizeMb, isAttachmentExtractionActive,
     // minBase64EmbeddedAttachmentSize, ...) are configured via OPIK_* env vars only.
     return filterUndefined({
       apiKey: config.opik.api_key,

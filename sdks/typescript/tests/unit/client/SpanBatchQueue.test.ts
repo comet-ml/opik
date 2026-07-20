@@ -32,11 +32,11 @@ describe("SpanBatchQueue truncation wiring", () => {
     requestOptions: unknown;
   };
 
-  const makeQueue = (maxSpanPayloadSizeMb?: number) =>
+  const makeQueue = (maxPayloadSizeMb?: number) =>
     new SpanBatchQueue(
       api as unknown as OpikApiClientTemp,
       0,
-      maxSpanPayloadSizeMb,
+      maxPayloadSizeMb,
     );
 
   beforeEach(() => {

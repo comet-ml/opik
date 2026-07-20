@@ -3,19 +3,22 @@ import { Opik } from "@/index";
 import { shouldRunIntegrationTests } from "./api/shouldRunIntegrationTests";
 
 /**
- * End-to-end verification of per-span truncation (OPIK-7349) against a real
- * Opik backend (the local "dev runner": OPIK_URL_OVERRIDE=http://localhost:8080).
+ * End-to-end verification of per-object (span + trace) truncation (OPIK-7349)
+ * against a real Opik backend (the local "dev runner":
+ * OPIK_URL_OVERRIDE=http://localhost:8080).
  *
- * Each scenario logs a span through the normal SDK path (trace.span / span.update
- * -> SpanBatchQueue -> createSpans/updateSpan), flushes, then fetches the stored
- * span back from the backend and asserts what actually landed:
+ * Each scenario logs through the normal SDK path (trace.span / span.update ->
+ * SpanBatchQueue -> createSpans/updateSpan, or trace -> TraceBatchQueue), flushes,
+ * then fetches the stored entity back from the backend and asserts what landed:
  *   - oversized field -> replaced by the truncation marker on the server copy;
  *   - small sibling   -> preserved;
- *   - hard per-span cap (total over, no single field over) -> everything truncated;
+ *   - hard per-object cap (total over, no single field over) -> everything truncated;
  *   - limit disabled  -> full payload stored (no marker);
  *   - configurable limit -> a field under the default 20 MB is still truncated
  *     when the client is configured with a lower limit;
- *   - update path     -> truncation applies on span.update too.
+ *   - update path     -> truncation applies on span.update too;
+ *   - trace path      -> an oversized trace output is truncated as well (parity
+ *     with the Python SDK; @track mirrors the outermost output onto the trace).
  *
  * Large payloads are built from many ~100 KB chunks rather than one giant string,
  * so the *document* is large (what our truncation measures) while every single
@@ -40,13 +43,13 @@ const MARKER_RE = /^<omitted_due_to_size_\d+MB_error_code_413_400>$/;
 const TIMEOUT = 90_000;
 
 let projectSeq = 0;
-const makeClient = (maxSpanPayloadSizeMb?: number) =>
+const makeClient = (maxPayloadSizeMb?: number) =>
   new Opik({
     projectName: `ts-trunc-e2e-${Date.now()}-${projectSeq++}`,
-    ...(maxSpanPayloadSizeMb !== undefined ? { maxSpanPayloadSizeMb } : {}),
+    ...(maxPayloadSizeMb !== undefined ? { maxPayloadSizeMb } : {}),
   });
 
-describe.skipIf(!run)("Span truncation E2E (OPIK-7349)", () => {
+describe.skipIf(!run)("Payload truncation E2E (OPIK-7349)", () => {
   let client: Opik;
 
   afterEach(async () => {
@@ -76,6 +79,29 @@ describe.skipIf(!run)("Span truncation E2E (OPIK-7349)", () => {
     }
     throw new Error(
       `span ${id} not found (or predicate unmet) within timeout` +
+        (lastError ? `; last error: ${lastError}` : ""),
+    );
+  };
+
+  const fetchTrace = async (
+    id: string,
+    until: (trace: Record<string, unknown>) => boolean = () => true,
+  ) => {
+    const start = Date.now();
+    let lastError: unknown;
+    while (Date.now() - start < 30_000) {
+      try {
+        const trace = (await client.api.traces.getTraceById(
+          id,
+        )) as unknown as Record<string, unknown>;
+        if (trace && until(trace)) return trace;
+      } catch (error) {
+        lastError = error;
+      }
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    throw new Error(
+      `trace ${id} not found (or predicate unmet) within timeout` +
         (lastError ? `; last error: ${lastError}` : ""),
     );
   };
@@ -112,7 +138,7 @@ describe.skipIf(!run)("Span truncation E2E (OPIK-7349)", () => {
   );
 
   it(
-    "hard per-span cap: total over 20 MB but no single field over -> all truncated",
+    "hard per-object cap: total over 20 MB but no single field over -> all truncated",
     async () => {
       client = makeClient(20);
       const id = await logSpan({ input: big(12), output: big(12) }); // 24 MB total
@@ -193,6 +219,24 @@ describe.skipIf(!run)("Span truncation E2E (OPIK-7349)", () => {
       expect(Array.isArray(asMarker(stored.metadata).items)).toBe(true); // stored whole
       expect(asMarker(stored.input).opik_truncated).toBeUndefined();
       expect(asMarker(stored.output).opik_truncated).toBeUndefined();
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "trace: an oversized trace output is truncated too",
+    async () => {
+      client = makeClient(20);
+      const trace = client.trace({
+        name: "trunc-e2e-trace-only",
+        output: big(24),
+      });
+      trace.end();
+      await client.flush();
+
+      const stored = await fetchTrace(trace.data.id, (t) => t.output != null);
+      expect(asMarker(stored.output).opik_truncated).toBe(true);
+      expect(asMarker(stored.output).reason).toMatch(MARKER_RE);
     },
     TIMEOUT,
   );

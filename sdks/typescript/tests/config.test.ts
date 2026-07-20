@@ -47,33 +47,33 @@ describe("Opik client config", () => {
     expect(opik.config.trackDisable).toBe(false);
   });
 
-  it("should load maxSpanPayloadSizeMb from the OPIK_MAX_SPAN_PAYLOAD_SIZE_MB env var", async () => {
+  it("should load maxPayloadSizeMb from the OPIK_MAX_PAYLOAD_SIZE_MB env var", async () => {
     process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/api";
     process.env.OPIK_API_KEY = "test";
     process.env.OPIK_WORKSPACE = "test";
-    process.env.OPIK_MAX_SPAN_PAYLOAD_SIZE_MB = "50";
+    process.env.OPIK_MAX_PAYLOAD_SIZE_MB = "50";
 
     const opik = new Opik();
-    expect(opik.config.maxSpanPayloadSizeMb).toBe(50);
+    expect(opik.config.maxPayloadSizeMb).toBe(50);
   });
 
-  it("should default maxSpanPayloadSizeMb to 20 when the env var is unset", async () => {
+  it("should default maxPayloadSizeMb to 20 when the env var is unset", async () => {
     process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/api";
     process.env.OPIK_API_KEY = "test";
     process.env.OPIK_WORKSPACE = "test";
 
     const opik = new Opik();
-    expect(opik.config.maxSpanPayloadSizeMb).toBe(20);
+    expect(opik.config.maxPayloadSizeMb).toBe(20);
   });
 
-  it("should fall back to the default (not NaN) when OPIK_MAX_SPAN_PAYLOAD_SIZE_MB is non-numeric", async () => {
+  it("should fall back to the default (not NaN) when OPIK_MAX_PAYLOAD_SIZE_MB is non-numeric", async () => {
     process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/api";
     process.env.OPIK_API_KEY = "test";
     process.env.OPIK_WORKSPACE = "test";
-    process.env.OPIK_MAX_SPAN_PAYLOAD_SIZE_MB = "20MB"; // units typo -> Number() is NaN
+    process.env.OPIK_MAX_PAYLOAD_SIZE_MB = "20MB"; // units typo -> Number() is NaN
 
     const opik = new Opik();
-    expect(opik.config.maxSpanPayloadSizeMb).toBe(20);
+    expect(opik.config.maxPayloadSizeMb).toBe(20);
   });
 
   it("should not require an API key on cloud when tracking is disabled", async () => {

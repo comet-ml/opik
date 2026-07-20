@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { logger } from "@/utils/logger";
 import {
-  truncateSpanFields,
-  truncateSpanIfNeeded,
-} from "@/client/spanTruncation";
+  truncatePayloadFields,
+  truncatePayloadIfNeeded,
+} from "@/client/payloadTruncation";
 
 const MB = 1024 * 1024;
 const LIMIT_MB = 20;
@@ -14,15 +14,15 @@ const bigValue = (mb: number) => ({ payload: "x".repeat(mb * MB) });
 const asMarker = (value: unknown) =>
   value as { opik_truncated?: boolean; reason?: string };
 
-describe("truncateSpanFields", () => {
-  it("leaves a within-limit span unchanged (same reference)", () => {
+describe("truncatePayloadFields", () => {
+  it("leaves a within-limit payload unchanged (same reference)", () => {
     const span = {
       id: "s1",
       input: { prompt: "small" },
       output: { result: "ok" },
     };
 
-    const { result, truncated } = truncateSpanFields(span, LIMIT_MB);
+    const { result, truncated } = truncatePayloadFields(span, LIMIT_MB);
 
     expect(truncated).toEqual([]);
     expect(result).toBe(span);
@@ -31,7 +31,7 @@ describe("truncateSpanFields", () => {
   it("truncates an oversized field and keeps the small sibling", () => {
     const span = { id: "s1", input: { prompt: "small" }, output: bigValue(21) };
 
-    const { result, truncated } = truncateSpanFields(span, LIMIT_MB);
+    const { result, truncated } = truncatePayloadFields(span, LIMIT_MB);
 
     expect(truncated).toEqual(["output"]);
     expect(asMarker(result.output).opik_truncated).toBe(true);
@@ -44,24 +44,35 @@ describe("truncateSpanFields", () => {
   it("truncates every field that individually exceeds the limit", () => {
     const span = { id: "s1", input: bigValue(25), output: bigValue(25) };
 
-    const { truncated } = truncateSpanFields(span, LIMIT_MB);
+    const { truncated } = truncatePayloadFields(span, LIMIT_MB);
 
     expect([...truncated].sort()).toEqual(["input", "output"]);
   });
 
-  it("hard per-span cap: total over but no single field over -> truncates all", () => {
+  it("hard per-object cap: total over but no single field over -> truncates all", () => {
     const span = { id: "s1", input: bigValue(15), output: bigValue(15) };
 
-    const { result, truncated } = truncateSpanFields(span, LIMIT_MB);
+    const { result, truncated } = truncatePayloadFields(span, LIMIT_MB);
 
     expect([...truncated].sort()).toEqual(["input", "output"]);
     expect(asMarker(result.input).opik_truncated).toBe(true);
     expect(asMarker(result.output).opik_truncated).toBe(true);
   });
 
+  it("applies the same rule to a trace-shaped payload (output only)", () => {
+    // @track mirrors the outermost call's output onto the trace, so a trace can
+    // carry an oversized field just like a span. Same helper, same result.
+    const trace = { id: "t1", output: bigValue(21) };
+
+    const { result, truncated } = truncatePayloadFields(trace, LIMIT_MB);
+
+    expect(truncated).toEqual(["output"]);
+    expect(asMarker(result.output).opik_truncated).toBe(true);
+  });
+
   it("never truncates metadata, and a huge metadata does not trigger others", () => {
     // metadata is exempt: a huge metadata must not be truncated, nor drag the
-    // span over the cap and cause small input/output to be cut.
+    // object over the cap and cause small input/output to be cut.
     const metadata = bigValue(25);
     const span = {
       id: "s1",
@@ -70,7 +81,7 @@ describe("truncateSpanFields", () => {
       metadata,
     };
 
-    const { result, truncated } = truncateSpanFields(span, LIMIT_MB);
+    const { result, truncated } = truncatePayloadFields(span, LIMIT_MB);
 
     expect(truncated).toEqual([]); // nothing truncated
     expect(result).toBe(span);
@@ -81,18 +92,18 @@ describe("truncateSpanFields", () => {
     const metadata = bigValue(25);
     const span = { id: "s1", input: bigValue(25), metadata };
 
-    const { result, truncated } = truncateSpanFields(span, LIMIT_MB);
+    const { result, truncated } = truncatePayloadFields(span, LIMIT_MB);
 
     expect(truncated).toEqual(["input"]);
     expect(asMarker(result.input).opik_truncated).toBe(true);
     expect(result.metadata).toBe(metadata); // metadata untouched
   });
 
-  it("does not mutate the original span", () => {
+  it("does not mutate the original payload", () => {
     const bigOutput = bigValue(21);
     const span = { id: "s1", output: bigOutput };
 
-    truncateSpanFields(span, LIMIT_MB);
+    truncatePayloadFields(span, LIMIT_MB);
 
     expect(span.output).toBe(bigOutput); // original untouched (non-mutating)
   });
@@ -102,9 +113,9 @@ describe("truncateSpanFields", () => {
     circular.self = circular; // JSON.stringify would throw on this
     const span = { id: "s1", output: circular };
 
-    expect(() => truncateSpanFields(span, LIMIT_MB)).not.toThrow();
+    expect(() => truncatePayloadFields(span, LIMIT_MB)).not.toThrow();
 
-    const { result, truncated } = truncateSpanFields(span, LIMIT_MB);
+    const { result, truncated } = truncatePayloadFields(span, LIMIT_MB);
     expect(truncated).toEqual([]); // can't measure -> not truncated
     expect(result).toBe(span);
   });
@@ -120,27 +131,27 @@ describe("truncateSpanFields", () => {
     };
     const span = { id: "s1", output: tooLarge };
 
-    const { result, truncated } = truncateSpanFields(span, LIMIT_MB);
+    const { result, truncated } = truncatePayloadFields(span, LIMIT_MB);
 
     expect(truncated).toEqual(["output"]);
     expect(asMarker(result.output).opik_truncated).toBe(true);
   });
 
-  it("returns the same span when there are no truncatable fields (metadata only)", () => {
+  it("returns the same payload when there are no truncatable fields (metadata only)", () => {
     const span = { id: "s1", metadata: { note: "kept" } };
 
-    const { result, truncated } = truncateSpanFields(span, LIMIT_MB);
+    const { result, truncated } = truncatePayloadFields(span, LIMIT_MB);
 
     expect(truncated).toEqual([]);
     expect(result).toBe(span);
   });
 });
 
-describe("truncateSpanIfNeeded", () => {
+describe("truncatePayloadIfNeeded", () => {
   it("is a no-op when the limit is disabled (<= 0)", () => {
     const span = { id: "s1", output: bigValue(21) };
 
-    const result = truncateSpanIfNeeded(span, 0, "s1");
+    const result = truncatePayloadIfNeeded(span, 0, "span", "s1");
 
     expect(result).toBe(span);
   });
@@ -148,7 +159,7 @@ describe("truncateSpanIfNeeded", () => {
   it("truncates when a field is over the limit", () => {
     const span = { id: "s1", output: bigValue(21) };
 
-    const result = truncateSpanIfNeeded(span, LIMIT_MB, "s1");
+    const result = truncatePayloadIfNeeded(span, LIMIT_MB, "span", "s1");
 
     expect(asMarker(result.output).opik_truncated).toBe(true);
   });
@@ -156,13 +167,21 @@ describe("truncateSpanIfNeeded", () => {
   it("is a no-op when the limit is negative", () => {
     const span = { id: "s1", output: bigValue(21) };
 
-    const result = truncateSpanIfNeeded(span, -1, "s1");
+    const result = truncatePayloadIfNeeded(span, -1, "span", "s1");
 
     expect(result).toBe(span);
   });
+
+  it("defaults to the 'span' kind when none is given", () => {
+    const span = { id: "s1", output: bigValue(21) };
+
+    const result = truncatePayloadIfNeeded(span, LIMIT_MB);
+
+    expect(asMarker(result.output).opik_truncated).toBe(true);
+  });
 });
 
-describe("truncateSpanIfNeeded logging", () => {
+describe("truncatePayloadIfNeeded logging", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -170,21 +189,38 @@ describe("truncateSpanIfNeeded logging", () => {
   it("warns once with the span id and truncated field(s) on truncation", () => {
     const warn = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
 
-    truncateSpanIfNeeded(
+    truncatePayloadIfNeeded(
       { id: "s1", output: bigValue(21) },
       LIMIT_MB,
+      "span",
       "span-42",
     );
 
     expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain("Span");
     expect(warn.mock.calls[0][0]).toContain("span-42");
     expect(warn.mock.calls[0][0]).toContain("output");
   });
 
-  it("falls back to 'unknown' when no span id is given", () => {
+  it("uses the 'Trace' label and the trace id for a trace payload", () => {
     const warn = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
 
-    truncateSpanIfNeeded({ output: bigValue(21) }, LIMIT_MB);
+    truncatePayloadIfNeeded(
+      { id: "t1", output: bigValue(21) },
+      LIMIT_MB,
+      "trace",
+      "trace-7",
+    );
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain("Trace");
+    expect(warn.mock.calls[0][0]).toContain("trace-7");
+  });
+
+  it("falls back to 'unknown' when no id is given", () => {
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+
+    truncatePayloadIfNeeded({ output: bigValue(21) }, LIMIT_MB, "span");
 
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn.mock.calls[0][0]).toContain("unknown");
@@ -193,8 +229,8 @@ describe("truncateSpanIfNeeded logging", () => {
   it("does not warn on the under-limit or disabled paths", () => {
     const warn = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
 
-    truncateSpanIfNeeded({ id: "s1", output: { ok: true } }, LIMIT_MB, "s1");
-    truncateSpanIfNeeded({ id: "s1", output: bigValue(21) }, 0, "s1");
+    truncatePayloadIfNeeded({ id: "s1", output: { ok: true } }, LIMIT_MB, "span", "s1");
+    truncatePayloadIfNeeded({ id: "s1", output: bigValue(21) }, 0, "span", "s1");
 
     expect(warn).not.toHaveBeenCalled();
   });

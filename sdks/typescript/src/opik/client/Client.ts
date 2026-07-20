@@ -159,12 +159,13 @@ export class OpikClient {
     this.spanBatchQueue = new SpanBatchQueue(
       this.api,
       delay,
-      this.config.maxSpanPayloadSizeMb,
+      this.config.maxPayloadSizeMb,
       attachmentUploadConfig
     );
     this.traceBatchQueue = new TraceBatchQueue(
       this.api,
       delay,
+      this.config.maxPayloadSizeMb,
       attachmentUploadConfig
     );
     this.spanFeedbackScoresBatchQueue = new SpanFeedbackScoresBatchQueue(

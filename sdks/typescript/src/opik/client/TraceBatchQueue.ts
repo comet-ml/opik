@@ -1,6 +1,8 @@
 import { SavedTrace } from "@/tracer/Trace";
 import { BatchQueue } from "./BatchQueue";
 import { OpikApiClientTemp } from "@/client/OpikApiClientTemp";
+import { truncatePayloadIfNeeded } from "./payloadTruncation";
+import { DEFAULT_CONFIG } from "@/config/Config";
 import {
   extractAndUploadAttachments,
   type AttachmentUploadConfig,
@@ -17,6 +19,7 @@ export class TraceBatchQueue extends BatchQueue<SavedTrace> {
   constructor(
     private readonly api: OpikApiClientTemp,
     delay?: number,
+    private readonly maxPayloadSizeMb?: number,
     private readonly attachmentUpload?: AttachmentUploadConfig,
   ) {
     super({
@@ -47,10 +50,22 @@ export class TraceBatchQueue extends BatchQueue<SavedTrace> {
     );
   }
 
+  // Extract inline base64 attachments (when enabled) BEFORE truncation, so images become
+  // attachments and no longer count toward the per-object size cap. @track mirrors the
+  // outermost call's input/output onto the trace, so a trace can carry an oversized payload
+  // just like a span and needs the same guard.
   protected async createEntities(traces: SavedTrace[]) {
     const payload: SavedTrace[] = [];
     for (const trace of traces) {
-      payload.push(await this.extractAttachments(trace, trace.id));
+      const extracted = await this.extractAttachments(trace, trace.id);
+      payload.push(
+        truncatePayloadIfNeeded(
+          extracted,
+          this.maxPayloadSizeMb ?? DEFAULT_CONFIG.maxPayloadSizeMb,
+          "trace",
+          trace.id,
+        ),
+      );
     }
     await this.api.traces.createTraces(
       { traces: payload },
@@ -67,7 +82,13 @@ export class TraceBatchQueue extends BatchQueue<SavedTrace> {
   }
 
   protected async updateEntity(id: string, updates: Partial<SavedTrace>) {
-    const body = await this.extractAttachments(updates, id);
+    const extracted = await this.extractAttachments(updates, id);
+    const body = truncatePayloadIfNeeded(
+      extracted,
+      this.maxPayloadSizeMb ?? DEFAULT_CONFIG.maxPayloadSizeMb,
+      "trace",
+      id,
+    );
     await this.api.traces.updateTrace(id, { body }, this.api.requestOptions);
   }
 

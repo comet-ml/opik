@@ -33,7 +33,7 @@ const makeClient = () =>
   new Opik({
     projectName: `ts-attach-e2e-${Date.now()}-${projectSeq++}`,
     minBase64EmbeddedAttachmentSize: 1000, // small threshold: a modest image triggers extraction
-    maxSpanPayloadSizeMb: 1, // small cap: a >1 MB inline image would truncate unless extracted first
+    maxPayloadSizeMb: 1, // small cap: a >1 MB inline image would truncate unless extracted first
   });
 
 describe.skipIf(!run)("Attachment extraction E2E (OPIK-7349)", () => {
