@@ -54,6 +54,9 @@ jobs:
               sdks/opik_optimizer/setup.py
               sdks/opik_optimizer/tests/test_requirements.txt
 
+        - name: Set up uv
+          uses: astral-sh/setup-uv@v8.3.2
+
         - name: Cache HuggingFace datasets
           uses: actions/cache@v4
           with:

@@ -31,6 +31,9 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8.3.2
+
       - name: Install dependencies
         run: uv pip install --system requests
 

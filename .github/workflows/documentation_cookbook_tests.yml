@@ -41,6 +41,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8.3.2
       - name: Install dependencies
         run: |
           uv pip install --system -U ipython nbconvert

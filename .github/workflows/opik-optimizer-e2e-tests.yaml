@@ -83,6 +83,9 @@ jobs:
               sdks/opik_optimizer/setup.py
               sdks/opik_optimizer/tests/test_requirements.txt
 
+        - name: Set up uv
+          uses: astral-sh/setup-uv@v8.3.2
+
         - name: Run latest Opik server
           env:
             OPIK_USAGE_REPORT_ENABLED: false
@@ -174,6 +177,9 @@ jobs:
               sdks/opik_optimizer/pyproject.toml
               sdks/opik_optimizer/setup.py
               sdks/opik_optimizer/tests/test_requirements.txt
+
+        - name: Set up uv
+          uses: astral-sh/setup-uv@v8.3.2
 
         - name: Cache HuggingFace datasets
           uses: actions/cache@v4

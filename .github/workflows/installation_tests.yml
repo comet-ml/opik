@@ -23,6 +23,9 @@ jobs:
         with:
           python-version: 3.12
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8.3.2
+
       - name: Install Python dependencies
         run: |
           uv pip install --system -r ${{ github.workspace }}/tests_end_to_end/test_requirements.txt
@@ -64,6 +67,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8.3.2
 
       - name: Install Python dependencies
         run: |
@@ -119,6 +125,9 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8.3.2
+
       - name: Install Python dependencies
         run: |
           uv pip install --system -r ${{ github.workspace }}/tests_end_to_end/test_requirements.txt
@@ -172,6 +181,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8.3.2
 
       - name: Install Python dependencies
         run: |
@@ -227,6 +239,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8.3.2
 
       - name: Install Python dependencies
         run: |
