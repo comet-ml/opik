@@ -132,9 +132,7 @@ class OpikSpanProcessor(SpanProcessor):
             attrs.get("gen_ai.operation.name") == "invoke_agent" or name == "agent run"
         )
         if is_root:
-            agent_name = (
-                attrs.get("agent_name") or attrs.get("gen_ai.agent.name") or ""
-            )
+            agent_name = attrs.get("agent_name") or attrs.get("gen_ai.agent.name") or ""
             display_name = f"run {agent_name}" if agent_name else name
             span_type: SpanType = "general"
         else:
@@ -301,7 +299,9 @@ class OpikSpanProcessor(SpanProcessor):
         traceback = ""
 
         if exception_attrs is not None:
-            exception_type = str(exception_attrs.get("exception.type") or exception_type)
+            exception_type = str(
+                exception_attrs.get("exception.type") or exception_type
+            )
             if exception_message := exception_attrs.get("exception.message"):
                 message = str(exception_message)
             if exception_stacktrace := exception_attrs.get("exception.stacktrace"):
