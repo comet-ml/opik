@@ -85,13 +85,31 @@ class OptimizationStatusManager:
         # Only persist a non-empty reason: sending nothing avoids overwriting a
         # previously-stored error_info (the REST update gates on `is not None`,
         # not on emptiness). Truncate the free-text fields so we don't push
-        # oversized tracebacks into ClickHouse.
+        # oversized tracebacks into ClickHouse. Works on a copy — the caller's
+        # dict is never mutated.
         if error_info:
             truncated = dict(error_info)
-            for key in ("message", "traceback"):
-                value = truncated.get(key)
-                if isinstance(value, str):
-                    truncated[key] = value[:MAX_ERROR_INFO_LENGTH]
+
+            # The exception message is short and most meaningful at its start —
+            # keep the head.
+            message = truncated.get("message")
+            if isinstance(message, str) and len(message) > MAX_ERROR_INFO_LENGTH:
+                truncated["message"] = message[:MAX_ERROR_INFO_LENGTH]
+
+            # A traceback's most diagnostic frames (the innermost frame and the
+            # actual raise site) are at the END, so keep the TAIL and mark that
+            # earlier frames were dropped. Keeping the head would discard exactly
+            # the frames closest to the failure (OPIK-7172 surfaces this reason).
+            traceback_str = truncated.get("traceback")
+            if (
+                isinstance(traceback_str, str)
+                and len(traceback_str) > MAX_ERROR_INFO_LENGTH
+            ):
+                marker = "...[traceback truncated]...\n"
+                truncated["traceback"] = (
+                    marker + traceback_str[-(MAX_ERROR_INFO_LENGTH - len(marker)):]
+                )
+
             body["error_info"] = truncated
 
         if metadata is not None:
