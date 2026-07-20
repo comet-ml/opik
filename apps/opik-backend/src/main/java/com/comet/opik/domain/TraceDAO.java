@@ -468,6 +468,11 @@ class TraceDAOImpl implements TraceDAO {
      * Key format: {@code author} + optional {@code _queueId} + optional {@code _spanId} (ensures uniqueness across
      * queues/spans). Value tuple: (value, reason, category_name, source, last_updated_at, span_type, span_id,
      * source_queue_id, author).
+     *
+     * <p>experiments_agg collapses to a single canonical row per trace_id (the most recent experiment,
+     * by UUIDv7-ordered id) so the trace-by-id LEFT JOIN cannot fan a trace that belongs to multiple
+     * experiments into multiple rows — which surfaced as an IndexOutOfBoundsException 500 on GET by id
+     * and non-deterministic experiment metadata (OPIK-7396).
      */
     private static final String SELECT_BY_IDS = """
             WITH target_spans AS (
@@ -678,7 +683,7 @@ class TraceDAOImpl implements TraceDAO {
                 AND trace_id IN :ids
                 GROUP BY trace_id
             ), experiments_agg AS (
-                SELECT DISTINCT
+                SELECT
                     ei.trace_id,
                     if(div.id != '', div.dataset_item_id, ei.dataset_item_id) AS experiment_dataset_item_id,
                     e.id AS experiment_id,
@@ -706,6 +711,8 @@ class TraceDAOImpl implements TraceDAO {
                     ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) e ON ei.experiment_id = e.id
+                ORDER BY trace_id, experiment_id DESC
+                LIMIT 1 BY trace_id
             )
             SELECT
                 t.*,
