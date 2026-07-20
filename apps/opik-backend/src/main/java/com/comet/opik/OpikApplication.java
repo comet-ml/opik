@@ -41,7 +41,6 @@ import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.OpenAiMessageJsonDeserializer;
 import com.comet.opik.utils.StrictDurationDeserializer;
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.core.json.JsonReadFeature;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -140,11 +139,7 @@ public class OpikApplication extends Application<OpikConfiguration> {
         // Configure Dropwizard ObjectMapper (HTTP layer): bound a single string value AND the whole
         // document, so an oversized batch aborts mid-parse (4xx) before a multi-GB node tree is built.
         // (maxDocumentLength <= 0 is normalized to "unlimited" by the builder.)
-        StreamReadConstraints readConstraints = StreamReadConstraints.builder()
-                .maxStringLength(maxStringLength)
-                .maxDocumentLength(maxDocumentLength)
-                .build();
-        environment.getObjectMapper().getFactory().setStreamReadConstraints(readConstraints);
+        JsonUtils.applyStreamReadConstraints(environment.getObjectMapper(), maxStringLength, maxDocumentLength);
 
         // Configure JsonUtils ObjectMapper (internal processing) with the SAME limits
         JsonUtils.configure(maxStringLength, maxDocumentLength);

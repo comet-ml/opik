@@ -1,7 +1,9 @@
 package com.comet.opik.infrastructure;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.StreamReadConstraints;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Min;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -57,4 +59,18 @@ public class JacksonConfig {
      */
     @JsonProperty
     @Min(value = 1048576, message = "maxRequestSizeBytes must be at least 1MB") private long maxRequestSizeBytes = 536_870_912L; // 512MB
+
+    /**
+     * Cross-field invariant: the whole-document cap must not be smaller than the single-string cap,
+     * otherwise a legitimate max-size string that already passed {@link #maxStringLength} would be
+     * rejected by the document guard. A non-positive {@code maxDocumentLength} means "unlimited" and
+     * is always valid. Validated at startup (the config is {@code @Valid}), so a misordered override
+     * such as {@code JACKSON_MAX_DOCUMENT_LENGTH < JACKSON_MAX_STRING_LENGTH} fails fast with a clear
+     * message instead of surfacing as a confusing runtime rejection.
+     */
+    @JsonIgnore
+    @AssertTrue(message = "maxDocumentLength must be >= maxStringLength (or <= 0 for unlimited)")
+    public boolean isMaxDocumentLengthValid() {
+        return maxDocumentLength <= 0 || maxDocumentLength >= maxStringLength;
+    }
 }

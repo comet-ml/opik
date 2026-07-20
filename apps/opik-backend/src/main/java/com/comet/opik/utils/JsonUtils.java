@@ -91,15 +91,29 @@ public class JsonUtils {
                 .addDeserializer(Message.class, OpenAiMessageJsonDeserializer.INSTANCE)
                 .addDeserializer(Duration.class, StrictDurationDeserializer.INSTANCE));
 
-        // Configure stream read constraints (maxDocumentLength <= 0 is normalized to "unlimited"
-        // by the builder, matching the static-init default before configure() runs).
+        // Bound a single string value AND the whole document (shared with the Dropwizard HTTP mapper).
+        applyStreamReadConstraints(mapper, maxStringLength, maxDocumentLength);
+
+        return mapper;
+    }
+
+    /**
+     * Applies the JSON stream-read size limits (single-string and whole-document) to {@code mapper}'s
+     * factory. Shared by the internal ObjectMapper above and the Dropwizard HTTP ObjectMapper in
+     * {@code OpikApplication}, so both are configured identically from one place.
+     *
+     * @param mapper            the ObjectMapper to configure
+     * @param maxStringLength   Maximum single string value length in bytes
+     * @param maxDocumentLength Maximum whole-document length in bytes ({@code <= 0} is normalized to
+     *                          "unlimited" by the builder, matching the static-init default)
+     */
+    public static void applyStreamReadConstraints(@NonNull ObjectMapper mapper, int maxStringLength,
+            long maxDocumentLength) {
         StreamReadConstraints readConstraints = StreamReadConstraints.builder()
                 .maxStringLength(maxStringLength)
                 .maxDocumentLength(maxDocumentLength)
                 .build();
         mapper.getFactory().setStreamReadConstraints(readConstraints);
-
-        return mapper;
     }
 
     /**

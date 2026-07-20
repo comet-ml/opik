@@ -25,4 +25,21 @@ class JacksonConfigTest {
         // (holds for both the 20MB POJO default and the 100MB config.yml value).
         assertThat(config.getMaxDocumentLength()).isGreaterThan(104_857_600L); // > 100MB maxStringLength
     }
+
+    @Test
+    @DisplayName("cross-field validator: maxDocumentLength must be >= maxStringLength (or <= 0 for unlimited)")
+    void maxDocumentLengthValidity() {
+        JacksonConfig config = new JacksonConfig();
+        assertThat(config.isMaxDocumentLengthValid()).isTrue(); // defaults hold the invariant
+
+        config.setMaxStringLength(104_857_600); // 100MB
+        config.setMaxDocumentLength(52_428_800L); // 50MB < 100MB -> a valid max-size string would be rejected
+        assertThat(config.isMaxDocumentLengthValid()).isFalse();
+
+        config.setMaxDocumentLength(104_857_600L); // == string cap -> valid
+        assertThat(config.isMaxDocumentLengthValid()).isTrue();
+
+        config.setMaxDocumentLength(-1L); // <= 0 means "unlimited" -> always valid
+        assertThat(config.isMaxDocumentLengthValid()).isTrue();
+    }
 }
