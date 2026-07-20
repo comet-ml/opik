@@ -33,10 +33,10 @@ jobs:
         run: npm install -g fern-api@4.71.5
 
       - name: Set up Python
-        uses: astral-sh/setup-uv@v8.3.2
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          enable-cache: true
+          cache: 'pip'
 
       - name: Install Opik Optimizer SDK (for Fern docs)
         run: |

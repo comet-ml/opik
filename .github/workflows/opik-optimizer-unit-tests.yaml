@@ -45,11 +45,11 @@ jobs:
           uses: actions/checkout@v6
             
         - name: Setup Python ${{matrix.python_version}}
-          uses: astral-sh/setup-uv@v8.3.2
+          uses: actions/setup-python@v5
           with:
             python-version: ${{matrix.python_version}}
-            enable-cache: true
-            cache-dependency-glob: |
+            cache: 'pip'
+            cache-dependency-path: |
               sdks/opik_optimizer/pyproject.toml
               sdks/opik_optimizer/setup.py
               sdks/opik_optimizer/tests/test_requirements.txt

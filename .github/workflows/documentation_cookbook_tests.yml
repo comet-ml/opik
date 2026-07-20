@@ -37,10 +37,10 @@ jobs:
       OPIK_SENTRY_ENABLE: False
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v8.3.2
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          enable-cache: true
+          cache: 'pip'
       - name: Install dependencies
         run: |
           uv pip install --system -U ipython nbconvert

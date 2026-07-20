@@ -19,7 +19,7 @@ jobs:
           ref: ${{ github.ref }}
 
       - name: Setup Python
-        uses: astral-sh/setup-uv@v8.3.2
+        uses: actions/setup-python@v5
         with:
           python-version: 3.12
 
@@ -61,7 +61,7 @@ jobs:
           ref: ${{ github.ref }}
 
       - name: Setup Python
-        uses: astral-sh/setup-uv@v8.3.2
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
@@ -115,7 +115,7 @@ jobs:
           ref: ${{ github.ref }}
 
       - name: Setup Python
-        uses: astral-sh/setup-uv@v8.3.2
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
@@ -169,7 +169,7 @@ jobs:
           ref: ${{ github.ref }}
 
       - name: Setup Python
-        uses: astral-sh/setup-uv@v8.3.2
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
@@ -224,7 +224,7 @@ jobs:
           ref: ${{ github.ref }}
 
       - name: Setup Python
-        uses: astral-sh/setup-uv@v8.3.2
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
