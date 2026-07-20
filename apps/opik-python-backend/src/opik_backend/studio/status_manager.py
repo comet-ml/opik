@@ -58,6 +58,7 @@ class OptimizationStatusManager:
     def update_status(
         self,
         status: str,
+        *,
         error_info: Optional[dict] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
