@@ -504,12 +504,13 @@ public class SpanService {
                                         .doOnSuccess(__ -> log.info(
                                                 "Deleted '{}' spans for workspace '{}', project '{}'",
                                                 spanIds.size(), workspaceId, projectId)))
-                                // Post the event before capture, mirroring TraceService.delete's order: capture is a
-                                // best-effort bridge write and must not sit between the delete and its event.
-                                .doOnSuccess(__ -> eventBus.post(
-                                        new SpansDeleted(spanIds, traceIds, workspaceId, userName, projectId)))
                                 .then(captureDeletions(spanIds, projectId, workspaceId, userName))
                                 .thenReturn(spanIds);
+                    })
+                    .doOnSuccess(spanIds -> {
+                        if (spanIds != null) {
+                            eventBus.post(new SpansDeleted(spanIds, traceIds, workspaceId, userName, projectId));
+                        }
                     })
                     .then();
         });
@@ -533,7 +534,7 @@ public class SpanService {
                             .workspaceId(workspaceId)
                             .projectId(projectId)
                             .deletedId(id.toString())
-                            .deletionReason(DeletionReason.USER_REQUEST)
+                            .deletionReason(DeletionReason.CASCADE)
                             .build())
                     .collect(Collectors.toUnmodifiableSet());
             return deletionEventDAO.insert(events, userName)
