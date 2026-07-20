@@ -40,11 +40,11 @@ public enum AnthropicModelName implements StructuredOutputSupported {
 
     /**
      * Whether the model accepts sampling params (temperature/top_p/top_k). Adaptive-thinking models
-     * reject them with a 400. Unknown model names fail closed ({@code false}): newer Anthropic models
-     * trend adaptive-thinking, so we skip temperature until the model is added here rather than risk a 400.
+     * reject them with a 400 and are opted out explicitly. Unknown model names default to {@code true}
+     * so registry-only Anthropic models (not enumerated here) keep temperature support.
      */
     public static boolean supportsSamplingParams(String modelName) {
-        return SAMPLING_PARAMS_SUPPORT.getOrDefault(modelName, false);
+        return SAMPLING_PARAMS_SUPPORT.getOrDefault(modelName, true);
     }
 
     @Override

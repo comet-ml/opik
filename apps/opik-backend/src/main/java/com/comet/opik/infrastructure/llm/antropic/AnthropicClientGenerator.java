@@ -84,8 +84,9 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
 
     /**
      * Single decode of the {@code thinking} block from a rule's {@code custom_parameters}. Thinking counts as
-     * enabled unless the type is explicitly {@code "disabled"}, so {@code "enabled"}, {@code "adaptive"}, and
-     * any future type all gate temperature off. An absent/blank block is not enabled.
+     * enabled only when {@code type} is an explicit, non-blank value other than {@code "disabled"} — so
+     * {@code "enabled"}, {@code "adaptive"}, and any future type gate temperature off, while a missing/blank
+     * {@code type} (or absent block) is not enabled and must not gate temperature or shape max_tokens.
      */
     private ThinkingParams parseThinking(JsonNode customParameters) {
         if (customParameters == null || customParameters.isNull()) {
@@ -98,7 +99,7 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
 
         String type = null;
         var typeNode = thinkingNode.get("type");
-        if (typeNode != null && typeNode.isTextual()) {
+        if (typeNode != null && typeNode.isTextual() && StringUtils.isNotBlank(typeNode.asText())) {
             type = typeNode.asText();
         }
 
@@ -108,7 +109,7 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
             budgetTokens = budgetNode.asInt();
         }
 
-        return new ThinkingParams(!"disabled".equals(type), type, budgetTokens);
+        return new ThinkingParams(type != null && !"disabled".equals(type), type, budgetTokens);
     }
 
     /**
@@ -119,9 +120,13 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
     private void applyCustomParameters(AnthropicChatModel.AnthropicChatModelBuilder builder,
             JsonNode customParameters, ThinkingParams thinking) {
         Optional.ofNullable(thinking.type()).ifPresent(builder::thinkingType);
-        Optional.ofNullable(thinking.budgetTokens()).ifPresent(builder::thinkingBudgetTokens);
 
-        builder.maxTokens(resolveMaxTokens(parseMaxTokens(customParameters), thinking.budgetTokens()));
+        // budget_tokens is only valid alongside enabled thinking; forwarding it with an absent or "disabled"
+        // type produces a partial config that Anthropic rejects with a 400.
+        Integer thinkingBudgetTokens = thinking.enabled() ? thinking.budgetTokens() : null;
+        Optional.ofNullable(thinkingBudgetTokens).ifPresent(builder::thinkingBudgetTokens);
+
+        builder.maxTokens(resolveMaxTokens(parseMaxTokens(customParameters), thinkingBudgetTokens));
     }
 
     private Integer parseMaxTokens(JsonNode customParameters) {
@@ -143,7 +148,9 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
     private int resolveMaxTokens(Integer maxTokens, Integer thinkingBudgetTokens) {
         int resolved = maxTokens != null ? maxTokens : LlmProviderAnthropicMapper.DEFAULT_MAX_COMPLETION_TOKENS;
         if (thinkingBudgetTokens != null && resolved <= thinkingBudgetTokens) {
-            return thinkingBudgetTokens + LlmProviderAnthropicMapper.DEFAULT_MAX_COMPLETION_TOKENS;
+            // Widen to long before adding headroom so an extreme budget can't overflow to a negative int.
+            return (int) Math.min(Integer.MAX_VALUE,
+                    (long) thinkingBudgetTokens + LlmProviderAnthropicMapper.DEFAULT_MAX_COMPLETION_TOKENS);
         }
         return resolved;
     }

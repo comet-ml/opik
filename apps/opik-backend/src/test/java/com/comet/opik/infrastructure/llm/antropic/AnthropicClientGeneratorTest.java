@@ -45,9 +45,9 @@ class AnthropicClientGeneratorTest {
         }
 
         @ParameterizedTest
-        @ValueSource(strings = {"some-unknown-model", "claude-future-99", ""})
-        void supportsSamplingParamsFailsClosedForUnknownModels(String modelName) {
-            assertThat(AnthropicModelName.supportsSamplingParams(modelName)).isFalse();
+        @ValueSource(strings = {"some-unknown-model", "claude-future-99"})
+        void supportsSamplingParamsDefaultsTrueForUnknownModels(String modelName) {
+            assertThat(AnthropicModelName.supportsSamplingParams(modelName)).isTrue();
         }
     }
 
@@ -95,6 +95,19 @@ class AnthropicClientGeneratorTest {
                     .name("claude-3-7-sonnet-20250219")
                     .temperature(0.7)
                     .customParameters(JsonUtils.getJsonNodeFromString("{\"thinking\": {\"type\": \"disabled\"}}"))
+                    .build());
+
+            assertThat(parameters.temperature()).isEqualTo(0.7);
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"{\"thinking\": {}}", "{\"thinking\": {\"type\": \"\"}}",
+                "{\"thinking\": {\"budget_tokens\": 1024}}"})
+        void temperatureIsForwardedWhenThinkingTypeMissingOrBlankOnSamplingCapableModel(String customParameters) {
+            var parameters = generateChatParameters(LlmAsJudgeModelParameters.builder()
+                    .name("claude-3-7-sonnet-20250219")
+                    .temperature(0.7)
+                    .customParameters(JsonUtils.getJsonNodeFromString(customParameters))
                     .build());
 
             assertThat(parameters.temperature()).isEqualTo(0.7);
@@ -172,6 +185,17 @@ class AnthropicClientGeneratorTest {
             assertThat(parameters.maxOutputTokens()).isEqualTo(DEFAULT_MAX_TOKENS);
             assertThat(parameters.thinkingBudgetTokens()).isNull();
         }
+
+        @Test
+        void doesNotOverflowMaxTokensForExtremeThinkingBudget() {
+            var parameters = generateChatParameters(LlmAsJudgeModelParameters.builder()
+                    .name("claude-sonnet-5")
+                    .customParameters(JsonUtils.getJsonNodeFromString(
+                            "{\"thinking\": {\"type\": \"enabled\", \"budget_tokens\": 2147483647}}"))
+                    .build());
+
+            assertThat(parameters.maxOutputTokens()).isEqualTo(Integer.MAX_VALUE).isPositive();
+        }
     }
 
     @Nested
@@ -208,6 +232,30 @@ class AnthropicClientGeneratorTest {
                     .build());
 
             assertThat(parameters.thinkingType()).isNull();
+        }
+
+        @Test
+        void dropsBudgetWhenThinkingTypeMissing() {
+            var parameters = generateChatParameters(LlmAsJudgeModelParameters.builder()
+                    .name("claude-sonnet-5")
+                    .customParameters(JsonUtils.getJsonNodeFromString("{\"thinking\": {\"budget_tokens\": 1024}}"))
+                    .build());
+
+            assertThat(parameters.thinkingType()).isNull();
+            assertThat(parameters.thinkingBudgetTokens()).isNull();
+            assertThat(parameters.maxOutputTokens()).isEqualTo(DEFAULT_MAX_TOKENS);
+        }
+
+        @Test
+        void dropsBudgetWhenThinkingDisabled() {
+            var parameters = generateChatParameters(LlmAsJudgeModelParameters.builder()
+                    .name("claude-sonnet-5")
+                    .customParameters(JsonUtils.getJsonNodeFromString(
+                            "{\"thinking\": {\"type\": \"disabled\", \"budget_tokens\": 1024}}"))
+                    .build());
+
+            assertThat(parameters.thinkingType()).isEqualTo("disabled");
+            assertThat(parameters.thinkingBudgetTokens()).isNull();
         }
     }
 }
