@@ -22,6 +22,7 @@ import deepseekLogoUrl from "/images/integrations/deepseek.png";
 // import difyLogoUrl from "/images/integrations/dify.png";
 import googleAdkLogoUrl from "/images/integrations/google-adk.png";
 import guardrailsaiLogoUrl from "/images/integrations/guardrailsai.png";
+import hermesLogoUrl from "/images/integrations/hermes.svg";
 import ollamaLogoUrl from "/images/integrations/ollama.png";
 import ollamaWhiteLogoUrl from "/images/integrations/ollama-white.png";
 import openclawLogoUrl from "/images/integrations/openclaw.svg";
@@ -189,6 +190,42 @@ export const INTEGRATIONS: Integration[] = [
       },
     ],
     docsLink: buildDocsUrl("/integrations/openclaw"),
+  },
+  {
+    id: "hermes",
+    title: "Hermes",
+    description: "Frameworks & tools",
+    category: INTEGRATION_CATEGORIES.FRAMEWORKS_TOOLS,
+    icon: hermesLogoUrl,
+    code: "",
+    installCommand: "pip install opik-hermes",
+    installTitle: "1. Install the Opik plugin",
+    installDescription:
+      "Install the package into the same Python environment as Hermes. This pulls in the opik SDK and registers the plugin via the hermes_agent.plugins entry point.",
+    additionalSteps: [
+      {
+        title: "2. Enable the plugin",
+        description:
+          "Enable the plugin by adding it to plugins.enabled in ~/.hermes/config.yaml (the entry-point name is opik).",
+        code: "# ~/.hermes/config.yaml\nplugins:\n  enabled: [opik]",
+        language: SUPPORTED_LANGUAGE.yaml,
+      },
+      {
+        title: "3. Point Hermes at your Opik",
+        description:
+          'Add your Opik connection to ~/.hermes/.env (or run "opik configure"). On Opik Cloud the API key is enough; for local or self-hosted Opik set OPIK_URL_OVERRIDE and omit the key. Traces stream into your "PROJECT_NAME_PLACEHOLDER" project.',
+        code: "OPIK_API_KEY=<your-api-key>\nOPIK_WORKSPACE=<your-workspace>\nOPIK_PROJECT_NAME=PROJECT_NAME_PLACEHOLDER\n# Local / self-hosted only:\n# OPIK_URL_OVERRIDE=http://localhost:5173/api",
+        language: SUPPORTED_LANGUAGE.bash,
+      },
+      {
+        title: "4. Talk to Hermes and verify traces in Opik",
+        description:
+          "Every turn is traced. Run a chat and confirm traces appear in the configured Opik project.",
+        code: 'hermes chat -q "hello from hermes"',
+        language: SUPPORTED_LANGUAGE.bash,
+      },
+    ],
+    docsLink: buildDocsUrl("/integrations/hermes"),
   },
   {
     id: "bedrock",
