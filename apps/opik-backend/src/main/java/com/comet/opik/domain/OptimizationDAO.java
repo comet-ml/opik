@@ -32,6 +32,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
 
+import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
@@ -992,7 +993,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
             if (StringUtils.isNotEmpty(studioConfigJson)) {
                 try {
                     studioConfig = JsonUtils.readValue(studioConfigJson, OptimizationStudioConfig.class);
-                } catch (Exception e) {
+                } catch (UncheckedIOException e) {
                     log.error("Failed to deserialize studio_config for optimization: '{}'",
                             row.get("id", UUID.class), e);
                 }
@@ -1003,7 +1004,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
             if (StringUtils.isNotBlank(errorInfoJson)) {
                 try {
                     errorInfo = JsonUtils.readValue(errorInfoJson, ERROR_INFO_TYPE);
-                } catch (Exception e) {
+                } catch (UncheckedIOException e) {
                     log.error("Failed to deserialize error_info for optimization: '{}'",
                             row.get("id", UUID.class), e);
                 }
