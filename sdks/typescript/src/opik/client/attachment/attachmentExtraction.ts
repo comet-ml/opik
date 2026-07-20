@@ -12,7 +12,16 @@ import { detectMimeType, fileExtensionForMimeType } from "./mimeTypes";
  * Blobs are found with a regex, matching the Python SDK. `pattern.exec` in a loop (not
  * `String.matchAll`, which builds every match up front and can overflow V8's stack on
  * multi-MB inputs). The pattern is a single character class with a fixed+unbounded
- * quantifier, so it matches in linear time without catastrophic backtracking.
+ * quantifier, so there is no nested/overlapping structure and thus no *exponential*
+ * (catastrophic) backtracking.
+ *
+ * PERF NOTE (revisit only if profiling shows a problem): there is a narrow O(n^2)
+ * worst case — a single contiguous run of base64-alphabet chars that is long but stays
+ * just under the size threshold makes the engine retry from each offset. This needs a
+ * hundreds-of-KB pure-alphabet near-miss run at the default 256 KB threshold, so it is
+ * unlikely in practice and would be a slowdown, not a crash. We keep the regex for 1:1
+ * parity with the Python SDK (which has the same profile); if this ever bites, swap
+ * `extractFromString` for a linear single-pass character scan (strictly O(n)).
  *
  * Pure and non-mutating: returns the same reference when nothing was extracted.
  */
