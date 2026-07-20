@@ -70,12 +70,16 @@ public abstract class SortingFactory {
             sorting = List.of(sorting.get(0));
         }
 
-        // Filter out unsupported fields
+        // Filter out unsupported fields. A null/blank field is treated as unsupported and ignored
+        // (rather than dereferenced): getSortableFields() is an immutable List, whose contains(null)
+        // throws NPE, and isDynamicFieldSupported dereferences the field too.
         List<SortingField> validFields = sorting.stream()
                 .filter(sortField -> {
-                    boolean isValid = isFieldSupported(sortField.field()) || isDynamicFieldSupported(sortField.field());
+                    String field = sortField.field();
+                    boolean isValid = StringUtils.isNotBlank(field)
+                            && (isFieldSupported(field) || isDynamicFieldSupported(field));
                     if (!isValid) {
-                        log.info("Ignoring unsupported sorting field: '{}'", sortField.field());
+                        log.info("Ignoring unsupported sorting field: '{}'", field);
                     }
                     return isValid;
                 })
