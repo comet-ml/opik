@@ -1,7 +1,10 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.metrics.IngestionSizeGuardMetrics;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
+import jakarta.inject.Provider;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -26,15 +29,20 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 public class RequestSizeLimitFilter implements ContainerRequestFilter {
 
     private final JacksonConfig jacksonConfig;
+    private final IngestionSizeGuardMetrics sizeGuardMetrics;
+    private final Provider<RequestContext> requestContext;
 
     @Inject
-    public RequestSizeLimitFilter(@Config JacksonConfig jacksonConfig) {
+    public RequestSizeLimitFilter(@Config JacksonConfig jacksonConfig,
+            IngestionSizeGuardMetrics sizeGuardMetrics, Provider<RequestContext> requestContext) {
         this.jacksonConfig = jacksonConfig;
+        this.sizeGuardMetrics = sizeGuardMetrics;
+        this.requestContext = requestContext;
     }
 
     @Override
-    public void filter(ContainerRequestContext requestContext) {
-        String contentLengthHeader = requestContext.getHeaderString(HttpHeaders.CONTENT_LENGTH);
+    public void filter(ContainerRequestContext containerRequestContext) {
+        String contentLengthHeader = containerRequestContext.getHeaderString(HttpHeaders.CONTENT_LENGTH);
 
         // No Content-Length (e.g. chunked transfer-encoding): can't check here, let it through.
         // The decompressed body is still bounded by maxDocumentLength during parsing.
@@ -50,12 +58,12 @@ public class RequestSizeLimitFilter implements ContainerRequestFilter {
         try {
             contentLength = Long.parseLong(contentLengthHeader.trim());
         } catch (NumberFormatException e) {
-            abort(requestContext, Response.Status.BAD_REQUEST, "Invalid Content-Length header");
+            abort(containerRequestContext, Response.Status.BAD_REQUEST, "Invalid Content-Length header");
             return;
         }
 
         if (contentLength < 0) {
-            abort(requestContext, Response.Status.BAD_REQUEST, "Invalid Content-Length header");
+            abort(containerRequestContext, Response.Status.BAD_REQUEST, "Invalid Content-Length header");
             return;
         }
 
@@ -63,13 +71,14 @@ public class RequestSizeLimitFilter implements ContainerRequestFilter {
         if (contentLength > maxRequestSizeBytes) {
             log.warn("Rejecting request with Content-Length '{}' bytes exceeding limit '{}' bytes",
                     contentLength, maxRequestSizeBytes);
-            abort(requestContext, Response.Status.REQUEST_ENTITY_TOO_LARGE,
+            sizeGuardMetrics.recordRequestSizeRejection(containerRequestContext.getUriInfo(), requestContext);
+            abort(containerRequestContext, Response.Status.REQUEST_ENTITY_TOO_LARGE,
                     "Request body exceeds the maximum allowed size of %d bytes".formatted(maxRequestSizeBytes));
         }
     }
 
-    private void abort(ContainerRequestContext requestContext, Response.Status status, String message) {
-        requestContext.abortWith(Response.status(status)
+    private void abort(ContainerRequestContext containerRequestContext, Response.Status status, String message) {
+        containerRequestContext.abortWith(Response.status(status)
                 .entity(new ErrorMessage(status.getStatusCode(), message))
                 .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON)
                 .build());

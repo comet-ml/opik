@@ -1,5 +1,8 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.metrics.IngestionSizeGuardMetrics;
+import jakarta.inject.Provider;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
@@ -9,6 +12,7 @@ import org.mockito.ArgumentCaptor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -19,10 +23,15 @@ class RequestSizeLimitFilterTest {
 
     private static final long LIMIT = 50L * 1024 * 1024; // 50MB
 
+    @SuppressWarnings("unchecked")
+    private final Provider<RequestContext> requestContext = mock(Provider.class);
+    private IngestionSizeGuardMetrics sizeGuardMetrics;
+
     private RequestSizeLimitFilter newFilter() {
         JacksonConfig config = new JacksonConfig();
         config.setMaxRequestSizeBytes(LIMIT);
-        return new RequestSizeLimitFilter(config);
+        sizeGuardMetrics = mock(IngestionSizeGuardMetrics.class);
+        return new RequestSizeLimitFilter(config, sizeGuardMetrics, requestContext);
     }
 
     private ContainerRequestContext contextWithContentLength(String value) {
@@ -45,6 +54,7 @@ class RequestSizeLimitFilterTest {
         newFilter().filter(ctx);
 
         assertThat(abortedStatus(ctx)).isEqualTo(Response.Status.REQUEST_ENTITY_TOO_LARGE.getStatusCode());
+        verify(sizeGuardMetrics).recordRequestSizeRejection(any(), eq(requestContext));
     }
 
     @Test
@@ -55,6 +65,7 @@ class RequestSizeLimitFilterTest {
         newFilter().filter(ctx);
 
         verify(ctx, never()).abortWith(any());
+        verify(sizeGuardMetrics, never()).recordRequestSizeRejection(any(), any());
     }
 
     @Test
@@ -65,6 +76,7 @@ class RequestSizeLimitFilterTest {
         newFilter().filter(ctx);
 
         verify(ctx, never()).abortWith(any());
+        verify(sizeGuardMetrics, never()).recordRequestSizeRejection(any(), any());
     }
 
     @Test
@@ -75,25 +87,28 @@ class RequestSizeLimitFilterTest {
         newFilter().filter(ctx);
 
         assertThat(abortedStatus(ctx)).isEqualTo(Response.Status.REQUEST_ENTITY_TOO_LARGE.getStatusCode());
+        verify(sizeGuardMetrics).recordRequestSizeRejection(any(), eq(requestContext));
     }
 
     @Test
-    @DisplayName("malformed Content-Length fails closed with 400")
+    @DisplayName("malformed Content-Length fails closed with 400 and is not counted as a size rejection")
     void malformedContentLength_rejected400() {
         ContainerRequestContext ctx = contextWithContentLength("not-a-number");
 
         newFilter().filter(ctx);
 
         assertThat(abortedStatus(ctx)).isEqualTo(Response.Status.BAD_REQUEST.getStatusCode());
+        verify(sizeGuardMetrics, never()).recordRequestSizeRejection(any(), any());
     }
 
     @Test
-    @DisplayName("negative Content-Length fails closed with 400")
+    @DisplayName("negative Content-Length fails closed with 400 and is not counted as a size rejection")
     void negativeContentLength_rejected400() {
         ContainerRequestContext ctx = contextWithContentLength("-1");
 
         newFilter().filter(ctx);
 
         assertThat(abortedStatus(ctx)).isEqualTo(Response.Status.BAD_REQUEST.getStatusCode());
+        verify(sizeGuardMetrics, never()).recordRequestSizeRejection(any(), any());
     }
 }
