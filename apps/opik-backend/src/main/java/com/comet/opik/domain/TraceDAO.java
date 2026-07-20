@@ -3450,8 +3450,12 @@ class TraceDAOImpl implements TraceDAO {
     @Override
     @WithSpan
     public Mono<Trace> findById(@NonNull UUID id, @NonNull Connection connection) {
+        // A single id can map to more than one emitted Trace when the assembled query fans out
+        // over its join CTEs (e.g. un-merged/duplicated rows). Take the first emission rather than
+        // singleOrEmpty(), which throws IndexOutOfBoundsException ("Source emitted more than one
+        // item") and surfaces as a 500 on GET by id. next() preserves the empty case (-> 404).
         return findByIds(List.of(id), connection)
-                .singleOrEmpty();
+                .next();
     }
 
     @Override
