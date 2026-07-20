@@ -82,15 +82,29 @@ public class OpenTelemetryMappingUtils {
         }
     }
 
-    // Prefix rules strip the prefix and return the suffix (without leading dot).
-    // May return an empty suffix, in which case the value should be merged into the object.
-    // Exact rules keep the full key.
-    public static String storageKey(OpenTelemetryMappingRule rule, String key) {
+    /**
+     * Computes the storage key for an attribute under a mapping rule.
+     * <p>
+     * For exact-match rules the original key is returned unchanged. For prefix rules the
+     * prefix is stripped and any leading dot on the suffix is removed. The suffix may be
+     * empty, in which case the caller should typically merge the value into the enclosing object.
+     * If a prefix rule does not actually match the key (key shorter than the prefix, or the
+     * stripped suffix does not start with a dot when the prefix lacks one), the original
+     * key is returned unchanged.
+     *
+     * @param rule the mapping rule to apply; must not be {@code null}
+     * @param key the attribute key to transform; must not be {@code null}
+     * @return the storage key to use, never {@code null}
+     */
+    public static String storageKey(@NonNull OpenTelemetryMappingRule rule, @NonNull String key) {
         if (!rule.isPrefix()) {
             return key;
         }
 
         String prefix = rule.getRule();
+        if (key.length() < prefix.length()) {
+            return key;
+        }
         String suffix = key.substring(prefix.length());
 
         // Strip when suffix is empty, suffix starts with '.', or the rule itself ends with '.' (e.g. "gen_ai.input.").

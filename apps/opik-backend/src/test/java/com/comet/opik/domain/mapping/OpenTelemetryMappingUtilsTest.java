@@ -407,6 +407,8 @@ public class OpenTelemetryMappingUtilsTest {
                         "opik.metadata.a.b.c", "a.b.c"),
                 Arguments.of("opik.metadata prefix, bare overlap kept", prefixOpikMetadata,
                         "opik.metadata.integration", "integration"),
+                Arguments.of("opik.metadata prefix, key shorter than prefix kept", prefixOpikMetadata,
+                        "opik.meta", "opik.meta"),
                 Arguments.of("exact rule, full key kept", exactPrompt, "gen_ai.prompt", "gen_ai.prompt"));
     }
 
