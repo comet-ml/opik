@@ -19,19 +19,20 @@ and output of your LLM, but also images, videos and audio and any other media.
 To keep ingestion fast and reliable, Opik enforces size limits on **inline** content - what you put
 directly in a span/trace `input`, `output`, or `metadata`:
 
-- **Per field (~20 MB):** keep inline, non-media `input`/`output` content under ~20 MB. Recent Opik
-  SDK versions truncate a larger `input`/`output` client-side before sending (replacing it with a
-  truncation marker and logging a warning), so individual spans stay within the limit. `metadata` is
-  **not** truncated - keep it small too, since it still counts toward the per-request limit below.
+- **Per field (~20 MB):** keep each inline, non-media `input`/`output` field under ~20 MB - the same
+  cap also applies to `input` and `output` combined. Recent Opik SDK versions truncate an oversized
+  `input`/`output` client-side before sending (replacing it with a truncation marker and logging a
+  warning), so individual spans and traces stay within the limit. `metadata` is **not** truncated -
+  keep it small too, since it still counts toward the per-request limit below.
 - **Per request:** a single ingestion batch is capped at roughly **~50 MB compressed** and
   **~256 MB uncompressed**; larger requests are rejected (`413`, or `400` for an oversized single
   document).
 
-**Base64 media is handled separately and is not bound by the two limits above.** When you embed
-base64-encoded media in a field, the SDK automatically extracts anything larger than ~250 KB and
-uploads it as an attachment - a separate upload, not part of the JSON ingestion request - so a
-single embedded media value can be up to **100 MB**. See [Embedded base64 size
-limits](#embedded-base64-size-limits) below.
+**Base64-encoded content is handled separately and is not bound by the two limits above.** When you
+embed a large base64 blob in a field - images, audio, video, PDFs, and other recognized formats such
+as JSON - the SDK automatically extracts anything larger than ~250 KB and uploads it as an attachment
+- a separate upload, not part of the JSON ingestion request - so a single embedded value can be up to
+**100 MB**. See [Embedded base64 size limits](#embedded-base64-size-limits) below.
 
 Attachments are the recommended way to keep large content without hitting these limits: instead of
 embedding a large payload inline in `input`/`output`, log it as an attachment (below). The full
