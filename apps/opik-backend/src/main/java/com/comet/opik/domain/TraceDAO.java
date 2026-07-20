@@ -3451,11 +3451,18 @@ class TraceDAOImpl implements TraceDAO {
     @WithSpan
     public Mono<Trace> findById(@NonNull UUID id, @NonNull Connection connection) {
         // A single id can map to more than one emitted Trace when the assembled query fans out
-        // over its join CTEs (e.g. un-merged/duplicated rows). Take the first emission rather than
+        // over its join CTEs (e.g. un-merged/duplicated rows). Take the first row rather than
         // singleOrEmpty(), which throws IndexOutOfBoundsException ("Source emitted more than one
-        // item") and surfaces as a 500 on GET by id. next() preserves the empty case (-> 404).
+        // item") and surfaces as a 500 on GET by id. The empty case is preserved (-> 404).
+        // Log when it happens so the underlying duplication/fan-out stays visible.
         return findByIds(List.of(id), connection)
-                .next();
+                .collectList()
+                .flatMap(traces -> {
+                    if (traces.size() > 1) {
+                        log.warn("Trace id '{}' resolved to '{}' rows; returning the first", id, traces.size());
+                    }
+                    return traces.isEmpty() ? Mono.empty() : Mono.just(traces.get(0));
+                });
     }
 
     @Override
