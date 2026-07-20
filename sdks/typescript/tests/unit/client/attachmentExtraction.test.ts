@@ -22,6 +22,14 @@ const b64 = (signature: number[], bytes: number) => {
   return buf.toString("base64");
 };
 const bigPng = () => b64(PNG, 400); // ~536 base64 chars, well over the threshold
+// A JPEG needs the FFD9 EOI end marker to be detected (parity with the Python SDK).
+const bigJpeg = (bytes = 400) => {
+  const buf = Buffer.alloc(bytes);
+  JPEG.forEach((byte, i) => (buf[i] = byte));
+  buf[bytes - 2] = 0xff;
+  buf[bytes - 1] = 0xd9;
+  return buf.toString("base64");
+};
 const dataUri = (mime: string, base64: string) =>
   `data:${mime};base64,${base64}`;
 
@@ -82,7 +90,7 @@ describe("extractInlineAttachments", () => {
   });
 
   it("extracts from metadata as well", () => {
-    const span = { metadata: { img: dataUri("image/jpeg", b64(JPEG, 400)) } };
+    const span = { metadata: { img: dataUri("image/jpeg", bigJpeg(400)) } };
 
     const { result, attachments } = extractInlineAttachments(span, MIN);
 
@@ -158,9 +166,17 @@ describe("detectMimeType", () => {
 
   it("recognizes common image and document types", () => {
     expect(detectMimeType(withSig(PNG))).toBe("image/png");
-    expect(detectMimeType(withSig(JPEG))).toBe("image/jpeg");
     expect(detectMimeType(withSig(GIF89A))).toBe("image/gif");
     expect(detectMimeType(withSig(PDF))).toBe("application/pdf");
+    // JPEG requires the FFD9 EOI end marker (parity with the Python SDK).
+    const jpeg = withSig(JPEG);
+    jpeg[jpeg.length - 2] = 0xff;
+    jpeg[jpeg.length - 1] = 0xd9;
+    expect(detectMimeType(jpeg)).toBe("image/jpeg");
+  });
+
+  it("does not treat a header-only JPEG (no FFD9 end marker) as an image", () => {
+    expect(detectMimeType(withSig(JPEG))).toBeNull(); // SOI only -> not a complete JPEG
   });
 
   it("recognizes WEBP via the RIFF container", () => {

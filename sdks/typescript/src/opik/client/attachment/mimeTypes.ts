@@ -31,7 +31,17 @@ const FTYP = [0x66, 0x74, 0x79, 0x70]; // "ftyp" box, appears at byte offset 4 i
 
 export const detectMimeType = (bytes: Buffer): string | null => {
   if (startsWith(bytes, PNG)) return "image/png";
-  if (startsWith(bytes, JPEG)) return "image/jpeg";
+  // JPEG (parity with the Python SDK): the SOI header alone isn't enough — a complete JPEG
+  // ends with the EOI marker (FFD9). A header-only/truncated blob falls through to the other
+  // checks so random data that merely starts with FFD8FF isn't misclassified as an image.
+  if (
+    startsWith(bytes, JPEG) &&
+    bytes.length >= 2 &&
+    bytes[bytes.length - 2] === 0xff &&
+    bytes[bytes.length - 1] === 0xd9
+  ) {
+    return "image/jpeg";
+  }
   if (startsWith(bytes, GIF87A) || startsWith(bytes, GIF89A))
     return "image/gif";
   if (startsWith(bytes, RIFF) && startsWith(bytes, WEBP, 8))
