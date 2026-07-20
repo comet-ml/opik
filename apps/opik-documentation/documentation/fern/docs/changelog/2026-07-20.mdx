@@ -1,0 +1,57 @@
+---
+canonical-url: https://www.comet.com/docs/opik/changelog/2026-07-20
+---
+
+## Redesigned Optimization Run Overview
+
+The single-run page in Optimization Studio has been rebuilt end to end. The header now shows the run's dataset, model, algorithm, and metric as pills (hover the metric pill for its full config), and the KPI cards show the current value, a trend badge, and a baseline → best line, with the duration now measured to actual run completion rather than the last trial's timestamp. The trials progress chart highlights the best trial by default and labels discarded trials clearly instead of the previous "pruned" terminology.
+
+A new **Best trial prompt** panel shows an inline diff of the winning prompt against the baseline, and trial details now open in a right-side panel (Results / Prompt tabs) instead of navigating to a separate page.
+
+## Stuck Optimization Runs Now Recover, and Failures Are Explained
+
+Previously, an optimization run whose worker crashed or lost contact could sit in "Initializing" or "Running" forever with no indication anything was wrong. A background job now detects runs stuck for too long (5 minutes with no worker pickup, or 8 hours still running) and marks them as failed with a system-generated reason written to the run's logs.
+
+Separately, the worker now classifies real failures — auth errors, rate limits, misconfigured datasets/metrics, out-of-memory kills, and more — into a specific, readable message instead of leaving the run to fail silently. Runs that complete but produce no usable scores now show an explicit "No usable scores" warning, including how many items failed to score when that information is available.
+
+## Bug Fixes & Improvements
+
+- **Workspace switcher now matches the projects menu** — The workspace dropdown now groups workspaces into Pinned and Recently visited sections with per-row pin/unpin controls, instead of a single flat list, matching the pattern already used for the projects menu.
+
+- **Mobile web onboarding** — Opening Opik on a phone now shows a short guided walkthrough (what a trace is, how issues get flagged, how to connect your first integration) instead of the desktop quickstart, with an option to email yourself setup instructions.
+
+- **Workspace home now always opens on Projects** — Navigating to a workspace's home URL now consistently lands on the Projects tab, instead of sometimes reopening whichever project you last viewed.
+
+- **Metadata filter dropdown no longer overlaps rows** — Long metadata keys that wrapped onto multiple lines in the filter panel's autocomplete dropdown could visually overlap the option below them; rows now grow to fit the wrapped text.
+
+- **GPT-5.6 models now behave as reasoning models** — `gpt-5.6-luna`, `gpt-5.6-sol`, and `gpt-5.6-terra` were missing from the reasoning-model list, so the Playground and online scoring still tried to send `temperature`, which these models reject. They now show the reasoning-effort selector (including a new **Max** option) instead of temperature/Top P, consistent with other reasoning models.
+
+- **Perplexity model costs now load correctly** — Perplexity was missing from the provider list used to load pricing data, so calls through Perplexity (including the `sonar` model family) were costed at $0. Pricing now loads correctly.
+
+- **Clearer errors from Python-based LLM-as-judge scoring** — A metric evaluation that hit an empty or malformed response from the scoring service previously failed with an opaque server error; it now surfaces the actual underlying error message.
+
+- **Tool-call spans from OpenTelemetry now typed correctly** — Spans carrying the OTel `gen_ai.tool.call.arguments` / `gen_ai.tool.call.result` attributes are now classified as **tool** spans in the UI, matching spans tracked directly through the SDK.
+
+- **Fixed intermittent 500s retrieving threads and experiment project lists** — Two endpoints (thread lookup, and listing the projects an experiment spans) could return an unmapped server error when the underlying query legitimately returned more than one row for the same logical entity. Both now handle this correctly.
+
+- **More accurate error codes from LLM providers** — Errors from OpenAI-compatible providers (including calls routed through OpenRouter) were sometimes parsed with the wrong error model, which could turn a rate-limit error into a generic server error. The correct error model is now selected based on the error's shape, so the real status code is surfaced.
+
+- **LangChain integration: cost capture through proxies, and provider override** — `OpikTracer` accepts a new `provider` argument to override provider auto-detection, useful when routing `ChatOpenAI` through a proxy such as LiteLLM. When the proxy reports its own cost via the `x-litellm-response-cost` response header (with `include_response_headers=True` on `ChatOpenAI`), Opik now uses that cost instead of estimating $0.
+
+- **`opik migrate` no longer risks OOM on partially-stale projects** — When a migrated experiment referenced only deleted or timestamp-less traces, the CLI fell back to an unbounded read of the entire project's spans. It now skips the unrecoverable span data for that batch (with a warning) and continues the migration instead of risking an out-of-memory crash.
+
+- **SDK tolerates new OpenAI usage fields and avoids a broken LiteLLM release** — The SDK no longer breaks when OpenAI adds new fields to its usage payload, and the LiteLLM dependency now excludes the `1.92.*` release line, which crashed on import without optional proxy dependencies installed.
+
+- **Dataset and test suite creation logs point to the right project** — The URL logged by the SDK after creating a dataset or test suite now links directly to that resource inside its actual project, instead of a generic link that could resolve to the wrong project.
+
+## Performance Improvements
+
+- **Self-hosted: ClickHouse upgraded to 26.3 LTS** — The bundled ClickHouse instance (Helm chart, docker-compose, and testcontainers) is now pinned to 26.3 LTS. No manual data migration is required, though major-version upgrades may take longer to complete.
+
+- **Self-hosted: ingestion load spreads more evenly across backend pods** — The frontend nginx proxy now recycles its keepalive connections to the backend on a schedule, instead of holding them open indefinitely. On Kubernetes deployments this prevents a small number of backend pods from absorbing a disproportionate share of ingestion traffic while others sit idle.
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.1.15...2.2.0)
+
+_Releases_: `2.1.25`, `2.1.26`, `2.1.27`, `2.1.28`, `2.1.29`, `2.1.30`, `2.1.31`, `2.1.32`, `2.2.0`
