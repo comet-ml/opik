@@ -30,6 +30,12 @@ public abstract class SortingFactory {
             throw new BadRequestException(ERR_INVALID_SORTING_PARAM_TEMPLATE.formatted(queryParam), exception);
         }
 
+        // Drop entries with a null/blank field before any per-field processing. Subclass
+        // processFields hooks (e.g. SortingFactoryDatasets.ensureBindKeyParam) and the validity
+        // check dereference the field, and immutable getSortableFields().contains(null) /
+        // field.startsWith(...) both throw NPE on a null field.
+        sorting = sorting.stream().filter(field -> StringUtils.isNotBlank(field.field())).toList();
+
         // Hook for subclasses to process fields after deserialization
         sorting = processFields(sorting);
 
@@ -70,16 +76,12 @@ public abstract class SortingFactory {
             sorting = List.of(sorting.get(0));
         }
 
-        // Filter out unsupported fields. A null/blank field is treated as unsupported and ignored
-        // (rather than dereferenced): getSortableFields() is an immutable List, whose contains(null)
-        // throws NPE, and isDynamicFieldSupported dereferences the field too.
+        // Filter out unsupported fields
         List<SortingField> validFields = sorting.stream()
                 .filter(sortField -> {
-                    String field = sortField.field();
-                    boolean isValid = StringUtils.isNotBlank(field)
-                            && (isFieldSupported(field) || isDynamicFieldSupported(field));
+                    boolean isValid = isFieldSupported(sortField.field()) || isDynamicFieldSupported(sortField.field());
                     if (!isValid) {
-                        log.info("Ignoring unsupported sorting field: '{}'", field);
+                        log.info("Ignoring unsupported sorting field: '{}'", sortField.field());
                     }
                     return isValid;
                 })

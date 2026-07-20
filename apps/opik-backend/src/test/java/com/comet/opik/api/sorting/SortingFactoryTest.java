@@ -43,4 +43,22 @@ class SortingFactoryTest {
         assertThat(result.get(0).field()).isEqualTo("name");
         assertThat(result.get(0).direction()).isEqualTo(Direction.DESC);
     }
+
+    @Test
+    void newSorting__whenAnEntryHasNullField__keepsTheValidEntry() {
+        var result = factory.newSorting("[{\"field\":\"name\",\"direction\":\"ASC\"},{\"direction\":\"DESC\"}]");
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).field()).isEqualTo("name");
+    }
+
+    @Test
+    void newSorting__whenNullFieldOnDatasetsFactory__ignoresItWithoutThrowing() {
+        // Regression: the null field reaches SortingFactoryDatasets.processFields -> ensureBindKeyParam,
+        // which called field.startsWith(...) and NPE'd before the validity filter ran.
+        var datasetsFactory = new SortingFactoryDatasets();
+
+        assertThatCode(() -> datasetsFactory.newSorting("[{\"direction\":\"DESC\"}]")).doesNotThrowAnyException();
+        assertThat(datasetsFactory.newSorting("[{\"direction\":\"DESC\"}]")).isEmpty();
+    }
 }
