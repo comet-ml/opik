@@ -6,14 +6,8 @@ import { DEFAULT_CONFIG } from "@/config/Config";
 import {
   extractAndUploadAttachments,
   type AttachmentUploadConfig,
+  type AttachmentPayload,
 } from "./attachment";
-
-type AttachmentPayload = {
-  input?: unknown;
-  output?: unknown;
-  metadata?: unknown;
-  projectName?: string;
-};
 
 export class TraceBatchQueue extends BatchQueue<SavedTrace> {
   constructor(

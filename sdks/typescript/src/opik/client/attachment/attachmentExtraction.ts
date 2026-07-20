@@ -29,7 +29,7 @@ import { detectMimeType, fileExtensionForMimeType } from "./mimeTypes";
 const FIELDS = ["input", "output", "metadata"] as const;
 type Field = (typeof FIELDS)[number];
 
-type AttachmentSource = {
+export type AttachmentSource = {
   input?: unknown;
   output?: unknown;
   metadata?: unknown;

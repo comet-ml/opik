@@ -25,8 +25,11 @@ export interface OpikConfig {
   // upload them as attachments before send, so they don't count toward the size cap
   // (parity with the Python SDK). Default true.
   isAttachmentExtractionActive?: boolean;
-  // Minimum size (bytes) of an inline base64 blob before it is extracted as an attachment.
-  // Smaller blobs are left inline. Default 256000 (~250 KB).
+  // Minimum length of an inline base64 blob (in encoded characters/bytes) before it is extracted
+  // as an attachment; smaller blobs are left inline. This gates on the *encoded* string length, so
+  // the decoded blob is ~3/4 of it (the 256000 default extracts blobs ~192 KB+ decoded). Gating on
+  // the encoded length matches the Python SDK and avoids decoding every candidate just to size it.
+  // Default 256000.
   minBase64EmbeddedAttachmentSize?: number;
 }
 

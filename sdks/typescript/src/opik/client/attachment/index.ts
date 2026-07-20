@@ -1,19 +1,21 @@
 import { logger } from "@/utils/logger";
 import type { OpikApiClientTemp } from "@/client/OpikApiClientTemp";
-import { extractInlineAttachments } from "./attachmentExtraction";
+import {
+  extractInlineAttachments,
+  type AttachmentSource,
+} from "./attachmentExtraction";
 import {
   uploadInlineAttachment,
   type AttachmentUploadConfig,
   type AttachmentUploadTarget,
 } from "./attachmentUpload";
 
-export type { AttachmentUploadConfig, AttachmentUploadTarget };
+export type { AttachmentUploadConfig, AttachmentUploadTarget, AttachmentSource };
 
-type AttachmentSource = {
-  input?: unknown;
-  output?: unknown;
-  metadata?: unknown;
-};
+// A span/trace payload as the batch queues see it: the extractable fields plus the project name
+// used to target the uploaded attachment. Shared so SpanBatchQueue/TraceBatchQueue don't each
+// redeclare it.
+export type AttachmentPayload = AttachmentSource & { projectName?: string };
 
 /**
  * Extract inline base64 blobs from a span/trace payload, upload them as attachments, and

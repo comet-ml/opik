@@ -119,7 +119,7 @@ describe("Opik client config", () => {
     expect(opik.config.projectName).toBe("test");
   });
 
-  it("should being able to override config values from the environment variables + explicit config", async () => {
+  it("should be able to override config values from the environment variables + explicit config", async () => {
     process.env.OPIK_CONFIG_PATH = path.resolve(
       __dirname,
       "./examples/partial-opik-config.ini",

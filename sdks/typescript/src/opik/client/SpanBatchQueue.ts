@@ -6,15 +6,10 @@ import { DEFAULT_CONFIG } from "@/config/Config";
 import {
   extractAndUploadAttachments,
   type AttachmentUploadConfig,
+  type AttachmentPayload,
 } from "./attachment";
 
 type SpanUpdate = Partial<SavedSpan> & { traceId: string };
-type AttachmentPayload = {
-  input?: unknown;
-  output?: unknown;
-  metadata?: unknown;
-  projectName?: string;
-};
 
 export class SpanBatchQueue extends BatchQueue<SavedSpan> {
   constructor(

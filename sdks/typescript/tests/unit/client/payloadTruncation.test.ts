@@ -108,16 +108,19 @@ describe("truncatePayloadFields", () => {
     expect(span.output).toBe(bigOutput); // original untouched (non-mutating)
   });
 
-  it("is fail-safe: a non-serializable field does not throw and is left untouched", () => {
+  it("force-truncates a non-serializable (circular) field so the send can't throw on it", () => {
     const circular: Record<string, unknown> = {};
     circular.self = circular; // JSON.stringify would throw on this
-    const span = { id: "s1", output: circular };
+    const span = { id: "s1", output: circular, input: { ok: true } };
 
     expect(() => truncatePayloadFields(span, LIMIT_MB)).not.toThrow();
 
     const { result, truncated } = truncatePayloadFields(span, LIMIT_MB);
-    expect(truncated).toEqual([]); // can't measure -> not truncated
-    expect(result).toBe(span);
+    // Unserializable here == unsendable on the wire, so it's replaced with a marker (fail-safe)
+    // rather than left in place to crash create/update later.
+    expect(truncated).toEqual(["output"]);
+    expect(asMarker(result.output).opik_truncated).toBe(true);
+    expect(result.input).toEqual({ ok: true }); // serializable sibling kept
   });
 
   it("treats a field too large to serialize (RangeError) as oversized and truncates it", () => {

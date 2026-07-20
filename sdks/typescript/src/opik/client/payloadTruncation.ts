@@ -45,21 +45,21 @@ const truncationMarker = (sizeMb: number): TruncationMarker => ({
   reason: `<omitted_due_to_size_${Math.round(sizeMb)}MB_error_code_413_400>`,
 });
 
-// V8 caps a single string at ~512 MiB; JSON.stringify throws RangeError when its output would
-// exceed that. Such a field is at least this large, so we report this lower bound (rather than
-// 0) to force truncation of the very multi-GB payloads this guard exists to catch.
+// Reported as the size for ANY value we can't serialize here: a RangeError (a string over V8's
+// ~512 MiB cap) or a TypeError (a circular reference, BigInt, ...). If JSON.stringify fails here it
+// will fail on the wire too, so forcing truncation degrades the field to a marker and keeps
+// span/trace creation from throwing downstream on an unsendable payload - truncation must never
+// break creation, and leaving the value in place (size 0) would only defer the crash to send time.
 const MAX_SERIALIZABLE_MB = 512;
 
-// Serialized size of a value in MB - what it would weigh on the wire. A RangeError means the
-// value is too large to serialize (see above) and must be truncated. Any other failure
-// (circular reference, BigInt, ...) is genuinely unmeasurable, so return 0 and leave it
-// untouched. Truncation must never throw and break span/trace creation.
+// Serialized size of a value in MB - what it would weigh on the wire (0 if it serializes to
+// nothing). Any serialization failure is treated as oversized (see MAX_SERIALIZABLE_MB).
 const fieldSizeMb = (value: unknown): number => {
   try {
     const json = JSON.stringify(value);
     return json ? Buffer.byteLength(json, "utf8") / BYTES_PER_MB : 0;
-  } catch (error) {
-    return error instanceof RangeError ? MAX_SERIALIZABLE_MB : 0;
+  } catch {
+    return MAX_SERIALIZABLE_MB;
   }
 };
 
