@@ -684,6 +684,10 @@ altinity-clickhouse-operator:
 clickhouse:
   enabled: true
   shardsCount: 1
+  # For a FRESH High-Availability install, use the two-phase flow: install with replicasCount 1, let
+  # opik-backend finish all migrations, THEN raise replicasCount and upgrade so the ClickHouse operator
+  # clones the schema to the new replicas. Installing directly on >= 2 replicas prevents the analytics
+  # migrations from completing on a fresh cluster. See the self-host/scaling docs.
   replicasCount: 1
   image: altinity/clickhouse-server:26.3.16.10001.altinitystable
   storage: 50Gi
