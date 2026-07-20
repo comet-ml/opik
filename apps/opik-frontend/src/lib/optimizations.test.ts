@@ -719,6 +719,24 @@ class AMetric(BaseMetric):
     expect(extractMetricNameFromPythonCode(code)).toEqual("a_name");
   });
 
+  it("resolves an indirect (transitive) BaseMetric subclass", () => {
+    // AMetric subclasses BaseMetric only via ZBase; it is alphabetically first,
+    // so it is the class the backend instantiates. The extractor must follow the
+    // chain and read AMetric's name (not defer / miss it).
+    const code = `
+class ZBase(BaseMetric):
+    def __init__(self, name="zbase"):
+        super().__init__(name=name)
+
+class AMetric(ZBase):
+    def __init__(self):
+        super().__init__(name="ametric")
+    def score(self, output, reference):
+        return 1.0
+`;
+    expect(extractMetricNameFromPythonCode(code)).toEqual("ametric");
+  });
+
   it("recognizes a BaseMetric import alias as the metric base", () => {
     const code = `
 from opik.evaluation.metrics import BaseMetric as BM

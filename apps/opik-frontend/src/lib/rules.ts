@@ -120,12 +120,22 @@ interface MetricClassBody {
   aliases: Set<string>;
 }
 
+interface ClassDecl {
+  name: string;
+  indent: string;
+  bodyStart: number;
+  bases: string[];
+}
+
 /**
- * The `BaseMetric` subclass the backend would instantiate: among classes whose
- * declared bases include `BaseMetric` (or an alias), the alphabetically-first by
- * name — mirroring `_find_basemetric_classdef` / `get_metric_class` (which pick
- * `min` by name / the name-sorted `inspect.getmembers`). Returns that class's
- * body text (without the header), or null when no such class is found.
+ * The `BaseMetric` subclass the backend would instantiate: among classes DEFINED
+ * in the file that subclass `BaseMetric` (or an alias) — directly OR transitively
+ * via another class defined here — the alphabetically-first by name. Mirrors
+ * `_find_basemetric_classdef` / `get_metric_class` (which pick `min` by name /
+ * the name-sorted, defined-only `inspect.getmembers`). Returns that class's body
+ * text (without the header), or null when no such class is found (e.g. the only
+ * BaseMetric link is through an imported base — not statically resolvable; the
+ * backend defers on this too).
  */
 const findMetricClassBody = (source: string): MetricClassBody | null => {
   const aliases = collectBaseMetricAliases(source);
@@ -133,27 +143,41 @@ const findMetricClassBody = (source: string): MetricClassBody | null => {
   // `class MyMetric[T](BaseMetric):`.
   const classRegex =
     /^([ \t]*)class\s+(\w+)\s*(?:\[[^\]]*\])?\s*(?:\(([^)]*)\))?\s*:/gm;
-  const candidates: {
-    name: string;
-    indent: string;
-    bodyStart: number;
-    bases: string[];
-  }[] = [];
+  const classes: ClassDecl[] = [];
   let match: RegExpExecArray | null;
   while ((match = classRegex.exec(source)) !== null) {
     const bases = (match[3] ?? "")
       .split(",")
       .map((base) => base.trim().split(".").pop()?.replace(/\[.*$/, "").trim())
       .filter((base): base is string => Boolean(base));
-    if (bases.some((base) => aliases.has(base))) {
-      candidates.push({
-        name: match[2],
-        indent: match[1],
-        bodyStart: match.index + match[0].length,
-        bases,
-      });
+    classes.push({
+      name: match[2],
+      indent: match[1],
+      bodyStart: match.index + match[0].length,
+      bases,
+    });
+  }
+
+  // Seed with classes that DIRECTLY subclass a BaseMetric alias, then
+  // transitively add any class subclassing an already-known metric class
+  // defined in the file (mirrors runtime issubclass following the chain).
+  const metricNames = new Set(
+    classes
+      .filter((c) => c.bases.some((b) => aliases.has(b)))
+      .map((c) => c.name),
+  );
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const c of classes) {
+      if (!metricNames.has(c.name) && c.bases.some((b) => metricNames.has(b))) {
+        metricNames.add(c.name);
+        changed = true;
+      }
     }
   }
+
+  const candidates = classes.filter((c) => metricNames.has(c.name));
   if (candidates.length === 0) return null;
 
   // Alphabetically-first by class name (Python `min` on names, code-point order).
