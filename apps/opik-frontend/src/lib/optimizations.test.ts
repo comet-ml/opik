@@ -741,6 +741,26 @@ class MyMetric(metrics.BaseMetric):
     expect(extractMetricNameFromPythonCode(code)).toEqual("dotted");
   });
 
+  it("extracts the name when a nested call precedes the name kwarg", () => {
+    // The full (balanced) constructor arg list must be scanned — a nested call
+    // like make_cfg() must not truncate extraction at its inner `)`.
+    const code = `
+class MyMetric(BaseMetric):
+    def __init__(self):
+        super().__init__(config=make_cfg(), name="foo")
+`;
+    expect(extractMetricNameFromPythonCode(code)).toEqual("foo");
+  });
+
+  it("extracts the name from a base constructor with a nested call and trailing args", () => {
+    const code = `
+class MyMetric(BaseMetric):
+    def __init__(self):
+        super().__init__(name="bar", threshold=default_threshold(0.5))
+`;
+    expect(extractMetricNameFromPythonCode(code)).toEqual("bar");
+  });
+
   it("returns null when no BaseMetric subclass can be identified", () => {
     // Indirect subclassing isn't statically resolvable; the backend rejects it
     // too, so we defer rather than guess a wrong name.

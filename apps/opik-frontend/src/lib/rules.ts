@@ -203,6 +203,33 @@ const parenDelta = (line: string): number => {
 };
 
 /**
+ * Given `text` and an index just after an opening `(`, returns the substring up
+ * to the matching close paren, respecting nested parens and string literals.
+ * Used to capture a constructor's FULL argument list so a nested call (e.g.
+ * `super().__init__(config=make_cfg(), name="foo")`) doesn't truncate at the
+ * first `)` the way a `[^)]*` regex would.
+ */
+const balancedArgs = (text: string, start: number): string => {
+  let depth = 1;
+  let quote: string | null = null;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (quote !== null) {
+      if (ch === "\\") i += 1;
+      else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") quote = ch;
+    else if (ch === "(") depth += 1;
+    else if (ch === ")") {
+      depth -= 1;
+      if (depth === 0) return text.slice(start, i);
+    }
+  }
+  return text.slice(start);
+};
+
+/**
  * The class's own top-level `def __init__` block (header + body), or null.
  * Scoping name extraction to it keeps `super().__init__(name=...)` matches in
  * helper methods or nested classes from being mistaken for the metric identity.
@@ -258,8 +285,7 @@ const findTopLevelInitBlock = (cls: MetricClassBody): string | null => {
 const extractNameFromClassBody = (cls: MetricClassBody): string | null => {
   const init = findTopLevelInitBlock(cls);
   if (init !== null) {
-    const ctorRegex =
-      /(?:\bsuper\s*\(\s*\)|\b([\w.]+))\s*\.\s*__init__\s*\(([^)]*)/g;
+    const ctorRegex = /(?:\bsuper\s*\(\s*\)|\b([\w.]+))\s*\.\s*__init__\s*\(/g;
     let ctor: RegExpExecArray | null;
     while ((ctor = ctorRegex.exec(init)) !== null) {
       const target = ctor[1]?.split(".").pop();
@@ -267,7 +293,11 @@ const extractNameFromClassBody = (cls: MetricClassBody): string | null => {
       if (target && !cls.bases.includes(target) && !cls.aliases.has(target)) {
         continue;
       }
-      const name = ctor[2].match(/\bname\s*=\s*["']([^"']+)["']/);
+      // Capture the FULL (balanced) argument list so a nested call before the
+      // name kwarg — e.g. `super().__init__(config=make_cfg(), name="foo")` —
+      // doesn't get truncated at the first `)`.
+      const args = balancedArgs(init, ctorRegex.lastIndex);
+      const name = args.match(/\bname\s*=\s*["']([^"']+)["']/);
       if (name) return name[1];
     }
 
