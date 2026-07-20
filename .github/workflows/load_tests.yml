@@ -33,7 +33,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: astral-sh/setup-uv@v8.3.2
         with:
           python-version: "3.12"
 
@@ -57,12 +57,12 @@ jobs:
       - name: Install Opik SDK
         run: |
           cd ${{ github.workspace }}/sdks/python
-          pip install .
+          uv pip install --system .
 
       - name: Install Python SDK load-test requirements
         run: |
           cd ${{ github.workspace }}/tests_load/suite/python_sdk
-          pip install -r requirements.txt
+          uv pip install --system -r requirements.txt
 
       - name: Run Python SDK load tests
         # -n 2 + --dist=worksteal runs two scenarios in parallel at a time.

@@ -27,12 +27,12 @@ jobs:
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: astral-sh/setup-uv@v8.3.2
         with:
           python-version: '3.12'
 
       - name: Install dependencies
-        run: pip install requests
+        run: uv pip install --system requests
 
       - name: Set branch name
         run: |
