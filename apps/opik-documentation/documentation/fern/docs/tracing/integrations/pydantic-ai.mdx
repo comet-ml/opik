@@ -16,6 +16,9 @@ build production grade applications with Generative AI.
 Pydantic AI's primary advantage is its integration of Pydantic's type-safe data
 validation, ensuring structured and reliable responses in AI applications.
 
+Opik integrates natively with Pydantic AI to log a trace for every `agent.run`,
+with nested spans for each model call and tool call — no logfire required.
+
 ## Account Setup
 
 [Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=pydantic-ai&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=pydantic-ai&utm_campaign=opik) and grab your API Key.
@@ -26,16 +29,25 @@ validation, ensuring structured and reliable responses in AI applications.
 
 ### Installation
 
-To use the Pydantic AI integration with Opik, you will need to have Pydantic AI
-and logfire installed:
+To use the Pydantic AI integration with Opik, you will need to have `opik` and
+`pydantic-ai` installed:
 
 ```bash
-pip install --upgrade pydantic-ai logfire 'logfire[httpx]'
+pip install --upgrade opik pydantic-ai
 ```
+
+### Configuring Opik
+
+Configure the Opik Python SDK for your deployment type. See the [Python SDK Configuration guide](/tracing/advanced/sdk_configuration) for detailed instructions on:
+
+- **CLI configuration**: `opik configure`
+- **Code configuration**: `opik.configure()`
+- **Self-hosted vs Cloud vs Enterprise** setup
+- **Configuration files** and environment variables
 
 ### Configuring Pydantic AI
 
-In order to use Pydantic AI, you will need to configure your LLM provider API keys. For this example, we'll use OpenAI. You can [find or create your API keys in these pages](https://platform.openai.com/settings/organization/api-keys):
+In order to use Pydantic AI, you will need to configure your LLM provider API keys. For this example, we'll use OpenAI.
 
 You can set them as environment variables:
 
@@ -53,89 +65,14 @@ if "OPENAI_API_KEY" not in os.environ:
     os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")
 ```
 
-### Configuring OpenTelemetry
+## Logging Pydantic AI calls
 
-You will need to set the following environment variables to make
-sure the data is logged to Opik:
-
-<Tabs>
-    <Tab value="Opik Cloud" title="Opik Cloud">
-        If you are using Opik Cloud, you will need to set the following environment
-        variables:
-            
-        ```bash
-        export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
-        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
-        export OTEL_METRICS_EXPORTER=none
-        ```
-
-        <Tip>
-            To log the traces to a specific project, you can add the `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS` environment variable:
-
-            ```bash
-            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
-            ```
-
-            You can also update the `Comet-Workspace` parameter to a different value if you would like to log the data
-            to a different workspace.
-        </Tip>
-    </Tab>
-    <Tab value="Enterprise deployment" title="Enterprise deployment">
-        If you are using an Enterprise deployment of Opik, you will need to set the following
-        environment variables:
-
-        ```bash wordWrap
-        export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
-        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
-        export OTEL_METRICS_EXPORTER=none
-        ```
-
-        <Tip>
-            To log the traces to a specific project, you can add the
-            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
-            environment variable:
-
-            ```bash wordWrap
-            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
-            ```
-
-            You can also update the `Comet-Workspace` parameter to a different
-            value if you would like to log the data to a different workspace.
-        </Tip>
-    </Tab>
-    <Tab value="Self-hosted instance" title="Self-hosted instance">
-
-    If you are self-hosting Opik, you will need to set the following environment variables:
-
-    ```bash
-    export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
-    export OTEL_METRICS_EXPORTER=none
-    ```
-
-    <Tip>
-        To log the traces to a specific project, you can add the `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS` environment variable:
-
-        ```bash
-        export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
-        ```
-
-    </Tip>
-    </Tab>
-
-</Tabs>
-
-## Using Opik with Pydantic AI
-
-To track your Pydantic AI agents, you will need to configure logfire as this is
-the framework used by Pydantic AI to enable tracing.
+To track your Pydantic AI agents, call [`track_pydantic_ai`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/pydantic_ai/track_pydantic_ai.html). Called with no arguments it instruments every agent; pass a single agent to instrument only that one.
 
 ```python
-import logfire
+from opik.integrations.pydantic_ai import track_pydantic_ai
 
-logfire.configure(
-    send_to_logfire=False,
-)
-logfire.instrument_pydantic_ai()
+track_pydantic_ai()
 ```
 
 ## Practical Example
@@ -145,9 +82,13 @@ Now that everything is configured, you can create and run Pydantic AI agents:
 ```python
 import nest_asyncio
 from pydantic_ai import Agent
+from opik.integrations.pydantic_ai import track_pydantic_ai
 
 # Enable async support in Jupyter notebooks
 nest_asyncio.apply()
+
+# Enable Opik tracing for all agents
+track_pydantic_ai()
 
 # Create a simple agent
 agent = Agent(
@@ -164,33 +105,67 @@ print(result.output)
   <img src="/img/cookbook/pydantic-ai_trace_cookbook.png" alt="Pydantic AI tracing" />
 </Frame>
 
-## Logging threads
+## Cost Tracking
 
-You can group multiple agent calls into a conversation thread by setting `thread_id` as a span attribute on the root Logfire span. Opik's OTEL ingestion recognizes this attribute and maps it directly to the trace's `thread_id` field:
+The `track_pydantic_ai` integration automatically tracks token usage and cost for all supported LLM models used by your agents. For models that report prompt caching (e.g. Anthropic and Bedrock), cache read and creation tokens are captured so cost is priced with the cache discount.
+
+Cost information is automatically captured and displayed in the Opik UI, including:
+
+- Token usage details
+- Cost per request based on model pricing
+- Total trace cost
+
+<Tip>
+  View the complete list of supported models and providers on the [Supported Models](/tracing/advanced/cost_tracking) page.
+</Tip>
+
+## Grouping traces into conversational threads using `thread_id`
+
+Threads in Opik are collections of traces that are grouped together using a unique `thread_id`.
+
+Pass the `thread_id` through the native Pydantic AI `metadata` argument on `agent.run` (or `run_sync`) using the `opik.thread_id` key. Opik reads it and sets it on the trace:
 
 ```python
-# Logfire wraps OTEL - thread_id becomes a span attribute automatically
-with logfire.span("chat_turn", thread_id=thread_id):
-    result = agent.run_sync("What is machine learning?")
+result = agent.run_sync(
+    "What is machine learning?",
+    metadata={"opik.thread_id": "conversation-123"},
+)
+```
+
+More information on logging chat conversations can be found in the [Log conversations](/tracing/advanced/log_chat_conversations) section.
+
+## Enriching traces with metadata and prompts
+
+The same `metadata` argument accepts a few reserved `opik.*` keys that Opik maps onto the trace and root span:
+
+- `opik.metadata` — a dictionary of custom metadata.
+- `opik.provider` — override the provider recorded on the run.
+- `opik.prompts` — a list of Opik prompts used for this run, to link the trace to your [prompt library](/prompt_engineering/managing_prompts_in_code).
+
+```python
+import opik
+
+prompt = opik.Prompt(name="assistant", prompt="Be concise, reply with one sentence.")
+
+result = agent.run_sync(
+    'Where does "hello world" come from?',
+    metadata={
+        "opik.metadata": {"experiment": "baseline"},
+        "opik.prompts": [prompt.__internal_api__to_info_dict__()],
+    },
+)
 ```
 
 ## Combining with `@track`
 
-If you wrap your agent call in an `@track`-decorated function — for example to capture a clean entrypoint with its own input/output — the Pydantic AI / logfire spans and the `@track` span would normally land in two separate traces, since logfire produces OpenTelemetry spans while `@track` keeps its own context.
-
-Register `OpikSpanProcessor` on logfire's tracer provider to merge them into a single trace. The processor links the OpenTelemetry spans to the active `@track` span automatically — no header propagation or per-call wiring needed:
+If you wrap your agent call in an `@track`-decorated function — for example to capture a clean entrypoint with its own input/output — the Pydantic AI spans automatically nest under the `@track` span, producing a single trace:
 
 ```python
 import opik
-import logfire
 from pydantic_ai import Agent
-from opik.integrations.otel import OpikSpanProcessor
+from opik.integrations.pydantic_ai import track_pydantic_ai
 
-logfire.configure(
-    send_to_logfire=False,
-    additional_span_processors=[OpikSpanProcessor()],
-)
-logfire.instrument_pydantic_ai()
+track_pydantic_ai()
 
 agent = Agent("openai:gpt-4o")
 
@@ -201,7 +176,7 @@ def run(question: str) -> str:
 run('Where does "hello world" come from?')
 ```
 
-The result is one trace with the `run` entrypoint as the root and the `agent run` / model spans nested underneath.
+The result is one trace with the `run` entrypoint as the root and the agent run / model spans nested underneath.
 
 ## Further improvements
 
