@@ -111,6 +111,40 @@ describe("uploadInlineAttachment", () => {
     });
   });
 
+  it("cloud (S3) multipart: PUTs every part in order and completes with all collected ETags", async () => {
+    startMultiPartUpload.mockResolvedValue({
+      uploadId: "s3-upload-id",
+      preSignUrls: [
+        "https://s3.example/part-1",
+        "https://s3.example/part-2",
+        "https://s3.example/part-3",
+      ],
+    });
+    let n = 0;
+    // Sequential awaits guarantee ordering, so ETags come back 1,2,3 matching part numbers.
+    fetchSpy.mockImplementation(
+      async () =>
+        new Response(null, { status: 200, headers: { etag: `"etag-${++n}"` } }),
+    );
+
+    await run();
+
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+    expect(fetchSpy.mock.calls.map(([url]) => url)).toEqual([
+      "https://s3.example/part-1",
+      "https://s3.example/part-2",
+      "https://s3.example/part-3",
+    ]);
+    const completeArg = completeMultiPartUpload.mock.calls[0][0] as {
+      uploadedFileParts: { eTag: string; partNumber: number }[];
+    };
+    expect(completeArg.uploadedFileParts).toEqual([
+      { eTag: '"etag-1"', partNumber: 1 },
+      { eTag: '"etag-2"', partNumber: 2 },
+      { eTag: '"etag-3"', partNumber: 3 },
+    ]);
+  });
+
   it("throws when the upload PUT fails", async () => {
     startMultiPartUpload.mockResolvedValue({
       uploadId: "BEMinIO",

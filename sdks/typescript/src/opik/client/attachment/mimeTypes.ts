@@ -1,7 +1,7 @@
 /**
  * Magic-byte MIME sniffing for decoded base64 blobs. Recognizes binary media types
- * (PNG/JPEG/GIF/WebP/PDF/SVG/MP4); anything else returns null and is left inline.
- * Unlike the Python SDK, base64-encoded JSON is not extracted — it stays inline.
+ * (PNG/JPEG/GIF/WebP/PDF/SVG/MP4) plus JSON (leading `{`/`[`), matching the Python SDK's
+ * `detect_mime_type`; anything else returns null and is left inline.
  */
 
 const startsWith = (
@@ -45,6 +45,20 @@ export const detectMimeType = (bytes: Buffer): string | null => {
   if (head.includes("<svg")) {
     return "image/svg+xml";
   }
+
+  // JSON (matches the Python SDK): the first ~100 bytes must be valid UTF-8 and, once
+  // leading whitespace is trimmed, begin with `{` or `[`. A fatal decoder means a binary
+  // blob (or a multibyte char split at the 100-byte window) is treated as not-JSON.
+  try {
+    const text = new TextDecoder("utf-8", { fatal: true })
+      .decode(bytes.subarray(0, 100))
+      .trimStart();
+    if (text.startsWith("{") || text.startsWith("[")) {
+      return "application/json";
+    }
+  } catch {
+    // not valid UTF-8 in the sampled window -> not JSON
+  }
   return null;
 };
 
@@ -56,6 +70,7 @@ const EXTENSIONS: Record<string, string> = {
   "application/pdf": "pdf",
   "image/svg+xml": "svg",
   "video/mp4": "mp4",
+  "application/json": "json",
 };
 
 export const fileExtensionForMimeType = (mimeType: string): string =>

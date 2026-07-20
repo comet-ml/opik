@@ -122,6 +122,31 @@ describe("extractInlineAttachments", () => {
 
     expect(input.image).toBe(uri); // original untouched (non-mutating)
   });
+
+  it("extracts an oversized base64 JSON blob as a .json attachment (Python parity)", () => {
+    // decodes to `{"k":"yyy…"}` -> starts with '{' -> application/json
+    const json = Buffer.from(`{"k":"${"y".repeat(300)}"}`).toString("base64");
+    const span = { output: { blob: json } };
+
+    const { result, attachments } = extractInlineAttachments(span, MIN);
+
+    expect(attachments).toHaveLength(1);
+    expect(attachments[0].mimeType).toBe("application/json");
+    expect((result.output as { blob: string }).blob).toMatch(
+      /^\[output-attachment-\d+-\d+-sdk\.json\]$/,
+    );
+  });
+
+  it("is fail-safe against circular references (no throw, nothing extracted)", () => {
+    const circular: Record<string, unknown> = {};
+    circular.self = circular; // a cycle would recurse forever without the guard
+    const span = { input: { data: circular }, output: { text: "small" } };
+
+    expect(() => extractInlineAttachments(span, MIN)).not.toThrow();
+    const { result, attachments } = extractInlineAttachments(span, MIN);
+    expect(attachments).toHaveLength(0);
+    expect(result).toBe(span); // unchanged, same reference
+  });
 });
 
 describe("detectMimeType", () => {
@@ -145,6 +170,11 @@ describe("detectMimeType", () => {
     expect(detectMimeType(buf)).toBe("image/webp");
   });
 
+  it("recognizes JSON content (leading { or [) — Python parity", () => {
+    expect(detectMimeType(Buffer.from('{"a":1}'))).toBe("application/json");
+    expect(detectMimeType(Buffer.from("  [1,2,3]"))).toBe("application/json"); // leading ws ok
+  });
+
   it("returns null for unrecognized bytes", () => {
     expect(
       detectMimeType(Buffer.from("just some plain text bytes")),
@@ -154,6 +184,7 @@ describe("detectMimeType", () => {
   it("maps mime types to file extensions", () => {
     expect(fileExtensionForMimeType("image/jpeg")).toBe("jpg");
     expect(fileExtensionForMimeType("application/pdf")).toBe("pdf");
+    expect(fileExtensionForMimeType("application/json")).toBe("json");
     expect(fileExtensionForMimeType("application/x-unknown")).toBe("bin");
   });
 });

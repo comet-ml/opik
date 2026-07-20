@@ -33,9 +33,11 @@ export const extractAndUploadAttachments = async <T extends AttachmentSource>(
   try {
     extraction = extractInlineAttachments(payload, config.minSizeBytes);
   } catch (error) {
+    // Log only the message: a network-layer error's `cause` can carry a presigned S3 URL
+    // (which embeds an AWS signature), so never serialize the raw error object.
     logger.warn(
-      `Attachment extraction skipped for ${target.entityType} '${target.entityId}'`,
-      { error },
+      `Attachment extraction skipped for ${target.entityType} '${target.entityId}': ` +
+        `${error instanceof Error ? error.message : String(error)}`,
     );
     return payload;
   }
@@ -47,10 +49,11 @@ export const extractAndUploadAttachments = async <T extends AttachmentSource>(
   await Promise.all(
     extraction.attachments.map((attachment) =>
       uploadInlineAttachment(api, config, target, attachment).catch((error) => {
+        // Message only — a fetch rejection's `cause` may hold the presigned S3 URL.
         logger.warn(
           `Failed to upload extracted attachment '${attachment.fileName}' ` +
-            `for ${target.entityType} '${target.entityId}'`,
-          { error },
+            `for ${target.entityType} '${target.entityId}': ` +
+            `${error instanceof Error ? error.message : String(error)}`,
         );
       }),
     ),
