@@ -75,9 +75,7 @@ def test_pydantic_ai__with_tool__creates_tool_span(fake_backend):
     tool_spans = [s for s in all_spans if s.type == "tool"]
     assert len(tool_spans) >= 1
     assert any("add" in (s.name or "") for s in tool_spans)
-    assert any(
-        (s.input or {}).get("tool_name") == "add" for s in tool_spans
-    )
+    assert any((s.input or {}).get("tool_name") == "add" for s in tool_spans)
 
 
 def test_pydantic_ai__structured_output__captured_on_trace(fake_backend):
