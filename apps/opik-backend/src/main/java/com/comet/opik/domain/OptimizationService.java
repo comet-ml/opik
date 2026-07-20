@@ -34,7 +34,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RedissonReactiveClient;
-import org.redisson.client.RedisException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -334,39 +333,17 @@ class OptimizationServiceImpl implements OptimizationService {
             return Mono.empty();
         }
 
-        Mono<Long> action = Mono.defer(() -> applyUpdate(id, update));
-
-        // Serialize the per-id read-modify-write so concurrent partial writes don't lose each other's
-        // columns: the DAO's UPDATE_BY_ID is an INSERT...SELECT that copies every non-updated column forward
-        // from the base version it reads, so an unlocked rename racing a status write (or the worker racing
-        // the reaper) would drop one side — and a dropped terminal status leaves a finished run non-terminal
-        // for the reaper to later mislabel ERROR, the exact failure this feature exists to prevent.
+        // Serialize every per-id state change under the lock. The DAO's UPDATE_BY_ID is an INSERT...SELECT
+        // that copies each non-updated column forward from the base version it reads, so two concurrent
+        // partial writes (a rename racing a status write, or the worker racing the reaper) would drop one
+        // side — and a dropped terminal status strands a finished run non-terminal. The lock is lightweight
+        // and guards every write against that lost update. A Redis outage failing the write is acceptable:
+        // the stalled-run reaper is the backstop for a run left non-terminal, so protecting against data loss
+        // is preferred over a lock-free fallback here (review: thiagohora). NOTE: prod ClickHouse has no
+        // read-your-own-writes (async insert, 2 replicas), so studio metadata must still stay effectively
+        // single-writer — the lock hardens the in-process race, not the cross-replica one.
         var lock = new LockService.Lock(id, "optimization-update");
-        Mono<Long> guarded = lockService.executeWithLock(lock, action);
-
-        // A cancellation is the one update whose effect genuinely needs Redis: the worker learns it only from
-        // the Redis cancel signal (CancellationMonitor polls Redis; there is no DB-status polling), so
-        // persisting CANCELLED while Redis is down would report success to the user while the run keeps
-        // executing to timeout and its later terminal callback is dropped by the terminal-overwrite guard.
-        // Keep cancellation on the hard-fail path so the user sees the failure and can retry (review: baz).
-        if (update.status() == OptimizationStatus.CANCELLED) {
-            return guarded;
-        }
-
-        // Every other write (worker mark_completed / mark_error, reaper ERROR, rename) must NOT hard-depend on
-        // Redis: on a lock-ACQUISITION failure (a Redis blip) fall back to a lock-free apply so it still
-        // persists (thiagohora's [medium]). Only the acquisition surfaces RedisException here — applyUpdate's
-        // own Redis touch (the cancel signal) is not reached on this path and already swallows its errors — so
-        // the fallback never masks the action's 404/409, and the action runs exactly once (executeWithLock
-        // never subscribes it when acquisition fails). NOTE: prod ClickHouse has no read-your-own-writes
-        // (async insert, 2 replicas), so the lock cannot fully close the window either — studio metadata must
-        // stay effectively single-writer (review: thiagohora + adversarial review of the metadata-only-lock
-        // variant).
-        return guarded.onErrorResume(RedisException.class, error -> {
-            log.warn("Redis unavailable acquiring the optimization-update lock for '{}'; persisting the update "
-                    + "without it (a concurrent lost update is possible but rare)", id, error);
-            return action;
-        });
+        return lockService.executeWithLock(lock, Mono.defer(() -> applyUpdate(id, update)));
     }
 
     private Mono<Long> applyUpdate(@NonNull UUID id, @NonNull OptimizationUpdate update) {

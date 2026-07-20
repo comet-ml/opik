@@ -34,12 +34,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Guards the OPIK-7159/OPIK-7029 review fixes for {@code update()}: the per-id write is serialized under the
- * distributed lock (so a rename can't race a status write, or the worker race the reaper, into a lost update
- * that strands a finished run non-terminal), yet a Redis blip on lock acquisition must NOT fail the write —
- * it falls back to a lock-free apply so the worker's mark_completed / mark_error callback and the reaper's
- * own ERROR write still persist. Cancellation is the exception: its effect needs the Redis signal the worker
- * polls, so it stays on the hard-fail path rather than reporting a false success during a Redis outage.
+ * Guards the OPIK-7159/OPIK-7029 review decision for {@code update()}: every per-id state change is
+ * serialized under the distributed lock so a rename can't race a status write (or the worker race the
+ * reaper) into a lost update that strands a finished run non-terminal. The lock deliberately protects every
+ * write rather than falling back to a lock-free path on a Redis outage — the stalled-run reaper is the
+ * backstop for a run left non-terminal, so the write surfaces the error instead of risking a lost update.
  */
 @ExtendWith(MockitoExtension.class)
 class OptimizationServiceUpdateLockTest {
@@ -134,34 +133,16 @@ class OptimizationServiceUpdateLockTest {
     }
 
     @Test
-    @DisplayName("a Redis blip on lock acquisition falls back to a lock-free write that still persists")
-    void updateWhenRedisUnavailablePersistsWithoutLock() {
+    @DisplayName("a lock-acquisition failure surfaces the error instead of writing lock-free")
+    void updateWhenRedisUnavailableSurfacesError() {
         var id = UUID.randomUUID();
-        when(optimizationDAO.getById(id)).thenReturn(Mono.just(existing(id)));
-        when(optimizationDAO.update(eq(id), any())).thenReturn(Mono.just(1L));
         // Lock acquisition fails as it would during a Redis outage.
         when(lockService.executeWithLock(any(LockService.Lock.class), ArgumentMatchers.<Mono<Long>>any()))
                 .thenReturn(Mono.error(new RedisException("redis unavailable")));
 
         var update = OptimizationUpdate.builder().status(OptimizationStatus.RUNNING).build();
 
-        // The status write must still persist rather than surfacing the Redis error.
-        StepVerifier.create(update(id, update)).expectNext(1L).verifyComplete();
-
-        verify(optimizationDAO).update(eq(id), any());
-    }
-
-    @Test
-    @DisplayName("a cancellation stays on the hard-fail path when Redis is unavailable (no false success)")
-    void updateWhenCancellingAndRedisUnavailableFails() {
-        var id = UUID.randomUUID();
-        // Lock acquisition fails as it would during a Redis outage.
-        when(lockService.executeWithLock(any(LockService.Lock.class), ArgumentMatchers.<Mono<Long>>any()))
-                .thenReturn(Mono.error(new RedisException("redis unavailable")));
-
-        var update = OptimizationUpdate.builder().status(OptimizationStatus.CANCELLED).build();
-
-        // Must surface the error, not silently persist CANCELLED while the worker never gets the signal.
+        // The write must NOT bypass the lock: surface the error rather than risk a lock-free lost update.
         StepVerifier.create(update(id, update)).expectError(RedisException.class).verify();
 
         verify(optimizationDAO, never()).update(any(), any());
