@@ -91,6 +91,11 @@ git status               # Modified files
 - Zustand selectors are specific (not whole store)
 - Proper memoization (useMemo/useCallback where needed)
 - Lodash imports are direct (not barrel imports)
+- **Design fidelity**: For changes under `apps/opik-frontend/`, apply the `frontend-design-fidelity`
+  skill (`.agents/skills/frontend-design-fidelity/SKILL.md`) — correct component variant/size, on-scale
+  typography (no raw `text-[..px]`/`font-[600]`), tokens over raw hex/arbitrary spacing,
+  hover/active/empty/loading/error states, tooltips on icon buttons, dark-mode contrast. These are the
+  design team's most-repeated review comments; catching them here reduces design-review iterations.
 
 **SDKs (Python/TypeScript)**
 - Async operations properly documented
