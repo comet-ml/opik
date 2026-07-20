@@ -345,21 +345,30 @@ def validate_user_code(code: str) -> dict:
     if metric_class is None:
         # No class statically resolves to a BaseMetric subclass. A metric whose
         # only link to BaseMetric is through an IMPORTED base (e.g.
-        # `from x import MyBase; class My(MyBase)`, possibly inheriting score())
-        # is not statically resolvable, yet runtime get_metric_class (issubclass)
-        # instantiates it fine — so hard-rejecting here would regress a
-        # previously-working metric. When the file defines at least one class,
-        # defer to runtime with permissive defaults (name resolved at score time,
-        # full-splat) rather than reject; a non-metric class is still rejected at
-        # score time by get_metric_class. Only a file with NO class at all is a
-        # definite build-time reject.
-        has_class = any(isinstance(node, ast.ClassDef) for node in ast.walk(tree))
-        if not has_class:
+        # `from x import MyBase; class My(MyBase)`) is not statically resolvable,
+        # yet runtime get_metric_class (issubclass) instantiates it fine — so
+        # hard-rejecting here would regress a previously-working metric.
+        class_defs = [n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]
+        if not class_defs:
+            # No class at all -> definitely not a metric -> build-time reject.
             return {
                 "code": 400,
                 "error": "Field 'code' in the request doesn't contain a subclass implementation of 'opik.evaluation.metrics.BaseMetric'",
             }
-        return {"name": None, "accepts_var_keyword": True, "score_params": []}
+        # Best-effort mirror of runtime get_metric_class (name-sorted, defined-
+        # only): a metric declares score(), so read the name + signature flags
+        # from the alphabetically-first defined class that declares one. This
+        # keeps a STRICT imported-base metric from being force-splatted (masked
+        # 0.0) and preserves its name. If no defined class declares score() (it
+        # is inherited from the imported base), we can't infer the signature —
+        # fall back to permissive defaults and defer to runtime.
+        scored = sorted(
+            (c for c in class_defs if _score_funcdef(c) is not None),
+            key=lambda node: node.name,
+        )
+        if not scored:
+            return {"name": None, "accepts_var_keyword": True, "score_params": []}
+        metric_class = scored[0]
 
     return {
         "name": _metric_name_ast(metric_class),

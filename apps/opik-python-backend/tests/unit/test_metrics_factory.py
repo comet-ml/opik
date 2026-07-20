@@ -473,23 +473,55 @@ class MyMetric(BaseMetric):
         assert result.value == 0.42
         assert result.name == "mymetric"
 
-    def test_validate_user_code_imported_base_defers_instead_of_rejecting(self):
+    def test_validate_user_code_imported_base_defers_and_reads_signature(self):
         """A class whose only BaseMetric link is an IMPORTED base can't be
         resolved statically, but runtime instantiates it fine — so build defers
-        with permissive defaults rather than hard-rejecting (OPIK-7172 regression
-        guard)."""
+        rather than hard-rejecting (OPIK-7172 regression guard). The deferred
+        path still reads the class's OWN score() signature so a STRICT metric is
+        not force-splatted into a masked 0.0."""
         code = """
 from some_external_pkg import CustomBase
 
 class MyMetric(CustomBase):
-    def score(self, output, **kwargs):
+    def score(self, output, reference):
         return None
 """
         result = validate_user_code(code)
         assert "code" not in result  # not a 400
-        assert result["name"] is None
-        assert result["accepts_var_keyword"] is True
-        assert result["score_params"] == []
+        # Signature read from MyMetric's own strict score(), not blanket-permissive.
+        assert result["accepts_var_keyword"] is False
+        assert result["score_params"] == ["output", "reference"]
+
+    def test_code_metric_imported_base_builds_and_scores(self):
+        """A metric subclassing an IMPORTED BaseMetric subclass (statically
+        unresolvable) builds and scores its real result — its own name and strict
+        signature are honored, not renamed to 'code' or force-splatted."""
+        code = """
+from opik.evaluation.metrics import Equals
+from opik.evaluation.metrics.score_result import ScoreResult
+
+class MyImported(Equals):
+    def __init__(self):
+        super().__init__(name="my_imported")
+
+    def score(self, output, reference):
+        return ScoreResult(
+            name=self.name,
+            value=1.0 if output == reference else 0.0,
+            reason=f"ref={reference}",
+        )
+"""
+        metric_fn = MetricFactory.build(
+            "code",
+            {"code": code, "arguments": {"reference": "expected"}},
+            "model",
+        )
+        # Name inferred from the defined class (not "code").
+        assert metric_fn.__name__ == "my_imported"
+        # Strict signature honored: the extra column is not splatted; real score.
+        item = {"expected": "Paris", "extra": "x"}
+        assert metric_fn(item, "Paris").value == 1.0
+        assert metric_fn(item, "London").value == 0.0
 
     def test_validate_user_code_no_class_is_rejected_at_build(self):
         """A file with no class at all is a definite non-metric -> 400 at build."""
