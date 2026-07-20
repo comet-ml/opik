@@ -3457,12 +3457,13 @@ class TraceDAOImpl implements TraceDAO {
         // Log when it happens so the underlying duplication/fan-out stays visible.
         return findByIds(List.of(id), connection)
                 .collectList()
-                .flatMap(traces -> {
+                .flatMap(traces -> Mono.deferContextual(ctx -> {
                     if (traces.size() > 1) {
-                        log.warn("Trace id '{}' resolved to '{}' rows; returning the first", id, traces.size());
+                        log.warn("Trace id '{}' in workspace '{}' resolved to '{}' rows; returning the first",
+                                id, ctx.getOrDefault(RequestContext.WORKSPACE_ID, "unknown"), traces.size());
                     }
-                    return traces.isEmpty() ? Mono.empty() : Mono.just(traces.get(0));
-                });
+                    return traces.isEmpty() ? Mono.<Trace>empty() : Mono.just(traces.get(0));
+                }));
     }
 
     @Override
