@@ -42,21 +42,4 @@ class JacksonConfigTest {
         config.setMaxDocumentLength(-1L); // <= 0 means "unlimited" -> always valid
         assertThat(config.isMaxDocumentLengthValid()).isTrue();
     }
-
-    @Test
-    @DisplayName("cross-field validator: maxRequestSizeBytes must be >= maxDocumentLength (or doc <= 0 unlimited)")
-    void maxRequestSizeValidity() {
-        JacksonConfig config = new JacksonConfig();
-        assertThat(config.isMaxRequestSizeValid()).isTrue(); // defaults: request == document (512MB)
-
-        config.setMaxDocumentLength(268_435_456L); // 256MB
-        config.setMaxRequestSizeBytes(104_857_600L); // 100MB < 256MB -> filter would shadow the doc guard
-        assertThat(config.isMaxRequestSizeValid()).isFalse();
-
-        config.setMaxRequestSizeBytes(268_435_456L); // == document cap -> valid
-        assertThat(config.isMaxRequestSizeValid()).isTrue();
-
-        config.setMaxDocumentLength(-1L); // document unlimited -> nothing to shadow -> valid
-        assertThat(config.isMaxRequestSizeValid()).isTrue();
-    }
 }

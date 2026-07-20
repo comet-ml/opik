@@ -74,17 +74,10 @@ public class JacksonConfig {
         return maxDocumentLength <= 0 || maxDocumentLength >= maxStringLength;
     }
 
-    /**
-     * Cross-field invariant: the request-size cap (checked against {@code Content-Length}) must not be
-     * smaller than the whole-document cap, otherwise {@link
-     * com.comet.opik.infrastructure.RequestSizeLimitFilter} would reject a request with {@code 413}
-     * that the document guard would have accepted. When {@code maxDocumentLength <= 0} (unlimited)
-     * there is nothing to shadow, so any request cap is valid. Validated at startup alongside {@link
-     * #isMaxDocumentLengthValid()}.
-     */
-    @JsonIgnore
-    @AssertTrue(message = "maxRequestSizeBytes must be >= maxDocumentLength (unless maxDocumentLength <= 0 for unlimited)")
-    public boolean isMaxRequestSizeValid() {
-        return maxDocumentLength <= 0 || maxRequestSizeBytes >= maxDocumentLength;
-    }
+    // NOTE: intentionally no cross-field check of maxRequestSizeBytes against maxDocumentLength.
+    // They measure different axes — maxRequestSizeBytes bounds the on-the-wire (compressed)
+    // Content-Length, while maxDocumentLength bounds the decompressed document — so a request cap
+    // below the document cap is a legitimate configuration (e.g. cap uploads at the edge while still
+    // parsing larger decompressed batches), not a misconfiguration. config-test.yml relies on exactly
+    // that (50MB request < 256MB document) to exercise the 413 path cheaply.
 }
