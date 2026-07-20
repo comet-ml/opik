@@ -107,7 +107,7 @@ class OptimizationServiceUpdateLockTest {
 
     @Test
     @DisplayName("a status update is serialized under the distributed lock")
-    void statusUpdate__serializesUnderLock() {
+    void updateWhenStatusOnlyAcquiresLock() {
         var id = UUID.randomUUID();
         stubHappyPath(id);
 
@@ -121,7 +121,7 @@ class OptimizationServiceUpdateLockTest {
 
     @Test
     @DisplayName("a name-only update is serialized under the distributed lock")
-    void nameUpdate__serializesUnderLock() {
+    void updateWhenNameOnlyAcquiresLock() {
         var id = UUID.randomUUID();
         stubHappyPath(id);
 
@@ -135,7 +135,7 @@ class OptimizationServiceUpdateLockTest {
 
     @Test
     @DisplayName("a Redis blip on lock acquisition falls back to a lock-free write that still persists")
-    void update__fallsBackLockFreeWhenRedisUnavailable() {
+    void updateWhenRedisUnavailablePersistsWithoutLock() {
         var id = UUID.randomUUID();
         when(optimizationDAO.getById(id)).thenReturn(Mono.just(existing(id)));
         when(optimizationDAO.update(eq(id), any())).thenReturn(Mono.just(1L));
@@ -153,7 +153,7 @@ class OptimizationServiceUpdateLockTest {
 
     @Test
     @DisplayName("a cancellation stays on the hard-fail path when Redis is unavailable (no false success)")
-    void cancellation__hardFailsWhenRedisUnavailable() {
+    void updateWhenCancellingAndRedisUnavailableFails() {
         var id = UUID.randomUUID();
         // Lock acquisition fails as it would during a Redis outage.
         when(lockService.executeWithLock(any(LockService.Lock.class), ArgumentMatchers.<Mono<Long>>any()))
