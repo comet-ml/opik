@@ -3450,20 +3450,25 @@ class TraceDAOImpl implements TraceDAO {
     @Override
     @WithSpan
     public Mono<Trace> findById(@NonNull UUID id, @NonNull Connection connection) {
-        // A single id can map to more than one emitted Trace when the assembled query fans out
-        // over its join CTEs (e.g. un-merged/duplicated rows). Take the first row rather than
-        // singleOrEmpty(), which throws IndexOutOfBoundsException ("Source emitted more than one
-        // item") and surfaces as a 500 on GET by id. The empty case is preserved (-> 404).
-        // Log when it happens so the underlying duplication/fan-out stays visible.
         return findByIds(List.of(id), connection)
                 .collectList()
-                .flatMap(traces -> Mono.deferContextual(ctx -> {
-                    if (traces.size() > 1) {
-                        log.warn("Trace id '{}' in workspace '{}' resolved to '{}' rows; returning the first",
-                                id, ctx.getOrDefault(RequestContext.WORKSPACE_ID, "unknown"), traces.size());
-                    }
-                    return traces.isEmpty() ? Mono.<Trace>empty() : Mono.just(traces.get(0));
-                }));
+                .flatMap(traces -> Mono.deferContextual(ctx -> Mono.justOrEmpty(
+                        firstOrLogFanOut(traces, id, ctx.getOrDefault(RequestContext.WORKSPACE_ID, "unknown")))));
+    }
+
+    /**
+     * Reduce the rows returned for a single trace id to at most one {@link Trace}. A get-by-id
+     * query can fan out to more than one row over its join CTEs (e.g. un-merged/duplicated rows);
+     * returning the first row avoids the {@code IndexOutOfBoundsException} ("Source emitted more
+     * than one item") that a strict single-item reducer throws, which surfaces as a 500. The empty
+     * case is preserved (-> 404). A fan-out is logged so the underlying duplication stays visible.
+     */
+    static Optional<Trace> firstOrLogFanOut(@NonNull List<Trace> traces, UUID id, String workspaceId) {
+        if (traces.size() > 1) {
+            log.warn("Trace id '{}' in workspace '{}' resolved to '{}' rows; returning the first",
+                    id, workspaceId, traces.size());
+        }
+        return traces.stream().findFirst();
     }
 
     @Override
