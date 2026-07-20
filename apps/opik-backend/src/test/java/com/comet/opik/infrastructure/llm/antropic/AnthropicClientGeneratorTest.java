@@ -256,6 +256,7 @@ class AnthropicClientGeneratorTest {
 
             assertThat(parameters.thinkingType()).isEqualTo("disabled");
             assertThat(parameters.thinkingBudgetTokens()).isNull();
+            assertThat(parameters.maxOutputTokens()).isEqualTo(DEFAULT_MAX_TOKENS);
         }
     }
 }
