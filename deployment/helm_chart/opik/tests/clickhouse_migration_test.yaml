@@ -8,7 +8,14 @@ templates:
   - templates/NOTES.txt
 
 tests:
-  - it: NOTES omits the multi-replica migration banner for the single-replica default
+  - it: NOTES omits the multi-replica migration banner for the default replica count
+    asserts:
+      - notMatchRegexRaw:
+          pattern: "two-phase install"
+
+  - it: NOTES omits the banner at an explicit single replica
+    set:
+      clickhouse.replicasCount: 1
     asserts:
       - notMatchRegexRaw:
           pattern: "two-phase install"
