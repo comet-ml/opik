@@ -67,6 +67,10 @@ bind. Inert until Migration 000097 attaches `tiered_replicated` to a table.
 {{- define "opik.clickhouse.storageXml" -}}
 {{- $ts := .Values.clickhouse.tieredStorage -}}
 {{- $s3 := $ts.cold.s3 -}}
+{{- $vn := $ts.cold.cache.volumeName -}}
+{{- if not (regexMatch "^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$" $vn) -}}
+{{- fail (printf "clickhouse.tieredStorage.cold.cache.volumeName %q must be a DNS label (<=63 chars, lowercase alphanumeric or '-', start with a letter, end alphanumeric)" $vn) -}}
+{{- end -}}
 {{- $endpoint := printf "%s/%s/" (trimSuffix "/" $s3.endpoint) (trimSuffix "/" (trimPrefix "/" $s3.prefix)) -}}
 <clickhouse>
   <storage_configuration>
@@ -77,7 +81,9 @@ bind. Inert until Migration 000097 attaches `tiered_replicated` to a table.
       <cold_s3>
         <type>s3</type>
         <endpoint>{{ $endpoint }}</endpoint>
+        {{- if $s3.readOnly }}
         <read_only>true</read_only>
+        {{- end }}
         {{- if $s3.useEnvironmentCredentials }}
         <use_environment_credentials>true</use_environment_credentials>
         {{- end }}

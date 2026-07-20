@@ -828,10 +828,16 @@ clickhouse:
         region: ""
         # Use the pod's IAM role (IRSA) instead of static keys.
         useEnvironmentCredentials: true
+        # Keep false: the tiered_replicated policy writes parts to cold on TTL
+        # MOVE, so the disk must be writable. Set true only for a pre-populated /
+        # externally-managed bucket that ClickHouse should never write to.
+        readOnly: false
         maxGetRps: 1000
         maxPutRps: 500
       cache:
         # Read-through LRU cache wrapping cold_s3, on a local EBS volume.
+        # Must be a DNS label (<=63 chars, lowercase alphanumeric or '-', start
+        # with a letter) — used verbatim as the K8s volume / PVC name.
         volumeName: s3-cache-vc-template
         path: /var/cache/clickhouse_s3
         storage: 200Gi
