@@ -91,6 +91,8 @@ Code: 60. DB::Exception: Could not find table: <table_name>. (UNKNOWN_TABLE)
 Code: 81. DB::Exception: Database opik does not exist. (UNKNOWN_DATABASE)
 ```
 
+_`opik` is the default analytics database name (`ANALYTICS_DB_DATABASE_NAME`); substitute your own if you overrode it._
+
 **Symptoms:**
 
 - Fresh install only (no existing data); backend in CrashLoopBackOff
@@ -122,7 +124,7 @@ Single-replica installs and upgrades of already-migrated multi-replica clusters 
 </Callout>
 
 <Callout intent="warning">
-If a fresh multi-replica migration was already attempted, dropped ClickHouse tables can leave stale ZooKeeper paths under `/clickhouse/tables/...`, which cause `REPLICA_ALREADY_EXISTS` on a retry. Clean those up (see [ClickHouse Zookeeper Metadata Loss](#clickhouse-zookeeper-metadata-loss)) before re-running the two-phase flow.
+If a fresh multi-replica attempt was torn down, the dropped tables can leave orphaned `/clickhouse/tables/...` ZooKeeper paths that cause `REPLICA_ALREADY_EXISTS` on a retry. Since a fresh install has no data to preserve, recovery only needs those orphaned paths cleared before re-running — the full replica-restore rebuild in [ClickHouse Zookeeper Metadata Loss](#clickhouse-zookeeper-metadata-loss) is for recovering existing data and isn't needed here.
 </Callout>
 
 ### ClickHouse Zookeeper Metadata Loss
