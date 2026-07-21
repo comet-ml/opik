@@ -1,5 +1,5 @@
 name: Deploy Opik Python SDK docs
-run-name: Deploy Python SDK docs ${{ github.ref_name }} to S3 ${{ inputs.environment }} by @${{ github.actor }}
+run-name: Deploy Python SDK docs ${{ github.ref_name }} to S3 ${{ inputs.environment || 'production' }} by @${{ github.actor }}
 
 on:
   workflow_dispatch:
@@ -11,11 +11,18 @@ on:
           - staging
           - production
           - development
+  push:
+    branches:
+      - main
+    paths:
+      - "sdks/python/**"
+      - "apps/opik-documentation/python-sdk-docs/**"
+
 jobs:
   upload:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    environment: ${{ inputs.environment }}
+    environment: ${{ inputs.environment || 'production' }}
     permissions:
       id-token: write   # required for OIDC
       contents: read
@@ -23,6 +30,7 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_REGION: ${{ vars.AWS_REGION }}
+      ENVIRONMENT: ${{ inputs.environment || 'production' }}
     steps:
       - name: Verify AWS credentials
         run: aws sts get-caller-identity
@@ -44,10 +52,10 @@ jobs:
             uv pip install ../../../sdks/python
             uv run make build
 
-      - name: Upload sdk docs to site.comet.com (${{ inputs.environment }})
+      - name: Upload sdk docs to site.comet.com (${{ env.ENVIRONMENT }})
         run: |
           aws s3 sync apps/opik-documentation/python-sdk-docs/build/html \
-            s3://site.comet.com/${{ inputs.environment }}/docs-opik/python-sdk-reference \
+            s3://site.comet.com/${{ env.ENVIRONMENT }}/docs-opik/python-sdk-reference \
             --follow-symlinks --no-progress --delete --exclude '.git*'
 
   notify-slack:
