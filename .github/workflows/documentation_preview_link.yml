@@ -44,11 +44,31 @@ jobs:
 
                 # --concurrency 500: the preview CDN serves bursts without rate-limiting;
                 # the recurse otherwise brushes the job's 15-minute timeout.
+                #
+                # The external provider/reference hosts below rate-limit or time out under
+                # the crawler's high concurrency (status 0/403/429). They are valid, live
+                # links; skipping them stops the check flaking on whichever host is slow
+                # that run. Add hosts (not individual paths) here as they appear.
                 npx linkinator ${{ steps.generate-docs.outputs.URL }} \
                   --recurse \
                   --concurrency 500 \
                   --skip "search\/v2\/key" \
                   --skip "app.buildwithfern.com" \
+                  --skip "en.wikipedia.org" \
+                  --skip "ai.pydantic.dev" \
+                  --skip "code.claude.com" \
+                  --skip "docs.claude.com" \
+                  --skip "console.groq.com" \
+                  --skip "console.mistral.ai" \
+                  --skip "docs.predibase.com" \
+                  --skip "docs.ragas.io" \
+                  --skip "fireworks.ai" \
+                  --skip "python.useinstructor.com" \
+                  --skip "www.together.ai" \
+                  --skip "docs.quarkiverse.io" \
+                  --skip "quarkus.io" \
+                  --skip "www.ibm.com" \
+                  --skip "martinfowler.com" \
                   --skip "https://ai.google.dev/gemini-api" \
                   --skip "https://ai.google.dev/aistudio" \
                   --skip "chat.comet.com" \
