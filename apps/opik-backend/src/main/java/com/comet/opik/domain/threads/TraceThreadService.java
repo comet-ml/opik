@@ -10,7 +10,6 @@ import com.comet.opik.api.WorkspaceConfiguration;
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
 import com.comet.opik.api.events.TraceThreadsCreated;
 import com.comet.opik.api.resources.v1.events.TraceThreadBufferConfig;
-import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.TagOperations;
 import com.comet.opik.domain.TraceService;
@@ -87,7 +86,6 @@ class TraceThreadServiceImpl implements TraceThreadService {
 
     private static final Duration LOCK_DURATION = Duration.ofSeconds(5);
 
-    private final @NonNull IdGenerator idGenerator;
     private final @NonNull TraceThreadDAO traceThreadDAO;
     private final @NonNull TraceThreadIdService traceThreadIdService;
     private final @NonNull TraceService traceService;
@@ -400,7 +398,6 @@ class TraceThreadServiceImpl implements TraceThreadService {
 
     @Override
     public Mono<Void> openThread(UUID projectId, String projectName, @NonNull String threadId) {
-        idGenerator.validateIdNotInFutureIfPresent(projectId, "project");
         return projectService.resolveProjectIdAndVerifyVisibility(projectId, projectName)
                 .flatMap(verifiedProjectId -> getOrCreateThreadId(verifiedProjectId, threadId)
                         .then(Mono.defer(() -> lockService.executeWithLockCustomExpire(
@@ -414,7 +411,6 @@ class TraceThreadServiceImpl implements TraceThreadService {
 
     @Override
     public Mono<Void> closeThreads(UUID projectId, String projectName, @NonNull Set<String> threadIds) {
-        idGenerator.validateIdNotInFutureIfPresent(projectId, "project");
         if (CollectionUtils.isEmpty(threadIds)) {
             return Mono.empty();
         }

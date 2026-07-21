@@ -1573,8 +1573,6 @@ class DatasetItemServiceImpl implements DatasetItemService {
     public Mono<DatasetVersion> save(@NonNull DatasetItemBatch batch) {
 
         idGenerator.validateIdNotInFutureIfPresent(batch.datasetId(), "dataset");
-        idGenerator.validateIdNotInFutureIfPresent(batch.copyFromDatasetId(), "dataset");
-        idGenerator.validateIdNotInFutureIfPresent(batch.copyFromVersionId(), "dataset version");
 
         if (!featureFlags.isDatasetVersioningEnabled()) {
             // Legacy: save to legacy table
