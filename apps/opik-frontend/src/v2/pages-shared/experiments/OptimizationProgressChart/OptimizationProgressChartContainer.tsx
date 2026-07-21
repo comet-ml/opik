@@ -87,7 +87,11 @@ const OptimizationProgressChartContainer: React.FC<
       return (
         <NoData
           className="min-h-32 text-light-slate"
-          message="No data to show"
+          message={
+            status === OPTIMIZATION_STATUS.CANCELLED
+              ? "This run was cancelled"
+              : "No data to show"
+          }
         />
       );
     }

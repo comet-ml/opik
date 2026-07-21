@@ -38,6 +38,7 @@ from opik.cli.migrate.datasets.experiments import (
     cascade_experiments,
 )
 from opik.cli.migrate.errors import ExperimentCascadeError
+from opik.rest_api.core.api_error import ApiError
 
 from ._migrate_helpers import (
     _DatasetRow,
@@ -1873,6 +1874,313 @@ class TestCascadeExperiments:
         assert result.span_comments_migrated == 0
         rest_client.traces.add_trace_comment.assert_not_called()
         rest_client.spans.add_span_comment.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Guard against unbounded full-project span reads (OPIK-7344)
+# ---------------------------------------------------------------------------
+
+
+class TestBulkFetchSpansGuard:
+    """The cascade must never issue an unbounded, unfiltered ``search_spans``
+    -- ``search_spans(filter_string=None, max_results=sys.maxsize)`` -- which
+    reads a whole project and OOMs the client on large projects.
+
+    A per-project span-fetch bucket becomes unbounded two ways, both driven
+    here through the public ``cascade_experiments`` entrypoint:
+      * empty bucket -- every trace it references is stale/deleted (absent
+        from the experiment's fetched traces);
+      * non-empty bucket whose traces carry no start/end/last_updated
+        timestamps -- no window to bound the read.
+    Both must be skipped with a warning; the invariant is that
+    ``search_spans`` is never called with ``filter_string=None``.
+    """
+
+    def _run(
+        self,
+        *,
+        rest_client: Any,
+        client: Any,
+        item_id_remap: Dict[str, str],
+        capture_log: Any,
+    ) -> Any:
+        with capture_log.at_level("WARNING"):
+            return cascade_experiments(
+                client,
+                rest_client,
+                source_dataset_id="src-dataset-1",
+                target_dataset_name="MyDataset",
+                target_project_name="DestProject",
+                version_remap={"src-v-1": "dest-v-1"},
+                item_id_remap=item_id_remap,
+                audit=_audit(),
+            )
+
+    def _assert_no_unbounded_read(self, client: Any) -> None:
+        for call in client.search_spans.call_args_list:
+            assert call.kwargs.get("filter_string") is not None, (
+                "cascade must never call search_spans with filter_string=None"
+            )
+            assert "start_time" in call.kwargs["filter_string"]
+
+    def test_stale_bucket__skipped_without_unbounded_read(self, capture_log) -> None:
+        # A project bucket whose every trace is stale/deleted (absent from
+        # the fetched traces) must be skipped -- NOT read as an unbounded
+        # full-project search. ``live`` and ``gone`` live in different
+        # projects so ``gone``'s bucket is degenerate on its own.
+        live = _ExperimentItem(
+            id="src-item-live",
+            experiment_id="src-exp-1",
+            trace_id="src-trace-live",
+            dataset_item_id="src-ds-live",
+        )
+        gone = _ExperimentItem(
+            id="src-item-gone",
+            experiment_id="src-exp-1",
+            trace_id="src-trace-gone",
+            dataset_item_id="src-ds-gone",
+        )
+        experiment = _Experiment(id="src-exp-1", dataset_version_id="src-v-1")
+        rest_client = _cascade_rest_client(
+            experiments_by_dataset={"src-dataset-1": [experiment]},
+            items_by_experiment={"experiment": [live, gone]},
+            # Both traces exist so the item stream buckets each into its own
+            # project; ``gone`` is in a distinct project.
+            traces_by_id={
+                "src-trace-live": _Trace(
+                    id="src-trace-live",
+                    project_id="project-live",
+                    start_time=dt.datetime(2026, 1, 1, 12, 0, 0),
+                    end_time=dt.datetime(2026, 1, 1, 12, 5, 0),
+                ),
+                "src-trace-gone": _Trace(
+                    id="src-trace-gone", project_id="project-gone"
+                ),
+            },
+            spans_by_trace={"src-trace-live": [], "src-trace-gone": []},
+        )
+        client = _client_with_recreate_capture(rest_client)
+
+        # Make ``gone`` unfetchable everywhere: absent from the bulk
+        # search_traces AND 404 on the per-trace fallback. Its project
+        # bucket then has an empty per_project_traces at span-fetch time.
+        client.search_traces = MagicMock(
+            return_value=[
+                rest_client._traces_by_id_for_cascade_search["src-trace-live"]
+            ]
+        )
+        client.get_trace_content = MagicMock(
+            side_effect=ApiError(status_code=404, body="not found")
+        )
+
+        self._run(
+            rest_client=rest_client,
+            client=client,
+            item_id_remap={
+                "src-ds-live": "dest-ds-live",
+                "src-ds-gone": "dest-ds-gone",
+            },
+            capture_log=capture_log,
+        )
+
+        # search_spans ran only for the live bucket, always time-bounded.
+        self._assert_no_unbounded_read(client)
+        assert client.search_spans.call_count == 1
+        assert any(
+            "project-gone" in rec.message and "stale/deleted" in rec.message
+            for rec in capture_log.records
+        ), "expected a warning naming the skipped stale project"
+
+    def test_no_timestamp_bucket__skipped_without_unbounded_read(
+        self, capture_log
+    ) -> None:
+        # A bucket whose traces exist but carry no usable timestamps can't
+        # be time-bounded; it must be skipped rather than read unbounded.
+        no_ts = _Trace(id="notime-1", project_id="project-notime")
+        # ``_Trace`` defaults ``start_time`` to a real datetime; null all
+        # three timestamp fields so the span window can't be derived.
+        no_ts.start_time = None
+        no_ts.end_time = None
+        no_ts.last_updated_at = None
+        item = _ExperimentItem(
+            id="src-item-1",
+            experiment_id="src-exp-1",
+            trace_id="notime-1",
+            dataset_item_id="src-ds-1",
+        )
+        experiment = _Experiment(id="src-exp-1", dataset_version_id="src-v-1")
+        rest_client = _cascade_rest_client(
+            experiments_by_dataset={"src-dataset-1": [experiment]},
+            items_by_experiment={"experiment": [item]},
+            traces_by_id={"notime-1": no_ts},
+            spans_by_trace={"notime-1": []},
+        )
+        client = _client_with_recreate_capture(rest_client)
+
+        self._run(
+            rest_client=rest_client,
+            client=client,
+            item_id_remap={"src-ds-1": "dest-ds-1"},
+            capture_log=capture_log,
+        )
+
+        client.search_spans.assert_not_called()
+        assert any(
+            "project-notime" in rec.message and "no usable timestamps" in rec.message
+            for rec in capture_log.records
+        ), "expected a warning naming the skipped no-timestamp project"
+
+    def test_healthy_bucket__reads_with_bounded_filter(self, capture_log) -> None:
+        # Sanity: a normal bucket still issues one bounded search_spans.
+        trace = _Trace(
+            id="ok-1",
+            project_id="project-ok",
+            start_time=dt.datetime(2026, 1, 1, 12, 0, 0),
+            end_time=dt.datetime(2026, 1, 1, 12, 5, 0),
+        )
+        item = _ExperimentItem(
+            id="src-item-1",
+            experiment_id="src-exp-1",
+            trace_id="ok-1",
+            dataset_item_id="src-ds-1",
+        )
+        experiment = _Experiment(id="src-exp-1", dataset_version_id="src-v-1")
+        rest_client = _cascade_rest_client(
+            experiments_by_dataset={"src-dataset-1": [experiment]},
+            items_by_experiment={"experiment": [item]},
+            traces_by_id={"ok-1": trace},
+            spans_by_trace={"ok-1": []},
+        )
+        client = _client_with_recreate_capture(rest_client)
+
+        self._run(
+            rest_client=rest_client,
+            client=client,
+            item_id_remap={"src-ds-1": "dest-ds-1"},
+            capture_log=capture_log,
+        )
+
+        client.search_spans.assert_called_once()
+        kwargs = client.search_spans.call_args.kwargs
+        # Assert the EXACT bounded filter, not just that one exists -- a
+        # regression that corrupts the derived window would still leave a
+        # non-null filter_string containing "start_time". The trace spans
+        # [12:00, 12:05]; _compute_span_time_window pads by the 5-minute
+        # _SPAN_BULK_WINDOW_BUFFER on each side -> [11:55, 12:10].
+        assert kwargs["filter_string"] == (
+            'start_time >= "2026-01-01T11:55:00Z" '
+            'AND start_time <= "2026-01-01T12:10:00Z"'
+        )
+        assert kwargs["max_results"] == sys.maxsize
+
+
+# ---------------------------------------------------------------------------
+# Tolerate referenced-but-deleted traces in the trace-fetch fallback
+# (OPIK-7344)
+# ---------------------------------------------------------------------------
+
+
+class TestDeletedTraceFallback:
+    """When ``search_traces(experiment_id=)`` misses a trace, the cascade
+    falls back to per-trace ``get_trace_content``. An experiment item can
+    reference a trace that has since been deleted -- the fallback then 404s.
+    That 404 must skip the trace and continue, not abort the migration.
+    """
+
+    def _setup(
+        self,
+        *,
+        deleted_status_code: int,
+    ) -> tuple:
+        # ``good`` is returned by the bulk search_traces; ``gone`` is
+        # referenced by an item but absent from search_traces, forcing the
+        # per-trace get_trace_content fallback -- which raises for it.
+        good = _ExperimentItem(
+            id="src-item-good",
+            experiment_id="src-exp-1",
+            trace_id="src-trace-good",
+            dataset_item_id="src-ds-good",
+        )
+        gone = _ExperimentItem(
+            id="src-item-gone",
+            experiment_id="src-exp-1",
+            trace_id="src-trace-gone",
+            dataset_item_id="src-ds-gone",
+        )
+        experiment = _Experiment(id="src-exp-1", dataset_version_id="src-v-1")
+        # Only the good trace exists in the source; the deleted trace is
+        # absent so search_traces never returns it, triggering the fallback.
+        rest_client = _cascade_rest_client(
+            experiments_by_dataset={"src-dataset-1": [experiment]},
+            items_by_experiment={"experiment": [good, gone]},
+            traces_by_id={"src-trace-good": _Trace(id="src-trace-good")},
+            spans_by_trace={"src-trace-good": []},
+        )
+        # ``stream_experiment_items`` derives project_id from traces_by_id;
+        # the deleted trace is absent there, so its bucket routes to the
+        # fallback project -- fine, it never gets fetched as a trace.
+        client = _client_with_recreate_capture(rest_client)
+
+        # The fallback delegates client.get_trace_content -> rest_client
+        # .traces.get_trace_by_id. Make the deleted id raise, others pass.
+        def _get_trace_by_id(id: str) -> Any:
+            if id == "src-trace-gone":
+                raise ApiError(status_code=deleted_status_code, body="not found")
+            return _Trace(id=id)
+
+        client.get_trace_content = MagicMock(
+            side_effect=lambda id: _get_trace_by_id(id)
+        )
+        return client, rest_client
+
+    def test_deleted_trace__skipped_and_migration_continues(self, capture_log) -> None:
+        client, rest_client = self._setup(deleted_status_code=404)
+
+        with capture_log.at_level("WARNING"):
+            result = cascade_experiments(
+                client,
+                rest_client,
+                source_dataset_id="src-dataset-1",
+                target_dataset_name="MyDataset",
+                target_project_name="DestProject",
+                version_remap={"src-v-1": "dest-v-1"},
+                item_id_remap={
+                    "src-ds-good": "dest-ds-good",
+                    "src-ds-gone": "dest-ds-gone",
+                },
+                audit=_audit(),
+            )
+
+        # The migration completed; only the surviving trace was copied.
+        assert result.experiments_migrated == 1
+        assert result.traces_migrated == 1
+        assert set(result.trace_id_remap.keys()) == {"src-trace-good"}
+        assert "src-trace-gone" not in result.trace_id_remap
+        assert any(
+            "src-trace-gone" in rec.message and "deleted" in rec.message
+            for rec in capture_log.records
+        ), "expected a warning naming the skipped deleted trace"
+
+    def test_non_404_error__propagates(self) -> None:
+        # A real failure (500) must not be swallowed -- only 404 (deleted)
+        # is tolerated.
+        client, rest_client = self._setup(deleted_status_code=500)
+
+        with pytest.raises(ApiError) as exc_info:
+            cascade_experiments(
+                client,
+                rest_client,
+                source_dataset_id="src-dataset-1",
+                target_dataset_name="MyDataset",
+                target_project_name="DestProject",
+                version_remap={"src-v-1": "dest-v-1"},
+                item_id_remap={
+                    "src-ds-good": "dest-ds-good",
+                    "src-ds-gone": "dest-ds-gone",
+                },
+                audit=_audit(),
+            )
+        assert exc_info.value.status_code == 500
 
 
 # ---------------------------------------------------------------------------

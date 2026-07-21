@@ -301,7 +301,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 FROM (
                     SELECT
                         id,
-                        if(end_time IS NOT NULL AND start_time IS NOT NULL
+                        if(end_time IS NOT NULL AND notEquals(end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) AND start_time IS NOT NULL
                              AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                          NULL) AS duration,
@@ -616,6 +616,10 @@ class KpiCardDAOImpl implements KpiCardDAO {
         return configuration.getDatabaseAnalyticsDataModel().traceColumnsNonNullable();
     }
 
+    private boolean spanColumnsNonNullable() {
+        return configuration.getDatabaseAnalyticsDataModel().spanColumnsNonNullable();
+    }
+
     private void bindTraceFilters(Statement statement, List<? extends Filter> filters) {
         Optional.ofNullable(filters).ifPresent(f -> {
             FilterQueryBuilder.bind(statement, f, FilterStrategy.TRACE);
@@ -626,7 +630,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
 
     private void addSpanFilters(ST template, List<? extends Filter> filters) {
         Optional.ofNullable(filters).ifPresent(f -> {
-            FilterQueryBuilder.toAnalyticsDbFilters(f, FilterStrategy.SPAN)
+            FilterQueryBuilder.toAnalyticsDbFilters(f, FilterStrategy.SPAN, spanColumnsNonNullable())
                     .ifPresent(spanFilters -> template.add("span_filters", spanFilters));
             FilterQueryBuilder.toAnalyticsDbFilters(f, FilterStrategy.SPAN_FEEDBACK_SCORES)
                     .ifPresent(scoresFilters -> template.add("span_feedback_scores_filters", scoresFilters));

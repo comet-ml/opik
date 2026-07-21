@@ -116,10 +116,22 @@ databaseAnalyticsDataModel:
   #   Flip in lockstep with the cutover EXCHANGE.
   traceColumnsNonNullable: ${ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE:-false}
   #  Default: false
+  #  Description: Spans sibling of traceColumnsNonNullable. Leave false while the spans table still has Nullable
+  #   end_time/duration/ttft columns; span writes bind null for absent end_time/ttft. Set true once replaced with
+  #   sentinel-defaulted non-nullable columns so writes bind the sentinels (end_time->epoch, ttft->NaN) instead. Gates
+  #   reads too. Flip in lockstep with the Slice 3 cutover EXCHANGE, independently of the trace flag.
+  spanColumnsNonNullable: ${ANALYTICS_DB_DATA_MODEL_SPAN_COLUMNS_NON_NULLABLE:-false}
+  #  Default: false
   #  Description: Leave false at deploy time. Turn true once the trace backfill starts so trace deletes also
   #   record the deleted ids in the deletion_events_local bridge; without it those deletes are lost from the table
   #   copy. Scope capture to the backfill-to-cutover window.
   traceDeletionEventsCaptureEnabled: ${ANALYTICS_DB_DATA_MODEL_TRACE_DELETION_EVENTS_CAPTURE_ENABLED:-false}
+  #  Default: false
+  #  Description: Spans sibling of traceDeletionEventsCaptureEnabled. Spans have no standalone delete, so this captures
+  #   the span ids removed by the trace-delete cascade into the deletion_events_local bridge (source_table=spans) so they
+  #   survive the spans table copy. Leave false at deploy time; turn true once the span backfill starts, independently of
+  #   the trace flag.
+  spanDeletionEventsCaptureEnabled: ${ANALYTICS_DB_DATA_MODEL_SPAN_DELETION_EVENTS_CAPTURE_ENABLED:-false}
   #  Default: 1000
   #  Description: Rows per INSERT into the deletion_events_local bridge. A single delete batch can carry more ids
   #   than the ClickHouse driver binds reliably in one statement (5 columns per row), so the insert is split into
@@ -1012,6 +1024,39 @@ optimizationLogs:
   # Default: 5
   # Description: Maximum number of concurrent S3 uploads during sync
   syncConcurrency: ${OPTIMIZATION_LOGS_SYNC_CONCURRENCY:-5}
+
+# Safety net for Optimization Studio runs that never reach a terminal status (OPIK-7159).
+# A run's status is only advanced by the Python optimizer worker calling back; if the worker never
+# runs or dies before reporting, the run stays INITIALIZED/RUNNING forever. This reaper transitions
+# such runs to ERROR with a reason so they can never stay stuck indefinitely.
+optimizationStalledReaper:
+  # Default: true
+  # Description: Whether the stalled-run reaper job is enabled
+  enabled: ${OPTIMIZATION_STALLED_REAPER_ENABLED:-true}
+  # Default: 5m
+  # Description: Delay before the first reaper run after startup, to avoid false positives during warm-up
+  startupDelay: ${OPTIMIZATION_STALLED_REAPER_STARTUP_DELAY:-5m}
+  # Default: 5m
+  # Description: Interval between reaper job executions
+  jobInterval: ${OPTIMIZATION_STALLED_REAPER_JOB_INTERVAL:-5m}
+  # Default: 5m
+  # Description: A run stuck in INITIALIZED longer than this is marked ERROR (the worker should call
+  #   mark_running within seconds; kept above normal queue latency to tolerate a backlog)
+  initializedTimeout: ${OPTIMIZATION_STALLED_REAPER_INITIALIZED_TIMEOUT:-5m}
+  # Default: 8h
+  # Description: A run stuck in RUNNING longer than this is marked ERROR. MUST exceed the worker's max
+  #   execution timeout (OPTSTUDIO_EXECUTION_TIMEOUT, default 6h = 21600s) plus a buffer, since the row
+  #   has no per-progress heartbeat and last_updated_at only advances on a status change. If you raise
+  #   the worker timeout, raise this too or healthy long runs will be reaped.
+  runningTimeout: ${OPTIMIZATION_STALLED_REAPER_RUNNING_TIMEOUT:-8h}
+  # Default: 4m
+  # Description: How long the reaper holds its distributed lock (until expiry) to prevent concurrent
+  #   fleet-wide runs. MUST stay below jobInterval — the lock is held until expiry, so a value >=
+  #   jobInterval would make every other scheduled tick a no-op and halve the effective cadence.
+  lockDuration: ${OPTIMIZATION_STALLED_REAPER_LOCK_DURATION:-4m}
+  # Default: 100
+  # Description: Maximum number of stalled runs reconciled per cycle (a large backlog drains over several cycles)
+  batchSize: ${OPTIMIZATION_STALLED_REAPER_BATCH_SIZE:-100}
 
 # Environment CRUD configuration
 environment:
