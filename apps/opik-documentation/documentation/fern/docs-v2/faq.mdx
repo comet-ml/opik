@@ -143,15 +143,23 @@ Opik.
 Additionally, there's another data ingestion limit of `5,000` events/minute per workspace and per
 user.
 
-Finally, there's a rate limit of `250` requests/minute per user for the `Get span by id` endpoint:
+There's a rate limit of `250` requests/minute per user for the `Get span by id` endpoint:
 `GET /api/v1/private/spans/:id`.
+
+Finally, the search and listing endpoints used to read/export traces and spans are limited to `30`
+requests/minute per workspace, each with its own bucket: `search_traces` and `search_spans` (used by
+the SDK `Opik.search_traces` / `Opik.search_spans` methods), and the paginated `GET /traces` and
+`GET /spans` endpoints. This is the limit you are most likely to hit when exporting data at scale;
+see [Exporting at scale](/tracing/advanced/export-data#exporting-at-scale) for how to stay within it.
 
 <Note>
 The Python SDK has implemented some logic to slow down the logging to avoid data loss when
 encountering rate limits. You will see the message: `OPIK: Ingestion rate limited, retrying in 55 seconds, remaining queue size: 1, ...`.
 
-If you are using other logging methods, you will need to implement your own "backoff and retry"
-strategy
+The SDK also automatically backs off and retries on the read/search endpoints, so the
+`Opik.search_traces`, `Opik.search_spans`, and `Opik.search_threads` methods respect these limits
+for you. If you are using other methods, you will need to implement your own "backoff and retry"
+strategy.
 
 </Note>
 

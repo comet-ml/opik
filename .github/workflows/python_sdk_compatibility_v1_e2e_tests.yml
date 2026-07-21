@@ -103,6 +103,9 @@ jobs:
           with:
             python-version: ${{matrix.python_version}}
 
+        - name: Set up uv
+          uses: astral-sh/setup-uv@v8.3.2
+
         - name: Run latest Opik server
           env:
             OPIK_USAGE_REPORT_ENABLED: false
@@ -130,13 +133,13 @@ jobs:
         - name: Install opik SDK
           run: |
             cd ${{ github.workspace }}/sdks/python
-            pip install .
+            uv pip install --system .
 
         - name: Install test requirements
           run: |
             cd ${{ github.workspace }}/sdks/python
-            pip install -r tests/test_requirements.txt
-            pip list
+            uv pip install --system -r tests/test_requirements.txt
+            uv pip list --system
 
         - name: Run compatibility v1 tests
           run: |

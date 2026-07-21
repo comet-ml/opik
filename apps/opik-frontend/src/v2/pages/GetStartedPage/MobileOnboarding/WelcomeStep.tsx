@@ -94,7 +94,16 @@ const WelcomeStep: React.FC<{ onNext?: () => void }> = ({ onNext }) => {
 
         <div>
           <div className="flex flex-col gap-2 rounded-xl border border-border bg-background px-4 pb-3 pt-4">
-            <div className="min-h-5 text-sm leading-5 text-foreground">
+            {/* translate="no": this node's text is rewritten by JS every few
+                dozen ms. Letting the browser translate it makes Google
+                Translate mutate the DOM (wrapping text nodes in <font>), which
+                then crashes React with "NotFoundError: removeChild". Excluding
+                just this animated demo string fixes it; the rest of the page
+                still translates. */}
+            <div
+              className="min-h-5 text-sm leading-5 text-foreground"
+              translate="no"
+            >
               <TypingText />
             </div>
             <div className="flex items-center justify-between">

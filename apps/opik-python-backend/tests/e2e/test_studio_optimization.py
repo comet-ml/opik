@@ -70,6 +70,71 @@ class LabelMatch(BaseMetric):
         )
 '''
 
+# Missing the colon after the class definition: a plain syntax error the
+# build-time `compile()`/`ast.parse` check (OPIK-7172) must reject before any
+# LLM call is made.
+_SYNTAX_ERROR_CODE_METRIC = '''
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+
+class BrokenMetric(BaseMetric)
+    def __init__(self, name: str = "broken"):
+        super().__init__(name=name)
+
+    def score(self, output: str, **kwargs) -> ScoreResult:
+        return ScoreResult(name=self.name, value=0.0, reason="never runs")
+'''
+
+# A strict (non-**kwargs) `score()` signature whose `gold_label` parameter has
+# no same-named column in the dataset (the item source exposes `label`), so it
+# only resolves via the rename-capable `arguments` map
+# ({"gold_label": "label"}). Exercises the arguments-map contract (OPIK-7172)
+# through a real subprocess run, not just the metrics-factory unit tests.
+_RENAMED_CODE_METRIC = '''
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+
+class LabelMatchRenamed(BaseMetric):
+    def __init__(self, name: str = "label_match_renamed"):
+        super().__init__(name=name)
+
+    def score(self, output: str, gold_label: str) -> ScoreResult:
+        label = str(gold_label or "").strip().lower()
+        matched = bool(label) and label in (output or "").lower()
+        return ScoreResult(
+            name=self.name,
+            value=1.0 if matched else 0.0,
+            reason=f"gold_label {label!r} {'found' if matched else 'missing'}",
+        )
+'''
+
+# A strict `score()` signature whose `reference` parameter is mapped (via
+# `arguments`) to a dataset column that does not exist. The backend can't
+# validate this at build time (no dataset access when a code metric is
+# built): at scoring time the mapped column never resolves, so `reference`
+# never lands in `score()`'s kwargs. Because this is a strict (no-`**kwargs`)
+# signature, `isolated_metric` restricts `data` to `output` + the mapped params
+# only (OPIK-7172), so `score(output=...)` raises a `TypeError` for the missing
+# required `reference`. That failure is caught per item and reported as an
+# explicit `ScoreResult(0.0, reason="Error: ...")` (see `run_user_code`) rather
+# than a silent, unexplained 0.0 or a crashed run.
+_MISSING_COLUMN_CODE_METRIC = '''
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+
+class RequiresMissingColumn(BaseMetric):
+    def __init__(self, name: str = "requires_missing_column"):
+        super().__init__(name=name)
+
+    def score(self, output: str, reference: str) -> ScoreResult:
+        # Never reached in this test: `score(**data)` always fails first (see
+        # the contract note above).
+        return ScoreResult(name=self.name, value=1.0)
+'''
+
 
 def _studio_config(
     model: str, dataset_name: str, optimizer_type: str, metric: dict[str, Any]
@@ -139,6 +204,34 @@ def _wait_for_model(opik_client: opik.Opik, project_name: str, substring: str) -
     )
 
 
+def _wait_for_optimization_status(
+    opik_client: opik.Opik, optimization_id: str, expected_status: str
+) -> Any:
+    """Poll the persisted optimization record until it reaches ``expected_status``.
+
+    The record is a ClickHouse ReplacingMergeTree row (versioned re-insert), so
+    a status update isn't guaranteed to be visible the instant
+    ``update_optimizations_by_id`` returns; poll rather than reading once.
+    Returns the fetched optimization on success.
+    """
+    fetched: dict[str, Any] = {}
+
+    def _matches() -> bool:
+        fetched["optimization"] = (
+            opik_client.rest_client.optimizations.get_optimization_by_id(
+                optimization_id
+            )
+        )
+        return fetched["optimization"].status == expected_status
+
+    assert synchronization.until(_matches, sleep=1.0, max_try_seconds=30), (
+        f"optimization {optimization_id} never reached status "
+        f"'{expected_status}' (last seen: "
+        f"{getattr(fetched.get('optimization'), 'status', None)!r})"
+    )
+    return fetched["optimization"]
+
+
 def _assert_only_configured_model_ran(opik_client: opik.Opik, project_name: str) -> None:
     """The configured model actually ran, and the SDK default never leaked (the
     model-passing regression fell back to it). Spans land in ClickHouse with
@@ -193,3 +286,136 @@ def test_studio_optimization_with_code_metric(
     # executor and produced scores end-to-end.
     _assert_optimization_healthy(result)
     _assert_only_configured_model_ran(opik_client, project_name)
+
+
+def test_studio_optimization_code_metric_syntax_error_surfaces_as_error(
+    opik_client: opik.Opik,
+    anthropic_workspace_key: None,
+    project_name: str,
+    seeded_sentiment_classification_dataset: opik.Dataset,
+    run_studio_optimization: RunStudioOptimization,
+) -> None:
+    """A syntax error in the user's code is rejected at build time — before any
+    LLM call — and the reason reaches the persisted optimization record, not
+    just the subprocess log stream (OPIK-7172).
+    """
+    dataset_name = seeded_sentiment_classification_dataset.name
+    metric = {"type": "code", "parameters": {"code": _SYNTAX_ERROR_CODE_METRIC}}
+    studio_config = _studio_config(ANTHROPIC_CLAUDE_HAIKU, dataset_name, "gepa", metric)
+
+    # `MetricFactory.build` raises `InvalidMetricError` inside
+    # `optimization_lifecycle`, which marks the run as failed before
+    # re-raising; `process_optimizer_job` then raises on the subprocess's
+    # "error" result.
+    with pytest.raises(Exception, match="invalid Python code"):
+        run_studio_optimization(project_name, dataset_name, studio_config)
+
+    optimization_id = run_studio_optimization.last_optimization_id
+    assert optimization_id, "fixture did not record the created optimization id"
+
+    optimization = _wait_for_optimization_status(opik_client, optimization_id, "error")
+    assert optimization.status == "error"
+    assert optimization.error_info, "error_info was not persisted on the failed run"
+    # error_info is now the structured ErrorInfo shape (exception_type/message/
+    # traceback), matching the type spans/traces use (OPIK-7172). The pinned
+    # (released) opik SDK doesn't type this field yet, so it comes back as a
+    # plain dict; a newer SDK would expose a typed object — handle both. The
+    # build failure reason is carried in the message.
+    error_info = optimization.error_info
+
+    def _field(name: str) -> str:
+        if isinstance(error_info, dict):
+            return str(error_info.get(name) or "")
+        return str(getattr(error_info, name, "") or "")
+
+    error_text = f"{_field('message')} {_field('traceback')}"
+    assert "invalid Python code" in error_text, (
+        f"error_info did not surface the build failure: {error_info!r}"
+    )
+
+
+def test_studio_optimization_with_code_metric_arguments_map_rename(
+    opik_client: opik.Opik,
+    anthropic_workspace_key: None,
+    project_name: str,
+    seeded_sentiment_classification_dataset: opik.Dataset,
+    run_studio_optimization: RunStudioOptimization,
+) -> None:
+    """The rename-capable `arguments` map (`score()` param -> dataset column)
+    resolves end-to-end through a real optimization subprocess: `gold_label`
+    has no same-named dataset column, so the metric only builds/scores
+    correctly because `{"gold_label": "label"}` is honored.
+
+    Crucially this uses a STRICT signature `score(self, output, gold_label)`
+    (no `**kwargs`) while the dataset carries an EXTRA unmapped column (`text`,
+    consumed by the prompt). Under the pre-fix behavior `text` was splatted into
+    `score(**data)` as an unexpected keyword -> TypeError -> swallowed to 0.0 for
+    every item, which `_assert_optimization_healthy` accepts (0.0 >= 0.0). So we
+    additionally assert a NON-TRIVIAL score: the build-time `accepts_var_keyword`
+    detection (OPIK-7172) must restrict `data` to `output` + `gold_label` so the
+    metric actually matches labels and scores above zero.
+    """
+    dataset_name = seeded_sentiment_classification_dataset.name
+    metric = {
+        "type": "code",
+        "parameters": {
+            "code": _RENAMED_CODE_METRIC,
+            "arguments": {"gold_label": "label"},
+        },
+    }
+    studio_config = _studio_config(ANTHROPIC_CLAUDE_HAIKU, dataset_name, "gepa", metric)
+
+    result = run_studio_optimization(project_name, dataset_name, studio_config)
+
+    _assert_optimization_healthy(result)
+    # Non-trivial correctness: a masked 0.0 (extra `text` column colliding with
+    # the strict signature) would satisfy _assert_optimization_healthy but leave
+    # the baseline at exactly 0.0. A working rename on these clear-cut sentiment
+    # examples must match at least one label -> baseline strictly above zero.
+    assert result.get("initial_score", 0.0) > 0.0, (
+        f"rename map produced a trivial 0.0 baseline — extra 'text' column likely "
+        f"collided with the strict score() signature: {result.get('initial_score')!r}"
+    )
+    _assert_only_configured_model_ran(opik_client, project_name)
+
+
+def test_studio_optimization_with_code_metric_missing_mapped_column(
+    opik_client: opik.Opik,
+    anthropic_workspace_key: None,
+    project_name: str,
+    seeded_sentiment_classification_dataset: opik.Dataset,
+    run_studio_optimization: RunStudioOptimization,
+) -> None:
+    """An `arguments` map entry pointing at a column absent from the dataset
+    can't be validated at build time (the code metric builder has no dataset
+    access), so it degrades to a defined, explained per-item failure rather
+    than silently reporting a healthy-looking run: every item's `score(**data)`
+    call raises (the mapped `reference` never resolves), which is caught and
+    reported as `ScoreResult(0.0, reason="Error: ...")` — never a crash, and
+    never an unexplained/silent score (OPIK-7172; mirrors the OPIK-7160
+    anti-pattern other reference-based metrics guard against at build time).
+    """
+    dataset_name = seeded_sentiment_classification_dataset.name
+    metric = {
+        "type": "code",
+        "parameters": {
+            "code": _MISSING_COLUMN_CODE_METRIC,
+            "arguments": {"reference": "does_not_exist_in_dataset"},
+        },
+    }
+    studio_config = _studio_config(ANTHROPIC_CLAUDE_HAIKU, dataset_name, "gepa", metric)
+
+    result = run_studio_optimization(project_name, dataset_name, studio_config)
+
+    # The run completes (the per-item scoring failure never crashes the whole
+    # optimization) but the metric can never produce anything but 0: it's a
+    # deterministic, explained degradation, not an accidental "healthy" score.
+    assert result is not None, "no result returned"
+    assert result.get("status") != "cancelled", "optimization was cancelled"
+    assert result.get("initial_score") == 0.0, (
+        f"expected a deterministic 0.0 baseline (every item's score() call is "
+        f"missing 'reference'), got {result.get('initial_score')!r}"
+    )
+    assert result.get("score") == 0.0, (
+        f"expected a deterministic 0.0 final score, got {result.get('score')!r}"
+    )

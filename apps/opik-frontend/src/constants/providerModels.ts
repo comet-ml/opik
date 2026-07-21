@@ -856,6 +856,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "mancer/weaver",
     },
     {
+      value: PROVIDER_MODEL_TYPE.MEITUAN_LONGCAT_2_0,
+      label: "meituan/longcat-2.0",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.MEITUAN_LONGCAT_FLASH_CHAT,
       label: "meituan/longcat-flash-chat",
     },
@@ -1677,6 +1681,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openrouter/auto",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENROUTER_AUTO_BETA,
+      label: "openrouter/auto-beta",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENROUTER_BODYBUILDER,
       label: "openrouter/bodybuilder",
     },
@@ -2139,6 +2147,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.THEDRUMMER_UNSLOPNEMO_12B,
       label: "thedrummer/unslopnemo-12b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.THINKINGMACHINES_INKLING,
+      label: "thinkingmachines/inkling",
     },
     {
       value: PROVIDER_MODEL_TYPE.THUDM_GLM_4_1V_9B_THINKING,

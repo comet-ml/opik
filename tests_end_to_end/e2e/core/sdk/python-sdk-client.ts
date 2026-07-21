@@ -122,6 +122,13 @@ export interface PythonSdkClient {
     items_failed: number;
     items_total: number;
   }>;
+  createAnnotationQueue(args: {
+    project_name: string;
+    name: string;
+    trace_ids: string[];
+    feedback_definition_names?: string[];
+    workspace?: string;
+  }): Promise<{ id: string; name: string }>;
 }
 
 export class PythonSdkBridgeError extends Error {
@@ -268,6 +275,9 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
         items_failed: number;
         items_total: number;
       }>('POST', '/test-suites/run', args);
+    },
+    async createAnnotationQueue(args) {
+      return request<{ id: string; name: string }>('POST', '/annotation-queues', args);
     },
   };
 }
