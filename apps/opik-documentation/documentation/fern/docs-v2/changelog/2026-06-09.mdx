@@ -1,7 +1,3 @@
----
-canonical-url: https://www.comet.com/docs/opik/changelog/2026-06-09
----
-
 ## Resume Interrupted Evaluations with `evaluate_resume`
 
 Long-running evaluation jobs that get cut short — by Ctrl-C, an OOM error, a failed scoring metric, or a network blip — can now be continued from where they stopped instead of restarting from scratch. `opik.evaluate_resume(experiment_id, task, scoring_metrics=[...])` replays only the trials that did not complete, merges them with the ones that did, and returns a single `EvaluationResult` covering the whole experiment.

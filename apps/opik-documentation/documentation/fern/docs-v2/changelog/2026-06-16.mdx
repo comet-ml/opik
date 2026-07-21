@@ -1,7 +1,3 @@
----
-canonical-url: https://www.comet.com/docs/opik/changelog/2026-06-16
----
-
 ## PydanticAI and Logfire Trace Fidelity Improvements
 
 Traces from PydanticAI agents ingested over OpenTelemetry (via Logfire) now show complete, correctly-typed data and accurate cost. Several gaps in the OTel → Opik span mapping were fixed:
@@ -17,7 +13,7 @@ The error-surfacing fix is generic and benefits all OTel integrations; the tool 
 
 Setting up Claude Desktop (or any MCP client) to connect to Opik no longer requires manually editing JSON config files. Running `opik configure` now offers an opt-in MCP setup step at the end of the flow. The standalone `opik mcp configure` command runs the same wizard on its own. Both automatically write the Opik MCP server block to your Claude Desktop configuration.
 
-👉 [MCP server documentation](https://www.comet.com/docs/opik/prompt_engineering/mcp-server)
+👉 [MCP server documentation](https://www.comet.com/docs/opik/mcp-server)
 
 ## Bug Fixes & Improvements
 
