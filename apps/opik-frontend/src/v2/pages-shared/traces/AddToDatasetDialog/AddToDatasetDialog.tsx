@@ -46,8 +46,9 @@ import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescrip
 import EvaluationCriteriaSection from "@/shared/EvaluationCriteriaSection/EvaluationCriteriaSection";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import LoadableSelectBox from "@/shared/LoadableSelectBox/LoadableSelectBox";
+import LoadableSelectBox from "@/v2/components/LoadableSelectBox/LoadableSelectBox";
 import { Separator } from "@/ui/separator";
+import { ListAction } from "@/ui/list-action";
 
 const DEFAULT_SIZE = 100;
 
@@ -552,13 +553,10 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
                   canCreateDatasets ? (
                     <>
                       <Separator className="my-1" />
-                      <div
-                        className="flex h-10 cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground"
-                        onClick={() => setOpenDialog(true)}
-                      >
-                        <Plus className="size-4 shrink-0" />
-                        <span className="comet-body-s">Add {entityName}</span>
-                      </div>
+                      <ListAction size="sm" onClick={() => setOpenDialog(true)}>
+                        <Plus className="size-3.5 shrink-0" />
+                        Add {entityName}
+                      </ListAction>
                     </>
                   ) : undefined
                 }
