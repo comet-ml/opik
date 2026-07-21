@@ -996,6 +996,9 @@ navigation:
               - page: Experiments
                 path: ../docs-v2/reference/typescript-sdk/evaluation/experiments.mdx
                 slug: experiments
+              - page: Test Suites
+                path: ../docs-v2/reference/typescript-sdk/evaluation/test_suites.mdx
+                slug: test_suites
 
       - section: Rest API
         slug: rest-api
