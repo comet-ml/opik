@@ -134,6 +134,10 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
             return Mono.just(0L);
         }
 
+        // Queue items reference trace/thread ids (v7 by construction); enforce so the referenced-id
+        // policy is uniform. Past allowed — queues commonly collect older traces/threads.
+        itemIds.forEach(itemId -> idGenerator.validateIdNotInFuture(itemId, "AnnotationQueue item"));
+
         return annotationQueueDAO.findQueueInfoById(queueId)
                 .switchIfEmpty(Mono.error(createNotFoundError(queueId)))
                 .flatMap(queue -> annotationQueueDAO.addItems(queueId, itemIds, queue.projectId()))

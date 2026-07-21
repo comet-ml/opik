@@ -89,6 +89,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     private final @NonNull TraceThreadService traceThreadService;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull EventBus eventBus;
+    private final @NonNull IdGenerator idGenerator;
 
     @Builder(toBuilder = true)
     record ProjectDto<T extends FeedbackScoreItem>(Project project, List<T> scores) {
@@ -100,6 +101,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
+            idGenerator.validateIdNotInFuture(traceId, EntityType.TRACE.getType());
             return traceDAO.getProjectIdFromTrace(traceId)
                     .switchIfEmpty(Mono.error(failWithNotFound("Trace", traceId)))
                     .flatMap(projectId -> getAuthor()
@@ -118,6 +120,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
+            idGenerator.validateIdNotInFuture(spanId, EntityType.SPAN.getType());
             return spanDAO.getProjectIdFromSpan(spanId)
                     .switchIfEmpty(Mono.error(failWithNotFound("Span", spanId)))
                     .flatMap(projectId -> getAuthor()
@@ -173,7 +176,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
         Map<String, List<FeedbackScoreItem>> scoresPerProject = scores
                 .stream()
                 .map(score -> {
-                    IdGenerator.validateVersion(score.id(), entityType.getType()); // validate span/trace id
+                    idGenerator.validateIdNotInFuture(score.id(), entityType.getType()); // validate span/trace id
 
                     return score.toBuilder()
                             .projectName(WorkspaceUtils.getProjectName(score.projectName()))

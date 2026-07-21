@@ -34,12 +34,19 @@ public interface IdGenerator {
     Mono<UUID> validateIdAsync(UUID id, String resource);
 
     /**
-     * Validates an ingested {@code id} on the update path: it must be a version 7 UUID
-     * ({@link #validateVersion(UUID, String)}) and must not embed a timestamp far in the future (which
-     * would corrupt the partition layout). Unlike {@link #validateId}, old ids are allowed, because
-     * updating a long-lived entity (e.g. created months ago) is a legitimate operation.
+     * Validates an {@code id} that may legitimately point at an entity created in the past: it must be a
+     * version 7 UUID ({@link #validateVersion(UUID, String)}) and must not embed a timestamp far in the
+     * future (which would corrupt the partition layout / retention id-range). Unlike {@link #validateId},
+     * old ids are allowed.
+     *
+     * <p>Used both on the update path (updating a long-lived entity created months ago is legitimate) and
+     * for referenced/foreign ids on ingest (e.g. a span's {@code traceId}: retention orders spans by the
+     * {@code trace_id} range assuming it is a time-ordered UUIDv7, and late spans on old traces are common,
+     * so old is fine but non-v7 or future-dated must be rejected).
      */
-    Mono<UUID> validateIdForUpdateAsync(UUID id, String resource);
+    void validateIdNotInFuture(UUID id, String resource);
+
+    Mono<UUID> validateIdNotInFutureAsync(UUID id, String resource);
 
     static Mono<UUID> validateVersionAsync(@NonNull UUID id, String resource) {
         return Mono.fromCallable(() -> {
@@ -91,15 +98,16 @@ class IdGeneratorImpl implements IdGenerator {
         });
     }
 
-    private void validateIdForUpdate(UUID id, String resource) {
+    @Override
+    public void validateIdNotInFuture(@NonNull UUID id, String resource) {
         IdGenerator.validateVersion(id, resource);
         uuidV7TimestampValidator.validateNotInFuture(id);
     }
 
     @Override
-    public Mono<UUID> validateIdForUpdateAsync(@NonNull UUID id, String resource) {
+    public Mono<UUID> validateIdNotInFutureAsync(@NonNull UUID id, String resource) {
         return Mono.fromCallable(() -> {
-            validateIdForUpdate(id, resource);
+            validateIdNotInFuture(id, resource);
             return id;
         });
     }

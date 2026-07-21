@@ -62,6 +62,8 @@ public class SpanService {
     public static final String PARENT_SPAN_IS_MISMATCH = "parent_span_id does not match the existing span";
     public static final String TRACE_ID_MISMATCH = "trace_id does not match the existing span";
     public static final String SPAN_KEY = "Span";
+    public static final String SPAN_TRACE_KEY = "Span trace";
+    public static final String SPAN_PARENT_KEY = "Span parent";
     public static final String PROJECT_AND_WORKSPACE_NAME_MISMATCH = "Project name and workspace name do not match the existing span";
 
     private final @NonNull SpanDAO spanDAO;
@@ -159,6 +161,10 @@ public class SpanService {
         var projectName = WorkspaceUtils.getProjectName(span.projectName());
         return idGenerator
                 .validateIdAsync(id, SPAN_KEY)
+                .then(idGenerator.validateIdNotInFutureAsync(span.traceId(), SPAN_TRACE_KEY))
+                .then(span.parentSpanId() == null
+                        ? Mono.<UUID>empty()
+                        : idGenerator.validateIdNotInFutureAsync(span.parentSpanId(), SPAN_PARENT_KEY))
                 .then(projectService.getOrCreate(projectName))
                 .flatMap(project -> lockService.executeWithLock(
                         new LockService.Lock(id, SPAN_KEY),
@@ -220,7 +226,11 @@ public class SpanService {
             String userName = ctx.get(RequestContext.USER_NAME);
 
             return idGenerator
-                    .validateIdForUpdateAsync(id, SPAN_KEY)
+                    .validateIdNotInFutureAsync(id, SPAN_KEY)
+                    .then(idGenerator.validateIdNotInFutureAsync(spanUpdate.traceId(), SPAN_TRACE_KEY))
+                    .then(spanUpdate.parentSpanId() == null
+                            ? Mono.<UUID>empty()
+                            : idGenerator.validateIdNotInFutureAsync(spanUpdate.parentSpanId(), SPAN_PARENT_KEY))
                     .then(Mono.defer(() -> getProjectById(spanUpdate)
                             .switchIfEmpty(Mono.defer(() -> projectService.getOrCreate(projectName)))
                             .subscribeOn(Schedulers.boundedElastic()))
@@ -247,7 +257,12 @@ public class SpanService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            return spanDAO.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), mergeTags)
+            return idGenerator.validateIdNotInFutureAsync(batchUpdate.update().traceId(), SPAN_TRACE_KEY)
+                    .then(batchUpdate.update().parentSpanId() == null
+                            ? Mono.<UUID>empty()
+                            : idGenerator.validateIdNotInFutureAsync(batchUpdate.update().parentSpanId(),
+                                    SPAN_PARENT_KEY))
+                    .then(spanDAO.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), mergeTags))
                     .onErrorResume(TagOperations::mapTagLimitError)
                     .doOnSuccess(__ -> {
                         log.info("Completed batch update for '{}' spans", batchUpdate.ids().size());
@@ -460,6 +475,10 @@ public class SpanService {
 
                     UUID id = span.id() == null ? idGenerator.generateId() : span.id();
                     idGenerator.validateId(id, SPAN_KEY);
+                    idGenerator.validateIdNotInFuture(span.traceId(), SPAN_TRACE_KEY);
+                    if (span.parentSpanId() != null) {
+                        idGenerator.validateIdNotInFuture(span.parentSpanId(), SPAN_PARENT_KEY);
+                    }
 
                     return span.toBuilder().id(id).projectId(project.id()).build();
                 })
