@@ -14,7 +14,6 @@ re-enqueues, connection errors parked for replay) are deliberately excluded.
 import collections
 import dataclasses
 import enum
-import threading
 import time
 from typing import Deque, List, Optional, Tuple
 
@@ -118,64 +117,63 @@ class ErrorsReport:
 
 
 class DataLossTracker:
-    """Thread-safe, bounded record of terminally-dropped messages.
+    """Bounded record of terminally-dropped messages.
 
     Shared across all :class:`opik.Opik` handles on one connection identity (the
     background sender is shared). Per-flush attribution is done with an opaque
     monotonic marker: :meth:`marker` before the flush, :meth:`drops_since`
     after.
+
+    Lock-free: writes come from the sender's background threads and rely on
+    ``deque`` being thread-safe. The running counters are plain integers, so
+    under concurrent drops a count may momentarily lag or round off — that
+    imprecision is deliberately accepted (a data-loss tally need not be exact to
+    the message, and a lock would add contention on the hot sending path).
     """
 
     def __init__(self, max_entries: int = 1000):
-        self._lock = threading.Lock()
         self._entries: Deque[FailedMessageInfo] = collections.deque(maxlen=max_entries)
         # Running totals kept independently of the bounded ``_entries`` window,
-        # so both message and item counts stay exact even after eviction.
+        # so counts survive eviction of the oldest details.
         self._recorded_count = 0
         self._recorded_items = 0
 
     def record(self, failure: FailedMessageInfo) -> None:
-        with self._lock:
-            self._entries.append(failure)
-            self._recorded_count += 1
-            self._recorded_items += failure.item_count
+        self._entries.append(failure)
+        self._recorded_count += 1
+        self._recorded_items += failure.item_count
 
     def marker(self) -> DropMarker:
         """Opaque token marking the current point in the drop history.
 
         Carries the running (message, item) totals; pass it to
-        :meth:`drops_since` to get the exact deltas observed since.
+        :meth:`drops_since` to get the deltas observed since.
         """
-        with self._lock:
-            return self._recorded_count, self._recorded_items
+        return self._recorded_count, self._recorded_items
 
     def drops_since(
         self, marker: DropMarker
     ) -> Tuple[int, int, List[FailedMessageInfo]]:
-        """Drops recorded since ``marker``, as one consistent snapshot.
+        """Drops recorded since ``marker``.
 
-        Returns ``(message_count, item_count, failures)``. Both counts are
-        exact — derived from running totals, not the window — even under extreme
-        drop volume; only ``failures`` (the details) are best-effort, since the
-        oldest entries are evicted once capacity is exceeded. A single lock keeps
-        the counts and details consistent even while other clients on the shared
-        sender keep recording.
+        Returns ``(message_count, item_count, failures)`` — the counts from the
+        running totals, and the retained per-drop details (bounded to the most
+        recent ``max_entries``, oldest evicted once capacity is exceeded).
         """
         marker_count, marker_items = marker
-        with self._lock:
-            count = self._recorded_count - marker_count
-            items = self._recorded_items - marker_items
-            window_size = min(count, len(self._entries))
-            failures = list(self._entries)[-window_size:] if window_size > 0 else []
-            return count, items, failures
+        count = self._recorded_count - marker_count
+        items = self._recorded_items - marker_items
+        window = list(self._entries)
+        window_size = min(count, len(window))
+        failures = window[-window_size:] if window_size > 0 else []
+        return count, items, failures
 
     def total_drops(self) -> Tuple[int, int, List[FailedMessageInfo]]:
-        """All-time drop totals plus retained details, as one snapshot.
+        """All-time drop totals plus retained details.
 
         Returns ``(message_count, item_count, failures)``, independent of any
         flush boundary — answers "has anything been lost?" across the sender's
-        lifetime. Counts are exact (running totals); ``failures`` is bounded to
-        the most recent ``max_entries``, older details evicted.
+        lifetime. ``failures`` is bounded to the most recent ``max_entries``,
+        older details evicted.
         """
-        with self._lock:
-            return self._recorded_count, self._recorded_items, list(self._entries)
+        return self._recorded_count, self._recorded_items, list(self._entries)
