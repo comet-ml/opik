@@ -262,7 +262,10 @@ repos:
         name: 🧪 pre-commit wrapper smoke tests
         entry: scripts/test_precommit_wrappers.sh
         language: system
-        files: ^scripts/precommit-.*\.sh$|^scripts/test_precommit_wrappers\.sh$
+        # Retrigger on the wrapper scripts, the desc resolver + its TSV data, and
+        # the config itself — so adding a hook (or renaming one) without a
+        # matching description entry fails the coverage test.
+        files: ^scripts/precommit-.*\.(sh|py|tsv)$|^scripts/test_precommit_wrappers\.sh$|^\.pre-commit-config\.yaml$
         pass_filenames: false
 
   # ---------------------------------------------------------------------------
