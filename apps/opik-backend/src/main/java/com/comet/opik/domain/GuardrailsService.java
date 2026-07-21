@@ -51,7 +51,9 @@ class GuardrailsServiceImpl implements GuardrailsService {
                 .stream()
                 .map(guardrail -> {
                     UUID id = idGenerator.generateId();
-                    IdGenerator.validateVersion(guardrail.entityId(), entityType.getType()); // validate trace id
+                    idGenerator.validateIdNotInFuture(guardrail.entityId(), entityType.getType());
+                    idGenerator.validateIdNotInFuture(guardrail.secondaryId(), "guardrail secondary");
+                    idGenerator.validateIdNotInFutureIfPresent(guardrail.projectId(), "project");
 
                     return guardrail.toBuilder()
                             .id(id)

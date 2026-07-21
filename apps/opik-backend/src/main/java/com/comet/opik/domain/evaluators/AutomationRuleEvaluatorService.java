@@ -117,6 +117,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
         UUID id = idGenerator.generateId();
         IdGenerator.validateVersion(id, "AutomationRuleEvaluator");
+        projectIds.forEach(projectId -> idGenerator.validateIdNotInFutureIfPresent(projectId, "project"));
 
         // Dual-field sync: First projectId becomes the legacy project_id field
         UUID primaryProjectId = projectIds.isEmpty() ? null : projectIds.iterator().next();
@@ -226,6 +227,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     @CacheEvict(name = "automation_rule_evaluators_find_all", key = "'*-' + $workspaceId + '-*'", keyUsesPatternMatching = true)
     public void update(@NonNull UUID id, @NonNull Set<UUID> projectIds, @NonNull String workspaceId,
             @NonNull String userName, @NonNull AutomationRuleEvaluatorUpdate<?, ?> evaluatorUpdate) {
+
+        projectIds.forEach(projectId -> idGenerator.validateIdNotInFutureIfPresent(projectId, "project"));
 
         log.debug("Updating AutomationRuleEvaluator with id '{}' in projectIds '{}' and workspaceId '{}'", id,
                 projectIds,

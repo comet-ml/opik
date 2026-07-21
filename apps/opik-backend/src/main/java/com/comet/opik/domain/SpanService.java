@@ -162,9 +162,7 @@ public class SpanService {
         return idGenerator
                 .validateIdAsync(id, SPAN_KEY)
                 .then(idGenerator.validateIdNotInFutureAsync(span.traceId(), SPAN_TRACE_KEY))
-                .then(span.parentSpanId() == null
-                        ? Mono.<UUID>empty()
-                        : idGenerator.validateIdNotInFutureAsync(span.parentSpanId(), SPAN_PARENT_KEY))
+                .then(idGenerator.validateIdNotInFutureIfPresentAsync(span.parentSpanId(), SPAN_PARENT_KEY))
                 .then(projectService.getOrCreate(projectName))
                 .flatMap(project -> lockService.executeWithLock(
                         new LockService.Lock(id, SPAN_KEY),
@@ -228,9 +226,8 @@ public class SpanService {
             return idGenerator
                     .validateIdNotInFutureAsync(id, SPAN_KEY)
                     .then(idGenerator.validateIdNotInFutureAsync(spanUpdate.traceId(), SPAN_TRACE_KEY))
-                    .then(spanUpdate.parentSpanId() == null
-                            ? Mono.<UUID>empty()
-                            : idGenerator.validateIdNotInFutureAsync(spanUpdate.parentSpanId(), SPAN_PARENT_KEY))
+                    .then(idGenerator.validateIdNotInFutureIfPresentAsync(spanUpdate.parentSpanId(), SPAN_PARENT_KEY))
+                    .then(idGenerator.validateIdNotInFutureIfPresentAsync(spanUpdate.projectId(), "project"))
                     .then(Mono.defer(() -> getProjectById(spanUpdate)
                             .switchIfEmpty(Mono.defer(() -> projectService.getOrCreate(projectName)))
                             .subscribeOn(Schedulers.boundedElastic()))
@@ -258,10 +255,9 @@ public class SpanService {
             String userName = ctx.get(RequestContext.USER_NAME);
 
             return idGenerator.validateIdNotInFutureAsync(batchUpdate.update().traceId(), SPAN_TRACE_KEY)
-                    .then(batchUpdate.update().parentSpanId() == null
-                            ? Mono.<UUID>empty()
-                            : idGenerator.validateIdNotInFutureAsync(batchUpdate.update().parentSpanId(),
-                                    SPAN_PARENT_KEY))
+                    .then(idGenerator.validateIdNotInFutureIfPresentAsync(batchUpdate.update().parentSpanId(),
+                            SPAN_PARENT_KEY))
+                    .then(idGenerator.validateIdNotInFutureIfPresentAsync(batchUpdate.update().projectId(), "project"))
                     .then(spanDAO.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), mergeTags))
                     .onErrorResume(TagOperations::mapTagLimitError)
                     .doOnSuccess(__ -> {
@@ -476,9 +472,7 @@ public class SpanService {
                     UUID id = span.id() == null ? idGenerator.generateId() : span.id();
                     idGenerator.validateId(id, SPAN_KEY);
                     idGenerator.validateIdNotInFuture(span.traceId(), SPAN_TRACE_KEY);
-                    if (span.parentSpanId() != null) {
-                        idGenerator.validateIdNotInFuture(span.parentSpanId(), SPAN_PARENT_KEY);
-                    }
+                    idGenerator.validateIdNotInFutureIfPresent(span.parentSpanId(), SPAN_PARENT_KEY);
 
                     return span.toBuilder().id(id).projectId(project.id()).build();
                 })

@@ -495,6 +495,9 @@ public class ExperimentService {
     public Mono<UUID> create(@NonNull Experiment experiment) {
         var id = experiment.id() == null ? idGenerator.generateId() : experiment.id();
         IdGenerator.validateVersion(id, "Experiment");
+        idGenerator.validateIdNotInFutureIfPresent(experiment.projectId(), "project");
+        idGenerator.validateIdNotInFutureIfPresent(experiment.optimizationId(), "optimization");
+        idGenerator.validateIdNotInFutureIfPresent(experiment.datasetVersionId(), "dataset version");
         var name = StringUtils.getIfBlank(experiment.name(), nameGenerator::generateName);
         return resolveProjectId(experiment)
                 .flatMap(resolvedExperiment -> datasetService

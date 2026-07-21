@@ -102,6 +102,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
             String userName = ctx.get(RequestContext.USER_NAME);
 
             idGenerator.validateIdNotInFuture(traceId, EntityType.TRACE.getType());
+            idGenerator.validateIdNotInFutureIfPresent(score.sourceQueueId(), "annotation queue");
             return traceDAO.getProjectIdFromTrace(traceId)
                     .switchIfEmpty(Mono.error(failWithNotFound("Trace", traceId)))
                     .flatMap(projectId -> getAuthor()
@@ -121,6 +122,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
             String userName = ctx.get(RequestContext.USER_NAME);
 
             idGenerator.validateIdNotInFuture(spanId, EntityType.SPAN.getType());
+            idGenerator.validateIdNotInFutureIfPresent(score.sourceQueueId(), "annotation queue");
             return spanDAO.getProjectIdFromSpan(spanId)
                     .switchIfEmpty(Mono.error(failWithNotFound("Span", spanId)))
                     .flatMap(projectId -> getAuthor()
@@ -177,6 +179,8 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                 .stream()
                 .map(score -> {
                     idGenerator.validateIdNotInFuture(score.id(), entityType.getType()); // validate span/trace id
+                    idGenerator.validateIdNotInFutureIfPresent(score.projectId(), "project");
+                    idGenerator.validateIdNotInFutureIfPresent(score.sourceQueueId(), "annotation queue");
 
                     return score.toBuilder()
                             .projectName(WorkspaceUtils.getProjectName(score.projectName()))

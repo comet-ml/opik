@@ -261,6 +261,7 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
     private AnnotationQueue prepareAnnotationQueue(AnnotationQueue annotationQueue) {
         UUID id = annotationQueue.id() == null ? idGenerator.generateId() : annotationQueue.id();
         IdGenerator.validateVersion(id, "AnnotationQueue");
+        idGenerator.validateIdNotInFutureIfPresent(annotationQueue.projectId(), "project");
 
         log.debug("Preparing annotation queue with id '{}', name '{}', project '{}'",
                 id, annotationQueue.name(), annotationQueue.projectId());
