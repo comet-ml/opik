@@ -39,18 +39,24 @@ public class JsonProcessingExceptionMapper implements ExceptionMapper<JsonProces
         // plain `instanceof` check misses it and the metric under-counts exactly the real-world case
         // the dashboard monitors. Walk the cause chain to find the underlying constraint.
         StreamConstraintsException streamConstraintsException = findStreamConstraint(exception);
+        Response.Status status;
         if (streamConstraintsException != null) {
+            // A size-guard trip is a payload-too-large rejection, not malformed JSON, so surface it as
+            // 413 REQUEST_ENTITY_TOO_LARGE — consistent with RequestSizeLimitFilter's pre-parse 413 —
+            // rather than 400. It is an EXPECTED client rejection, already surfaced via the ingestion
+            // size-guard metric, so keep it at DEBUG so oversized-payload traffic doesn't flood INFO.
             log.debug("Ingestion size guard rejected a request", exception);
             sizeGuardMetrics.recordStreamConstraintRejection(streamConstraintsException, uriInfo.get(), requestContext);
+            status = Response.Status.REQUEST_ENTITY_TOO_LARGE;
         } else {
             // Genuine malformed JSON: log the exception itself (not just its message) so the type and
             // stack trace are available to diagnose the rare, unexpected parse failure.
             log.info("Deserialization exception", exception);
+            status = Response.Status.BAD_REQUEST;
         }
 
-        return Response.status(Response.Status.BAD_REQUEST)
-                .entity(new ErrorMessage(Response.Status.BAD_REQUEST.getStatusCode(),
-                        "Unable to process JSON. " + exception.getMessage()))
+        return Response.status(status)
+                .entity(new ErrorMessage(status.getStatusCode(), "Unable to process JSON. " + exception.getMessage()))
                 .build();
     }
 

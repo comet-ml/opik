@@ -69,6 +69,7 @@ import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.client.ClientBuilder;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -80,6 +81,10 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpStatus;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.awaitility.Awaitility;
+import org.glassfish.jersey.client.ClientConfig;
+import org.glassfish.jersey.client.ClientProperties;
+import org.glassfish.jersey.client.RequestEntityProcessing;
+import org.glassfish.jersey.grizzly.connector.GrizzlyConnectorProvider;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -4361,7 +4366,7 @@ class SpansResourceTest {
         }
 
         @Test
-        @DisplayName("Create span with attachment exceeding limit - should return 400 Bad Request")
+        @DisplayName("Create span with attachment exceeding limit - should return 413 Request Entity Too Large")
         void createSpan__whenSingleAttachmentExceedsLimit__thenReject() throws Exception {
             // Given: Create a single attachment that exceeds the 250MB test limit
             // In test environment: maxStringLength = 250MB (262,144,000 bytes)
@@ -4387,8 +4392,9 @@ class SpansResourceTest {
                     .build();
 
             // When: Attempt to create the span
-            // Then: Should fail with 400 Bad Request
-            try (Response response = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE, 400)) {
+            // Then: Should fail with 413 Request Entity Too Large (single value exceeds maxStringLength)
+            try (Response response = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_REQUEST_TOO_LONG)) {
                 // Assert error message mentions the limit
                 var errorResponse = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
                 assertThat(errorResponse).isNotNull();
@@ -4400,7 +4406,7 @@ class SpansResourceTest {
         }
 
         @Test
-        @DisplayName("Create span whose total document exceeds maxDocumentLength - should return 400 Bad Request")
+        @DisplayName("Create span whose total document exceeds maxDocumentLength - should return 413 Request Entity Too Large")
         void createSpan__whenTotalDocumentExceedsMaxDocumentLength__thenReject() throws Exception {
             // Given: THREE 70MB attachments (~93MB base64 each). Each individual string is under the
             // 250MB maxStringLength, but the whole document (~280MB) exceeds maxDocumentLength (256MB).
@@ -4431,9 +4437,10 @@ class SpansResourceTest {
                     .build();
 
             // When: Attempt to create the span
-            // Then: rejected mid-parse with 400 Bad Request (document length exceeded), before a
-            // multi-GB node tree is materialized - so no attachment stripping / S3 upload happens.
-            try (Response response = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE, 400)) {
+            // Then: rejected mid-parse with 413 Request Entity Too Large (document length exceeded),
+            // before a multi-GB node tree is materialized - so no attachment stripping / S3 upload happens.
+            try (Response response = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_REQUEST_TOO_LONG)) {
                 var errorResponse = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
                 assertThat(errorResponse).isNotNull();
                 assertThat(errorResponse.getMessage())
@@ -4454,13 +4461,12 @@ class SpansResourceTest {
             // header before the body is sent. (BUFFERED makes a real Content-Length be sent; without
             // Expect-continue the JDK connector throws "error writing to server" when the server 413s
             // mid-upload.)
-            var config = new org.glassfish.jersey.client.ClientConfig();
-            config.connectorProvider(new org.glassfish.jersey.grizzly.connector.GrizzlyConnectorProvider());
-            config.property(org.glassfish.jersey.client.ClientProperties.REQUEST_ENTITY_PROCESSING,
-                    org.glassfish.jersey.client.RequestEntityProcessing.BUFFERED);
-            config.property(org.glassfish.jersey.client.ClientProperties.EXPECT_100_CONTINUE, true);
+            var config = new ClientConfig();
+            config.connectorProvider(new GrizzlyConnectorProvider());
+            config.property(ClientProperties.REQUEST_ENTITY_PROCESSING, RequestEntityProcessing.BUFFERED);
+            config.property(ClientProperties.EXPECT_100_CONTINUE, true);
 
-            try (var bufferedClient = jakarta.ws.rs.client.ClientBuilder.newClient(config)) {
+            try (var bufferedClient = ClientBuilder.newClient(config)) {
                 try (Response response = bufferedClient.target("%s/v1/private/spans".formatted(baseURI))
                         .request()
                         .header(HttpHeaders.AUTHORIZATION, API_KEY)

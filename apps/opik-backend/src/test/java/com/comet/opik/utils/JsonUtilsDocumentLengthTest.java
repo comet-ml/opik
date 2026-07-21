@@ -37,7 +37,7 @@ class JsonUtilsDocumentLengthTest {
     }
 
     @Test
-    @DisplayName("a document over maxDocumentLength is rejected mid-parse (StreamConstraintsException -> 400)")
+    @DisplayName("a document over maxDocumentLength is rejected mid-parse (StreamConstraintsException -> 413)")
     void overMaxDocumentLength_rejected() {
         ObjectMapper mapper = JsonUtils.createConfiguredMapper(STRING_LEN, 1024L); // 1KB
 

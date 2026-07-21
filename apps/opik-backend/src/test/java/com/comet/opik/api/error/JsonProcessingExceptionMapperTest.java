@@ -40,13 +40,20 @@ class JsonProcessingExceptionMapperTest {
         return new JsonProcessingExceptionMapper(sizeGuardMetrics, requestContext, uriInfoProvider);
     }
 
+    // A size-guard trip is a payload-too-large rejection -> 413 (consistent with RequestSizeLimitFilter).
+    private void assertPayloadTooLarge(Response response) {
+        assertThat(response.getStatus()).isEqualTo(Response.Status.REQUEST_ENTITY_TOO_LARGE.getStatusCode());
+        assertThat(((ErrorMessage) response.getEntity()).getMessage()).startsWith("Unable to process JSON.");
+    }
+
+    // Genuine malformed JSON stays 400.
     private void assertBadRequest(Response response) {
         assertThat(response.getStatus()).isEqualTo(Response.Status.BAD_REQUEST.getStatusCode());
         assertThat(((ErrorMessage) response.getEntity()).getMessage()).startsWith("Unable to process JSON.");
     }
 
     @Test
-    @DisplayName("records the size-guard metric when the constraint is WRAPPED by a JsonMappingException")
+    @DisplayName("records the metric and returns 413 when the constraint is WRAPPED by a JsonMappingException")
     void recordsMetricForWrappedStreamConstraint() {
         // The real-world case: Jackson trips maxDocumentLength while binding Span["output"] and re-wraps
         // the parser-level StreamConstraintsException in a JsonMappingException (with the reference chain).
@@ -62,11 +69,11 @@ class JsonProcessingExceptionMapperTest {
 
         // The UNWRAPPED constraint is handed to the metric so it can classify document vs string length.
         verify(sizeGuardMetrics).recordStreamConstraintRejection(streamConstraint, uriInfo, requestContext);
-        assertBadRequest(response);
+        assertPayloadTooLarge(response);
     }
 
     @Test
-    @DisplayName("records the size-guard metric for a raw (unwrapped) StreamConstraintsException")
+    @DisplayName("records the metric and returns 413 for a raw (unwrapped) StreamConstraintsException")
     void recordsMetricForRawStreamConstraint() {
         when(uriInfoProvider.get()).thenReturn(uriInfo);
         var streamConstraint = new StreamConstraintsException(DOC_LENGTH_MESSAGE);
@@ -74,11 +81,11 @@ class JsonProcessingExceptionMapperTest {
         var response = mapper().toResponse(streamConstraint);
 
         verify(sizeGuardMetrics).recordStreamConstraintRejection(streamConstraint, uriInfo, requestContext);
-        assertBadRequest(response);
+        assertPayloadTooLarge(response);
     }
 
     @Test
-    @DisplayName("finds a StreamConstraintsException nested deeper than the immediate cause")
+    @DisplayName("finds a StreamConstraintsException nested deeper than the immediate cause (413)")
     void recordsMetricForDeeplyNestedStreamConstraint() {
         when(uriInfoProvider.get()).thenReturn(uriInfo);
         var streamConstraint = new StreamConstraintsException(DOC_LENGTH_MESSAGE);
@@ -88,11 +95,11 @@ class JsonProcessingExceptionMapperTest {
         var response = mapper().toResponse(outer);
 
         verify(sizeGuardMetrics).recordStreamConstraintRejection(streamConstraint, uriInfo, requestContext);
-        assertBadRequest(response);
+        assertPayloadTooLarge(response);
     }
 
     @Test
-    @DisplayName("does NOT record the metric for genuinely malformed JSON (no size constraint in the chain)")
+    @DisplayName("does NOT record the metric and returns 400 for genuinely malformed JSON (no size constraint)")
     void doesNotRecordForPlainMalformedJson() {
         JsonProcessingException malformed = new JsonMappingException(null, "Unexpected end-of-input",
                 new IllegalStateException("boom"));
@@ -104,7 +111,7 @@ class JsonProcessingExceptionMapperTest {
     }
 
     @Test
-    @DisplayName("does not loop on a self-referencing cause chain")
+    @DisplayName("does not loop on a self-referencing cause chain (400)")
     void doesNotLoopOnSelfReferencingCause() {
         // A malformed chain whose cause is itself must terminate the walk, not hang.
         var selfReferencing = new JsonProcessingException("self-referencing") {
