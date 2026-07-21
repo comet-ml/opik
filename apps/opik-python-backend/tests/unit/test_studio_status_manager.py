@@ -17,6 +17,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from opik_backend.studio.status_manager import (
+    MAX_ERROR_INFO_LENGTH,
     OptimizationStatusManager,
     optimization_lifecycle,
 )
@@ -412,3 +413,82 @@ class TestScoringHealthGuard:
             "completed",
             metadata={"scoring_health": {"failed_count": 1, "total_count": 4}},
         )
+
+
+class TestErrorInfoForwarding:
+    """Coverage for the error_info send / suppression / truncation path."""
+
+    def test_mark_error_sends_error_info_via_raw_client(self):
+        """mark_error({...}) routes through the raw HTTP client with error_info
+        in the PUT body (the typed client doesn't expose the field)."""
+        sm = _make_real_status_manager()
+        raw_client = sm.client.rest_client.optimizations._raw_client
+        http_client = raw_client._client_wrapper.httpx_client
+        http_client.request.return_value.status_code = 200
+
+        error_info = {
+            "exception_type": "ValueError",
+            "message": "boom",
+            "traceback": "Traceback...\nValueError: boom",
+        }
+        sm.mark_error(error_info)
+
+        # Typed client is NOT used when the enriched PUT succeeds.
+        sm.client.rest_client.optimizations.update_optimizations_by_id.assert_not_called()
+        http_client.request.assert_called_once_with(
+            "v1/private/optimizations/test-opt-id-123",
+            method="PUT",
+            json={"status": "error", "error_info": error_info},
+            headers={"content-type": "application/json"},
+            request_options={"max_retries": 3},
+        )
+
+    @pytest.mark.parametrize("empty", [None, {}])
+    def test_mark_error_empty_reason_does_not_send_error_info(self, empty):
+        """mark_error(None) / mark_error({}) must NOT include error_info, so it
+        can't clobber a reason persisted by an earlier update. The body is
+        status-only, so it goes via the typed client (enriched=False)."""
+        sm = _make_real_status_manager()
+        raw_client = sm.client.rest_client.optimizations._raw_client
+        http_client = raw_client._client_wrapper.httpx_client
+
+        sm.mark_error(empty)
+
+        # No enriched PUT — status-only via the typed client.
+        http_client.request.assert_not_called()
+        sm.client.rest_client.optimizations.update_optimizations_by_id.assert_called_once_with(
+            "test-opt-id-123",
+            status="error",
+            request_options={"max_retries": 3},
+        )
+
+    def test_error_info_truncation_keeps_message_head_and_traceback_tail(self):
+        """Over-length message is truncated at the head; over-length traceback
+        keeps the TAIL (innermost frame); the caller's dict is not mutated."""
+        sm = _make_real_status_manager()
+        raw_client = sm.client.rest_client.optimizations._raw_client
+        http_client = raw_client._client_wrapper.httpx_client
+        http_client.request.return_value.status_code = 200
+
+        long_message = "M" * (MAX_ERROR_INFO_LENGTH + 500)
+        long_traceback = (
+            "OUTER_FRAME\n" + ("x" * MAX_ERROR_INFO_LENGTH) + "\nINNERMOST_RAISE"
+        )
+        error_info = {
+            "exception_type": "ValueError",
+            "message": long_message,
+            "traceback": long_traceback,
+        }
+        sm.mark_error(error_info)
+
+        sent = http_client.request.call_args.kwargs["json"]["error_info"]
+        # message: head kept, capped.
+        assert len(sent["message"]) == MAX_ERROR_INFO_LENGTH
+        assert sent["message"] == long_message[:MAX_ERROR_INFO_LENGTH]
+        # traceback: tail kept (innermost frame survives), capped, marked.
+        assert len(sent["traceback"]) <= MAX_ERROR_INFO_LENGTH
+        assert sent["traceback"].endswith("INNERMOST_RAISE")
+        assert "truncated" in sent["traceback"]
+        # the original dict must not be mutated.
+        assert error_info["message"] == long_message
+        assert error_info["traceback"] == long_traceback

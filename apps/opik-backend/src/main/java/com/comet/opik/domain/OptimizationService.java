@@ -216,6 +216,15 @@ class OptimizationServiceImpl implements OptimizationService {
                                         builder.studioConfig(existing.studioConfig());
                                     }
 
+                                    // Preserve the persisted failure reason if not provided in update
+                                    // (upsert does a full-row replace; the SDK re-upserts with a null
+                                    // errorInfo and would otherwise clobber a previously recorded failure).
+                                    // errorInfo is normally set through the PATCH/update path.
+                                    if (optimization.errorInfo() == null
+                                            && existing.errorInfo() != null) {
+                                        builder.errorInfo(existing.errorInfo());
+                                    }
+
                                     // Preserve original name only if incoming name is blank
                                     // (SDK sends blank name, but explicit updates should be honored)
                                     if (StringUtils.isBlank(optimization.name())) {
@@ -329,7 +338,8 @@ class OptimizationServiceImpl implements OptimizationService {
 
     @Override
     public Mono<Long> update(@NonNull UUID id, @NonNull OptimizationUpdate update) {
-        if (update.name() == null && update.status() == null && update.metadata() == null) {
+        if (update.name() == null && update.status() == null && update.errorInfo() == null
+                && update.metadata() == null) {
             return Mono.empty();
         }
 
