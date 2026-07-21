@@ -77,7 +77,7 @@ jobs:
         run: |
           set -ex
           git config --local user.email "github-actions@comet.com"
-          git config --local user.name "Github Actions (${ACTOR})"
+          git config --local user.name "GitHub Actions (${ACTOR})"
           git add sdks/python/src/opik/rest_api/
           git add sdks/typescript/src/opik/rest_api/
           git add sdks/code_generation/fern/openapi/openapi.yaml

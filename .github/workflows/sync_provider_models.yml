@@ -98,7 +98,7 @@ jobs:
         run: |
           set -ex
           git config --local user.email "github-actions@comet.com"
-          git config --local user.name "Github Actions (${ACTOR})"
+          git config --local user.name "GitHub Actions (${ACTOR})"
           git add apps/opik-backend/src/main/java/com/comet/opik/infrastructure/llm/
           git add apps/opik-frontend/src/types/providers.ts
           git add apps/opik-frontend/src/constants/providerModels.ts
