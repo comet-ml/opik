@@ -273,6 +273,41 @@ class CostIntelligenceIngestionTest {
             });
         }
 
+        @Test
+        @DisplayName("system_tools/system_tools_deferred land in the built_in_tools lane, keyed by tool_name")
+        void systemToolsLandInBuiltInToolsLane() {
+            var ws = newWorkspace();
+            String projectName = "cipx-" + UUID.randomUUID();
+
+            var span = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .metadata(systemToolsCipxMetadata("claude-sonnet-4-6", 200))
+                    .build();
+            spanResourceClient.createSpan(span, ws.apiKey(), ws.workspaceName());
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                var rows = getCipxBlocks(span.id(), ws.workspaceId());
+                assertThat(rows).hasSize(2);
+
+                // schema block for a named tool: reclassified out of static_overhead, keyed by
+                // tool_name instead of the bare category string (mirrors tool_io's own labeling).
+                var bash = rows.get(0);
+                assertThat(bash.category()).isEqualTo("system_tools");
+                assertThat(bash.lane()).isEqualTo("built_in_tools");
+                assertThat(bash.bdLane()).isEqualTo("built_in_tools");
+                assertThat(bash.label()).isEqualTo("Bash");
+                assertThat(bash.isDefinition()).isEqualTo(1);
+
+                // deferred-tools reminder: one multi-tool text block, no single tool_name.
+                var deferred = rows.get(1);
+                assertThat(deferred.category()).isEqualTo("system_tools_deferred");
+                assertThat(deferred.lane()).isEqualTo("built_in_tools");
+                assertThat(deferred.bdLane()).isEqualTo("built_in_tools");
+                assertThat(deferred.label()).isEqualTo("(unattributed)");
+                assertThat(deferred.isDefinition()).isEqualTo(1);
+            });
+        }
+
         @DisplayName("write blocks inherit the span's cache TTL (1h vs 5m)")
         @ParameterizedTest
         @CsvSource({
@@ -506,6 +541,36 @@ class CostIntelligenceIngestionTest {
                         }
                         """
                         .formatted(model, lump == 0 ? 50 : lump, cacheCreation5m, cacheCreation1h));
+    }
+
+    private static JsonNode systemToolsCipxMetadata(String model, long cacheRead) {
+        return JsonUtils.getJsonNodeFromString(
+                """
+                        {
+                          "cipx": {
+                            "call": {
+                              "model": "%s",
+                              "usage": {
+                                "input_tokens": 0,
+                                "cache_read_input_tokens": %d,
+                                "cache_creation_input_tokens": 0,
+                                "output_tokens": 0
+                              },
+                              "config": {
+                                "effort": "high",
+                                "thinking_type": "adaptive",
+                                "max_tokens": 64000,
+                                "context_management": "clear_thinking_20251015"
+                              }
+                            },
+                            "blocks": [
+                              {"category":"system_tools","side":"input","cache_status":"read","parent_category":"context","chars":150,"tool_name":"Bash","tool_server":"","tool_use_id":"","resource":"","kind":"text"},
+                              {"category":"system_tools_deferred","side":"input","cache_status":"read","parent_category":"context","chars":50,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"}
+                            ]
+                          }
+                        }
+                        """
+                        .formatted(model, cacheRead));
     }
 
     private static JsonNode traceCipxMetadata(String userUuid, String email, String displayName, String repository,
