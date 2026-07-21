@@ -4437,6 +4437,10 @@ class SpansResourceTest {
                     .build();
 
             // When: Attempt to create the span
+            // Relies on the default Grizzly client streaming CHUNKED (no Content-Length), so the 50MB
+            // RequestSizeLimitFilter is bypassed and the request reaches the maxDocumentLength parse
+            // guard. Both guards return 413, so the "Document length" message assertion below is what
+            // proves the document guard (not the request-size guard) fired.
             // Then: rejected mid-parse with 413 Request Entity Too Large (document length exceeded),
             // before a multi-GB node tree is materialized - so no attachment stripping / S3 upload happens.
             try (Response response = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE,
@@ -4474,7 +4478,9 @@ class SpansResourceTest {
                         .post(Entity.json(oversizedJson))) {
 
                     assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_REQUEST_TOO_LONG); // 413
-                    assertThat(response.readEntity(String.class))
+                    var body = response.readEntity(JsonNode.class);
+                    assertThat(body.path("code").asInt()).isEqualTo(HttpStatus.SC_REQUEST_TOO_LONG);
+                    assertThat(body.path("message").asText())
                             .containsIgnoringCase("exceeds the maximum allowed size");
                 }
             }

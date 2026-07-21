@@ -109,6 +109,12 @@ public class IngestionSizeGuardMetrics {
      * StreamConstraintsException}; the concrete limit is distinguishable only from the message, which
      * references the tripped {@code StreamReadConstraints} accessor. An unrecognized message falls
      * back to {@link #GUARD_STREAM_CONSTRAINT} rather than guessing.
+     * <p>
+     * NOTE: these substrings are Jackson internals, not a stable contract - a Jackson upgrade that
+     * rewords the message would silently collapse both cases into {@code stream_constraint} and
+     * degrade the dashboard breakdown. The real-parse tests in {@code IngestionSizeGuardMetricsTest}
+     * drive actual Jackson past the caps so that a wording change breaks a test instead of the
+     * metric; re-validate these substrings on a Jackson version bump.
      */
     static String classifyStreamConstraint(StreamConstraintsException exception) {
         String message = exception.getMessage();

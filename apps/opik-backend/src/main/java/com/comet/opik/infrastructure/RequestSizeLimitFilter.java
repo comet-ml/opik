@@ -15,8 +15,12 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 /**
  * Rejects an oversized request with 413 based on its {@code Content-Length}, before the body is
- * read. This fast-fails a large ingestion batch at the request boundary so the JSON parser never
- * starts building a node tree from it.
+ * read, so the JSON parser never starts building a node tree from it.
+ *
+ * This is a global JAX-RS provider with no path scoping, so it caps EVERY request that carries a
+ * {@code Content-Length} - not only span/trace ingestion, but also e.g. attachment and dataset-import
+ * uploads (which buffer the whole body in memory). That broad coverage is intentional: this is a
+ * memory guard, and any endpoint that buffers a large body is exactly the OOM vector it protects.
  *
  * The header reflects the on-the-wire size (compressed, when the client gzips). A request with no
  * {@code Content-Length} (e.g. chunked transfer) is legitimate and passes here; it is still bounded

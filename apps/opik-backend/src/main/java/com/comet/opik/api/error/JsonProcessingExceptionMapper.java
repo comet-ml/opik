@@ -1,6 +1,7 @@
 package com.comet.opik.api.error;
 
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import com.comet.opik.infrastructure.metrics.IngestionSizeGuardMetrics;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.exc.StreamConstraintsException;
@@ -50,8 +51,10 @@ public class JsonProcessingExceptionMapper implements ExceptionMapper<JsonProces
             status = Response.Status.REQUEST_ENTITY_TOO_LARGE;
         } else {
             // Genuine malformed JSON: log the exception itself (not just its message) so the type and
-            // stack trace are available to diagnose the rare, unexpected parse failure.
-            log.info("Deserialization exception", exception);
+            // stack trace are available to diagnose the rare, unexpected parse failure; include the
+            // workspace to help attribute the offending client.
+            log.info("Deserialization exception for workspace {}",
+                    ErrorMetricsResolver.workspaceId(requestContext), exception);
             status = Response.Status.BAD_REQUEST;
         }
 

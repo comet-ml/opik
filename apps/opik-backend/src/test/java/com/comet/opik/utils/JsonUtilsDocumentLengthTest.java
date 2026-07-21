@@ -1,6 +1,8 @@
 package com.comet.opik.utils;
 
+import com.comet.opik.api.SpanBatch;
 import com.fasterxml.jackson.core.exc.StreamConstraintsException;
+import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
@@ -18,11 +20,11 @@ class JsonUtilsDocumentLengthTest {
 
     private static final int STRING_LEN = 100 * 1024 * 1024; // 100MB, generous
 
-    // Jackson enforces maxDocumentLength inside _loadMore() (buffer refill), so it only triggers
-    // when the parser reads across buffer boundaries from a stream - i.e. an InputStream/Reader,
-    // which is exactly how Dropwizard reads the HTTP request body in prod. A fully-in-memory
-    // byte[]/String fits the initial buffer, never refills, and would bypass the check - so these
-    // tests parse from an InputStream to mirror the real ingestion path.
+    // Jackson enforces maxDocumentLength inside _loadMore() (buffer refill), so it only triggers when
+    // the parser reads across buffer boundaries from a stream - i.e. an InputStream/Reader, not a
+    // fully-in-memory byte[]/String (which fits the initial buffer and never refills). The readTree
+    // cases below verify that wiring on the stream path; typedBeanBinding_wrapsStreamConstraint covers
+    // the real ingestion path, where binding into a typed bean wraps the exception.
     private static ByteArrayInputStream manySmallValues(int minLength) {
         StringBuilder sb = new StringBuilder("{");
         int i = 0;
@@ -77,5 +79,35 @@ class JsonUtilsDocumentLengthTest {
 
         assertThatThrownBy(() -> mapper.readTree(oneHugeString))
                 .isInstanceOf(StreamConstraintsException.class);
+    }
+
+    // {"spans":[{"output":{<many small values>}}]} - big enough that maxDocumentLength trips while the
+    // parser is reading Span["output"], so Jackson wraps the StreamConstraintsException in a
+    // JsonMappingException (the real ingestion path, unlike the untyped readTree cases above).
+    private static ByteArrayInputStream spanBatchWithBigOutput(int minBytes) {
+        StringBuilder sb = new StringBuilder("{\"spans\":[{\"output\":{");
+        int i = 0;
+        while (sb.length() < minBytes) {
+            if (i > 0) {
+                sb.append(',');
+            }
+            sb.append("\"k").append(i).append("\":").append(i);
+            i++;
+        }
+        sb.append("}}]}");
+        return new ByteArrayInputStream(sb.toString().getBytes(StandardCharsets.UTF_8));
+    }
+
+    @Test
+    @DisplayName("binding into a typed bean wraps the size trip in a JsonMappingException (real ingestion path)")
+    void typedBeanBinding_wrapsStreamConstraint() {
+        ObjectMapper mapper = JsonUtils.createConfiguredMapper(STRING_LEN, 1024L); // 1KB doc cap
+
+        // Unlike the untyped readTree cases above, deserializing into a typed bean makes Jackson re-wrap
+        // the parser-level StreamConstraintsException in a JsonMappingException (with the reference
+        // chain) - exactly what prod hits on /spans/batch and what the size-guard metric fix unwraps.
+        assertThatThrownBy(() -> mapper.readValue(spanBatchWithBigOutput(200 * 1024), SpanBatch.class))
+                .isInstanceOf(JsonMappingException.class)
+                .hasRootCauseInstanceOf(StreamConstraintsException.class);
     }
 }
