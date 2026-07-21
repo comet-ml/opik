@@ -179,7 +179,7 @@ class TestFlushReporter:
 
         report = reporter.build_errors_report()
 
-        assert report.has_data_loss is True
+        assert report.total_dropped_messages == 1
         assert report.generated_at > 0
         assert report.first_failure_at == 1000.0
         assert report.last_failure_at == 1000.0
@@ -190,7 +190,7 @@ class TestFlushReporter:
 
         report = reporter.build_errors_report()
 
-        assert report.has_data_loss is False
+        assert report.total_dropped_messages == 0
         assert report.failures == []
         assert report.first_failure_at is None
 

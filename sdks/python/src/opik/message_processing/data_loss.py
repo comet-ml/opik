@@ -97,10 +97,6 @@ class ErrorsReport:
     generated_at: float
 
     @property
-    def has_data_loss(self) -> bool:
-        return self.total_dropped_messages > 0
-
-    @property
     def first_failure_at(self) -> Optional[float]:
         """Timestamp of the oldest retained failure (bounded window), or None."""
         return min((failure.timestamp for failure in self.failures), default=None)
