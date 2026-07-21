@@ -27,6 +27,7 @@ class OptimizationStalledReaperJobTest {
 
     private static final Duration INITIALIZED_TIMEOUT = Duration.minutes(5);
     private static final Duration RUNNING_TIMEOUT = Duration.hours(8);
+    private static final Duration LOOKBACK_MARGIN = Duration.days(7);
     private static final int BATCH_SIZE = 42;
 
     @Mock
@@ -45,6 +46,7 @@ class OptimizationStalledReaperJobTest {
                 .jobInterval(Duration.minutes(5))
                 .initializedTimeout(INITIALIZED_TIMEOUT)
                 .runningTimeout(RUNNING_TIMEOUT)
+                .lookbackMargin(LOOKBACK_MARGIN)
                 .lockDuration(Duration.minutes(4))
                 .batchSize(BATCH_SIZE)
                 .build();
@@ -58,7 +60,8 @@ class OptimizationStalledReaperJobTest {
         when(lockService.bestEffortLock(any(), any(), any(), any(), any(), anyBoolean()))
                 .thenAnswer(invocation -> invocation.<Mono<Long>>getArgument(1));
         when(optimizationService.reconcileStalledStudioOptimizations(
-                INITIALIZED_TIMEOUT.toJavaDuration(), RUNNING_TIMEOUT.toJavaDuration(), BATCH_SIZE))
+                INITIALIZED_TIMEOUT.toJavaDuration(), RUNNING_TIMEOUT.toJavaDuration(),
+                LOOKBACK_MARGIN.toJavaDuration(), BATCH_SIZE))
                 .thenReturn(Mono.just(3L));
 
         job.doJob(mock(JobExecutionContext.class));
@@ -66,7 +69,8 @@ class OptimizationStalledReaperJobTest {
         // doJob subscribes on boundedElastic (fire-and-forget), so await the async invocation.
         Awaitility.await().atMost(java.time.Duration.ofSeconds(5))
                 .untilAsserted(() -> verify(optimizationService).reconcileStalledStudioOptimizations(
-                        INITIALIZED_TIMEOUT.toJavaDuration(), RUNNING_TIMEOUT.toJavaDuration(), BATCH_SIZE));
+                        INITIALIZED_TIMEOUT.toJavaDuration(), RUNNING_TIMEOUT.toJavaDuration(),
+                        LOOKBACK_MARGIN.toJavaDuration(), BATCH_SIZE));
     }
 
     @Test

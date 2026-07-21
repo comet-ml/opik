@@ -94,7 +94,7 @@ public interface OptimizationDAO {
     Mono<Long> batchSetProjectId(Set<UUID> optimizationIds, UUID projectId);
 
     Flux<StalledOptimization> findStalledStudioOptimizations(Duration initializedTimeout, Duration runningTimeout,
-            int limit);
+            Duration lookbackMargin, int limit);
 }
 
 @Singleton
@@ -254,8 +254,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * a {@code >=} lower bound can never drop it — it just bounds the scan to recent data instead of the
      * whole (unbounded-growth) table, which the old query re-read + re-sorted every cycle. {@code
      * INITIALIZED} (worker never started) and {@code RUNNING} (worker died mid-run) use separate
-     * upper-bound thresholds because there is no per-progress heartbeat on the row. See
-     * {@link #STALLED_LOOKBACK_MARGIN} for the floor width and its reaper-downtime tradeoff.
+     * upper-bound thresholds because there is no per-progress heartbeat on the row. The caller-supplied
+     * {@code lookbackMargin} sets the floor width and its reaper-downtime tradeoff.
      */
     private static final String FIND_STALLED_STUDIO_OPTIMIZATIONS = """
             SELECT
@@ -1202,18 +1202,16 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 .reduce(0L, Long::sum);
     }
 
-    // How far back the stalled-run query scans (the last_updated_at FLOOR that lets the minmax skip index
-    // prune granules). Set to the largest timeout plus a generous reaper-downtime margin, so in normal
-    // operation (reaper running every few minutes) the floor is purely a scan bound and never a coverage
-    // gap: a run's last status change is only older than this if the reaper was down longer than the
-    // margin, in which case that run is not reaped (documented tradeoff, review: thiagohora).
-    private static final Duration STALLED_LOOKBACK_MARGIN = Duration.ofDays(7);
-
     @Override
     public Flux<StalledOptimization> findStalledStudioOptimizations(@NonNull Duration initializedTimeout,
-            @NonNull Duration runningTimeout, int limit) {
+            @NonNull Duration runningTimeout, @NonNull Duration lookbackMargin, int limit) {
+        // How far back the query scans (the last_updated_at FLOOR that lets the minmax skip index prune
+        // granules): the largest timeout plus the configured reaper-downtime margin, so in normal operation
+        // the floor is purely a scan bound and never a coverage gap — a run's last status change is only
+        // older than this if the reaper was down longer than the margin, in which case that run is not
+        // reaped (documented tradeoff, review: thiagohora).
         long lookbackSeconds = Math.max(initializedTimeout.toSeconds(), runningTimeout.toSeconds())
-                + STALLED_LOOKBACK_MARGIN.toSeconds();
+                + lookbackMargin.toSeconds();
         var details = "initializedTimeoutSeconds=%d, runningTimeoutSeconds=%d, lookbackSeconds=%d, limit=%d"
                 .formatted(initializedTimeout.toSeconds(), runningTimeout.toSeconds(), lookbackSeconds, limit);
         var template = FilterUtils.getSTWithLogComment(FIND_STALLED_STUDIO_OPTIMIZATIONS,

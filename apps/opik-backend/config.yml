@@ -1049,6 +1049,12 @@ optimizationStalledReaper:
   #   has no per-progress heartbeat and last_updated_at only advances on a status change. If you raise
   #   the worker timeout, raise this too or healthy long runs will be reaped.
   runningTimeout: ${OPTIMIZATION_STALLED_REAPER_RUNNING_TIMEOUT:-8h}
+  # Default: 7d
+  # Description: Added to max(initializedTimeout, runningTimeout) to size the last_updated_at floor of the
+  #   reaper's scan. Pure reaper-downtime insurance (a run that stalled just before the reaper went down is
+  #   still caught on recovery if it was down less than this); not needed to find fresh stalls. Keep it only
+  #   as large as the longest expected reaper outage — a shorter margin also tightens skip-index pruning.
+  lookbackMargin: ${OPTIMIZATION_STALLED_REAPER_LOOKBACK_MARGIN:-7d}
   # Default: 4m
   # Description: How long the reaper holds its distributed lock (until expiry) to prevent concurrent
   #   fleet-wide runs. MUST stay below jobInterval — the lock is held until expiry, so a value >=

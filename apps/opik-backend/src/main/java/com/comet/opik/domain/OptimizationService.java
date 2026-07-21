@@ -81,7 +81,7 @@ public interface OptimizationService {
      * @return the number of runs transitioned to ERROR in this pass.
      */
     Mono<Long> reconcileStalledStudioOptimizations(Duration initializedTimeout, Duration runningTimeout,
-            int batchSize);
+            Duration lookbackMargin, int batchSize);
 }
 
 @Singleton
@@ -333,13 +333,15 @@ class OptimizationServiceImpl implements OptimizationService {
             return Mono.empty();
         }
 
-        // Serialize the read-modify-write per optimization: update() reads the current row (getById),
-        // merges metadata in app memory, then inserts a full new ReplacingMergeTree version. Without this
-        // lock, two concurrent partial updates both read the same base and the later write silently drops
-        // the earlier one's keys (lost update); the lock also keeps the terminal-overwrite / cancellation
-        // guards consistent within a single writer. NOTE: prod ClickHouse has no read-your-own-writes
-        // (async insert, 2 replicas), so a lock alone cannot fully close the window — studio metadata must
-        // stay effectively single-writer (the worker) — but this hardens the in-process race (review: thiagohora).
+        // Serialize every per-id state change under the lock. The DAO's UPDATE_BY_ID is an INSERT...SELECT
+        // that copies each non-updated column forward from the base version it reads, so two concurrent
+        // partial writes (a rename racing a status write, or the worker racing the reaper) would drop one
+        // side — and a dropped terminal status strands a finished run non-terminal. The lock is lightweight
+        // and guards every write against that lost update. A Redis outage failing the write is acceptable:
+        // the stalled-run reaper is the backstop for a run left non-terminal, so protecting against data loss
+        // is preferred over a lock-free fallback here (review: thiagohora). NOTE: prod ClickHouse has no
+        // read-your-own-writes (async insert, 2 replicas), so studio metadata must still stay effectively
+        // single-writer — the lock hardens the in-process race, not the cross-replica one.
         var lock = new LockService.Lock(id, "optimization-update");
         return lockService.executeWithLock(lock, Mono.defer(() -> applyUpdate(id, update)));
     }
@@ -649,8 +651,9 @@ class OptimizationServiceImpl implements OptimizationService {
     @Override
     @WithSpan
     public Mono<Long> reconcileStalledStudioOptimizations(@NonNull Duration initializedTimeout,
-            @NonNull Duration runningTimeout, int batchSize) {
-        return optimizationDAO.findStalledStudioOptimizations(initializedTimeout, runningTimeout, batchSize)
+            @NonNull Duration runningTimeout, @NonNull Duration lookbackMargin, int batchSize) {
+        return optimizationDAO.findStalledStudioOptimizations(initializedTimeout, runningTimeout, lookbackMargin,
+                batchSize)
                 // Sequential: stalled runs are rare and this keeps the reaper's DB/Redis footprint small.
                 .concatMap(stalled -> markStalledOptimizationAsError(stalled, initializedTimeout, runningTimeout))
                 .reduce(0L, Long::sum);
