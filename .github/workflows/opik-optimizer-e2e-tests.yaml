@@ -18,7 +18,7 @@ on:
 
 permissions:
   contents: read
-  packages: write
+  packages: read
 
 env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
@@ -32,6 +32,13 @@ env:
 
 jobs:
     build-opik:
+        # The reusable build workflow pushes images to GHCR; pass down the
+        # packages: write grant here rather than at the workflow level (a
+        # called workflow's permissions can only be maintained or reduced from
+        # the caller's, never elevated).
+        permissions:
+          contents: read
+          packages: write
         uses: ./.github/workflows/build_e2e_docker.yaml
         with:
           include_guardrails: true

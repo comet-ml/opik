@@ -37,11 +37,14 @@ jobs:
         steps:
         - name: Setup
           id: setup
+          env:
+            INPUT_VERSION: ${{ inputs.version }}
+            REF_NAME: ${{ github.ref_name }}
           run: |
-            if [[ "${{inputs.version}}" == ""  ]]; then
-              echo "build_from=${{github.ref_name}}" | tee -a "$GITHUB_OUTPUT"
+            if [[ "${INPUT_VERSION}" == ""  ]]; then
+              echo "build_from=${REF_NAME}" | tee -a "$GITHUB_OUTPUT"
             else
-              echo "build_from=${{inputs.version}}" | tee -a "$GITHUB_OUTPUT"
+              echo "build_from=${INPUT_VERSION}" | tee -a "$GITHUB_OUTPUT"
             fi
         - name: Checkout
           uses: actions/checkout@v6
@@ -62,10 +65,12 @@ jobs:
             package_name: opik
 
         - name: Build pip package
+          env:
+            INPUT_VERSION: ${{ inputs.version }}
           run: |
                 cd sdks/python
                 pip3 install -U pip build
-                if [[ "${{inputs.version}}" != "" ]]; then export VERSION=${{inputs.version}};fi
+                if [[ "${INPUT_VERSION}" != "" ]]; then export VERSION="${INPUT_VERSION}";fi
                 python3 -m build --sdist --wheel --outdir dist/ .
 
         - name: Publish package distributions to PyPI

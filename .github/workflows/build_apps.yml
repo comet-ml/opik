@@ -93,17 +93,22 @@ jobs:
 
         - name: Set version
           id: version
+          env:
+            INPUT_VERSION: ${{ inputs.version }}
+            INPUT_REF: ${{ inputs.ref }}
+            REF_NAME: ${{ github.ref_name }}
+            RUN_NUMBER: ${{ github.run_number }}
           run: |
-            if [[ "${{inputs.version}}" != "" ]]; then
-              VERSION=${{inputs.version}}
+            if [[ "${INPUT_VERSION}" != "" ]]; then
+              VERSION="${INPUT_VERSION}"
             else
               BASE_VERSION=$(cat version.txt)
-              BRANCH_NAME="${{ github.ref_name }}"
+              BRANCH_NAME="${REF_NAME}"
               if [[ "${BRANCH_NAME}" == "main" ]]; then
-                VERSION=${BASE_VERSION}-${{ github.run_number }}
+                VERSION="${BASE_VERSION}-${RUN_NUMBER}"
               elif [[ "${BRANCH_NAME}" =~ ^hotfix/.* ]]; then
                 # Special handling for hotfix branches
-                VERSION="${BASE_VERSION}-hotfix.${{ github.run_number }}"
+                VERSION="${BASE_VERSION}-hotfix.${RUN_NUMBER}"
               else
                 # Normalize branch name
                 fixedBranchName=$(echo "${BRANCH_NAME}" | sed 's/origin\///; s/\//-/g; s/_/-/g; s/.*/\L&/')
@@ -114,18 +119,18 @@ jobs:
                     fixedBranchName="${fixedBranchName%?}"
                   done
                 fi
-                VERSION="${BASE_VERSION}-${fixedBranchName}-${{ github.run_number }}"
+                VERSION="${BASE_VERSION}-${fixedBranchName}-${RUN_NUMBER}"
               fi
             fi
             echo "version=${VERSION}" | tee -a "$GITHUB_OUTPUT"
             echo "Version is ${VERSION}" >> "$GITHUB_STEP_SUMMARY"
 
-            if [ "${{inputs.ref}}" != "" ]; then
-              echo "build_from=${{inputs.ref}}" | tee -a "$GITHUB_OUTPUT"
-            elif [[ "${{inputs.version}}" == "" ]]; then
-              echo "build_from=${{github.ref_name}}" | tee -a "$GITHUB_OUTPUT"
+            if [ "${INPUT_REF}" != "" ]; then
+              echo "build_from=${INPUT_REF}" | tee -a "$GITHUB_OUTPUT"
+            elif [[ "${INPUT_VERSION}" == "" ]]; then
+              echo "build_from=${REF_NAME}" | tee -a "$GITHUB_OUTPUT"
             else
-              echo "build_from=${{inputs.version}}" | tee -a "$GITHUB_OUTPUT"
+              echo "build_from=${INPUT_VERSION}" | tee -a "$GITHUB_OUTPUT"
             fi
             
   build-backend:

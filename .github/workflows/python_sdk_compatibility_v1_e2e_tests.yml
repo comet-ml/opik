@@ -2,9 +2,7 @@ name: Python SDK Compatibility V1.x E2E Tests
 run-name: "Python SDK Compatibility V1 E2E Tests ${{ github.ref_name }} by @${{ github.actor }}"
 permissions:
   contents: read
-  checks: write
-  pull-requests: write
-  packages: write
+  packages: read
 on:
     workflow_dispatch:
     pull_request:
@@ -50,6 +48,13 @@ jobs:
                   github-token: ${{ secrets.GITHUB_TOKEN }}
 
     build-opik:
+        # The reusable build workflow pushes images to GHCR; pass down the
+        # packages: write grant here rather than at the workflow level (a
+        # called workflow's permissions can only be maintained or reduced from
+        # the caller's, never elevated).
+        permissions:
+          contents: read
+          packages: write
         uses: ./.github/workflows/build_e2e_docker.yaml
         with:
           include_guardrails: true
@@ -58,6 +63,13 @@ jobs:
         needs: [select-matrix, build-opik]
         name: Python SDK Compatibility V1.x E2E Tests ${{matrix.python_version}}
         runs-on: ubuntu-latest
+        # Only the "Publish Test Report" step needs these; keep them off the
+        # workflow-level default (least privilege).
+        permissions:
+          contents: read
+          packages: read
+          checks: write
+          pull-requests: write
         timeout-minutes: 30
         strategy:
             fail-fast: false

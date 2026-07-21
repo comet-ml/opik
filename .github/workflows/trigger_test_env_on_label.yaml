@@ -11,9 +11,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 permissions:
-  contents: write
-  pull-requests: write
-  packages: write
+  contents: read
 
 jobs:
 
@@ -28,6 +26,10 @@ jobs:
   start:
     if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'test-environment'
     runs-on: ubuntu-latest
+    # Posts a "deployment started" PR comment; keep write off the default.
+    permissions:
+      contents: read
+      pull-requests: write
     outputs:
       version: ${{ steps.get-tag.outputs.version }}
     steps:
@@ -87,6 +89,12 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'test-environment'
     needs:
       - start
+    # build_apps.yml pushes images to GHCR; pass down packages: write here (a
+    # called workflow's permissions can only be maintained or reduced from the
+    # caller's, never elevated).
+    permissions:
+      contents: read
+      packages: write
     uses: ./.github/workflows/build_apps.yml
     secrets: inherit
     with:
@@ -101,6 +109,10 @@ jobs:
     needs:
       - start
     runs-on: ubuntu-latest
+    # Posts a PR comment on trigger failure; keep write off the default.
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Trigger deployment with base version
         uses: actions/github-script@v7
@@ -147,6 +159,10 @@ jobs:
       - build-apps
       - trigger-deploy-base-version
     runs-on: ubuntu-latest
+    # Posts a PR comment on trigger failure; keep write off the default.
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Trigger deployment with new version
         uses: actions/github-script@v7

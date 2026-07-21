@@ -1,7 +1,14 @@
 name: 🗂️ Auto Label PR
 
 on:
-  pull_request_target:
+  # pull_request_target (not pull_request) is required so the labeler holds
+  # pull-requests: write on fork PRs — a pull_request run gets a read-only token
+  # on forks and can't apply labels. This is safe because no job here checks out
+  # or executes PR-controlled code: actions/labeler and github-script operate
+  # purely through the GitHub API on PR metadata (numbers, filenames, labels),
+  # never on the PR's file contents. See the dangerous-triggers audit rationale:
+  # https://docs.zizmor.sh/audits/#dangerous-triggers
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
     types: [opened, reopened, synchronize, ready_for_review]
 
 

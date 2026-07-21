@@ -71,15 +71,19 @@ jobs:
 
       - name: "🔍 Get PR/commit information"
         id: get-pr-info
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          COMMIT_AUTHOR: ${{ github.event.head_commit.author.username }}
+          ACTOR: ${{ github.actor }}
         run: |
-          if [ "${{ github.event_name }}" == "push" ]; then
+          if [ "${EVENT_NAME}" == "push" ]; then
             # For push events, get the author from the commit
-            AUTHOR="${{ github.event.head_commit.author.username }}"
+            AUTHOR="${COMMIT_AUTHOR}"
             if [ -z "$AUTHOR" ]; then
-              AUTHOR="${{ github.actor }}"
+              AUTHOR="${ACTOR}"
             fi
           else
-            AUTHOR="${{ github.actor }}"
+            AUTHOR="${ACTOR}"
           fi
           echo "author=$AUTHOR" >> "$GITHUB_OUTPUT"
           echo "📝 Author: $AUTHOR"
@@ -119,8 +123,9 @@ jobs:
         env:
           OPIK_USAGE_REPORT_ENABLED: false
           COMPOSE_BAKE: false
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          echo "::group::Building Opik from branch: ${{ github.ref_name }}"
+          echo "::group::Building Opik from branch: ${REF_NAME}"
           cd ${{ github.workspace }}
           TOGGLE_WELCOME_WIZARD_ENABLED="false" TOGGLE_FORCE_WORKSPACE_VERSION="version_2" ./opik.sh --build
           echo "::endgroup::"
@@ -156,8 +161,8 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ALLURE_LAUNCH_NAME: "Opik v2 Post-Merge ${{ github.event.inputs.tier || 't1' }} - ${{ github.run_id }}"
+          TIER: ${{ github.event.inputs.tier || 't1' }}
         run: |
-          TIER="${{ github.event.inputs.tier || 't1' }}"
           echo "========================================"
           echo "🧪 Running v2 tier: $TIER"
           echo "========================================"
@@ -173,7 +178,7 @@ jobs:
           # Run tests with allurectl watch for TestOps integration
           # Capture output to extract the direct report URL
           set +e
-          allurectl watch -- npm run test:${TIER} 2>&1 | tee allure_output.log
+          allurectl watch -- npm run "test:${TIER}" 2>&1 | tee allure_output.log
           TEST_EXIT_CODE=${PIPESTATUS[0]}
           set -e
 
@@ -254,15 +259,20 @@ jobs:
       # ========================================
       - name: "📋 Generate job summary"
         if: always()
+        env:
+          TIER: ${{ github.event.inputs.tier || 't1' }}
+          TESTOPS_URL: ${{ steps.set-outputs.outputs.testops_url }}
+          TOTAL: ${{ steps.parse-results.outputs.total }}
+          PASSED: ${{ steps.parse-results.outputs.passed }}
+          FAILED: ${{ steps.parse-results.outputs.failed }}
+          SKIPPED: ${{ steps.parse-results.outputs.skipped }}
+          RUN_TESTS_OUTCOME: ${{ steps.run-tests.outcome }}
+          REF_NAME: ${{ github.ref_name }}
+          REPOSITORY: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.sha }}
+          TRIGGER_LABEL: ${{ github.event_name == 'push' && 'Post-merge (push to main)' || 'Manual dispatch' }}
+          AUTHOR: ${{ steps.get-pr-info.outputs.author }}
         run: |
-          TIER="${{ github.event.inputs.tier || 't1' }}"
-          TESTOPS_URL="${{ steps.set-outputs.outputs.testops_url }}"
-
-          TOTAL="${{ steps.parse-results.outputs.total }}"
-          PASSED="${{ steps.parse-results.outputs.passed }}"
-          FAILED="${{ steps.parse-results.outputs.failed }}"
-          SKIPPED="${{ steps.parse-results.outputs.skipped }}"
-
           # Redirect stdout to the summary file for the remainder of this step
           exec >> "$GITHUB_STEP_SUMMARY"
 
@@ -271,12 +281,12 @@ jobs:
           echo ""
 
           # Status banner
-          if [ "${{ steps.run-tests.outcome }}" == "success" ]; then
+          if [ "${RUN_TESTS_OUTCOME}" == "success" ]; then
             echo "> ✅ **All tests passed!**"
-          elif [ "${{ steps.run-tests.outcome }}" == "failure" ]; then
+          elif [ "${RUN_TESTS_OUTCOME}" == "failure" ]; then
             echo "> ❌ **$FAILED test(s) failed** - Please review the results below"
           else
-            echo "> ⚠️ **Test run status: ${{ steps.run-tests.outcome }}**"
+            echo "> ⚠️ **Test run status: ${RUN_TESTS_OUTCOME}**"
           fi
           echo ""
 
@@ -286,10 +296,10 @@ jobs:
           echo "| Property | Value |"
           echo "|----------|-------|"
           echo "| **Tier** | \`$TIER\` |"
-          echo "| **Branch** | \`${{ github.ref_name }}\` |"
-          echo "| **Commit** | [\`${GITHUB_SHA:0:7}\`](https://github.com/${{ github.repository }}/commit/${{ github.sha }}) |"
-          echo "| **Trigger** | ${{ github.event_name == 'push' && 'Post-merge (push to main)' || 'Manual dispatch' }} |"
-          echo "| **Author** | @${{ steps.get-pr-info.outputs.author }} |"
+          echo "| **Branch** | \`${REF_NAME}\` |"
+          echo "| **Commit** | [\`${COMMIT_SHA:0:7}\`](https://github.com/${REPOSITORY}/commit/${COMMIT_SHA}) |"
+          echo "| **Trigger** | ${TRIGGER_LABEL} |"
+          echo "| **Author** | @${AUTHOR} |"
           echo ""
 
           # Results table
@@ -313,7 +323,7 @@ jobs:
           echo ""
 
           # Debugging section (only on failure)
-          if [ "${{ steps.run-tests.outcome }}" == "failure" ]; then
+          if [ "${RUN_TESTS_OUTCOME}" == "failure" ]; then
             echo "## 🔧 Debugging Guide"
             echo ""
             echo "### Quick steps to investigate failures:"

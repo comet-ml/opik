@@ -333,4 +333,27 @@ repos:
         # CI matrix builder in scripts/precommit-detect-hooks.py can route a
         # changed Dockerfile to this leg — it matches on paths, not content type.
         files: (^|/)Dockerfile(\..+)?$
+
+  # ---------------------------------------------------------------------------
+  # GitHub Actions workflows / composite actions — zizmor (Trail of Bits). The
+  # security counterpart to actionlint: actionlint asks "will this YAML run?",
+  # zizmor asks "if it runs, can it be exploited?" (template injection, dangerous
+  # triggers, excessive GITHUB_TOKEN permissions, cache poisoning). Runs offline
+  # (no GitHub API calls → no rate limits) at high severity, regular persona (the
+  # low-false-positive default). Rule tuning lives in .github/zizmor.yml
+  # (auto-discovered), where unpinned-uses is disabled pending the SHA-pinning
+  # follow-up. The pre-commit repo tag pins the zizmor version (v1.27.0 →
+  # zizmor==1.27.0). See OPIK-6366.
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: v1.27.0
+    hooks:
+      - id: zizmor
+        name: 🌈 zizmor — github workflows security
+        args: ["--offline", "--min-severity", "high", "--persona", "regular", "--no-progress"]
+        # Explicit files: regex (not the upstream `types: [yaml]`) so the CI
+        # matrix builder in scripts/precommit-detect-hooks.py can route a changed
+        # workflow / composite action to this leg by path. Covers both workflows
+        # and composite `action.yml`/`action.yaml` files (zizmor audits both).
+        files: (^\.github/workflows/.+\.(yml|yaml)$)|((^|/)action\.(yml|yaml)$)
 ...

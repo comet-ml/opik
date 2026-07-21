@@ -2,8 +2,6 @@ name: Guardrails E2E Tests
 run-name: "Guardrails E2E Tests ${{ github.ref_name }} by @${{ github.actor }}"
 permissions:
   contents: read
-  checks: write
-  pull-requests: write
 
 on:
   workflow_dispatch:
@@ -58,6 +56,12 @@ jobs:
   e2e-tests:
     needs: select-matrix
     name: Guardrails E2E Tests ${{matrix.python_version}}
+    # Only the "Publish Test Report" step needs these; keep them off the
+    # workflow-level default (least privilege).
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:

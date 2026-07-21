@@ -3,7 +3,7 @@
 name: SDK E2E Libraries Integration Tests
 permissions:
   contents: read
-  packages: write
+  packages: read
 run-name: "SDK E2E Libraries Integration Tests ${{ github.ref_name }} by @${{ github.actor }}"
 on:
     workflow_dispatch:
@@ -66,6 +66,13 @@ jobs:
   build-opik:
     needs: [has_needed_secrets]
     if: ${{ needs.has_needed_secrets.outputs.has_secrets == 'true' }}
+    # The reusable build workflow pushes images to GHCR; pass down the
+    # packages: write grant here rather than at the workflow level (a called
+    # workflow's permissions can only be maintained or reduced from the
+    # caller's, never elevated).
+    permissions:
+      contents: read
+      packages: write
     uses: ./.github/workflows/build_e2e_docker.yaml
 
   run_e2e_lib_integration:

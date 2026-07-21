@@ -72,10 +72,12 @@ jobs:
 
       - name: Commit files
         if: steps.check_changes.outputs.has_changes == 'true'
+        env:
+          ACTOR: ${{ github.actor }}
         run: |
           set -ex
           git config --local user.email "github-actions@comet.com"
-          git config --local user.name "Github Actions (${{ github.actor }})"
+          git config --local user.name "Github Actions (${ACTOR})"
           git add sdks/python/src/opik/rest_api/
           git add sdks/typescript/src/opik/rest_api/
           git add sdks/code_generation/fern/openapi/openapi.yaml

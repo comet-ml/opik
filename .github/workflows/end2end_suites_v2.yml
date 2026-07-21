@@ -107,12 +107,13 @@ jobs:
       - name: Run v2 E2E suite
         working-directory: ${{ github.workspace }}/tests_end_to_end/e2e
         env:
+          TIER: ${{ github.event.inputs.tier || 't1' }}
           ALLURE_LAUNCH_NAME: "Opik v2 E2E ${{ github.event.inputs.tier || 't1' }} - ${{ github.run_id }}"
         run: |
           # Point both the allure-playwright reporter and allurectl at the same
           # absolute results dir, then stream results to TestOps via allurectl watch.
           export ALLURE_RESULTS="${{ github.workspace }}/tests_end_to_end/e2e/allure-results"
-          allurectl watch -- npm run test:${{ github.event.inputs.tier || 't1' }}
+          allurectl watch -- npm run "test:${TIER}"
 
       - name: Upload Allure Results
         if: always()
