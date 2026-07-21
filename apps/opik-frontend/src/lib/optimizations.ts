@@ -13,6 +13,7 @@ import { aggregateExperimentMetrics } from "@/lib/experiment-metrics";
 import { getFeedbackScore } from "@/lib/feedback-scores";
 import { Experiment, EVALUATION_METHOD } from "@/types/datasets";
 import { extractMetricNameFromPythonCode } from "@/lib/rules";
+import { parsePythonMethodParameters } from "@/lib/pythonArgumentsParser";
 import {
   DEFAULT_GEPA_OPTIMIZER_CONFIGS,
   DEFAULT_EVOLUTIONARY_OPTIMIZER_CONFIGS,
@@ -87,6 +88,160 @@ export const getBestOptimizationScore = (
 
 export const extractMetricNameFromCode = (code: string): string => {
   return extractMetricNameFromPythonCode(code) || "code";
+};
+
+// Dataset columns a code metric REQUIRES via `kwargs`. The backend splats the
+// dataset item into `score(**kwargs)`, so a required `kwargs["x"]` /
+// default-less `kwargs.get("x")` access references a dataset column that must
+// exist in the item source (mirrors extractMetricNameFromPythonCode's
+// static-scan approach).
+//
+// Only *required* accesses are returned (they gate submit):
+//   - `kwargs["x"]`               -> required (KeyError if absent -> crash)
+//   - `kwargs.get("x")`           -> NOT required. `.get()` is missing-safe by
+//                                    definition (returns None), and the editor's
+//                                    own helper copy recommends it precisely as
+//                                    the safe accessor for maybe-absent fields —
+//                                    so it must never hard-block submit.
+//   - `kwargs.get("x", default)`  -> NOT required (a default is supplied).
+//
+// Comments and string/docstring literals are stripped (best-effort, via a small
+// state machine) before the scan, so a `kwargs.get("x")` mention buried inside a
+// docstring or `# comment` is not mistaken for a real column access. Dynamic
+// access (e.g. `kwargs.get(var)`) can't be resolved statically and stays a
+// runtime concern. `output` is always injected by the backend, so it is never
+// treated as a required column.
+export const extractKwargsKeysFromPython = (code: string): string[] => {
+  if (!code) return [];
+
+  const keys = new Set<string>();
+  const n = code.length;
+  const isIdentChar = (c: string | undefined) =>
+    c !== undefined && /[A-Za-z0-9_]/.test(c);
+
+  // Read a quoted string starting at `code[start]` (a quote char). Returns the
+  // literal contents and the index just past the closing quote.
+  const readQuoted = (
+    start: number,
+    quote: string,
+  ): { value: string; end: number } => {
+    let k = start + 1;
+    let value = "";
+    while (k < n) {
+      if (code[k] === "\\") {
+        value += code[k + 1] ?? "";
+        k += 2;
+        continue;
+      }
+      if (code[k] === quote) {
+        k += 1;
+        break;
+      }
+      value += code[k];
+      k += 1;
+    }
+    return { value, end: k };
+  };
+
+  let i = 0;
+  while (i < n) {
+    const ch = code[i];
+
+    // Skip `#` comments to end of line.
+    if (ch === "#") {
+      while (i < n && code[i] !== "\n") i += 1;
+      continue;
+    }
+
+    // Skip string / docstring literals (single, double, and triple-quoted).
+    if (ch === '"' || ch === "'") {
+      const triple = code.slice(i, i + 3) === ch.repeat(3);
+      const closing = triple ? ch.repeat(3) : ch;
+      i += closing.length;
+      while (i < n) {
+        if (code[i] === "\\") {
+          i += 2;
+          continue;
+        }
+        if (code.slice(i, i + closing.length) === closing) {
+          i += closing.length;
+          break;
+        }
+        i += 1;
+      }
+      continue;
+    }
+
+    // A `kwargs` identifier access in code (not part of a longer identifier).
+    if (
+      code.startsWith("kwargs", i) &&
+      !isIdentChar(code[i - 1]) &&
+      !isIdentChar(code[i + 6])
+    ) {
+      let j = i + 6;
+      while (j < n && /\s/.test(code[j])) j += 1;
+
+      // kwargs["x"] / kwargs['x'] -> required.
+      if (code[j] === "[") {
+        j += 1;
+        while (j < n && /\s/.test(code[j])) j += 1;
+        if (code[j] === '"' || code[j] === "'") {
+          const { value, end } = readQuoted(j, code[j]);
+          if (value && value !== "output") keys.add(value);
+          i = end;
+          continue;
+        }
+      }
+
+      // kwargs.get(...) is intentionally NOT collected: `.get()` is
+      // missing-safe (returns None / a default), so it must never block submit.
+      // The key literal inside `.get("x")` is skipped as a string literal by
+      // the main loop, so it is not mistaken for a subscript access.
+    }
+
+    i += 1;
+  }
+
+  return [...keys];
+};
+
+// Dataset columns a *strict* `score()` signature REQUIRES as positional params.
+// A metric whose `score(self, output, reference)` declares no `**kwargs`
+// receives ONLY its declared params from the backend, each resolved via the
+// `arguments` map or a same-named dataset column. A declared param with no
+// default that is neither `output` nor mapped therefore MUST have a same-named
+// column present, or `score()` raises a missing-argument TypeError at runtime —
+// swallowed to 0.0 for every item, i.e. a silent all-zero run. The `kwargs[...]`
+// scanner above can't catch these (there is no `kwargs` identifier), so the
+// param names are surfaced here for the submit gate.
+//
+// A trailing `**kwargs` does NOT relax this: `**kwargs` only absorbs *undeclared*
+// extra columns, so a declared positional param with no default (e.g. `reference`
+// in `score(self, output, reference, **kwargs)`) is still required and its
+// absence raises a missing-argument TypeError.
+//
+// Returns [] when it can't confidently determine the requirement:
+//   - `score()` can't be located;
+//   - more than one `score()` is declared — the backend instantiates the
+//     alphabetically-first BaseMetric subclass (get_metric_class), which a
+//     source-order scan can't reliably mirror, so we defer to the backend rather
+//     than guess the wrong signature and block on the wrong column;
+//   - the signature can't be parsed — best-effort only; a false block is worse
+//     UX than a missed warning, and the backend AST validation is authoritative.
+export const extractRequiredScoreParams = (code: string): string[] => {
+  if (!code) return [];
+  // Ambiguous class/signature selection -> defer to the backend.
+  const scoreDefs = code.match(/def\s+score\s*\(/g);
+  if (!scoreDefs || scoreDefs.length !== 1) return [];
+  try {
+    // parsePythonMethodParameters already drops `self` and `*`/`**` params, so
+    // only concrete declared params remain; keep the required (no-default) ones.
+    return parsePythonMethodParameters(code, "score")
+      .filter((param) => !param.optional && param.name !== "output")
+      .map((param) => param.name);
+  } catch {
+    return [];
+  }
 };
 
 export const getObjectiveLabel = (

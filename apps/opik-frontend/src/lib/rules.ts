@@ -15,18 +15,338 @@ export const isPythonCodeRule = (rule: EvaluatorsRule): boolean => {
 };
 
 /**
- * Attempts to extract metric name from Python code by parsing the __init__ default parameter.
- * Looks for patterns like: def __init__(self, name: str = "my_custom_metric")
+ * Removes Python comments (`# ...`) and triple-quoted strings (docstrings) from
+ * source, while preserving ordinary single-/double-quoted string literals (they
+ * may hold the metric name we want to extract). This keeps the regex-based
+ * extractor from matching a `super().__init__(name="fake")` or `name = "fake"`
+ * that only appears inside a comment or docstring.
+ */
+const stripPythonCommentsAndDocstrings = (code: string): string => {
+  let result = "";
+  let i = 0;
+  const n = code.length;
+  while (i < n) {
+    const three = code.slice(i, i + 3);
+    // Triple-quoted string (docstring) — drop it entirely.
+    if (three === '"""' || three === "'''") {
+      const end = code.indexOf(three, i + 3);
+      i = end === -1 ? n : end + 3;
+      continue;
+    }
+    const ch = code[i];
+    // Line comment — drop to end of line (keep the newline for line structure).
+    if (ch === "#") {
+      const nl = code.indexOf("\n", i);
+      i = nl === -1 ? n : nl;
+      continue;
+    }
+    // Ordinary string literal — copy verbatim (may contain the metric name).
+    if (ch === '"' || ch === "'") {
+      result += ch;
+      i += 1;
+      while (i < n) {
+        const c = code[i];
+        if (c === "\\") {
+          result += c + (code[i + 1] ?? "");
+          i += 2;
+          continue;
+        }
+        result += c;
+        i += 1;
+        if (c === ch) break;
+      }
+      continue;
+    }
+    result += ch;
+    i += 1;
+  }
+  return result;
+};
+
+/**
+ * Attempts to extract the metric name from Python code, mirroring the backend's
+ * static extraction (opik-python-backend process_worker: `_find_basemetric_classdef`
+ * + `_metric_name_ast`) so a name derived here — e.g. the Optimization Studio
+ * create-time `objective_name` — matches the name the metric actually scores
+ * under. A mismatch is worse than `null`: it makes `getFeedbackScore(...,
+ * objective_name)` miss AND keeps `expectedMetricNames` polling for a name that
+ * never arrives (until MAX_REFETCH_TIME). So we resolve the SAME class the
+ * backend instantiates and read the name from ONLY that class; if we cannot
+ * identify the BaseMetric subclass we return null and defer to the backend.
  * Returns the extracted name or null if no name can be extracted.
  */
 export const extractMetricNameFromPythonCode = (
   code: string,
 ): string | null => {
-  // Match: def __init__(self, name: str = "metric_name") or name = 'metric_name'
-  const pattern =
-    /def\s+__init__\s*\([^)]*name(?:\s*:\s*str)?\s*=\s*["']([^"']+)["']/;
-  const match = code.match(pattern);
-  return match?.[1] || null;
+  if (!code) return null;
+
+  // Strip comments/docstrings first so none of the patterns below match text
+  // that never executes (e.g. `super().__init__(name="fake")` in a docstring).
+  const source = stripPythonCommentsAndDocstrings(code);
+
+  // Resolve the metric class the way the backend does, then read the name from
+  // that class body only — never from a helper or sibling class.
+  const metricClass = findMetricClassBody(source);
+  if (metricClass === null) return null;
+
+  return extractNameFromClassBody(metricClass);
+};
+
+const leadingWhitespace = (line: string): string =>
+  line.match(/^[ \t]*/)?.[0] ?? "";
+
+/**
+ * Local names that refer to `BaseMetric`: the literal plus any
+ * `from ... import BaseMetric as X` alias. Mirrors `_basemetric_aliases`.
+ */
+const collectBaseMetricAliases = (source: string): Set<string> => {
+  const aliases = new Set<string>(["BaseMetric"]);
+  // Parenthesized import lists span lines: `from ... import (\n  BaseMetric as BM,\n)`.
+  const importRegex = /from\s+[\w.]+\s+import\s+(?:\(([^)]*)\)|([^\n]+))/g;
+  let match: RegExpExecArray | null;
+  while ((match = importRegex.exec(source)) !== null) {
+    const imported = match[1] ?? match[2];
+    const aliasRegex = /\bBaseMetric\s+as\s+(\w+)/g;
+    let alias: RegExpExecArray | null;
+    while ((alias = aliasRegex.exec(imported)) !== null) aliases.add(alias[1]);
+  }
+  return aliases;
+};
+
+interface MetricClassBody {
+  indent: string;
+  body: string;
+  bases: string[];
+  aliases: Set<string>;
+}
+
+interface ClassDecl {
+  name: string;
+  indent: string;
+  bodyStart: number;
+  bases: string[];
+}
+
+/**
+ * The `BaseMetric` subclass the backend would instantiate: among classes DEFINED
+ * in the file that subclass `BaseMetric` (or an alias) — directly OR transitively
+ * via another class defined here — the alphabetically-first by name. Mirrors
+ * `_find_basemetric_classdef` / `get_metric_class` (which pick `min` by name /
+ * the name-sorted, defined-only `inspect.getmembers`). Returns that class's body
+ * text (without the header), or null when no such class is found (e.g. the only
+ * BaseMetric link is through an imported base — not statically resolvable; the
+ * backend defers on this too).
+ */
+const findMetricClassBody = (source: string): MetricClassBody | null => {
+  const aliases = collectBaseMetricAliases(source);
+  // PEP 695 type parameters may sit between the class name and the base list:
+  // `class MyMetric[T](BaseMetric):`.
+  const classRegex =
+    /^([ \t]*)class\s+(\w+)\s*(?:\[[^\]]*\])?\s*(?:\(([^)]*)\))?\s*:/gm;
+  const classes: ClassDecl[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = classRegex.exec(source)) !== null) {
+    const bases = (match[3] ?? "")
+      .split(",")
+      .map((base) => base.trim().split(".").pop()?.replace(/\[.*$/, "").trim())
+      .filter((base): base is string => Boolean(base));
+    classes.push({
+      name: match[2],
+      indent: match[1],
+      bodyStart: match.index + match[0].length,
+      bases,
+    });
+  }
+
+  // Seed with classes that DIRECTLY subclass a BaseMetric alias, then
+  // transitively add any class subclassing an already-known metric class
+  // defined in the file (mirrors runtime issubclass following the chain).
+  const metricNames = new Set(
+    classes
+      .filter((c) => c.bases.some((b) => aliases.has(b)))
+      .map((c) => c.name),
+  );
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const c of classes) {
+      if (!metricNames.has(c.name) && c.bases.some((b) => metricNames.has(b))) {
+        metricNames.add(c.name);
+        changed = true;
+      }
+    }
+  }
+
+  const candidates = classes.filter((c) => metricNames.has(c.name));
+  if (candidates.length === 0) return null;
+
+  // Alphabetically-first by class name (Python `min` on names, code-point order).
+  candidates.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  const chosen = candidates[0];
+
+  // Body = the lines after the header until the indentation returns to (or below)
+  // the class header's own indent.
+  const bodyLines: string[] = [];
+  for (const line of source.slice(chosen.bodyStart).split("\n")) {
+    if (line.trim() && leadingWhitespace(line).length <= chosen.indent.length) {
+      break;
+    }
+    bodyLines.push(line);
+  }
+  return {
+    indent: chosen.indent,
+    body: bodyLines.join("\n"),
+    bases: chosen.bases,
+    aliases,
+  };
+};
+
+/**
+ * Reads the metric name from a single class body, in the backend's precedence
+ * order (`_metric_name_ast`): base-constructor `super().__init__(name=...)`,
+ * then the `__init__` `name` param default, then a class-body-level
+ * `name = "..."` assignment (scoped to the body indentation so method-local
+ * `name = ...` and `self.name = ...` are excluded).
+ */
+/** Net `(`/`)` balance of a line, ignoring parens inside string literals. */
+const parenDelta = (line: string): number => {
+  let delta = 0;
+  let quote: string | null = null;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (quote !== null) {
+      if (ch === "\\") i += 1;
+      else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") quote = ch;
+    else if (ch === "(") delta += 1;
+    else if (ch === ")") delta -= 1;
+  }
+  return delta;
+};
+
+/**
+ * Given `text` and an index just after an opening `(`, returns the substring up
+ * to the matching close paren, respecting nested parens and string literals.
+ * Used to capture a constructor's FULL argument list so a nested call (e.g.
+ * `super().__init__(config=make_cfg(), name="foo")`) doesn't truncate at the
+ * first `)` the way a `[^)]*` regex would.
+ */
+const balancedArgs = (text: string, start: number): string => {
+  let depth = 1;
+  let quote: string | null = null;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (quote !== null) {
+      if (ch === "\\") i += 1;
+      else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") quote = ch;
+    else if (ch === "(") depth += 1;
+    else if (ch === ")") {
+      depth -= 1;
+      if (depth === 0) return text.slice(start, i);
+    }
+  }
+  return text.slice(start);
+};
+
+/**
+ * The class's own top-level `def __init__` block (header + body), or null.
+ * Scoping name extraction to it keeps `super().__init__(name=...)` matches in
+ * helper methods or nested classes from being mistaken for the metric identity.
+ */
+const findTopLevelInitBlock = (cls: MetricClassBody): string | null => {
+  const lines = cls.body.split("\n");
+  let bodyIndent: string | null = null;
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    bodyIndent = leadingWhitespace(line);
+    break;
+  }
+  if (bodyIndent === null) return null;
+
+  const block: string[] = [];
+  let depth = 0;
+  for (const line of lines) {
+    if (block.length === 0) {
+      if (
+        leadingWhitespace(line) === bodyIndent &&
+        /^[ \t]*(?:async\s+)?def\s+__init__\s*\(/.test(line)
+      ) {
+        block.push(line);
+        depth = parenDelta(line);
+      }
+      continue;
+    }
+    // Keep consuming while inside the (possibly multiline) signature, then
+    // while the body stays indented deeper than the class body level.
+    if (
+      depth > 0 ||
+      !line.trim() ||
+      leadingWhitespace(line).length > bodyIndent.length
+    ) {
+      block.push(line);
+      depth += parenDelta(line);
+      continue;
+    }
+    break;
+  }
+  return block.length > 0 ? block.join("\n") : null;
+};
+
+/**
+ * Reads the metric name from a single class body, in the backend's precedence
+ * order (`_metric_name_ast`): a base-constructor call inside the class's own
+ * `__init__` — `super().__init__(name=...)` or `<Base>.__init__(name=...)`
+ * where `<Base>` is a declared base or a `BaseMetric` alias — then the
+ * `__init__` `name` param default, then a class-body-level `name = "..."`
+ * assignment (scoped to the body indentation so method-local `name = ...` and
+ * `self.name = ...` are excluded).
+ */
+const extractNameFromClassBody = (cls: MetricClassBody): string | null => {
+  const init = findTopLevelInitBlock(cls);
+  if (init !== null) {
+    const ctorRegex = /(?:\bsuper\s*\(\s*\)|\b([\w.]+))\s*\.\s*__init__\s*\(/g;
+    let ctor: RegExpExecArray | null;
+    while ((ctor = ctorRegex.exec(init)) !== null) {
+      const target = ctor[1]?.split(".").pop();
+      // `super().__init__` (no target) or an explicit base-class constructor.
+      if (target && !cls.bases.includes(target) && !cls.aliases.has(target)) {
+        continue;
+      }
+      // Capture the FULL (balanced) argument list so a nested call before the
+      // name kwarg — e.g. `super().__init__(config=make_cfg(), name="foo")` —
+      // doesn't get truncated at the first `)`.
+      const args = balancedArgs(init, ctorRegex.lastIndex);
+      const name = args.match(/\bname\s*=\s*["']([^"']+)["']/);
+      if (name) return name[1];
+    }
+
+    const initDefault = init.match(
+      /def\s+__init__\s*\([^)]*\bname(?:\s*:\s*[^=,)]+)?\s*=\s*["']([^"']+)["']/,
+    );
+    if (initDefault) return initDefault[1];
+  }
+
+  // Class-body indentation: the indent of the first non-blank body line.
+  const bodyLines = cls.body.split("\n");
+  let bodyIndent: string | null = null;
+  for (const line of bodyLines) {
+    if (!line.trim()) continue;
+    bodyIndent = leadingWhitespace(line);
+    break;
+  }
+  if (bodyIndent === null) return null;
+
+  for (const line of bodyLines) {
+    if (leadingWhitespace(line) !== bodyIndent) continue;
+    const match = line.match(/^[ \t]*name\s*=\s*["']([^"']+)["']/);
+    if (match) return match[1];
+  }
+  return null;
 };
 
 export const isLLMJudgeRule = (rule: EvaluatorsRule): boolean => {

@@ -230,3 +230,18 @@ class ChatPromptCreate(BaseModel):
 class PromptResponse(BaseModel):
     id: str
     name: str
+
+
+class AnnotationQueueCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_name: str
+    name: str
+    trace_ids: list[str]
+    feedback_definition_names: list[str] | None = None
+    workspace: str | None = None
+
+
+class AnnotationQueueResponse(BaseModel):
+    id: str
+    name: str

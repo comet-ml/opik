@@ -1161,6 +1161,7 @@ optimizationStalledReaper:
   jobInterval: 5m
   initializedTimeout: 15m
   runningTimeout: 26h
+  lookbackMargin: 7d
   lockDuration: 4m
   batchSize: 100
 

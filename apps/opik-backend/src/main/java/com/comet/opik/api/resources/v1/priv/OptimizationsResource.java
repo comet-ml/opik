@@ -199,7 +199,7 @@ public class OptimizationsResource {
             @ApiResponse(responseCode = "204", description = "No content")})
     @RequiredPermissions(WorkspaceUserPermission.OPTIMIZATION_STUDIO_USE)
     public Response updateOptimizationsById(@PathParam("id") UUID id,
-            @RequestBody(content = @Content(schema = @Schema(implementation = OptimizationUpdate.class))) @NotNull OptimizationUpdate request) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = OptimizationUpdate.class))) @NotNull @Valid OptimizationUpdate request) {
         log.info("Update optimization with id '{}', with request '{}'", id, request);
 
         optimizationService.update(id, request)
