@@ -4,6 +4,7 @@ import {
   isStringMarkdown,
   removeUndefinedKeys,
   isLooseEqual,
+  formatNumberInK,
 } from "./utils";
 
 describe("isStringMarkdown", () => {
@@ -407,5 +408,51 @@ describe("getSelectAllCheckedState", () => {
 
   it("returns true when selectedCount exceeds totalCount", () => {
     expect(getSelectAllCheckedState(7, 5)).toBe(true);
+  });
+});
+
+describe("formatNumberInK", () => {
+  it("keeps existing (non-strict) behavior: no forced trailing zero", () => {
+    expect(formatNumberInK(7000000)).toBe("7M");
+    expect(formatNumberInK(6900)).toBe("6.9K");
+    expect(formatNumberInK(842)).toBe("842");
+  });
+
+  describe("strict (Cost-intelligence rounding rules)", () => {
+    const strict = (v: number) => formatNumberInK(v, 1, { strict: true });
+
+    it("shows values below 1,000 as raw integers, rounded half up", () => {
+      expect(strict(0)).toBe("0");
+      expect(strict(842)).toBe("842");
+      expect(strict(842.4)).toBe("842");
+      expect(strict(842.5)).toBe("843");
+      expect(strict(999)).toBe("999");
+    });
+
+    it("abbreviates K/M/B with the right suffix", () => {
+      expect(strict(6900)).toBe("6.9K");
+      expect(strict(7_200_000)).toBe("7.2M");
+      expect(strict(549_800_000_000)).toBe("549.8B");
+    });
+
+    it("always keeps one decimal, including a trailing .0", () => {
+      expect(strict(1000)).toBe("1.0K");
+      expect(strict(7_000_000)).toBe("7.0M");
+      expect(strict(1_600_000_000)).toBe("1.6B");
+    });
+
+    it("rounds half up to one decimal", () => {
+      expect(strict(1250)).toBe("1.3K");
+      expect(strict(2651)).toBe("2.7K");
+    });
+
+    it("carries over to the next unit instead of showing 1000.0", () => {
+      expect(strict(999_950)).toBe("1.0M");
+      expect(strict(999_950_000)).toBe("1.0B");
+    });
+
+    it("preserves the sign for negative values", () => {
+      expect(strict(-6900)).toBe("-6.9K");
+    });
   });
 });

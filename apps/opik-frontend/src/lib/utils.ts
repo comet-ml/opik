@@ -246,13 +246,37 @@ export const truncateMiddle = (text: string, maxLength: number): string => {
   return `${text.slice(0, left)}…${text.slice(-right)}`;
 };
 
-export const formatNumberInK = (value: number, precision = 1): string => {
+export const formatNumberInK = (
+  value: number,
+  precision = 1,
+  { strict = false }: { strict?: boolean } = {},
+): string => {
   const ranges = [
     { threshold: 1000000000000, suffix: "T", divider: 1000000000000 },
     { threshold: 1000000000, suffix: "B", divider: 1000000000 },
     { threshold: 1000000, suffix: "M", divider: 1000000 },
     { threshold: 1000, suffix: "K", divider: 1000 },
   ];
+
+  // Strict mode applies the Cost-intelligence rounding rules: always `precision`
+  // decimals on suffixed values (trailing zeros kept, e.g. 7.0M), an integer
+  // with no decimals below 1000, round-half-up, carry-over to the next unit when
+  // rounding hits 1000 (999,950 -> 1.0M), and a leading sign on negatives.
+  if (strict) {
+    const sign = value < 0 ? "-" : "";
+    const magnitude = Math.abs(value);
+    if (magnitude < 1000) return `${sign}${Math.round(magnitude)}`;
+    const factor = 10 ** precision;
+    const scale = (index: number): number =>
+      Math.round((magnitude / ranges[index].divider) * factor) / factor;
+    let index = ranges.findIndex((r) => magnitude >= r.divider);
+    let scaled = scale(index);
+    if (scaled >= 1000 && index > 0) {
+      index -= 1;
+      scaled = scale(index);
+    }
+    return `${sign}${scaled.toFixed(precision)}${ranges[index].suffix}`;
+  }
 
   const formatValue = (num: number): string =>
     isInteger(num) ? num.toString() : num.toFixed(precision);
