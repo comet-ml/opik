@@ -56,6 +56,15 @@ def _basemetric_aliases(tree: ast.AST) -> set:
     return aliases
 
 
+def _top_level_classdefs(tree: ast.AST) -> List[ast.ClassDef]:
+    """Module-level ClassDefs only — the classes that become module attributes
+    after exec, i.e. exactly what runtime ``inspect.getmembers`` sees. Excludes
+    classes nested in a method or another class, which a broad ``ast.walk`` would
+    otherwise pick up (and which runtime ``get_metric_class`` never instantiates).
+    """
+    return [node for node in getattr(tree, "body", []) if isinstance(node, ast.ClassDef)]
+
+
 def _class_base_names(node: ast.ClassDef) -> set:
     """The (last-segment) names of a ClassDef's declared bases, e.g. ``BaseMetric``
     for both ``class X(BaseMetric)`` and ``class X(pkg.BaseMetric)``."""
@@ -97,10 +106,9 @@ def _find_basemetric_classdef(tree: ast.AST) -> Optional[ast.ClassDef]:
 
     class_defs: dict = {}  # name -> ClassDef (last definition wins, as at runtime)
     base_names: dict = {}  # name -> set of declared base names
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ClassDef):
-            class_defs[node.name] = node
-            base_names[node.name] = _class_base_names(node)
+    for node in _top_level_classdefs(tree):
+        class_defs[node.name] = node
+        base_names[node.name] = _class_base_names(node)
 
     # Seed with classes that DIRECTLY subclass a BaseMetric alias, then
     # transitively add any class that subclasses an already-known metric class
@@ -348,7 +356,7 @@ def validate_user_code(code: str) -> dict:
         # `from x import MyBase; class My(MyBase)`) is not statically resolvable,
         # yet runtime get_metric_class (issubclass) instantiates it fine — so
         # hard-rejecting here would regress a previously-working metric.
-        class_defs = [n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]
+        class_defs = _top_level_classdefs(tree)
         if not class_defs:
             # No class at all -> definitely not a metric -> build-time reject.
             return {

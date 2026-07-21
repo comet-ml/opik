@@ -523,6 +523,31 @@ class MyImported(Equals):
         assert metric_fn(item, "Paris").value == 1.0
         assert metric_fn(item, "London").value == 0.0
 
+    def test_validate_user_code_fallback_ignores_nested_class(self):
+        """The imported-base fallback must read the TOP-LEVEL metric's signature,
+        not a NESTED helper class's score() — runtime get_metric_class only sees
+        module-level classes, so a nested `AHelper.score(self, output)` sorting
+        alphabetically first must not override `MyMetric.score(self, output,
+        reference)`."""
+        code = """
+from some_external_pkg import CustomBase
+
+class MyMetric(CustomBase):
+    def helper_setup(self):
+        class AHelper:
+            def score(self, output):
+                return None
+        return AHelper
+
+    def score(self, output, reference):
+        return None
+"""
+        result = validate_user_code(code)
+        assert "code" not in result
+        # Read from top-level MyMetric (strict output+reference), not nested AHelper.
+        assert result["accepts_var_keyword"] is False
+        assert result["score_params"] == ["output", "reference"]
+
     def test_validate_user_code_no_class_is_rejected_at_build(self):
         """A file with no class at all is a definite non-metric -> 400 at build."""
         result = validate_user_code("x = 1\n")
