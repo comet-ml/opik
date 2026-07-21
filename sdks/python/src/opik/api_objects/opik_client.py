@@ -1994,18 +1994,18 @@ class Opik:
         """
         return self._last_flush_result
 
-    def get_data_loss(self) -> List[data_loss.FailedMessageInfo]:
-        """Messages the background sender terminally dropped (never delivered).
+    def get_errors_report(self) -> data_loss.ErrorsReport:
+        """Report of messages the background sender terminally dropped.
 
         Unlike :attr:`last_flush_result`, which is scoped to a single flush, this
-        returns the sender's retained data-loss history — including drops that
-        happened before or between flushes. Bounded to the most recent entries.
+        reports the sender's retained data-loss history — including drops that
+        happened before or between flushes. Exact all-time counts plus the most
+        recent per-drop details (bounded), each with its own timestamp.
 
         The sender is shared across clients with a matching configuration, so
-        the history may include drops from sibling clients on the same
-        connection.
+        the report may include drops from sibling clients on the same connection.
         """
-        return self._flush_reporter.recorded_failures()
+        return self._flush_reporter.build_errors_report()
 
     def __internal_api__drain_to_processors__(
         self, timeout: Optional[float] = None

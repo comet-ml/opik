@@ -102,19 +102,24 @@ class TestDataLossTracker:
         assert items == 20
         assert len(failures) == 2
 
-    def test_recorded_failures__returns_all_retained(self):
+    def test_total_drops__exact_counts_and_details(self):
         tracker = data_loss.DataLossTracker()
         tracker.record(_failure())
         tracker.record(_failure(item_count=2))
 
-        assert len(tracker.recorded_failures()) == 2
+        count, items, failures = tracker.total_drops()
+        assert count == 2
+        assert items == 3
+        assert len(failures) == 2
 
-    def test_recorded_failures__bounded_to_capacity(self):
+    def test_total_drops__details_bounded_but_counts_exact(self):
         tracker = data_loss.DataLossTracker(max_entries=2)
         for _ in range(5):
             tracker.record(_failure())
 
-        assert len(tracker.recorded_failures()) == 2
+        count, _items, failures = tracker.total_drops()
+        assert count == 5
+        assert len(failures) == 2
 
 
 class TestFlushReporter:
@@ -145,18 +150,49 @@ class TestFlushReporter:
 
         assert result.success is True
 
-    def test_recorded_failures__surfaces_drops_outside_flush_window(self):
+    def test_build_errors_report__surfaces_drops_outside_flush_window(self):
         # A drop that happened before the flush window is not in the flush
-        # result, but is still discoverable via the sender-wide history.
+        # result, but is still discoverable via the sender-wide report.
         tracker = data_loss.DataLossTracker()
         reporter = self._reporter(tracker)
         tracker.record(_failure())
 
         marker = reporter.marker()
         result = reporter.build_result(marker, flushed=True)
+        report = reporter.build_errors_report()
 
         assert result.dropped_messages == 0
-        assert len(reporter.recorded_failures()) == 1
+        assert report.total_dropped_messages == 1
+        assert len(report.failures) == 1
+
+    def test_build_errors_report__carries_timestamps(self):
+        tracker = data_loss.DataLossTracker()
+        reporter = self._reporter(tracker)
+        tracker.record(
+            data_loss.FailedMessageInfo(
+                message_type="CreateSpansBatchMessage",
+                reason=data_loss.FailureReason.HTTP_CLIENT_ERROR,
+                item_count=1,
+                timestamp=1000.0,
+            )
+        )
+
+        report = reporter.build_errors_report()
+
+        assert report.has_data_loss is True
+        assert report.generated_at > 0
+        assert report.first_failure_at == 1000.0
+        assert report.last_failure_at == 1000.0
+
+    def test_build_errors_report__no_drops__empty(self):
+        tracker = data_loss.DataLossTracker()
+        reporter = self._reporter(tracker)
+
+        report = reporter.build_errors_report()
+
+        assert report.has_data_loss is False
+        assert report.failures == []
+        assert report.first_failure_at is None
 
 
 class TestMessageItemCount:

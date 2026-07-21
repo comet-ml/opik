@@ -7,7 +7,8 @@ connection bundle and shared by every client on it.
 """
 
 import logging
-from typing import TYPE_CHECKING, List
+import time
+from typing import TYPE_CHECKING
 
 from . import data_loss
 
@@ -58,6 +59,12 @@ class FlushReporter:
             )
         return result
 
-    def recorded_failures(self) -> List["data_loss.FailedMessageInfo"]:
-        """Sender-wide data-loss history, independent of any single flush."""
-        return self._data_loss_tracker.recorded_failures()
+    def build_errors_report(self) -> "data_loss.ErrorsReport":
+        """Sender-wide data-loss snapshot, independent of any single flush."""
+        total_messages, total_items, failures = self._data_loss_tracker.total_drops()
+        return data_loss.ErrorsReport(
+            total_dropped_messages=total_messages,
+            total_dropped_items=total_items,
+            failures=failures,
+            generated_at=time.time(),
+        )

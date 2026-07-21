@@ -76,6 +76,41 @@ class FlushResult:
         return self.flushed and self.dropped_messages == 0
 
 
+@dataclasses.dataclass(frozen=True)
+class ErrorsReport:
+    """Snapshot of terminal data loss recorded by the background sender.
+
+    Sender-wide and not tied to a single flush. ``total_*`` counts are exact
+    (running totals); ``failures`` holds the retained per-drop details, bounded
+    to the most recent entries, each carrying its own ``timestamp``.
+
+    Attributes:
+        total_dropped_messages: Messages terminally dropped since the sender started.
+        total_dropped_items: Traces/spans lost across those messages.
+        failures: Retained per-drop details (most recent; bounded).
+        generated_at: Unix time when this report was produced.
+    """
+
+    total_dropped_messages: int
+    total_dropped_items: int
+    failures: List[FailedMessageInfo]
+    generated_at: float
+
+    @property
+    def has_data_loss(self) -> bool:
+        return self.total_dropped_messages > 0
+
+    @property
+    def first_failure_at(self) -> Optional[float]:
+        """Timestamp of the oldest retained failure (bounded window), or None."""
+        return min((failure.timestamp for failure in self.failures), default=None)
+
+    @property
+    def last_failure_at(self) -> Optional[float]:
+        """Timestamp of the newest retained failure, or None."""
+        return max((failure.timestamp for failure in self.failures), default=None)
+
+
 class DataLossTracker:
     """Thread-safe, bounded record of terminally-dropped messages.
 
@@ -128,12 +163,13 @@ class DataLossTracker:
             failures = list(self._entries)[-window_size:] if window_size > 0 else []
             return count, items, failures
 
-    def recorded_failures(self) -> List[FailedMessageInfo]:
-        """All retained terminal drops, independent of any flush boundary.
+    def total_drops(self) -> Tuple[int, int, List[FailedMessageInfo]]:
+        """All-time drop totals plus retained details, as one snapshot.
 
-        Answers "has anything been lost?" across the sender's lifetime, unlike
-        :meth:`drops_since` which is scoped to one flush. Bounded to the most
-        recent ``max_entries`` — older details are evicted.
+        Returns ``(message_count, item_count, failures)``, independent of any
+        flush boundary — answers "has anything been lost?" across the sender's
+        lifetime. Counts are exact (running totals); ``failures`` is bounded to
+        the most recent ``max_entries``, older details evicted.
         """
         with self._lock:
-            return list(self._entries)
+            return self._recorded_count, self._recorded_items, list(self._entries)
