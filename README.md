@@ -9,12 +9,11 @@
             <img alt="Comet Opik logo" src="https://raw.githubusercontent.com/comet-ml/opik/refs/heads/main/apps/opik-documentation/documentation/static/img/opik-logo.svg" width="200" />
         </picture></a>
         <br>
-        Opik
+        Opik: Open-Source LLM Observability, Evaluation & AI Agent Tracing
     </div>
 </h1>
-<h2 align="center" style="border-bottom: none">Open-source AI Observability, Evaluation, and Optimization</h2>
 <p align="center">
-Opik helps you build, test, and optimize generative AI applications that run better, from prototype to production.  From RAG chatbots to code assistants to complex agentic systems, Opik provides comprehensive tracing, evaluation, and automatic prompt and tool optimization to take the guesswork out of AI development.
+<b>Opik is the open-source LLM observability and evaluation platform for AI agent tracing, LLM evaluation, prompt management, and production monitoring.</b> Built by <a href="https://www.comet.com?from=llm&utm_source=opik&utm_medium=github&utm_content=what_is_opik_link&utm_campaign=opik">Comet</a>. Apache-2.0 licensed, free to self-host the full platform, with 20,000+ GitHub stars.
 </p>
 
 <div align="center">
@@ -34,8 +33,10 @@ Opik helps you build, test, and optimize generative AI applications that run bet
     <a href="https://www.comet.com/docs/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=docs_button&utm_campaign=opik"><b>Documentation</b></a>
 </p>
 
+<p align="center"><sub>Last updated: 2026-07-17</sub></p>
+
 <div align="center" style="margin-top: 1em; margin-bottom: 1em;">
-<a href="#-what-is-opik">🚀 What is Opik?</a> • <a href="#%EF%B8%8F-opik-server-installation">🛠️ Opik Server Installation</a> • <a href="#-opik-client-sdk">💻 Opik Client SDK</a> • <a href="#-logging-traces-with-integrations">📝 Logging Traces</a><br>
+<a href="#-what-is-opik">🚀 What is Opik?</a> • <a href="#-quick-start">⚡ Quick Start</a> • <a href="#-how-opik-compares">📊 How Does Opik Compare?</a> • <a href="#-frequently-asked-questions">❓ FAQ</a> • <a href="#%EF%B8%8F-opik-server-installation">🛠️ Opik Server Installation</a> • <a href="#-opik-client-sdk">💻 Opik Client SDK</a> • <a href="#-logging-traces-with-integrations">📝 Logging Traces</a><br>
 <a href="#-llm-as-a-judge-metrics">🧑‍⚖️ LLM as a Judge</a> • <a href="#-evaluating-your-llm-application">🔍 Evaluating your Application</a> • <a href="#-star-us-on-github">⭐ Star Us</a> • <a href="#-contributing">🤝 Contributing</a>
 </div>
 
@@ -46,13 +47,14 @@ Opik helps you build, test, and optimize generative AI applications that run bet
 <a id="-what-is-opik"></a>
 ## 🚀 What is Opik?
 
-Opik (built by [Comet](https://www.comet.com?from=llm&utm_source=opik&utm_medium=github&utm_content=what_is_opik_link&utm_campaign=opik)) is an open-source platform designed to streamline the entire lifecycle of LLM applications. It empowers developers to evaluate, test, monitor, and optimize their models and agentic systems. Key offerings include:
+Opik covers the full LLM application lifecycle, from the first trace in development to production monitoring, for teams building LLM apps and AI agents. Key offerings include:
 
-- **Comprehensive Observability**: Deep tracing of LLM calls, conversation logging, and agent activity.
-- **Advanced Evaluation**: Robust prompt evaluation, LLM-as-a-judge, and experiment management.
-- **Production-Ready**: Scalable monitoring dashboards and online evaluation rules for production.
-- **Opik Agent Optimizer**: Dedicated SDK and set of optimizers to enhance prompts and agents.
+- **AI Agent Tracing & Observability**: Deep tracing of LLM calls, conversation logging, and agent activity, with full trace trees for multi-step agents and tool calls.
+- **LLM Evaluation**: Datasets, experiments, and LLM-as-a-judge metrics for hallucination detection, moderation, and RAG assessment.
+- **Prompt & Agent Optimization**: The Opik Agent Optimizer SDK to improve prompts and agents.
+- **Production-Ready Monitoring**: Scalable dashboards and online evaluation rules.
 - **Opik Guardrails**: Features to help you implement safe and responsible AI practices.
+- **CI/CD Evaluation**: A PyTest integration to test LLM pipelines on every commit.
 
 <br>
 
@@ -75,8 +77,75 @@ Key capabilities include:
   - Utilize [Online Evaluation Rules](https://www.comet.com/docs/opik/v1/production/rules/?from=llm&utm_source=opik&utm_medium=github&utm_content=dashboard_link&utm_campaign=opik) with LLM-as-a-Judge metrics to identify production issues.
   - Leverage **Opik Agent Optimizer** and **Opik Guardrails** to continuously improve and secure your LLM applications in production.
 
+**Who it's for:** ML engineers building LLM-powered agents, AI teams moving from prototype to production, and engineering teams that need open-source, self-hostable observability they can run in their own environment.
+
+> **Why open source matters here:** Opik is Apache-2.0 licensed and free to self-host: the full platform, backend included, not just a client SDK. The repository includes the server backend, web application, tracing, datasets, experiments, evaluations, prompt management, online evaluation, and agent optimization components, all under Apache-2.0. You can run LLM observability inside your own infrastructure with no data leaving your environment and no Enterprise sales conversation required.
+
 > [!TIP]
 > If you are looking for features that Opik doesn't have today, please raise a new [Feature request](https://github.com/comet-ml/opik/issues/new/choose) 🚀
+
+<br>
+
+<a id="-quick-start"></a>
+## ⚡ Quick Start
+
+Install the Python SDK and configure it:
+
+```bash
+pip install opik
+opik configure
+```
+
+Wrap any function with the `@track` decorator to start logging traces:
+
+```python
+from opik import track
+
+@track
+def my_function(input: str) -> str:
+    return input
+```
+
+Every call to `my_function` is now logged to Opik, including nested calls, so this works for full agent and pipeline traces, not just single LLM calls. See the [Quickstart guide](https://www.comet.com/docs/opik/quickstart?from=llm&utm_source=opik&utm_medium=github&utm_content=quickstart_hero_link&utm_campaign=opik) for the TypeScript SDK and other setup options.
+
+<br>
+
+<a id="-how-opik-compares"></a>
+## 📊 How Does Opik Compare?
+
+Opik competes in the **LLM observability / AI agent evaluation** category alongside **LangSmith, Arize (Phoenix and Arize AX), Weights & Biases (Weave), Langfuse, and Braintrust**.
+
+| Capability | Opik | LangSmith | Phoenix | Arize AX | Weights & Biases (Weave) | Langfuse | Braintrust |
+|---|---|---|---|---|---|---|---|
+| Open source | Yes, Apache-2.0 (full platform) | No | Source-available (Elastic License 2.0, not OSI-approved) | No | Open-source SDK/toolkit; self-managed platform requires a commercial license | MIT-licensed core platform; commercial enterprise modules | No |
+| Self-hosted deployment | Yes | Enterprise only | Yes | Enterprise only | Enterprise only for Weave itself | Yes, core | Enterprise only |
+| Free tier available (cloud or self-hosted) | Yes, both | Yes, cloud | Yes, self-hosted | Yes, cloud | Yes, cloud | Yes, both | Yes, cloud |
+| Agent / multi-step tracing | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| LLM-as-a-judge evaluation | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| Prompt management | Yes | Yes | Partly | Partly | Partly | Yes | Yes |
+| Framework-agnostic | Yes | Partly, built around LangChain | Yes | Yes | Yes | Yes | Yes |
+
+**When teams choose Opik:** Opik's full observability, evaluation, and optimization platform is Apache-2.0 licensed and free to self-host. Unlike closed platforms whose self-hosted deployment requires an Enterprise plan, Opik can be deployed without a commercial license, and it's framework-agnostic so it won't lock you into a single agent ecosystem. See the table above for where self-hosting and licensing differ across alternatives.
+
+<br>
+
+<a id="-frequently-asked-questions"></a>
+## ❓ Frequently Asked Questions
+
+#### Is Opik open source?
+Opik is licensed under Apache 2.0. Its server, web application, and core observability and evaluation capabilities can be self-hosted without a commercial license.
+
+#### Can I self-host Opik?
+Yes. Opik can be deployed locally or in your own infrastructure using the documented self-hosting options.
+
+#### Does Opik support AI agent tracing?
+Yes. Opik captures multi-step traces containing LLM calls, tool executions, retrieval steps, and other agent activity.
+
+#### Does Opik support LLM evaluation?
+Yes. Opik supports datasets, experiments, code-based metrics, LLM-as-a-judge evaluation, and online evaluation.
+
+#### Is Opik tied to a specific agent framework?
+No. Opik is framework-agnostic and supports its SDK, OpenTelemetry, and framework-specific integrations.
 
 <br>
 

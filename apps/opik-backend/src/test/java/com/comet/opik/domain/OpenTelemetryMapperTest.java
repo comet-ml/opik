@@ -1064,6 +1064,25 @@ class OpenTelemetryMapperTest {
             assertThat(opikSpan.parentSpanId()).isNotNull();
             assertThat(opikSpan.parentSpanId()).isNotEqualTo(overrideParentSpanId);
         }
+        @Test
+        void toOpikSpan_parentSpanIdEqualsTraceId_isTreatedAsRootSpan() {
+            // Some instrumentations set parent_span_id to the 16-byte trace id to mean "top-level span".
+            // Converting those bytes would yield a dangling UUID, so the span must become a root span.
+            var otelTraceId = UUID.randomUUID().toString().getBytes();
+            var otelSpanId = UUID.randomUUID().toString().getBytes();
+
+            // parent_span_id is the trace id (16 bytes), not a real span id
+            var otelSpan = buildOtelSpan(otelTraceId, otelSpanId, otelTraceId, List.of());
+
+            var mappedTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId,
+                    System.currentTimeMillis());
+
+            var opikSpan = OpenTelemetryMapper.toOpikSpan(otelSpan, mappedTraceId, null);
+
+            assertThat(opikSpan.traceId()).isEqualTo(mappedTraceId);
+            // parent_span_id == trace_id must resolve to null so the span renders as top-level
+            assertThat(opikSpan.parentSpanId()).isNull();
+        }
     }
 
     @Nested
