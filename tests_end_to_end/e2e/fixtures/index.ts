@@ -16,6 +16,12 @@ export type {
   ExperimentItemScore,
 } from './experiment.fixture';
 export type {
+  ComparisonRef,
+  ComparisonFixtures,
+  ComparisonItemSeed,
+  ComparisonExperimentRef,
+} from './comparison-experiment.fixture';
+export type {
   TestSuiteRef,
   TestSuiteFixtures,
   TestSuiteItemSeed,

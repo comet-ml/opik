@@ -147,6 +147,48 @@ class ExperimentEvaluateResponse(BaseModel):
     scores: list[ExperimentItemScore]
 
 
+class CompareDatasetItemSeed(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    input: str
+    expected_output: str
+
+
+class CompareExperimentSeed(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    experiment_name: str
+    # Per-experiment task outputs, aligned by index with the shared dataset
+    # items. Keeping task_output off the dataset item is what lets two
+    # experiments share the same items (same content hash) yet score
+    # differently under Equals(output, expected_output).
+    task_outputs: list[str]
+
+
+class ExperimentCompareSeedRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_name: str
+    dataset_name: str
+    items: list[CompareDatasetItemSeed]
+    experiments: list[CompareExperimentSeed]
+    dataset_description: str | None = None
+    workspace: str | None = None
+
+
+class CompareExperimentResult(BaseModel):
+    experiment_id: str
+    experiment_name: str
+    scores: list[ExperimentItemScore]
+
+
+class ExperimentCompareSeedResponse(BaseModel):
+    dataset_id: str
+    dataset_name: str
+    item_count: int
+    experiments: list[CompareExperimentResult]
+
+
 class TestSuiteItemSeed(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
