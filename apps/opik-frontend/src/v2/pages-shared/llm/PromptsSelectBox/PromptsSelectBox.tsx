@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import { ListAction } from "@/ui/list-action";
 import { Separator } from "@/ui/separator";
-import LoadableSelectBox from "@/shared/LoadableSelectBox/LoadableSelectBox";
+import LoadableSelectBox from "@/v2/components/LoadableSelectBox/LoadableSelectBox";
 import SelectBoxClearWrapper from "@/shared/SelectBoxClearWrapper/SelectBoxClearWrapper";
 import useProjectPromptsList from "@/api/prompts/useProjectPromptsList";
 import usePromptById from "@/api/prompts/usePromptById";
@@ -143,6 +143,7 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
       <>
         <Separator className="my-1" />
         <ListAction
+          size="sm"
           onClick={() => {
             onValueChange(undefined);
             setOpen(false);
