@@ -33,6 +33,7 @@ import com.comet.opik.utils.TruncationUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -3470,10 +3471,11 @@ class TraceDAOImpl implements TraceDAO {
      * than one item") that a strict single-item reducer throws, which surfaces as a 500. The empty
      * case is preserved (-> 404). A fan-out is logged so the underlying duplication stays visible.
      */
+    @VisibleForTesting
     static Optional<Trace> firstOrLogFanOut(@NonNull List<Trace> traces, UUID id, String workspaceId) {
         if (traces.size() > 1) {
-            log.warn("Trace id '{}' in workspace '{}' resolved to '{}' rows; returning the first",
-                    id, workspaceId, traces.size());
+            log.warn("Trace get-by-id resolved to multiple rows; returning the first. workspaceId '{}', traceId '{}'",
+                    workspaceId, id);
         }
         return traces.stream().findFirst();
     }
