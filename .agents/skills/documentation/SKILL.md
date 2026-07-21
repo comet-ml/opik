@@ -80,7 +80,7 @@ When documenting a feature, cover:
 
 ## Internationalized READMEs
 
-Non-English README files (`readme_CN.md`, `readme_JP.md`, `readme_KO.md`, `readme_PT_BR.md`) are AI machine-translated from the English `README.md`.
+Non-English README files (`readme_CN.md`, `readme_ES.md`, `readme_FR.md`, `readme_DE.md`) are AI machine-translated from the English `README.md`.
 
 - Each non-English README must have a notice at the top (as a blockquote) warning that the file is AI-translated and welcoming improvements.
 - When the English README is updated with significant content changes, re-translate the affected non-English READMEs using AI and update accordingly.
