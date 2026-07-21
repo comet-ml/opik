@@ -49,3 +49,22 @@ jobs:
           aws s3 sync apps/opik-documentation/python-sdk-docs/build/html \
             s3://site.comet.com/${{ inputs.environment }}/docs-opik/python-sdk-reference \
             --follow-symlinks --no-progress --delete --exclude '.git*'
+
+  notify-slack:
+    name: "📢 Slack Notification"
+    runs-on: ubuntu-latest
+    needs: upload
+    if: always() && needs.upload.result == 'failure'
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
+
+      - name: Send Slack failure notification
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: .github/scripts/notify-slack-test-failure.sh "Python SDK Docs Deploy"
