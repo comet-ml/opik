@@ -10,7 +10,9 @@ import com.comet.opik.api.EvaluatorItem;
 import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.lock.LockService;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
@@ -26,8 +28,10 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -43,6 +47,10 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 public interface DatasetVersionService {
 
     String LATEST_TAG = "latest";
+
+    // Distributed-lock name serializing all version-creating writers on a dataset (OPIK-7264).
+    // Shared by DatasetItemService (save/patch/delete/applyDeltaChanges) and the restore path here.
+    String DATASET_VERSION_LOCK = "DatasetVersion";
 
     // Error message templates
     String ERROR_VERSION_HASH_EXISTS = "Version hash collision detected for dataset '%s'";
@@ -254,6 +262,8 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull DatasetItemDAO datasetItemDAO;
     private final @NonNull DatasetItemVersionDAO datasetItemVersionDAO;
+    private final @NonNull LockService lockService;
+    private final @NonNull @Config OpikConfiguration config;
 
     @Override
     public DatasetVersionPage getVersions(@NonNull UUID datasetId, int page, int size) {
@@ -704,7 +714,10 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        return Mono.fromCallable(() -> buildRestoreContext(datasetId, versionRef, workspaceId, userName))
+        // Serialize restore under the same per-dataset lock as the other version-creating writers so a
+        // concurrent item write can't move 'latest' mid-restore and race the flip (OPIK-7264).
+        Mono<DatasetVersion> restore = Mono
+                .fromCallable(() -> buildRestoreContext(datasetId, versionRef, workspaceId, userName))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(context -> {
                     if (context.isLatestVersion) {
@@ -714,6 +727,10 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                     }
                     return createRestoredVersion(datasetId, versionRef, context);
                 });
+
+        Duration lockLease = config.getDatasetVersioning().lockLease().toJavaDuration();
+        return lockService.executeWithLockCustomExpire(
+                new LockService.Lock(datasetId, DATASET_VERSION_LOCK), restore, lockLease);
     }
 
     private RestoreContext buildRestoreContext(UUID datasetId, String versionRef,

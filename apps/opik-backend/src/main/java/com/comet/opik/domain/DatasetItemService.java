@@ -152,7 +152,7 @@ public interface DatasetItemService {
 @Slf4j
 class DatasetItemServiceImpl implements DatasetItemService {
 
-    private static final String DATASET_VERSION_LOCK = "DatasetVersion";
+    private static final String DATASET_VERSION_LOCK = DatasetVersionService.DATASET_VERSION_LOCK;
 
     private final @NonNull DatasetItemDAO dao;
     private final @NonNull DatasetItemVersionDAO versionDao;
@@ -860,7 +860,12 @@ class DatasetItemServiceImpl implements DatasetItemService {
         // Route to versioned or legacy based on toggle
         if (featureFlags.isDatasetVersioningEnabled()) {
             log.info("Saving batch with versioning for dataset '{}', itemCount '{}'", datasetId, items.size());
-            return withDatasetVersionLock(datasetId, saveItemsWithVersion(batch, datasetId, null)
+            // Unlike the other callers of saveItemsWithVersion, this public overload has no prior
+            // dataset-existence read, so guard here (under the lock) to fail fast on a missing dataset.
+            return withDatasetVersionLock(datasetId, Mono.deferContextual(ctx -> {
+                datasetService.findById(datasetId, ctx.get(RequestContext.WORKSPACE_ID), null);
+                return saveItemsWithVersion(batch, datasetId, null);
+            })
                     .map(version -> (long) items.size())
                     .defaultIfEmpty((long) items.size()));
         }
@@ -1805,14 +1810,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 log.debug("Saving items with version for dataset '{}', itemCount '{}', batchGroupId '{}'",
                         datasetId, batch.items().size(), batchGroupId);
 
-                // Fail fast on a missing/deleted dataset before burning per-item span/trace validation.
-                return Mono.defer(() -> {
-                    // Verify dataset exists
-                    datasetService.findById(datasetId, workspaceId, null);
-
-                    // Ensure dataset is migrated if lazy migration is enabled
-                    return ensureLazyMigration(datasetId, workspaceId);
-                })
+                // Ensure dataset is migrated if lazy migration is enabled. Dataset existence is already
+                // guaranteed by every caller (createFromTraces/Spans, save(), saveBatch), so no redundant
+                // findById here.
+                return ensureLazyMigration(datasetId, workspaceId)
                         // Validate span and trace workspaces before proceeding
                         .then(Mono.defer(() -> validateSpans(workspaceId, validatedItems)))
                         .then(Mono.defer(() -> validateTraces(workspaceId, validatedItems)))
