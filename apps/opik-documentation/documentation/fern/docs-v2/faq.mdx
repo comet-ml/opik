@@ -161,7 +161,7 @@ For questions about rate limits, reach out to us on [Slack](https://chat.comet.c
 
 Yes. Opik caps both the per-field size of `input`/`output` (recent SDKs truncate a larger
 `input`/`output` client-side, replacing it with a truncation marker and logging a warning) and the
-per-request payload size (oversized requests are rejected with `413`/`400`). `metadata` is not
+per-request payload size (oversized requests are rejected with `413`). `metadata` is not
 truncated and embedded base64 content (images, audio, video, PDFs, or JSON) is handled separately as
 an attachment.
 

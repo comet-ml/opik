@@ -25,8 +25,7 @@ directly in a span/trace `input`, `output`, or `metadata`:
   warning), so individual spans and traces stay within the limit. `metadata` is **not** truncated -
   keep it small too, since it still counts toward the per-request limit below.
 - **Per request:** a single ingestion batch is capped at roughly **~50 MB compressed** and
-  **~256 MB uncompressed**; larger requests are rejected (`413`, or `400` for an oversized single
-  document).
+  **~256 MB uncompressed**; larger requests are rejected with `413`.
 
 **Base64-encoded content is handled separately and is not bound by the two limits above.** When you
 embed a large base64 blob in a field - images, audio, video, PDFs, and other recognized formats such
