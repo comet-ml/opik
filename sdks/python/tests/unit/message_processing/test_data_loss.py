@@ -102,6 +102,20 @@ class TestDataLossTracker:
         assert items == 20
         assert len(failures) == 2
 
+    def test_recorded_failures__returns_all_retained(self):
+        tracker = data_loss.DataLossTracker()
+        tracker.record(_failure())
+        tracker.record(_failure(item_count=2))
+
+        assert len(tracker.recorded_failures()) == 2
+
+    def test_recorded_failures__bounded_to_capacity(self):
+        tracker = data_loss.DataLossTracker(max_entries=2)
+        for _ in range(5):
+            tracker.record(_failure())
+
+        assert len(tracker.recorded_failures()) == 2
+
 
 class TestFlushReporter:
     def _reporter(self, tracker, *, queue_size=0):
@@ -130,6 +144,19 @@ class TestFlushReporter:
         result = reporter.build_result(marker, flushed=True)
 
         assert result.success is True
+
+    def test_recorded_failures__surfaces_drops_outside_flush_window(self):
+        # A drop that happened before the flush window is not in the flush
+        # result, but is still discoverable via the sender-wide history.
+        tracker = data_loss.DataLossTracker()
+        reporter = self._reporter(tracker)
+        tracker.record(_failure())
+
+        marker = reporter.marker()
+        result = reporter.build_result(marker, flushed=True)
+
+        assert result.dropped_messages == 0
+        assert len(reporter.recorded_failures()) == 1
 
 
 class TestMessageItemCount:

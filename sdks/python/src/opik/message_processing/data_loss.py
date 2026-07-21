@@ -127,3 +127,13 @@ class DataLossTracker:
             window_size = min(count, len(self._entries))
             failures = list(self._entries)[-window_size:] if window_size > 0 else []
             return count, items, failures
+
+    def recorded_failures(self) -> List[FailedMessageInfo]:
+        """All retained terminal drops, independent of any flush boundary.
+
+        Answers "has anything been lost?" across the sender's lifetime, unlike
+        :meth:`drops_since` which is scoped to one flush. Bounded to the most
+        recent ``max_entries`` — older details are evicted.
+        """
+        with self._lock:
+            return list(self._entries)

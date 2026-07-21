@@ -7,7 +7,7 @@ connection bundle and shared by every client on it.
 """
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
 from . import data_loss
 
@@ -57,3 +57,7 @@ class FlushReporter:
                 result.remaining_queue_size,
             )
         return result
+
+    def recorded_failures(self) -> List["data_loss.FailedMessageInfo"]:
+        """Sender-wide data-loss history, independent of any single flush."""
+        return self._data_loss_tracker.recorded_failures()
