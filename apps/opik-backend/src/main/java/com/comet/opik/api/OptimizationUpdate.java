@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import lombok.Builder;
 
 @Builder(toBuilder = true)
@@ -13,5 +14,6 @@ import lombok.Builder;
 public record OptimizationUpdate(
         String name,
         OptimizationStatus status,
+        @Valid ErrorInfo errorInfo,
         @Schema(implementation = JsonListString.class, description = "Optional metadata to merge into the optimization's existing metadata. Provided keys are added or overwritten; existing keys not present here are preserved.") JsonNode metadata) {
 }

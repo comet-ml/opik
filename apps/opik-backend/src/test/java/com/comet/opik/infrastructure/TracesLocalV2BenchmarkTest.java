@@ -96,26 +96,26 @@ class TracesLocalV2BenchmarkTest {
      * The intended codec for every {@code traces_local_v2} column, keyed by column name. This is the canonical record
      * of the per-field decisions the benchmarks below justify; {@link #everyTracesLocalV2ColumnUsesItsIntendedCodec()}
      * asserts the live DDL matches it, column for column. It reflects the codecs the live table ships after migrations
-     * {@code 000101} (create) and {@code 000106} (which applies the six benchmark-driven refinements), so it moves in
-     * lockstep with those migrations — the pin test fails loudly if the DDL and this map ever drift apart.
+     * {@code 000101} (create), {@code 000106} and {@code 000107} (which apply the benchmark-driven refinements), so it
+     * moves in lockstep with those migrations — the pin test fails loudly if the DDL and this map ever drift apart.
      */
     private static final Map<String, ExpectedCodec> TRACES_LOCAL_V2_CODECS = Map.ofEntries(
             Map.entry("id", ExpectedCodec.ZSTD1),
-            Map.entry("workspace_id", ExpectedCodec.ZSTD1),
+            Map.entry("workspace_id", ExpectedCodec.ZSTD3),
             Map.entry("project_id", ExpectedCodec.ZSTD1),
-            Map.entry("name", ExpectedCodec.ZSTD1),
+            Map.entry("name", ExpectedCodec.ZSTD3),
             Map.entry("start_time", ExpectedCodec.DELTA_ZSTD1),
-            Map.entry("end_time", ExpectedCodec.ZSTD1),
+            Map.entry("end_time", ExpectedCodec.DELTA_ZSTD1),
             Map.entry("input", ExpectedCodec.ZSTD3),
             Map.entry("output", ExpectedCodec.ZSTD3),
             Map.entry("metadata", ExpectedCodec.ZSTD3),
-            Map.entry("tags", ExpectedCodec.ZSTD1),
+            Map.entry("tags", ExpectedCodec.ZSTD3),
             Map.entry("created_at", ExpectedCodec.DELTA_ZSTD1),
-            Map.entry("last_updated_at", ExpectedCodec.ZSTD1),
-            Map.entry("created_by", ExpectedCodec.ZSTD1),
-            Map.entry("last_updated_by", ExpectedCodec.ZSTD1),
+            Map.entry("last_updated_at", ExpectedCodec.DELTA_ZSTD1),
+            Map.entry("created_by", ExpectedCodec.ZSTD3),
+            Map.entry("last_updated_by", ExpectedCodec.ZSTD3),
             Map.entry("error_info", ExpectedCodec.ZSTD1),
-            Map.entry("thread_id", ExpectedCodec.ZSTD1),
+            Map.entry("thread_id", ExpectedCodec.ZSTD3),
             Map.entry("visibility_mode", ExpectedCodec.ZSTD1),
             Map.entry("truncation_threshold", ExpectedCodec.ZSTD1),
             Map.entry("input_slim", ExpectedCodec.ZSTD3),
@@ -172,6 +172,7 @@ class TracesLocalV2BenchmarkTest {
                     proj_zstd3        FixedString(36)              CODEC(ZSTD(3)),
                     ws_lz4            String                       CODEC(LZ4),
                     ws_zstd1          String                       CODEC(ZSTD(1)),
+                    ws_zstd3          String                       CODEC(ZSTD(3)),
                     name_lz4          String                       CODEC(LZ4),
                     name_zstd1        String                       CODEC(ZSTD(1)),
                     name_zstd3        String                       CODEC(ZSTD(3)),
@@ -253,6 +254,7 @@ class TracesLocalV2BenchmarkTest {
                         proj_zstd3,
                         ws_lz4,
                         ws_zstd1,
+                        ws_zstd3,
                         name_lz4,
                         name_zstd1,
                         name_zstd3,
@@ -472,6 +474,7 @@ class TracesLocalV2BenchmarkTest {
                     project_id,   -- proj_zstd3
                     workspace_id, -- ws_lz4
                     workspace_id, -- ws_zstd1
+                    workspace_id, -- ws_zstd3
                     name,         -- name_lz4
                     name,         -- name_zstd1
                     name,         -- name_zstd3
@@ -597,30 +600,35 @@ class TracesLocalV2BenchmarkTest {
     }
 
     @Test
-    void clusteredUuidV4WorkspaceIdColumnCompressesBestWithLz4() {
-        long uncompressed = uncompressed("ws_zstd1");
+    void clusteredUuidV4WorkspaceIdColumnShipsZstd3() {
+        long uncompressed = uncompressed("ws_zstd3");
         long lz4 = compressed("ws_lz4");
         long zstd1 = compressed("ws_zstd1");
+        long zstd3 = compressed("ws_zstd3");
 
-        // workspace_id is a UUIDv4 (no timestamp prefix) but clustered in long runs (first sort key), so it also
-        // compresses to a small fraction of its raw size. On CH 26.3 LZ4 wins here: ZSTD(1) on this clustered-UUIDv4
-        // String is ~2x larger than LZ4 (measured ws_lz4 ~4.5k vs ws_zstd1 ~8.7k), a reversal from 25.8 where ZSTD(1)
-        // was far smaller. Require LZ4 to be at least WITHIN_5_PCT smaller than ZSTD(1) — the margin is on the ZSTD(1)
-        // side so the check fails if LZ4 ever stops being the clear winner. It cannot be LowCardinality (ORDER BY prefix).
-        assertThat(lz4).isLessThan(uncompressed);
-        assertThat(lz4).isLessThanOrEqualTo(Math.round(zstd1 / WITHIN_5_PCT));
-        log.info("[OPIK-6899] clustered workspace_id (UUIDv4) compressed bytes | LZ4: {} | ZSTD(1): {}", lz4, zstd1);
+        // workspace_id is a clustered UUIDv4 String (first sort key, long runs), so it compresses to a tiny fraction of
+        // its raw size; it cannot be LowCardinality (ORDER BY prefix). Ships ZSTD(3): on ClickHouse 26.3 ZSTD(1)
+        // regressed on this clustered String (larger than LZ4), while ZSTD(3) is unaffected and smallest, at
+        // level-independent decode. The shipped codec is pinned by everyTracesLocalV2ColumnUsesItsIntendedCodec.
+        assertThat(zstd3).isLessThan(uncompressed);
+        assertThat(zstd3).isLessThanOrEqualTo(lz4);
+        assertThat(zstd3).isLessThanOrEqualTo(zstd1);
+        log.info("[OPIK-6899] clustered workspace_id (UUIDv4) compressed bytes | LZ4: {} | ZSTD(1): {} | ZSTD(3): {}",
+                lz4, zstd1, zstd3);
     }
 
     @Test
-    void traceNameColumnCompressesBestWithZstd1() {
+    void traceNameColumnShipsZstd3() {
         long lz4 = compressed("name_lz4");
         long zstd1 = compressed("name_zstd1");
         long zstd3 = compressed("name_zstd3");
 
-        // The trace name is short medium-cardinality text; ZSTD(1) beats LZ4 and ZSTD(3) adds little.
-        assertThat(zstd1).isLessThan(lz4);
-        assertThat(zstd1).isLessThanOrEqualTo(Math.round(zstd3 * WITHIN_15_PCT));
+        // The trace name is short medium-cardinality text. Ships ZSTD(3): on ClickHouse 26.3 ZSTD(1) regressed on these
+        // repetitive variable-length String columns, while ZSTD(3) is unaffected and smallest, at level-independent
+        // decode. The shipped codec is pinned by everyTracesLocalV2ColumnUsesItsIntendedCodec.
+        assertThat(zstd3).isLessThan(lz4);
+        assertThat(zstd3).isLessThanOrEqualTo(Math.round(zstd1 * WITHIN_5_PCT));
+        log.info("[OPIK-6899] name compressed bytes | LZ4: {} | ZSTD(1): {} | ZSTD(3): {}", lz4, zstd1, zstd3);
     }
 
     @Test
@@ -720,14 +728,18 @@ class TracesLocalV2BenchmarkTest {
     }
 
     @Test
-    void tagsArrayColumnCompressesBestWithZstd1() {
+    void tagsArrayColumnShipsZstd3() {
         long lz4 = compressed("arr_lz4");
         long zstd1 = compressed("arr_zstd1");
         long zstd3 = compressed("arr_zstd3");
 
-        // tags is an Array(String) of low-cardinality values; ZSTD(1) beats LZ4 and ZSTD(3) adds little.
-        assertThat(zstd1).isLessThan(lz4);
-        assertThat(zstd1).isLessThanOrEqualTo(Math.round(zstd3 * WITHIN_15_PCT));
+        // tags is an Array(String) of low-cardinality values. Ships ZSTD(3): it is smallest and, unlike ZSTD(1), is
+        // unaffected by the ClickHouse 26.3 level-1 regression on repetitive columns. The shipped codec is pinned by
+        // everyTracesLocalV2ColumnUsesItsIntendedCodec.
+        assertThat(zstd3).isLessThan(lz4);
+        assertThat(zstd3).isLessThanOrEqualTo(Math.round(zstd1 * WITHIN_5_PCT));
+        log.info("[OPIK-6899] tags Array(String) compressed bytes | LZ4: {} | ZSTD(1): {} | ZSTD(3): {}",
+                lz4, zstd1, zstd3);
     }
 
     @Test
@@ -791,36 +803,37 @@ class TracesLocalV2BenchmarkTest {
     }
 
     @Test
-    void endTimeIsNotMonotonicSoPlainZstd1BeatsDelta() {
+    void endTimeShipsDeltaZstd1FromRealData() {
         long lz4 = compressed("et_lz4");
         long zstd1 = compressed("et_zstd1");
         long deltaZstd1 = compressed("et_delta_zstd1");
 
-        // Unlike start_time/created_at (monotonic in storage order), end_time is start_time + a variable duration and
-        // carries epoch sentinels for unfinished traces, so it is NOT monotonic in storage order: Delta hurts rather
-        // than helps and plain ZSTD(1) is the smallest. The size of the gap depends on the duration distribution and
-        // the epoch fraction.
+        // Ships Delta + ZSTD(1) (restoring 000101, reverting the 000106 plain ZSTD(1)): on real production data end_time
+        // is monotonic enough in storage order that Delta is smaller than plain ZSTD(1). This synthetic slice
+        // deliberately scrambles end_time (start + a wide random duration + epoch sentinels), so plain ZSTD(1) can edge
+        // Delta here; hence only the robust facts are asserted (both ZSTD variants beat LZ4). The shipped codec is
+        // pinned by everyTracesLocalV2ColumnUsesItsIntendedCodec.
         assertThat(zstd1).isLessThan(lz4);
-        assertThat(zstd1).isLessThanOrEqualTo(deltaZstd1);
-        log.info(
-                "[OPIK-6899] end_time (start+duration, ~3% epoch) compressed bytes | LZ4: {} | ZSTD(1): {} | Delta+ZSTD(1): {}",
+        assertThat(deltaZstd1).isLessThan(lz4);
+        log.info("[OPIK-6899] end_time compressed bytes | LZ4: {} | ZSTD(1): {} | Delta+ZSTD(1): {} (ships Delta)",
                 lz4, zstd1, deltaZstd1);
     }
 
     @Test
-    void lastUpdatedAtIsScrambledSoPlainZstd1BeatsDelta() {
+    void lastUpdatedAtShipsDeltaZstd1FromRealData() {
         long lz4 = compressed("lua_lz4");
         long zstd1 = compressed("lua_zstd1");
         long deltaZstd1 = compressed("lua_delta_zstd1");
 
-        // last_updated_at is the ReplacingMergeTree version column = last write time. For created-then-finalized traces
-        // (~70%) it is ~ start + duration, so like end_time it is NOT monotonic in storage order and plain ZSTD(1) beats
-        // Delta. The size of the gap depends on the updated-trace fraction.
+        // last_updated_at is the ReplacingMergeTree version column. Ships Delta + ZSTD(1) (restoring 000101, reverting
+        // the 000106 plain ZSTD(1)): on real production data it is monotonic enough that Delta is smaller than plain
+        // ZSTD(1). This synthetic slice scrambles it (like end_time), so plain ZSTD(1) can edge Delta here; only the
+        // robust facts are asserted (both ZSTD variants beat LZ4). The shipped codec is pinned by
+        // everyTracesLocalV2ColumnUsesItsIntendedCodec.
         assertThat(zstd1).isLessThan(lz4);
-        assertThat(zstd1).isLessThanOrEqualTo(deltaZstd1);
+        assertThat(deltaZstd1).isLessThan(lz4);
         log.info(
-                "[OPIK-6899] last_updated_at (version column, ~70% updated) compressed bytes | LZ4: {} | ZSTD(1): {} | "
-                        + "Delta+ZSTD(1): {}",
+                "[OPIK-6899] last_updated_at compressed bytes | LZ4: {} | ZSTD(1): {} | Delta+ZSTD(1): {} (ships Delta)",
                 lz4, zstd1, deltaZstd1);
     }
 
@@ -854,15 +867,18 @@ class TracesLocalV2BenchmarkTest {
     }
 
     @Test
-    void flexibleThreadIdColumnCompressesBestWithZstd1() {
+    void flexibleThreadIdColumnShipsZstd3() {
         long lz4 = compressed("thread_lz4");
         long zstd1 = compressed("thread_zstd1");
         long zstd3 = compressed("thread_zstd3");
 
-        // thread_id is a free-form identifier — mostly empty, else a UUIDv4 or a short random string — and scattered
-        // (not in the sort key). ZSTD(1) beats LZ4 whatever the exact format; ZSTD(3) adds little. Shipped ZSTD(1) holds.
-        assertThat(zstd1).isLessThan(lz4);
-        assertThat(zstd1).isLessThanOrEqualTo(Math.round(zstd3 * WITHIN_15_PCT));
+        // thread_id is a free-form, high-entropy identifier (mostly empty, else a UUID or short random string), not in
+        // the sort key. Ships ZSTD(3) for consistency with the other variable-length String columns: it is smallest on
+        // 26.3 and ~equal to ZSTD(1) otherwise, at level-independent decode. The shipped codec is pinned by
+        // everyTracesLocalV2ColumnUsesItsIntendedCodec.
+        assertThat(zstd3).isLessThan(lz4);
+        assertThat(zstd3).isLessThanOrEqualTo(Math.round(zstd1 * WITHIN_15_PCT));
+        log.info("[OPIK-6899] thread_id compressed bytes | LZ4: {} | ZSTD(1): {} | ZSTD(3): {}", lz4, zstd1, zstd3);
     }
 
     @Test
@@ -1064,21 +1080,22 @@ class TracesLocalV2BenchmarkTest {
                     duration Float64 MATERIALIZED if(end_time = toDateTime64('1970-01-01 00:00:00', 6) OR start_time = toDateTime64('1970-01-01 00:00:00', 6), toFloat64('nan'), dateDiff('microsecond', start_time, end_time) / 1000.0) CODEC(ZSTD(1)),
                     id_at DateTime('UTC') MATERIALIZED UUIDv7ToDateTime(toUUID(id)) CODEC(Delta, ZSTD(1))
                 """;
-        // NEW traces_local_v2 format = the live table's codecs after migrations 000101 (create) + 000106 (the six
-        // benchmark-driven refinements: end_time / last_updated_at -> ZSTD(1); visibility_mode / source / environment ->
-        // ZSTD(1); output_keys -> ZSTD(3)), matching the pin map above. The refinements are best guesses to re-validate
-        // at the staging cutover; the headline is the deployed format, DateTime64(6), epoch/NaN sentinels, is_deleted.
+        // NEW traces_local_v2 format = the live table's codecs after migrations 000101 (create), 000106 and 000107 (the
+        // benchmark-driven refinements), matching the pin map above: the variable-length String/Array columns
+        // (workspace_id, name, tags, created_by, last_updated_by, thread_id, output_keys) on ZSTD(3); end_time /
+        // last_updated_at on Delta + ZSTD(1); visibility_mode / source / environment on ZSTD(1). The headline is the
+        // deployed format: tuned per-column codecs, DateTime64(6), epoch/NaN sentinels, is_deleted.
         execute(("""
                 CREATE TABLE {db}.full_after
                 (
-                    id FixedString(36) CODEC(ZSTD(1)), workspace_id String CODEC(ZSTD(1)),
-                    project_id FixedString(36) CODEC(ZSTD(1)), name String CODEC(ZSTD(1)),
-                    start_time DateTime64(6, 'UTC') CODEC(Delta, ZSTD(1)), end_time DateTime64(6, 'UTC') CODEC(ZSTD(1)),
+                    id FixedString(36) CODEC(ZSTD(1)), workspace_id String CODEC(ZSTD(3)),
+                    project_id FixedString(36) CODEC(ZSTD(1)), name String CODEC(ZSTD(3)),
+                    start_time DateTime64(6, 'UTC') CODEC(Delta, ZSTD(1)), end_time DateTime64(6, 'UTC') CODEC(Delta, ZSTD(1)),
                     input String CODEC(ZSTD(3)), output String CODEC(ZSTD(3)), metadata String CODEC(ZSTD(3)),
-                    tags Array(String) CODEC(ZSTD(1)),
-                    created_at DateTime64(6, 'UTC') CODEC(Delta, ZSTD(1)), last_updated_at DateTime64(6, 'UTC') CODEC(ZSTD(1)),
-                    created_by String CODEC(ZSTD(1)), last_updated_by String CODEC(ZSTD(1)),
-                    error_info String CODEC(ZSTD(1)), thread_id String CODEC(ZSTD(1)),
+                    tags Array(String) CODEC(ZSTD(3)),
+                    created_at DateTime64(6, 'UTC') CODEC(Delta, ZSTD(1)), last_updated_at DateTime64(6, 'UTC') CODEC(Delta, ZSTD(1)),
+                    created_by String CODEC(ZSTD(3)), last_updated_by String CODEC(ZSTD(3)),
+                    error_info String CODEC(ZSTD(1)), thread_id String CODEC(ZSTD(3)),
                     visibility_mode Enum8('unknown' = 0, 'default' = 1, 'hidden' = 2) CODEC(ZSTD(1)),
                     truncation_threshold UInt64 CODEC(ZSTD(1)), input_slim String CODEC(ZSTD(3)), output_slim String CODEC(ZSTD(3)),
                     ttft Float64 CODEC(ZSTD(1)),

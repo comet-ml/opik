@@ -12,6 +12,7 @@ from ..core.pydantic_utilities import parse_obj_as
 from ..core.request_options import RequestOptions
 from ..core.serialization import convert_and_respect_annotation_metadata
 from ..errors.bad_request_error import BadRequestError
+from ..types.error_info import ErrorInfo
 from ..errors.not_found_error import NotFoundError
 from ..types.json_list_string import JsonListString
 from ..types.json_list_string_write import JsonListStringWrite
@@ -369,6 +370,7 @@ class RawOptimizationsClient:
         *,
         name: typing.Optional[str] = OMIT,
         status: typing.Optional[OptimizationUpdateStatus] = OMIT,
+        error_info: typing.Optional[ErrorInfo] = OMIT,
         metadata: typing.Optional[JsonListString] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
@@ -382,6 +384,8 @@ class RawOptimizationsClient:
         name : typing.Optional[str]
 
         status : typing.Optional[OptimizationUpdateStatus]
+
+        error_info : typing.Optional[ErrorInfo]
 
         metadata : typing.Optional[JsonListString]
 
@@ -398,6 +402,7 @@ class RawOptimizationsClient:
             json={
                 "name": name,
                 "status": status,
+                "error_info": error_info,
                 "metadata": convert_and_respect_annotation_metadata(
                     object_=metadata, annotation=JsonListString, direction="write"
                 ),
@@ -809,6 +814,7 @@ class AsyncRawOptimizationsClient:
         *,
         name: typing.Optional[str] = OMIT,
         status: typing.Optional[OptimizationUpdateStatus] = OMIT,
+        error_info: typing.Optional[ErrorInfo] = OMIT,
         metadata: typing.Optional[JsonListString] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
@@ -822,6 +828,8 @@ class AsyncRawOptimizationsClient:
         name : typing.Optional[str]
 
         status : typing.Optional[OptimizationUpdateStatus]
+
+        error_info : typing.Optional[ErrorInfo]
 
         metadata : typing.Optional[JsonListString]
 
@@ -838,6 +846,7 @@ class AsyncRawOptimizationsClient:
             json={
                 "name": name,
                 "status": status,
+                "error_info": error_info,
                 "metadata": convert_and_respect_annotation_metadata(
                     object_=metadata, annotation=JsonListString, direction="write"
                 ),

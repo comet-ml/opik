@@ -1,0 +1,68 @@
+---
+description: Install and configure the opik-hermes plugin to export LLM, tool, and
+  agent traces to Opik.
+headline: Hermes | Opik Documentation
+og:description: Connect Hermes to Opik with the opik-hermes plugin.
+og:site_name: Opik Documentation
+og:title: Hermes Integration - Opik
+title: Observability for Hermes with Opik
+canonical-url: https://www.comet.com/docs/opik/integrations/hermes
+---
+
+[Hermes](https://github.com/NousResearch/hermes-agent) can send trace data to Opik through the plugin package [`opik-hermes`](https://github.com/comet-ml/opik-hermes).
+
+This integration captures:
+
+- A root trace per agent turn, organized by Hermes `session_id`
+- LLM spans (`type=llm`): messages, assistant output, model/provider, token usage, and USD cost
+- Tool spans (`type=tool`): tool arguments and results
+
+## Prerequisites
+
+- The [Hermes](https://github.com/NousResearch/hermes-agent) agent framework installed.
+- Opik project/workspace details (for cloud or enterprise deployments).
+
+## Setup
+
+<Steps>
+  <Step title="1. Install the plugin">
+    ```bash
+    pip install opik-hermes
+    ```
+
+    Installing the package automatically registers the plugin with Hermes.
+  </Step>
+  <Step title="2. Enable the plugin">
+    Add `opik` to the enabled plugins in `~/.hermes/config.yaml`:
+
+    ```yaml
+    plugins:
+      enabled: [opik]
+    ```
+  </Step>
+  <Step title="3. Configure Opik credentials">
+    Set the Opik environment variables in `~/.hermes/.env`.
+
+    For a local open-source Opik deployment:
+
+    ```bash
+    OPIK_URL_OVERRIDE=http://localhost:5173/api
+    OPIK_PROJECT_NAME=hermes
+    ```
+
+    For Comet-hosted Opik:
+
+    ```bash
+    OPIK_API_KEY=your-api-key
+    OPIK_WORKSPACE=your-workspace
+    ```
+  </Step>
+</Steps>
+
+## Validate setup
+
+Run a Hermes chat session and verify traces appear in the configured Opik project dashboard.
+
+## Next step
+
+For OTEL-native pipelines, see [OpenTelemetry integration](/v1/integrations/opentelemetry).

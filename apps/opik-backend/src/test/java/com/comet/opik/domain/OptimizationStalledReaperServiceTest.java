@@ -72,6 +72,8 @@ class OptimizationStalledReaperServiceTest {
     private static final Duration IMMEDIATE = Duration.ZERO;
     // Far longer than the age of any run seeded in this suite => never stalled.
     private static final Duration NEVER = Duration.ofDays(7);
+    // Scan-floor margin; every seeded run is fresh so any positive value keeps it inside the lookback window.
+    private static final Duration LOOKBACK_MARGIN = Duration.ofDays(7);
     private static final int BATCH_SIZE = 100;
 
     private static final String API_KEY = UUID.randomUUID().toString();
@@ -228,7 +230,7 @@ class OptimizationStalledReaperServiceTest {
 
     private long reconcile(Duration initializedTimeout, Duration runningTimeout, int batchSize) {
         Long transitioned = optimizationService
-                .reconcileStalledStudioOptimizations(initializedTimeout, runningTimeout, batchSize)
+                .reconcileStalledStudioOptimizations(initializedTimeout, runningTimeout, LOOKBACK_MARGIN, batchSize)
                 .block();
         assertThat(transitioned).isNotNull();
         return transitioned;

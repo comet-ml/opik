@@ -855,6 +855,9 @@ navigation:
           - page: Flowise
             path: ../docs-v2/integrations/flowise.mdx
             slug: flowise
+          - page: Hermes
+            path: ../docs-v2/integrations/hermes.mdx
+            slug: hermes
           - page: Langflow
             path: ../docs-v2/integrations/langflow.mdx
             slug: langflow
@@ -993,6 +996,9 @@ navigation:
               - page: Experiments
                 path: ../docs-v2/reference/typescript-sdk/evaluation/experiments.mdx
                 slug: experiments
+              - page: Test Suites
+                path: ../docs-v2/reference/typescript-sdk/evaluation/test_suites.mdx
+                slug: test_suites
 
       - section: Rest API
         slug: rest-api
