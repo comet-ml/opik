@@ -262,27 +262,17 @@ public class CipxSpendBlockDAO {
             };
         }
 
-        /** Breakdown lane: like {@link #lane} but categories with no breakdown rows map to '' (excluded). */
+        /**
+         * Breakdown lane: like {@link #lane} but categories with no breakdown rows map to '' (excluded).
+         * Delegates to {@link #lane} for the shared dispatch table and only overrides the two
+         * intentional differences, so the two tables can't drift apart on a future category addition.
+         */
         private static String bdLane(String category, String toolServer) {
-            return switch (category) {
-                case "tool_io" -> toolServer.isEmpty() ? "built_in_tools" : "mcp_servers";
-                case "system_tools", "system_tools_deferred" -> "built_in_tools";
-                case "user_prompts" -> "user_prompts";
-                case "prior_assistant" -> "prior_assistant";
-                case "mcp_tools_active" -> "mcp_servers";
-                case "skills_menu", "skills_loaded" -> "skills";
-                case "custom_agents" -> "custom_agents";
-                case "memory" -> "memory";
-                case "file_attachments" -> "file_attachments";
-                case "system_prompt", "env_info" -> "static_overhead";
-                case "auto_classifier", "agent_overhead" -> "static_overhead";
-                case "thinking" -> "thinking";
-                case "assistant_text" -> "assistant_text";
-                case "built_in_tool_calls" -> "built_in_tool_calls";
-                case "mcp_tool_calls" -> "mcp_tool_calls";
-                case "skill_invocations" -> "skill_invocations";
-                default -> "";
-            };
+            if (category.equals("mcp_tools_deferred") || category.equals("mcp_server_instructions")) {
+                return "";
+            }
+            String baseLane = lane(category, toolServer);
+            return baseLane.equals("unattributed") ? "" : baseLane;
         }
 
         /** Breakdown row key; which raw field names the row depends on the category. */
