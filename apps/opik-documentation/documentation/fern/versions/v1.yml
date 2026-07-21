@@ -661,6 +661,9 @@ navigation:
           - page: Flowise
             path: ../docs/tracing/integrations/flowise.mdx
             slug: flowise
+          - page: Hermes
+            path: ../docs/tracing/integrations/hermes.mdx
+            slug: hermes
           - page: Langflow
             path: ../docs/tracing/integrations/langflow.mdx
             slug: langflow

@@ -88,7 +88,12 @@ public class OpenTelemetryMapper {
             }
             effectiveTraceId = opikTraceId;
             var otelParentSpanId = otelSpan.getParentSpanId();
-            opikParentSpanId = otelParentSpanId.isEmpty()
+            // Some instrumentations set parent_span_id to the 16-byte trace id to mean "top-level span".
+            // Converting it yields a dangling UUID that doesn't match the Redis-mapped trace id, so
+            // treat it as a root span.
+            boolean parentIsTraceId = !otelParentSpanId.isEmpty()
+                    && otelParentSpanId.equals(otelSpan.getTraceId());
+            opikParentSpanId = (otelParentSpanId.isEmpty() || parentIsTraceId)
                     ? null
                     : convertOtelIdToUUIDv7(otelParentSpanId.toByteArray(), traceTimestamp);
         }

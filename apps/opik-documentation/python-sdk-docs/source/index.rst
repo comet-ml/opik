@@ -196,6 +196,7 @@ You can learn more about the `opik` python SDK in the following sections:
    :maxdepth: 1
    
    evaluation/Dataset
+   evaluation/TestSuite
    evaluation/evaluate
    evaluation/evaluate_prompt
    evaluation/evaluate_experiment
@@ -257,6 +258,7 @@ You can learn more about the `opik` python SDK in the following sections:
    Objects/ExperimentItemReferences.rst
    Objects/EvaluationResult.rst
    Objects/TestResult.rst
+   Objects/TestSuiteResult.rst
    Objects/Prompt.rst
    Objects/ChatPrompt.rst
    Objects/ScoreResult.rst

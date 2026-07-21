@@ -66,6 +66,18 @@ export interface AutomationRuleRef {
   projectIds: string[];
 }
 
+export interface AnnotationQueueReviewerRef {
+  username: string;
+  itemsScored: number;
+}
+
+export interface AnnotationQueueDetail {
+  id: string;
+  name: string;
+  itemsCount: number;
+  reviewers: AnnotationQueueReviewerRef[];
+}
+
 export interface OptimizationRef {
   id: string;
   name: string;
@@ -348,6 +360,33 @@ export function makeBackendClient(apiKey: string | null = null) {
     async deleteOptimization(id: string): Promise<void> {
       try {
         await opik.api.optimizations.deleteOptimizationsById({ ids: [id] });
+      } catch (err) {
+        if (isNotFoundError(err)) return;
+        throw err;
+      }
+    },
+
+    async getAnnotationQueue(id: string): Promise<AnnotationQueueDetail | null> {
+      try {
+        const q = await opik.api.annotationQueues.getAnnotationQueueById(id);
+        return {
+          id: String(q.id),
+          name: q.name,
+          itemsCount: q.itemsCount ?? 0,
+          reviewers: (q.reviewers ?? []).map((r) => ({
+            username: r.username ?? '',
+            itemsScored: r.status ?? 0,
+          })),
+        };
+      } catch (err) {
+        if (isNotFoundError(err)) return null;
+        throw err;
+      }
+    },
+
+    async deleteAnnotationQueue(id: string): Promise<void> {
+      try {
+        await opik.api.annotationQueues.deleteAnnotationQueueBatch({ ids: [id] });
       } catch (err) {
         if (isNotFoundError(err)) return;
         throw err;
