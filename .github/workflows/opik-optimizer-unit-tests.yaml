@@ -48,11 +48,6 @@ jobs:
           uses: actions/setup-python@v5
           with:
             python-version: ${{matrix.python_version}}
-            cache: 'pip'
-            cache-dependency-path: |
-              sdks/opik_optimizer/pyproject.toml
-              sdks/opik_optimizer/setup.py
-              sdks/opik_optimizer/tests/test_requirements.txt
 
         - name: Set up uv
           uses: astral-sh/setup-uv@v8.3.2
