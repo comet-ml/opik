@@ -68,8 +68,7 @@ export interface AutomationRuleRef {
 
 export interface AnnotationQueueReviewerRef {
   username: string;
-  /** Count of items this reviewer has scored in the queue. */
-  status: number;
+  itemsScored: number;
 }
 
 export interface AnnotationQueueDetail {
@@ -376,7 +375,7 @@ export function makeBackendClient(apiKey: string | null = null) {
           itemsCount: q.itemsCount ?? 0,
           reviewers: (q.reviewers ?? []).map((r) => ({
             username: r.username ?? '',
-            status: r.status ?? 0,
+            itemsScored: r.status ?? 0,
           })),
         };
       } catch (err) {

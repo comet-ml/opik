@@ -13,19 +13,13 @@ def create_annotation_queue(
     body: AnnotationQueueCreate,
     x_opik_api_key: str | None = Header(default=None),
 ) -> AnnotationQueueResponse:
-    # Wraps client.create_traces_annotation_queue(...) + queue.add_traces(...),
-    # the same code path opik.TracesAnnotationQueue users invoke. add_traces
-    # takes Trace/TracePublic objects (not bare ids), so each seeded trace is
-    # looked up by id via search_traces before being added. ApiError is
-    # translated to HTTP by the app-wide exception handler.
+    # add_traces takes Trace/TracePublic objects (not bare ids), so each
+    # seeded trace is looked up by id via search_traces first; the queue is
+    # only created once every trace is confirmed visible, so a lookup
+    # failure doesn't leave an orphan queue behind. ApiError is translated
+    # to HTTP by the app-wide exception handler.
     client = make_opik_client(workspace=body.workspace, api_key=x_opik_api_key)
     try:
-        queue = client.create_traces_annotation_queue(
-            name=body.name,
-            project_name=body.project_name,
-            feedback_definition_names=body.feedback_definition_names,
-        )
-
         traces = []
         for trace_id in body.trace_ids:
             found = client.search_traces(
@@ -41,6 +35,11 @@ def create_annotation_queue(
                 )
             traces.append(found[0])
 
+        queue = client.create_traces_annotation_queue(
+            name=body.name,
+            project_name=body.project_name,
+            feedback_definition_names=body.feedback_definition_names,
+        )
         queue.add_traces(traces)
     finally:
         client.end(flush=False)
