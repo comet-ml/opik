@@ -221,22 +221,7 @@ public class OpenTelemetryMapper {
                     // If the suffix is empty then try merging as a JSON object,
                     // otherwise nest under the stripped key or the rule key.
                     if (jsonKey.isEmpty() && value.getValueCase() == AnyValue.ValueCase.STRING_VALUE) {
-                        try {
-                            var jsonNode = JsonUtils.getJsonNodeFromString(value.getStringValue());
-                            if (jsonNode.isObject()) {
-                                jsonNode.fields()
-                                        .forEachRemaining(entry -> {
-                                            if (!RESERVED_METADATA_KEYS.contains(entry.getKey())) {
-                                                node.set(entry.getKey(), entry.getValue());
-                                            }
-                                        });
-                            } else {
-                                extractToJsonColumn(node, rule.getRule(), value);
-                            }
-                        } catch (UncheckedIOException e) {
-                            log.debug("Failed to parse JSON, falling back to text for key '{}'", key, e);
-                            extractToJsonColumn(node, rule.getRule(), value);
-                        }
+                        mergeJsonObjectOrFallback(node, rule.getRule(), key, value);
                     } else if (jsonKey.isEmpty()) {
                         extractToJsonColumn(node, rule.getRule(), value);
                     } else {
@@ -320,6 +305,31 @@ public class OpenTelemetryMapper {
         }
         if (!tags.isEmpty()) {
             spanBuilder.tags(tags);
+        }
+    }
+
+    /**
+     * When the storage key is empty and the value is a string, try parsing it as a JSON object
+     * and merge its fields into {@code node}, skipping {@link #RESERVED_METADATA_KEYS}. On a
+     * non-object JSON value or a parse failure, fall back to storing the raw value under the
+     * rule's key via {@link #extractToJsonColumn}.
+     */
+    private static void mergeJsonObjectOrFallback(ObjectNode node, String ruleKey, String key, AnyValue value) {
+        try {
+            var jsonNode = JsonUtils.getJsonNodeFromString(value.getStringValue());
+            if (jsonNode.isObject()) {
+                jsonNode.fields()
+                        .forEachRemaining(entry -> {
+                            if (!RESERVED_METADATA_KEYS.contains(entry.getKey())) {
+                                node.set(entry.getKey(), entry.getValue());
+                            }
+                        });
+            } else {
+                extractToJsonColumn(node, ruleKey, value);
+            }
+        } catch (UncheckedIOException e) {
+            log.warn("Failed to parse JSON, falling back to text for key '{}'", key, e);
+            extractToJsonColumn(node, ruleKey, value);
         }
     }
 
