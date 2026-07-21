@@ -32,8 +32,15 @@ public class JsonProcessingExceptionMapper implements ExceptionMapper<JsonProces
         // A StreamConstraintsException is the document-/string-length size guard tripping mid-parse
         // (OPIK-7334) — an EXPECTED client rejection, already surfaced via the ingestion size-guard
         // metric. Keep it at DEBUG so normal oversized-payload traffic doesn't flood INFO logs.
-        if (exception instanceof StreamConstraintsException streamConstraintsException) {
-            log.debug("Ingestion size guard rejected a request", streamConstraintsException);
+        //
+        // It rarely arrives as the thrown type: when the overrun trips while binding a bean property
+        // (the common case — a well-formed SpanBatch/TraceBatch whose input/output/metadata is
+        // oversized), Jackson wraps it in a JsonMappingException carrying the reference chain, so a
+        // plain `instanceof` check misses it and the metric under-counts exactly the real-world case
+        // the dashboard monitors. Walk the cause chain to find the underlying constraint.
+        StreamConstraintsException streamConstraintsException = findStreamConstraint(exception);
+        if (streamConstraintsException != null) {
+            log.debug("Ingestion size guard rejected a request", exception);
             sizeGuardMetrics.recordStreamConstraintRejection(streamConstraintsException, uriInfo.get(), requestContext);
         } else {
             // Genuine malformed JSON: log the exception itself (not just its message) so the type and
@@ -45,5 +52,24 @@ public class JsonProcessingExceptionMapper implements ExceptionMapper<JsonProces
                 .entity(new ErrorMessage(Response.Status.BAD_REQUEST.getStatusCode(),
                         "Unable to process JSON. " + exception.getMessage()))
                 .build();
+    }
+
+    /**
+     * Return the {@link StreamConstraintsException} the given throwable is or wraps, or {@code null} if
+     * none is present. Jackson raises the size-guard overrun at the parser level but re-wraps it in a
+     * {@link com.fasterxml.jackson.databind.JsonMappingException} (with the bean reference chain) when
+     * it trips during databinding, so the constraint is usually a cause rather than the thrown type.
+     * The walk is bounded and self-reference-safe to avoid looping on a malformed cause chain.
+     */
+    private static StreamConstraintsException findStreamConstraint(Throwable throwable) {
+        for (Throwable cause = throwable; cause != null; cause = cause.getCause()) {
+            if (cause instanceof StreamConstraintsException streamConstraintsException) {
+                return streamConstraintsException;
+            }
+            if (cause == cause.getCause()) {
+                break;
+            }
+        }
+        return null;
     }
 }
