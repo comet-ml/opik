@@ -42,24 +42,25 @@ interface TruncationMarker {
 
 const truncationMarker = (sizeMb: number): TruncationMarker => ({
   opik_truncated: true,
-  reason: `<omitted_due_to_size_${Math.round(sizeMb)}MB_error_code_413_400>`,
+  // A non-finite size means the value couldn't be serialized to measure it (see fieldSizeMb);
+  // report that rather than a bogus "InfinityMB" (Math.round(Infinity) === Infinity).
+  reason: Number.isFinite(sizeMb)
+    ? `<omitted_due_to_size_${Math.round(sizeMb)}MB_error_code_413_400>`
+    : `<omitted_unserializable_error_code_413_400>`,
 });
 
-// Reported as the size for ANY value we can't serialize here: a RangeError (a string over V8's
-// ~512 MiB cap) or a TypeError (a circular reference, BigInt, ...). If JSON.stringify fails here it
-// will fail on the wire too, so forcing truncation degrades the field to a marker and keeps
-// span/trace creation from throwing downstream on an unsendable payload - truncation must never
-// break creation, and leaving the value in place (size 0) would only defer the crash to send time.
-const MAX_SERIALIZABLE_MB = 512;
-
 // Serialized size of a value in MB - what it would weigh on the wire (0 if it serializes to
-// nothing). Any serialization failure is treated as oversized (see MAX_SERIALIZABLE_MB).
+// nothing). ANY serialization failure - a RangeError (a string over V8's ~512 MiB cap) or a
+// TypeError (circular reference, BigInt, throwing toJSON, ...) - returns Infinity, so the field is
+// always truncated regardless of the configured cap. A value we can't serialize here can't be sent
+// either, so degrading it to a marker keeps span/trace creation from throwing downstream; a finite
+// sentinel would let a larger cap slip an unsendable payload through to the wire.
 const fieldSizeMb = (value: unknown): number => {
   try {
     const json = JSON.stringify(value);
     return json ? Buffer.byteLength(json, "utf8") / BYTES_PER_MB : 0;
   } catch {
-    return MAX_SERIALIZABLE_MB;
+    return Infinity;
   }
 };
 

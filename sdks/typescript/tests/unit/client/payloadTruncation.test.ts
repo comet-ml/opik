@@ -123,6 +123,22 @@ describe("truncatePayloadFields", () => {
     expect(result.input).toEqual({ ok: true }); // serializable sibling kept
   });
 
+  it("force-truncates an unserializable field even when the cap exceeds 512 MB", () => {
+    // Regression: a finite sentinel (the old 512) let a larger configured cap slip an
+    // unsendable payload through. Infinity must beat ANY finite cap.
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    const span = { id: "s1", output: circular };
+
+    const { result, truncated } = truncatePayloadFields(span, 1000);
+
+    expect(truncated).toEqual(["output"]);
+    expect(asMarker(result.output).opik_truncated).toBe(true);
+    expect(asMarker(result.output).reason).toBe(
+      "<omitted_unserializable_error_code_413_400>",
+    );
+  });
+
   it("treats a field too large to serialize (RangeError) as oversized and truncates it", () => {
     // Reproduce V8's "Invalid string length" deterministically without allocating >512 MiB:
     // a value whose serialization throws RangeError is the multi-GB payload this guard must
