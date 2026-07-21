@@ -37,6 +37,8 @@ jobs:
 
       - name: Build Python SDK docs
         run: |
+            echo "TEMPORARY: forcing failure to test notify-slack alert path - revert before merge"
+            exit 1
             echo "Build sdk documentation"
             cd apps/opik-documentation/python-sdk-docs
             uv venv .venv
