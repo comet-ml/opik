@@ -80,14 +80,24 @@ class FlushResult:
 class ErrorsReport:
     """Snapshot of terminal data loss recorded by the background sender.
 
-    Sender-wide and not tied to a single flush. ``total_*`` counts are exact
-    (running totals); ``failures`` holds the retained per-drop details, bounded
-    to the most recent entries, each carrying its own ``timestamp``.
+    Sender-wide and not tied to a single flush.
+
+    .. note::
+        The report is **capped**. ``total_dropped_messages`` /
+        ``total_dropped_items`` are always exact (kept as running totals), but
+        ``failures`` holds only the **most recent** drops — up to the tracker's
+        configured capacity (default 1000). Once that limit is reached, the
+        oldest per-drop details are discarded, so ``failures`` can
+        contain fewer entries than ``total_dropped_messages``, and
+        ``first_failure_at`` reflects the oldest *retained* detail, not
+        necessarily the first-ever drop.
 
     Attributes:
-        total_dropped_messages: Messages terminally dropped since the sender started.
-        total_dropped_items: Traces/spans lost across those messages.
-        failures: Retained per-drop details (most recent; bounded).
+        total_dropped_messages: Messages terminally dropped since the sender
+            started (exact).
+        total_dropped_items: Traces/spans lost across those messages (exact).
+        failures: Most-recent per-drop details, capped (see note); each carries
+            its own ``timestamp``.
         generated_at: Unix time when this report was produced.
     """
 

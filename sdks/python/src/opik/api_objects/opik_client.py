@@ -1999,8 +1999,11 @@ class Opik:
 
         Unlike :attr:`last_flush_result`, which is scoped to a single flush, this
         reports the sender's retained data-loss history — including drops that
-        happened before or between flushes. Exact all-time counts plus the most
-        recent per-drop details (bounded), each with its own timestamp.
+        happened before or between flushes.
+
+        The report is **capped**: the total counts are exact, but the per-drop
+        ``failures`` list keeps only the most recent entries (bounded, drop-oldest)
+        so it never grows without bound — see :class:`~opik.ErrorsReport`.
 
         The sender is shared across clients with a matching configuration, so
         the report may include drops from sibling clients on the same connection.
