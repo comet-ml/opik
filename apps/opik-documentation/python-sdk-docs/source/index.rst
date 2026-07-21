@@ -7,11 +7,11 @@ Main features
 
 The Comet Opik platform is a suite of tools that allow you to evaluate the output of an LLM powered application.
 
-In includes the following features:
+It includes the following features:
 
-- `Tracing <https://www.comet.com/docs/opik/tracing/log_traces>`_: Ability to log LLM calls and traces to the Opik platform.
+- `Tracing <https://www.comet.com/docs/opik/tracing/advanced/log_traces>`_: Ability to log LLM calls and traces to the Opik platform.
 - `LLM evaluation metrics <https://www.comet.com/docs/opik/evaluation/metrics/heuristic_metrics>`_: A set of functions that evaluate the output of an LLM, these are both heuristic metrics and LLM as a Judge.
-- `Evaluation <https://www.comet.com/docs/opik//evaluation/evaluate_your_llm>`_: Ability to log test datasets in Opik and evaluate using some of our LLM evaluation metrics.
+- `Evaluation <https://www.comet.com/docs/opik/evaluation/advanced/evaluate_your_llm>`_: Ability to log test datasets in Opik and evaluate using some of our LLM evaluation metrics.
 
 For a more detailed overview of the platform, you can refer to the `Comet Opik documentation <https://www.comet.com/docs/opik>`_.
 
@@ -19,7 +19,7 @@ For a more detailed overview of the platform, you can refer to the `Comet Opik d
 Installation
 ============
 
-To get start with the package, you can install it using pip::
+To get started with the package, you can install it using pip::
 
    pip install opik
 
@@ -58,9 +58,9 @@ To log your first trace, you can use the `track` decorator::
 
    llm_function("Hello")
 
-**Note:** The `track` decorator supports nested functions, if you track multiple functions, each functionc call will be associated with the parent trace.
+**Note:** The `track` decorator supports nested functions, if you track multiple functions, each function call will be associated with the parent trace.
 
-**Integrations**: If you are using LangChain or OpenAI, Comet Opik as `built-in integrations <https://www.comet.com/docs/opik/integrations/langchain>`_ for these libraries.
+**Integrations**: If you are using LangChain or OpenAI, Comet Opik has `built-in integrations <https://www.comet.com/docs/opik/integrations/langchain>`_ for these libraries.
 
 ----------------------------
 Using LLM evaluation metrics
@@ -89,12 +89,12 @@ Running evaluations
 
 Evaluations are run using the `evaluate` function, this function takes a dataset, a task and a list of metrics and returns a dictionary of scores::
 
+   import openai
+
    from opik import Opik, track
    from opik.evaluation import evaluate
-   from opik.evaluation.metrics import EqualsMetric, HallucinationMetric
+   from opik.evaluation.metrics import Equals, Hallucination
    from opik.integrations.openai import track_openai
-   from typing import Dict
-
    from typing import Dict
 
    # Define the task to evaluate
@@ -118,8 +118,8 @@ Evaluations are run using the `evaluate` function, this function takes a dataset
    dataset = client.get_dataset(name="your-dataset-name")
 
    # Define the metrics
-   equals_metric = EqualsMetric()
-   hallucination_metric = HallucinationMetric()
+   equals_metric = Equals()
+   hallucination_metric = Hallucination()
 
    # Define and run the evaluation
    def evaluation_task(x: Dict):
