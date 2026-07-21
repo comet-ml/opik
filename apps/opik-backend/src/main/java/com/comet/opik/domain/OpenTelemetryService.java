@@ -177,6 +177,7 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                             .input(rootSpan.input())
                             .output(rootSpan.output())
                             .metadata(rootSpan.metadata())
+                            .tags(rootSpan.tags())
                             .errorInfo(rootSpan.errorInfo())
                             .source(Source.SDK);
 
