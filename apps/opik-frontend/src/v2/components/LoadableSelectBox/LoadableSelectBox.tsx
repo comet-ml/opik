@@ -304,7 +304,7 @@ export const LoadableSelectBox = ({
               }
             : {}
         }
-        className={cn("relative p-1", hideSearch ? "pt-1" : "pt-11")}
+        className="p-1"
         hideWhenDetached
         onOpenAutoFocus={(e) => {
           if (!autoFocus || hideSearch) {
@@ -314,16 +314,18 @@ export const LoadableSelectBox = ({
         onCloseAutoFocus={(e) => e.preventDefault()}
       >
         {!hideSearch && (
-          <div className="absolute inset-x-1 top-0 h-10">
-            <SearchInput
-              searchText={search}
-              setSearchText={setSearch}
-              placeholder={searchPlaceholder}
-              variant="ghost"
-              dimension="sm"
-            ></SearchInput>
-            <Separator className="mt-1" />
-          </div>
+          <>
+            <div className="px-0.5">
+              <SearchInput
+                searchText={search}
+                setSearchText={setSearch}
+                placeholder={searchPlaceholder}
+                variant="ghost"
+                dimension="sm"
+              ></SearchInput>
+            </div>
+            <Separator className="-mx-px my-1 bg-muted" />
+          </>
         )}
         <div className="max-h-[40vh] overflow-y-auto overflow-x-hidden">
           {isLoading && (
@@ -433,7 +435,9 @@ export const LoadableSelectBox = ({
                 if (showGroupHeader) {
                   return (
                     <React.Fragment key={option.value}>
-                      {prevGroup && <Separator className="my-1" />}
+                      {prevGroup && (
+                        <Separator className="-mx-px my-1 bg-muted" />
+                      )}
                       <div className="comet-body-s-accented flex h-8 items-center px-3 text-light-slate">
                         {option.group}
                       </div>
@@ -456,7 +460,7 @@ export const LoadableSelectBox = ({
           <div className="sticky inset-x-0 bottom-0">
             {showSelectAll && hasFilteredOptions && (
               <>
-                <Separator className="my-1" />
+                <Separator className="-mx-px my-1 bg-muted" />
                 <div
                   className="flex h-8 cursor-pointer items-center gap-2 rounded-md px-3 hover:bg-primary-foreground"
                   onClick={handleSelectAll}
@@ -476,7 +480,7 @@ export const LoadableSelectBox = ({
               </>
             )}
             {hasMoreSection && (
-              <div className="flex flex-wrap items-center justify-between border-t border-border px-4">
+              <div className="flex flex-wrap items-center justify-between border-t border-muted px-4">
                 <div className="comet-body-s text-light-slate">
                   {`Showing first ${optionsCount} items.`}
                 </div>

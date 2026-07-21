@@ -131,7 +131,7 @@ const FeedbackDefinitionsSelectBox: React.FC<
   const actionPanel = useMemo(
     () => (
       <>
-        <Separator className="my-1" />
+        <Separator className="-mx-px my-1 bg-muted" />
         <ListAction size="sm" onClick={handleAddNewClick}>
           <Plus className="size-3.5 shrink-0" />
           Add new

@@ -141,7 +141,7 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
   const actionPanel = useMemo(() => {
     return asNewOption ? (
       <>
-        <Separator className="my-1" />
+        <Separator className="-mx-px my-1 bg-muted" />
         <ListAction
           size="sm"
           onClick={() => {
