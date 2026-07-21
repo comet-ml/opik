@@ -315,8 +315,16 @@ public class OpenTelemetryMapper {
      * rule's key via {@link #extractToJsonColumn}.
      */
     private static void mergeJsonObjectOrFallback(ObjectNode node, String ruleKey, String key, AnyValue value) {
+        String stringValue = value.getStringValue();
+
+        // Only try to parse JSON-looking strings
+        String trimmed = StringUtils.trimToEmpty(stringValue);
+        if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
+            extractToJsonColumn(node, ruleKey, value);
+            return;
+        }
         try {
-            var jsonNode = JsonUtils.getJsonNodeFromString(value.getStringValue());
+            var jsonNode = JsonUtils.getJsonNodeFromString(stringValue);
             if (jsonNode.isObject()) {
                 jsonNode.fields()
                         .forEachRemaining(entry -> {
