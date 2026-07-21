@@ -62,7 +62,8 @@ ClickHouse tiered-storage server config (conf.d/storage.xml).
 Renders the hot -> cold storage policy per Section 5.3 of the Hyperscale plan.
 Helm renders a concrete <endpoint>; ClickHouse macros ({shard}/{replica})
 cannot be used here because the S3 disk is read at server start, before macros
-bind. Inert until Migration 000097 attaches `tiered_replicated` to a table.
+bind. Inert until a later, environment-gated migration attaches the
+`tiered_replicated` policy to a table.
 */}}
 {{- define "opik.clickhouse.storageXml" -}}
 {{- $ts := .Values.clickhouse.tieredStorage -}}
@@ -70,6 +71,9 @@ bind. Inert until Migration 000097 attaches `tiered_replicated` to a table.
 {{- $vn := $ts.cold.cache.volumeName -}}
 {{- if not (regexMatch "^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$" $vn) -}}
 {{- fail (printf "clickhouse.tieredStorage.cold.cache.volumeName %q must be a DNS label (<=63 chars, lowercase alphanumeric or '-', start with a letter, end alphanumeric)" $vn) -}}
+{{- end -}}
+{{- if not $s3.endpoint -}}
+{{- fail "clickhouse.tieredStorage.cold.s3.endpoint must be set to the cold bucket's S3 URL when tiered storage is enabled" -}}
 {{- end -}}
 {{- $endpoint := printf "%s/%s/" (trimSuffix "/" $s3.endpoint) (trimSuffix "/" (trimPrefix "/" $s3.prefix)) -}}
 <clickhouse>
