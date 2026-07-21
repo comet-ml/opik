@@ -502,7 +502,7 @@ class Opik:
 
         Args:
             trace_id: The unique identifier for the trace. If not provided, a new ID will be generated. Must be a valid [UUIDv7](https://uuid7.com/) ID.
-            id: The unique identifier for the span. If not provided, a new ID will be generated. Must be a valid [UUIDv7](https://uuid.ramsey.dev/en/stable/rfc4122/version8.html) ID.
+            id: The unique identifier for the span. If not provided, a new ID will be generated. Must be a valid [UUIDv7](https://uuid7.com/) ID.
             parent_span_id: The unique identifier for the parent span.
             name: The name of the span.
             type: The type of the span. Default is "general".
@@ -2658,30 +2658,32 @@ class Opik:
             PromptTemplateStructureMismatch: If the prompt exists but is a chat prompt (template structure mismatch).
 
         Example:
-            # Get all versions of a prompt
-            versions = client.get_prompt_history(name="my-prompt", project_name="my-project")
+            .. code-block:: python
 
-            # Filter by tags (versions containing "production" tag)
-            versions = client.get_prompt_history(
-                name="my-prompt",
-                project_name="my-project",
-                filter_string='tags contains "production"'
-            )
+                # Get all versions of a prompt
+                versions = client.get_prompt_history(name="my-prompt", project_name="my-project")
 
-            # Search for specific text in template or change description fields
-            versions = client.get_prompt_history(
-                name="my-prompt",
-                project_name="my-project",
-                search="customer"
-            )
+                # Filter by tags (versions containing "production" tag)
+                versions = client.get_prompt_history(
+                    name="my-prompt",
+                    project_name="my-project",
+                    filter_string='tags contains "production"'
+                )
 
-            # Combine search and filtering
-            versions = client.get_prompt_history(
-                name="my-prompt",
-                project_name="my-project",
-                search="customer",
-                filter_string='tags contains "production"'
-            )
+                # Search for specific text in template or change description fields
+                versions = client.get_prompt_history(
+                    name="my-prompt",
+                    project_name="my-project",
+                    search="customer"
+                )
+
+                # Combine search and filtering
+                versions = client.get_prompt_history(
+                    name="my-prompt",
+                    project_name="my-project",
+                    search="customer",
+                    filter_string='tags contains "production"'
+                )
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
         project_name = self._resolve_project_name(project_name)
@@ -2750,30 +2752,32 @@ class Opik:
             PromptTemplateStructureMismatch: If the prompt exists but is a text prompt (template structure mismatch).
 
         Example:
-            # Get all versions of a chat prompt
-            versions = client.get_chat_prompt_history(name="my-chat-prompt", project_name="my-project")
+            .. code-block:: python
 
-            # Filter by tags (versions containing "production" tag)
-            versions = client.get_chat_prompt_history(
-                name="my-chat-prompt",
-                project_name="my-project",
-                filter_string='tags contains "production"'
-            )
+                # Get all versions of a chat prompt
+                versions = client.get_chat_prompt_history(name="my-chat-prompt", project_name="my-project")
 
-            # Search for specific text in template or change description fields
-            versions = client.get_chat_prompt_history(
-                name="my-chat-prompt",
-                project_name="my-project",
-                search="helpful assistant"
-            )
+                # Filter by tags (versions containing "production" tag)
+                versions = client.get_chat_prompt_history(
+                    name="my-chat-prompt",
+                    project_name="my-project",
+                    filter_string='tags contains "production"'
+                )
 
-            # Combine search and filtering
-            versions = client.get_chat_prompt_history(
-                name="my-chat-prompt",
-                project_name="my-project",
-                search="helpful assistant",
-                filter_string='tags contains "production"'
-            )
+                # Search for specific text in template or change description fields
+                versions = client.get_chat_prompt_history(
+                    name="my-chat-prompt",
+                    project_name="my-project",
+                    search="helpful assistant"
+                )
+
+                # Combine search and filtering
+                versions = client.get_chat_prompt_history(
+                    name="my-chat-prompt",
+                    project_name="my-project",
+                    search="helpful assistant",
+                    filter_string='tags contains "production"'
+                )
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
         project_name = self._resolve_project_name(project_name)
@@ -2958,11 +2962,13 @@ class Opik:
             An instance of the PromptClient initialized with a cached REST client.
 
         Example:
-            prompts_client = client.get_prompts_client()
-            prompts_client.batch_update_prompt_version_tags(
-                version_ids=["version-id-1", "version-id-2"],
-                tags=["production", "v2"]
-            )
+            .. code-block:: python
+
+                prompts_client = client.get_prompts_client()
+                prompts_client.batch_update_prompt_version_tags(
+                    version_ids=["version-id-1", "version-id-2"],
+                    tags=["production", "v2"]
+                )
         """
         return prompt_client.PromptClient(self._rest_client)
 
