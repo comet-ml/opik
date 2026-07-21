@@ -45,7 +45,7 @@ navigation:
             path: ../docs-v2/faq.mdx
             slug: faq
             icon: fa-regular fa-question
-          - changelog: ../docs/changelog
+          - changelog: ../docs-v2/changelog
             title: Changelog
             slug: changelog
             icon: fa-regular fa-calendar
