@@ -98,20 +98,15 @@ public class JsonUtils {
     }
 
     /**
-     * Applies the JSON stream-read size limits (single-string and whole-document) to {@code mapper}'s
-     * factory. Shared by the internal ObjectMapper above and the Dropwizard HTTP ObjectMapper in
-     * {@code OpikApplication}, so both carry the same StreamReadConstraints from one place.
-     * <p>
-     * NOTE on {@code maxDocumentLength}: Jackson enforces it only on a parser buffer refill, which
-     * happens for stream/reader inputs (e.g. the Dropwizard HTTP request body) - NOT for a fully
-     * in-memory {@code String}/{@code byte[]} that fits a single buffer. So the document cap protects
-     * the HTTP ingestion boundary but does not re-check this mapper's in-memory reads; those inputs
-     * are already bounded at ingestion. ({@code maxStringLength} applies to both.)
+     * Applies the JSON stream-read size limits to {@code mapper}'s factory (shared with the Dropwizard
+     * HTTP ObjectMapper in {@code OpikApplication}). {@code maxDocumentLength} is enforced only on a
+     * parser buffer refill - i.e. stream/reader inputs such as the HTTP request body - so a fully
+     * in-memory {@code String}/{@code byte[]} read does not trigger it; {@code maxStringLength} applies
+     * to both.
      *
      * @param mapper            the ObjectMapper to configure
      * @param maxStringLength   Maximum single string value length in bytes
-     * @param maxDocumentLength Maximum whole-document length in bytes ({@code <= 0} is normalized to
-     *                          "unlimited" by the builder, matching the static-init default)
+     * @param maxDocumentLength Maximum whole-document length in bytes ({@code <= 0} = unlimited)
      */
     public static void applyStreamReadConstraints(@NonNull ObjectMapper mapper, int maxStringLength,
             long maxDocumentLength) {

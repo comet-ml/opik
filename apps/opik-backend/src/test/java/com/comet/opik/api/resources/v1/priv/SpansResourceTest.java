@@ -4398,10 +4398,9 @@ class SpansResourceTest {
                 // Assert error message mentions the limit
                 var errorResponse = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
                 assertThat(errorResponse).isNotNull();
+                // Stable generic message; the raw parser detail is logged server-side, not returned.
                 assertThat(errorResponse.getMessage())
-                        .containsIgnoringCase("String value length")
-                        .containsIgnoringCase("exceeds the maximum allowed")
-                        .containsIgnoringCase("StreamReadConstraints");
+                        .isEqualTo("Request payload exceeds the maximum allowed size.");
             }
         }
 
@@ -4409,7 +4408,7 @@ class SpansResourceTest {
         @DisplayName("Create span whose total document exceeds maxDocumentLength - should return 413 Request Entity Too Large")
         void createSpan__whenTotalDocumentExceedsMaxDocumentLength__thenReject() throws Exception {
             // Given: THREE 70MB attachments (~93MB base64 each). Each individual string is under the
-            // 250MB maxStringLength, but the whole document (~280MB) exceeds maxDocumentLength (256MB).
+            // 250MB maxStringLength, but the whole document (~280MB) exceeds maxDocumentLength.
             // Verifies the per-document guard (OPIK-7334) rejects an oversized batch even when every
             // single value is within the per-string limit - i.e. there is now a per-total cap, not
             // only a per-string one.
@@ -4437,19 +4436,17 @@ class SpansResourceTest {
                     .build();
 
             // When: Attempt to create the span
-            // Relies on the default Grizzly client streaming CHUNKED (no Content-Length), so the 50MB
-            // RequestSizeLimitFilter is bypassed and the request reaches the maxDocumentLength parse
-            // guard. Both guards return 413, so the "Document length" message assertion below is what
-            // proves the document guard (not the request-size guard) fired.
-            // Then: rejected mid-parse with 413 Request Entity Too Large (document length exceeded),
-            // before a multi-GB node tree is materialized - so no attachment stripping / S3 upload happens.
+            // The default Grizzly client streams CHUNKED (no Content-Length), so this bypasses the
+            // RequestSizeLimitFilter and reaches the maxDocumentLength parse guard - the chunked transport
+            // (not the response body, which is a generic 413 message) is what selects this guard.
+            // Then: rejected mid-parse before a multi-GB node tree is materialized - no attachment
+            // stripping / S3 upload happens.
             try (Response response = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_REQUEST_TOO_LONG)) {
                 var errorResponse = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
                 assertThat(errorResponse).isNotNull();
                 assertThat(errorResponse.getMessage())
-                        .containsIgnoringCase("Document length")
-                        .containsIgnoringCase("exceeds the maximum allowed");
+                        .isEqualTo("Request payload exceeds the maximum allowed size.");
             }
         }
 
@@ -4459,7 +4456,7 @@ class SpansResourceTest {
             // The default test client (GrizzlyConnectorProvider) streams chunked and never sends a
             // Content-Length, so it bypasses RequestSizeLimitFilter. A BUFFERED client sets
             // Content-Length, exercising the pre-parse 413 guard (OPIK-7333) end-to-end.
-            String oversizedJson = "\"" + "a".repeat(51 * 1024 * 1024) + "\""; // 51MB > 50MB limit, valid JSON
+            String oversizedJson = "\"" + "a".repeat(51 * 1024 * 1024) + "\""; // 51MB, over the request cap; valid JSON
 
             // Grizzly connector + Expect: 100-continue so the server can reject on the Content-Length
             // header before the body is sent. (BUFFERED makes a real Content-Length be sent; without

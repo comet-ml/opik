@@ -14,20 +14,11 @@ import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 /**
- * Rejects an oversized request with 413 based on its {@code Content-Length}, before the body is
- * read, so the JSON parser never starts building a node tree from it.
- *
- * This is a global JAX-RS provider with no path scoping, so it caps EVERY request that carries a
- * {@code Content-Length} - not only span/trace ingestion, but also e.g. attachment and dataset-import
- * uploads (which buffer the whole body in memory). That broad coverage is intentional: this is a
- * memory guard, and any endpoint that buffers a large body is exactly the OOM vector it protects.
- *
- * The header reflects the on-the-wire size (compressed, when the client gzips). A request with no
- * {@code Content-Length} (e.g. chunked transfer) is legitimate and passes here; it is still bounded
- * by the {@code maxDocumentLength} StreamReadConstraint enforced during parsing.
- *
- * Guicey auto-installs this as a JAX-RS provider and injects {@link JacksonConfig} via the Guicey
- * {@code @Config} sub-config binding (no explicit module binding needed).
+ * Rejects an oversized request with 413 based on its {@code Content-Length}, before the body is read.
+ * A global JAX-RS provider (no path scoping), so it caps EVERY request carrying a Content-Length -
+ * ingestion plus e.g. attachment/dataset-import uploads that buffer the whole body; that broad memory
+ * guard is intentional. A request without a Content-Length (chunked) passes here and is still bounded
+ * by {@code maxDocumentLength} during parsing. Guicey auto-installs it and injects {@link JacksonConfig}.
  */
 @Slf4j
 public class RequestSizeLimitFilter implements ContainerRequestFilter {

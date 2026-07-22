@@ -43,13 +43,15 @@ class JsonProcessingExceptionMapperTest {
     // A size-guard trip is a payload-too-large rejection -> 413 (consistent with RequestSizeLimitFilter).
     private void assertPayloadTooLarge(Response response) {
         assertThat(response.getStatus()).isEqualTo(Response.Status.REQUEST_ENTITY_TOO_LARGE.getStatusCode());
-        assertThat(((ErrorMessage) response.getEntity()).getMessage()).startsWith("Unable to process JSON.");
+        assertThat(((ErrorMessage) response.getEntity()).getMessage())
+                .isEqualTo("Request payload exceeds the maximum allowed size.");
     }
 
     // Genuine malformed JSON stays 400.
     private void assertBadRequest(Response response) {
         assertThat(response.getStatus()).isEqualTo(Response.Status.BAD_REQUEST.getStatusCode());
-        assertThat(((ErrorMessage) response.getEntity()).getMessage()).startsWith("Unable to process JSON.");
+        assertThat(((ErrorMessage) response.getEntity()).getMessage())
+                .isEqualTo("Unable to process the request body: it is not valid JSON.");
     }
 
     @Test
@@ -70,6 +72,10 @@ class JsonProcessingExceptionMapperTest {
         // The UNWRAPPED constraint is handed to the metric so it can classify document vs string length.
         verify(sizeGuardMetrics).recordStreamConstraintRejection(streamConstraint, uriInfo, requestContext);
         assertPayloadTooLarge(response);
+        // Leak guard: raw parser detail (sizes, Jackson internals, the payload reference chain) must not
+        // reach the client.
+        assertThat(((ErrorMessage) response.getEntity()).getMessage())
+                .doesNotContain("12590880", "reference chain", "StreamReadConstraints");
     }
 
     @Test
