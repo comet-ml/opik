@@ -19,5 +19,6 @@ Domain-specific agent skills for the Opik monorepo. Each skill provides patterns
 | python-sdk | `python-sdk/` | Python SDK patterns for Opik. Use when working in `sdks/python`, on SDK APIs, integrations, or message processing. |
 | typescript-sdk | `typescript-sdk/` | TypeScript SDK patterns for Opik. Use when working in `sdks/typescript`. |
 | writing-e2e-tests | `writing-e2e-tests/` | Add an end-to-end test for an Opik feature in `tests_end_to_end/e2e/`. Use when a developer wants to write a test for a feature, page, or branch — runs the full loop: analyze, explore the live UI, write the POM + spec, and run it locally until green. |
+| writing-visual-tests | `writing-visual-tests/` | Add a screenshot-comparison test in `tests_end_to_end/visual-tests/`. Use when a developer wants a visual regression test for a page or panel — covers the page-object pattern, deterministic seeding, unique screenshot naming, per-test masking, and the local generate-baseline/stress-test loop. |
 
 Each skill directory contains a `SKILL.md` entry point plus supporting documents (testing, code quality, patterns, etc.).
