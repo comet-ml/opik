@@ -5,6 +5,8 @@ import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.jobs.Job;
 import io.dropwizard.jobs.annotations.Every;
 import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
 import jakarta.inject.Inject;
@@ -26,6 +28,9 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
 public class StaleReportCleanupJob extends Job {
 
     private static final Lock JOB_LOCK = new Lock("stale_report_cleanup:lock");
+
+    private static final AttributeKey<String> WORKSPACE_ID_KEY = AttributeKey.stringKey("workspace_id");
+    private static final AttributeKey<String> WORKSPACE_NAME_KEY = AttributeKey.stringKey("workspace_name");
 
     private final ReportService reportService;
     private final LockService lockService;
@@ -51,13 +56,10 @@ public class StaleReportCleanupJob extends Job {
     public void doJob(JobExecutionContext context) {
         lockService.bestEffortLock(
                 JOB_LOCK,
-                Mono.fromRunnable(() -> {
-                    int swept = reportService.failStaleReports();
-                    log.info("Stale report cleanup swept {} reports", swept);
-                    if (swept > 0) {
-                        staleReportsCounter.add(swept);
-                    }
-                }),
+                Mono.fromRunnable(() -> reportService.failStaleReports()
+                        .forEach((workspaceId, count) -> staleReportsCounter.add(count, Attributes.of(
+                                WORKSPACE_ID_KEY, workspaceId,
+                                WORKSPACE_NAME_KEY, workspaceId)))),
                 Mono.defer(() -> {
                     log.debug("Could not acquire lock for stale report cleanup, another instance is running");
                     return Mono.empty();

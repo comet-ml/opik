@@ -6,12 +6,15 @@ import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.jobs.Job;
 import io.dropwizard.jobs.annotations.On;
 import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.Meter;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.quartz.DisallowConcurrentExecution;
 import org.quartz.JobExecutionContext;
 import reactor.core.publisher.Mono;
@@ -31,10 +34,13 @@ public class OllieDailyReportJob extends Job {
     private static final int WINDOW_MINUTES = 10;
     private static final Lock JOB_LOCK = new Lock("daily_report_job:lock");
 
+    private static final AttributeKey<String> WORKSPACE_ID_KEY = AttributeKey.stringKey("workspace_id");
+    private static final AttributeKey<String> WORKSPACE_NAME_KEY = AttributeKey.stringKey("workspace_name");
+    private static final AttributeKey<String> ERROR_TYPE_KEY = AttributeKey.stringKey("error_type");
+
     private final ReportService reportService;
     private final LockService lockService;
 
-    private final LongCounter reportsTriggeredCounter;
     private final LongCounter triggerErrorCounter;
 
     @Inject
@@ -45,11 +51,6 @@ public class OllieDailyReportJob extends Job {
         this.lockService = lockService;
 
         Meter meter = GlobalOpenTelemetry.get().getMeter("opik.daily_report");
-
-        this.reportsTriggeredCounter = meter
-                .counterBuilder("opik.daily_report.triggered")
-                .setDescription("Number of reports triggered for generation")
-                .build();
 
         this.triggerErrorCounter = meter
                 .counterBuilder("opik.daily_report.trigger_error")
@@ -97,22 +98,16 @@ public class OllieDailyReportJob extends Job {
         List<ReportPreference> prefs = reportService.findEnabledPreferencesInTimeWindow(windowStart, windowEnd);
         log.info("Found {} projects scheduled in window [{}, {})", prefs.size(), windowStart, windowEnd);
 
-        int triggered = 0;
-        int errors = 0;
         for (var pref : prefs) {
             try {
-                var reportId = reportService.createAndTriggerReport(pref.workspaceId(), pref.workspaceName(),
-                        pref.projectId());
-                if (reportId != null) {
-                    triggered++;
-                }
+                reportService.createAndTriggerReport(pref.workspaceId(), pref.workspaceName(), pref.projectId());
             } catch (Exception e) {
                 log.error("Failed to trigger report for project '{}'", pref.projectId(), e);
-                errors++;
+                triggerErrorCounter.add(1, Attributes.of(
+                        WORKSPACE_ID_KEY, pref.workspaceId(),
+                        WORKSPACE_NAME_KEY, StringUtils.defaultIfBlank(pref.workspaceName(), pref.workspaceId()),
+                        ERROR_TYPE_KEY, e.getClass().getSimpleName()));
             }
         }
-
-        reportsTriggeredCounter.add(triggered);
-        triggerErrorCounter.add(errors);
     }
 }
