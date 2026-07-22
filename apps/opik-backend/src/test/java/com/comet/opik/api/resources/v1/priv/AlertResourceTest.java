@@ -57,6 +57,8 @@ import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.uuid.Generators;
+import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -169,6 +171,7 @@ class AlertResourceTest {
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
+    private final TimeBasedEpochGenerator generator = Generators.timeBasedEpochGenerator();
 
     private AlertResourceClient alertResourceClient;
     private PromptResourceClient promptResourceClient;
@@ -1785,7 +1788,7 @@ class AlertResourceTest {
             // Create guardrails for the trace
             Guardrail guardrail = factory.manufacturePojo(Guardrail.class).toBuilder()
                     .entityId(trace.id())
-                    .secondaryId(UUID.randomUUID())
+                    .secondaryId(generator.generate())
                     .projectName(projectName)
                     .result(GuardrailResult.FAILED)
                     .build();
@@ -1904,7 +1907,7 @@ class AlertResourceTest {
 
             Guardrail guardrailA = factory.manufacturePojo(Guardrail.class).toBuilder()
                     .entityId(traceA.id())
-                    .secondaryId(UUID.randomUUID())
+                    .secondaryId(generator.generate())
                     .projectName(projectAName)
                     .result(GuardrailResult.FAILED)
                     .build();
@@ -1929,7 +1932,7 @@ class AlertResourceTest {
 
             Guardrail guardrailB = factory.manufacturePojo(Guardrail.class).toBuilder()
                     .entityId(traceB.id())
-                    .secondaryId(UUID.randomUUID())
+                    .secondaryId(generator.generate())
                     .projectName(projectBName)
                     .result(GuardrailResult.FAILED)
                     .build();
@@ -2720,7 +2723,7 @@ class AlertResourceTest {
             List<Guardrail> guardrails = IntStream.range(0, 2)
                     .mapToObj(i -> factory.manufacturePojo(Guardrail.class).toBuilder()
                             .entityId(trace.id())
-                            .secondaryId(UUID.randomUUID())
+                            .secondaryId(generator.generate())
                             .projectName(projectName)
                             .projectId(projectId)
                             .result(GuardrailResult.FAILED)
@@ -2812,7 +2815,7 @@ class AlertResourceTest {
 
                         return factory.manufacturePojo(Guardrail.class).toBuilder()
                                 .entityId(trace.id())
-                                .secondaryId(UUID.randomUUID())
+                                .secondaryId(generator.generate())
                                 .projectName(projectName)
                                 .projectId(projectId)
                                 .result(GuardrailResult.FAILED)

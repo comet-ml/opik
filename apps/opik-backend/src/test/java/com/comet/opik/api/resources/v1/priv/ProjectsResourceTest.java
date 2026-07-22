@@ -59,6 +59,8 @@ import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.ValidationUtils;
+import com.fasterxml.uuid.Generators;
+import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.HttpMethod;
@@ -131,7 +133,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
-import static java.util.UUID.randomUUID;
 import static java.util.stream.Collectors.averagingDouble;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.toMap;
@@ -184,6 +185,7 @@ class ProjectsResourceTest {
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
+    private final TimeBasedEpochGenerator generator = Generators.timeBasedEpochGenerator();
 
     private String baseURI;
     private ClientSupport client;
@@ -1857,7 +1859,7 @@ class ProjectsResourceTest {
 
         var guardrailsByTraceId = traces.stream()
                 .collect(Collectors.toMap(Trace::id, trace -> guardrailsGenerator.generateGuardrailsForTrace(
-                        trace.id(), randomUUID(), trace.projectName())));
+                        trace.id(), generator.generate(), trace.projectName())));
         guardrailsByTraceId.values().forEach(guardrail -> guardrailsResourceClient.addBatch(
                 guardrail, apiKey, workspaceName));
 

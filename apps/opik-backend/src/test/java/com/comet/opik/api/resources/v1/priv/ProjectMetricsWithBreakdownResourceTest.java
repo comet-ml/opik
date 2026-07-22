@@ -31,6 +31,8 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.uuid.Generators;
+import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jersey.validation.ValidationErrorMessage;
 import jakarta.ws.rs.client.Entity;
@@ -116,6 +118,7 @@ class ProjectMetricsWithBreakdownResourceTest {
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
+    private final TimeBasedEpochGenerator generator = Generators.timeBasedEpochGenerator();
     private IdGenerator idGenerator;
 
     private String baseURI;
@@ -1412,7 +1415,7 @@ class ProjectMetricsWithBreakdownResourceTest {
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
 
             // Add guardrail (alternating between pass and fail)
-            var guardrails = guardrailsGenerator.generateGuardrailsForTrace(trace.id(), UUID.randomUUID(),
+            var guardrails = guardrailsGenerator.generateGuardrailsForTrace(trace.id(), generator.generate(),
                     projectName);
             // Set result to FAILED for even indices, PASSED for odd
             var guardrailsWithResult = guardrails.stream()

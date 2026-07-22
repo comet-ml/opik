@@ -2819,6 +2819,9 @@ class DatasetVersionResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class ExperimentDatasetVersionLinking {
 
+        private final com.fasterxml.uuid.impl.TimeBasedEpochGenerator generator = com.fasterxml.uuid.Generators
+                .timeBasedEpochGenerator();
+
         private Experiment getExperiment(UUID id) {
             return experimentResourceClient.getExperiment(id, API_KEY, TEST_WORKSPACE);
         }
@@ -3059,7 +3062,7 @@ class DatasetVersionResourceTest {
             var datasetId = createDataset(datasetName);
             createDatasetItems(datasetId, 1);
 
-            var nonExistentVersionId = UUID.randomUUID();
+            var nonExistentVersionId = generator.generate();
 
             // when - create experiment with non-existent version ID
             var experiment = experimentResourceClient.createPartialExperiment()
