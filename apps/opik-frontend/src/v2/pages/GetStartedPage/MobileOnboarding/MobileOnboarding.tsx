@@ -113,7 +113,7 @@ const MobileOnboarding: React.FC = () => {
       nextLabel={config.nextLabel}
       nextVariant={config.nextVariant}
     >
-      <WelcomeStep onNext={handleNext} />
+      <WelcomeStep onNext={handleNext} active={step === 1} />
       <TraceStep onNext={handleNext} />
       <IssuesStep />
       <ConnectStep userEmail={userEmail} />

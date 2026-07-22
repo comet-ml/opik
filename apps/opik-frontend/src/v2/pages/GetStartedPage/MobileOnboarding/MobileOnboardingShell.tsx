@@ -19,6 +19,24 @@ interface MobileOnboardingShellProps {
 const clampStep = (value: number, totalSteps: number) =>
   Math.min(totalSteps, Math.max(1, value));
 
+/** Derives the 1-indexed step the scroller is currently closest to. */
+const stepFromScroll = (el: HTMLElement, totalSteps: number) =>
+  clampStep(Math.round(el.scrollLeft / el.clientWidth) + 1, totalSteps);
+
+/**
+ * Smooth-scrolls the panel for `step` into view (instant under
+ * prefers-reduced-motion). Returns the target scrollLeft, or null when the
+ * scroller is already there.
+ */
+const scrollPanelIntoView = (el: HTMLElement, step: number): number | null => {
+  const left = (step - 1) * el.clientWidth;
+  if (Math.abs(el.scrollLeft - left) < 2) return null;
+  const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")
+    .matches;
+  el.scrollTo({ left, behavior: reduceMotion ? "auto" : "smooth" });
+  return left;
+};
+
 const MobileOnboardingShell: React.FC<MobileOnboardingShellProps> = ({
   step,
   totalSteps,
@@ -39,7 +57,7 @@ const MobileOnboardingShell: React.FC<MobileOnboardingShellProps> = ({
   const targetLeft = useRef<number | null>(null);
 
   // Per-panel animation state. On every step change (swipe or buttons) the
-  // outgoing panel's content remounts wrapped in `onboarding-anim-reverse`,
+  // outgoing panel's content remounts in `comet-onboarding-anim-reverse`,
   // replaying its staggered slide-fade entrance BACKWARDS (elements cascade
   // out), while the incoming panel remounts normally and staggers in.
   const prevStep = useRef(step);
@@ -72,12 +90,7 @@ const MobileOnboardingShell: React.FC<MobileOnboardingShellProps> = ({
       fromScroll.current = false;
       return;
     }
-    const left = (step - 1) * el.clientWidth;
-    if (Math.abs(el.scrollLeft - left) < 2) return;
-    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")
-      .matches;
-    targetLeft.current = left;
-    el.scrollTo({ left, behavior: reduceMotion ? "auto" : "smooth" });
+    targetLeft.current = scrollPanelIntoView(el, step);
   }, [step]);
 
   // Swiping is plain native horizontal scrolling with snap points; we only
@@ -92,10 +105,7 @@ const MobileOnboardingShell: React.FC<MobileOnboardingShellProps> = ({
         targetLeft.current = null;
       }
     } else {
-      const index = clampStep(
-        Math.round(el.scrollLeft / el.clientWidth) + 1,
-        totalSteps,
-      );
+      const index = stepFromScroll(el, totalSteps);
       if (index !== step) {
         fromScroll.current = true;
         onStepChange(index);
@@ -103,7 +113,9 @@ const MobileOnboardingShell: React.FC<MobileOnboardingShellProps> = ({
     }
   };
 
-  // A touch interrupting a button-driven scroll returns control to the user.
+  // Any user interaction (touch, trackpad/wheel, pointer) interrupting a
+  // button-driven scroll returns control to the user immediately, so step
+  // syncing is never left suppressed by an unreached target position.
   const handleUserScrollStart = () => {
     targetLeft.current = null;
   };
@@ -138,6 +150,8 @@ const MobileOnboardingShell: React.FC<MobileOnboardingShellProps> = ({
         ref={scrollerRef}
         onScroll={handleScroll}
         onTouchStart={handleUserScrollStart}
+        onWheel={handleUserScrollStart}
+        onPointerDown={handleUserScrollStart}
         className="flex min-h-0 flex-1 snap-x snap-mandatory overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {React.Children.map(children, (panel, i) => (
@@ -145,7 +159,9 @@ const MobileOnboardingShell: React.FC<MobileOnboardingShellProps> = ({
             <div
               key={panelAnim[i]?.seq ?? 0}
               className={`flex flex-col gap-3 ${
-                panelAnim[i]?.mode === "out" ? "onboarding-anim-reverse" : ""
+                panelAnim[i]?.mode === "out"
+                  ? "comet-onboarding-anim-reverse"
+                  : ""
               }`}
             >
               {panel}
