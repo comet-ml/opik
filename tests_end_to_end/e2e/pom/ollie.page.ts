@@ -68,24 +68,8 @@ export class OlliePage {
       await this.sendButton().click();
 
       // The user echo and the assistant reply each mount as a [data-message-id]
-      // node. Wait for both to land (count grows by 2), then for the reply's
-      // text to be non-empty (it streams in after the bubble appears).
-      await expect
-        .poll(async () => this.messages().count(), {
-          timeout: timeoutMs,
-          intervals: [500, 1000, 2000],
-        })
-        .toBeGreaterThanOrEqual(before + 2);
-
-      const reply = this.messages().last();
-      await expect
-        .poll(async () => ((await reply.textContent()) ?? '').trim().length, {
-          timeout: timeoutMs,
-          intervals: [500, 1000, 2000],
-        })
-        .toBeGreaterThan(0);
-
-      return ((await reply.textContent()) ?? '').trim();
+      // node, so wait for both to land (count grows by 2).
+      return this.awaitNewMessage(before + 2, timeoutMs, [500, 1000, 2000]);
     });
   }
 
@@ -139,22 +123,7 @@ export class OlliePage {
    */
   async awaitContinuedConversation(beforeCount: number, timeoutMs = 30_000): Promise<string> {
     return test.step('wait for the continued conversation to render in the sidebar', async () => {
-      await expect
-        .poll(async () => this.messages().count(), {
-          timeout: timeoutMs,
-          intervals: [300, 600, 1200],
-        })
-        .toBeGreaterThanOrEqual(beforeCount + 2);
-
-      const reply = this.messages().last();
-      await expect
-        .poll(async () => ((await reply.textContent()) ?? '').trim().length, {
-          timeout: timeoutMs,
-          intervals: [300, 600, 1200],
-        })
-        .toBeGreaterThan(0);
-
-      return ((await reply.textContent()) ?? '').trim();
+      return this.awaitNewMessage(beforeCount + 2, timeoutMs, [300, 600, 1200]);
     });
   }
 
@@ -168,21 +137,7 @@ export class OlliePage {
     return test.step('run /analyze and await a response', async () => {
       const before = await this.messages().count();
       await this.analyzeButton().click();
-      await expect
-        .poll(async () => this.messages().count(), {
-          timeout: timeoutMs,
-          intervals: [1000, 2000, 5000],
-        })
-        .toBeGreaterThan(before);
-
-      const reply = this.messages().last();
-      await expect
-        .poll(async () => ((await reply.textContent()) ?? '').trim().length, {
-          timeout: timeoutMs,
-          intervals: [1000, 2000, 5000],
-        })
-        .toBeGreaterThan(0);
-      return ((await reply.textContent()) ?? '').trim();
+      return this.awaitNewMessage(before + 1, timeoutMs, [1000, 2000, 5000]);
     });
   }
 
@@ -333,6 +288,31 @@ export class OlliePage {
   }
 
   // ── private helpers ─────────────────────────────────────────────────────
+
+  /**
+   * Wait for the message list to reach `minCount` messages, then for the last
+   * one's text to be non-empty (it streams in after the bubble appears).
+   * Returns the last message's (the reply's) text.
+   */
+  private async awaitNewMessage(
+    minCount: number,
+    timeoutMs: number,
+    intervals: number[],
+  ): Promise<string> {
+    await expect
+      .poll(async () => this.messages().count(), { timeout: timeoutMs, intervals })
+      .toBeGreaterThanOrEqual(minCount);
+
+    const reply = this.messages().last();
+    await expect
+      .poll(async () => ((await reply.textContent()) ?? '').trim().length, {
+        timeout: timeoutMs,
+        intervals,
+      })
+      .toBeGreaterThan(0);
+
+    return ((await reply.textContent()) ?? '').trim();
+  }
 
   // Anchor on the testid added to the host iframe in AssistantSidebar.tsx, OR
   // on the `title="Assistant"` attribute already present on deployed builds.
