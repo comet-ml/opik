@@ -400,12 +400,12 @@ class OpikTracer(BaseTracer):
         self, run_id: UUID, run_dict: Dict[str, Any], allow_duplicating_root_span: bool
     ) -> None:
         """
-        Creates a root trace and span for a given run and stores the relevant trace and span
-        data in local storage for future reference.
+        Creates a root trace and span for a given run and records the trace and
+        span data in the tracer's run state for later lookup.
 
         The new span is only created if no new trace is created, i.e., when attached to an existing span
         or distributed headers. If a new trace is created, the span is skipped and only the
-        trace data is stored in local storage for future reference.
+        trace data is recorded for future reference.
         """
         # This is the first run for the chain.
         root_run_result = self._track_root_run(run_dict, allow_duplicating_root_span)
@@ -414,45 +414,39 @@ class OpikTracer(BaseTracer):
                 self._opik_context_storage.set_trace_data(
                     root_run_result.new_trace_data
                 )
-
-            if (
-                self._opik_client.config.log_start_trace_span
-                and tracing_runtime_config.is_tracing_active()
-            ):
-                self._opik_client.__internal_api__trace__(
-                    **root_run_result.new_trace_data.as_start_parameters
-                )
+            self._emit_start_trace(root_run_result.new_trace_data)
 
         # If this is a LangGraph/LangChain root run under fresh trace, skip creating the span
         if root_run_result.new_span_data is None:
-            # Mark this run as skipped and store trace data for child runs
+            # Mark this run as skipped and record its trace data for child runs
             self._run_state.mark_skipped_langgraph_root(run_id)
 
-            # Store trace data if we created a new trace but skip span data
             if root_run_result.new_trace_data is not None:
-                self._save_span_trace_data_to_local_maps(
-                    run_id=run_id,
-                    span_data=None,
-                    trace_data=root_run_result.new_trace_data,
-                )
+                self._run_state.save_trace_data(run_id, root_run_result.new_trace_data)
         else:
-            # save new span and trace data to local maps to be able to retrieve them later
-            self._save_span_trace_data_to_local_maps(
-                run_id=run_id,
-                span_data=root_run_result.new_span_data,
-                trace_data=root_run_result.new_trace_data,
-            )
+            # Record the new span (and trace, if any) so children can look them up
+            self._run_state.save_span_data(run_id, root_run_result.new_span_data)
+            if root_run_result.new_trace_data is not None:
+                self._run_state.save_trace_data(run_id, root_run_result.new_trace_data)
 
             if not self._opik_context_read_only_mode:
                 self._opik_context_storage.add_span_data(root_run_result.new_span_data)
 
-            if (
-                self._opik_client.config.log_start_trace_span
-                and tracing_runtime_config.is_tracing_active()
-            ):
-                self._opik_client.__internal_api__span__(
-                    **root_run_result.new_span_data.as_start_parameters
-                )
+            self._emit_start_span(root_run_result.new_span_data)
+
+    def _should_log_start_events(self) -> bool:
+        return (
+            self._opik_client.config.log_start_trace_span
+            and tracing_runtime_config.is_tracing_active()
+        )
+
+    def _emit_start_trace(self, trace_data: trace.TraceData) -> None:
+        if self._should_log_start_events():
+            self._opik_client.__internal_api__trace__(**trace_data.as_start_parameters)
+
+    def _emit_start_span(self, span_data: span.SpanData) -> None:
+        if self._should_log_start_events():
+            self._opik_client.__internal_api__span__(**span_data.as_start_parameters)
 
     def _attach_span_to_parent_span(
         self, run_id: UUID, parent_run_id: UUID, run_dict: Dict[str, Any]
@@ -461,7 +455,7 @@ class OpikTracer(BaseTracer):
         Attaches child span to a parent span and updates relevant context storage.
 
         This method is responsible for creating a new span data object associated with a
-        run, linking it to the parent span data, and saving it to local and external maps.
+        run, linking it to the parent span data, and recording it in the tracer's run state.
         Additionally, it updates the context storage and logs the span if tracing is active.
         """
         parent_span_data = self._run_state.get_span_data(parent_run_id)
@@ -483,11 +477,7 @@ class OpikTracer(BaseTracer):
         )
         new_span_data.update(metadata={"created_from": "langchain"})
 
-        self._save_span_trace_data_to_local_maps(
-            run_id=run_id,
-            span_data=new_span_data,
-            trace_data=None,
-        )
+        self._run_state.save_span_data(run_id, new_span_data)
 
         if self._run_state.owns_trace(new_span_data.trace_id):
             # Parent may be a stream-restart root run that exists only as a span
@@ -502,13 +492,7 @@ class OpikTracer(BaseTracer):
         if not self._opik_context_read_only_mode:
             self._opik_context_storage.add_span_data(new_span_data)
 
-        if (
-            self._opik_client.config.log_start_trace_span
-            and tracing_runtime_config.is_tracing_active()
-        ):
-            self._opik_client.__internal_api__span__(
-                **new_span_data.as_start_parameters
-            )
+        self._emit_start_span(new_span_data)
 
     def _attach_span_to_local_or_distributed_trace(
         self, run_id: UUID, parent_run_id: UUID, run_dict: Dict[str, Any]
@@ -580,22 +564,12 @@ class OpikTracer(BaseTracer):
             return
 
         new_span_data.update(metadata={"created_from": "langchain"})
-        self._save_span_trace_data_to_local_maps(
-            run_id=run_id,
-            span_data=new_span_data,
-            trace_data=None,
-        )
+        self._run_state.save_span_data(run_id, new_span_data)
 
         if not self._opik_context_read_only_mode:
             self._opik_context_storage.add_span_data(new_span_data)
 
-        if (
-            self._opik_client.config.log_start_trace_span
-            and tracing_runtime_config.is_tracing_active()
-        ):
-            self._opik_client.__internal_api__span__(
-                **new_span_data.as_start_parameters
-            )
+        self._emit_start_span(new_span_data)
 
     def _process_end_span(self, run: Run) -> None:
         span_data = None
@@ -658,15 +632,26 @@ class OpikTracer(BaseTracer):
         except Exception as e:
             LOGGER.error(f"Failed during _process_end_span: {e}", exc_info=True)
         finally:
-            if span_data is not None and not self._opik_context_read_only_mode:
-                self._opik_context_storage.trim_span_data_stack_to_certain_span(
-                    span_id=span_data.id
-                )
-                self._opik_context_storage.pop_span_data(ensure_id=span_data.id)
-            # A root run's end handler is the last callback for its whole subtree
-            # (LangChain calls it after _persist_run), so release the state here.
-            if run.parent_run_id is None:
-                self._run_state.release_run_tree(run)
+            self._release_ended_span_state(run, span_data)
+
+    def _release_ended_span_state(
+        self, run: Run, span_data: Optional[span.SpanData]
+    ) -> None:
+        """Clean up after a run's span has ended.
+
+        Pops the ended span off the context stack and, when the run is the root
+        of its tree, releases the whole subtree's bookkeeping. A root run's end
+        handler is the last callback LangChain fires for its subtree (after
+        ``_persist_run``), so this is the point at which the state is safe to drop.
+        """
+        if span_data is not None and not self._opik_context_read_only_mode:
+            self._opik_context_storage.trim_span_data_stack_to_certain_span(
+                span_id=span_data.id
+            )
+            self._opik_context_storage.pop_span_data(ensure_id=span_data.id)
+
+        if run.parent_run_id is None:
+            self._run_state.release_run_tree(run)
 
     def _resolve_provider(
         self, run_dict: Dict[str, Any], model: Optional[str]
@@ -750,27 +735,7 @@ class OpikTracer(BaseTracer):
         except Exception as e:
             LOGGER.debug(f"Failed during _process_end_span_with_error: {e}")
         finally:
-            if span_data is not None and not self._opik_context_read_only_mode:
-                self._opik_context_storage.trim_span_data_stack_to_certain_span(
-                    span_id=span_data.id
-                )
-                self._opik_context_storage.pop_span_data(ensure_id=span_data.id)
-            # A root run's end handler is the last callback for its whole subtree
-            # (LangChain calls it after _persist_run), so release the state here.
-            if run.parent_run_id is None:
-                self._run_state.release_run_tree(run)
-
-    def _save_span_trace_data_to_local_maps(
-        self,
-        run_id: UUID,
-        span_data: Optional[span.SpanData],
-        trace_data: Optional[trace.TraceData],
-    ) -> None:
-        if span_data is not None:
-            self._run_state.save_span_data(run_id, span_data)
-
-        if trace_data is not None:
-            self._run_state.save_trace_data(run_id, trace_data)
+            self._release_ended_span_state(run, span_data)
 
     def flush(self) -> None:
         """
@@ -791,10 +756,7 @@ class OpikTracer(BaseTracer):
         return self._run_state.get_span_data(run_id)
 
     def _skip_tracking(self) -> bool:
-        if not tracing_runtime_config.is_tracing_active():
-            return True
-
-        return False
+        return not tracing_runtime_config.is_tracing_active()
 
     def _on_llm_start(self, run: Run) -> None:
         """Process the LLM Run upon start."""
