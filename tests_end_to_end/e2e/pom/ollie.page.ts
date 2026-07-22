@@ -299,19 +299,23 @@ export class OlliePage {
     timeoutMs: number,
     intervals: number[],
   ): Promise<string> {
-    await expect
-      .poll(async () => this.messages().count(), { timeout: timeoutMs, intervals })
-      .toBeGreaterThanOrEqual(minCount);
+    return test.step('wait for a new Ollie message to render', async () => {
+      const deadline = Date.now() + timeoutMs;
 
-    const reply = this.messages().last();
-    await expect
-      .poll(async () => ((await reply.textContent()) ?? '').trim().length, {
-        timeout: timeoutMs,
-        intervals,
-      })
-      .toBeGreaterThan(0);
+      await expect
+        .poll(async () => this.messages().count(), { timeout: timeoutMs, intervals })
+        .toBeGreaterThanOrEqual(minCount);
 
-    return ((await reply.textContent()) ?? '').trim();
+      const reply = this.messages().last();
+      await expect
+        .poll(async () => ((await reply.textContent()) ?? '').trim().length, {
+          timeout: Math.max(0, deadline - Date.now()),
+          intervals,
+        })
+        .toBeGreaterThan(0);
+
+      return ((await reply.textContent()) ?? '').trim();
+    });
   }
 
   // Anchor on the testid added to the host iframe in AssistantSidebar.tsx, OR
