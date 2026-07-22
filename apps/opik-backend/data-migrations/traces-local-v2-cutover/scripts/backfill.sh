@@ -256,6 +256,9 @@ preflight_capacity
 if [[ "$DRY_RUN" != "1" ]]; then
     if [[ -s "$STATE_FILE" ]]; then
         BACKFILL_START="$(cat "$STATE_FILE")"
+        # Validate the resumed content: the state file is operator-owned, so a corrupted or wrong file would otherwise
+        # feed a garbage anchor forward to step 2. Fail fast unless it is a well-formed timestamp.
+        [[ "$BACKFILL_START" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?$ ]] || { echo "ERROR: $STATE_FILE does not contain a valid backfill_start timestamp ('YYYY-MM-DD HH:MM:SS[.ffffff]')." >&2; exit 1; }
         log "REUSING backfill_start=$BACKFILL_START from $STATE_FILE (resume: original anchor kept)"
     else
         BACKFILL_START="$(ch "SELECT toString(now64(6))")"
