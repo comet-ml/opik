@@ -1,6 +1,7 @@
 import OpenAIIcon from "@/icons/integrations/openai.svg?react";
 import AnthropicIcon from "@/icons/integrations/anthropic.svg?react";
 import OpenRouterIcon from "@/icons/integrations/open_router.svg?react";
+import OrcaRouterIcon from "@/icons/integrations/orca_router.svg?react";
 import GeminiIcon from "@/icons/integrations/gemini.svg?react";
 import VertexAIIcon from "@/icons/integrations/vertex_ai.svg?react";
 import BedrockIcon from "@/icons/integrations/bedrock.svg?react";
@@ -64,6 +65,16 @@ export const PROVIDERS: PROVIDERS_TYPE = {
     apiKeyURL: "https://openrouter.ai/keys",
     defaultModel: PROVIDER_MODEL_TYPE.OPENAI_GPT_4O,
   },
+  [PROVIDER_TYPE.ORCA_ROUTER]: {
+    label: "OrcaRouter",
+    value: PROVIDER_TYPE.ORCA_ROUTER,
+    icon: OrcaRouterIcon,
+    apiKeyName: "ORCAROUTER_API_KEY",
+    apiKeyURL: "https://www.orcarouter.ai/console",
+    description:
+      "OpenAI-compatible model-routing gateway. Use orcarouter/auto to route each request across upstreams, or pick a specific model.",
+    defaultModel: PROVIDER_MODEL_TYPE.ORCAROUTER_AUTO,
+  },
   [PROVIDER_TYPE.GEMINI]: {
     label: "Gemini",
     value: PROVIDER_TYPE.GEMINI,
@@ -122,6 +133,7 @@ export const PROVIDER_FEATURE_TOGGLE_MAP: Record<
   [PROVIDER_TYPE.ANTHROPIC]: FeatureToggleKeys.ANTHROPIC_PROVIDER_ENABLED,
   [PROVIDER_TYPE.GEMINI]: FeatureToggleKeys.GEMINI_PROVIDER_ENABLED,
   [PROVIDER_TYPE.OPEN_ROUTER]: FeatureToggleKeys.OPENROUTER_PROVIDER_ENABLED,
+  [PROVIDER_TYPE.ORCA_ROUTER]: FeatureToggleKeys.ORCAROUTER_PROVIDER_ENABLED,
   [PROVIDER_TYPE.VERTEX_AI]: FeatureToggleKeys.VERTEXAI_PROVIDER_ENABLED,
   [PROVIDER_TYPE.BEDROCK]: FeatureToggleKeys.BEDROCK_PROVIDER_ENABLED,
   [PROVIDER_TYPE.OLLAMA]: FeatureToggleKeys.OLLAMA_PROVIDER_ENABLED,

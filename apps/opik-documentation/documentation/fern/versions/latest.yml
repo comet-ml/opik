@@ -791,6 +791,9 @@ navigation:
               - page: OpenRouter
                 path: ../docs-v2/integrations/openrouter.mdx
                 slug: openrouter
+              - page: OrcaRouter
+                path: ../docs-v2/integrations/orcarouter.mdx
+                slug: orcarouter
               - page: Portkey
                 path: ../docs-v2/integrations/portkey.mdx
                 slug: portkey

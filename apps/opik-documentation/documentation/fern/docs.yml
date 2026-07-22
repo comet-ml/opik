@@ -292,6 +292,9 @@ redirects:
   - source: "/docs/opik/tracing/integrations/openrouter"
     destination: "/docs/opik/integrations/openrouter"
     permanent: true
+  - source: "/docs/opik/tracing/integrations/orcarouter"
+    destination: "/docs/opik/integrations/orcarouter"
+    permanent: true
   - source: "/docs/opik/tracing/integrations/predibase"
     destination: "/docs/opik/integrations/predibase"
     permanent: true

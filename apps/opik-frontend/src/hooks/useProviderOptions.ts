@@ -24,6 +24,7 @@ export interface ProviderEnabledMap {
   [PROVIDER_TYPE.ANTHROPIC]: boolean;
   [PROVIDER_TYPE.GEMINI]: boolean;
   [PROVIDER_TYPE.OPEN_ROUTER]: boolean;
+  [PROVIDER_TYPE.ORCA_ROUTER]: boolean;
   [PROVIDER_TYPE.VERTEX_AI]: boolean;
   [PROVIDER_TYPE.BEDROCK]: boolean;
   [PROVIDER_TYPE.OLLAMA]: boolean;
@@ -47,6 +48,9 @@ export function useProviderEnabledMap(): ProviderEnabledMap {
   const isOpenRouterEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.OPENROUTER_PROVIDER_ENABLED,
   );
+  const isOrcaRouterEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.ORCAROUTER_PROVIDER_ENABLED,
+  );
   const isVertexAIEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.VERTEXAI_PROVIDER_ENABLED,
   );
@@ -66,6 +70,7 @@ export function useProviderEnabledMap(): ProviderEnabledMap {
       [PROVIDER_TYPE.ANTHROPIC]: isAnthropicEnabled,
       [PROVIDER_TYPE.GEMINI]: isGeminiEnabled,
       [PROVIDER_TYPE.OPEN_ROUTER]: isOpenRouterEnabled,
+      [PROVIDER_TYPE.ORCA_ROUTER]: isOrcaRouterEnabled,
       [PROVIDER_TYPE.VERTEX_AI]: isVertexAIEnabled,
       [PROVIDER_TYPE.BEDROCK]: isBedrockEnabled,
       [PROVIDER_TYPE.OLLAMA]: isOllamaEnabled,
@@ -76,6 +81,7 @@ export function useProviderEnabledMap(): ProviderEnabledMap {
       isAnthropicEnabled,
       isGeminiEnabled,
       isOpenRouterEnabled,
+      isOrcaRouterEnabled,
       isVertexAIEnabled,
       isBedrockEnabled,
       isOllamaEnabled,
