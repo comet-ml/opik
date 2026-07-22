@@ -19,8 +19,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class JacksonConfig {
 
-    // Upper bound for the externally-configured byte caps below: beyond ~2GB a single Java String/array
-    // hits its 2^31 limit, so a larger cap can't protect the heap and is almost always a units typo.
+    // Upper bound for the byte caps below: beyond ~2GB a single Java String/array hits its 2^31 limit,
+    // so a larger cap can't protect the heap and is almost always a units typo.
     private static final long MAX_CONFIGURABLE_BYTES = 2_147_483_648L; // 2GB
 
     /**
@@ -34,28 +34,21 @@ public class JacksonConfig {
     @Min(value = 1048576, message = "maxStringLength must be at least 1MB") private int maxStringLength = StreamReadConstraints.DEFAULT_MAX_STRING_LEN;
 
     /**
-     * Maximum decompressed JSON document size (whole batch), enforced mid-parse -> 413; catches an
-     * oversized batch of many small values that {@link #maxStringLength} misses. {@code <= 0} means
-     * unlimited; positive values are bounds-checked by {@link #isMaxDocumentLengthValid()} (plain
-     * {@code @Min}/{@code @Max} can't express the unlimited escape hatch). Configurable via
-     * {@code JACKSON_MAX_DOCUMENT_LENGTH} (defaults differ by deployment).
+     * Maximum decompressed document size (whole batch), enforced mid-parse -> 413; catches a batch of many
+     * small values that {@link #maxStringLength} misses. {@code <= 0} = unlimited (hence the custom
+     * {@link #isMaxDocumentLengthValid()} instead of {@code @Min}/{@code @Max}).
      */
     @JsonProperty
     private long maxDocumentLength = 536_870_912L; // 512MB
 
     /**
-     * Maximum incoming request body size (on-the-wire/compressed {@code Content-Length}), rejected 413
-     * pre-parse by {@link com.comet.opik.infrastructure.RequestSizeLimitFilter}. A different axis from
-     * {@link #maxDocumentLength} (decompressed), so a lower value is legitimate (see the note below).
-     * Configurable via {@code JACKSON_MAX_REQUEST_SIZE_BYTES} (defaults differ by deployment).
+     * Maximum request body size (compressed {@code Content-Length}), rejected 413 pre-parse by
+     * {@link com.comet.opik.infrastructure.RequestSizeLimitFilter} - a different axis from
+     * {@link #maxDocumentLength} (decompressed), so a lower value is legitimate.
      */
     @JsonProperty
     @Min(value = 1048576, message = "maxRequestSizeBytes must be at least 1MB") @Max(value = MAX_CONFIGURABLE_BYTES, message = "maxRequestSizeBytes must be at most 2GB") private long maxRequestSizeBytes = 536_870_912L; // 512MB
 
-    /**
-     * {@code <= 0} (unlimited) is always valid; a positive value must be in
-     * {@code [maxStringLength, MAX_CONFIGURABLE_BYTES]}. Enforced at startup ({@code @Valid}).
-     */
     @JsonIgnore
     @AssertTrue(message = "maxDocumentLength must be <= 0 (unlimited) or between maxStringLength and 2GB")
     public boolean isMaxDocumentLengthValid() {
@@ -63,7 +56,6 @@ public class JacksonConfig {
                 || (maxDocumentLength >= maxStringLength && maxDocumentLength <= MAX_CONFIGURABLE_BYTES);
     }
 
-    // No cross-field check of maxRequestSizeBytes vs maxDocumentLength: different axes (compressed
-    // request vs decompressed document), so request < document is legitimate - config-test.yml relies
-    // on it (a lower request cap than the document cap) to exercise the 413 path cheaply.
+    // No cross-field check of maxRequestSizeBytes vs maxDocumentLength: different axes (compressed vs
+    // decompressed), so request < document is legitimate (config-test.yml relies on it for the 413 path).
 }

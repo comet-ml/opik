@@ -14,11 +14,9 @@ import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 /**
- * Rejects an oversized request with 413 based on its {@code Content-Length}, before the body is read.
- * A global JAX-RS provider (no path scoping), so it caps EVERY request carrying a Content-Length -
- * ingestion plus e.g. attachment/dataset-import uploads that buffer the whole body; that broad memory
- * guard is intentional. A request without a Content-Length (chunked) passes here and is still bounded
- * by {@code maxDocumentLength} during parsing. Guicey auto-installs it and injects {@link JacksonConfig}.
+ * Rejects an oversized request with 413 by its {@code Content-Length}, before the body is read. Global
+ * (no path scoping) by design, so it caps every request carrying a Content-Length; a chunked request has
+ * none, passes here, and is still bounded by {@code maxDocumentLength} during parsing.
  */
 @Slf4j
 public class RequestSizeLimitFilter implements ContainerRequestFilter {
@@ -39,16 +37,13 @@ public class RequestSizeLimitFilter implements ContainerRequestFilter {
     public void filter(ContainerRequestContext containerRequestContext) {
         String contentLengthHeader = containerRequestContext.getHeaderString(HttpHeaders.CONTENT_LENGTH);
 
-        // No Content-Length (e.g. chunked transfer-encoding): can't check here, let it through.
-        // The decompressed body is still bounded by maxDocumentLength during parsing.
+        // No Content-Length (chunked): can't check here; the body is still bounded by maxDocumentLength at parse time.
         if (contentLengthHeader == null) {
             return;
         }
 
-        // Parse as a long: jakarta's getLength() is an int and returns -1 for bodies above
-        // Integer.MAX_VALUE (~2GB), which would let the very largest payloads slip through. Treat a
-        // present-but-invalid Content-Length as malformed HTTP framing and fail closed with 400,
-        // rather than silently ignoring it.
+        // Parse as long, not jakarta's int getLength() (returns -1 above ~2GB, letting the largest bodies
+        // slip). A present-but-invalid Content-Length is malformed framing -> fail closed with 400.
         long contentLength;
         try {
             contentLength = Long.parseLong(contentLengthHeader.trim());

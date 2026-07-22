@@ -30,9 +30,8 @@ public class JsonProcessingExceptionMapper implements ExceptionMapper<JsonProces
 
     @Override
     public Response toResponse(JsonProcessingException exception) {
-        // A StreamConstraintsException - often wrapped in a JsonMappingException during bean binding, so
-        // walk the cause chain - is the ingestion size guard tripping mid-parse (OPIK-7334): a
-        // payload-too-large rejection (413, like RequestSizeLimitFilter). Anything else is malformed JSON.
+        // A StreamConstraintsException (often wrapped by Jackson during bean binding, hence the cause walk)
+        // is the size guard tripping mid-parse -> 413; anything else is malformed JSON -> 400.
         StreamConstraintsException streamConstraintsException = findStreamConstraint(exception);
         Response.Status status;
         String clientMessage;
@@ -40,15 +39,14 @@ public class JsonProcessingExceptionMapper implements ExceptionMapper<JsonProces
             log.debug("Ingestion size guard rejected a request", exception); // expected; already on the metric
             sizeGuardMetrics.recordStreamConstraintRejection(streamConstraintsException, uriInfo.get(), requestContext);
             status = Response.Status.REQUEST_ENTITY_TOO_LARGE;
-            // Redact: the size-guard message exposes internal limits + Jackson internals (StreamReadConstraints,
-            // the configured max). Full detail stays in the server log above, not the HTTP response.
+            // Redacted: the size-guard message exposes internal limits/Jackson internals (detail is in the log).
             clientMessage = "Request payload exceeds the maximum allowed size.";
         } else {
             log.info("Deserialization exception for workspace {}",
                     ErrorMetricsResolver.workspaceId(requestContext), exception);
             status = Response.Status.BAD_REQUEST;
-            // Ordinary malformed/invalid JSON: echo the parser detail (the caller's own payload + our own
-            // field names, not internal limits) - useful for the client and the long-standing contract.
+            // Keep the parser detail (the caller's own payload, not internal limits) - a long-standing contract
+            // many endpoints assert; do NOT genericize this branch (that broke ~8 test suites once).
             clientMessage = "Unable to process JSON. " + exception.getMessage();
         }
 
@@ -57,16 +55,11 @@ public class JsonProcessingExceptionMapper implements ExceptionMapper<JsonProces
                 .build();
     }
 
-    // Real exception cause chains are only a handful deep; this cap is far beyond any legitimate chain
-    // yet stops a pathological cause cycle (A -> B -> A, which Throwable.initCause permits — it rejects
-    // only a direct self-cause) from spinning the walk forever and pinning the request thread.
+    // Bounds the cause walk so a pathological cause cycle (A -> B -> A) can't spin forever and pin the
+    // request thread; 50 is far beyond any real chain.
     private static final int MAX_CAUSE_DEPTH = 50;
 
-    /**
-     * The {@link StreamConstraintsException} this throwable is or wraps (Jackson re-wraps it in a
-     * JsonMappingException during bean binding), or {@code null}. The walk is bounded by
-     * {@link #MAX_CAUSE_DEPTH} so a cyclic cause chain cannot hang the request thread.
-     */
+    /** The {@link StreamConstraintsException} this throwable is or wraps, or {@code null}. */
     private static StreamConstraintsException findStreamConstraint(Throwable throwable) {
         Throwable cause = throwable;
         for (int depth = 0; cause != null && depth < MAX_CAUSE_DEPTH; cause = cause.getCause(), depth++) {

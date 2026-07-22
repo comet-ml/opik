@@ -132,16 +132,12 @@ public class OpikApplication extends Application<OpikConfiguration> {
                         .addDeserializer(Message.class, OpenAiMessageJsonDeserializer.INSTANCE)
                         .addDeserializer(Duration.class, StrictDurationDeserializer.INSTANCE));
 
-        // Get the configured limits from config.yml
         int maxStringLength = configuration.getJacksonConfig().getMaxStringLength();
         long maxDocumentLength = configuration.getJacksonConfig().getMaxDocumentLength();
 
-        // Configure Dropwizard ObjectMapper (HTTP layer): bound a single string value AND the whole
-        // document, so an oversized batch aborts mid-parse (4xx) before a multi-GB node tree is built.
-        // (maxDocumentLength <= 0 is normalized to "unlimited" by the builder.)
+        // Apply the same stream-read limits to both the HTTP (Dropwizard) and internal (JsonUtils) mappers,
+        // so an oversized batch aborts mid-parse before a huge node tree is built.
         JsonUtils.applyStreamReadConstraints(environment.getObjectMapper(), maxStringLength, maxDocumentLength);
-
-        // Configure JsonUtils ObjectMapper (internal processing) with the SAME limits
         JsonUtils.configure(maxStringLength, maxDocumentLength);
 
         jersey.property(ServerProperties.RESPONSE_SET_STATUS_OVER_SEND_ERROR, true);

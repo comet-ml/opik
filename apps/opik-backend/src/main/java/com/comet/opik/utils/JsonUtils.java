@@ -45,7 +45,6 @@ public class JsonUtils {
     private static volatile ObjectMapper MAPPER;
 
     static {
-        // Initialize with defaults (20MB string, unlimited document) until OpikApplication configures it
         MAPPER = createConfiguredMapper(StreamReadConstraints.DEFAULT_MAX_STRING_LEN, -1L);
         log.info("JsonUtils initialized with default maxStringLength: '{}', maxDocumentLength: unlimited",
                 StreamReadConstraints.DEFAULT_MAX_STRING_LEN);
@@ -91,22 +90,15 @@ public class JsonUtils {
                 .addDeserializer(Message.class, OpenAiMessageJsonDeserializer.INSTANCE)
                 .addDeserializer(Duration.class, StrictDurationDeserializer.INSTANCE));
 
-        // Bound a single string value AND the whole document (shared with the Dropwizard HTTP mapper).
         applyStreamReadConstraints(mapper, maxStringLength, maxDocumentLength);
 
         return mapper;
     }
 
     /**
-     * Applies the JSON stream-read size limits to {@code mapper}'s factory (shared with the Dropwizard
-     * HTTP ObjectMapper in {@code OpikApplication}). {@code maxDocumentLength} is enforced only on a
-     * parser buffer refill - i.e. stream/reader inputs such as the HTTP request body - so a fully
-     * in-memory {@code String}/{@code byte[]} read does not trigger it; {@code maxStringLength} applies
-     * to both.
-     *
-     * @param mapper            the ObjectMapper to configure
-     * @param maxStringLength   Maximum single string value length in bytes
-     * @param maxDocumentLength Maximum whole-document length in bytes ({@code <= 0} = unlimited)
+     * Applies the JSON stream-read size limits to {@code mapper}'s factory. NOTE: {@code maxDocumentLength}
+     * is enforced only on parser buffer refills (stream/reader input, e.g. the HTTP request body) - a fully
+     * in-memory {@code String}/{@code byte[]} read bypasses it; {@code maxStringLength} applies to both.
      */
     public static void applyStreamReadConstraints(@NonNull ObjectMapper mapper, int maxStringLength,
             long maxDocumentLength) {

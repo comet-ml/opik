@@ -18,22 +18,10 @@ import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.WORKSPA
 import static com.comet.opik.infrastructure.metrics.ErrorMetricsResolver.WORKSPACE_NAME_KEY;
 
 /**
- * Emits the {@code ingestion_size_guard_rejections_total} counter for requests rejected by the
- * server-side ingestion size guards (OPIK-7333 / OPIK-7334), broken down by the emitting {@code
- * component} (request filter vs JSON parser), which {@code guard} tripped, the matched route
- * ({@code endpoint}) and the {@code workspace_id} / {@code workspace_name}.
- * <p>
- * These rejections are otherwise invisible to {@link HttpErrorMetrics} ({@code opik.errors.count}):
- * the request-size 413 aborts the filter chain with a Response (no throwable), and the
- * document/string-length 4xx is handled by the more-specific {@link
- * com.comet.opik.api.error.JsonProcessingExceptionMapper} rather than the generic mapper that feeds
- * the error counter. The dedicated {@code guard} label also distinguishes an oversized-payload
- * rejection from an ordinary malformed-JSON 400, which a status-only or {@code error_type} view
- * cannot.
- * <p>
- * The request-size guard runs at the request boundary, possibly before authentication resolves the
- * workspace; {@link ErrorMetricsResolver#workspaceId(Provider)} falls back to {@code unknown} in that
- * case rather than failing.
+ * Emits {@code ingestion_size_guard_rejections_total} for requests rejected by a server-side ingestion
+ * size guard (OPIK-7333/7334), labelled by {@code component}, {@code guard}, {@code endpoint} and
+ * {@code workspace_id}/{@code workspace_name}. These rejections never reach {@link HttpErrorMetrics},
+ * so they need their own counter.
  */
 @Singleton
 public class IngestionSizeGuardMetrics {
@@ -41,22 +29,14 @@ public class IngestionSizeGuardMetrics {
     private static final String METRIC_NAMESPACE = "ingestion_size_guard";
 
     public static final AttributeKey<String> GUARD_KEY = AttributeKey.stringKey("guard");
-    // A stable origin label: one counter serves two call sites, so distinguish them by component
-    // rather than by inferring from the guard subtype (metrics-instrumentation skill §1.4).
     public static final AttributeKey<String> COMPONENT_KEY = AttributeKey.stringKey("component");
 
-    /** The {@link com.comet.opik.infrastructure.RequestSizeLimitFilter} 413 (Content-Length over cap). */
     public static final String GUARD_REQUEST_SIZE = "request_size";
-    /** The whole decompressed document exceeded {@code maxDocumentLength}. */
     public static final String GUARD_DOCUMENT_LENGTH = "document_length";
-    /** A single string value exceeded {@code maxStringLength}. */
     public static final String GUARD_STRING_LENGTH = "string_length";
-    /** A stream-read constraint we couldn't classify from its message. */
-    public static final String GUARD_STREAM_CONSTRAINT = "stream_constraint";
+    public static final String GUARD_STREAM_CONSTRAINT = "stream_constraint"; // unclassified fallback
 
-    /** Rejection emitted from {@link com.comet.opik.infrastructure.RequestSizeLimitFilter} (413 path). */
     public static final String COMPONENT_REQUEST_FILTER = "request_filter";
-    /** Rejection emitted from {@link com.comet.opik.api.error.JsonProcessingExceptionMapper} (4xx parse path). */
     public static final String COMPONENT_JSON_PARSER = "json_parser";
 
     private final LongCounter rejectionCounter;
@@ -71,19 +51,12 @@ public class IngestionSizeGuardMetrics {
                 .build();
     }
 
-    /**
-     * Records a request-size (413) rejection. Called from the request filter, where the workspace may
-     * not be resolved yet and resolves to {@code unknown}.
-     */
     public void recordRequestSizeRejection(UriInfo uriInfo, Provider<RequestContext> requestContext) {
         record(COMPONENT_REQUEST_FILTER, GUARD_REQUEST_SIZE, ErrorMetricsResolver.endpoint(uriInfo),
                 ErrorMetricsResolver.workspaceId(requestContext),
                 ErrorMetricsResolver.workspaceName(requestContext));
     }
 
-    /**
-     * Records a document- or string-length rejection, classified from the Jackson exception message.
-     */
     public void recordStreamConstraintRejection(StreamConstraintsException exception, UriInfo uriInfo,
             Provider<RequestContext> requestContext) {
         record(COMPONENT_JSON_PARSER, classifyStreamConstraint(exception), ErrorMetricsResolver.endpoint(uriInfo),
@@ -92,8 +65,6 @@ public class IngestionSizeGuardMetrics {
     }
 
     public void record(String component, String guard, String endpoint, String workspaceId, String workspaceName) {
-        // workspace_name falls back to workspace_id when the name is absent (metrics-instrumentation
-        // skill §2.3), so the name label is never emptier than the id.
         var resolvedWorkspaceId = StringUtils.defaultIfBlank(workspaceId, UNKNOWN);
         rejectionCounter.add(1, Attributes.builder()
                 .put(COMPONENT_KEY, StringUtils.defaultIfBlank(component, UNKNOWN))
@@ -104,12 +75,8 @@ public class IngestionSizeGuardMetrics {
                 .build());
     }
 
-    /**
-     * Classifies a {@link StreamConstraintsException} (document- vs string-length) from its message -
-     * the only signal Jackson exposes; unrecognized -> {@link #GUARD_STREAM_CONSTRAINT}. The substrings
-     * are Jackson-version-dependent (guarded by the real-parse tests in IngestionSizeGuardMetricsTest);
-     * re-validate on a Jackson bump.
-     */
+    // Classifies via Jackson's message text (the only signal it exposes): version-dependent, guarded by
+    // IngestionSizeGuardMetricsTest; re-check on a Jackson bump. Unrecognized -> stream_constraint.
     static String classifyStreamConstraint(StreamConstraintsException exception) {
         String message = exception.getMessage();
         if (message == null) {
