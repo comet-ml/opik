@@ -850,6 +850,50 @@ class AutomationRuleEvaluatorsResourceTest {
                 assertThat(response.readEntity(AutomationRuleEvaluator.class).getName()).isEqualTo(name + "-1");
             }
         }
+
+        private UUID createLlmRule(String name, UUID projectId) {
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .name(name)
+                    .projectIds(Set.of(projectId))
+                    .build();
+            return evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+        }
+
+        private String getName(UUID id, UUID projectId) {
+            try (var response = evaluatorsResourceClient.getEvaluator(id, projectId, WORKSPACE_NAME, API_KEY,
+                    HttpStatus.SC_OK)) {
+                return response.readEntity(AutomationRuleEvaluator.class).getName();
+            }
+        }
+
+        private void renameRule(UUID id, String newName, UUID projectId) {
+            var update = factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class).toBuilder()
+                    .name(newName)
+                    .projectIds(Set.of(projectId))
+                    .build();
+            try (var response = evaluatorsResourceClient.callUpdateEvaluator(id, WORKSPACE_NAME, update, API_KEY)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            }
+        }
+
+        @Test
+        @DisplayName("when a rule is renamed to a name that already exists in the project, then suffix (self excluded)")
+        void whenRenamedToExistingName__thenSuffixIsAppended() {
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var nameA = "Bias " + UUID.randomUUID();
+            var nameB = "Drift " + UUID.randomUUID();
+
+            createLlmRule(nameA, projectId);
+            var idB = createLlmRule(nameB, projectId);
+
+            // Rename B to A's name: collides with A -> suffixed
+            renameRule(idB, nameA, projectId);
+            assertThat(getName(idB, projectId)).isEqualTo(nameA + "-1");
+
+            // Rename B to its own current name: self is excluded, so no spurious suffix
+            renameRule(idB, nameA + "-1", projectId);
+            assertThat(getName(idB, projectId)).isEqualTo(nameA + "-1");
+        }
     }
 
     @Nested

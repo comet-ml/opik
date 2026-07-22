@@ -129,7 +129,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             // Auto-suffix the name when it collides with existing rules in the same project(s) (OPIK-7371).
             // Names are not unique at the DB layer, so re-running an SDK script would otherwise create
             // rules that are indistinguishable in the UI.
-            String uniqueName = resolveUniqueName(ruleDAO, inputRuleEvaluator.getName(), projectIds, workspaceId);
+            Set<String> existingNames = ruleDAO.findNamesByProjects(projectIds, workspaceId);
+            String uniqueName = resolveUniqueName(inputRuleEvaluator.getName(), existingNames, projectIds, workspaceId);
 
             AutomationRuleEvaluatorModel<?> evaluator = switch (inputRuleEvaluator) {
                 case AutomationRuleEvaluatorLlmAsJudge llmAsJudge -> {
@@ -234,12 +235,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
         return findById(savedEvaluator.id(), savedEvaluator.projectIds(), workspaceId);
     }
 
-    private String resolveUniqueName(AutomationRuleDAO ruleDAO, String requestedName, Set<UUID> projectIds,
+    private String resolveUniqueName(String requestedName, Set<String> existingNames, Set<UUID> projectIds,
             String workspaceId) {
-        if (projectIds.isEmpty()) {
-            return requestedName;
-        }
-        Set<String> existingNames = ruleDAO.findNamesByProjects(projectIds, workspaceId);
         String uniqueName = AutomationRuleNames.generateUniqueName(requestedName, existingNames);
         if (!uniqueName.equals(requestedName)) {
             log.info(
@@ -260,12 +257,19 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
             var projectsDAO = handle.attach(AutomationRuleProjectsDAO.class);
+            var ruleDAO = handle.attach(AutomationRuleDAO.class);
 
             try {
                 String filtersJson = AutomationModelEvaluatorMapper.INSTANCE.map(evaluatorUpdate.getFilters());
 
+                // Auto-suffix on rename collisions too, excluding this rule itself so an unchanged name (or
+                // a non-name edit) is never spuriously suffixed (OPIK-7371).
+                Set<String> existingNames = ruleDAO.findNamesByProjectsExcludingRule(projectIds, workspaceId, id);
+                String uniqueName = resolveUniqueName(evaluatorUpdate.getName(), existingNames, projectIds,
+                        workspaceId);
+
                 // Update base rule (project associations handled separately in junction table)
-                int resultBase = dao.updateBaseRule(id, workspaceId, evaluatorUpdate.getName(),
+                int resultBase = dao.updateBaseRule(id, workspaceId, uniqueName,
                         evaluatorUpdate.getSamplingRate(), evaluatorUpdate.isEnabled(), filtersJson);
 
                 // Update project associations in junction table

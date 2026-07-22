@@ -61,6 +61,25 @@ public interface AutomationRuleDAO {
             @Define("projectIds") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "projectIds") Set<UUID> projectIds,
             @Bind("workspaceId") String workspaceId);
 
+    /**
+     * Same as {@link #findNamesByProjects} but excludes a single rule by id, used on update so a rule's own
+     * name (unchanged name or a non-name edit) does not count as a self-collision (OPIK-7371).
+     */
+    @SqlQuery("""
+            SELECT DISTINCT rule.name
+            FROM automation_rules rule
+            LEFT JOIN automation_rule_projects arp ON rule.id = arp.rule_id
+            WHERE rule.workspace_id = :workspaceId
+            AND rule.id != :excludeRuleId
+            AND (arp.project_id IN (<projectIds>) OR rule.project_id IN (<projectIds>))
+            """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    Set<String> findNamesByProjectsExcludingRule(
+            @Define("projectIds") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "projectIds") Set<UUID> projectIds,
+            @Bind("workspaceId") String workspaceId,
+            @Bind("excludeRuleId") UUID excludeRuleId);
+
     @SqlUpdate("""
             UPDATE automation_rules
             SET name = :name,
