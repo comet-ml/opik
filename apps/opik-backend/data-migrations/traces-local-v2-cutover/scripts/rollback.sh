@@ -37,6 +37,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$DATABASE" ]] || { echo "ERROR: --database is required" >&2; exit 2; }
+# --database and --cutover-start are interpolated into the reference SQL; validate their shapes so neither can alter it.
+[[ "$DATABASE" =~ ^[A-Za-z0-9_]+$ ]] || { echo "ERROR: --database must be a ClickHouse identifier (letters, digits, underscore)." >&2; exit 2; }
+[[ -z "$CUTOVER_START" || "$CUTOVER_START" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?$ ]] || { echo "ERROR: --cutover-start must be 'YYYY-MM-DD HH:MM:SS[.ffffff]'." >&2; exit 2; }
 case "$STAGE" in
     A|B|C) ;;
     *) echo "ERROR: --stage must be A, B or C" >&2; exit 2 ;;

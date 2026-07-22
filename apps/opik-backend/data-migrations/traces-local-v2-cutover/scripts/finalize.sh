@@ -35,6 +35,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$DATABASE" ]] || { echo "ERROR: --database is required" >&2; exit 2; }
+# --database is interpolated into the drop/exists SQL; require a plain ClickHouse identifier so it cannot alter the query.
+[[ "$DATABASE" =~ ^[A-Za-z0-9_]+$ ]] || { echo "ERROR: --database must be a ClickHouse identifier (letters, digits, underscore)." >&2; exit 2; }
 
 ch() {
     clickhouse-client --database "$DATABASE" --query "$1"

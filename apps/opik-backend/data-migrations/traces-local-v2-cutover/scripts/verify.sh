@@ -57,6 +57,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$DATABASE" ]] || { echo "ERROR: --database is required" >&2; exit 2; }
+# --database / --old-table / --new-table are interpolated into the reference SQL; require plain ClickHouse identifiers.
+for _ident in "$DATABASE" "$OLD_TABLE" "$NEW_TABLE"; do
+    [[ "$_ident" =~ ^[A-Za-z0-9_]+$ ]] || { echo "ERROR: --database/--old-table/--new-table must be ClickHouse identifiers (letters, digits, underscore): '$_ident'" >&2; exit 2; }
+done
 [[ -f "$VERIFY_SQL" ]] || { echo "ERROR: cannot find verify SQL at $VERIFY_SQL" >&2; exit 2; }
 
 ch() {
