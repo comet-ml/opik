@@ -112,11 +112,11 @@ const WelcomeStep: React.FC<{ onNext?: () => void }> = ({ onNext }) => {
                 <Mic className="size-3.5 text-light-slate" />
                 <Button
                   variant="ghost"
-                  size="icon-xs"
+                  size="icon"
                   onClick={onNext}
-                  className="size-6 rounded-full bg-foreground hover:bg-foreground"
+                  className="size-9 rounded-full bg-foreground hover:bg-foreground"
                 >
-                  <ArrowUp className="size-3 text-background" />
+                  <ArrowUp className="size-4 text-background" />
                 </Button>
               </div>
             </div>

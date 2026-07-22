@@ -91,6 +91,12 @@ const MobileOnboarding: React.FC = () => {
     }
   }, [step]);
 
+  // Swipe navigation: the shell reports the step the user scrolled to.
+  const handleStepChange = useCallback((next: number) => {
+    stepRef.current = next;
+    setStep(next);
+  }, []);
+
   if (completed) {
     return <Navigate to="/$workspaceName/home" params={{ workspaceName }} />;
   }
@@ -103,13 +109,14 @@ const MobileOnboarding: React.FC = () => {
       totalSteps={STEP_CONFIG.length}
       onBack={step > 1 ? handleBack : undefined}
       onNext={handleNext}
+      onStepChange={handleStepChange}
       nextLabel={config.nextLabel}
       nextVariant={config.nextVariant}
     >
-      {step === 1 && <WelcomeStep onNext={handleNext} />}
-      {step === 2 && <TraceStep onNext={handleNext} />}
-      {step === 3 && <IssuesStep />}
-      {step === 4 && <ConnectStep userEmail={userEmail} />}
+      <WelcomeStep onNext={handleNext} />
+      <TraceStep onNext={handleNext} />
+      <IssuesStep />
+      <ConnectStep userEmail={userEmail} />
     </MobileOnboardingShell>
   );
 };

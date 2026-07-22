@@ -149,7 +149,7 @@ const ConnectStep: React.FC<ConnectStepProps> = ({ userEmail = "" }) => {
             />
 
             <Button
-              size="sm"
+              size="lg"
               type="submit"
               disabled={!isValidEmail(email) || emailSent || isPending}
               className="gap-1.5"
@@ -186,7 +186,7 @@ const ConnectStep: React.FC<ConnectStepProps> = ({ userEmail = "" }) => {
             <div className="h-px flex-1 bg-border" />
           </div>
 
-          <Button variant="outline" size="sm" asChild>
+          <Button variant="outline" size="lg" asChild>
             <a
               href={buildDocsUrl("/quickstart")}
               target="_blank"
@@ -194,13 +194,13 @@ const ConnectStep: React.FC<ConnectStepProps> = ({ userEmail = "" }) => {
               className="gap-1.5"
             >
               Open docs
-              <ArrowUpRight className="size-3.5" />
+              <ArrowUpRight className="size-4" />
             </a>
           </Button>
         </div>
       ) : (
         <Button
-          size="sm"
+          size="lg"
           className="slide-fade-right gap-1.5 [animation-delay:200ms]"
           asChild
         >
@@ -210,7 +210,7 @@ const ConnectStep: React.FC<ConnectStepProps> = ({ userEmail = "" }) => {
             rel="noopener noreferrer"
           >
             Quickstart guide
-            <ArrowUpRight className="size-3.5" />
+            <ArrowUpRight className="size-4" />
           </a>
         </Button>
       )}
