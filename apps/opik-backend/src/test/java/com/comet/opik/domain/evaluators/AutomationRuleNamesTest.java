@@ -2,9 +2,6 @@ package com.comet.opik.domain.evaluators;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.NullAndEmptySource;
-import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.Set;
 
@@ -91,13 +88,24 @@ class AutomationRuleNamesTest {
         assertThat(second).isNotEqualTo(first).endsWith("-2");
     }
 
-    @ParameterizedTest
-    @NullAndEmptySource
-    @ValueSource(strings = {"   "})
-    @DisplayName("returns blank or null names unchanged")
-    void blankNames(String name) {
-        assertThat(AutomationRuleNames.generateUniqueName(name, Set.of("Hallucination")))
-                .isEqualTo(name);
+    @Test
+    @DisplayName("returns null and empty names unchanged")
+    void nullOrEmptyNames() {
+        assertThat(AutomationRuleNames.generateUniqueName(null, Set.of("Hallucination"))).isNull();
+        assertThat(AutomationRuleNames.generateUniqueName("", Set.of("Hallucination"))).isEmpty();
+    }
+
+    @Test
+    @DisplayName("returns whitespace-only names unchanged")
+    void whitespaceOnlyName() {
+        assertThat(AutomationRuleNames.generateUniqueName("   ", Set.of("Hallucination"))).isEqualTo("   ");
+    }
+
+    @Test
+    @DisplayName("treats accented names as collisions (matches unicode_ci collation)")
+    void accentInsensitiveCollision() {
+        assertThat(AutomationRuleNames.generateUniqueName("Cafe", Set.of("Café")))
+                .isEqualTo("Cafe-1");
     }
 
     @Test
@@ -106,5 +114,16 @@ class AutomationRuleNamesTest {
         String base = "a".repeat(150);
         String result = AutomationRuleNames.generateUniqueName(base, Set.of(base));
         assertThat(result).hasSize(150).endsWith("-1");
+    }
+
+    @Test
+    @DisplayName("does not split a surrogate pair when truncating a name ending in a non-BMP character")
+    void truncatesOnCodePointBoundary() {
+        // 147 ASCII chars + one emoji (2 UTF-16 units) = 149 units. With a "-1" suffix the cut (index 148)
+        // falls between the emoji's surrogate pair, so truncation must not leave a lone surrogate.
+        String base = "a".repeat(147) + "😀";
+        String result = AutomationRuleNames.generateUniqueName(base, Set.of(base));
+        assertThat(result).endsWith("-1");
+        assertThat(result.codePoints().anyMatch(cp -> cp >= 0xD800 && cp <= 0xDFFF)).isFalse();
     }
 }
