@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
 
 import { cn } from "@/lib/utils";
-import LoadableSelectBox from "@/shared/LoadableSelectBox/LoadableSelectBox";
+import LoadableSelectBox from "@/v2/components/LoadableSelectBox/LoadableSelectBox";
 import SelectBoxClearWrapper from "@/shared/SelectBoxClearWrapper/SelectBoxClearWrapper";
 import useExperimentsList, {
   UseExperimentsListParams,

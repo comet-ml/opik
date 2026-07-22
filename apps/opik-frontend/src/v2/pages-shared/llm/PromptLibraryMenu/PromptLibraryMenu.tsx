@@ -7,7 +7,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/ui/hover-card";
 import { Separator } from "@/ui/separator";
 import { Spinner } from "@/ui/spinner";
 import SearchInput from "@/shared/SearchInput/SearchInput";
-import NoOptions from "@/shared/LoadableSelectBox/NoOptions";
+import NoOptions from "@/v2/components/LoadableSelectBox/NoOptions";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import StageTag from "@/v2/pages-shared/version-history/StageTag";
 import EnvironmentBadgeList from "@/shared/EnvironmentLabel/EnvironmentBadgeList";
