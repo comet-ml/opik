@@ -1,56 +1,89 @@
 import copy
+import gc
 from typing import Any, Dict, List, Optional
-from uuid import uuid4
 
 import pytest
+from langchain_core.language_models import fake
+from langchain_core.prompts import PromptTemplate
 from langchain_core.tools import tool
 from langchain_core.tracers import BaseTracer
 from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
 
+import opik
 from opik import exceptions
-from opik.api_objects import span as span_module, trace as trace_module
+from opik.api_objects import span as span_module
 from opik.integrations import langchain
 from opik.integrations.langchain.opik_tracer import OpikTracer
 from opik.integrations.langchain import run_parse_helpers
 
 
-def test_opik_tracer__attach_span_to_parent_span__stream_restart_root(fake_backend):
-    """When a parent run is a stream-restart root (in _span_data_map but NOT in
-    _created_traces_data_map), trace data should be propagated to the child via
-    a trace_id fallback lookup rather than raising a KeyError."""
-    tracer = OpikTracer(opik_context_read_only_mode=True)
+def _live_span_data_count() -> int:
+    gc.collect()
+    return sum(1 for obj in gc.get_objects() if isinstance(obj, span_module.SpanData))
 
-    # Simulate an original root run that created a trace
-    trace_data = trace_module.TraceData(name="test-trace")
-    trace_id = trace_data.id
-    root_run_id = uuid4()
-    tracer._created_traces_data_map[root_run_id] = trace_data
 
-    # Simulate a stream-restart root: has a span with the same trace_id but is
-    # NOT in _created_traces_data_map (the scenario that previously caused a KeyError)
-    stream_restart_run_id = uuid4()
-    parent_span = span_module.SpanData(trace_id=trace_id, name="stream-restart-span")
-    tracer._span_data_map[stream_restart_run_id] = parent_span
+def test_opik_tracer__span_payloads_are_freed_after_each_invocation(fake_backend):
+    """Real end-to-end check that a long-lived tracer does not retain span
+    payloads: the count of live SpanData objects does not grow as the same tracer
+    is invoked repeatedly. This is the memory leak the fix targets - SpanData
+    carries the full prompt/completion payload."""
+    llm = fake.FakeListLLM(responses=["ok"] * 30)
+    prompt = PromptTemplate(input_variables=["n"], template="Say something about {n}.")
+    chain = prompt | llm
 
-    child_run_id = uuid4()
-    run_dict = {
-        "inputs": {"input": "hello"},
-        "name": "child-span",
-        "run_type": "general",
-        "extra": {},
-    }
+    tracer = OpikTracer()
 
-    # Should not raise KeyError
-    tracer._attach_span_to_parent_span(
-        run_id=child_run_id,
-        parent_run_id=stream_restart_run_id,
-        run_dict=run_dict,
-    )
+    chain.invoke({"n": "warmup"}, config={"callbacks": [tracer]})
+    tracer.flush()
+    baseline = _live_span_data_count()
 
-    # Child should inherit the trace data via trace_id fallback lookup
-    assert child_run_id in tracer._created_traces_data_map
-    assert tracer._created_traces_data_map[child_run_id] is trace_data
+    for n in range(25):
+        chain.invoke({"n": str(n)}, config={"callbacks": [tracer]})
+    tracer.flush()
+
+    assert _live_span_data_count() <= baseline
+
+    # created_traces() is a public accessor and intentionally accumulates.
+    assert len(tracer.created_traces()) == 26
+
+
+def test_opik_tracer__nested_under_tracked_function__spans_logged_and_state_freed(
+    fake_backend,
+):
+    """When the tracer runs under an externally created trace/span (an @track
+    function), the LangChain root run is a real span whose own end callback fires
+    after _persist_run. Its state must be released only after that span's output
+    has been recorded, so the nested spans are logged intact while memory stays
+    flat across invocations."""
+    llm = fake.FakeListLLM(responses=["ok"] * 10)
+    prompt = PromptTemplate(input_variables=["n"], template="Say something about {n}.")
+    chain = prompt | llm
+
+    tracer = OpikTracer()
+
+    @opik.track
+    def run_chain(n: int) -> str:
+        chain.invoke({"n": str(n)}, config={"callbacks": [tracer]})
+        return "done"
+
+    run_chain(-1)
+    opik.flush_tracker()
+    baseline = _live_span_data_count()
+
+    for n in range(3):
+        run_chain(n)
+    opik.flush_tracker()
+
+    assert _live_span_data_count() <= baseline
+
+    # The chain's spans were attached to each tracked-function trace, not dropped.
+    assert len(fake_backend.trace_trees) == 4
+    for trace_tree in fake_backend.trace_trees:
+        chain_span = trace_tree.spans[0].spans[0]
+        assert chain_span.name == "RunnableSequence"
+        assert chain_span.output is not None
+        assert chain_span.end_time is not None
 
 
 def test_opik_tracer__init_validation():
