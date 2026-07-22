@@ -822,7 +822,9 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         }).withError(() -> new EntityAlreadyExistsException(
                 new ErrorMessage(List.of(ERROR_VERSION_HASH_EXISTS.formatted(datasetId)))));
 
-        UUID casBase = context.previousLatestVersion != null ? context.previousLatestVersion.id() : null;
+        UUID casBase = Optional.ofNullable(context.previousLatestVersion)
+                .map(DatasetVersion::id)
+                .orElse(null);
         flipLatestTag(dao, datasetId, newVersionId, casBase, context.userName, context.workspaceId);
     }
 

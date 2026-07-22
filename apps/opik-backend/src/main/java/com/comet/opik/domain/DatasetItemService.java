@@ -39,7 +39,6 @@ import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
-import lombok.Getter;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -171,15 +170,12 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private final @NonNull @Config OpikConfiguration config;
     private final @NonNull LockService lockService;
 
-    // Computed once from the (immutable at runtime) config instead of per lock acquisition.
-    @Getter(lazy = true)
-    private final Duration datasetVersionLockLease = config.getDatasetVersioning().lockLease().toJavaDuration();
-
     // Serialize the read-latest -> create-version -> flip-latest sequence per dataset so parallel
     // uploads can't race on the dataset's mutable 'latest' pointer (OPIK-7264).
     private <T> Mono<T> withDatasetVersionLock(UUID datasetId, Mono<T> action) {
+        Duration lockLease = config.getDatasetVersioning().lockLease().toJavaDuration();
         return lockService.executeWithLockCustomExpire(
-                new LockService.Lock(datasetId, DATASET_VERSION_LOCK), action, getDatasetVersionLockLease());
+                new LockService.Lock(datasetId, DATASET_VERSION_LOCK), action, lockLease);
     }
 
     @WithSpan
@@ -583,54 +579,56 @@ class DatasetItemServiceImpl implements DatasetItemService {
      */
     private Mono<Void> batchUpdateByIdsWithVersioning(UUID datasetId, DatasetItemBatchUpdate batchUpdate,
             String workspaceId, String userName) {
+        // Defer so nothing runs until the caller's withDatasetVersionLock is held (OPIK-7264).
+        return Mono.defer(() -> {
+            int updateSize = batchUpdate.ids().size();
+            log.info("Batch updating '{}' items by IDs with versioning for dataset '{}'", updateSize, datasetId);
 
-        int updateSize = batchUpdate.ids().size();
-        log.info("Batch updating '{}' items by IDs with versioning for dataset '{}'", updateSize, datasetId);
+            // Ensure dataset is migrated if lazy migration is enabled
+            return ensureLazyMigration(datasetId, workspaceId)
+                    .then(Mono.defer(() -> {
+                        // Get the latest version
+                        return getLatestVersionOrError(datasetId, workspaceId)
+                                .flatMap(latestVersion -> {
+                                    UUID baseVersionId = latestVersion.id();
+                                    UUID newVersionId = idGenerator.generateId();
 
-        // Ensure dataset is migrated if lazy migration is enabled
-        return ensureLazyMigration(datasetId, workspaceId)
-                .then(Mono.defer(() -> {
-                    // Get the latest version
-                    return getLatestVersionOrError(datasetId, workspaceId)
-                            .flatMap(latestVersion -> {
-                                UUID baseVersionId = latestVersion.id();
-                                UUID newVersionId = idGenerator.generateId();
+                                    // UUIDs for the updated-item INSERT...SELECT. Generated first so they
+                                    // sort before the unchanged-item UUIDs (which are generated below).
+                                    List<UUID> updateUuids = generateUuidPool(idGenerator, updateSize);
 
-                                // UUIDs for the updated-item INSERT...SELECT. Generated first so they
-                                // sort before the unchanged-item UUIDs (which are generated below).
-                                List<UUID> updateUuids = generateUuidPool(idGenerator, updateSize);
+                                    // Perform batch update
+                                    return versionDao
+                                            .batchUpdateItems(datasetId, baseVersionId, newVersionId,
+                                                    batchUpdate,
+                                                    updateUuids)
+                                            .flatMap(updatedCount -> {
+                                                if (updatedCount == 0) {
+                                                    log.info("No items found to update for dataset '{}'", datasetId);
+                                                    return Mono.empty();
+                                                }
 
-                                // Perform batch update
-                                return versionDao
-                                        .batchUpdateItems(datasetId, baseVersionId, newVersionId,
-                                                batchUpdate,
-                                                updateUuids)
-                                        .flatMap(updatedCount -> {
-                                            if (updatedCount == 0) {
-                                                log.info("No items found to update for dataset '{}'", datasetId);
-                                                return Mono.empty();
-                                            }
+                                                log.info(
+                                                        "Batch updated '{}' items by IDs for dataset '{}', baseVersion='{}'",
+                                                        updatedCount, datasetId, baseVersionId);
 
-                                            log.info(
-                                                    "Batch updated '{}' items by IDs for dataset '{}', baseVersion='{}'",
-                                                    updatedCount, datasetId, baseVersionId);
-
-                                            // OPIK-6390: pass the just-updated IDs as the "deleted" slot of
-                                            // applyDelta so they're excluded from the unchanged-items copy.
-                                            // The helper sizes the UUID pool from a live ClickHouse count.
-                                            return applyEditDeleteWithLiveCount(datasetId, baseVersionId,
-                                                    newVersionId, List.of(), batchUpdate.ids(), workspaceId)
-                                                    .flatMap(unchangedCount -> createVersionMetadata(
-                                                            datasetId, newVersionId, baseVersionId,
-                                                            updatedCount, unchangedCount, false,
-                                                            workspaceId, userName));
-                                        });
-                            });
-                }))
-                .contextWrite(ctx -> ctx
-                        .put(RequestContext.WORKSPACE_ID, workspaceId)
-                        .put(RequestContext.USER_NAME, userName))
-                .then();
+                                                // OPIK-6390: pass the just-updated IDs as the "deleted" slot of
+                                                // applyDelta so they're excluded from the unchanged-items copy.
+                                                // The helper sizes the UUID pool from a live ClickHouse count.
+                                                return applyEditDeleteWithLiveCount(datasetId, baseVersionId,
+                                                        newVersionId, List.of(), batchUpdate.ids(), workspaceId)
+                                                        .flatMap(unchangedCount -> createVersionMetadata(
+                                                                datasetId, newVersionId, baseVersionId,
+                                                                updatedCount, unchangedCount, false,
+                                                                workspaceId, userName));
+                                            });
+                                });
+                    }))
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, workspaceId)
+                            .put(RequestContext.USER_NAME, userName))
+                    .then();
+        });
     }
 
     /**
@@ -638,81 +636,83 @@ class DatasetItemServiceImpl implements DatasetItemService {
      */
     private Mono<Void> batchUpdateByFiltersWithVersioning(UUID datasetId, DatasetItemBatchUpdate batchUpdate,
             String workspaceId, String userName) {
+        // Defer so nothing runs until the caller's withDatasetVersionLock is held (OPIK-7264).
+        return Mono.defer(() -> {
+            log.info("Batch updating items by filters with versioning for dataset '{}'", datasetId);
 
-        log.info("Batch updating items by filters with versioning for dataset '{}'", datasetId);
+            // Ensure dataset is migrated if lazy migration is enabled
+            return ensureLazyMigration(datasetId, workspaceId)
+                    .then(Mono.defer(() -> {
+                        // Get the latest version
+                        return getLatestVersionOrError(datasetId, workspaceId)
+                                .flatMap(latestVersion -> {
+                                    UUID baseVersionId = latestVersion.id();
+                                    UUID newVersionId = idGenerator.generateId();
 
-        // Ensure dataset is migrated if lazy migration is enabled
-        return ensureLazyMigration(datasetId, workspaceId)
-                .then(Mono.defer(() -> {
-                    // Get the latest version
-                    return getLatestVersionOrError(datasetId, workspaceId)
-                            .flatMap(latestVersion -> {
-                                UUID baseVersionId = latestVersion.id();
-                                UUID newVersionId = idGenerator.generateId();
+                                    // OPIK-6390: size both UUID pools from a live ClickHouse count of the
+                                    // base version rather than the (drift-prone) MySQL items_total. The
+                                    // exact base count is an upper bound on both the matching (update)
+                                    // and non-matching (copy) row counts, so no headroom multiplier is
+                                    // needed; the defensive arrayElement fallback in COPY_VERSION_ITEMS
+                                    // covers any residual mismatch without data loss.
+                                    return versionDao
+                                            .countRowsInVersion(datasetId, baseVersionId, Set.of(), null, workspaceId)
+                                            .flatMap(baseRowCount -> {
+                                                int poolSize = baseRowCount.intValue();
+                                                List<UUID> updateUuids = generateUuidPool(idGenerator, poolSize);
+                                                List<UUID> copyUuids = generateUuidPool(idGenerator, poolSize);
 
-                                // OPIK-6390: size both UUID pools from a live ClickHouse count of the
-                                // base version rather than the (drift-prone) MySQL items_total. The
-                                // exact base count is an upper bound on both the matching (update)
-                                // and non-matching (copy) row counts, so no headroom multiplier is
-                                // needed; the defensive arrayElement fallback in COPY_VERSION_ITEMS
-                                // covers any residual mismatch without data loss.
-                                return versionDao
-                                        .countRowsInVersion(datasetId, baseVersionId, Set.of(), null, workspaceId)
-                                        .flatMap(baseRowCount -> {
-                                            int poolSize = baseRowCount.intValue();
-                                            List<UUID> updateUuids = generateUuidPool(idGenerator, poolSize);
-                                            List<UUID> copyUuids = generateUuidPool(idGenerator, poolSize);
+                                                log.debug(
+                                                        "Generated separate UUID pools for filter-based update: updateSize='{}', copySize='{}'",
+                                                        updateUuids.size(), copyUuids.size());
 
-                                            log.debug(
-                                                    "Generated separate UUID pools for filter-based update: updateSize='{}', copySize='{}'",
-                                                    updateUuids.size(), copyUuids.size());
+                                                // Perform batch update
+                                                return versionDao
+                                                        .batchUpdateItems(datasetId, baseVersionId, newVersionId,
+                                                                batchUpdate,
+                                                                updateUuids)
+                                                        .flatMap(updatedCount -> {
+                                                            if (updatedCount == 0) {
+                                                                log.info("No items found to update for dataset '{}'",
+                                                                        datasetId);
+                                                                return Mono.empty();
+                                                            }
 
-                                            // Perform batch update
-                                            return versionDao
-                                                    .batchUpdateItems(datasetId, baseVersionId, newVersionId,
-                                                            batchUpdate,
-                                                            updateUuids)
-                                                    .flatMap(updatedCount -> {
-                                                        if (updatedCount == 0) {
-                                                            log.info("No items found to update for dataset '{}'",
-                                                                    datasetId);
-                                                            return Mono.empty();
-                                                        }
-
-                                                        log.info(
-                                                                "Batch updated '{}' items by filters for dataset '{}', baseVersion='{}'",
-                                                                updatedCount, datasetId, baseVersionId);
-
-                                                        // Copy unchanged items (those NOT matching the filters)
-                                                        // Special case: empty filters list means "select all" - no unchanged items to copy
-                                                        if (batchUpdate.filters() != null
-                                                                && batchUpdate.filters().isEmpty()) {
-                                                            // Empty filters means all items were updated - nothing to copy
                                                             log.info(
-                                                                    "Empty filters (select all) - skipping copy of unchanged items");
-                                                            return createVersionMetadata(
-                                                                    datasetId, newVersionId, baseVersionId,
-                                                                    updatedCount, 0L, true,
-                                                                    workspaceId, userName);
-                                                        }
+                                                                    "Batch updated '{}' items by filters for dataset '{}', baseVersion='{}'",
+                                                                    updatedCount, datasetId, baseVersionId);
 
-                                                        // Copy unchanged items using copyVersionItems (exclude matching filters)
-                                                        return versionDao
-                                                                .copyVersionItems(datasetId, baseVersionId,
-                                                                        datasetId, newVersionId,
-                                                                        batchUpdate.filters(), copyUuids)
-                                                                .flatMap(unchangedCount -> createVersionMetadata(
+                                                            // Copy unchanged items (those NOT matching the filters)
+                                                            // Special case: empty filters list means "select all" - no unchanged items to copy
+                                                            if (batchUpdate.filters() != null
+                                                                    && batchUpdate.filters().isEmpty()) {
+                                                                // Empty filters means all items were updated - nothing to copy
+                                                                log.info(
+                                                                        "Empty filters (select all) - skipping copy of unchanged items");
+                                                                return createVersionMetadata(
                                                                         datasetId, newVersionId, baseVersionId,
-                                                                        updatedCount, unchangedCount, true,
-                                                                        workspaceId, userName));
-                                                    });
-                                        });
-                            });
-                }))
-                .contextWrite(ctx -> ctx
-                        .put(RequestContext.WORKSPACE_ID, workspaceId)
-                        .put(RequestContext.USER_NAME, userName))
-                .then();
+                                                                        updatedCount, 0L, true,
+                                                                        workspaceId, userName);
+                                                            }
+
+                                                            // Copy unchanged items using copyVersionItems (exclude matching filters)
+                                                            return versionDao
+                                                                    .copyVersionItems(datasetId, baseVersionId,
+                                                                            datasetId, newVersionId,
+                                                                            batchUpdate.filters(), copyUuids)
+                                                                    .flatMap(unchangedCount -> createVersionMetadata(
+                                                                            datasetId, newVersionId, baseVersionId,
+                                                                            updatedCount, unchangedCount, true,
+                                                                            workspaceId, userName));
+                                                        });
+                                            });
+                                });
+                    }))
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, workspaceId)
+                            .put(RequestContext.USER_NAME, userName))
+                    .then();
+        });
     }
 
     /**
@@ -992,18 +992,21 @@ class DatasetItemServiceImpl implements DatasetItemService {
      */
     private Mono<Void> deleteItemsWithVersion(Set<UUID> ids, UUID datasetId, List<DatasetItemFilter> filters,
             String workspaceId, String userName, UUID batchGroupId) {
-        // Case 1: Deleting by item IDs
-        if (CollectionUtils.isNotEmpty(ids)) {
-            return deleteByItemIdsWithVersion(ids, datasetId, workspaceId, userName, batchGroupId);
-        }
+        // Defer so nothing runs until the caller's withDatasetVersionLock is held (OPIK-7264).
+        return Mono.defer(() -> {
+            // Case 1: Deleting by item IDs
+            if (CollectionUtils.isNotEmpty(ids)) {
+                return deleteByItemIdsWithVersion(ids, datasetId, workspaceId, userName, batchGroupId);
+            }
 
-        // Case 2: Deleting by datasetId with filters
-        if (datasetId != null) {
-            return deleteByDatasetIdWithVersion(datasetId, filters, workspaceId, userName, batchGroupId);
-        }
+            // Case 2: Deleting by datasetId with filters
+            if (datasetId != null) {
+                return deleteByDatasetIdWithVersion(datasetId, filters, workspaceId, userName, batchGroupId);
+            }
 
-        // No valid input
-        return Mono.empty();
+            // No valid input
+            return Mono.empty();
+        });
     }
 
     /**
@@ -2280,21 +2283,24 @@ class DatasetItemServiceImpl implements DatasetItemService {
      */
     private Mono<Void> handleGroupedDeletion(UUID batchGroupId, Set<UUID> ids, UUID datasetId,
             List<DatasetItemFilter> filters, String workspaceId, String userName) {
+        // Defer so nothing runs until the caller's withDatasetVersionLock is held (OPIK-7264).
+        return Mono.defer(() -> {
+            // For filter-based deletions, ids is null - skip mapping and proceed directly
+            if (ids == null) {
+                return proceedWithGroupedDeletion(batchGroupId, Set.of(), datasetId, filters, workspaceId, userName);
+            }
 
-        // For filter-based deletions, ids is null - skip mapping and proceed directly
-        if (ids == null) {
-            return proceedWithGroupedDeletion(batchGroupId, Set.of(), datasetId, filters, workspaceId, userName);
-        }
+            if (datasetId != null) {
+                return proceedWithGroupedDeletion(batchGroupId, ids, datasetId, filters, workspaceId, userName);
+            }
 
-        if (datasetId != null) {
-            return proceedWithGroupedDeletion(batchGroupId, ids, datasetId, filters, workspaceId, userName);
-        }
-
-        return resolveDatasetIdFromItemIds(ids)
-                .flatMap(resolvedId -> {
-                    log.info("Resolved dataset '{}' for batch_group_id '{}'", resolvedId, batchGroupId);
-                    return proceedWithGroupedDeletion(batchGroupId, ids, resolvedId, filters, workspaceId, userName);
-                });
+            return resolveDatasetIdFromItemIds(ids)
+                    .flatMap(resolvedId -> {
+                        log.info("Resolved dataset '{}' for batch_group_id '{}'", resolvedId, batchGroupId);
+                        return proceedWithGroupedDeletion(batchGroupId, ids, resolvedId, filters, workspaceId,
+                                userName);
+                    });
+        });
     }
 
     /**
