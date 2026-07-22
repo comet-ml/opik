@@ -41,7 +41,6 @@ import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.OpenAiMessageJsonDeserializer;
 import com.comet.opik.utils.StrictDurationDeserializer;
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.core.json.JsonReadFeature;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -133,17 +132,17 @@ public class OpikApplication extends Application<OpikConfiguration> {
                         .addDeserializer(Message.class, OpenAiMessageJsonDeserializer.INSTANCE)
                         .addDeserializer(Duration.class, StrictDurationDeserializer.INSTANCE));
 
-        // Get the configured limit from config.yml
+        // Get the configured limits from config.yml
         int maxStringLength = configuration.getJacksonConfig().getMaxStringLength();
+        long maxDocumentLength = configuration.getJacksonConfig().getMaxDocumentLength();
 
-        // Configure Dropwizard ObjectMapper (HTTP layer)
-        StreamReadConstraints readConstraints = StreamReadConstraints.builder()
-                .maxStringLength(maxStringLength)
-                .build();
-        environment.getObjectMapper().getFactory().setStreamReadConstraints(readConstraints);
+        // Configure Dropwizard ObjectMapper (HTTP layer): bound a single string value AND the whole
+        // document, so an oversized batch aborts mid-parse (4xx) before a multi-GB node tree is built.
+        // (maxDocumentLength <= 0 is normalized to "unlimited" by the builder.)
+        JsonUtils.applyStreamReadConstraints(environment.getObjectMapper(), maxStringLength, maxDocumentLength);
 
-        // Configure JsonUtils ObjectMapper (internal processing) with SAME limit
-        JsonUtils.configure(maxStringLength);
+        // Configure JsonUtils ObjectMapper (internal processing) with the SAME limits
+        JsonUtils.configure(maxStringLength, maxDocumentLength);
 
         jersey.property(ServerProperties.RESPONSE_SET_STATUS_OVER_SEND_ERROR, true);
 

@@ -303,6 +303,21 @@ jacksonConfig:
   #   This configuration is used by both HTTP layer and internal JSON processing for consistency,
   #   preventing memory exhaustion from extremely large base64-encoded attachments before they can be stripped
   maxStringLength: 262144000
+  # Test-only caps, deliberately small so the LargePayloadTests below trip the guards on modest
+  # payloads (253MB string, 280MB doc, 51MB request) rather than production-sized bodies. They
+  # exercise the 413 rejection mechanism; JacksonConfigTest verifies the real shipped defaults.
+  # Description: Maximum size of an entire JSON document (the whole decompressed batch). Unlike
+  #   maxStringLength (a single string value), this caps the whole document, so it catches an
+  #   oversized batch built from many small values. Aborts mid-parse with a 413 before a multi-GB
+  #   node tree is materialized. Must stay above maxStringLength so a single max-size string parses.
+  maxDocumentLength: 268435456
+  # Intentionally BELOW maxDocumentLength so the ~51MB LargePayloadTests request trips the 413
+  #   pre-parse guard cheaply. Request size (compressed) and document length (decompressed) are
+  #   independent axes -- do NOT raise this to match maxDocumentLength.
+  # Description: Maximum incoming request body size, checked against the Content-Length header and
+  #   rejected with 413 before the body is read. Requests without a Content-Length (e.g. chunked)
+  #   fall through and are bounded by maxDocumentLength during parsing.
+  maxRequestSizeBytes: 52428800
 
 # Configuration for batch operations
 batchOperations:

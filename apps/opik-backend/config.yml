@@ -351,6 +351,20 @@ jacksonConfig:
   #   This configuration is used by both HTTP layer and internal JSON processing for consistency,
   #   preventing memory exhaustion from extremely large base64-encoded attachments before they can be stripped
   maxStringLength: ${JACKSON_MAX_STRING_LENGTH:-104857600}
+  # Default: 536870912 (512MB) - the self-hosted default (higher, to avoid surprising customers);
+  #   the Comet cloud deployment overrides JACKSON_MAX_DOCUMENT_LENGTH to 268435456 (256MB).
+  # Description: Maximum size of an entire JSON document (the whole decompressed batch). Unlike
+  #   maxStringLength (a single string value), this caps the whole document, so it catches an
+  #   oversized batch built from many small values. Aborts mid-parse with a 4xx before a multi-GB
+  #   node tree is materialized. Must stay above maxStringLength so a single max-size string parses.
+  maxDocumentLength: ${JACKSON_MAX_DOCUMENT_LENGTH:-536870912}
+  # Default: 536870912 (512MB) - self-hosted default; cloud overrides JACKSON_MAX_REQUEST_SIZE_BYTES
+  #   to 268435456 (256MB). Kept equal to maxDocumentLength so the request filter never rejects a
+  #   request the document guard would otherwise accept.
+  # Description: Maximum incoming request body size, checked against the Content-Length header and
+  #   rejected with 413 before the body is read. Requests without a Content-Length (e.g. chunked)
+  #   fall through and are bounded by maxDocumentLength during parsing.
+  maxRequestSizeBytes: ${JACKSON_MAX_REQUEST_SIZE_BYTES:-536870912}
 
 # Configuration for batch operations
 batchOperations:
