@@ -145,6 +145,13 @@ uuidValidation:
   #  Description: Operational kill-switch. When false, ids are not checked against the window (the
   #   window is still validated to be a sane value).
   enabled: ${UUID_VALIDATION_ENABLED:-false}
+  #  Default: false
+  #  Description: Audit (shadow / log-only) mode. Only takes effect when enabled is true. When true,
+  #   out-of-window ids are counted (opik.ingestion.uuid_v7.rejected, tagged by workspace) and logged
+  #   but NOT rejected, so offenders surface without breaking ingestion. When false, out-of-window ids
+  #   are rejected with HTTP 400. Effective mode: enabled=false -> disabled; enabled=true & auditOnly=true
+  #   -> audit; enabled=true & auditOnly=false -> reject.
+  auditOnly: ${UUID_VALIDATION_AUDIT_ONLY:-false}
   #  Default: 24h
   #  Description: Validation window (between 12h and 45d). Writes whose `id` is a UUIDv7 with an
   #   embedded timestamp more than this far in the past or future are rejected.

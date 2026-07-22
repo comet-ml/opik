@@ -393,7 +393,7 @@ public class SpanService {
                     Mono<List<Span>> resolveProjects = Flux.fromIterable(projectNames)
                             .flatMap(projectService::getOrCreate)
                             .collectList()
-                            .map(projects -> bindSpanToProjectAndId(dedupedSpans, projects));
+                            .map(projects -> bindSpanToProjectAndId(dedupedSpans, projects, workspaceId));
 
                     return resolveProjects
                             .flatMap(this::stripAttachmentsFromSpanBatch)
@@ -438,7 +438,7 @@ public class SpanService {
         return result;
     }
 
-    private List<Span> bindSpanToProjectAndId(List<Span> spans, List<Project> projects) {
+    private List<Span> bindSpanToProjectAndId(List<Span> spans, List<Project> projects, String workspaceId) {
         Map<String, Project> projectPerName = projects.stream()
                 .collect(Collectors.toMap(
                         WorkspaceUtils::stripProjectName,
@@ -459,7 +459,7 @@ public class SpanService {
                     }
 
                     UUID id = span.id() == null ? idGenerator.generateId() : span.id();
-                    idGenerator.validateId(id, SPAN_KEY);
+                    idGenerator.validateId(id, SPAN_KEY, workspaceId);
 
                     return span.toBuilder().id(id).projectId(project.id()).build();
                 })

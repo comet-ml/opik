@@ -200,7 +200,7 @@ class TraceServiceImpl implements TraceService {
                     Mono<List<Trace>> resolveProjects = Flux.fromIterable(projectNames)
                             .flatMap(projectService::getOrCreate)
                             .collectList()
-                            .map(projects -> bindTraceToProjectAndId(dedupedTraces, projects))
+                            .map(projects -> bindTraceToProjectAndId(dedupedTraces, projects, workspaceId))
                             .flatMapMany(Flux::fromIterable)
                             .flatMap(trace -> attachmentStripperService.stripAttachments(trace, workspaceId,
                                     userName,
@@ -237,7 +237,7 @@ class TraceServiceImpl implements TraceService {
         return result;
     }
 
-    private List<Trace> bindTraceToProjectAndId(List<Trace> traces, List<Project> projects) {
+    private List<Trace> bindTraceToProjectAndId(List<Trace> traces, List<Project> projects, String workspaceId) {
         Map<String, Project> projectPerName = projects.stream()
                 .collect(Collectors.toMap(
                         WorkspaceUtils::stripProjectName,
@@ -252,7 +252,7 @@ class TraceServiceImpl implements TraceService {
                     Project project = projectPerName.get(projectName);
 
                     UUID id = trace.id() == null ? idGenerator.generateId() : trace.id();
-                    idGenerator.validateId(id, TRACE_KEY);
+                    idGenerator.validateId(id, TRACE_KEY, workspaceId);
 
                     return trace.toBuilder().id(id).projectId(project.id()).projectName(project.name()).build();
                 })
