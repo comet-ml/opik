@@ -3,6 +3,7 @@
 import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
+import { ErrorInfoPublic } from "./ErrorInfoPublic.js";
 import { FeedbackScoreAveragePublic } from "./FeedbackScoreAveragePublic.js";
 import { JsonListStringPublic } from "./JsonListStringPublic.js";
 import { OptimizationPublicStatus } from "./OptimizationPublicStatus.js";
@@ -20,6 +21,7 @@ export const OptimizationPublic: core.serialization.ObjectSchema<
     status: OptimizationPublicStatus,
     metadata: JsonListStringPublic.optional(),
     studioConfig: core.serialization.property("studio_config", OptimizationStudioConfigPublic.optional()),
+    errorInfo: core.serialization.property("error_info", ErrorInfoPublic.optional()),
     datasetId: core.serialization.property("dataset_id", core.serialization.string().optional()),
     numTrials: core.serialization.property("num_trials", core.serialization.number().optional()),
     feedbackScores: core.serialization.property(
@@ -59,6 +61,7 @@ export declare namespace OptimizationPublic {
         status: OptimizationPublicStatus.Raw;
         metadata?: JsonListStringPublic.Raw | null;
         studio_config?: OptimizationStudioConfigPublic.Raw | null;
+        error_info?: ErrorInfoPublic.Raw | null;
         dataset_id?: string | null;
         num_trials?: number | null;
         feedback_scores?: FeedbackScoreAveragePublic.Raw[] | null;
