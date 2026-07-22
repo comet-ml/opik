@@ -8,10 +8,12 @@ import com.fasterxml.jackson.core.exc.StreamConstraintsException;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
+import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
 import jakarta.ws.rs.ext.ExceptionMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 
 @Slf4j
 public class JsonProcessingExceptionMapper implements ExceptionMapper<JsonProcessingException> {
@@ -30,17 +32,32 @@ public class JsonProcessingExceptionMapper implements ExceptionMapper<JsonProces
 
     @Override
     public Response toResponse(JsonProcessingException exception) {
-        // A StreamConstraintsException (often wrapped by Jackson during bean binding, hence the cause walk)
-        // is the size guard tripping mid-parse -> 413; anything else is malformed JSON -> 400.
-        StreamConstraintsException streamConstraintsException = findStreamConstraint(exception);
+        // A StreamConstraintsException (often wrapped by Jackson during binding) is a stream-read limit
+        // tripping mid-parse. getThrowableList is cycle-safe, so no manual bound is needed. A size limit
+        // (document/string length) -> 413; a structural limit (nesting/number) or anything else -> 400.
+        StreamConstraintsException streamConstraint = ExceptionUtils.getThrowableList(exception).stream()
+                .filter(StreamConstraintsException.class::isInstance)
+                .map(StreamConstraintsException.class::cast)
+                .findFirst()
+                .orElse(null);
+
         Response.Status status;
         String clientMessage;
-        if (streamConstraintsException != null) {
-            log.debug("Ingestion size guard rejected a request", exception); // expected; already on the metric
-            sizeGuardMetrics.recordStreamConstraintRejection(streamConstraintsException, uriInfo.get(), requestContext);
-            status = Response.Status.REQUEST_ENTITY_TOO_LARGE;
-            // Redacted: the size-guard message exposes internal limits/Jackson internals (detail is in the log).
-            clientMessage = "Request payload exceeds the maximum allowed size.";
+        if (streamConstraint != null) {
+            sizeGuardMetrics.recordStreamConstraintRejection(streamConstraint, uriInfo.get(), requestContext);
+            String guard = IngestionSizeGuardMetrics.classifyStreamConstraint(streamConstraint);
+            if (IngestionSizeGuardMetrics.GUARD_DOCUMENT_LENGTH.equals(guard)
+                    || IngestionSizeGuardMetrics.GUARD_STRING_LENGTH.equals(guard)) {
+                log.debug("Ingestion size guard rejected a request", exception); // expected; already on the metric
+                status = Response.Status.REQUEST_ENTITY_TOO_LARGE;
+                clientMessage = "Request payload exceeds the maximum allowed size."; // redacted; detail in the log
+            } else {
+                // A structural limit (nesting/number depth), not an oversize -> 400; kept generic since the
+                // message also carries Jackson internals.
+                log.info("Rejecting a request that violates a JSON structural limit", exception);
+                status = Response.Status.BAD_REQUEST;
+                clientMessage = "Unable to process JSON. The request exceeds an allowed structural limit.";
+            }
         } else {
             log.info("Deserialization exception for workspace {}",
                     ErrorMetricsResolver.workspaceId(requestContext), exception);
@@ -50,23 +67,12 @@ public class JsonProcessingExceptionMapper implements ExceptionMapper<JsonProces
             clientMessage = "Unable to process JSON. " + exception.getMessage();
         }
 
+        // Force JSON: ingestion endpoints negotiate non-JSON (e.g. OTel protobuf) with no writer for
+        // ErrorMessage, so without an explicit type the error fails to serialize and surfaces as a 500
+        // (matches InvalidUUIDExceptionMapper and RequestSizeLimitFilter).
         return Response.status(status)
+                .type(MediaType.APPLICATION_JSON_TYPE)
                 .entity(new ErrorMessage(status.getStatusCode(), clientMessage))
                 .build();
-    }
-
-    // Bounds the cause walk so a pathological cause cycle (A -> B -> A) can't spin forever and pin the
-    // request thread; 50 is far beyond any real chain.
-    private static final int MAX_CAUSE_DEPTH = 50;
-
-    /** The {@link StreamConstraintsException} this throwable is or wraps, or {@code null}. */
-    private static StreamConstraintsException findStreamConstraint(Throwable throwable) {
-        Throwable cause = throwable;
-        for (int depth = 0; cause != null && depth < MAX_CAUSE_DEPTH; cause = cause.getCause(), depth++) {
-            if (cause instanceof StreamConstraintsException streamConstraintsException) {
-                return streamConstraintsException;
-            }
-        }
-        return null;
     }
 }

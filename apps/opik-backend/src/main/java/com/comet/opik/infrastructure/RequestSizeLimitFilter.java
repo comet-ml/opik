@@ -3,8 +3,10 @@ package com.comet.opik.infrastructure;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.metrics.IngestionSizeGuardMetrics;
 import io.dropwizard.jersey.errors.ErrorMessage;
+import jakarta.annotation.Priority;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
+import jakarta.ws.rs.Priorities;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -14,11 +16,13 @@ import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 /**
- * Rejects an oversized request with 413 by its {@code Content-Length}, before the body is read. Global
- * (no path scoping) by design, so it caps every request carrying a Content-Length; a chunked request has
- * none, passes here, and is still bounded by {@code maxDocumentLength} during parsing.
+ * Rejects an oversized request with 413 by its {@code Content-Length}, before the body is read and ahead of
+ * authentication (low {@code @Priority}). Global (no path scoping) by design, so it caps every request
+ * carrying a Content-Length; a chunked request has none, passes here, and is still bounded by
+ * {@code maxDocumentLength} during parsing.
  */
 @Slf4j
+@Priority(Priorities.HEADER_DECORATOR)
 public class RequestSizeLimitFilter implements ContainerRequestFilter {
 
     private final JacksonConfig jacksonConfig;

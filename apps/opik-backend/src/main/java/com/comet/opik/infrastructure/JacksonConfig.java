@@ -19,9 +19,9 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class JacksonConfig {
 
-    // Upper bound for the byte caps below: beyond ~2GB a single Java String/array hits its 2^31 limit,
-    // so a larger cap can't protect the heap and is almost always a units typo.
-    private static final long MAX_CONFIGURABLE_BYTES = 2_147_483_648L; // 2GB
+    // Upper bound for the byte caps below: a single Java String/array can't exceed Integer.MAX_VALUE
+    // (2^31-1 bytes), so a larger cap can't protect the heap and is almost always a units typo.
+    private static final long MAX_CONFIGURABLE_BYTES = Integer.MAX_VALUE; // ~2GB (2^31-1)
 
     /**
      * Maximum size (in bytes) for individual string values during JSON deserialization.

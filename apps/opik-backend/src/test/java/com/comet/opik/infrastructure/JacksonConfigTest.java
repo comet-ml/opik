@@ -46,6 +46,12 @@ class JacksonConfigTest {
 
         config.setMaxDocumentLength(3_221_225_472L); // 3GB > 2GB ceiling -> invalid (typo / silently-defeated guard)
         assertThat(config.isMaxDocumentLengthValid()).isFalse();
+
+        config.setMaxDocumentLength((long) Integer.MAX_VALUE); // exactly the max String/array length -> valid
+        assertThat(config.isMaxDocumentLengthValid()).isTrue();
+
+        config.setMaxDocumentLength(2_147_483_648L); // Integer.MAX_VALUE + 1 -> one byte past the real limit, invalid
+        assertThat(config.isMaxDocumentLengthValid()).isFalse();
     }
 
     @Test

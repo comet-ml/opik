@@ -77,7 +77,7 @@ public class IngestionSizeGuardMetrics {
 
     // Classifies via Jackson's message text (the only signal it exposes): version-dependent, guarded by
     // IngestionSizeGuardMetricsTest; re-check on a Jackson bump. Unrecognized -> stream_constraint.
-    static String classifyStreamConstraint(StreamConstraintsException exception) {
+    public static String classifyStreamConstraint(StreamConstraintsException exception) {
         String message = exception.getMessage();
         if (message == null) {
             return GUARD_STREAM_CONSTRAINT;

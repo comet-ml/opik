@@ -7,6 +7,7 @@ import com.fasterxml.jackson.core.exc.StreamConstraintsException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Provider;
+import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
 import org.junit.jupiter.api.DisplayName;
@@ -47,6 +48,7 @@ class JsonProcessingExceptionMapperTest {
     // A size-guard trip is a payload-too-large rejection -> 413 (consistent with RequestSizeLimitFilter).
     private void assertPayloadTooLarge(Response response) {
         assertThat(response.getStatus()).isEqualTo(Response.Status.REQUEST_ENTITY_TOO_LARGE.getStatusCode());
+        assertThat(response.getMediaType()).isEqualTo(MediaType.APPLICATION_JSON_TYPE);
         assertThat(((ErrorMessage) response.getEntity()).getMessage())
                 .isEqualTo("Request payload exceeds the maximum allowed size.");
     }
@@ -55,6 +57,7 @@ class JsonProcessingExceptionMapperTest {
     // (the detail is the caller's own payload, not size-guard internals — those are redacted on the 413 path).
     private void assertBadRequest(Response response) {
         assertThat(response.getStatus()).isEqualTo(Response.Status.BAD_REQUEST.getStatusCode());
+        assertThat(response.getMediaType()).isEqualTo(MediaType.APPLICATION_JSON_TYPE);
         assertThat(((ErrorMessage) response.getEntity()).getMessage())
                 .startsWith("Unable to process JSON.");
     }
@@ -139,11 +142,11 @@ class JsonProcessingExceptionMapperTest {
     }
 
     @Test
-    @DisplayName("does not loop on a multi-node cause CYCLE (A -> B -> A) — bounded walk (400)")
+    @DisplayName("does not loop on a multi-node cause CYCLE (A -> B -> A) — cycle-safe walk (400)")
     void doesNotLoopOnMultiNodeCauseCycle() {
         // Throwable.initCause only rejects a DIRECT self-cause, so a 2-node cycle A -> B -> A is
-        // constructible and would spin the cause-chain walk forever, pinning the request thread. The
-        // walk must be bounded (depth cap), terminate, and fall through to the malformed-JSON 400.
+        // constructible and would spin a naive cause walk forever. ExceptionUtils.getThrowableList stops
+        // on a repeated throwable, so the walk terminates and falls through to the malformed-JSON 400.
         var a = new JsonMappingException((Closeable) null, "a");
         var b = new RuntimeException("b");
         a.initCause(b); // a -> b
@@ -152,6 +155,23 @@ class JsonProcessingExceptionMapperTest {
         var response = assertTimeoutPreemptively(Duration.ofSeconds(2), () -> mapper().toResponse(a));
 
         verifyNoInteractions(sizeGuardMetrics);
+        assertBadRequest(response);
+    }
+
+    @Test
+    @DisplayName("returns 400 (not 413) for a non-size stream constraint (e.g. nesting depth)")
+    void nonSizeStreamConstraintIsBadRequest() {
+        // Jackson raises StreamConstraintsException for structural limits too (nesting depth, number length),
+        // which are not oversize problems -> 400, not a misleading 413 "too large".
+        when(uriInfoProvider.get()).thenReturn(uriInfo);
+        var nesting = new StreamConstraintsException(
+                "Document nesting depth (1001) exceeds the maximum allowed (1000, from "
+                        + "`StreamReadConstraints.getMaxNestingDepth()`)");
+
+        var response = mapper().toResponse(nesting);
+
+        // Still counted (as an unclassified stream constraint), but signalled as a 400.
+        verify(sizeGuardMetrics).recordStreamConstraintRejection(nesting, uriInfo, requestContext);
         assertBadRequest(response);
     }
 }
