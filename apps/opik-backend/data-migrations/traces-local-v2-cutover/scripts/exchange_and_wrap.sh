@@ -24,7 +24,7 @@
 #   --with-wrap       also apply the Distributed wrap in the same run (EXCHANGE + wrap). Use only once the delete/read
 #                     DAOs are sharding-aware. Mutually exclusive with --skip-wrap / --wrap-only.
 #   --skip-wrap       explicit alias for the default (EXCHANGE only); accepted for clarity and back-compat.
-#   --wrap-only       run ONLY the Distributed wrap on the already-EXCHANGEd `traces` (no EXCHANGE, no new cutover_start)
+#   --wrap-only       run ONLY the Distributed wrap on the already-swapped `traces` (no EXCHANGE, no new cutover_start)
 #                     — the deferred second half of a prior EXCHANGE-only run. Mutually exclusive with the above.
 #   --force           skip the replication-settle gate. By default the swap aborts while any replica still
 #                     has replication-queue backlog or an unfinished mutation on traces / traces_local_v2, since a
@@ -103,7 +103,10 @@ assert_pre_exchange_topology() {
     [[ -n "$(traces_engine traces_local_v2)" ]] || { echo "ERROR: successor 'traces_local_v2' not found; run the backfill + delta first." >&2; exit 1; }
 }
 
-# --wrap-only precondition: traces must be the post-EXCHANGE successor MergeTree (not the original, not already wrapped).
+# --wrap-only precondition: traces must be the post-EXCHANGE successor MergeTree (not the original, not already wrapped),
+# AND the post-swap RENAME must have completed. In the split state (EXCHANGE done, RENAME not) `traces` already holds
+# the successor schema but `traces_local_v2` still holds the old data — wrapping then would orphan the old data under
+# the wrong name (finalize.sh would misread it as the disposable successor). So refuse until the rename is finished.
 assert_pre_wrap_topology() {
     local engine end_time
     engine="$(traces_engine traces)"
@@ -117,6 +120,12 @@ assert_pre_wrap_topology() {
         echo "ERROR: --wrap-only expects the post-EXCHANGE state (traces = successor schema), but traces has Nullable end_time (the EXCHANGE has not run). Run without --wrap-only first." >&2
         exit 1
     }
+    if [[ -n "$(traces_engine traces_local_v2)" ]]; then
+        echo "ERROR: --wrap-only: 'traces_local_v2' still exists — the post-EXCHANGE RENAME did not complete, so wrapping" >&2
+        echo "       now would orphan the old data under the wrong name. Finish the rename first, then re-run --wrap-only:" >&2
+        echo "         clickhouse-client --database $DATABASE --query \"RENAME TABLE $DATABASE.traces_local_v2 TO $DATABASE.traces_pre_cutover_backup ON CLUSTER '{cluster}'\"" >&2
+        exit 1
+    fi
 }
 
 # Pre-EXCHANGE gate: the swap is metadata-only and near-instant, but each replica reads its own local parts afterwards.

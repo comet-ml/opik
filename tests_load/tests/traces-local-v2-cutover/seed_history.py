@@ -54,8 +54,9 @@ COLUMNS = [
     "environment",
 ]
 
-# A far-future instant matching the litellm UUIDv7 bug (ids whose embedded timestamp lands around the year 2201).
-BAD_ID_INSTANT = utcnow().replace(year=2201)
+# A far-future instant matching the litellm UUIDv7 bug (ids whose embedded timestamp lands around the year 2201). Built
+# from a fixed date (not now().replace(year=2201)) so it never hits Feb 29 -> ValueError at import on a leap-day run.
+BAD_ID_INSTANT = datetime(2201, 6, 1, tzinfo=timezone.utc)
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 _TAG_POOL = ["prod", "llm", "rag", "eval", "v1", "v2", "canary", "batch", "stream", "agent"]
