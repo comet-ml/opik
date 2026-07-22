@@ -68,6 +68,8 @@ public interface WorkspaceMetricsDAO {
     Mono<List<WorkspaceMetricResponse.Result>> getCostsDaily(WorkspaceMetricRequest request);
 
     Mono<List<WorkspaceMetricResponse.Result>> getSpanTokenUsage(WorkspaceSpanMetricRequest request);
+
+    Mono<List<String>> getWorkspaceTokenUsageNames(Set<UUID> projectIds);
 }
 
 @Slf4j
@@ -303,6 +305,23 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             SETTINGS log_comment = '<log_comment>';
             """.formatted(SPAN_FILTERED_PREFIX);
 
+    // Distinct span token-usage key names across an explicit project set, all-time. Mirrors ProjectMetricsDAO's
+    // GET_PROJECT_TOKEN_USAGE_NAMES with the single-project predicate widened to a bounded project_id IN (...) list.
+    private static final String GET_WORKSPACE_TOKEN_USAGE_NAMES = """
+            SELECT DISTINCT name
+            FROM (
+                SELECT usage
+                FROM spans final
+                WHERE workspace_id = :workspace_id
+                AND project_id IN :project_ids
+            )
+            ARRAY JOIN
+                mapKeys(usage) AS name,
+                mapValues(usage) AS value
+            WHERE value > 0
+            SETTINGS log_comment = '<log_comment>';
+            """;
+
     private static final String WORKSPACE_METRIC_QUERY_NAME_PREFIX = "WorkspaceMetrics_";
 
     private static final Map<TimeInterval, String> INTERVAL_TO_SQL = Map.of(
@@ -368,6 +387,29 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 "workspaceSpanTokenUsage")
                 .flatMapMany(this::rowToDataPoint)
                 .collectList());
+    }
+
+    @Override
+    public Mono<List<String>> getWorkspaceTokenUsageNames(@NonNull Set<UUID> projectIds) {
+        // The service resolves "all projects" into the explicit project set before calling the DAO, so the query is
+        // always bounded by project_id IN (...) and prunes on the spans primary key rather than scanning the workspace.
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(projectIds),
+                "projectIds must be resolved before querying workspace token usage names");
+        return template.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
+            var stTemplate = getSTWithLogComment(GET_WORKSPACE_TOKEN_USAGE_NAMES,
+                    WORKSPACE_METRIC_QUERY_NAME_PREFIX + "tokenUsageNames", workspaceId, userName, projectIds.size());
+
+            var statement = connection.createStatement(stTemplate.render())
+                    .bind("workspace_id", workspaceId)
+                    .bind("project_ids", projectIds.toArray(new UUID[0]));
+
+            InstrumentAsyncUtils.Segment segment = startSegment("workspaceTokenUsageNames", "Clickhouse", "get");
+
+            return Mono.from(statement.execute())
+                    .flatMapMany(result -> result.map((row, metadata) -> row.get("name", String.class)))
+                    .collectList()
+                    .doFinally(signalType -> endSegment(segment));
+        }));
     }
 
     private Mono<? extends Result> getSpanMetric(WorkspaceSpanMetricRequest request, Connection connection,
