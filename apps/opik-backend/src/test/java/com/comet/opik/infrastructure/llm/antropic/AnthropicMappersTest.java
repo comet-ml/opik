@@ -9,16 +9,19 @@ import dev.langchain4j.model.openai.internal.chat.ChatCompletionChoice;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.Role;
 import dev.langchain4j.model.openai.internal.shared.Usage;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -129,6 +132,101 @@ public class AnthropicMappersTest {
                     Arguments.of(Boolean.TRUE, true),
                     Arguments.of(Boolean.FALSE, false),
                     Arguments.of(null, false));
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Sampling params gating")
+    class SamplingParamsGating {
+
+        @ParameterizedTest
+        @ValueSource(strings = {"claude-sonnet-5", "claude-opus-4-8"})
+        void dropsTemperatureAndTopPForAdaptiveThinkingModels(String model) {
+            var request = ChatCompletionRequest.builder()
+                    .model(model)
+                    .addUserMessage("hi")
+                    .temperature(0.7)
+                    .topP(0.9)
+                    .build();
+
+            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request);
+
+            assertThat(actual.temperature).isNull();
+            assertThat(actual.topP).isNull();
+        }
+
+        @Test
+        void forwardsTemperatureForModelsThatSupportSamplingParams() {
+            var request = ChatCompletionRequest.builder()
+                    .model("claude-3-7-sonnet-20250219")
+                    .addUserMessage("hi")
+                    .temperature(0.7)
+                    .build();
+
+            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request);
+
+            assertThat(actual.temperature).isEqualTo(0.7);
+        }
+
+        @Test
+        void forwardsTopPWhenTemperatureAbsentOnSamplingCapableModel() {
+            var request = ChatCompletionRequest.builder()
+                    .model("claude-3-7-sonnet-20250219")
+                    .addUserMessage("hi")
+                    .topP(0.9)
+                    .build();
+
+            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request);
+
+            assertThat(actual.temperature).isNull();
+            assertThat(actual.topP).isEqualTo(0.9);
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"enabled", "adaptive", "some-future-mode"})
+        void dropsSamplingParamsWhenThinkingEnabledOnSamplingCapableModel(String thinkingType) {
+            var request = ChatCompletionRequest.builder()
+                    .model("claude-3-7-sonnet-20250219")
+                    .addUserMessage("hi")
+                    .temperature(0.7)
+                    .topP(0.9)
+                    .customParameters(Map.of("thinking", Map.of("type", thinkingType, "budget_tokens", 1024)))
+                    .build();
+
+            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request);
+
+            assertThat(actual.temperature).isNull();
+            assertThat(actual.topP).isNull();
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"disabled", "", " "})
+        void forwardsTemperatureWhenThinkingDisabledOrBlankOnSamplingCapableModel(String thinkingType) {
+            var request = ChatCompletionRequest.builder()
+                    .model("claude-3-7-sonnet-20250219")
+                    .addUserMessage("hi")
+                    .temperature(0.7)
+                    .customParameters(Map.of("thinking", Map.of("type", thinkingType)))
+                    .build();
+
+            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request);
+
+            assertThat(actual.temperature).isEqualTo(0.7);
+        }
+
+        @Test
+        void forwardsTemperatureWhenThinkingBlockAbsentOnSamplingCapableModel() {
+            var request = ChatCompletionRequest.builder()
+                    .model("claude-3-7-sonnet-20250219")
+                    .addUserMessage("hi")
+                    .temperature(0.7)
+                    .customParameters(Map.of("max_tokens", 2048))
+                    .build();
+
+            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request);
+
+            assertThat(actual.temperature).isEqualTo(0.7);
         }
     }
 
