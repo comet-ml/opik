@@ -941,7 +941,7 @@ navigation:
         slug: python-sdk
         contents:
           - link: Reference
-            href: https://www.comet.com/docs/opik/python-sdk-reference/
+            href: https://www.comet.com/docs/opik/python-sdk-reference/index.html
           - page: REST API Client
             path: ../docs-v2/reference/python-sdk/rest-api.mdx
             slug: rest-api

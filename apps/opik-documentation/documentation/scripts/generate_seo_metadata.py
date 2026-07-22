@@ -304,7 +304,10 @@ def main():
         # Prepare frontmatter
         new_frontmatter = {
             "title": page["title"],
-            "headline": f"{page['title']} | Opik Documentation",
+            # Fern already appends the site title ("| Opik Documentation") to the
+            # page <title>, so the headline must NOT include it or the suffix is
+            # rendered twice (e.g. "Overview | Opik Documentation | Opik Documentation").
+            "headline": page["title"],
             "og:site_name": OG_SITE_NAME,
             "og:title": metadata["og_title"],
             "og:description": metadata["og_description"],
