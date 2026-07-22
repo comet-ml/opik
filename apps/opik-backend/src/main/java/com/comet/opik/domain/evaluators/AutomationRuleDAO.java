@@ -1,6 +1,8 @@
 package com.comet.opik.domain.evaluators;
 
 import com.comet.opik.api.evaluators.AutomationRule;
+import com.comet.opik.api.evaluators.EvalTriggerScope;
+import com.comet.opik.infrastructure.db.EvalTriggerScopeColumnMapper;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
@@ -17,6 +19,7 @@ import java.util.Set;
 import java.util.UUID;
 
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
+@RegisterArgumentFactory(EvalTriggerScopeColumnMapper.class)
 @RegisterRowMapper(AutomationRuleRowMapper.class)
 public interface AutomationRuleDAO {
 
@@ -53,7 +56,7 @@ public interface AutomationRuleDAO {
             @Bind("name") String name,
             @Bind("samplingRate") float samplingRate,
             @Bind("enabled") boolean enabled,
-            @Bind("triggerScope") String triggerScope,
+            @Bind("triggerScope") EvalTriggerScope triggerScope,
             @Bind("filters") String filters);
 
     /**

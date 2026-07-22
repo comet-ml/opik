@@ -1,5 +1,6 @@
 package com.comet.opik.api.evaluators;
 
+import com.comet.opik.infrastructure.db.HasValue;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 import lombok.AccessLevel;
@@ -10,7 +11,7 @@ import java.util.Arrays;
 
 @Getter
 @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
-public enum EvalTriggerScope {
+public enum EvalTriggerScope implements HasValue {
 
     PRODUCTION("production"),
     EXPERIMENT("experiment"),

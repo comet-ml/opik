@@ -41,7 +41,8 @@ public class AutomationRuleEvaluatorRowMapper implements RowMapper<AutomationRul
         String name = rs.getString("name");
         Float samplingRate = rs.getFloat("sampling_rate");
         boolean enabled = rs.getBoolean("enabled");
-        EvalTriggerScope triggerScope = EvalTriggerScope.fromString(rs.getString("trigger_scope"));
+        String triggerScopeStr = rs.getString("trigger_scope");
+        EvalTriggerScope triggerScope = triggerScopeStr != null ? EvalTriggerScope.fromString(triggerScopeStr) : null;
         String filters = rs.getString("filters");
         Instant createdAt = rs.getTimestamp("created_at").toInstant();
         String createdBy = rs.getString("created_by");

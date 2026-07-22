@@ -248,7 +248,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                         : EvalTriggerScope.PRODUCTION;
                 int resultBase = dao.updateBaseRule(id, workspaceId, evaluatorUpdate.getName(),
                         evaluatorUpdate.getSamplingRate(), evaluatorUpdate.isEnabled(),
-                        triggerScope.getValue(), filtersJson);
+                        triggerScope, filtersJson);
 
                 // Update project associations in junction table
                 projectsDAO.deleteByRuleIds(Set.of(id), workspaceId);

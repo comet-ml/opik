@@ -627,52 +627,54 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="triggerScope"
-                  render={({ field }) => (
-                    <FormItem>
-                      <Label className="flex items-center">
-                        Trigger scope{" "}
-                        <TooltipWrapper content="Choose whether this rule fires on production traces, experiment traces, or both.">
-                          <Info className="ml-1 size-4 text-light-slate" />
-                        </TooltipWrapper>
-                      </Label>
-                      <FormControl>
-                        <div className="flex">
-                          <ToggleGroup
-                            type="single"
-                            data-testid="add-edit-rule-dialog-trigger-scope"
-                            value={field.value}
-                            onValueChange={(value: EVAL_TRIGGER_SCOPE) => {
-                              if (!value) return;
-                              field.onChange(value);
-                            }}
-                          >
-                            <ToggleGroupItem
-                              value={EVAL_TRIGGER_SCOPE.production}
-                              aria-label="Production traces"
+                {!isThreadScope && !isSpanScope && (
+                  <FormField
+                    control={form.control}
+                    name="triggerScope"
+                    render={({ field }) => (
+                      <FormItem>
+                        <Label className="flex items-center">
+                          Trigger scope{" "}
+                          <TooltipWrapper content="Choose whether this rule fires on production traces, experiment traces, or both.">
+                            <Info className="ml-1 size-4 text-light-slate" />
+                          </TooltipWrapper>
+                        </Label>
+                        <FormControl>
+                          <div className="flex">
+                            <ToggleGroup
+                              type="single"
+                              data-testid="add-edit-rule-dialog-trigger-scope"
+                              value={field.value}
+                              onValueChange={(value: EVAL_TRIGGER_SCOPE) => {
+                                if (!value) return;
+                                field.onChange(value);
+                              }}
                             >
-                              Production traces
-                            </ToggleGroupItem>
-                            <ToggleGroupItem
-                              value={EVAL_TRIGGER_SCOPE.experiment}
-                              aria-label="Experiment traces"
-                            >
-                              Experiment traces
-                            </ToggleGroupItem>
-                            <ToggleGroupItem
-                              value={EVAL_TRIGGER_SCOPE.both}
-                              aria-label="Both"
-                            >
-                              Both
-                            </ToggleGroupItem>
-                          </ToggleGroup>
-                        </div>
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
+                              <ToggleGroupItem
+                                value={EVAL_TRIGGER_SCOPE.production}
+                                aria-label="Production traces"
+                              >
+                                Production traces
+                              </ToggleGroupItem>
+                              <ToggleGroupItem
+                                value={EVAL_TRIGGER_SCOPE.experiment}
+                                aria-label="Experiment traces"
+                              >
+                                Experiment traces
+                              </ToggleGroupItem>
+                              <ToggleGroupItem
+                                value={EVAL_TRIGGER_SCOPE.both}
+                                aria-label="Both"
+                              >
+                                Both
+                              </ToggleGroupItem>
+                            </ToggleGroup>
+                          </div>
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                )}
 
                 {!isEdit && (
                   <FormField
