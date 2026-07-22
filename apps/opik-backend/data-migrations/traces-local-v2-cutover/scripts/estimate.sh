@@ -51,6 +51,12 @@ done
 [[ -n "$DATABASE" ]] || { echo "ERROR: --database is required" >&2; exit 2; }
 # --database is interpolated into the probe/size SQL; require a plain ClickHouse identifier so it cannot alter the query.
 [[ "$DATABASE" =~ ^[A-Za-z0-9_]+$ ]] || { echo "ERROR: --database must be a ClickHouse identifier (letters, digits, underscore)." >&2; exit 2; }
+# Numeric args flow into the probe/estimate SQL and awk; require sane numeric shapes so none can alter the query.
+[[ "$MAX_ROWS" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --max-rows-per-insert must be a positive integer." >&2; exit 2; }
+[[ "$PROBE_ROWS" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --probe-rows must be a positive integer." >&2; exit 2; }
+[[ "$PAUSE_SECONDS" =~ ^[0-9]+$ ]] || { echo "ERROR: --pause-seconds must be a non-negative integer." >&2; exit 2; }
+[[ "$WRITE_COST_FACTOR" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "ERROR: --write-cost-factor must be a number." >&2; exit 2; }
+[[ -z "$ROWS_PER_SEC" || "$ROWS_PER_SEC" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "ERROR: --rows-per-sec must be a number." >&2; exit 2; }
 
 ch() {
     clickhouse-client --database "$DATABASE" --query "$1"
