@@ -54,13 +54,16 @@ public class JsonProcessingExceptionMapper implements ExceptionMapper<JsonProces
             } else {
                 // A structural limit (nesting/number depth), not an oversize -> 400; kept generic since the
                 // message also carries Jackson internals.
-                log.info("Rejecting a request that violates a JSON structural limit", exception);
+                log.info("Rejecting a request that violates a JSON structural limit for workspace '{}'",
+                        ErrorMetricsResolver.workspaceId(requestContext));
                 status = Response.Status.BAD_REQUEST;
                 clientMessage = "Unable to process JSON. The request exceeds an allowed structural limit.";
             }
         } else {
-            log.info("Deserialization exception for workspace {}",
-                    ErrorMetricsResolver.workspaceId(requestContext), exception);
+            // Redacted summary only: the exception message carries the caller's own body content (potential
+            // PII), so log the type + workspace, never the throwable (SKILL.md "Never Log PII").
+            log.info("Deserialization exception for workspace '{}': {}",
+                    ErrorMetricsResolver.workspaceId(requestContext), exception.getClass().getSimpleName());
             status = Response.Status.BAD_REQUEST;
             // Keep the parser detail (the caller's own payload, not internal limits) - a long-standing contract
             // many endpoints assert; do NOT genericize this branch (that broke ~8 test suites once).
