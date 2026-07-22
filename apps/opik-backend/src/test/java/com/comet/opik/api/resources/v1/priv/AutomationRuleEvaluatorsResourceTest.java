@@ -426,7 +426,7 @@ class AutomationRuleEvaluatorsResourceTest {
         @DisplayName("create evaluator definition: when api key is present, then return proper response")
         void createAutomationRuleEvaluator__whenSessionTokenIsPresent__thenReturnProperResponse(
                 String sessionToken, boolean isAuthorized, String workspaceName) {
-            var projectId = UUID.randomUUID();
+            var projectId = generator.generate();
             var ruleEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
                     .projectIds(Set.of(projectId))
                     .build();
