@@ -19,6 +19,10 @@ interface MobileOnboardingShellProps {
 const clampStep = (value: number, totalSteps: number) =>
   Math.min(totalSteps, Math.max(1, value));
 
+// Longest stagger (525ms delay + 200ms duration) rounded up — after this the
+// outgoing panel's reverse cascade is done and it can be restored.
+const OUT_ANIMATION_TOTAL_MS = 800;
+
 /** Derives the 1-indexed step the scroller is currently closest to. */
 const stepFromScroll = (el: HTMLElement, totalSteps: number) =>
   clampStep(Math.round(el.scrollLeft / el.clientWidth) + 1, totalSteps);
@@ -61,6 +65,7 @@ const MobileOnboardingShell: React.FC<MobileOnboardingShellProps> = ({
   // replaying its staggered slide-fade entrance BACKWARDS (elements cascade
   // out), while the incoming panel remounts normally and staggers in.
   const prevStep = useRef(step);
+  const outResetTimer = useRef<ReturnType<typeof setTimeout>>();
   const [panelAnim, setPanelAnim] = useState<
     { seq: number; mode: "in" | "out" }[]
   >(() => Array.from({ length: totalSteps }, () => ({ seq: 0, mode: "in" })));
@@ -83,6 +88,21 @@ const MobileOnboardingShell: React.FC<MobileOnboardingShellProps> = ({
       ),
     );
 
+    // The reversed cascade parks the departed panel at its hidden first
+    // frame (fill-mode: both). Once it finishes, restore the panel to its
+    // settled visible state — the forward replay happens offscreen — so
+    // peeking back at it mid-swipe never reveals a blank page.
+    // (Cleared on any subsequent step change, so firing implies the departed
+    // panel is still not the current one.)
+    clearTimeout(outResetTimer.current);
+    outResetTimer.current = setTimeout(() => {
+      setPanelAnim((arr) =>
+        arr.map((p, i) =>
+          i === from - 1 ? { seq: p.seq + 1, mode: "in" } : p,
+        ),
+      );
+    }, OUT_ANIMATION_TOTAL_MS);
+
     const el = scrollerRef.current;
     if (!el) return;
     if (fromScroll.current) {
@@ -92,6 +112,8 @@ const MobileOnboardingShell: React.FC<MobileOnboardingShellProps> = ({
     }
     targetLeft.current = scrollPanelIntoView(el, step);
   }, [step]);
+
+  useEffect(() => () => clearTimeout(outResetTimer.current), []);
 
   // Swiping is plain native horizontal scrolling with snap points; we only
   // observe it to keep the step state (progress bar, labels) in sync.

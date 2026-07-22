@@ -49,7 +49,12 @@ const TypingText: React.FC<{ active: boolean }> = ({ active }) => {
     const handleVisibility = () => {
       if (document.hidden) {
         clearTimeout(timer);
+        clearTimeout(startTimer);
       } else {
+        // Clear both timers before restarting so a pending start timer can't
+        // spawn a second concurrent tick chain.
+        clearTimeout(timer);
+        clearTimeout(startTimer);
         tick();
       }
     };
