@@ -5,10 +5,12 @@ import com.comet.opik.domain.ReportService;
 import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.jobs.Job;
 import io.dropwizard.jobs.annotations.On;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.metrics.LongCounter;
+import io.opentelemetry.api.metrics.Meter;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.quartz.DisallowConcurrentExecution;
 import org.quartz.JobExecutionContext;
@@ -20,22 +22,40 @@ import java.util.List;
 
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
 
-/**
- * Runs every 10 minutes and triggers report generation for projects
- * whose schedule_time falls within the previous 10-minute window.
- */
 @Slf4j
 @Singleton
 @DisallowConcurrentExecution
 @On(value = "0 0/10 * * * ?", timeZone = "UTC")
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 public class OllieDailyReportJob extends Job {
 
     private static final int WINDOW_MINUTES = 10;
     private static final Lock JOB_LOCK = new Lock("daily_report_job:lock");
 
-    private final @NonNull ReportService reportService;
-    private final @NonNull LockService lockService;
+    private final ReportService reportService;
+    private final LockService lockService;
+
+    private final LongCounter reportsTriggeredCounter;
+    private final LongCounter triggerErrorCounter;
+
+    @Inject
+    public OllieDailyReportJob(
+            @NonNull ReportService reportService,
+            @NonNull LockService lockService) {
+        this.reportService = reportService;
+        this.lockService = lockService;
+
+        Meter meter = GlobalOpenTelemetry.get().getMeter("opik.daily_report");
+
+        this.reportsTriggeredCounter = meter
+                .counterBuilder("opik.daily_report.triggered")
+                .setDescription("Number of reports triggered for generation")
+                .build();
+
+        this.triggerErrorCounter = meter
+                .counterBuilder("opik.daily_report.trigger_error")
+                .setDescription("Number of report trigger failures")
+                .build();
+    }
 
     record TimeWindow(String start, String end) {
     }
@@ -77,12 +97,22 @@ public class OllieDailyReportJob extends Job {
         List<ReportPreference> prefs = reportService.findEnabledPreferencesInTimeWindow(windowStart, windowEnd);
         log.info("Found {} projects scheduled in window [{}, {})", prefs.size(), windowStart, windowEnd);
 
+        int triggered = 0;
+        int errors = 0;
         for (var pref : prefs) {
             try {
-                reportService.createAndTriggerReport(pref.workspaceId(), pref.workspaceName(), pref.projectId());
+                var reportId = reportService.createAndTriggerReport(pref.workspaceId(), pref.workspaceName(),
+                        pref.projectId());
+                if (reportId != null) {
+                    triggered++;
+                }
             } catch (Exception e) {
                 log.error("Failed to trigger report for project '{}'", pref.projectId(), e);
+                errors++;
             }
         }
+
+        reportsTriggeredCounter.add(triggered);
+        triggerErrorCounter.add(errors);
     }
 }

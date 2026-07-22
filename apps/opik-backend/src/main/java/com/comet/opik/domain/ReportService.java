@@ -5,34 +5,83 @@ import com.comet.opik.api.OllieReport.ReportStatus;
 import com.comet.opik.api.ReportPreference;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.databind.JsonNode;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.LongCounter;
+import io.opentelemetry.api.metrics.LongHistogram;
+import io.opentelemetry.api.metrics.Meter;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
+import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 @Singleton
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 public class ReportService {
 
-    private final @NonNull TransactionTemplate transactionTemplate;
-    private final @NonNull IdGenerator idGenerator;
-    private final @NonNull Provider<RequestContext> requestContext;
-    private final @NonNull OrchestratorClient orchestratorClient;
-    private final @NonNull ProjectService projectService;
+    private final TransactionTemplate transactionTemplate;
+    private final IdGenerator idGenerator;
+    private final Provider<RequestContext> requestContext;
+    private final OrchestratorClient orchestratorClient;
+    private final ProjectService projectService;
+
+    private final LongCounter finishedCounter;
+    private final LongHistogram endToEndDuration;
+    private final LongHistogram scheduledToCompletionDuration;
+
+    @Inject
+    public ReportService(
+            @NonNull TransactionTemplate transactionTemplate,
+            @NonNull IdGenerator idGenerator,
+            @NonNull Provider<RequestContext> requestContext,
+            @NonNull OrchestratorClient orchestratorClient,
+            @NonNull ProjectService projectService) {
+        this.transactionTemplate = transactionTemplate;
+        this.idGenerator = idGenerator;
+        this.requestContext = requestContext;
+        this.orchestratorClient = orchestratorClient;
+        this.projectService = projectService;
+
+        Meter meter = GlobalOpenTelemetry.get().getMeter("opik.daily_report");
+
+        this.finishedCounter = meter
+                .counterBuilder("opik.daily_report.finished")
+                .setDescription("Number of reports finalized via the completion callback or trigger failure, "
+                        + "by result (completed / failed / trigger_failed); stale sweeps are counted separately "
+                        + "by opik.daily_report.stale_swept")
+                .build();
+
+        this.endToEndDuration = meter
+                .histogramBuilder("opik.daily_report.end_to_end_duration")
+                .setDescription("Time from report creation to completion callback")
+                .setUnit("ms")
+                .ofLongs()
+                .build();
+
+        this.scheduledToCompletionDuration = meter
+                .histogramBuilder("opik.daily_report.scheduled_to_completion_duration")
+                .setDescription("Time from user-configured schedule time to completion callback")
+                .setUnit("ms")
+                .ofLongs()
+                .build();
+    }
 
     public Mono<UUID> generateReport(@NonNull UUID projectId) {
         var ctx = requestContext.get();
@@ -81,14 +130,19 @@ public class ReportService {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         return Mono.fromCallable(() -> transactionTemplate.inTransaction(WRITE, handle -> {
-            int updated = handle.attach(OllieReportDAO.class)
-                    .update(reportId, workspaceId, projectId, content, sessionId, recommendedActions,
-                            status.getValue());
+            var dao = handle.attach(OllieReportDAO.class);
+
+            int updated = dao.update(reportId, workspaceId, projectId, content, sessionId, recommendedActions,
+                    status.getValue());
             if (updated == 0) {
                 throw new NotFoundException("Report not found or already processed: " + reportId);
             }
-            return null;
-        })).subscribeOn(Schedulers.boundedElastic()).then();
+
+            return dao.getCreatedAt(reportId, workspaceId);
+        }))
+                .doOnNext(createdAt -> recordCompletionMetrics(workspaceId, projectId, status, createdAt))
+                .subscribeOn(Schedulers.boundedElastic())
+                .then();
     }
 
     public Mono<OllieReportPage> getReports(@NonNull UUID projectId, int page, int size) {
@@ -134,26 +188,52 @@ public class ReportService {
                         .findAllEnabledInTimeWindow(windowStart, windowEnd));
     }
 
+    private void recordCompletionMetrics(String workspaceId, UUID projectId, ReportStatus status, Instant createdAt) {
+        try {
+            Instant now = Instant.now();
+            String result = status == ReportStatus.COMPLETED ? "completed" : "failed";
+            Attributes attrs = Attributes.of(stringKey("result"), result);
+
+            finishedCounter.add(1, attrs);
+            endToEndDuration.record(now.toEpochMilli() - createdAt.toEpochMilli(), attrs);
+
+            transactionTemplate.inTransaction(READ_ONLY, handle -> handle.attach(ReportPreferenceDAO.class)
+                    .findByProjectId(workspaceId, projectId))
+                    .map(ReportPreference::scheduleTime)
+                    .ifPresent(scheduleTimeStr -> {
+                        LocalDate reportDate = createdAt.atZone(ZoneOffset.UTC).toLocalDate();
+                        Instant scheduledAt = reportDate.atTime(LocalTime.parse(scheduleTimeStr))
+                                .toInstant(ZoneOffset.UTC);
+                        if (scheduledAt.isAfter(createdAt)) {
+                            scheduledAt = scheduledAt.minusSeconds(86400);
+                        }
+                        scheduledToCompletionDuration.record(now.toEpochMilli() - scheduledAt.toEpochMilli(), attrs);
+                    });
+        } catch (Exception e) {
+            log.warn("Failed to record completion metrics for project '{}'", projectId, e);
+        }
+    }
+
     private void markReportFailed(UUID reportId, String workspaceId, UUID projectId) {
         try {
-            transactionTemplate.inTransaction(WRITE, handle -> {
-                handle.attach(OllieReportDAO.class)
-                        .update(reportId, workspaceId, projectId, null, null, null, ReportStatus.FAILED.getValue());
-                return null;
-            });
-            log.info("Marked report '{}' as failed", reportId);
+            int updated = transactionTemplate.inTransaction(WRITE, handle -> handle.attach(OllieReportDAO.class)
+                    .update(reportId, workspaceId, projectId, null, null, null, ReportStatus.FAILED.getValue()));
+            if (updated > 0) {
+                finishedCounter.add(1, Attributes.of(stringKey("result"), "trigger_failed"));
+                log.info("Marked report '{}' as failed", reportId);
+            }
         } catch (Exception e) {
             log.error("Failed to mark report '{}' as failed", reportId, e);
         }
     }
 
-    public void failStaleReports() {
-        transactionTemplate.inTransaction(WRITE, handle -> {
+    public int failStaleReports() {
+        return transactionTemplate.inTransaction(WRITE, handle -> {
             int failed = handle.attach(OllieReportDAO.class).failStaleReports();
             if (failed > 0) {
                 log.info("Marked {} stale pending reports as failed", failed);
             }
-            return null;
+            return failed;
         });
     }
 }
