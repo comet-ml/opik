@@ -155,7 +155,16 @@ const MobileOnboardingShell: React.FC<MobileOnboardingShellProps> = ({
         className="flex min-h-0 flex-1 snap-x snap-mandatory overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {React.Children.map(children, (panel, i) => (
-          <div className="w-full shrink-0 snap-center snap-always overflow-y-auto overflow-x-hidden px-5 py-3">
+          <div
+            // Offscreen panels are inert: removed from the tab order, the
+            // accessibility tree and pointer events, so keyboard/screen-reader
+            // users can't reach controls of steps they're not on. Set
+            // imperatively — React 18 has no boolean `inert` prop support.
+            ref={(node) => {
+              if (node) node.inert = i + 1 !== step;
+            }}
+            className="w-full shrink-0 snap-center snap-always overflow-y-auto overflow-x-hidden px-5 py-3"
+          >
             <div
               key={panelAnim[i]?.seq ?? 0}
               className={`flex flex-col gap-3 ${
