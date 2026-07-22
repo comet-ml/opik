@@ -53,7 +53,6 @@ class GuardrailsServiceImpl implements GuardrailsService {
                     UUID id = idGenerator.generateId();
                     idGenerator.validateIdNotInFuture(guardrail.entityId(), entityType.getType());
                     idGenerator.validateIdNotInFuture(guardrail.secondaryId(), "guardrail secondary");
-                    idGenerator.validateIdNotInFutureIfPresent(guardrail.projectId(), "project");
 
                     return guardrail.toBuilder()
                             .id(id)

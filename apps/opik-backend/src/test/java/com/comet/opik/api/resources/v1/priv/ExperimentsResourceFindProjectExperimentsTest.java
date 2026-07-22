@@ -39,6 +39,8 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.uuid.Generators;
+import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.google.common.eventbus.EventBus;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -110,6 +112,7 @@ class ExperimentsResourceFindProjectExperimentsTest {
     private final TestDropwizardAppExtension APP = setup.APP;
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
+    private final TimeBasedEpochGenerator generator = Generators.timeBasedEpochGenerator();
 
     private String baseURI;
     private ExperimentResourceClient experimentResourceClient;
@@ -1120,7 +1123,7 @@ class ExperimentsResourceFindProjectExperimentsTest {
         var project = factory.manufacturePojo(Project.class);
         var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
 
-        UUID optimizationId = UUID.randomUUID();
+        UUID optimizationId = generator.generate();
 
         var experiments = experimentResourceClient.generateExperimentList()
                 .stream()

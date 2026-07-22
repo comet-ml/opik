@@ -51,6 +51,8 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.fasterxml.uuid.Generators;
+import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.awaitility.Awaitility;
@@ -125,6 +127,7 @@ class MultiValueFeedbackScoresE2ETest {
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
+    private final TimeBasedEpochGenerator generator = Generators.timeBasedEpochGenerator();
 
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
@@ -290,8 +293,8 @@ class MultiValueFeedbackScoresE2ETest {
                 .build();
         var traceId = traceResourceClient.createTrace(trace, API_KEY1, TEST_WORKSPACE);
 
-        var queueIdA = randomUUID();
-        var queueIdB = randomUUID();
+        var queueIdA = generator.generate();
+        var queueIdB = generator.generate();
 
         // Score from queue A
         var score = factory.manufacturePojo(FeedbackScore.class).toBuilder()
@@ -343,8 +346,8 @@ class MultiValueFeedbackScoresE2ETest {
                 .build();
         var traceId = traceResourceClient.createTrace(trace, API_KEY1, TEST_WORKSPACE);
 
-        var queueIdA = randomUUID();
-        var queueIdB = randomUUID();
+        var queueIdA = generator.generate();
+        var queueIdB = generator.generate();
         var scoreName = randomUUID().toString();
 
         var scoreFromQueueA = factory.manufacturePojo(FeedbackScore.class).toBuilder()

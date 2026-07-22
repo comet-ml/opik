@@ -29,6 +29,8 @@ import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.fasterxml.uuid.Generators;
+import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.awaitility.Awaitility;
@@ -83,6 +85,7 @@ class WorkspaceVersionResourceTest {
             .build();
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
+    private final TimeBasedEpochGenerator generator = Generators.timeBasedEpochGenerator();
 
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -526,7 +529,7 @@ class WorkspaceVersionResourceTest {
             // Single-project rule does not trigger version_1
             evaluatorClient.createEvaluator(podamFactory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
                     .toBuilder()
-                    .projectIds(Set.of(UUID.randomUUID()))
+                    .projectIds(Set.of(generator.generate()))
                     .build(),
                     workspaceName, API_KEY);
             assertThat(workspaceClient.getWorkspaceVersion(API_KEY, workspaceName)).isEqualTo(V2_WORKSPACE_VERSION);
@@ -534,7 +537,7 @@ class WorkspaceVersionResourceTest {
             // Multi-project rule triggers version_1
             evaluatorClient.createEvaluator(podamFactory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
                     .toBuilder()
-                    .projectIds(Set.of(UUID.randomUUID(), UUID.randomUUID()))
+                    .projectIds(Set.of(generator.generate(), generator.generate()))
                     .build(),
                     workspaceName, API_KEY);
             assertThat(workspaceClient.getWorkspaceVersion(API_KEY, workspaceName)).isEqualTo(V1_WORKSPACE_VERSION);
@@ -597,7 +600,7 @@ class WorkspaceVersionResourceTest {
 
             // Project-scoped alert (projectId column) does not trigger version_1
             alertClient.createAlert(
-                    AlertResourceTest.generateAlertForProject(podamFactory, UUID.randomUUID()),
+                    AlertResourceTest.generateAlertForProject(podamFactory, generator.generate()),
                     API_KEY, workspaceName, 201);
             assertThat(workspaceClient.getWorkspaceVersion(API_KEY, workspaceName)).isEqualTo(V2_WORKSPACE_VERSION);
 

@@ -1848,14 +1848,20 @@ class SpansResourceTest {
         @DisplayName("Create span with an old (past) v7 traceId succeeds — late spans on old traces are valid")
         void createWithOldTraceIdSucceeds() {
             var old = Instant.now().minus(Duration.ofDays(30)).toEpochMilli();
+            var oldTraceId = generator.construct(old);
             var span = podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .traceId(generator.construct(old))
+                    .traceId(oldTraceId)
                     .parentSpanId(null)
                     .build();
 
             var id = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
 
             assertThat(id).isNotNull();
+
+            // Round-trip: the old traceId must be persisted verbatim (not rewritten) and parentSpanId stays null.
+            var retrievedSpan = spanResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
+            assertThat(retrievedSpan.traceId()).isEqualTo(oldTraceId);
+            assertThat(retrievedSpan.parentSpanId()).isNull();
         }
 
         @Test
@@ -2356,6 +2362,20 @@ class SpansResourceTest {
             var expectedEntity = new io.dropwizard.jersey.errors.ErrorMessage(
                     HttpStatus.SC_BAD_REQUEST, "Invalid UUID for id", expectedDetails);
             var span = podamFactory.manufacturePojo(Span.class).toBuilder().traceId(traceId).build();
+            try (var response = spanResourceClient.callBatchCreateSpans(
+                    List.of(span), API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                var actualEntity = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                assertThat(actualEntity).isEqualTo(expectedEntity);
+            }
+        }
+
+        @Test
+        @DisplayName("Batch create span with non-v7 parentSpanId throws bad request")
+        void batchCreateWithNonV7ParentSpanIdThrowsBadRequest() {
+            var expectedEntity = new io.dropwizard.jersey.errors.ErrorMessage(
+                    HttpStatus.SC_BAD_REQUEST, "Invalid UUID for id", "Span parent id must be a version 7 UUID");
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder().parentSpanId(UUID.randomUUID()).build();
             try (var response = spanResourceClient.callBatchCreateSpans(
                     List.of(span), API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);

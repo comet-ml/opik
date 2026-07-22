@@ -64,10 +64,7 @@ class AssertionResultServiceImpl implements AssertionResultService {
         }
 
         // Validate up front so a bad id fails fast and independently of project-name normalisation.
-        assertionResults.forEach(item -> {
-            idGenerator.validateIdNotInFuture(item.entityId(), entityType.getType());
-            idGenerator.validateIdNotInFutureIfPresent(item.projectId(), "project");
-        });
+        assertionResults.forEach(item -> idGenerator.validateIdNotInFuture(item.entityId(), entityType.getType()));
 
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
