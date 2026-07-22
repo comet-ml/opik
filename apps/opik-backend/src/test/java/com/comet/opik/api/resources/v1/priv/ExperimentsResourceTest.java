@@ -1495,7 +1495,7 @@ class ExperimentsResourceTest {
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-            UUID optimizationId = UUID.randomUUID();
+            UUID optimizationId = GENERATOR.generate();
 
             var experiments = experimentResourceClient.generateExperimentList()
                     .stream()
@@ -4785,7 +4785,7 @@ class ExperimentsResourceTest {
         void createWithOptimizationIdTypeAndGet(ExperimentType type) {
             var expectedExperiment = experimentResourceClient.createPartialExperiment()
                     .type(type)
-                    .optimizationId(UUID.randomUUID())
+                    .optimizationId(GENERATOR.generate())
                     .build();
             var expectedId = createAndAssert(expectedExperiment, API_KEY, TEST_WORKSPACE);
 
