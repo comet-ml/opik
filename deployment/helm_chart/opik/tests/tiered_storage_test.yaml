@@ -41,6 +41,16 @@ tests:
       - matchRegex:
           path: spec.configuration.files["conf.d/storage.xml"]
           pattern: "<default>\\s*<keep_free_space_bytes>"
+      # Negative guards: the custom <hot> DISK stanza (a <hot> wrapping
+      # keep_free_space_bytes or path) must never render — that is the exact
+      # shape CH 26.x rejects. Only the <hot> VOLUME (<hot><disk>default</disk>)
+      # is allowed, which the positive assertion above already pins.
+      - notMatchRegex:
+          path: spec.configuration.files["conf.d/storage.xml"]
+          pattern: "<hot>\\s*<keep_free_space_bytes>"
+      - notMatchRegex:
+          path: spec.configuration.files["conf.d/storage.xml"]
+          pattern: "<hot>\\s*<path>"
 
   - it: omits <read_only> by default so the cold tier is writable
     set:
