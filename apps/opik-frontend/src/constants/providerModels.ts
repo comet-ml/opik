@@ -688,6 +688,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "google/gemini-3.5-flash",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_5_FLASH_LITE,
+      label: "google/gemini-3.5-flash-lite",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_6_FLASH,
+      label: "google/gemini-3.6-flash",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_2_27B_IT,
       label: "google/gemma-2-27b-it",
     },
@@ -1753,6 +1761,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "poolside/laguna-m.1:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_S_2_1,
+      label: "poolside/laguna-s-2.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_S_2_1_FREE,
+      label: "poolside/laguna-s-2.1:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_XS_2_1,
       label: "poolside/laguna-xs-2.1",
     },
@@ -2372,8 +2388,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
 
   [PROVIDER_TYPE.GEMINI]: [
     {
+      value: PROVIDER_MODEL_TYPE.GEMINI_3_6_FLASH,
+      label: "Gemini 3.6 Flash",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH,
       label: "Gemini 3.5 Flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH_LITE,
+      label: "Gemini 3.5 Flash Lite",
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO,
