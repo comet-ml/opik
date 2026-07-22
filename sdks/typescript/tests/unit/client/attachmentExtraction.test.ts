@@ -50,6 +50,40 @@ describe("extractInlineAttachments", () => {
     expect(result.output).toEqual({ text: "hi" }); // untouched sibling
   });
 
+  it("extracts a large (multi-MB) image without a stack overflow", () => {
+    // Regression: a ~5MB image is ~6.7MB base64 - a long contiguous base64 run. The previous
+    // regex scanner threw "RangeError: Maximum call stack size exceeded" here (V8 backtracking on
+    // the unbounded quantifier), which was caught upstream and SILENTLY skipped extraction for
+    // exactly the large-media case this feature targets. The linear scan must handle it.
+    const span = {
+      id: "s1",
+      output: { image: dataUri("image/png", b64(PNG, 5 * 1024 * 1024)) },
+    };
+
+    const { result, attachments } = extractInlineAttachments(span, MIN);
+
+    expect(attachments).toHaveLength(1);
+    expect(attachments[0].mimeType).toBe("image/png");
+    expect((result.output as { image: string }).image).toMatch(PLACEHOLDER);
+  });
+
+  it("extracts a URL-safe base64 image (google.genai parity — OPIK-6387)", () => {
+    // google.genai emits URL-safe base64 (-/_ for +//); Node's decoder silently drops those chars,
+    // so the scanner must normalize before decoding. 0xFF bytes -> '/' in base64 -> '_' when URL-safe.
+    const buf = Buffer.alloc(400, 0xff);
+    PNG.forEach((byte, i) => (buf[i] = byte));
+    const urlSafe = buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_");
+    expect(urlSafe).toMatch(/_/); // sanity: genuinely URL-safe (a standard-only decoder would corrupt it)
+    const span = { id: "s1", output: { image: urlSafe } };
+
+    const { result, attachments } = extractInlineAttachments(span, MIN);
+
+    expect(attachments).toHaveLength(1);
+    expect(attachments[0].mimeType).toBe("image/png");
+    expect(attachments[0].data.subarray(0, 8)).toEqual(Buffer.from(PNG));
+    expect((result.output as { image: string }).image).toMatch(PLACEHOLDER);
+  });
+
   it("leaves a blob below the size threshold inline", () => {
     const span = { id: "s1", input: dataUri("image/png", b64(PNG, 30)) };
 

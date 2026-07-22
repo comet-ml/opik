@@ -9,19 +9,12 @@ import { detectMimeType, fileExtensionForMimeType } from "./mimeTypes";
  * and returns the decoded bytes so the caller can upload them as real attachments. Running
  * this BEFORE the size measurement is what lets images bypass the cap.
  *
- * Blobs are found with a regex, matching the Python SDK. `pattern.exec` in a loop (not
- * `String.matchAll`, which builds every match up front and can overflow V8's stack on
- * multi-MB inputs). The pattern is a single character class with a fixed+unbounded
- * quantifier, so there is no nested/overlapping structure and thus no *exponential*
- * (catastrophic) backtracking.
- *
- * PERF NOTE (revisit only if profiling shows a problem): there is a narrow O(n^2)
- * worst case — a single contiguous run of base64-alphabet chars that is long but stays
- * just under the size threshold makes the engine retry from each offset. This needs a
- * hundreds-of-KB pure-alphabet near-miss run at the default 256 KB threshold, so it is
- * unlikely in practice and would be a slowdown, not a crash. We keep the regex for 1:1
- * parity with the Python SDK (which has the same profile); if this ever bites, swap
- * `extractFromString` for a linear single-pass character scan (strictly O(n)).
+ * Blobs are found with a manual single-pass character scan (see `extractFromString`), NOT a
+ * regex. V8's regex engine throws `RangeError: Maximum call stack size exceeded` on a multi-MB
+ * contiguous base64 run — an unbounded quantifier over the base64 alphabet backtracks into the
+ * call stack — which silently skips extraction for exactly the large-media case this targets
+ * (reproduced: an inline image >= ~4 MB base64 crashed the old regex). A linear scan is O(n) and
+ * cannot overflow the stack.
  *
  * Pure and non-mutating: returns the same reference when nothing was extracted.
  */
@@ -50,33 +43,39 @@ const createAttachmentFileName = (
   return `${context}-attachment-${random}-${Date.now()}-sdk.${extension}`;
 };
 
-// The matched base64 alphabet is valid by construction, so Buffer.from is safe and never
-// throws (invalid chars would just be ignored); an empty decode means "not a real blob".
+// Decode a scanned run. URL-safe base64 (`-`/`_` instead of `+`/`/`, emitted by e.g. google.genai)
+// is normalized to the standard alphabet first — Node's base64 decoder silently drops `-`/`_`,
+// which would corrupt the bytes and truncate the blob at the first such char (parity with the
+// Python SDK's base64_normalizer, OPIK-6387). The run is otherwise valid base64 by construction, so
+// Buffer.from never throws; an empty decode means "not a real blob".
 const decodeBase64 = (base64: string): Buffer | null => {
-  const decoded = Buffer.from(base64, "base64");
+  const normalized =
+    base64.includes("-") || base64.includes("_")
+      ? base64.replace(/[-_]/g, (c) => (c === "-" ? "+" : "/"))
+      : base64;
+  const decoded = Buffer.from(normalized, "base64");
   return decoded.length > 0 ? decoded : null;
 };
 
-// The regex depends only on minGroups (fixed per client), so compile it once and reuse.
-// lastIndex is reset before each use in extractFromString, so a shared instance is safe.
-const patternCache = new Map<number, RegExp>();
-const patternForGroups = (minGroups: number): RegExp => {
-  let pattern = patternCache.get(minGroups);
-  if (!pattern) {
-    pattern = new RegExp(
-      `(?<prefix>data:[^,]*;base64,)?(?<base64>(?:[A-Za-z0-9+/]{4}){${minGroups},}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?)`,
-      "g",
-    );
-    patternCache.set(minGroups, pattern);
-  }
-  return pattern;
-};
+const isBase64Char = (code: number): boolean =>
+  (code >= 65 && code <= 90) || // A-Z
+  (code >= 97 && code <= 122) || // a-z
+  (code >= 48 && code <= 57) || // 0-9
+  code === 43 || // +
+  code === 47 || // /
+  code === 45 || // - (URL-safe base64 alias for +, e.g. google.genai — OPIK-6387)
+  code === 95; // _ (URL-safe base64 alias for /)
+const EQUALS = 61; // '='
+
+// An optional `data:<mime>;base64,` prefix immediately before a run is detected with a tiny
+// regex on a short look-back slice (safe — bounded length) so the whole URI is replaced.
+const DATA_URI_PREFIX_RE = /data:[^,]*;base64,$/;
+const PREFIX_LOOKBACK = 128;
 
 const extractFromString = (
   value: string,
   context: Field,
   attachments: ExtractedAttachment[],
-  pattern: RegExp,
   minChars: number,
 ): string => {
   // A blob can't be a match if the whole string is shorter than the minimum (parity with
@@ -84,27 +83,52 @@ const extractFromString = (
   if (value.length < minChars) {
     return value;
   }
-  pattern.lastIndex = 0;
   const parts: string[] = [];
   let lastEnd = 0;
   let changed = false;
-  let match: RegExpExecArray | null;
-  while ((match = pattern.exec(value)) !== null) {
-    const base64 = match.groups?.base64 ?? "";
-    const decoded = decodeBase64(base64);
-    const mimeType = decoded ? detectMimeType(decoded) : null;
-    // Leave unrecognized blobs (plain base64, unknown types) inline, like the Python SDK.
-    if (!decoded || !mimeType) {
+  const n = value.length;
+  let i = 0;
+
+  while (i < n) {
+    if (!isBase64Char(value.charCodeAt(i))) {
+      i++;
       continue;
     }
-    const fileName = createAttachmentFileName(context, mimeType);
-    // match[0] includes the optional `data:<mime>;base64,` prefix, so the whole URI is replaced.
-    parts.push(value.slice(lastEnd, match.index));
-    parts.push(`[${fileName}]`);
-    lastEnd = match.index + match[0].length;
-    attachments.push({ data: decoded, fileName, mimeType });
-    changed = true;
+    // Consume a maximal run of base64 chars, then up to two '=' padding chars.
+    let end = i;
+    while (end < n && isBase64Char(value.charCodeAt(end))) {
+      end++;
+    }
+    let pad = 0;
+    while (end < n && value.charCodeAt(end) === EQUALS && pad < 2) {
+      end++;
+      pad++;
+    }
+
+    const runLength = end - i;
+    if (runLength >= minChars) {
+      const decoded = decodeBase64(value.slice(i, end));
+      const mimeType = decoded ? detectMimeType(decoded) : null;
+      // Leave unrecognized blobs (plain base64, unknown types) inline, like the Python SDK.
+      if (decoded && mimeType) {
+        // Absorb a preceding `data:<mime>;base64,` prefix so the whole URI is replaced.
+        let replaceStart = i;
+        const lookback = value.slice(Math.max(0, i - PREFIX_LOOKBACK), i);
+        const prefixMatch = lookback.match(DATA_URI_PREFIX_RE);
+        if (prefixMatch) {
+          replaceStart = i - prefixMatch[0].length;
+        }
+        const fileName = createAttachmentFileName(context, mimeType);
+        parts.push(value.slice(lastEnd, replaceStart));
+        parts.push(`[${fileName}]`);
+        lastEnd = end;
+        attachments.push({ data: decoded, fileName, mimeType });
+        changed = true;
+      }
+    }
+    i = end;
   }
+
   if (!changed) {
     return value;
   }
@@ -118,19 +142,18 @@ const walk = (
   value: unknown,
   context: Field,
   attachments: ExtractedAttachment[],
-  pattern: RegExp,
   minChars: number,
   seen: WeakSet<object>,
 ): unknown => {
   if (typeof value === "string") {
-    return extractFromString(value, context, attachments, pattern, minChars);
+    return extractFromString(value, context, attachments, minChars);
   }
   if (Array.isArray(value)) {
     if (seen.has(value)) return value;
     seen.add(value);
     let changed = false;
     const out = value.map((element) => {
-      const walked = walk(element, context, attachments, pattern, minChars, seen);
+      const walked = walk(element, context, attachments, minChars, seen);
       if (walked !== element) changed = true;
       return walked;
     });
@@ -142,7 +165,7 @@ const walk = (
     let changed = false;
     const out: Record<string, unknown> = {};
     for (const [key, item] of Object.entries(value)) {
-      const walked = walk(item, context, attachments, pattern, minChars, seen);
+      const walked = walk(item, context, attachments, minChars, seen);
       if (walked !== item) changed = true;
       out[key] = walked;
     }
@@ -161,10 +184,8 @@ export const extractInlineAttachments = <T extends AttachmentSource>(
   minSizeBytes: number,
 ): { result: T; attachments: ExtractedAttachment[] } => {
   // Threshold on base64 character length: 4 base64 chars encode 3 bytes, and the Python SDK
-  // gates on `floor(minSizeBytes / 4)` groups of 4 — mirror that exactly for parity.
-  const minGroups = Math.max(1, Math.floor(minSizeBytes / 4));
-  const minChars = minGroups * 4;
-  const pattern = patternForGroups(minGroups);
+  // gates on `floor(minSizeBytes / 4)` groups of 4 — mirror that (rounded to a whole group).
+  const minChars = Math.max(4, Math.floor(minSizeBytes / 4) * 4);
 
   const attachments: ExtractedAttachment[] = [];
   const overrides: Partial<Record<Field, unknown>> = {};
@@ -174,14 +195,7 @@ export const extractInlineAttachments = <T extends AttachmentSource>(
       continue;
     }
     // A fresh `seen` per field: the guard is only for cycles within one field's own graph.
-    const walked = walk(
-      original,
-      field,
-      attachments,
-      pattern,
-      minChars,
-      new WeakSet(),
-    );
+    const walked = walk(original, field, attachments, minChars, new WeakSet());
     if (walked !== original) {
       overrides[field] = walked;
     }

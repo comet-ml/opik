@@ -91,10 +91,17 @@ export const truncatePayloadFields = <T extends PayloadLike>(
     }
   }
 
-  // Pass 2 - hard per-object cap: if input+output are still over as a whole,
-  // truncate the remaining truncatable field too. One measurement, no loop.
-  // metadata is excluded so it can't drag the object over and cut small siblings.
-  if (fieldSizeMb({ ...payload, ...overrides, metadata: undefined }) > maxSizeMb) {
+  // Pass 2 - hard per-object cap: if the still-inline input+output are over as a whole, truncate
+  // the remaining truncatable field too. Reuse the pass-1 `sizes` instead of re-serializing the
+  // whole object here - that JSON.stringify runs on the hot send path (on top of pass 1's and the
+  // API client's), so at high throughput with large payloads it needlessly blocks the event loop.
+  // A field already truncated in pass 1 is a tiny marker, so it contributes ~0; metadata and other
+  // non-truncatable fields are excluded by construction (only input/output are summed).
+  const inlineTotalMb = TRUNCATABLE_FIELDS.reduce(
+    (sum, field) => sum + (overrides[field] ? 0 : (sizes[field] ?? 0)),
+    0,
+  );
+  if (inlineTotalMb > maxSizeMb) {
     for (const field of TRUNCATABLE_FIELDS) {
       if (sizes[field] !== undefined && overrides[field] === undefined) {
         overrides[field] = truncationMarker(sizes[field]);
