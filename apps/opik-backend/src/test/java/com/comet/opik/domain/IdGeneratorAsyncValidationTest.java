@@ -17,7 +17,7 @@ import java.util.UUID;
 
 /**
  * Covers the reactive validation paths of {@link IdGenerator} (which the sync {@link
- * UuidV7TimestampValidatorTest} does not): {@code validateIdAsync} / {@code validateIdForUpdateAsync}
+ * UuidV7TimestampValidatorTest} does not): {@code validateIdAsync} / {@code validateIdNotInFutureAsync}
  * resolve {@code workspaceId} from the Reactor context via {@code deferContextual}, falling back to
  * {@link com.comet.opik.infrastructure.metrics.ErrorMetricsResolver#UNKNOWN} when the context has no
  * {@link RequestContext#WORKSPACE_ID}. Both cases must preserve the accept/reject behavior.
@@ -76,14 +76,14 @@ class IdGeneratorAsyncValidationTest {
     }
 
     @Test
-    @DisplayName("reject: validateIdForUpdateAsync rejects only too-far-future, accepts old ids")
+    @DisplayName("reject: validateIdNotInFutureAsync rejects only too-far-future, accepts old ids")
     void rejectForUpdateAsync() {
         var oldId = idAt(Instant.now().minus(48, ChronoUnit.HOURS));
-        StepVerifier.create(rejectGenerator.validateIdForUpdateAsync(oldId, RESOURCE).contextWrite(withWorkspace()))
+        StepVerifier.create(rejectGenerator.validateIdNotInFutureAsync(oldId, RESOURCE).contextWrite(withWorkspace()))
                 .expectNext(oldId)
                 .verifyComplete();
         StepVerifier
-                .create(rejectGenerator.validateIdForUpdateAsync(tooFarFutureId(), RESOURCE)
+                .create(rejectGenerator.validateIdNotInFutureAsync(tooFarFutureId(), RESOURCE)
                         .contextWrite(withWorkspace()))
                 .expectError(InvalidUUIDException.class)
                 .verify();
@@ -104,10 +104,10 @@ class IdGeneratorAsyncValidationTest {
     }
 
     @Test
-    @DisplayName("audit: validateIdForUpdateAsync passes a too-far-future id through")
+    @DisplayName("audit: validateIdNotInFutureAsync passes a too-far-future id through")
     void auditForUpdateAsyncNeverRejects() {
         var id = tooFarFutureId();
-        StepVerifier.create(Mono.defer(() -> auditGenerator.validateIdForUpdateAsync(id, RESOURCE)))
+        StepVerifier.create(Mono.defer(() -> auditGenerator.validateIdNotInFutureAsync(id, RESOURCE)))
                 .expectNext(id)
                 .verifyComplete();
     }

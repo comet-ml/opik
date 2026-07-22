@@ -375,15 +375,6 @@ public class SpanService {
 
         List<Span> dedupedSpans = dedupSpans(batch.spans());
 
-        // Fail fast on invalid ids BEFORE any side effect below (auto-stripped attachment deletion, project
-        // creation), so a rejected batch never mutates state.
-        dedupedSpans.forEach(span -> {
-            if (span.id() != null) {
-                idGenerator.validateId(span.id(), SPAN_KEY);
-            }
-            validateSpanReferences(span.traceId(), span.parentSpanId());
-        });
-
         List<String> projectNames = dedupedSpans
                 .stream()
                 .map(Span::projectName)
@@ -401,7 +392,19 @@ public class SpanService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
 
-        return attachmentService.deleteAutoStrippedAttachments(SPAN, spanIds)
+        // Fail fast on invalid ids BEFORE any side effect below (auto-stripped attachment deletion, project
+        // creation), so a rejected batch never mutates state. Runs inside deferContextual so the audit
+        // metric can attribute the batch's own ids to the request workspace.
+        return Mono.deferContextual(validationCtx -> {
+            String validationWorkspaceId = validationCtx.get(RequestContext.WORKSPACE_ID);
+            dedupedSpans.forEach(span -> {
+                if (span.id() != null) {
+                    idGenerator.validateId(span.id(), SPAN_KEY, validationWorkspaceId);
+                }
+                validateSpanReferences(span.traceId(), span.parentSpanId());
+            });
+            return attachmentService.deleteAutoStrippedAttachments(SPAN, spanIds);
+        })
                 .then(Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
                     String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "");
@@ -410,7 +413,7 @@ public class SpanService {
                     Mono<List<Span>> resolveProjects = Flux.fromIterable(projectNames)
                             .flatMap(projectService::getOrCreate)
                             .collectList()
-                            .map(projects -> bindSpanToProjectAndId(dedupedSpans, projects, workspaceId));
+                            .map(projects -> bindSpanToProjectAndId(dedupedSpans, projects));
 
                     return resolveProjects
                             .flatMap(this::stripAttachmentsFromSpanBatch)
@@ -462,7 +465,7 @@ public class SpanService {
         idGenerator.validateIdNotInFutureIfPresent(parentSpanId, SPAN_PARENT_KEY);
     }
 
-    private List<Span> bindSpanToProjectAndId(List<Span> spans, List<Project> projects, String workspaceId) {
+    private List<Span> bindSpanToProjectAndId(List<Span> spans, List<Project> projects) {
         Map<String, Project> projectPerName = projects.stream()
                 .collect(Collectors.toMap(
                         WorkspaceUtils::stripProjectName,
@@ -482,9 +485,8 @@ public class SpanService {
                         throw new IllegalStateException("Project not found: %s".formatted(span.projectName()));
                     }
 
+                    // Ids are already validated up-front in create(SpanBatch); generated ids are inherently valid.
                     UUID id = span.id() == null ? idGenerator.generateId() : span.id();
-
-                    idGenerator.validateId(id, SPAN_KEY, workspaceId);
 
                     return span.toBuilder().id(id).projectId(project.id()).build();
                 })

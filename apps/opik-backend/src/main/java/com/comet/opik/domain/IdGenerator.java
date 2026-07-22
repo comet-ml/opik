@@ -111,16 +111,19 @@ class IdGeneratorImpl implements IdGenerator {
     }
 
     @Override
-
-    public void validateIdForUpdate(@NonNull UUID id, String resource, String workspaceId) {
+    public void validateIdNotInFuture(@NonNull UUID id, String resource) {
         IdGenerator.validateVersion(id, resource);
-        uuidV7TimestampValidator.validateNotInFuture(id, resource, workspaceId);
+        // Referenced/foreign ids are validated where the request-scoped workspace is not threaded
+        // (e.g. the synchronous fail-fast batch pass), so the audit metric falls back to UNKNOWN here;
+        // the batch's own ids still carry the workspace via validateId.
+        uuidV7TimestampValidator.validateNotInFuture(id, resource, ErrorMetricsResolver.UNKNOWN);
     }
 
     @Override
-    public Mono<UUID> validateIdForUpdateAsync(@NonNull UUID id, String resource) {
+    public Mono<UUID> validateIdNotInFutureAsync(@NonNull UUID id, String resource) {
         return Mono.deferContextual(ctx -> Mono.fromCallable(() -> {
-            validateIdNotInFuture(id, resource, workspaceId(ctx));
+            IdGenerator.validateVersion(id, resource);
+            uuidV7TimestampValidator.validateNotInFuture(id, resource, workspaceId(ctx));
             return id;
         }));
     }
